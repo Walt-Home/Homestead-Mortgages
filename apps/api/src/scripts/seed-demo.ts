@@ -9,11 +9,11 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { prisma } from "@sm/db";
-import type { Prisma } from "@sm/db";
-import { fixtureRegistry, PERSONAS, type PersonaId } from "@sm/connectors";
-import { progress } from "@sm/requirements";
-import { underwrite } from "@sm/underwriting";
+import { prisma } from "@hm/db";
+import type { Prisma } from "@hm/db";
+import { fixtureRegistry, PERSONAS, type PersonaId } from "@hm/connectors";
+import { progress } from "@hm/requirements";
+import { underwrite } from "@hm/underwriting";
 import { loadLoanFile, recordEvent, recordSnapshot } from "../services/repository.js";
 import { config } from "../config.js";
 
@@ -31,6 +31,10 @@ async function seed(personaId: PersonaId): Promise<void> {
 
   const created = await prisma.loanFile.create({
     data: {
+      // No owner and isDemo: readable by everyone signed in, writable by no
+      // one. See assertFileAccess — isDemo wins over ownership, so these stay
+      // read-only even for whoever ran the seed.
+      isDemo: true,
       stage: "DECISION",
       purpose: PURPOSE_TO_DB[s.purpose],
       loanAmount: s.loanAmount,
@@ -184,6 +188,11 @@ async function seed(personaId: PersonaId): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Re-seeding replaces the demo set rather than accumulating copies of it.
+  // Only demo files are touched; nobody's real file is in this query.
+  const removed = await prisma.loanFile.deleteMany({ where: { isDemo: true } });
+  if (removed.count) console.log(`removed ${removed.count} existing demo file(s)`);
+
   for (const id of Object.keys(PERSONAS) as PersonaId[]) {
     await seed(id);
   }

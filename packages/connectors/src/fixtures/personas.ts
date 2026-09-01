@@ -17,7 +17,7 @@ import type {
   CreditReport,
   PayrollData,
   TaxTranscript,
-} from "@sm/shared";
+} from "@hm/shared";
 
 export type PersonaId = "clean_w2" | "thin_file_renter" | "variable_income";
 

@@ -15,9 +15,9 @@ import {
   outstanding,
   progress,
   REQUIREMENTS,
-} from "@sm/requirements";
+} from "@hm/requirements";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
-import { loadLoanFile } from "../services/repository.js";
+import { assertFileAccess, loadLoanFile } from "../services/repository.js";
 
 export const requirementRouter = Router();
 
@@ -30,6 +30,7 @@ requirementRouter.get(
   "/:id/assessment",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
+    await assertFileAccess(id, req.user!.id, "read");
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
 

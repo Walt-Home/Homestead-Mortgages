@@ -3,7 +3,7 @@
 /**
  * The AUS recommendation.
  *
- * V1 produces these from our own engine (`@sm/underwriting`) rather than from
+ * V1 produces these from our own engine (`@hm/underwriting`) rather than from
  * Desktop Underwriter, because a real DU submission needs a seller/servicer
  * number and returns a verdict we cannot decompose for the borrower. The shape
  * matches DU's so a real submission can replace the shadow engine behind the

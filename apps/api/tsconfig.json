@@ -4,11 +4,11 @@
     "outDir": "dist",
     "rootDir": "src",
     "paths": {
-      "@sm/shared": ["../../packages/shared/src/index.ts"],
-      "@sm/requirements": ["../../packages/requirements/src/index.ts"],
-      "@sm/connectors": ["../../packages/connectors/src/index.ts"],
-      "@sm/underwriting": ["../../packages/underwriting/src/index.ts"],
-      "@sm/db": ["../../packages/db/src/index.ts"]
+      "@hm/shared": ["../../packages/shared/src/index.ts"],
+      "@hm/requirements": ["../../packages/requirements/src/index.ts"],
+      "@hm/connectors": ["../../packages/connectors/src/index.ts"],
+      "@hm/underwriting": ["../../packages/underwriting/src/index.ts"],
+      "@hm/db": ["../../packages/db/src/index.ts"]
     }
   },
   "include": ["src"],

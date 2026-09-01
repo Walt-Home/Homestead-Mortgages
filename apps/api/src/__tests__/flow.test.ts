@@ -11,10 +11,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { Consent, LoanFile } from "@sm/shared";
-import { fixtureRegistry, PERSONAS } from "@sm/connectors";
-import { assessAll, outstanding, progress } from "@sm/requirements";
-import { underwrite } from "@sm/underwriting";
+import type { Consent, LoanFile } from "@hm/shared";
+import { fixtureRegistry, PERSONAS } from "@hm/connectors";
+import { assessAll, outstanding, progress } from "@hm/requirements";
+import { underwrite } from "@hm/underwriting";
 
 const REFERENCE = new Date("2026-06-15T12:00:00.000Z");
 const registry = fixtureRegistry({ latencyMs: 0, persona: "clean_w2", referenceDate: REFERENCE });

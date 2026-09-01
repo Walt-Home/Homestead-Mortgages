@@ -7,7 +7,7 @@
  * quietly serving fixture data to a real borrower.
  */
 
-import { fixtureRegistry, type ConnectorRegistry, type PersonaId } from "@sm/connectors";
+import { fixtureRegistry, type ConnectorRegistry, type PersonaId } from "@hm/connectors";
 import { config } from "../config.js";
 
 let registry: ConnectorRegistry | undefined;

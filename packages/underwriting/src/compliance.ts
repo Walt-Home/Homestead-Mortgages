@@ -8,7 +8,7 @@
  * no APOR to compare against is worse than no test at all.
  */
 
-import type { ComplianceTests, LoanFile } from "@sm/shared";
+import type { ComplianceTests, LoanFile } from "@hm/shared";
 import { DerivationLog, round } from "./derive.js";
 import { GUIDELINES, pointsAndFeesCap } from "./guidelines.js";
 

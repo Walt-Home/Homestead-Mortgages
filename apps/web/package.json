@@ -1,5 +1,5 @@
 {
-  "name": "@sm/web",
+  "name": "@hm/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@sm/shared": "*",
+    "@hm/shared": "*",
     "@tanstack/react-query": "^5.101.1",
     "clsx": "^2.1.0",
     "react": "^19.2.7",

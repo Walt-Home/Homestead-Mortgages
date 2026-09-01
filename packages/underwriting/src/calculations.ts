@@ -7,7 +7,7 @@
  * is worse than no DTI, because it looks like an answer.
  */
 
-import type { LoanFile } from "@sm/shared";
+import type { LoanFile } from "@hm/shared";
 import { DerivationLog, round } from "./derive.js";
 import { GUIDELINES } from "./guidelines.js";
 

@@ -1,5 +1,5 @@
 {
-  "name": "@sm/api",
+  "name": "@hm/api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,20 +11,25 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@sm/connectors": "*",
-    "@sm/db": "*",
-    "@sm/requirements": "*",
-    "@sm/shared": "*",
-    "@sm/underwriting": "*",
+    "@hm/connectors": "*",
+    "@hm/db": "*",
+    "@hm/requirements": "*",
+    "@hm/shared": "*",
+    "@hm/underwriting": "*",
+    "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",
     "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "google-auth-library": "^11.0.2",
     "helmet": "^8.2.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/connect-pg-simple": "^7.0.3",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.6",
+    "@types/express-session": "^1.19.0",
     "@types/node": "^22.10.0",
     "tsx": "^4.11.0",
     "typescript": "^5.4.0",

@@ -2,7 +2,7 @@
  * Loading a loan file out of Postgres and into the domain shape.
  *
  * The engine, the connectors and the UI all speak `LoanFile` from
- * `@sm/shared`. Prisma rows are a storage detail, and this module is the only
+ * `@hm/shared`. Prisma rows are a storage detail, and this module is the only
  * place the two meet. Everything above it can be tested with a plain object.
  *
  * Connector data is read from the LATEST snapshot per kind. Older snapshots
@@ -10,7 +10,7 @@
  * once the monitoring loop exists.
  */
 
-import { prisma } from "@sm/db";
+import { prisma } from "@hm/db";
 import type {
   AssetReport,
   Borrower,
@@ -21,8 +21,9 @@ import type {
   LoanFile,
   PayrollData,
   TaxTranscript,
-} from "@sm/shared";
-import type { Prisma } from "@sm/db";
+} from "@hm/shared";
+import type { Prisma } from "@hm/db";
+import { AppError } from "../middleware/error-handler.js";
 
 /** Prisma returns Decimal; the domain uses number. One place to convert. */
 function num(value: Prisma.Decimal | null): number | null {
@@ -319,6 +320,68 @@ export async function recordSnapshot(
       externalId,
       payload: payload as Prisma.InputJsonValue,
       retrievedAt: new Date(retrievedAt),
+    },
+  });
+}
+
+/* ── Access control ───────────────────────────────────────────────────────── */
+
+/**
+ * Decide whether this user may touch this file, and refuse if not.
+ *
+ * Refusals are **404, not 403**, and deliberately so: a 403 confirms that a
+ * file with that id exists, which hands an enumeration oracle to anyone with a
+ * session. The only thing a caller learns is "not yours."
+ *
+ * Demo files are readable by everyone signed in and writable by no one. They
+ * exist so the team has a shared artifact to critique without anybody's real
+ * file becoming shared — a data model that would have to be unwound later.
+ */
+export async function assertFileAccess(
+  loanFileId: string,
+  userId: string,
+  mode: "read" | "write",
+): Promise<void> {
+  const file = await prisma.loanFile.findUnique({
+    where: { id: loanFileId },
+    select: { userId: true, isDemo: true },
+  });
+
+  if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
+
+  if (file.isDemo) {
+    if (mode === "read") return;
+    throw new AppError(
+      403,
+      "Demo files are read-only. Start your own to walk the flow.",
+      "DEMO_FILE_READ_ONLY",
+    );
+  }
+
+  if (file.userId !== userId) throw new AppError(404, "Loan file not found", "NOT_FOUND");
+}
+
+/** Files this user may see: their own, newest first, plus the shared demo set. */
+export async function listAccessibleFiles(userId: string) {
+  return prisma.loanFile.findMany({
+    where: { OR: [{ userId }, { isDemo: true }] },
+    orderBy: [{ isDemo: "asc" }, { createdAt: "desc" }],
+    select: {
+      id: true,
+      stage: true,
+      isDemo: true,
+      createdAt: true,
+      purpose: true,
+      loanAmount: true,
+      valueOrPrice: true,
+      propertyCity: true,
+      propertyState: true,
+      borrowers: { select: { firstName: true, lastName: true }, take: 1 },
+      decisions: {
+        orderBy: { computedAt: "desc" },
+        take: 1,
+        select: { outcome: true, ausRecommendation: true },
+      },
     },
   });
 }

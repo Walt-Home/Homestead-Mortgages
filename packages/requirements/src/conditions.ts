@@ -17,8 +17,8 @@
  * is the single worst thing this product can do.
  */
 
-import type { LoanFile } from "@sm/shared";
-import { COMMUNITY_PROPERTY_STATES } from "@sm/shared";
+import type { LoanFile } from "@hm/shared";
+import { COMMUNITY_PROPERTY_STATES } from "@hm/shared";
 import type { ConditionKey } from "./types.js";
 
 /** true / false / not-yet-knowable. */

@@ -3,7 +3,7 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "paths": { "@sm/shared": ["../shared/src/index.ts"] }
+    "paths": { "@hm/shared": ["../shared/src/index.ts"] }
   },
   "include": ["src"],
   "references": [{ "path": "../shared" }]

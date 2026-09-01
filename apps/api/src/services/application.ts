@@ -19,9 +19,9 @@
  * has not restarted the clock, because TRID does not work that way.
  */
 
-import { prisma } from "@sm/db";
-import type { Prisma } from "@sm/db";
-import type { LoanFile } from "@sm/shared";
+import { prisma } from "@hm/db";
+import type { Prisma } from "@hm/db";
+import type { LoanFile } from "@hm/shared";
 import { recordEvent } from "./repository.js";
 
 export interface SixPieces {

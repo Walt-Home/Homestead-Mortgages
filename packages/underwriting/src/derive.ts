@@ -11,7 +11,7 @@
  * — which is what turns "DTI: —" into "DTI: waiting on your income".
  */
 
-import type { Derivation } from "@sm/shared";
+import type { Derivation } from "@hm/shared";
 
 export type Inputs = Record<string, number | string | boolean | null>;
 

@@ -14,7 +14,7 @@
    needs different surfaces anyway.
 
    Two of Homestead's documented inconsistencies are fixed rather than copied:
-     · `--sm-danger` is its own colour here. In Homestead `colors.danger`
+     · `--hm-danger` is its own colour here. In Homestead `colors.danger`
        resolves to the validation red, so destructive actions and form errors
        render identically.
      · The canvas/app ink split is not reproduced. Homestead declares two
@@ -22,61 +22,61 @@
    ══════════════════════════════════════════════════════════════════════════ */
 :root {
   /* Surfaces */
-  --sm-canvas: #fffdf8;
-  --sm-surface: #fffefb;
-  --sm-app: #ffffff;
-  --sm-raised: #f8f6f1;
-  --sm-inset: #f2efe9;
-  --sm-hover: #f1ede4;
+  --hm-canvas: #fffdf8;
+  --hm-surface: #fffefb;
+  --hm-app: #ffffff;
+  --hm-raised: #f8f6f1;
+  --hm-inset: #f2efe9;
+  --hm-hover: #f1ede4;
 
   /* Ink */
-  --sm-ink: #20231f;
-  --sm-ink-prose: #272923;
-  --sm-ink-editorial: #1a1714;
-  --sm-ink-soft: #4e514b;
-  --sm-text-muted: #6e7068;
-  --sm-meta: #817d74;
-  --sm-subtle: #9a948a;
+  --hm-ink: #20231f;
+  --hm-ink-prose: #272923;
+  --hm-ink-editorial: #1a1714;
+  --hm-ink-soft: #4e514b;
+  --hm-text-muted: #6e7068;
+  --hm-meta: #817d74;
+  --hm-subtle: #9a948a;
 
   /* Rules */
-  --sm-border: #e2dbce;
-  --sm-border-light: #ece6dc;
-  --sm-border-form: #ddd9d1;
-  --sm-border-strong: #bbb4a7;
+  --hm-border: #e2dbce;
+  --hm-border-light: #ece6dc;
+  --hm-border-form: #ddd9d1;
+  --hm-border-strong: #bbb4a7;
 
   /* Olive — verified, connected, affirmative */
-  --sm-olive: #465340;
-  --sm-olive-hover: #394535;
-  --sm-olive-chat: #596653;
-  --sm-olive-tint: #edf0eb;
-  --sm-olive-light: #eef2ea;
-  --sm-olive-border: #d9e3d4;
+  --hm-olive: #465340;
+  --hm-olive-hover: #394535;
+  --hm-olive-chat: #596653;
+  --hm-olive-tint: #edf0eb;
+  --hm-olive-light: #eef2ea;
+  --hm-olive-border: #d9e3d4;
 
   /* Gold — money, ownership, the commit action */
-  --sm-gold: #9b6412;
-  --sm-gold-hover: #82530f;
-  --sm-gold-fill: #faf2e2;
-  --sm-gold-border: #e9d9b8;
+  --hm-gold: #9b6412;
+  --hm-gold-hover: #82530f;
+  --hm-gold-fill: #faf2e2;
+  --hm-gold-border: #e9d9b8;
 
   /* Status */
-  --sm-error: #a3483d;
-  --sm-danger: #8c2b1f;
-  --sm-notice-bg: #fbf6ee;
-  --sm-notice-border: #e5d5c2;
+  --hm-error: #a3483d;
+  --hm-danger: #8c2b1f;
+  --hm-notice-bg: #fbf6ee;
+  --hm-notice-border: #e5d5c2;
 
   /* Focus */
-  --sm-focus: rgba(153, 99, 22, 0.25);
+  --hm-focus: rgba(153, 99, 22, 0.25);
 
   /* Radius */
-  --sm-r-form: 2px;
-  --sm-r-row: 10px;
-  --sm-r-control: 11px;
-  --sm-r-card: 14px;
-  --sm-r-pill: 999px;
+  --hm-r-form: 2px;
+  --hm-r-row: 10px;
+  --hm-r-control: 11px;
+  --hm-r-card: 14px;
+  --hm-r-pill: 999px;
 
   /* Shadow — this list is closed. */
-  --sm-shadow-card: 0 1px 2px rgba(38, 34, 27, 0.025), 0 4px 14px rgba(51, 46, 38, 0.045);
-  --sm-shadow-cta: 0 6px 24px rgba(155, 100, 18, 0.28);
+  --hm-shadow-card: 0 1px 2px rgba(38, 34, 27, 0.025), 0 4px 14px rgba(51, 46, 38, 0.045);
+  --hm-shadow-cta: 0 6px 24px rgba(155, 100, 18, 0.28);
 }
 
 @layer base {
@@ -102,8 +102,8 @@
            outline-none transition-shadow;
   }
   .field-input:focus {
-    box-shadow: 0 0 0 3px var(--sm-focus);
-    border-color: var(--sm-border-strong);
+    box-shadow: 0 0 0 3px var(--hm-focus);
+    border-color: var(--hm-border-strong);
   }
 
   .btn-primary {
@@ -111,7 +111,7 @@
            transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
   }
   .btn-primary:hover:not(:disabled) {
-    background: var(--sm-gold-hover);
+    background: var(--hm-gold-hover);
   }
 
   .btn-secondary {
@@ -119,7 +119,7 @@
            font-medium text-ink-soft transition-colors;
   }
   .btn-secondary:hover {
-    background: var(--sm-hover);
+    background: var(--hm-hover);
   }
 
   .card {

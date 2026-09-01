@@ -1,44 +1,23 @@
-name: Deploy SuperMortgage
+name: Deploy Homestead Mortgages
 
-# Deploys into Walt's GCP project, on Walt's Cloud SQL instance, in
-# SuperMortgage's own database and its own Cloud Run service.
-#
-# ⚠ ONE-TIME PREREQUISITE, and this workflow cannot authenticate without it.
-# The Workload Identity provider allowlists repositories by name:
-#
-#   attribute.repository=='Walt-Home/Walt' || attribute.repository=='Walt-Home/Homestead'
-#
-# and `walt-github-actions@` grants roles/iam.workloadIdentityUser to exactly
-# those two principalSets. Both need Walt-Home/SuperMortgage added:
-#
-#   gcloud iam workload-identity-pools providers update-oidc github \
-#     --location=global --workload-identity-pool=github --project=walt-489214 \
-#     --attribute-condition="attribute.repository=='Walt-Home/Walt' || attribute.repository=='Walt-Home/Homestead' || attribute.repository=='Walt-Home/SuperMortgage'"
-#
-#   gcloud iam service-accounts add-iam-policy-binding \
-#     walt-github-actions@walt-489214.iam.gserviceaccount.com --project=walt-489214 \
-#     --role=roles/iam.workloadIdentityUser \
-#     --member="principalSet://iam.googleapis.com/projects/859792949607/locations/global/workloadIdentityPools/github/attribute.repository/Walt-Home/SuperMortgage"
+# Everything this app uses now lives in its own GCP project. No shared Cloud
+# SQL instance, no shared Artifact Registry, no borrowed service accounts —
+# which is what finally makes the IAM boundary structural rather than
+# maintained. See docs/decisions.md for why that mattered enough to move.
 
 on:
   push:
     branches: [main]
 
 env:
-  GCP_PROJECT: walt-489214
+  GCP_PROJECT: homestead-mortgages
   REGION: us-central1
-  ARTIFACT_REPO: walt-app
-  SERVICE: supermortgage-staging
-  # SuperMortgage's OWN Cloud SQL instance, not the shared walt-db. Cloud SQL
-  # users are instance-scoped, so sharing an instance would mean this app's
-  # role could authenticate against Walt's production database.
-  SQL_INSTANCE: supermortgage-db
-  # Our OWN runtime identity. walt-cloud-run@ carries project-wide
-  # secretmanager.secretAccessor and storage.objectAdmin, so running as it
-  # would let this container read every secret in the project — Anthropic,
-  # Twilio, Walt's own DATABASE_URL — and delete objects from Walt's buckets.
-  # supermortgage-run@ holds cloudsql.client and access to exactly one secret.
-  RUNTIME_SA: supermortgage-run@walt-489214.iam.gserviceaccount.com
+  ARTIFACT_REPO: homestead-mortgages
+  SERVICE: homestead-mortgages-staging
+  SQL_INSTANCE: homestead-mortgages-db
+  # Least privilege: cloudsql.client, plus accessor on exactly two secrets
+  # granted on the secrets themselves rather than project-wide.
+  RUNTIME_SA: hm-run@homestead-mortgages.iam.gserviceaccount.com
 
 jobs:
   check:
@@ -67,8 +46,26 @@ jobs:
       - name: Build
         run: npm run build
 
+  # Deploying without a Google client id would put up a sign-in page that can
+  # never succeed, and the server refuses to boot without one anyway. So the
+  # deploy waits for the repo variable rather than shipping a door with no key.
+  # Set it once, in the console, and re-run: `gh variable set GOOGLE_CLIENT_ID`.
+  awaiting-oauth-client:
+    needs: check
+    if: vars.GOOGLE_CLIENT_ID == ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy skipped
+        run: |
+          echo "::warning title=Deploy skipped::GOOGLE_CLIENT_ID repo variable is not set."
+          echo "Create an OAuth client (Internal, Web application) in the"
+          echo "homestead-mortgages project, then:"
+          echo "  gh variable set GOOGLE_CLIENT_ID --repo Walt-Home/Homestead-Mortgages"
+          echo "See docs/decisions.md → Google sign-in."
+
   deploy:
     needs: check
+    if: vars.GOOGLE_CLIENT_ID != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -89,8 +86,7 @@ jobs:
 
       # Artifact Registry returns a transient 502 on the manifest push often
       # enough to fail a deploy that was otherwise fine — seen once already,
-      # with every layer pushed and only the manifest rejected. Retried rather
-      # than left for a human to notice and re-run.
+      # with every layer pushed and only the manifest rejected.
       - name: Build and push
         run: |
           IMAGE=${{ env.REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE }}:${{ github.sha }}
@@ -106,19 +102,14 @@ jobs:
           echo "docker push failed after 3 attempts"
           exit 1
 
-      # Migrations run before the new revision serves traffic. Prisma's
-      # `migrate deploy` applies committed migrations only — it never generates
-      # one, so it cannot invent a destructive change against a live database.
-      #
-      # Reached through the Cloud SQL Auth Proxy rather than the instance's
-      # public IP: GitHub runners have dynamic addresses, so the alternative is
-      # an authorized-network entry wide enough to expose an instance that also
-      # holds two production databases.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
+      # Reached through the Cloud SQL Auth Proxy rather than a public IP:
+      # GitHub runners have dynamic addresses, so the alternative is an
+      # authorized-network entry wide enough to expose the instance.
       - name: Start Cloud SQL Auth Proxy
         run: |
           curl -sSo cloud-sql-proxy \
@@ -131,30 +122,27 @@ jobs:
             sleep 1
           done
 
-      # Run through the workspace script, NOT `npx prisma migrate deploy
-      # --schema <path>` from the repo root. Prisma 7 takes the datasource URL
-      # from prisma.config.ts, and it looks for that file in the working
-      # directory — pointing --schema at the package while standing in the root
-      # finds the schema and misses the config, which fails as "datasource.url
-      # is required" and reads like a missing secret rather than a wrong cwd.
+      # Through the workspace script, NOT `npx prisma migrate deploy --schema
+      # <path>` from the repo root. Prisma 7 takes the datasource URL from
+      # prisma.config.ts and looks for that file in the working directory —
+      # pointing --schema at the package while standing in the root finds the
+      # schema and misses the config, which fails as "datasource.url is
+      # required" and reads like a missing secret rather than a wrong cwd.
       - name: Apply migrations
         run: |
           npm ci
           npm run db:generate
-          npm run migrate:deploy --workspace=@sm/db
+          npm run migrate:deploy --workspace=@hm/db
         env:
-          DATABASE_URL: ${{ secrets.SUPERMORTGAGE_MIGRATION_URL }}
+          DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
 
-      # --allow-unauthenticated is deliberate and is NOT the same as open.
+      # --allow-unauthenticated is correct here and is NOT the same as open.
       #
-      # Cloud Run's IAM auth requires an OIDC token on every request, which a
-      # browser will not send — an IAM-protected URL cannot be handed to a
-      # colleague as a link. So the service is publicly routable and the
-      # ACCESS_PASSPHRASE gate in the app decides who gets in.
-      #
-      # That trade is only acceptable while CONNECTOR_MODE=fixture and no real
-      # borrower data exists. Before this holds anything real, the gate is
-      # replaced with actual authentication and this flag comes back off.
+      # Google sign-in is the gate, and it is enforced in the application: every
+      # /api route past /health and /auth requires a session, and the OAuth app
+      # is Internal to the Workspace so Google refuses non-domain accounts
+      # before a token is minted. Cloud Run's own IAM auth cannot be satisfied
+      # by a browser, so using it would mean nobody could open the link at all.
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE }} \
@@ -162,8 +150,8 @@ jobs:
             --region ${{ env.REGION }} \
             --service-account ${{ env.RUNTIME_SA }} \
             --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
-            --set-secrets "DATABASE_URL=SUPERMORTGAGE_DATABASE_URL_STAGING:latest,ACCESS_PASSPHRASE=SUPERMORTGAGE_ACCESS_PASSPHRASE:latest" \
-            --set-env-vars "NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture" \
+            --set-secrets "DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET:latest" \
+            --set-env-vars "NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture,ALLOWED_DOMAIN=trywalt.ai,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}" \
             --allow-unauthenticated \
             --port 8080 \
             --memory 1Gi \

@@ -13,7 +13,7 @@
     "isolatedModules": true,
     "noEmit": true,
     "allowImportingTsExtensions": false,
-    "paths": { "@sm/shared": ["../../packages/shared/src/index.ts"] },
+    "paths": { "@hm/shared": ["../../packages/shared/src/index.ts"] },
     "baseUrl": "."
   },
   "include": ["src"]

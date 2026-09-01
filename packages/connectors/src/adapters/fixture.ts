@@ -18,7 +18,7 @@ import type {
   LoanFile,
   PayrollData,
   TaxTranscript,
-} from "@sm/shared";
+} from "@hm/shared";
 import type {
   BankConnector,
   ConnectorRegistry,

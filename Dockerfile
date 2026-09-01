@@ -26,7 +26,7 @@ COPY --from=build /app/node_modules ./node_modules
 # entrypoint as ambiguous, warns MODULE_TYPELESS_PACKAGE_JSON, and reparses it
 # as ESM on every cold start. A three-line manifest declaring the module type
 # is enough — the runtime stage needs nothing else from the root manifest.
-RUN printf '{\n  "name": "supermortgage-runtime",\n  "private": true,\n  "type": "module"\n}\n' > package.json
+RUN printf '{\n  "name": "homestead-mortgages-runtime",\n  "private": true,\n  "type": "module"\n}\n' > package.json
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/web/dist ./apps/web/dist

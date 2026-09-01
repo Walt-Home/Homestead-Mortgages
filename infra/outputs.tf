@@ -3,9 +3,9 @@ output "service_url" {
 }
 
 output "instance_connection_name" {
-  value = google_sql_database_instance.supermortgage.connection_name
+  value = google_sql_database_instance.homestead-mortgages.connection_name
 }
 
 output "database_name" {
-  value = google_sql_database.supermortgage.name
+  value = google_sql_database.homestead-mortgages.name
 }

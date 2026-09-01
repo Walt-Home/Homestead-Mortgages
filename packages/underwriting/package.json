@@ -1,5 +1,5 @@
 {
-  "name": "@sm/underwriting",
+  "name": "@hm/underwriting",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@sm/shared": "*"
+    "@hm/shared": "*"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

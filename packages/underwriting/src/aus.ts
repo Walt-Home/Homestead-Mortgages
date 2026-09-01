@@ -26,7 +26,7 @@ import type {
   Decision,
   LoanCondition,
   LoanFile,
-} from "@sm/shared";
+} from "@hm/shared";
 import { DerivationLog, round } from "./derive.js";
 import { GUIDELINES } from "./guidelines.js";
 import {

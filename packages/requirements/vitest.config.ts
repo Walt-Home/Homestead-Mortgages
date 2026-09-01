@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 export default defineConfig({
   resolve: {
-    alias: { "@sm/shared": resolve(import.meta.dirname, "../shared/src/index.ts") },
+    alias: { "@hm/shared": resolve(import.meta.dirname, "../shared/src/index.ts") },
   },
   test: { include: ["src/**/*.test.ts"] },
 });

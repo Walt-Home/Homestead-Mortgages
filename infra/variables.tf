@@ -1,7 +1,7 @@
 variable "project_id" {
   description = "GCP project. Shared with Walt and Homestead; the SQL instance is not."
   type        = string
-  default     = "walt-489214"
+  default     = "homestead-mortgages"
 }
 
 variable "region" {
@@ -34,7 +34,7 @@ variable "public_ip_enabled" {
 
 variable "db_password" {
   description = <<-EOT
-    Password for supermortgage_app. Generated out of band and passed at apply
+    Password for homestead_mortgages_app. Generated out of band and passed at apply
     time; `ignore_changes` keeps rotations from reverting. Never commit it — a
     password in a tfvars file is a password in the state bucket.
   EOT
@@ -44,14 +44,13 @@ variable "db_password" {
 
 variable "service_account_email" {
   description = <<-EOT
-    Runtime identity for the Cloud Run service. Deliberately NOT
-    walt-cloud-run@, which holds project-wide secretmanager.secretAccessor and
-    storage.objectAdmin — running as it would give this container read access
-    to every secret in the project and delete rights on Walt's buckets.
-    supermortgage-run@ has cloudsql.client and access to one secret.
+    Runtime identity for the Cloud Run service. Holds cloudsql.client and
+    secretAccessor on exactly the secrets it needs, granted on the secrets
+    rather than the project — so a compromised container cannot enumerate
+    Secret Manager.
   EOT
   type        = string
-  default     = "supermortgage-run@walt-489214.iam.gserviceaccount.com"
+  default     = "hm-run@homestead-mortgages.iam.gserviceaccount.com"
 }
 
 variable "image" {
@@ -62,7 +61,7 @@ variable "image" {
 variable "database_url_secret" {
   description = "Secret Manager secret holding the connection string."
   type        = string
-  default     = "SUPERMORTGAGE_DATABASE_URL_STAGING"
+  default     = "HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING"
 }
 
 variable "connector_mode" {
@@ -78,22 +77,38 @@ variable "connector_mode" {
 
 variable "cors_origin" {
   type    = string
-  default = "https://supermortgage-staging.trywalt.ai"
+  default = "https://homestead-mortgages-staging.trywalt.ai"
 }
 
-variable "access_passphrase_secret" {
-  description = "Secret Manager secret holding the prototype gate passphrase."
+variable "session_secret_secret" {
+  description = "Secret Manager secret holding the session signing key."
   type        = string
-  default     = "SUPERMORTGAGE_ACCESS_PASSPHRASE"
+  default     = "HOMESTEAD_MORTGAGES_SESSION_SECRET"
+}
+
+variable "google_client_id" {
+  description = <<-EOT
+    OAuth client id for Google sign-in. Public by design — it is embedded in
+    every page that offers the button — so it is a variable, not a secret. The
+    server refuses to boot in production without it.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "allowed_domain" {
+  description = "Workspace domain permitted to sign in."
+  type        = string
+  default     = "trywalt.ai"
 }
 
 variable "public" {
   description = <<-EOT
-    Whether the service is routable by anyone. True is only defensible while
-    connector_mode is "fixture" and the ACCESS_PASSPHRASE gate is set — it
-    exists because Cloud Run IAM auth cannot be satisfied by a browser, so an
-    IAM-protected URL is not a link anyone can open. Set false before real
-    borrower data exists.
+    Whether the service is routable by anyone. True is correct here: Google
+    sign-in is enforced in the application, and Cloud Run's own IAM auth cannot
+    be satisfied by a browser — using it would mean nobody could open the link.
+    "Routable" is not "accessible"; every /api route past /health and /auth
+    requires a session.
   EOT
   type        = bool
   default     = true

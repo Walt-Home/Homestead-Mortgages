@@ -1,4 +1,4 @@
-// SuperMortgage — the underwriting file.
+// Homestead Mortgages — the underwriting file.
 //
 // Two shapes live here and they answer to different masters.
 //
@@ -18,6 +18,35 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ─── PEOPLE WHO SIGN IN ─────────────────────────────────────────────────────
+
+/// A signed-in person.
+///
+/// Identity comes from Google and nothing else — there is no password column
+/// here and there must never be one. `googleSub` is the stable subject claim
+/// and is the real key; email is stored for display and can change, which is
+/// why it is not what we join on.
+///
+/// Access is restricted to the trywalt.ai Workspace domain by the OAuth app
+/// being Internal, so Google refuses non-domain accounts before we ever see a
+/// token. `hostedDomain` records what the token actually asserted, because
+/// "Google enforces it" is a claim worth being able to audit.
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  googleSub    String   @unique @map("google_sub")
+  email        String   @unique
+  name         String?
+  pictureUrl   String?  @map("picture_url")
+  hostedDomain String?  @map("hosted_domain")
+
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  loanFiles LoanFile[]
+
+  @@map("users")
 }
 
 // ─── THE FILE ───────────────────────────────────────────────────────────────
@@ -44,6 +73,17 @@ enum LoanPurpose {
 model LoanFile {
   id        String    @id @default(uuid()) @db.Uuid
   stage     FlowStage @default(PROPERTY_LOAN)
+
+  /// Who created it. Null only for the shared demo files, which belong to
+  /// nobody on purpose — see `isDemo`.
+  userId String? @map("user_id") @db.Uuid
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// A seeded fixture file, readable by everyone signed in and writable by no
+  /// one. It exists so the team has a common artifact to critique without
+  /// anyone's own file becoming shared — which is a data model we would have
+  /// to unwind later.
+  isDemo Boolean @default(false) @map("is_demo")
 
   // Screen 1. Nullable because a file exists the moment somebody starts, and
   // the whole point of the flow is that it is useful before it is complete.
@@ -112,6 +152,8 @@ model LoanFile {
 
   @@index([stage])
   @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([isDemo])
   @@map("loan_files")
 }
 

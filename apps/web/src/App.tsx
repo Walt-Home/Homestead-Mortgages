@@ -4,7 +4,9 @@ import { Stepper, type ScreenPath } from "./components/Stepper.js";
 import { RequirementRail } from "./components/RequirementRail.js";
 import { PrototypeBanner } from "./components/PrototypeBanner.js";
 import { api, type Assessment } from "./lib/api.js";
-import { StartPage } from "./pages/StartPage.js";
+import { useAuth } from "./lib/auth.js";
+import { SignInPage } from "./pages/SignInPage.js";
+import { FilesPage } from "./pages/FilesPage.js";
 import { PropertyLoanPage } from "./pages/PropertyLoanPage.js";
 import { IdentityPage } from "./pages/IdentityPage.js";
 import { BankPage, CreditPage, IrsPage, PayrollPage } from "./pages/ConnectPages.js";
@@ -13,9 +15,18 @@ import { DecisionPage } from "./pages/DecisionPage.js";
 import { ConsentPage } from "./pages/ConsentPage.js";
 
 export function App() {
+  const { status } = useAuth();
+
+  // Render nothing rather than the sign-in page while the session is still
+  // being resolved — a signed-in person should never see a sign-in flash.
+  if (status === "loading") return <div className="min-h-screen bg-canvas" />;
+  if (status === "signed-out") return <SignInPage />;
+
   return (
     <Routes>
-      <Route path="/" element={<StartPage />} />
+      <Route path="/" element={<Chrome />}>
+        <Route index element={<FilesPage />} />
+      </Route>
 
       {/* Screen 1 runs before a file exists, so there is nothing to assess yet
           and no rail to show. Every later screen has both. */}
@@ -40,9 +51,6 @@ export function App() {
 }
 
 /**
- * The shell for a file that exists: stepper across the top, requirement rail
- * beside the form.
- *
  * The rail is keyed on the current path as well as the file id, so moving
  * between screens refetches. A connector call in the previous step changes
  * what is outstanding in this one, and a cached rail would show satisfied work
@@ -62,6 +70,41 @@ function FileShell() {
   return <Shell screen={screen} assessment={data} />;
 }
 
+/** Header and banner without the flow chrome, for pages outside a file. */
+function Chrome() {
+  return (
+    <div className="min-h-screen bg-canvas">
+      <PrototypeBanner />
+      <Header />
+      <Outlet />
+    </div>
+  );
+}
+
+function Header({ children }: { children?: React.ReactNode }) {
+  const { user, signOut } = useAuth();
+  return (
+    <header className="border-b border-line-light bg-app/70 backdrop-blur">
+      <div className="mx-auto max-w-5xl px-6 py-4">
+        <div className="flex items-center justify-between gap-4">
+          <a href="/" className="font-brand text-[15px] font-bold tracking-tight text-gold">
+            Homestead Mortgages
+          </a>
+          {user && (
+            <div className="flex items-center gap-3 text-[12px]">
+              <span className="text-meta">{user.email}</span>
+              <button className="text-subtle underline-offset-2 hover:underline" onClick={() => void signOut()}>
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
+        {children && <div className="mt-3">{children}</div>}
+      </div>
+    </header>
+  );
+}
+
 function Shell({
   screen,
   assessment,
@@ -74,16 +117,9 @@ function Shell({
   return (
     <div className="min-h-screen bg-canvas">
       <PrototypeBanner />
-      <header className="border-b border-line-light bg-app/70 backdrop-blur">
-        <div className="mx-auto max-w-5xl px-6 py-4">
-          <span className="font-brand text-[15px] font-bold tracking-tight text-gold">
-            SuperMortgage
-          </span>
-          <div className="mt-3">
-            <Stepper current={screen} />
-          </div>
-        </div>
-      </header>
+      <Header>
+        <Stepper current={screen} />
+      </Header>
 
       <main className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10 lg:flex-row">
         <div className="min-w-0 flex-1">

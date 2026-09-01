@@ -8,10 +8,15 @@
 
 import { Router } from "express";
 import { z } from "zod";
-import { prisma } from "@sm/db";
+import { prisma } from "@hm/db";
 import { config } from "../config.js";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
-import { loadLoanFile, recordEvent } from "../services/repository.js";
+import {
+  assertFileAccess,
+  listAccessibleFiles,
+  loadLoanFile,
+  recordEvent,
+} from "../services/repository.js";
 import { loanEstimateDueAt, stampApplicationIfComplete } from "../services/application.js";
 
 export const fileRouter = Router();
@@ -62,6 +67,9 @@ fileRouter.post(
     const input = propertyLoanSchema.parse(req.body);
     const file = await prisma.loanFile.create({
       data: {
+        // Ownership is set at creation and never changes. A file with no owner
+        // is a demo file, and only the seed script makes those.
+        userId: req.user!.id,
         stage: "IDENTITY",
         purpose: PURPOSE_TO_DB[input.purpose],
         loanAmount: input.loanAmount,
@@ -125,6 +133,7 @@ fileRouter.post(
     const id = z.string().uuid().parse(req.params.id);
     const input = identitySchema.parse(req.body);
 
+    await assertFileAccess(id, req.user!.id, "write");
     const existing = await loadLoanFile(id);
     if (!existing) throw new AppError(404, "Loan file not found", "NOT_FOUND");
 
@@ -177,10 +186,19 @@ fileRouter.post(
   }),
 );
 
+/** Everything this user may open: their own files, plus the shared demo set. */
+fileRouter.get(
+  "/",
+  asyncRoute(async (req, res) => {
+    res.json({ files: await listAccessibleFiles(req.user!.id) });
+  }),
+);
+
 fileRouter.get(
   "/:id",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
+    await assertFileAccess(id, req.user!.id, "read");
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
     res.json({ file, loanEstimateDueAt: loanEstimateDueAt(file) });

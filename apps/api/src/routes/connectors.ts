@@ -7,14 +7,25 @@
 
 import { Router } from "express";
 import { z } from "zod";
-import { prisma } from "@sm/db";
+import { prisma } from "@hm/db";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
-import { loadLoanFile, recordEvent, recordSnapshot } from "../services/repository.js";
+import {
+  assertFileAccess,
+  loadLoanFile,
+  recordEvent,
+  recordSnapshot,
+} from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
 
 export const connectorRouter = Router();
 
-async function requireFile(id: string) {
+/**
+ * Load a file the caller is allowed to WRITE. Every route in this module
+ * mutates — a connector pull writes a snapshot — so there is no read-only
+ * variant here on purpose.
+ */
+async function requireFile(id: string, userId: string) {
+  await assertFileAccess(id, userId, "write");
   const file = await loadLoanFile(id);
   if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
   return file;
@@ -32,7 +43,7 @@ connectorRouter.post(
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const input = consentSchema.parse(req.body);
-    await requireFile(id);
+    await requireFile(id, req.user!.id);
 
     const consent = await prisma.consent.create({
       data: {
@@ -58,7 +69,7 @@ connectorRouter.post(
   "/:id/credit",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    const file = await requireFile(id);
+    const file = await requireFile(id, req.user!.id);
 
     const result = await connectors().credit.pullTriMerge(file);
     await recordSnapshot(id, "credit", result.provider, result.externalId, result.data, result.retrievedAt);
@@ -75,7 +86,7 @@ connectorRouter.post(
   "/:id/bank",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    const file = await requireFile(id);
+    const file = await requireFile(id, req.user!.id);
 
     const bank = connectors().bank;
     const session = await bank.createLinkSession(file);
@@ -100,7 +111,7 @@ connectorRouter.post(
   "/:id/payroll",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    const file = await requireFile(id);
+    const file = await requireFile(id, req.user!.id);
 
     const payroll = connectors().payroll;
     const session = await payroll.createLinkSession(file);
@@ -152,7 +163,7 @@ connectorRouter.post(
   "/:id/irs",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    const file = await requireFile(id);
+    const file = await requireFile(id, req.user!.id);
 
     const currentYear = new Date().getFullYear();
     const result = await connectors().irs.fetchTranscripts(file, [currentYear - 1, currentYear - 2]);
@@ -172,7 +183,7 @@ connectorRouter.post(
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const enabled = z.object({ enabled: z.boolean() }).parse(req.body).enabled;
-    await requireFile(id);
+    await requireFile(id, req.user!.id);
 
     await prisma.connectorLink.updateMany({
       where: { loanFileId: id },

@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { LoanFile } from "@sm/shared";
+import type { LoanFile } from "@hm/shared";
 import {
   AuthorizationError,
   fixtureRegistry,

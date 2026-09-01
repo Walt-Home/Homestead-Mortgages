@@ -14,7 +14,7 @@
  * nobody finishes.
  */
 
-import type { LoanFile } from "@sm/shared";
+import type { LoanFile } from "@hm/shared";
 import type { FailureSeverity, Requirement, RequirementSource, ScreenId } from "./types.js";
 import { type Applicability, evaluateCondition } from "./conditions.js";
 import { evaluateSatisfaction, type Satisfaction } from "./satisfaction.js";

@@ -1,4 +1,4 @@
-# SuperMortgage
+# Homestead Mortgages
 
 Onboard a homebuyer, retrieve almost everything underwriting needs from
 connected accounts rather than uploads, and give them a decision that explains
@@ -71,6 +71,6 @@ every adapter against an unauthorized file and fails if any returns data.
 
 ## Infrastructure
 
-Runs in Walt's GCP project on its **own** Cloud SQL instance (`supermortgage-db`).
+Runs in Walt's GCP project on its **own** Cloud SQL instance (`homestead-mortgages-db`).
 Not Walt's instance: Cloud SQL users are instance-scoped, so sharing one would
 let this app's role authenticate against `walt_prod`. See `docs/decisions.md`.

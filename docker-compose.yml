@@ -6,20 +6,20 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: supermortgage-postgres
+    container_name: homestead-mortgages-postgres
     environment:
-      POSTGRES_USER: supermortgage
-      POSTGRES_PASSWORD: supermortgage
-      POSTGRES_DB: supermortgage
+      POSTGRES_USER: homestead-mortgages
+      POSTGRES_PASSWORD: homestead-mortgages
+      POSTGRES_DB: homestead-mortgages
     ports:
       - "5433:5432"
     volumes:
-      - supermortgage-pgdata:/var/lib/postgresql/data
+      - homestead-mortgages-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U supermortgage"]
+      test: ["CMD-SHELL", "pg_isready -U homestead-mortgages"]
       interval: 5s
       timeout: 5s
       retries: 5
 
 volumes:
-  supermortgage-pgdata:
+  homestead-mortgages-pgdata:

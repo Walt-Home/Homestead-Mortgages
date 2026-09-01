@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
-import { AuthorizationError } from "@sm/connectors";
+import { AuthorizationError } from "@hm/connectors";
 
 export class AppError extends Error {
   constructor(

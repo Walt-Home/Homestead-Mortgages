@@ -1,12 +1,12 @@
-# SuperMortgage infrastructure.
+# Homestead Mortgages infrastructure.
 #
-# The app runs in Walt's GCP project (walt-489214) but on its OWN Cloud SQL
+# The app runs in Walt's GCP project (homestead-mortgages) but on its OWN Cloud SQL
 # instance. That is a deliberate change from where this started.
 #
-# The first cut put SuperMortgage's database on the shared `walt-db` instance,
+# The first cut put Homestead Mortgages's database on the shared `homestead-mortgages-db` instance,
 # alongside walt_prod and homestead_prod. Wiring it up produced the argument
 # against: Cloud SQL users are INSTANCE-scoped, not database-scoped, so the
-# `supermortgage_app` role could open a connection to walt_prod. It could read
+# `homestead_mortgages_app` role could open a connection to walt_prod. It could read
 # nothing — 0 of 98 tables — but "authenticated, reads nothing" is a posture
 # that depends on table grants staying correct forever, and this product will
 # eventually hold SSNs, credit reports and twelve months of bank transactions.
@@ -36,8 +36,8 @@ provider "google" {
   region  = var.region
 }
 
-resource "google_sql_database_instance" "supermortgage" {
-  name             = "supermortgage-db"
+resource "google_sql_database_instance" "homestead-mortgages" {
+  name             = "homestead-mortgages-db"
   database_version = "POSTGRES_16"
   region           = var.region
 
@@ -72,9 +72,9 @@ resource "google_sql_database_instance" "supermortgage" {
   }
 }
 
-resource "google_sql_database" "supermortgage" {
-  name     = "supermortgage_${var.environment}"
-  instance = google_sql_database_instance.supermortgage.name
+resource "google_sql_database" "homestead-mortgages" {
+  name     = "homestead-mortgages_${var.environment}"
+  instance = google_sql_database_instance.homestead-mortgages.name
 
   lifecycle {
     prevent_destroy = true
@@ -85,8 +85,8 @@ resource "google_sql_database" "supermortgage" {
 # generated out of band and stored in Secret Manager, because a password in
 # state is a password in whoever can read the state bucket.
 resource "google_sql_user" "app" {
-  name     = "supermortgage_app"
-  instance = google_sql_database_instance.supermortgage.name
+  name     = "homestead_mortgages_app"
+  instance = google_sql_database_instance.homestead-mortgages.name
   password = var.db_password
 
   lifecycle {
@@ -95,7 +95,7 @@ resource "google_sql_user" "app" {
 }
 
 resource "google_cloud_run_v2_service" "api" {
-  name     = "supermortgage-${var.environment}"
+  name     = "homestead-mortgages-${var.environment}"
   location = var.region
 
   template {
@@ -109,7 +109,7 @@ resource "google_cloud_run_v2_service" "api" {
     volumes {
       name = "cloudsql"
       cloud_sql_instance {
-        instances = [google_sql_database_instance.supermortgage.connection_name]
+        instances = [google_sql_database_instance.homestead-mortgages.connection_name]
       }
     }
 
@@ -163,17 +163,26 @@ resource "google_cloud_run_v2_service" "api" {
         }
       }
 
-      # The prototype gate. See apps/api/src/middleware/access-gate.ts — it is
-      # a door on a demo, not authentication, and it is what makes it safe to
-      # leave the service publicly routable so a link actually works.
       env {
-        name = "ACCESS_PASSPHRASE"
+        name = "SESSION_SECRET"
         value_source {
           secret_key_ref {
-            secret  = var.access_passphrase_secret
+            secret  = var.session_secret_secret
             version = "latest"
           }
         }
+      }
+
+      # Public by design; see variables.tf. The server refuses to boot in
+      # production if this is empty, rather than serving a door that never opens.
+      env {
+        name  = "GOOGLE_CLIENT_ID"
+        value = var.google_client_id
+      }
+
+      env {
+        name  = "ALLOWED_DOMAIN"
+        value = var.allowed_domain
       }
 
       volume_mounts {
@@ -189,16 +198,12 @@ resource "google_cloud_run_v2_service" "api" {
   }
 }
 
-# Publicly routable, gated by ACCESS_PASSPHRASE in the application.
+# Publicly routable, gated by Google sign-in in the application.
 #
 # Cloud Run's IAM auth needs an OIDC token on every request, which a browser
 # does not send — so an IAM-protected URL cannot be handed to a colleague as a
-# link, which is the entire point of a prototype under review. The passphrase
-# gate takes that job instead.
-#
-# This is only acceptable while connector_mode is "fixture" and no real
-# borrower data exists. Flip `public` to false and restore invoker_members
-# before anything real lands here.
+# link. Authentication happens in the app instead, where it can also express
+# "this file is yours and that one is not".
 resource "google_cloud_run_v2_service_iam_member" "public" {
   count = var.public ? 1 : 0
 

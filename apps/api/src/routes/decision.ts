@@ -8,11 +8,11 @@
 import { Router } from "express";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { prisma } from "@sm/db";
-import { underwrite } from "@sm/underwriting";
-import type { Prisma } from "@sm/db";
+import { prisma } from "@hm/db";
+import { underwrite } from "@hm/underwriting";
+import type { Prisma } from "@hm/db";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
-import { loadLoanFile, recordEvent } from "../services/repository.js";
+import { assertFileAccess, loadLoanFile, recordEvent } from "../services/repository.js";
 
 export const decisionRouter = Router();
 
@@ -32,6 +32,7 @@ decisionRouter.post(
     const id = z.string().uuid().parse(req.params.id);
     const market = marketSchema.parse(req.body ?? {});
 
+    await assertFileAccess(id, req.user!.id, "write");
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
 
@@ -104,6 +105,7 @@ decisionRouter.get(
   "/:id/decisions",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
+    await assertFileAccess(id, req.user!.id, "read");
     const decisions = await prisma.decision.findMany({
       where: { loanFileId: id },
       orderBy: { computedAt: "desc" },

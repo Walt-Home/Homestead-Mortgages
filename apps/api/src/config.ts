@@ -55,10 +55,27 @@ export const config = {
    * the number is visible and adjustable rather than buried in a constructor.
    */
   /**
-   * Shared passphrase for the prototype gate. Unset disables the gate, which
-   * is what local development wants. See middleware/access-gate.ts.
+   * Google OAuth client id. Public by design — it is embedded in every page
+   * that offers Google sign-in — so it is a plain env var, not a secret.
+   * Required in production; `assertAuthConfigured` refuses to boot without it.
    */
-  accessPassphrase: process.env.ACCESS_PASSPHRASE,
+  googleClientId: process.env.GOOGLE_CLIENT_ID,
+
+  /**
+   * Workspace domain allowed to sign in. Google already enforces this because
+   * the OAuth app is Internal; this is the copy of the rule that lives in the
+   * repo, next to a test, where a console click cannot quietly loosen it.
+   */
+  allowedDomain: process.env.ALLOWED_DOMAIN ?? "trywalt.ai",
+
+  /**
+   * Signs the session cookie. A weak or shared value would let anyone who
+   * knows it mint a session for any user, so production must supply a real
+   * one — the development fallback is deliberately obvious as a fallback.
+   */
+  sessionSecret:
+    process.env.SESSION_SECRET ??
+    (process.env.NODE_ENV === "production" ? "" : "development-only-session-secret"),
 
   defaultProduct: {
     code: process.env.DEFAULT_PRODUCT_CODE ?? "CONF-30-FIXED",

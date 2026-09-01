@@ -12,7 +12,7 @@
  * unauthorized file and fails if any of them returns data.
  */
 
-import type { Consent, LoanFile } from "@sm/shared";
+import type { Consent, LoanFile } from "@hm/shared";
 
 export class AuthorizationError extends Error {
   constructor(

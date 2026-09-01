@@ -11,7 +11,7 @@
  * done" in different words.
  */
 
-import type { LoanFile } from "@sm/shared";
+import type { LoanFile } from "@hm/shared";
 import type { Requirement } from "./types.js";
 
 export type Satisfaction =

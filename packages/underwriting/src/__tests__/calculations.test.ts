@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { LoanFile } from "@sm/shared";
+import type { LoanFile } from "@hm/shared";
 import { DerivationLog } from "../derive.js";
 import { housingPitia, loanToValue, representativeFico, reserves } from "../calculations.js";
 import { pointsAndFeesCap, GUIDELINES } from "../guidelines.js";

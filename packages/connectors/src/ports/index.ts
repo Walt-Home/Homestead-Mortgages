@@ -12,7 +12,7 @@
  *   1. Nothing may be pulled before APP-005. `guard.ts` enforces it, and the
  *      guard is not optional — it is in the port's own contract, not in each
  *      adapter's good intentions.
- *   2. An adapter returns domain types from `@sm/shared`, never vendor JSON.
+ *   2. An adapter returns domain types from `@hm/shared`, never vendor JSON.
  *      Vendor shapes stay inside the adapter so a vendor swap cannot ripple.
  */
 
@@ -23,7 +23,7 @@ import type {
   LoanFile,
   PayrollData,
   TaxTranscript,
-} from "@sm/shared";
+} from "@hm/shared";
 
 /** Which requirements an adapter claims it can satisfy. Checked in tests. */
 export interface ConnectorCapabilities {

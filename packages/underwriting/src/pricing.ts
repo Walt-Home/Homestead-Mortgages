@@ -11,7 +11,7 @@
  * mispricing means. Wire the real matrix before anything is quoted.
  */
 
-import type { LoanFile } from "@sm/shared";
+import type { LoanFile } from "@hm/shared";
 import { DerivationLog } from "./derive.js";
 
 export interface PricingResult {

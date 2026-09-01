@@ -26,6 +26,27 @@ carries `persistentMonitoringEnabled` and `nextSyncDueAt`, decisions and
 connector snapshots are append-only so a re-evaluation has something to diff
 against, and `FileEvent` is written from day one. Nothing schedules a re-pull.
 
+**Its own database instance, not a database on Walt's.**
+The first cut put `supermortgage_staging` on the shared `walt-db` alongside
+`walt_prod` and `homestead_prod`. Wiring up the credential produced the
+argument against it: Cloud SQL users are instance-scoped, so `supermortgage_app`
+could authenticate against `walt_prod`. Verified it reads nothing there — 0 of
+98 tables — but "authenticated, reads nothing" holds only as long as every
+table grant stays correct, and the failure mode is a mortgage app with a
+foothold in a live consumer database. `supermortgage-db` is a separate
+ENTERPRISE-edition instance, db-g1-small, roughly $25/month, in the same
+project. Point-in-time recovery, maintenance windows and CPU are now ours too.
+
+**Its own runtime identity, not Walt's.**
+Same class of problem as the instance, one layer up, and worse. The deploy
+originally ran as `walt-cloud-run@`, which holds **project-wide**
+`secretmanager.secretAccessor` and `storage.objectAdmin` — so this container
+could have read every secret in the project (Anthropic, Twilio, Resend, Walt's
+own `DATABASE_URL_PROD`) and deleted objects from Walt's buckets. Nothing in
+the code would have done that; the point is that nothing structural stopped it.
+`supermortgage-run@` holds `cloudsql.client` and accessor on exactly one
+secret, granted on the secret rather than the project.
+
 **HMX monorepo shape.** Turbo, Prisma, Terraform, npm workspaces. Palette and
 type stacks ported from Homestead; the component layer was not, because
 Homestead's own design doc reports eleven of fourteen kit components have zero

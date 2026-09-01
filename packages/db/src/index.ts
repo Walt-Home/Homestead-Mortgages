@@ -17,7 +17,22 @@ const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefi
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
-export const prisma =
+/**
+ * The explicit `: PrismaClient` annotation is load-bearing, not decoration.
+ *
+ * Without it TypeScript infers a type that mentions `$Extensions.DefaultArgs`,
+ * and it cannot name that symbol in this package's emitted `.d.ts`. With
+ * `skipLibCheck` on, the broken declaration does not error — it silently
+ * degrades to `any` for every consumer, so `prisma.loanFile.findUnique()`
+ * returns `any` and the repository's callbacks become implicit-any. That
+ * surfaces as `TS7006` in apps/api on a COLD build only, because a warm
+ * `packages/db/dist` from a previous good build masks it.
+ *
+ * It cost a red container build to find. The annotation makes the emitted
+ * declaration `export declare const prisma: PrismaClient;` — nameable, stable,
+ * and the same warm or cold.
+ */
+export const prisma: PrismaClient =
   globalForPrisma.prisma ??
   new PrismaClient({
     adapter,

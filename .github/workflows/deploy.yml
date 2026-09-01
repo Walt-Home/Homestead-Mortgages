@@ -29,6 +29,16 @@ env:
   REGION: us-central1
   ARTIFACT_REPO: walt-app
   SERVICE: supermortgage-staging
+  # SuperMortgage's OWN Cloud SQL instance, not the shared walt-db. Cloud SQL
+  # users are instance-scoped, so sharing an instance would mean this app's
+  # role could authenticate against Walt's production database.
+  SQL_INSTANCE: supermortgage-db
+  # Our OWN runtime identity. walt-cloud-run@ carries project-wide
+  # secretmanager.secretAccessor and storage.objectAdmin, so running as it
+  # would let this container read every secret in the project — Anthropic,
+  # Twilio, Walt's own DATABASE_URL — and delete objects from Walt's buckets.
+  # supermortgage-run@ holds cloudsql.client and access to exactly one secret.
+  RUNTIME_SA: supermortgage-run@walt-489214.iam.gserviceaccount.com
 
 jobs:
   check:
@@ -103,7 +113,7 @@ jobs:
             https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
           chmod +x cloud-sql-proxy
           ./cloud-sql-proxy --port 5432 \
-            ${{ env.GCP_PROJECT }}:${{ env.REGION }}:walt-db &
+            ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} &
           for i in $(seq 1 30); do
             (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1 && break
             sleep 1
@@ -122,8 +132,8 @@ jobs:
           gcloud run deploy ${{ env.SERVICE }} \
             --image "$IMAGE" \
             --region ${{ env.REGION }} \
-            --service-account walt-cloud-run@${{ env.GCP_PROJECT }}.iam.gserviceaccount.com \
-            --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:walt-db \
+            --service-account ${{ env.RUNTIME_SA }} \
+            --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
             --set-secrets "DATABASE_URL=SUPERMORTGAGE_DATABASE_URL_STAGING:latest" \
             --set-env-vars "NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture" \
             --no-allow-unauthenticated \

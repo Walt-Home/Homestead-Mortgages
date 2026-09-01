@@ -1,5 +1,5 @@
 variable "project_id" {
-  description = "GCP project. Shared with Walt and Homestead."
+  description = "GCP project. Shared with Walt and Homestead; the SQL instance is not."
   type        = string
   default     = "walt-489214"
 }
@@ -15,16 +15,43 @@ variable "environment" {
   default     = "staging"
 }
 
-variable "sql_instance_name" {
-  description = "Existing Cloud SQL instance. NOT managed by this configuration."
+variable "db_tier" {
+  description = "Cloud SQL machine type. db-g1-small is roughly $25/month."
   type        = string
-  default     = "walt-db"
+  default     = "db-g1-small"
+}
+
+variable "public_ip_enabled" {
+  description = <<-EOT
+    Whether the instance has a public IPv4 address. True is safe here BECAUSE
+    there are no authorized networks: reachability still requires the Cloud SQL
+    Auth Proxy or the Cloud Run socket, both IAM-authenticated. Set false only
+    once private services access is configured on the VPC.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "db_password" {
+  description = <<-EOT
+    Password for supermortgage_app. Generated out of band and passed at apply
+    time; `ignore_changes` keeps rotations from reverting. Never commit it — a
+    password in a tfvars file is a password in the state bucket.
+  EOT
+  type        = string
+  sensitive   = true
 }
 
 variable "service_account_email" {
-  description = "Runtime service account for the Cloud Run service."
+  description = <<-EOT
+    Runtime identity for the Cloud Run service. Deliberately NOT
+    walt-cloud-run@, which holds project-wide secretmanager.secretAccessor and
+    storage.objectAdmin — running as it would give this container read access
+    to every secret in the project and delete rights on Walt's buckets.
+    supermortgage-run@ has cloudsql.client and access to one secret.
+  EOT
   type        = string
-  default     = "walt-cloud-run@walt-489214.iam.gserviceaccount.com"
+  default     = "supermortgage-run@walt-489214.iam.gserviceaccount.com"
 }
 
 variable "image" {

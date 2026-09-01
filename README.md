@@ -68,3 +68,9 @@ every adapter against an unauthorized file and fails if any returns data.
 
 - `docs/requirements.md` — how the registry works and how to change it
 - `docs/decisions.md` — what was decided, what is assumed, and what is known wrong
+
+## Infrastructure
+
+Runs in Walt's GCP project on its **own** Cloud SQL instance (`supermortgage-db`).
+Not Walt's instance: Cloud SQL users are instance-scoped, so sharing one would
+let this app's role authenticate against `walt_prod`. See `docs/decisions.md`.

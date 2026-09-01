@@ -65,15 +65,28 @@ reference; `ssn_last4` is display only.
 
 ## Where this shares infrastructure
 
-Walt's GCP project (`walt-489214`) and Walt's Cloud SQL instance (`walt-db`),
-but SuperMortgage's own database (`supermortgage_staging`) and its own Cloud
-Run service. That is narrower sharing than Homestead has — Homestead shares
-Walt's *database* and inherited a long list of cross-service hazards for it.
-Here, `prisma migrate` cannot reach anything Walt or Homestead owns.
+Walt's GCP project (`walt-489214`) and Walt's Artifact Registry. **Not** Walt's
+database instance — SuperMortgage has its own, `supermortgage-db`.
 
-Terraform does **not** manage the walt-db instance, the shared Artifact
-Registry repo, or the WIF pool. Those pre-date this repo and belong to Walt;
-importing them would let a `terraform destroy` here take down two live apps.
+That was not the first plan, and the reason it changed is worth keeping:
+**Cloud SQL users are instance-scoped, not database-scoped.** With the database
+on the shared `walt-db`, the `supermortgage_app` role could open an
+authenticated connection to `walt_prod`. It could read nothing — 0 of 98 tables
+— but that posture depends on table grants staying correct forever, and this
+product will eventually hold SSNs, credit reports and twelve months of bank
+transactions. A separate instance makes the boundary structural rather than
+maintained. It also decouples point-in-time recovery, maintenance windows and
+CPU contention, all of which are instance-scoped.
+
+The runtime identity is `supermortgage-run@`, not `walt-cloud-run@`, for the
+same reason at the IAM layer: `walt-cloud-run@` carries project-wide
+`secretmanager.secretAccessor` and `storage.objectAdmin`. Ours has
+`cloudsql.client` and accessor on one secret, granted on the secret itself.
+
+Terraform manages `supermortgage-db`, its database, its app role and the Cloud
+Run service. It does **not** manage the shared Artifact Registry repo or the
+WIF pool — those pre-date this repo and belong to Walt, and importing them
+would let a `terraform destroy` here take down two live apps.
 
 ## Commands
 

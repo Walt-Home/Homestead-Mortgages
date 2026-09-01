@@ -1,8 +1,18 @@
-node_modules
+# Docker's ignore patterns use Go filepath.Match: a leading `*` matches only at
+# the root, so `*.tsbuildinfo` does NOT match `apps/api/tsbuildinfo`. Every
+# pattern below is therefore `**`-prefixed.
+#
+# This is not a tidiness rule. A local `tsconfig.tsbuildinfo` copied into the
+# image tells `tsc -b` the project is already built, so it emits nothing and
+# exits 0 — a green build that produces no dist. It cost a red container build
+# to find; the failure at least surfaced as a missing COPY rather than a stale
+# image shipping old code.
 **/node_modules
 **/dist
-.turbo
+**/.turbo
+**/*.tsbuildinfo
 .git
 .env
-*.tsbuildinfo
+.env.local
+**/.DS_Store
 infra/.terraform

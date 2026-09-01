@@ -119,9 +119,23 @@ export const EVALUATORS: Record<string, Evaluator> = {
   "APP-011": (f) => {
     const b = f.borrowers[0];
     if (!b) return no("no borrower");
-    return b.demographics
-      ? ok("URLA Section 7 collected")
-      : no("demographic information not requested");
+    if (!b.demographics) return no("demographic information not requested");
+    // Reg B is about the ASKING. All three must have been put to the borrower;
+    // an empty answer means the question was never shown, which is not the
+    // same as a decline and must not be recorded as one.
+    const d = b.demographics;
+    const answered = (v: readonly string[] | string) =>
+      v === "declined" || (Array.isArray(v) ? v.length > 0 : v.length > 0);
+    const missing = [
+      answered(d.ethnicity) ? null : "ethnicity",
+      answered(d.race) ? null : "race",
+      answered(d.sex) ? null : "sex",
+    ].filter((x): x is string => x !== null);
+    return check(
+      missing.length === 0,
+      "URLA Section 7 requested; answers or declines recorded",
+      `${missing.join(", ")} not requested`,
+    );
   },
 
   "APP-012": (f) =>

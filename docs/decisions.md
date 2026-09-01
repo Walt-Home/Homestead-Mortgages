@@ -233,9 +233,20 @@ learns to expect a plaintext SSN in a request body. A migration adding a
 plaintext SSN column is the single change most likely to turn this prototype
 into a breach.
 
-**The prototype runs on fixture borrowers.** No real PII should enter it while
-`CONNECTOR_MODE=fixture`, and the Cloud Run service is deployed
-`--no-allow-unauthenticated` because a URL is not an access control.
+**The prototype is PUBLIC and open to any Google account.** It was not always:
+the service ran `--no-allow-unauthenticated` behind a shared passphrase until
+the audience widened to friends and family. Today Cloud Run is
+`--allow-unauthenticated` under a project-level exception to the org's Domain
+Restricted Sharing constraint, `ALLOWED_DOMAIN` is unset, and the banner
+invites people to enter real details.
+
+What follows from that, and should be said plainly rather than left implied:
+**this is a consumer-facing system holding real personal data.** Date of birth,
+address, phone and email sit in plain columns. There is no privacy policy, no
+retention window, and no encryption beyond what Cloud SQL does at rest. That is
+a defensible posture for a handful of testers who have been told what it is,
+and it stops being defensible the moment the audience grows or a real
+application is taken.
 
 **Consent IPs are evidence.** `TRUST_PROXY` is a hop count and never `true`.
 With `true`, a client can forge `X-Forwarded-For`, and a consent record whose

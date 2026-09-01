@@ -3,6 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
 import { hasConsent, useLoanFile } from "../lib/file.js";
+import {
+  DemographicQuestions,
+  type DemographicAnswers,
+} from "../components/DemographicQuestions.js";
 
 /**
  * Screen 2. Required before any pull, because APP-005's timing constraint is
@@ -26,6 +30,15 @@ export function IdentityPage() {
   const [error, setError] = useState<string | null>(null);
   const [authorized, setAuthorized] = useState(false);
   const [econsent, setEconsent] = useState(false);
+  // Starts empty, not "declined". Declining is an answer somebody gives, and
+  // recording it for a question they were never shown is a false statement in
+  // a compliance record.
+  const [demographics, setDemographics] = useState<DemographicAnswers>({
+    ethnicity: [],
+    race: [],
+    sex: "",
+    visualObservationNoted: false,
+  });
 
   const [form, setForm] = useState({
     firstName: "",
@@ -113,7 +126,12 @@ export function IdentityPage() {
         firstTimeHomebuyer: form.firstTimeHomebuyer === "true",
         currentHousing: form.currentHousing,
         monthlyRent: form.monthlyRent ? Number(form.monthlyRent) : undefined,
-        demographics: { ethnicity: "declined", race: "declined", sex: "declined", visualObservationNoted: false },
+        demographics: {
+          ethnicity: demographics.ethnicity === "declined" ? "declined" : demographics.ethnicity,
+          race: demographics.race === "declined" ? "declined" : demographics.race,
+          sex: demographics.sex === "" ? "declined" : demographics.sex,
+          visualObservationNoted: false,
+        },
         statedMonthlyIncome: Number(form.statedMonthlyIncome || 1),
       });
 
@@ -265,6 +283,8 @@ export function IdentityPage() {
           </div>
         )}
       </div>
+
+      <DemographicQuestions value={demographics} onChange={setDemographics} />
 
       <div className="mt-6 space-y-3 border-t border-line-light pt-5">
         <label className="flex gap-3 text-[13px] leading-relaxed text-ink-soft">

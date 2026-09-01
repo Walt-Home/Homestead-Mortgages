@@ -73,3 +73,67 @@ describe("dependency graph", () => {
     ]);
   });
 });
+
+describe("APP-011 — demographic collection", () => {
+  // Regulation B is about the ASKING. The UI once hardcoded
+  // {ethnicity:"declined", race:"declined", sex:"declined"} for every borrower
+  // and this evaluator marked a "Regulatory violation" requirement satisfied on
+  // the strength of it — recording that a person declined a question they were
+  // never shown. That is the only place this codebase asserted something false
+  // about a borrower.
+  const borrower = (demographics: unknown) =>
+    ({ borrowers: [{ demographics }] }) as never;
+
+  it("is unsatisfied when the questions were never asked", () => {
+    const r = EVALUATORS["APP-011"]!(borrower(null));
+    expect(r.status).toBe("unsatisfied");
+  });
+
+  it("is unsatisfied when an answer is blank, which is not a decline", () => {
+    const r = EVALUATORS["APP-011"]!(
+      borrower({ ethnicity: [], race: [], sex: "", visualObservationNoted: false }),
+    );
+    expect(r.status).toBe("unsatisfied");
+    if (r.status === "unsatisfied") {
+      expect(r.missing).toContain("ethnicity");
+      expect(r.missing).toContain("race");
+      expect(r.missing).toContain("sex");
+    }
+  });
+
+  it("is satisfied by a genuine decline", () => {
+    const r = EVALUATORS["APP-011"]!(
+      borrower({
+        ethnicity: "declined",
+        race: "declined",
+        sex: "declined",
+        visualObservationNoted: false,
+      }),
+    );
+    expect(r.status).toBe("satisfied");
+  });
+
+  it("is satisfied by real answers", () => {
+    const r = EVALUATORS["APP-011"]!(
+      borrower({
+        ethnicity: ["Not Hispanic or Latino"],
+        race: ["White"],
+        sex: "Female",
+        visualObservationNoted: false,
+      }),
+    );
+    expect(r.status).toBe("satisfied");
+  });
+
+  it("is satisfied when some are answered and others declined", () => {
+    const r = EVALUATORS["APP-011"]!(
+      borrower({
+        ethnicity: ["Hispanic or Latino"],
+        race: "declined",
+        sex: "Male",
+        visualObservationNoted: false,
+      }),
+    );
+    expect(r.status).toBe("satisfied");
+  });
+});

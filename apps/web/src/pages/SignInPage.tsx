@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/auth.js";
 import { PrototypeBanner } from "../components/PrototypeBanner.js";
 
@@ -20,6 +20,7 @@ declare global {
             client_id: string;
             callback: (r: { credential: string }) => void;
             auto_select?: boolean;
+            error_callback?: (e: { type?: string; message?: string }) => void;
           }) => void;
           renderButton: (el: HTMLElement, o: Record<string, unknown>) => void;
         };
@@ -52,6 +53,8 @@ function loadGsi(): Promise<void> {
 export function SignInPage() {
   const { config, signInWithGoogle, signInAsDeveloper, error } = useAuth();
   const buttonRef = useRef<HTMLDivElement>(null);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+  const [scriptFailed, setScriptFailed] = useState(false);
 
   useEffect(() => {
     const clientId = config?.googleClientId;
@@ -64,6 +67,15 @@ export function SignInPage() {
         window.google.accounts.id.initialize({
           client_id: clientId,
           callback: (r) => void signInWithGoogle(r.credential),
+          // Google's popup fails silently on an unregistered origin — you get
+          // a blank accounts.google.com frame and no callback ever fires,
+          // which is indistinguishable from a hung network. Naming the origin
+          // turns twenty minutes of guessing into one line to copy.
+          error_callback: (e) =>
+            setGoogleError(
+              `Google refused the sign-in (${e.type ?? "unknown"}). The usual cause is that ` +
+                `${window.location.origin} is not an authorised JavaScript origin on the OAuth client.`,
+            ),
         });
         window.google.accounts.id.renderButton(buttonRef.current, {
           theme: "outline",
@@ -72,7 +84,7 @@ export function SignInPage() {
           shape: "pill",
         });
       })
-      .catch(() => undefined);
+      .catch(() => setScriptFailed(true));
 
     return () => {
       cancelled = true;
@@ -117,7 +129,28 @@ export function SignInPage() {
           </div>
         )}
 
+        {scriptFailed && (
+          <p className="mt-5 text-[13px] leading-relaxed text-error">
+            Google&rsquo;s sign-in script didn&rsquo;t load. An ad blocker or a blocked
+            third-party script will do this.
+          </p>
+        )}
+
+        {googleError && (
+          <p className="mt-5 text-[13px] leading-relaxed text-error">{googleError}</p>
+        )}
+
         {error && <p className="mt-5 text-[13px] text-error">{error}</p>}
+
+        {/* The popup can also die without firing error_callback at all — an
+            unregistered origin is the common case. Showing the origin
+            unconditionally means the answer is on screen before anyone has to
+            go looking for it. */}
+        <p className="mt-10 text-[11px] leading-relaxed text-subtle">
+          Trouble signing in? This page is served from{" "}
+          <code className="text-meta">{window.location.origin}</code>, which must be an
+          authorised JavaScript origin on the OAuth client.
+        </p>
       </div>
     </>
   );

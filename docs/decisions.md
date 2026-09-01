@@ -215,7 +215,20 @@ projects. So the client has to be made in the console, once:
    No redirect URIs are needed. Google Identity Services returns the ID token
    to the page; there is no server-side redirect leg and therefore no client
    secret to keep.
-4. Copy the client id and set it:
+4. **Authorised JavaScript origins must list every host the app is served
+   from.** Cloud Run gives a service TWO live hostnames — the hash form
+   (`SERVICE-HASH-uc.a.run.app`) and the numeric form
+   (`SERVICE-PROJECTNUMBER.REGION.run.app`) — and browsers land on the hash
+   form. Registering only one produces a **blank Google popup that never
+   returns**, with no callback and no console error: identical to a hung
+   network. Register both:
+   - `https://homestead-mortgages-staging-dhlswvsiia-uc.a.run.app`
+   - `https://homestead-mortgages-staging-193197012613.us-central1.run.app`
+   - `http://localhost:5173`
+5. **Audience must be External** if anyone outside trywalt.ai will sign in.
+   Internal produces `Error 403: org_internal` at Google, before the app is
+   ever reached.
+6. Copy the client id and set it:
    `gh variable set GOOGLE_CLIENT_ID --repo Walt-Home/Homestead-Mortgages`
 
 The deploy job is skipped while that variable is empty, so nothing ships a

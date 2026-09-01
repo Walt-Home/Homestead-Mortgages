@@ -172,10 +172,39 @@ export function fixtureIrsConnector(options: FixtureOptions = {}): IrsConnector 
  * authorization guard — it is how the authorization gets signed in the first
  * place. Guarding it would make APP-005 unobtainable.
  */
+/**
+ * The e-sign adapter, deliberately STATELESS.
+ *
+ * An earlier version kept envelopes in a Map on the adapter instance. That
+ * works on one process and breaks on Cloud Run the moment it scales past one:
+ * the envelope is created on instance A, the borrower signs, and the completion
+ * request lands on instance B, which has never heard of it. The failure is
+ * intermittent and load-dependent, which is the worst kind.
+ *
+ * So the envelope id CARRIES its own state. A real vendor holds this in their
+ * own system and hands back an opaque id; a fixture has nowhere to put it, and
+ * inventing a table for a thing that will be deleted the day Docusign is wired
+ * in is worse than encoding it. The port's shape is unchanged, so the real
+ * adapter can be opaque without anything above caring.
+ */
+const ENVELOPE_PREFIX = "fixture-envelope";
+
+function encodeEnvelope(kind: Consent["kind"], borrowerId: string): string {
+  return `${ENVELOPE_PREFIX}.${kind}.${borrowerId}`;
+}
+
+function decodeEnvelope(
+  envelopeId: string,
+): { kind: Consent["kind"]; borrowerId: string } | null {
+  const parts = envelopeId.split(".");
+  if (parts.length !== 3 || parts[0] !== ENVELOPE_PREFIX) return null;
+  const [, kind, borrowerId] = parts;
+  if (!kind || !borrowerId) return null;
+  return { kind: kind as Consent["kind"], borrowerId };
+}
+
 export function fixtureEsignConnector(options: FixtureOptions = {}): EsignConnector {
   const { latencyMs } = resolve(options);
-  const envelopes = new Map<string, { kind: Consent["kind"]; borrowerId: string }>();
-  let counter = 0;
 
   return {
     capabilities: {
@@ -184,13 +213,12 @@ export function fixtureEsignConnector(options: FixtureOptions = {}): EsignConnec
       satisfies: ["APP-005", "APP-012", "INC-008"],
     },
     async createEnvelope(_file: LoanFile, kind: Consent["kind"], borrowerId: string) {
-      const envelopeId = `fixture-envelope-${++counter}`;
-      envelopes.set(envelopeId, { kind, borrowerId });
+      const envelopeId = encodeEnvelope(kind, borrowerId);
       await sleep(latencyMs);
       return { envelopeId, signingUrl: `/sign/${envelopeId}` };
     },
     async getCompletedConsent(envelopeId: string): Promise<Consent | null> {
-      const envelope = envelopes.get(envelopeId);
+      const envelope = decodeEnvelope(envelopeId);
       if (!envelope) return null;
       return {
         kind: envelope.kind,

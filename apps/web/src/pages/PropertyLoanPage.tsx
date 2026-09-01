@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
+import { useLoanFile } from "../lib/file.js";
 
 /**
  * Screen 1. Drew's note is "under 60s of typing", so this asks for eight
@@ -14,6 +16,13 @@ import { api } from "../lib/api.js";
  */
 export function PropertyLoanPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  // Absent on /f/new/property, present when coming back to edit an existing file.
+  const { fileId } = useParams<{ fileId: string }>();
+  const { data } = useLoanFile(fileId);
+  const editing = Boolean(fileId);
+  const readOnly = data?.file.isDemo === true;
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,7 +37,33 @@ export function PropertyLoanPage() {
     valueOrPrice: "",
     downPayment: "",
     statedMonthlyIncome: "",
+    cashToBorrower: "",
+    cashOutPurpose: "",
   });
+
+  /**
+   * Prefill when editing. Screen 1 was previously reachable only as
+   * /f/new/property, so the sole way back to it was to abandon the file and
+   * start over — orphaning every connection already made.
+   */
+  useEffect(() => {
+    const f = data?.file;
+    if (!f?.loan || !f.property) return;
+    setForm((prev) => ({
+      ...prev,
+      purpose: f.loan!.purpose,
+      line1: f.property!.address.line1,
+      city: f.property!.address.city,
+      state: f.property!.address.state,
+      postalCode: f.property!.address.postalCode,
+      propertyType: f.property!.propertyType,
+      occupancy: f.property!.occupancy,
+      valueOrPrice: String(f.property!.valueOrPrice),
+      downPayment: String(f.loan!.downPayment),
+      cashToBorrower: f.loan!.cashToBorrower ? String(f.loan!.cashToBorrower) : "",
+      cashOutPurpose: f.loan!.cashOutPurpose ?? "",
+    }));
+  }, [data?.file]);
 
   const price = Number(form.valueOrPrice) || 0;
   const down = Number(form.downPayment) || 0;
@@ -44,25 +79,41 @@ export function PropertyLoanPage() {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+    const payload = {
+      purpose: form.purpose,
+      address: {
+        line1: form.line1,
+        city: form.city,
+        state: form.state.toUpperCase(),
+        postalCode: form.postalCode,
+      },
+      propertyType: form.propertyType,
+      occupancy: form.occupancy,
+      valueOrPrice: price,
+      loanAmount,
+      downPayment: down,
+      statedMonthlyIncome: Number(form.statedMonthlyIncome || 1),
+      ...(form.purpose === "cash_out_refinance"
+        ? {
+            cashToBorrower: Number(form.cashToBorrower || 0),
+            cashOutPurpose: form.cashOutPurpose || undefined,
+          }
+        : {}),
+    };
+
     try {
-      const created = await api.post<{ id: string }>("/files", {
-        purpose: form.purpose,
-        address: {
-          line1: form.line1,
-          city: form.city,
-          state: form.state.toUpperCase(),
-          postalCode: form.postalCode,
-        },
-        propertyType: form.propertyType,
-        occupancy: form.occupancy,
-        valueOrPrice: price,
-        loanAmount,
-        downPayment: down,
-        statedMonthlyIncome: Number(form.statedMonthlyIncome),
-      });
-      navigate(`/f/${created.id}/identity`);
+      if (editing && fileId) {
+        // PATCH, not POST: editing terms must not fork a second file.
+        await api.patch(`/files/${fileId}`, payload);
+        await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
+        await queryClient.invalidateQueries({ queryKey: ["assessment"] });
+        navigate(`/f/${fileId}/identity`);
+      } else {
+        const created = await api.post<{ id: string }>("/files", payload);
+        navigate(`/f/${created.id}/identity`);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start the file.");
+      setError(err instanceof Error ? err.message : "Could not save.");
       setSubmitting(false);
     }
   }
@@ -190,9 +241,45 @@ export function PropertyLoanPage() {
 
       {error && <p className="mt-4 text-[13px] text-error">{error}</p>}
 
-      <button className="btn-primary mt-6" disabled={submitting}>
-        {submitting ? "Starting…" : "Continue"}
-      </button>
+      {form.purpose === "cash_out_refinance" && (
+        <div className="mt-5 grid grid-cols-2 gap-4">
+          <div>
+            <label className="field-label">Cash to you at closing</label>
+            <input
+              className="field-input figure"
+              value={form.cashToBorrower}
+              onChange={set("cashToBorrower")}
+              inputMode="numeric"
+              placeholder="40000"
+            />
+          </div>
+          <div>
+            <label className="field-label">What is it for?</label>
+            <input
+              className="field-input"
+              value={form.cashOutPurpose}
+              onChange={set("cashOutPurpose")}
+              placeholder="Home improvements"
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="mt-6 flex items-center gap-3">
+        <button className="btn-primary" disabled={submitting || readOnly}>
+          {submitting ? "Saving…" : editing ? "Save and continue" : "Continue"}
+        </button>
+        {editing && (
+          <button type="button" className="btn-secondary" onClick={() => navigate(-1)}>
+            Back
+          </button>
+        )}
+      </div>
+      {readOnly && (
+        <p className="mt-3 text-[13px] text-subtle">
+          This is a sample file and can&rsquo;t be edited.
+        </p>
+      )}
     </form>
   );
 }

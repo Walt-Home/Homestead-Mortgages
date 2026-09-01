@@ -274,12 +274,17 @@ export const EVALUATORS: Record<string, Evaluator> = {
 
   "CRD-013": (f) => {
     if (!f.assets) return wait("the bank connection");
-    // Alternative references the report could evidence with 12 months of history.
-    const references = f.assets.identifiedRentPayments >= 12 ? 1 : 0;
+    // Three references, each with twelve months. Counting rent as the only
+    // possible reference and then demanding three made this unsatisfiable by
+    // construction — a thin-file borrower could never clear the requirement
+    // that exists specifically for thin-file borrowers.
+    const qualifying = f.assets.alternativeReferences.filter(
+      (r) => r.monthsOfHistory >= 12 && r.onTime,
+    );
     return check(
-      references >= 3,
-      `${references} alternative reference(s) with 12-month history`,
-      `${references} of 3 alternative credit references established`,
+      qualifying.length >= 3,
+      qualifying.map((r) => `${r.kind}: ${r.payeeName}`).join(", "),
+      `${qualifying.length} of 3 alternative credit references with 12 months of on-time history`,
     );
   },
 

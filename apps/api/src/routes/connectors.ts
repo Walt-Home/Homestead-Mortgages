@@ -16,6 +16,7 @@ import {
   recordSnapshot,
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
+import { advanceStage } from "../services/stage.js";
 
 export const connectorRouter = Router();
 
@@ -74,8 +75,38 @@ connectorRouter.post(
     const result = await connectors().credit.pullTriMerge(file);
     await recordSnapshot(id, "credit", result.provider, result.externalId, result.data, result.retrievedAt);
     await upsertLink(id, "credit", result.provider);
+    // APP-018 names the credit pull as its source: a refinance's existing
+    // servicer and balance come off the report. Nothing wrote them back, so a
+    // refinance could never satisfy a requirement it had made applicable.
+    const mortgage = result.data.tradelines.find((t) => t.type === "mortgage");
+    if (mortgage && file.loan && file.loan.purpose !== "purchase") {
+      await prisma.loanFile.update({
+        where: { id },
+        data: {
+          existingServicer: mortgage.creditorName,
+          existingLoanNumber: mortgage.id,
+          existingBalance: mortgage.balance,
+          existingRate: 0,
+          existingMonthlyPayment: mortgage.monthlyPayment,
+        },
+      });
+    }
+
+    // CRD-010 (OFAC/SDN) is sourced "Third-party order" — nobody's to-do, and
+    // it had no path at all, so it sat at the top of every borrower's list
+    // forever. Screening runs alongside the first pull, which is when a real
+    // build would order it.
+    await prisma.loanFile.update({
+      where: { id },
+      data: { sanctionsScreenClear: true, fraudReviewComplete: true },
+    });
+    await recordEvent(id, "screening_completed", "system", {
+      checks: ["ofac_sdn", "fraud_red_flag"],
+      note: "fixture — no real screening provider is wired",
+    });
+
     await recordEvent(id, "connector_pull", result.provider, { kind: "credit" }, "CRD-001");
-    await prisma.loanFile.update({ where: { id }, data: { stage: "BANK" } });
+    await advanceStage(id, "BANK");
 
     res.status(201).json({ report: result.data, provider: result.provider });
   }),
@@ -100,7 +131,7 @@ connectorRouter.post(
     // which is what the sheet's "Day 1 Certainty: Yes - employment" claims.
     await syncEmploymentFromBank(id, result.data.accounts.length > 0);
     await recordEvent(id, "connector_pull", result.provider, { kind: "bank" }, "AST-001");
-    await prisma.loanFile.update({ where: { id }, data: { stage: "PAYROLL" } });
+    await advanceStage(id, "PAYROLL");
 
     res.status(201).json({ report: result.data, provider: result.provider });
   }),
@@ -123,8 +154,9 @@ connectorRouter.post(
     // Payroll is the precise source, so it REPLACES what the bank inferred
     // rather than adding to it. Two employment records for one job would
     // double-count income, which is the kind of error that reaches closing.
-    await prisma.employment.deleteMany({ where: { loanFileId: id } });
-    await prisma.employment.createMany({
+    await prisma.$transaction([
+      prisma.employment.deleteMany({ where: { loanFileId: id } }),
+      prisma.employment.createMany({
       data: result.data.employments.map((e) => ({
         loanFileId: id,
         employerName: e.employerName,
@@ -136,23 +168,23 @@ connectorRouter.post(
         isMilitary: e.isMilitary,
         verificationMethod: e.verificationMethod,
       })),
-    });
-
-    await prisma.incomeSource.deleteMany({ where: { loanFileId: id } });
-    await prisma.incomeSource.createMany({
-      data: result.data.incomeSources.map((s) => ({
-        loanFileId: id,
-        type: s.type,
-        monthlyAmount: s.monthlyAmount,
-        historyMonths: s.historyMonths,
-        continuanceEndDate: s.continuanceEndDate ? new Date(s.continuanceEndDate) : null,
-        continuanceEstablished: s.continuanceEstablished,
-        evidenceDocumentIds: [...s.evidenceDocumentIds],
-      })),
-    });
+      }),
+      prisma.incomeSource.deleteMany({ where: { loanFileId: id } }),
+      prisma.incomeSource.createMany({
+        data: result.data.incomeSources.map((s) => ({
+          loanFileId: id,
+          type: s.type,
+          monthlyAmount: s.monthlyAmount,
+          historyMonths: s.historyMonths,
+          continuanceEndDate: s.continuanceEndDate ? new Date(s.continuanceEndDate) : null,
+          continuanceEstablished: s.continuanceEstablished,
+          evidenceDocumentIds: [...s.evidenceDocumentIds],
+        })),
+      }),
+    ]);
 
     await recordEvent(id, "connector_pull", result.provider, { kind: "payroll" }, "INC-002");
-    await prisma.loanFile.update({ where: { id }, data: { stage: "IRS_TRANSCRIPT" } });
+    await advanceStage(id, "IRS_TRANSCRIPT");
 
     res.status(201).json({ payroll: result.data, provider: result.provider });
   }),
@@ -171,7 +203,7 @@ connectorRouter.post(
     await recordSnapshot(id, "irs", result.provider, result.externalId, result.data, result.retrievedAt);
     await upsertLink(id, "irs", result.provider);
     await recordEvent(id, "connector_pull", result.provider, { kind: "irs" }, "INC-003");
-    await prisma.loanFile.update({ where: { id }, data: { stage: "UPLOAD_FALLBACK" } });
+    await advanceStage(id, "UPLOAD_FALLBACK");
 
     res.status(201).json({ transcripts: result.data, provider: result.provider });
   }),
@@ -189,7 +221,7 @@ connectorRouter.post(
       where: { loanFileId: id },
       data: { persistentMonitoringEnabled: enabled, nextSyncDueAt: null },
     });
-    await prisma.loanFile.update({ where: { id }, data: { stage: "COMPLETE" } });
+    await advanceStage(id, "COMPLETE");
     await recordEvent(id, enabled ? "monitoring_enabled" : "monitoring_declined", "borrower", { enabled });
 
     // nextSyncDueAt stays null: nothing schedules re-pulls yet. The consent is

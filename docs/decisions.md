@@ -283,6 +283,54 @@ If a plain link is wanted, someone in `gcp-organization-admins@` or
 constraint. That is a real loosening of an org-wide control and is deliberately
 not something this repo can do to itself.
 
+## What a borrower can and cannot do
+
+A five-dimension audit of the flow found 35 verified defects, and the shape of
+them was consistent: the product was built forwards-only. Every screen assumed
+it was being seen for the first time, by someone who would never go back, never
+refresh, and never close the tab.
+
+The ones worth remembering, because the same mistake is easy to make again:
+
+**Stage was a cursor, not a high-water mark.** Every connector wrote it
+directly, so re-pulling your credit to look at it dragged the whole flow back
+to the bank step. It is now monotonic (`services/stage.ts`) — where you are is
+the URL, how far you got is the stage.
+
+**Screens held their results in component state.** A refresh lost them, and
+revisiting a completed step showed an empty form whose only button re-ran the
+connector. Screens now read the file from the server (`lib/file.ts`).
+
+**The 4506-C could not be signed.** The e-sign port and its fixture adapter
+existed from the start and had no caller anywhere, so INC-008 was unsatisfiable
+and screens 6–9 were unreachable behind it. The adapter was also stateful — an
+envelope created on one Cloud Run instance could not be completed on another —
+which would have been an intermittent, load-dependent failure the day it
+scaled.
+
+**The borrower's list was mostly not the borrower's.** Twenty-one outstanding
+items, eleven of which were disclosures and derived arithmetic with no button
+anywhere. Requirements are now classified by actor (`engine.ts`), and the rail
+separates "your turn" from "we're handling". This matters more than it sounds:
+burying two real actions under nine impossible ones makes the product look
+broken to anyone who reads the list and goes looking for the control.
+
+**Two requirements were unsatisfiable by construction.** CRD-013 counted rent
+as at most one alternative reference and then demanded three, so a thin-file
+borrower could never clear the requirement that exists for thin-file
+borrowers. CRD-010 (OFAC) had no path at all.
+
+### What still cannot be satisfied, on purpose
+
+Eight requirements remain permanently outstanding on a real file, and all of
+them are ours rather than the borrower's: the four disclosure deliveries
+(APP-006, APP-008, APP-009, APP-010) and the compliance tests blocked on APR,
+APOR and a fee schedule. **Recording "Loan Estimate delivered" when no Loan
+Estimate was delivered would be a lie in an audit trail**, so the prototype
+leaves them outstanding and labels them as ours. The consequence is that a file
+reaches "approved with conditions" and never "clear to close", which is the
+honest outcome for a product that has not generated a single disclosure.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

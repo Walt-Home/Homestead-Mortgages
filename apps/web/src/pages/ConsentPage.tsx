@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
+import { useLoanFile } from "../lib/file.js";
 
 /**
  * Screen 9. Zero requirements in the sheet, and the highest leverage screen in
@@ -14,19 +15,41 @@ import { api } from "../lib/api.js";
  */
 export function ConsentPage() {
   const { fileId } = useParams<{ fileId: string }>();
-  const [choice, setChoice] = useState<boolean | null>(null);
+  const navigate = useNavigate();
+  const { data } = useLoanFile(fileId);
+  const readOnly = data?.file.isDemo === true;
+
+  // Seed from the file so a returning visitor sees the choice they made rather
+  // than being asked again.
+  const alreadyOn = data?.file.links.some((l) => l.persistentMonitoringEnabled) ?? false;
+  const [choice, setChoice] = useState<boolean | null>(alreadyOn ? true : null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function decide(enabled: boolean) {
     setSaving(true);
-    await api.post(`/files/${fileId}/monitoring`, { enabled });
-    setChoice(enabled);
-    setSaving(false);
+    setError(null);
+    try {
+      await api.post(`/files/${fileId}/monitoring`, { enabled });
+      setChoice(enabled);
+    } catch (err) {
+      // Without this, one failure left both buttons disabled forever and the
+      // flow had no exit at all.
+      setError(err instanceof Error ? err.message : "That didn't save. Try again?");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (choice !== null) {
     return (
       <div className="card">
+        <button
+          className="mb-4 text-[13px] text-subtle underline-offset-2 hover:underline"
+          onClick={() => navigate(`/f/${fileId}/decision`)}
+        >
+          Back to your decision
+        </button>
         <h1 className="font-brand text-[22px] font-semibold text-ink-editorial">
           {choice ? "We'll keep watching." : "Understood."}
         </h1>
@@ -55,14 +78,33 @@ export function ConsentPage() {
         <li>· You can disconnect any time, and we stop</li>
       </ul>
 
-      <div className="mt-7 flex gap-3">
-        <button className="btn-primary" onClick={() => decide(true)} disabled={saving}>
-          Keep my connections live
+      {error && <p className="mt-5 text-[13px] text-error">{error}</p>}
+
+      <div className="mt-7 flex flex-wrap gap-3">
+        <button
+          className="btn-primary"
+          onClick={() => void decide(true)}
+          disabled={saving || readOnly}
+        >
+          {saving ? "Saving…" : "Keep my connections live"}
         </button>
-        <button className="btn-secondary" onClick={() => decide(false)} disabled={saving}>
+        <button
+          className="btn-secondary"
+          onClick={() => void decide(false)}
+          disabled={saving || readOnly}
+        >
           No thanks
         </button>
+        <button className="btn-secondary" onClick={() => navigate(`/f/${fileId}/decision`)}>
+          Back
+        </button>
       </div>
+
+      {readOnly && (
+        <p className="mt-4 text-[13px] text-subtle">
+          This is a sample file, so the choice is fixed.
+        </p>
+      )}
     </div>
   );
 }

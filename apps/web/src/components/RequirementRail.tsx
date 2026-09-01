@@ -4,14 +4,17 @@ import type { Assessment, OutstandingItem } from "../lib/api.js";
 /**
  * The rail that answers "what is left".
  *
- * Three groups, and they are three different sentences:
- *   · needed now — applies to you, and you can do it
- *   · we might still ask — applicability is not yet knowable
- *   · waiting — applies, but something upstream has to happen first
+ * Two things it must not do, both of which it used to.
  *
- * Collapsing the middle group into either neighbour is what makes a flow feel
- * dishonest. A borrower told they are done, then asked for four more things
- * after the credit pull, has been misled by a progress bar.
+ * It must not show a borrower work they cannot possibly do. The list ran to
+ * twenty-one items, of which eleven were things like "Loan Estimate delivered"
+ * and "OFAC / SDN screening cleared" — lender and engine work with no button
+ * anywhere. Burying the two real actions under nine impossible ones makes the
+ * product look broken to anyone who reads the list and goes looking.
+ *
+ * And it must not fail silently. A failed fetch left it saying "Loading
+ * requirements…" forever, which is indistinguishable from a slow network and
+ * hides the fact that the screen beside it is showing nothing real.
  */
 
 const SEVERITY_LABEL: Record<OutstandingItem["severity"], string> = {
@@ -21,32 +24,61 @@ const SEVERITY_LABEL: Record<OutstandingItem["severity"], string> = {
   rework_delay: "Keeps things moving",
 };
 
-export function RequirementRail({ assessment }: { assessment: Assessment | undefined }) {
+export function RequirementRail({
+  assessment,
+  failed,
+}: {
+  assessment: Assessment | undefined;
+  failed?: boolean;
+}) {
+  if (failed) {
+    return (
+      <aside className="w-full shrink-0 lg:w-80">
+        <div className="card">
+          <h2 className="font-brand text-[15px] font-semibold text-ink-editorial">Your file</h2>
+          <p className="mt-3 text-[13px] leading-relaxed text-error">
+            We couldn&rsquo;t load what&rsquo;s outstanding. The steps still work — reload to try
+            again.
+          </p>
+        </div>
+      </aside>
+    );
+  }
+
   if (!assessment) {
-    return <aside className="w-full lg:w-80 text-[13px] text-subtle">Loading requirements…</aside>;
+    return <aside className="w-full text-[13px] text-subtle lg:w-80">Loading requirements…</aside>;
   }
 
   const { progress, outstanding, blocked } = assessment;
-  const actionable = outstanding.filter((o) => o.applicabilityKnown);
-  const possible = outstanding.filter((o) => !o.applicabilityKnown);
+  const mine = outstanding.filter((o) => o.actor === "borrower" && o.applicabilityKnown);
+  const possible = outstanding.filter((o) => o.actor === "borrower" && !o.applicabilityKnown);
+  const theirs = outstanding.filter((o) => o.actor === "lender");
 
   return (
-    <aside className="w-full lg:w-80 shrink-0">
+    <aside className="w-full shrink-0 lg:w-80">
       <div className="card">
         <h2 className="font-brand text-[15px] font-semibold text-ink-editorial">Your file</h2>
 
         <dl className="mt-4 space-y-1.5 text-[13px]">
           <Row label="Satisfied" value={progress.satisfied} tone="olive" />
-          <Row label="Needed now" value={actionable.length} tone="gold" />
+          <Row label="Your turn" value={mine.length} tone="gold" />
+          <Row label="We're handling" value={theirs.length} tone="muted" />
           <Row label="Waiting on something else" value={progress.blocked} tone="muted" />
-          <Row label="We might still ask" value={possible.length} tone="muted" />
         </dl>
 
-        {actionable.length > 0 && (
-          <Group title="Needed now">
-            {actionable.slice(0, 6).map((item) => (
+        {mine.length > 0 && (
+          <Group title="Your turn">
+            {mine.slice(0, 6).map((item) => (
               <Item key={item.id} item={item} />
             ))}
+          </Group>
+        )}
+
+        {mine.length === 0 && (
+          <Group title="Your turn">
+            <p className="text-[12px] leading-relaxed text-subtle">
+              Nothing right now — carry on to the next step.
+            </p>
           </Group>
         )}
 
@@ -60,14 +92,21 @@ export function RequirementRail({ assessment }: { assessment: Assessment | undef
           </Group>
         )}
 
+        {theirs.length > 0 && (
+          <Group title="We're handling">
+            <p className="text-[12px] leading-relaxed text-subtle">
+              {theirs.length} item{theirs.length === 1 ? "" : "s"} are ours or the engine&rsquo;s —
+              disclosures, screenings and the arithmetic. Nothing for you to do.
+            </p>
+          </Group>
+        )}
+
         {blocked.length > 0 && (
           <Group title="Waiting">
             {blocked.slice(0, 4).map((b) => (
               <div key={b.id} className="text-[12px] leading-relaxed">
                 <span className="text-ink-soft">{b.statement}</span>
-                {b.rootCauses[0] && (
-                  <span className="block text-subtle">after {b.rootCauses[0]}</span>
-                )}
+                {b.rootCauses[0] && <span className="block text-subtle">after {b.rootCauses[0]}</span>}
               </div>
             ))}
           </Group>
@@ -77,7 +116,15 @@ export function RequirementRail({ assessment }: { assessment: Assessment | undef
   );
 }
 
-function Row({ label, value, tone }: { label: string; value: number; tone: "olive" | "gold" | "muted" }) {
+function Row({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "olive" | "gold" | "muted";
+}) {
   return (
     <div className="flex items-baseline justify-between">
       <dt className="text-muted">{label}</dt>

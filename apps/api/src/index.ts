@@ -13,6 +13,8 @@ import { fileRouter } from "./routes/files.js";
 import { connectorRouter } from "./routes/connectors.js";
 import { requirementRouter } from "./routes/requirements.js";
 import { decisionRouter } from "./routes/decision.js";
+import { esignRouter } from "./routes/esign.js";
+import { documentRouter } from "./routes/documents.js";
 
 const app = express();
 
@@ -69,6 +71,15 @@ app.use("/api/requirements", requirementRouter);
 app.use("/api/files", fileRouter);
 app.use("/api/files", connectorRouter);
 app.use("/api/files", decisionRouter);
+app.use("/api/files", esignRouter);
+app.use("/api/files", documentRouter);
+
+// An unmatched /api path fell through to the SPA fallback and returned HTML,
+// which the client then tried to parse as JSON — turning "no such endpoint"
+// into an unreadable parse error. API 404s must look like API responses.
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: { message: "No such endpoint.", code: "NOT_FOUND" } });
+});
 
 // Mounted after the API routes so it can claim every remaining path, and
 // before the error handler so a 404 from it still renders properly.

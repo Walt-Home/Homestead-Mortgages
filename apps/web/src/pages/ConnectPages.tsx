@@ -1,15 +1,23 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { ConnectorStep } from "../components/ConnectorStep.js";
+import { SignDocument } from "../components/SignDocument.js";
+import { useLoanFile, hasConsent } from "../lib/file.js";
 
 function useStep(next: string) {
-  const { fileId } = useParams<{ fileId: string }>();
+  const { fileId = "" } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
-  return { fileId: fileId ?? "", onDone: () => navigate(`/f/${fileId}/${next}`) };
+  const { data } = useLoanFile(fileId);
+  return {
+    fileId,
+    file: data?.file,
+    readOnly: data?.file.isDemo === true,
+    onDone: () => navigate(`/f/${fileId}/${next}`),
+  };
 }
 
 /** Screen 3 — the first visible win. Something happens, instantly. */
 export function CreditPage() {
-  const { fileId, onDone } = useStep("bank");
+  const { fileId, file, readOnly, onDone } = useStep("bank");
   return (
     <ConnectorStep
       fileId={fileId}
@@ -18,16 +26,23 @@ export function CreditPage() {
       promise="A soft check, right now. It will not affect your score."
       detail="We pull all three bureaus at once. That gives us your score, your open accounts and your payment history — which is most of what a lender asks you to list by hand."
       duration="About two seconds"
+      existing={file?.credit ?? null}
+      extract={(r) => r.report}
+      readOnly={readOnly}
       onDone={onDone}
       renderResult={(data) => {
-        const report = (data as { report?: { scores?: { bureau: string; score: number }[]; tradelines?: unknown[] } })
-          ?.report;
+        const report = data as {
+          scores?: { bureau: string; score: number }[];
+          tradelines?: unknown[];
+        } | null;
         const scores = report?.scores ?? [];
         const middle = [...scores].map((s) => s.score).sort((a, b) => a - b)[1];
         return (
           <div>
             <div className="flex items-baseline gap-3">
-              <span className="figure text-[38px] leading-none text-ink-editorial">{middle ?? "—"}</span>
+              <span className="figure text-[38px] leading-none text-ink-editorial">
+                {middle ?? "—"}
+              </span>
               <span className="text-[13px] text-muted">your qualifying score</span>
             </div>
             <div className="mt-4 flex gap-6 text-[13px]">
@@ -51,7 +66,7 @@ export function CreditPage() {
 
 /** Screen 4 — the one that matters. Thirteen requirements come off this. */
 export function BankPage() {
-  const { fileId, onDone } = useStep("payroll");
+  const { fileId, file, readOnly, onDone } = useStep("payroll");
   return (
     <ConnectorStep
       fileId={fileId}
@@ -60,15 +75,16 @@ export function BankPage() {
       promise="Twelve months, read once. This replaces every statement you would otherwise upload."
       detail="One connection covers your down payment, your reserves, your income deposits, your rent history and your cash flow. It is the single biggest thing you can do here."
       duration="About ten seconds"
+      existing={file?.assets ?? null}
+      extract={(r) => r.report}
+      readOnly={readOnly}
       onDone={onDone}
       renderResult={(data) => {
-        const report = (data as {
-          report?: {
-            accounts?: { institution: string; type: string; mask: string; currentBalance: number }[];
-            identifiedRentPayments?: number;
-            cashFlowAssessmentResult?: string;
-          };
-        })?.report;
+        const report = data as {
+          accounts?: { institution: string; type: string; mask: string; currentBalance: number }[];
+          identifiedRentPayments?: number;
+          alternativeReferences?: { kind: string }[];
+        } | null;
         const accounts = report?.accounts ?? [];
         const total = accounts.reduce((s, a) => s + a.currentBalance, 0);
         return (
@@ -77,7 +93,9 @@ export function BankPage() {
               <span className="figure text-[30px] leading-none text-ink-editorial">
                 ${total.toLocaleString()}
               </span>
-              <span className="text-[13px] text-muted">verified across {accounts.length} accounts</span>
+              <span className="text-[13px] text-muted">
+                verified across {accounts.length} accounts
+              </span>
             </div>
             <ul className="mt-4 space-y-1.5 text-[13px]">
               {accounts.map((a) => (
@@ -91,7 +109,11 @@ export function BankPage() {
             </ul>
             {(report?.identifiedRentPayments ?? 0) >= 12 && (
               <p className="mt-4 rounded-row bg-olive-light px-3 py-2 text-[13px] text-olive">
-                Twelve months of on-time rent found. That counts in your favour.
+                Twelve months of on-time rent found
+                {report?.alternativeReferences?.length
+                  ? `, plus ${report.alternativeReferences.length - 1} other recurring payments`
+                  : ""}
+                . That counts in your favour.
               </p>
             )}
           </div>
@@ -103,7 +125,7 @@ export function BankPage() {
 
 /** Screen 5 — precision on employment and variable income. */
 export function PayrollPage() {
-  const { fileId, onDone } = useStep("irs");
+  const { fileId, file, readOnly, onDone } = useStep("irs");
   return (
     <ConnectorStep
       fileId={fileId}
@@ -112,14 +134,15 @@ export function PayrollPage() {
       promise="Your paystubs, straight from payroll."
       detail="Your bank showed us money arriving. This tells us exactly what it is — base pay against bonus or commission — which is what decides how much of it counts."
       duration="About five seconds"
+      existing={file?.payroll ?? null}
+      extract={(r) => r.payroll}
+      readOnly={readOnly}
       onDone={onDone}
       renderResult={(data) => {
-        const payroll = (data as {
-          payroll?: {
-            employments?: { employerName: string; position: string }[];
-            incomeSources?: { type: string; monthlyAmount: number }[];
-          };
-        })?.payroll;
+        const payroll = data as {
+          employments?: { employerName: string; position: string }[];
+          incomeSources?: { type: string; monthlyAmount: number }[];
+        } | null;
         const employer = payroll?.employments?.[0];
         return (
           <div>
@@ -143,9 +166,19 @@ export function PayrollPage() {
   );
 }
 
-/** Screen 6 — the reconciliation source. */
+/**
+ * Screen 6 — the reconciliation source.
+ *
+ * The IRS pull needs a signed 4506-C (INC-008), and for a long time nothing in
+ * the product could sign one — so this screen was a terminal dead end and
+ * screens 7, 8 and 9 were unreachable behind it. The signing step is now part
+ * of the screen rather than a prerequisite nobody could satisfy.
+ */
 export function IrsPage() {
-  const { fileId, onDone } = useStep("upload");
+  const { fileId, file, readOnly, onDone } = useStep("upload");
+  const signed = hasConsent(file, "form_4506c");
+  const transcripts = file?.transcripts?.length ? file.transcripts : null;
+
   return (
     <ConnectorStep
       fileId={fileId}
@@ -154,13 +187,24 @@ export function IrsPage() {
       promise="Two years of filed income, from the IRS directly."
       detail="This is the record every lender reconciles against. Having it now is what keeps a question from arriving three weeks before closing."
       duration="About five seconds"
+      existing={transcripts}
+      extract={(r) => r.transcripts}
+      readOnly={readOnly}
+      blocked={
+        signed || readOnly
+          ? null
+          : {
+              message:
+                "The IRS will only release transcripts to someone you have authorised in writing. Form 4506-C is that authorisation.",
+              action: <SignDocument fileId={fileId} kind="form_4506c" label="Review and sign the 4506-C" />,
+            }
+      }
       onDone={onDone}
       renderResult={(data) => {
-        const transcripts =
-          (data as { transcripts?: { taxYear: number; wages: number }[] })?.transcripts ?? [];
+        const list = (data as { taxYear: number; wages: number }[] | null) ?? [];
         return (
           <ul className="space-y-1.5 text-[13px]">
-            {transcripts.map((t) => (
+            {list.map((t) => (
               <li key={t.taxYear} className="flex justify-between">
                 <span className="text-ink-soft">{t.taxYear} wages</span>
                 <span className="figure text-meta">${t.wages.toLocaleString()}</span>

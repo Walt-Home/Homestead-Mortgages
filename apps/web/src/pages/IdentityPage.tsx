@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
+import { hasConsent, useLoanFile } from "../lib/file.js";
 
 /**
  * Screen 2. Required before any pull, because APP-005's timing constraint is
@@ -15,6 +17,11 @@ import { api } from "../lib/api.js";
 export function IdentityPage() {
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data } = useLoanFile(fileId);
+  const existing = data?.file.borrowers[0];
+  const readOnly = data?.file.isDemo === true;
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authorized, setAuthorized] = useState(false);
@@ -38,6 +45,36 @@ export function IdentityPage() {
     firstTimeHomebuyer: "false",
   });
 
+  /**
+   * Prefill on a revisit.
+   *
+   * Coming back to fix one field used to show an empty form, and saving it
+   * created a SECOND borrower. The SSN is deliberately not prefilled — we only
+   * hold the last four — and the server keeps the existing one when the field
+   * is left blank, so nobody is asked to retype it.
+   */
+  useEffect(() => {
+    if (!existing) return;
+    setForm((f) => ({
+      ...f,
+      firstName: existing.firstName,
+      lastName: existing.lastName,
+      email: existing.email,
+      phone: existing.phone,
+      dateOfBirth: existing.dateOfBirth?.slice(0, 10) ?? "",
+      line1: existing.currentAddress.line1,
+      city: existing.currentAddress.city,
+      state: existing.currentAddress.state,
+      postalCode: existing.currentAddress.postalCode,
+      maritalStatus: existing.maritalStatus,
+      currentHousing: existing.currentHousing,
+      monthlyRent: existing.monthlyRent ? String(existing.monthlyRent) : "",
+      firstTimeHomebuyer: String(existing.firstTimeHomebuyer ?? false),
+    }));
+    setAuthorized(hasConsent(data?.file, "verification_authorization"));
+    setEconsent(hasConsent(data?.file, "econsent"));
+  }, [existing, data?.file]);
+
   function set(key: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -56,9 +93,15 @@ export function IdentityPage() {
         email: form.email,
         phone: form.phone,
         dateOfBirth: form.dateOfBirth,
-        // Stand-in for the vault exchange. The real number is not sent.
-        ssnVaultHandle: `vault:${digits.slice(-4)}:${crypto.randomUUID()}`,
-        ssnLast4: digits.slice(-4),
+        // Stand-in for the vault exchange. The real number is never sent, and
+        // on a revisit with the field left blank nothing is sent at all — the
+        // server keeps what it has.
+        ...(digits.length >= 4
+          ? {
+              ssnVaultHandle: `vault:${digits.slice(-4)}:${crypto.randomUUID()}`,
+              ssnLast4: digits.slice(-4),
+            }
+          : {}),
         currentAddress: {
           line1: form.line1,
           city: form.city,
@@ -79,14 +122,20 @@ export function IdentityPage() {
       const file = await api.get<{ file: { borrowers: { id: string }[] } }>(`/files/${fileId}`);
       const borrowerId = file.file.borrowers[0]?.id;
       if (borrowerId) {
-        await api.post(`/files/${fileId}/consents`, {
-          kind: "verification_authorization",
-          borrowerId,
-        });
-        if (econsent) {
+        // Idempotent server-side: re-saving this screen will not duplicate a
+        // consent that already exists.
+        if (!hasConsent(data?.file, "verification_authorization")) {
+          await api.post(`/files/${fileId}/consents`, {
+            kind: "verification_authorization",
+            borrowerId,
+          });
+        }
+        if (econsent && !hasConsent(data?.file, "econsent")) {
           await api.post(`/files/${fileId}/consents`, { kind: "econsent", borrowerId });
         }
       }
+      await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
+      await queryClient.invalidateQueries({ queryKey: ["assessment"] });
       navigate(`/f/${created.id}/credit`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save your details.");
@@ -246,9 +295,19 @@ export function IdentityPage() {
 
       {error && <p className="mt-4 text-[13px] text-error">{error}</p>}
 
-      <button className="btn-primary mt-6" disabled={submitting || !authorized}>
-        {submitting ? "Saving…" : "Continue"}
-      </button>
+      <div className="mt-6 flex items-center gap-3">
+        <button className="btn-primary" disabled={submitting || !authorized || readOnly}>
+          {submitting ? "Saving…" : existing ? "Save and continue" : "Continue"}
+        </button>
+        <button type="button" className="btn-secondary" onClick={() => navigate(-1)}>
+          Back
+        </button>
+      </div>
+      {readOnly && (
+        <p className="mt-3 text-[13px] text-subtle">
+          This is a sample file and can&rsquo;t be edited.
+        </p>
+      )}
     </form>
   );
 }

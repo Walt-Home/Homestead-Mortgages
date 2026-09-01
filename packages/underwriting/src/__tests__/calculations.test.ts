@@ -175,6 +175,7 @@ describe("reserves", () => {
           ],
           largeDeposits: [],
           identifiedRentPayments: 0,
+          alternativeReferences: [],
           gifts: [],
           borrowedFunds: [],
           earnestMoneyVerified: true,

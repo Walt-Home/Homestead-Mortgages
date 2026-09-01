@@ -7,7 +7,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { api, ApiError } from "./api.js";
+import { api, ApiError, SESSION_EXPIRED } from "./api.js";
 
 export interface AuthUser {
   id: string;
@@ -60,6 +60,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // A session can end while somebody is halfway through the flow. Without
+  // this the app kept rendering screens whose every request failed.
+  useEffect(() => {
+    const onExpired = () => {
+      setUser(null);
+      setStatus("signed-out");
+      setError("Your session ended. Sign in again to pick up where you left off.");
+    };
+    window.addEventListener(SESSION_EXPIRED, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED, onExpired);
   }, []);
 
   const finish = useCallback((next: AuthUser) => {

@@ -175,6 +175,11 @@ const cleanW2: Persona = {
     ],
     largeDeposits: [],
     cashFlowAssessmentResult: "positive",
+    alternativeReferences: [
+      { kind: "rent", payeeName: "Fixture Property Management", monthsOfHistory: 12, monthlyAmount: 2_150, onTime: true },
+      { kind: "utility", payeeName: "Fixture Energy", monthsOfHistory: 12, monthlyAmount: 141, onTime: true },
+      { kind: "insurance", payeeName: "Fixture Mutual", monthsOfHistory: 12, monthlyAmount: 96, onTime: true },
+    ],
     identifiedRentPayments: 12,
     identifiedMonthlyRent: 2_150,
     gifts: [],
@@ -319,6 +324,14 @@ const thinFileRenter: Persona = {
       },
     ],
     cashFlowAssessmentResult: "positive",
+    // Four references, which is the whole point of this persona: a thin credit
+    // file that the 12-month bank report can still make lendable.
+    alternativeReferences: [
+      { kind: "rent", payeeName: "Fixture Residential", monthsOfHistory: 12, monthlyAmount: 1_680, onTime: true },
+      { kind: "utility", payeeName: "Fixture Power & Light", monthsOfHistory: 12, monthlyAmount: 118, onTime: true },
+      { kind: "insurance", payeeName: "Fixture Renters Insurance", monthsOfHistory: 12, monthlyAmount: 22, onTime: true },
+      { kind: "phone", payeeName: "Fixture Mobile", monthsOfHistory: 12, monthlyAmount: 65, onTime: true },
+    ],
     identifiedRentPayments: 12,
     identifiedMonthlyRent: 1_680,
     gifts: [],
@@ -470,6 +483,10 @@ const variableIncome: Persona = {
       },
     ],
     cashFlowAssessmentResult: "positive",
+    alternativeReferences: [
+      { kind: "rent", payeeName: "Fixture Lofts", monthsOfHistory: 12, monthlyAmount: 2_900, onTime: true },
+      { kind: "utility", payeeName: "Fixture Utilities", monthsOfHistory: 12, monthlyAmount: 173, onTime: true },
+    ],
     identifiedRentPayments: 12,
     identifiedMonthlyRent: 2_900,
     gifts: [

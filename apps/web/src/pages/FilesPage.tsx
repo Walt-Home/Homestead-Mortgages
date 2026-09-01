@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
+import { STAGE_TO_PATH, type FlowStage } from "../lib/file.js";
 
 /**
  * What you can open: your own files, and the shared demo set.
@@ -25,19 +26,6 @@ interface FileRow {
   borrowers: { firstName: string; lastName: string }[];
   decisions: { outcome: string; ausRecommendation: string }[];
 }
-
-const STAGE_PATH: Record<string, string> = {
-  PROPERTY_LOAN: "identity",
-  IDENTITY: "identity",
-  CREDIT: "credit",
-  BANK: "bank",
-  PAYROLL: "payroll",
-  IRS_TRANSCRIPT: "irs",
-  UPLOAD_FALLBACK: "upload",
-  DECISION: "decision",
-  PERSISTENT_CONSENT: "consent",
-  COMPLETE: "decision",
-};
 
 export function FilesPage() {
   const navigate = useNavigate();
@@ -65,6 +53,20 @@ export function FilesPage() {
         <p className="mt-6 font-prose text-[16px] leading-relaxed text-ink-prose">
           You haven&rsquo;t started one yet. It takes about two minutes.
         </p>
+      )}
+
+      {mine.length > 0 && mine[0] && mine[0].stage !== "COMPLETE" && (
+        <div className="mt-6 rounded-card border border-gold-border bg-gold-fill p-5">
+          <p className="text-[14px] text-ink-editorial">
+            You have a file in progress. Pick up where you left off.
+          </p>
+          <Link
+            to={`/f/${mine[0].id}/${STAGE_TO_PATH[mine[0].stage as FlowStage] ?? "decision"}`}
+            className="btn-primary mt-3 inline-block"
+          >
+            Continue
+          </Link>
+        </div>
       )}
 
       {mine.length > 0 && <Group files={mine} deletable />}
@@ -128,7 +130,9 @@ function Group({ files, deletable = false }: { files: FileRow[]; deletable?: boo
               </div>
             )}
             <Link
-              to={`/f/${f.id}/${STAGE_PATH[f.stage] ?? "decision"}`}
+              // Typed against FlowStage, so a new stage is a compile error
+              // rather than a silent fallback to the decision screen.
+              to={`/f/${f.id}/${STAGE_TO_PATH[f.stage as FlowStage] ?? "decision"}`}
               className="block rounded-row border border-line-light bg-app px-4 py-3.5 transition-colors hover:bg-hover"
             >
               <div className="flex items-baseline justify-between gap-4">

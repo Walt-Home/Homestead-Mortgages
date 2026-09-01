@@ -124,6 +124,15 @@ export interface BorrowedFunds {
   readonly agreementDocumentId?: string;
 }
 
+/** A recurring payment that can stand in for a tradeline on a thin file. */
+export interface AlternativeReference {
+  readonly kind: "rent" | "utility" | "insurance" | "phone" | "other";
+  readonly payeeName: string;
+  readonly monthsOfHistory: number;
+  readonly monthlyAmount: number;
+  readonly onTime: boolean;
+}
+
 /**
  * The 12-month bank connection. Drew calls this "the one that matters" and the
  * sheet agrees — 13 requirements name it as their source, and it is the only
@@ -141,6 +150,12 @@ export interface AssetReport {
   readonly cashFlowAssessmentResult?: string;
   /** Consecutive on-time rent payments the report could identify (CRD-018). */
   readonly identifiedRentPayments: number;
+  /**
+   * Recurring obligations the report can evidence as alternative credit —
+   * rent, utilities, insurance, phone. CRD-013 wants three with twelve months
+   * of history each, which is why this is a list and not a rent-only count.
+   */
+  readonly alternativeReferences: readonly AlternativeReference[];
   readonly identifiedMonthlyRent?: number;
   readonly gifts: readonly GiftFunds[];
   readonly borrowedFunds: readonly BorrowedFunds[];

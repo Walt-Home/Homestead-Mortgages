@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
+import { useLoanFile } from "../lib/file.js";
 
 /**
  * Screen 8. "Compute and answer. Show the reasoning, not just a verdict."
@@ -61,20 +63,70 @@ const OUTCOME_COPY: Record<string, { headline: string; body: string }> = {
 export function DecisionPage() {
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data: fileData } = useLoanFile(fileId);
+  const readOnly = fileData?.file.isDemo === true;
+
   const [state, setState] = useState<"idle" | "running" | "done" | "error">("idle");
   const [result, setResult] = useState<DecisionResponse["decision"] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showWork, setShowWork] = useState(false);
+  const [recomputing, setRecomputing] = useState(false);
+  const [intentSaving, setIntentSaving] = useState(false);
+  const intentRecorded = Boolean(fileData?.file && (fileData.file as { intentToProceedAt?: string | null }).intentToProceedAt);
+
+  async function recordIntent() {
+    setIntentSaving(true);
+    try {
+      await api.post(`/files/${fileId}/intent-to-proceed`, {});
+      await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
+      await queryClient.invalidateQueries({ queryKey: ["assessment"] });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That didn't save.");
+    } finally {
+      setIntentSaving(false);
+    }
+  }
+
+  /**
+   * Load whatever was last computed before offering to compute anything.
+   *
+   * The page used to hold the decision in component state only, so coming back
+   * to a finished file showed "Get my answer" again — and on a demo file that
+   * button 403s, because recomputing is a write. A stored decision is a thing
+   * to read, not a thing to re-earn.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    if (!fileId) return;
+    api
+      .get<{ decision: DecisionResponse["decision"] | null }>(`/files/${fileId}/decision`)
+      .then((r) => {
+        if (cancelled || !r.decision) return;
+        setResult(r.decision);
+        setState("done");
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [fileId]);
 
   async function compute() {
     setState("running");
+    setRecomputing(true);
+    setError(null);
     try {
       const response = await api.post<DecisionResponse>(`/files/${fileId}/decision`, {});
       setResult(response.decision);
       setState("done");
+      await queryClient.invalidateQueries({ queryKey: ["assessment"] });
+      await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not compute a decision.");
       setState("error");
+    } finally {
+      setRecomputing(false);
     }
   }
 
@@ -85,10 +137,24 @@ export function DecisionPage() {
         <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
           We have what we need. This takes a moment and shows you the arithmetic, not just a verdict.
         </p>
-        <button className="btn-primary mt-6" onClick={compute} disabled={state === "running"}>
-          {state === "running" ? "Computing…" : "Get my answer"}
-        </button>
+        {readOnly ? (
+          <p className="mt-6 text-[13px] text-subtle">
+            This sample file has no stored decision yet.
+          </p>
+        ) : (
+          <button className="btn-primary mt-6" onClick={compute} disabled={state === "running"}>
+            {state === "running" ? "Computing…" : "Get my answer"}
+          </button>
+        )}
         {error && <p className="mt-4 text-[13px] text-error">{error}</p>}
+        <div className="mt-6 border-t border-line-light pt-4">
+          <button
+            className="text-[13px] text-subtle underline-offset-2 hover:underline"
+            onClick={() => navigate(`/f/${fileId}/upload`)}
+          >
+            Back
+          </button>
+        </div>
       </div>
     );
   }
@@ -193,9 +259,44 @@ export function DecisionPage() {
         )}
       </div>
 
-      <button className="btn-primary" onClick={() => navigate(`/f/${fileId}/consent`)}>
-        Continue
-      </button>
+      {!readOnly && !intentRecorded && (
+        <div className="card">
+          <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
+            Want to go ahead?
+          </h2>
+          <p className="mt-1.5 font-prose text-[15px] leading-relaxed text-ink-prose">
+            Saying yes tells us to keep working on this. It is not a commitment to borrow, and you
+            can stop at any point.
+          </p>
+          <button className="btn-primary mt-4" onClick={() => void recordIntent()} disabled={intentSaving}>
+            {intentSaving ? "Saving…" : "Yes, keep going"}
+          </button>
+        </div>
+      )}
+
+      {intentRecorded && (
+        <p className="text-[13px] text-olive">
+          You&rsquo;ve told us to keep going. That&rsquo;s on the record.
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button className="btn-primary" onClick={() => navigate(`/f/${fileId}/consent`)}>
+          Continue
+        </button>
+        <button className="btn-secondary" onClick={() => navigate(`/f/${fileId}/upload`)}>
+          Back
+        </button>
+        {!readOnly && (
+          <button
+            className="text-[13px] text-subtle underline-offset-2 hover:underline"
+            onClick={compute}
+            disabled={recomputing}
+          >
+            {recomputing ? "Recomputing…" : "Recompute"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

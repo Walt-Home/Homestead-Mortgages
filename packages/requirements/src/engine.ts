@@ -20,6 +20,39 @@ import { type Applicability, evaluateCondition } from "./conditions.js";
 import { evaluateSatisfaction, type Satisfaction } from "./satisfaction.js";
 import { allRequirements, dependencies, transitiveDependencies } from "./graph.js";
 
+/**
+ * Who has to do something about a requirement.
+ *
+ * The borrower's list was 21 items long and 11 of them were things no borrower
+ * can act on — "Loan Estimate delivered", "Homeownership counseling list
+ * delivered", "OFAC / SDN screening cleared". Showing those to a person as
+ * work they owe is not a small cosmetic problem: it buries the two things they
+ * could actually do, and it makes the product look broken to somebody who
+ * reads the list and looks for the button.
+ *
+ * This is derived from `source` rather than stored, so a new row in Drew's
+ * sheet is classified the moment it lands.
+ */
+export type Actor = "borrower" | "lender";
+
+export function actorFor(requirement: Requirement): Actor {
+  switch (requirement.source) {
+    case "borrower_input":
+    case "connect_credit":
+    case "connect_bank":
+    case "connect_payroll":
+    case "connect_irs":
+    case "esign":
+    case "document_upload":
+      return "borrower";
+    // `third_party_order` is something the lender orders; `derived` is the
+    // engine's own arithmetic. Neither has a button a borrower could press.
+    case "third_party_order":
+    case "derived":
+      return "lender";
+  }
+}
+
 export interface Assessment {
   readonly requirement: Requirement;
   readonly applies: Applicability;
@@ -38,6 +71,16 @@ const SEVERITY_RANK: Record<FailureSeverity, number> = {
   financial_loss: 2,
   rework_delay: 3,
 };
+
+/** Outstanding work the BORROWER can act on, in the order it should be worked. */
+export function outstandingForBorrower(file: LoanFile): readonly Assessment[] {
+  return outstanding(file).filter((a) => actorFor(a.requirement) === "borrower");
+}
+
+/** Outstanding work that is the lender's or the engine's, not the borrower's. */
+export function outstandingForLender(file: LoanFile): readonly Assessment[] {
+  return outstanding(file).filter((a) => actorFor(a.requirement) === "lender");
+}
 
 export function assessAll(file: LoanFile): readonly Assessment[] {
   const satisfactions = new Map<string, Satisfaction>();
@@ -122,6 +165,10 @@ export interface Progress {
   readonly blocked: number;
   /** Applicability not yet knowable — the honest "we might still ask" count. */
   readonly undetermined: number;
+  /** Of `outstanding`, the part the borrower can actually act on. */
+  readonly borrowerOutstanding: number;
+  /** Of `outstanding`, the part that is the lender's or the engine's. */
+  readonly lenderOutstanding: number;
 }
 
 export function progress(file: LoanFile): Progress {
@@ -152,6 +199,21 @@ export function progress(file: LoanFile): Progress {
     blocked: applies.filter((a) => a.satisfaction.status !== "satisfied" && a.blockedBy.length > 0)
       .length,
     undetermined: all.filter((a) => a.applies === null).length,
+    // Split out so the borrower's list and the borrower's count are computed
+    // from the same predicate. They were not, and the number disagreed with
+    // the list beneath it.
+    borrowerOutstanding: applies.filter(
+      (a) =>
+        a.satisfaction.status !== "satisfied" &&
+        a.blockedBy.length === 0 &&
+        actorFor(a.requirement) === "borrower",
+    ).length,
+    lenderOutstanding: applies.filter(
+      (a) =>
+        a.satisfaction.status !== "satisfied" &&
+        a.blockedBy.length === 0 &&
+        actorFor(a.requirement) === "lender",
+    ).length,
   };
 }
 

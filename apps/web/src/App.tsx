@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Stepper, type ScreenPath } from "./components/Stepper.js";
 import { RequirementRail } from "./components/RequirementRail.js";
 import { PrototypeBanner } from "./components/PrototypeBanner.js";
-import { api, type Assessment } from "./lib/api.js";
+import { api, ApiError, type Assessment } from "./lib/api.js";
 import { useAuth } from "./lib/auth.js";
+import { STAGE_TO_PATH, useLoanFile } from "./lib/file.js";
 import { SignInPage } from "./pages/SignInPage.js";
 import { PrivacyPage } from "./pages/PrivacyPage.js";
 import { FilesPage } from "./pages/FilesPage.js";
@@ -22,11 +23,11 @@ export function App() {
   // being resolved — a signed-in person should never see a sign-in flash.
   if (status === "loading") return <div className="min-h-screen bg-canvas" />;
 
-  // The banner links here from the sign-in page too, so somebody deciding
-  // whether to hand over their details can read what happens to them first.
   if (status === "signed-out") {
     return (
       <Routes>
+        {/* The banner links here from the sign-in page too, so somebody deciding
+            whether to hand over their details can read what happens to them. */}
         <Route path="/privacy" element={<Chrome />}>
           <Route index element={<PrivacyPage />} />
         </Route>
@@ -49,6 +50,9 @@ export function App() {
       </Route>
 
       <Route path="/f/:fileId" element={<FileShell />}>
+        {/* Bare /f/:id used to render an empty shell. It now resumes. */}
+        <Route index element={<ResumeToStage />} />
+        <Route path="property" element={<PropertyLoanPage />} />
         <Route path="identity" element={<IdentityPage />} />
         <Route path="credit" element={<CreditPage />} />
         <Route path="bank" element={<BankPage />} />
@@ -64,24 +68,74 @@ export function App() {
   );
 }
 
+/** Sends a bare /f/:id to wherever the file actually got to. */
+function ResumeToStage() {
+  const { fileId } = useParams<{ fileId: string }>();
+  const { data, isLoading } = useLoanFile(fileId);
+  if (isLoading) return <p className="text-[13px] text-subtle">Finding your place…</p>;
+  const stage = data?.file.stage;
+  if (!stage) return <Navigate to="/" replace />;
+  return <Navigate to={`/f/${fileId}/${STAGE_TO_PATH[stage]}`} replace />;
+}
+
 /**
- * The rail is keyed on the current path as well as the file id, so moving
- * between screens refetches. A connector call in the previous step changes
- * what is outstanding in this one, and a cached rail would show satisfied work
- * as still needed — which reads as the product not noticing what you just did.
+ * The shell for a file that exists.
+ *
+ * The rail is keyed on the path as well as the file, so moving between screens
+ * refetches — a connector call on the previous screen changes what is
+ * outstanding on this one, and a cached rail reads as the product not noticing
+ * what you just did.
  */
 function FileShell() {
   const { fileId } = useParams<{ fileId: string }>();
   const location = useLocation();
   const screen = (location.pathname.split("/").pop() ?? "identity") as ScreenPath;
 
-  const { data } = useQuery({
+  const file = useLoanFile(fileId);
+  const assessment = useQuery({
     queryKey: ["assessment", fileId, screen],
     queryFn: () => api.get<Assessment>(`/requirements/${fileId}/assessment`),
     enabled: Boolean(fileId),
+    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
   });
 
-  return <Shell screen={screen} assessment={data} />;
+  // A 404 on the file means it is not this account's, which is exactly what a
+  // shared link produces. Saying so beats a blank screen and a console error.
+  if (file.error instanceof ApiError && file.error.status === 404) {
+    return <NotYours />;
+  }
+
+  return (
+    <Shell
+      screen={screen}
+      fileId={fileId}
+      reached={file.data?.file.stage}
+      assessment={assessment.data}
+      assessmentFailed={Boolean(assessment.error)}
+      isDemo={file.data?.file.isDemo}
+    />
+  );
+}
+
+function NotYours() {
+  return (
+    <div className="min-h-screen bg-canvas">
+      <PrototypeBanner />
+      <Header />
+      <div className="mx-auto max-w-2xl px-6 py-16">
+        <h1 className="font-brand text-[24px] font-semibold text-ink-editorial">
+          We can&rsquo;t find that file
+        </h1>
+        <p className="mt-3 font-prose text-[16px] leading-relaxed text-ink-prose">
+          It may belong to a different account, or it may have been deleted. Files are private to
+          whoever started them, so a link to one will not open for anybody else.
+        </p>
+        <a href="/" className="btn-primary mt-6 inline-block">
+          Back to your files
+        </a>
+      </div>
+    </div>
+  );
 }
 
 /** Header and banner without the flow chrome, for pages outside a file. */
@@ -107,7 +161,10 @@ function Header({ children }: { children?: React.ReactNode }) {
           {user && (
             <div className="flex items-center gap-3 text-[12px]">
               <span className="text-meta">{user.email}</span>
-              <button className="text-subtle underline-offset-2 hover:underline" onClick={() => void signOut()}>
+              <button
+                className="text-subtle underline-offset-2 hover:underline"
+                onClick={() => void signOut()}
+              >
                 Sign out
               </button>
             </div>
@@ -121,25 +178,42 @@ function Header({ children }: { children?: React.ReactNode }) {
 
 function Shell({
   screen,
+  fileId,
+  reached,
   assessment,
+  assessmentFailed,
+  isDemo,
   hideRail = false,
 }: {
   screen: ScreenPath;
+  fileId?: string;
+  reached?: import("./lib/file.js").FlowStage;
   assessment?: Assessment;
+  assessmentFailed?: boolean;
+  isDemo?: boolean;
   hideRail?: boolean;
 }) {
   return (
     <div className="min-h-screen bg-canvas">
       <PrototypeBanner />
       <Header>
-        <Stepper current={screen} />
+        <Stepper current={screen} fileId={fileId} reached={reached} />
       </Header>
+
+      {isDemo && (
+        <div className="border-b border-olive-border bg-olive-light">
+          <p className="mx-auto max-w-5xl px-6 py-2 text-[12px] text-olive">
+            A sample borrower, shared with everyone and read-only. Start your own file to walk
+            through the flow.
+          </p>
+        </div>
+      )}
 
       <main className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10 lg:flex-row">
         <div className="min-w-0 flex-1">
           <Outlet />
         </div>
-        {!hideRail && <RequirementRail assessment={assessment} />}
+        {!hideRail && <RequirementRail assessment={assessment} failed={assessmentFailed} />}
       </main>
     </div>
   );

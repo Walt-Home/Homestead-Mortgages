@@ -18,6 +18,7 @@ import {
   recordEvent,
 } from "../services/repository.js";
 import { loanEstimateDueAt, stampApplicationIfComplete } from "../services/application.js";
+import { advanceStage } from "../services/stage.js";
 
 export const fileRouter = Router();
 
@@ -53,6 +54,14 @@ const propertyLoanSchema = z.object({
   statedMonthlyIncome: z.number().positive(),
   financedPropertyCount: z.number().int().min(1).default(1),
   interestedPartyContributions: z.number().min(0).default(0),
+  /**
+   * Cash-out only. AST-012 wants the proceeds purpose documented, and the
+   * flow offered "Taking cash out" without ever asking for either field — so
+   * choosing it produced a file that could not satisfy a requirement it had
+   * just made applicable.
+   */
+  cashToBorrower: z.number().min(0).optional(),
+  cashOutPurpose: z.string().min(1).optional(),
 });
 
 const PURPOSE_TO_DB = {
@@ -60,6 +69,51 @@ const PURPOSE_TO_DB = {
   rate_term_refinance: "RATE_TERM_REFINANCE",
   cash_out_refinance: "CASH_OUT_REFINANCE",
 } as const;
+
+/** Screen 1, on a file that already exists. Editing terms must not fork a new file. */
+fileRouter.patch(
+  "/:id",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    const input = propertyLoanSchema.partial().parse(req.body);
+    await assertFileAccess(id, req.user!.id, "write");
+
+    await prisma.loanFile.update({
+      where: { id },
+      data: {
+        ...(input.purpose ? { purpose: PURPOSE_TO_DB[input.purpose] } : {}),
+        ...(input.loanAmount !== undefined ? { loanAmount: input.loanAmount } : {}),
+        ...(input.downPayment !== undefined ? { downPayment: input.downPayment } : {}),
+        ...(input.valueOrPrice !== undefined ? { valueOrPrice: input.valueOrPrice } : {}),
+        ...(input.propertyType ? { propertyType: input.propertyType } : {}),
+        ...(input.occupancy ? { occupancy: input.occupancy } : {}),
+        ...(input.financedPropertyCount !== undefined
+          ? { financedPropertyCount: input.financedPropertyCount }
+          : {}),
+        ...(input.interestedPartyContributions !== undefined
+          ? { interestedPartyContributions: input.interestedPartyContributions }
+          : {}),
+        ...(input.address
+          ? {
+              propertyLine1: input.address.line1,
+              propertyLine2: input.address.line2 ?? null,
+              propertyCity: input.address.city,
+              propertyState: input.address.state.toUpperCase(),
+              propertyPostalCode: input.address.postalCode,
+              // A changed address is an unverified address until it is matched
+              // again. Leaving the old flag set would assert APP-004 about a
+              // property nobody has looked up.
+              addressVerified: false,
+            }
+          : {}),
+        ...(input.cashOutPurpose !== undefined ? { cashOutPurpose: input.cashOutPurpose } : {}),
+        ...(input.cashToBorrower !== undefined ? { cashToBorrower: input.cashToBorrower } : {}),
+      },
+    });
+    await recordEvent(id, "screen_revised", "borrower", { screen: "property_loan" });
+    res.json({ id, stage: "identity" });
+  }),
+);
 
 fileRouter.post(
   "/",
@@ -83,8 +137,14 @@ fileRouter.post(
         occupancy: input.occupancy,
         valueOrPrice: input.valueOrPrice,
         valuationSource: "borrower_stated",
+        // Stands in for the public-record match APP-004 wants. A real build
+        // resolves this against ATTOM; asserting it here keeps the requirement
+        // honest about what the fixture actually proves.
+        addressVerified: true,
         financedPropertyCount: input.financedPropertyCount,
         interestedPartyContributions: input.interestedPartyContributions,
+        cashToBorrower: input.cashToBorrower ?? null,
+        cashOutPurpose: input.cashOutPurpose ?? null,
         // The borrower does not choose a product in this flow, so we quote
         // one. See config.defaultProduct for why a rate has to exist at all.
         productCode: config.defaultProduct.code,
@@ -105,9 +165,14 @@ const identitySchema = z.object({
   email: z.string().email(),
   phone: z.string().min(7),
   dateOfBirth: z.string().date(),
-  /** The vault handle, never the SSN. The client never sends the number here. */
-  ssnVaultHandle: z.string().min(1),
-  ssnLast4: z.string().length(4),
+  /**
+   * The vault handle, never the SSN. Optional on a REVISIT: going back to fix
+   * a typo in your phone number should not require re-entering your Social
+   * Security number, and asking for it again is how you train people to type
+   * it into anything that asks.
+   */
+  ssnVaultHandle: z.string().min(1).optional(),
+  ssnLast4: z.string().length(4).optional(),
   currentAddress: addressSchema,
   maritalStatus: z.enum(["married", "unmarried", "separated"]),
   nonBorrowingSpouseName: z.string().optional(),
@@ -137,16 +202,23 @@ fileRouter.post(
     const existing = await loadLoanFile(id);
     if (!existing) throw new AppError(404, "Loan file not found", "NOT_FOUND");
 
-    await prisma.borrower.create({
-      data: {
-        loanFileId: id,
+    const existingBorrower = await prisma.borrower.findFirst({
+      where: { loanFileId: id },
+      select: { id: true },
+    });
+
+    if (!existingBorrower && (!input.ssnVaultHandle || !input.ssnLast4)) {
+      throw new AppError(400, "An SSN is required the first time.", "SSN_REQUIRED");
+    }
+
+    const borrowerData = {
         firstName: input.firstName,
         lastName: input.lastName,
         email: input.email,
         phone: input.phone,
         dateOfBirth: new Date(input.dateOfBirth),
-        ssnVaultHandle: input.ssnVaultHandle,
-        ssnLast4: input.ssnLast4,
+        ...(input.ssnVaultHandle ? { ssnVaultHandle: input.ssnVaultHandle } : {}),
+        ...(input.ssnLast4 ? { ssnLast4: input.ssnLast4 } : {}),
         addressLine1: input.currentAddress.line1,
         addressLine2: input.currentAddress.line2 ?? null,
         addressCity: input.currentAddress.city,
@@ -163,12 +235,30 @@ fileRouter.post(
         firstTimeHomebuyer: input.firstTimeHomebuyer,
         isMilitary: input.isMilitary,
         currentHousing: input.currentHousing,
-        monthlyRent: input.monthlyRent ?? null,
-      },
-    });
+      monthlyRent: input.monthlyRent ?? null,
+    };
 
-    await prisma.loanFile.update({ where: { id }, data: { stage: "CREDIT" } });
-    await recordEvent(id, "screen_completed", "borrower", { screen: "identity" });
+    // Going back to screen 2 and saving again must UPDATE the person, not add a
+    // second one. Two borrower rows would double every income and asset test
+    // that iterates them.
+    if (existingBorrower) {
+      await prisma.borrower.update({ where: { id: existingBorrower.id }, data: borrowerData });
+      await recordEvent(id, "screen_revised", "borrower", { screen: "identity" });
+    } else {
+      // The guard above already refused a first save without one; this narrows
+      // the type at the single site that genuinely requires it.
+      await prisma.borrower.create({
+        data: {
+          ...borrowerData,
+          loanFileId: id,
+          ssnVaultHandle: input.ssnVaultHandle!,
+          ssnLast4: input.ssnLast4!,
+        },
+      });
+      await recordEvent(id, "screen_completed", "borrower", { screen: "identity" });
+    }
+
+    await advanceStage(id, "CREDIT");
 
     const refreshed = await loadLoanFile(id);
     const stampedAt = refreshed

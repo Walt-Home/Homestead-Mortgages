@@ -9,6 +9,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import {
+  actorFor,
   assessAll,
   connectorLeverage,
   explainBlock,
@@ -41,6 +42,9 @@ requirementRouter.get(
         id: a.requirement.id,
         screen: a.requirement.screen,
         source: a.requirement.source,
+        // Lets the client show a borrower only what a borrower can act on,
+        // instead of burying two real actions under nine pieces of lender work.
+        actor: actorFor(a.requirement),
         statement: a.requirement.statement,
         severity: a.requirement.failureSeverity,
         appliesBecause: a.requirement.conditionProse,

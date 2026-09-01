@@ -13,6 +13,7 @@ import { underwrite } from "@hm/underwriting";
 import type { Prisma } from "@hm/db";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { assertFileAccess, loadLoanFile, recordEvent } from "../services/repository.js";
+import { advanceStage } from "../services/stage.js";
 
 export const decisionRouter = Router();
 
@@ -87,8 +88,11 @@ decisionRouter.post(
         });
       }
 
-      await tx.loanFile.update({ where: { id }, data: { stage: "PERSISTENT_CONSENT" } });
+      // Not inside the transaction and not a direct write: recomputing a
+      // decision on a finished file must not rewind it to the consent step.
     });
+
+    await advanceStage(id, "PERSISTENT_CONSENT");
 
     await recordEvent(id, "decision_computed", "system", {
       outcome: decision.outcome,
@@ -97,6 +101,53 @@ decisionRouter.post(
     }, "UW-002");
 
     res.status(201).json({ decision });
+  }),
+);
+
+/**
+ * The decision as last computed. Read-only, and the only way a demo file can
+ * show one at all: recomputing is a write, and demo files refuse writes.
+ */
+decisionRouter.get(
+  "/:id/decision",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    await assertFileAccess(id, req.user!.id, "read");
+    const file = await loadLoanFile(id);
+    if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
+    res.json({ decision: file.decision });
+  }),
+);
+
+/**
+ * Intent to Proceed (APP-007).
+ *
+ * A borrower_input requirement with a regulatory-violation severity and no
+ * control anywhere, so it sat on the borrower's list permanently with nothing
+ * they could press. It belongs on the decision screen: intent is something you
+ * express AFTER seeing your Loan Estimate, which is what that screen stands in
+ * for.
+ */
+decisionRouter.post(
+  "/:id/intent-to-proceed",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    await assertFileAccess(id, req.user!.id, "write");
+
+    const file = await prisma.loanFile.findUnique({
+      where: { id },
+      select: { intentToProceedAt: true },
+    });
+    // Recording it twice would move a dated, regulatory record. Once is once.
+    if (file?.intentToProceedAt) {
+      res.json({ intentToProceedAt: file.intentToProceedAt, alreadyRecorded: true });
+      return;
+    }
+
+    const now = new Date();
+    await prisma.loanFile.update({ where: { id }, data: { intentToProceedAt: now } });
+    await recordEvent(id, "intent_to_proceed", "borrower", {}, "APP-007");
+    res.status(201).json({ intentToProceedAt: now, alreadyRecorded: false });
   }),
 );
 

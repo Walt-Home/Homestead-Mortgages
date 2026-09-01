@@ -154,6 +154,21 @@ listen on the port." Docker passes the same value through happily, and `$(...)`
 in a shell strips it, so it reproduces nowhere except Cloud Run. Create secrets
 with `printf '%s'`, never `print()` or `echo` without `-n`.
 
+**`$VAR:us-central1` in zsh is not what you think.** zsh applies `:u` as an
+uppercase history modifier to the parameter, so
+`CONN="$P:us-central1:db"` with `P=homestead-mortgages` yields
+`HOMESTEAD-MORTGAGESs-central1:db` — uppercased, and the `u` eaten. It went
+into the Cloud SQL socket path inside `DATABASE_URL`, and the deployed service
+could not reach its database at all for several hours. Always brace:
+`${P}:us-central1`.
+
+**A health check that cannot fail tells you nothing.** The bug above survived
+because `/api/health` and every unauthenticated 401 answered perfectly without
+touching Postgres — so a deployment with no database looked identical to a
+working one. `/api/health` now runs `SELECT 1` and returns 503 if it cannot,
+and the deploy workflow fails on that. Verify the thing that would break, not
+the thing that is easy to check.
+
 **Build the container locally before letting CI find the bugs.** Two of the
 three deploy failures in this repo's first hour were things a local
 `docker build` catches in ninety seconds.

@@ -183,3 +183,25 @@ jobs:
             *allUsers*) echo "service is publicly reachable" ;;
             *) echo "::error::allUsers is not bound — the service will 403 everyone"; exit 1 ;;
           esac
+
+      # Reachable is not the same as working. A malformed Cloud SQL socket path
+      # once produced a deploy where health and every unauthenticated route
+      # answered correctly and the first real sign-in 500'd, because nothing
+      # anyone tested touched Postgres. /api/health now runs SELECT 1 and
+      # returns 503 if it cannot.
+      - name: Verify the deployed service can reach its database
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)")
+          echo "checking $URL/api/health"
+          for attempt in 1 2 3 4 5 6; do
+            BODY=$(curl -fsS --max-time 30 "$URL/api/health") && break
+            echo "attempt $attempt failed; retrying"
+            sleep 10
+          done
+          echo "$BODY"
+          case "$BODY" in
+            *'"database":"ok"'*) echo "database reachable from the deployed revision" ;;
+            *) echo "::error::deployed service cannot reach its database"; exit 1 ;;
+          esac

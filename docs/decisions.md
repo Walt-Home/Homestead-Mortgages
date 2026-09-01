@@ -101,6 +101,21 @@ negative case we cannot currently prove.
 only. The Loan Estimate deadline it computes will be optimistic in a week
 containing a holiday.
 
+## Operational gotchas that cost real time
+
+**Secret values must not end in a newline.** `SUPERMORTGAGE_ACCESS_PASSPHRASE`
+was created from a file written by `python3 -c "print(...)"`, so it carried a
+trailing `\n`. Cloud Run injects secret bytes into the environment verbatim,
+and a newline in an env var value makes the container fail to start — with
+**no container logs at all**, reported only as the generic "failed to start and
+listen on the port." Docker passes the same value through happily, and `$(...)`
+in a shell strips it, so it reproduces nowhere except Cloud Run. Create secrets
+with `printf '%s'`, never `print()` or `echo` without `-n`.
+
+**Build the container locally before letting CI find the bugs.** Two of the
+three deploy failures in this repo's first hour were things a local
+`docker build` catches in ninety seconds.
+
 ## Privacy posture
 
 **SSN never lands in Postgres.** `borrowers` holds `ssn_last4` for display and

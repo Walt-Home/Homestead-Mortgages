@@ -182,6 +182,29 @@ sign-in page that cannot work. The client id is public — it is embedded in
 every page offering the button — which is why it is a repo *variable* and not
 a secret.
 
+## The org policy that shapes access
+
+`constraints/iam.allowedPolicyMemberDomains` is set org-wide to customer
+`C02l6gns3`, so `allUsers` cannot be added to any IAM policy under trywalt.ai.
+That means no plain shareable link: Cloud Run answers 403 to an anonymous
+browser no matter what the application would have done with the request.
+
+Worth knowing about the failure mode — `gcloud run deploy
+--allow-unauthenticated` does **not** fail when the org blocks it. It logs and
+continues, and you get a service with no invoker bindings at all that returns
+403 to everything, which reads exactly like a broken container. The workflow
+now asks for `domain:trywalt.ai` instead, which the constraint permits, and
+re-asserts it on every deploy.
+
+Reaching it therefore means `gcloud run services proxy` on port 5173 — a
+registered OAuth origin, so sign-in works unchanged. Two layers of Google auth
+(the proxy's, then the app's) is redundant but not harmful.
+
+If a plain link is wanted, someone in `gcp-organization-admins@` or
+`gcp-security-admins@` has to grant this project an exception to the
+constraint. That is a real loosening of an org-wide control and is deliberately
+not something this repo can do to itself.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

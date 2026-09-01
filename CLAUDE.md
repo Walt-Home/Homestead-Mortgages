@@ -94,6 +94,19 @@ Today `hm-run@` holds `cloudsql.client` and accessor on exactly two secrets,
 granted on the secrets themselves. `hm-github-actions@` can deploy and push
 images and nothing else. Terraform manages all of it.
 
+## Reaching the deployed app
+
+Not by URL. The org forbids `allUsers` in any IAM policy
+(`iam.allowedPolicyMemberDomains`), so Cloud Run 403s an anonymous browser.
+Invoker is `domain:trywalt.ai`, which browsers cannot satisfy, so:
+
+```bash
+gcloud run services proxy homestead-mortgages-staging \
+  --region us-central1 --project homestead-mortgages --port 5173
+```
+
+Port 5173 because it is a registered OAuth origin. See docs/decisions.md.
+
 ## Commands
 
 ```bash

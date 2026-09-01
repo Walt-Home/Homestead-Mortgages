@@ -136,13 +136,22 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
 
-      # --allow-unauthenticated is correct here and is NOT the same as open.
+      # NOT --allow-unauthenticated, because the org forbids it.
       #
-      # Google sign-in is the gate, and it is enforced in the application: every
-      # /api route past /health and /auth requires a session, and the OAuth app
-      # is Internal to the Workspace so Google refuses non-domain accounts
-      # before a token is minted. Cloud Run's own IAM auth cannot be satisfied
-      # by a browser, so using it would mean nobody could open the link at all.
+      # constraints/iam.allowedPolicyMemberDomains (Domain Restricted Sharing)
+      # is set org-wide to customer C02l6gns3, so `allUsers` cannot be added to
+      # any IAM policy under trywalt.ai. gcloud does not fail the deploy when
+      # this happens — it logs and moves on, leaving a service with NO invoker
+      # bindings that answers 403 to everything. Asking for what the org permits
+      # makes that visible instead of silent.
+      #
+      # domain:trywalt.ai is permitted, and it means a browser cannot reach the
+      # service directly (browsers do not send OIDC tokens). The team reaches it
+      # through `gcloud run services proxy` — see README. Google sign-in inside
+      # the app is still the real gate; this is the outer door.
+      #
+      # For a plain shareable link, an org-policy exception for this project is
+      # needed, and that sits with gcp-organization-admins@.
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE }} \
@@ -152,10 +161,19 @@ jobs:
             --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
             --set-secrets "DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET:latest" \
             --set-env-vars "NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture,ALLOWED_DOMAIN=trywalt.ai,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}" \
-            --allow-unauthenticated \
+            --no-allow-unauthenticated \
             --port 8080 \
             --memory 1Gi \
             --cpu 1 \
             --min-instances 0 \
             --max-instances 3 \
             --timeout 120
+
+      # Re-asserted every deploy: `gcloud run deploy` does not preserve invoker
+      # bindings when the service is recreated, and a silently-unreachable
+      # service is the failure mode this whole comment block exists to avoid.
+      - name: Allow the Workspace domain to invoke
+        run: |
+          gcloud run services add-iam-policy-binding ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --member="domain:trywalt.ai" --role=roles/run.invoker --quiet

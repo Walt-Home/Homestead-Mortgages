@@ -69,6 +69,25 @@ every adapter against an unauthorized file and fails if any returns data.
 - `docs/requirements.md` — how the registry works and how to change it
 - `docs/decisions.md` — what was decided, what is assumed, and what is known wrong
 
+## Opening the deployed app
+
+```bash
+gcloud run services proxy homestead-mortgages-staging \
+  --region us-central1 --project homestead-mortgages --port 5173
+```
+
+Then open **http://localhost:5173** and sign in with your trywalt.ai account.
+
+Port 5173 is not arbitrary — it is a registered origin on the OAuth client, so
+Google sign-in works through the proxy without touching the console.
+
+The service is not reachable by a plain link, and that is the org's decision
+rather than ours: `constraints/iam.allowedPolicyMemberDomains` forbids adding
+`allUsers` to any IAM policy under trywalt.ai. Invoker is granted to
+`domain:trywalt.ai`, which a browser cannot satisfy on its own because browsers
+do not send OIDC tokens — hence the proxy. A shareable link needs an
+org-policy exception for this project, which sits with `gcp-organization-admins@`.
+
 ## Infrastructure
 
 Runs in Walt's GCP project on its **own** Cloud SQL instance (`homestead-mortgages-db`).

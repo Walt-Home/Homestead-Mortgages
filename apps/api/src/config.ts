@@ -62,11 +62,17 @@ export const config = {
   googleClientId: process.env.GOOGLE_CLIENT_ID,
 
   /**
-   * Workspace domain allowed to sign in. Google already enforces this because
-   * the OAuth app is Internal; this is the copy of the rule that lives in the
-   * repo, next to a test, where a console click cannot quietly loosen it.
+   * Optional domain restriction on sign-in. **Unset means anyone with a Google
+   * account may sign in**, which is the current intent — the prototype is
+   * being tested by people outside the company.
+   *
+   * This defaults to open rather than closed, which is the opposite of what a
+   * gate should normally do. It is defensible only because it is not the
+   * control: the OAuth consent screen decides who Google will mint a token
+   * for, and this is a narrowing on top of that. Set it the moment the
+   * audience narrows again.
    */
-  allowedDomain: process.env.ALLOWED_DOMAIN ?? "trywalt.ai",
+  allowedDomain: process.env.ALLOWED_DOMAIN || undefined,
 
   /**
    * Signs the session cookie. A weak or shared value would let anyone who

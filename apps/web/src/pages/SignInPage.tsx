@@ -92,7 +92,7 @@ export function SignInPage() {
         <p className="mt-3 font-prose text-[16px] leading-relaxed text-ink-prose">
           {config?.allowedDomain
             ? `Use your ${config.allowedDomain} account.`
-            : "Use your Google account."}
+            : "Any Google account works."}
         </p>
 
         <div className="mt-8" ref={buttonRef} />

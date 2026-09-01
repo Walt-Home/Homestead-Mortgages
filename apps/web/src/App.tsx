@@ -6,6 +6,7 @@ import { PrototypeBanner } from "./components/PrototypeBanner.js";
 import { api, type Assessment } from "./lib/api.js";
 import { useAuth } from "./lib/auth.js";
 import { SignInPage } from "./pages/SignInPage.js";
+import { PrivacyPage } from "./pages/PrivacyPage.js";
 import { FilesPage } from "./pages/FilesPage.js";
 import { PropertyLoanPage } from "./pages/PropertyLoanPage.js";
 import { IdentityPage } from "./pages/IdentityPage.js";
@@ -20,12 +21,25 @@ export function App() {
   // Render nothing rather than the sign-in page while the session is still
   // being resolved — a signed-in person should never see a sign-in flash.
   if (status === "loading") return <div className="min-h-screen bg-canvas" />;
-  if (status === "signed-out") return <SignInPage />;
+
+  // The banner links here from the sign-in page too, so somebody deciding
+  // whether to hand over their details can read what happens to them first.
+  if (status === "signed-out") {
+    return (
+      <Routes>
+        <Route path="/privacy" element={<Chrome />}>
+          <Route index element={<PrivacyPage />} />
+        </Route>
+        <Route path="*" element={<SignInPage />} />
+      </Routes>
+    );
+  }
 
   return (
     <Routes>
       <Route path="/" element={<Chrome />}>
         <Route index element={<FilesPage />} />
+        <Route path="privacy" element={<PrivacyPage />} />
       </Route>
 
       {/* Screen 1 runs before a file exists, so there is nothing to assess yet

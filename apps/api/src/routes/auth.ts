@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { prisma } from "@hm/db";
 import { config } from "../config.js";
 import { asyncRoute } from "../middleware/error-handler.js";
 import { requireAuth } from "../middleware/require-auth.js";
@@ -56,6 +57,28 @@ authRouter.get(
   requireAuth,
   asyncRoute(async (req, res) => {
     res.json({ user: publicUser(req.user!) });
+  }),
+);
+
+/**
+ * Delete the account and everything attached to it.
+ *
+ * `users → loan_files` cascades, and every child of a loan file cascades from
+ * there, so this genuinely empties the person out of the database rather than
+ * flagging them deleted. For a prototype that asks real people for their date
+ * of birth and address, "you can take it back" has to actually be true.
+ */
+authRouter.delete(
+  "/me",
+  requireAuth,
+  asyncRoute(async (req, res) => {
+    const userId = req.user!.id;
+    const files = await prisma.loanFile.count({ where: { userId } });
+    await prisma.user.delete({ where: { id: userId } });
+    req.session.destroy(() => {
+      res.clearCookie("hm.sid");
+      res.json({ deleted: { user: 1, loanFiles: files } });
+    });
   }),
 );
 

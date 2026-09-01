@@ -60,7 +60,18 @@ consumers and this product needs form surfaces that kit never had. Two of
 Homestead's documented inconsistencies are fixed rather than copied — see the
 header comment in `apps/web/src/index.css`.
 
-**Google sign-in, restricted to the Workspace domain.** The OAuth app is
+**Google sign-in, open to any Google account.** Started as Internal to
+trywalt.ai; widened when the prototype went out to friends and family, who do
+not have Workspace accounts. `ALLOWED_DOMAIN` is now unset, which means the app
+adds no restriction of its own — the OAuth consent screen is the only thing
+deciding who Google will mint a token for.
+
+Be clear-eyed about what that means: **the front door is open, and what
+protects a person's data is ownership, not authentication.** `assertFileAccess`
+is now load-bearing in a way it was not when everyone signing in was a
+colleague. The 404-not-403 rule and its tests matter more, not less.
+
+**Superseded: sign-in restricted to the Workspace domain.** The OAuth app is
 Internal to trywalt.ai, so Google refuses non-domain accounts before a token
 exists. The domain is re-checked in `services/auth.ts` anyway: the Internal
 setting is console configuration that a future click can loosen silently, and
@@ -137,6 +148,36 @@ with `printf '%s'`, never `print()` or `echo` without `-n`.
 **Build the container locally before letting CI find the bugs.** Two of the
 three deploy failures in this repo's first hour were things a local
 `docker build` catches in ninety seconds.
+
+## Real people, real data
+
+The banner used to say "don't enter real personal information." That was the
+safe thing to write and the wrong thing to ask — a mortgage flow tested
+entirely with invented numbers teaches you nothing about how it feels to hand
+over your own. Once people outside the company started testing, the banner
+changed to tell the truth instead, and `/privacy` says in plain words what is
+stored and offers a button that removes it.
+
+Two things make that honest rather than decorative:
+
+**The SSN never reaches the server.** The browser keeps the full number and
+sends only the last four digits plus a fake vault handle. That was true before
+anyone outside the company touched it; it is the reason this was defensible at
+all.
+
+**Deletion actually deletes.** `users → loan_files` cascades, and every child of
+a loan file cascades from there, so removing an account empties the person out
+of the database rather than flagging them. `deletion.test.ts` reads the schema
+and fails if a new table arrives without `onDelete: Cascade`, because the
+privacy page makes a promise and a missing cascade would quietly turn it into a
+lie.
+
+What is still NOT true, and should be said out loud: there is no privacy
+policy, no encryption of the personal columns beyond what Cloud SQL does at
+rest, and no automatic retention window. Date of birth, address, phone and
+email sit in plain columns. That is acceptable for a prototype with a handful
+of testers who have been told what it is. It is not acceptable for anything
+more, and the gap should close before the audience grows.
 
 ## Privacy posture
 

@@ -5,18 +5,21 @@
  * there must never be one — a mortgage prototype is not the place to start
  * storing credentials, and Google already knows who works here.
  *
- * The domain restriction is enforced in three places, deliberately:
+ * Who may sign in is decided in two places, and only one of them is here:
  *
- *   1. The OAuth app is Internal to the trywalt.ai Workspace, so Google
- *      refuses a non-domain account before a token is ever minted.
- *   2. `verifyIdToken` checks the audience against our client id, so a token
- *      minted for some other app is rejected.
- *   3. `assertAllowedDomain` re-checks the `hd` claim here.
+ *   1. The OAuth consent screen. It is currently External and published, so
+ *      Google will mint a token for any Google account. Making it Internal
+ *      again would restrict it to the Workspace before we ever see a token.
+ *   2. `assertAllowedDomain`, which narrows further — but only when
+ *      ALLOWED_DOMAIN is set, and it is deliberately unset today.
  *
- * Three is not paranoia. (1) is configuration that a future console click can
- * silently loosen, and (2) does not say anything about which domain the user
- * belongs to. (3) is the only one that lives in this repo, in review, next to
- * a test.
+ * `verifyIdToken` checks the audience against our client id, so a token minted
+ * for a different app is rejected. That is not an audience restriction on
+ * people; it says nothing about who the signer is.
+ *
+ * The upshot worth being clear-eyed about: sign-in is currently open to the
+ * world, and what protects a person's data is ownership (see assertFileAccess),
+ * not the front door.
  */
 
 import { OAuth2Client } from "google-auth-library";

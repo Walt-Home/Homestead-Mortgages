@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
 
 /**
@@ -66,7 +67,7 @@ export function FilesPage() {
         </p>
       )}
 
-      {mine.length > 0 && <Group files={mine} />}
+      {mine.length > 0 && <Group files={mine} deletable />}
 
       {demos.length > 0 && (
         <section className="mt-12">
@@ -84,7 +85,14 @@ export function FilesPage() {
   );
 }
 
-function Group({ files }: { files: FileRow[] }) {
+function Group({ files, deletable = false }: { files: FileRow[]; deletable?: boolean }) {
+  const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const remove = useMutation({
+    mutationFn: (id: string) => api.del(`/files/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["files"] }),
+  });
+
   return (
     <ul className="mt-5 space-y-2.5">
       {files.map((f) => {
@@ -93,7 +101,32 @@ function Group({ files }: { files: FileRow[] }) {
           : "Unnamed file";
         const decision = f.decisions[0];
         return (
-          <li key={f.id}>
+          <li key={f.id} className="relative">
+            {deletable && (
+              <div className="absolute right-3 top-3 z-10">
+                {confirming === f.id ? (
+                  <span className="flex items-center gap-2 text-[12px]">
+                    <button
+                      className="text-danger underline underline-offset-2"
+                      onClick={() => remove.mutate(f.id)}
+                      disabled={remove.isPending}
+                    >
+                      delete for good
+                    </button>
+                    <button className="text-subtle" onClick={() => setConfirming(null)}>
+                      cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    className="text-[12px] text-subtle underline-offset-2 hover:underline"
+                    onClick={() => setConfirming(f.id)}
+                  >
+                    delete
+                  </button>
+                )}
+              </div>
+            )}
             <Link
               to={`/f/${f.id}/${STAGE_PATH[f.stage] ?? "decision"}`}
               className="block rounded-row border border-line-light bg-app px-4 py-3.5 transition-colors hover:bg-hover"

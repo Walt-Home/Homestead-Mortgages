@@ -160,7 +160,7 @@ jobs:
             --service-account ${{ env.RUNTIME_SA }} \
             --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
             --set-secrets "DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET:latest" \
-            --set-env-vars "NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture,ALLOWED_DOMAIN=trywalt.ai,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}" \
+            --set-env-vars "NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}" \
             --no-allow-unauthenticated \
             --port 8080 \
             --memory 1Gi \

@@ -20,7 +20,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
-  const body = await response.json().catch(() => ({}));
+  // 204 has no body; parsing it would throw and turn a success into an error.
+  const body = response.status === 204 ? {} : await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = (body as { error?: { message?: string; code?: string; requirementId?: string } })
       .error;
@@ -38,6 +39,7 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: JSON.stringify(body ?? {}) }),
+  del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
 /* ── Response shapes the UI reads ───────────────────────────────────────── */

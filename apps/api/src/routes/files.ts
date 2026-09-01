@@ -194,6 +194,28 @@ fileRouter.get(
   }),
 );
 
+/**
+ * Delete a file and everything under it.
+ *
+ * The append-only rule on `connector_snapshots` and `decisions` is about never
+ * REWRITING history — a re-pull adds a row rather than mutating one. It was
+ * never a claim that a person cannot remove their own data, and reading it
+ * that way would be using an audit property as an excuse. Every child relation
+ * cascades from `loan_files`, so one delete takes the borrower, the consents,
+ * the snapshots, the decisions and the events with it.
+ */
+fileRouter.delete(
+  "/:id",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    // "write" is what refuses demo files here, which is right: a shared
+    // fixture is not any one person's to delete.
+    await assertFileAccess(id, req.user!.id, "write");
+    await prisma.loanFile.delete({ where: { id } });
+    res.status(204).end();
+  }),
+);
+
 fileRouter.get(
   "/:id",
   asyncRoute(async (req, res) => {

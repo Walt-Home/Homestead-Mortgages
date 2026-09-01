@@ -163,6 +163,19 @@ resource "google_cloud_run_v2_service" "api" {
         }
       }
 
+      # The prototype gate. See apps/api/src/middleware/access-gate.ts — it is
+      # a door on a demo, not authentication, and it is what makes it safe to
+      # leave the service publicly routable so a link actually works.
+      env {
+        name = "ACCESS_PASSPHRASE"
+        value_source {
+          secret_key_ref {
+            secret  = var.access_passphrase_secret
+            version = "latest"
+          }
+        }
+      }
+
       volume_mounts {
         name       = "cloudsql"
         mount_path = "/cloudsql"
@@ -176,11 +189,28 @@ resource "google_cloud_run_v2_service" "api" {
   }
 }
 
-# The prototype is not public. Access is granted explicitly rather than with
-# allUsers, because the fixture flow still renders SSN-shaped fields and asks
-# for real-looking consent — and a URL is not an access control.
+# Publicly routable, gated by ACCESS_PASSPHRASE in the application.
+#
+# Cloud Run's IAM auth needs an OIDC token on every request, which a browser
+# does not send — so an IAM-protected URL cannot be handed to a colleague as a
+# link, which is the entire point of a prototype under review. The passphrase
+# gate takes that job instead.
+#
+# This is only acceptable while connector_mode is "fixture" and no real
+# borrower data exists. Flip `public` to false and restore invoker_members
+# before anything real lands here.
+resource "google_cloud_run_v2_service_iam_member" "public" {
+  count = var.public ? 1 : 0
+
+  project  = google_cloud_run_v2_service.api.project
+  location = google_cloud_run_v2_service.api.location
+  name     = google_cloud_run_v2_service.api.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
 resource "google_cloud_run_v2_service_iam_member" "invokers" {
-  for_each = toset(var.invoker_members)
+  for_each = var.public ? toset([]) : toset(var.invoker_members)
 
   project  = google_cloud_run_v2_service.api.project
   location = google_cloud_run_v2_service.api.location

@@ -81,8 +81,26 @@ variable "cors_origin" {
   default = "https://supermortgage-staging.trywalt.ai"
 }
 
+variable "access_passphrase_secret" {
+  description = "Secret Manager secret holding the prototype gate passphrase."
+  type        = string
+  default     = "SUPERMORTGAGE_ACCESS_PASSPHRASE"
+}
+
+variable "public" {
+  description = <<-EOT
+    Whether the service is routable by anyone. True is only defensible while
+    connector_mode is "fixture" and the ACCESS_PASSPHRASE gate is set — it
+    exists because Cloud Run IAM auth cannot be satisfied by a browser, so an
+    IAM-protected URL is not a link anyone can open. Set false before real
+    borrower data exists.
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "invoker_members" {
-  description = "Who may call the service. Deliberately not allUsers."
+  description = "Who may call the service when `public` is false."
   type        = list(string)
   default     = []
 }

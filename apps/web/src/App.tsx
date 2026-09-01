@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-r
 import { useQuery } from "@tanstack/react-query";
 import { Stepper, type ScreenPath } from "./components/Stepper.js";
 import { RequirementRail } from "./components/RequirementRail.js";
+import { PrototypeBanner } from "./components/PrototypeBanner.js";
 import { api, type Assessment } from "./lib/api.js";
 import { StartPage } from "./pages/StartPage.js";
 import { PropertyLoanPage } from "./pages/PropertyLoanPage.js";
@@ -72,6 +73,7 @@ function Shell({
 }) {
   return (
     <div className="min-h-screen bg-canvas">
+      <PrototypeBanner />
       <header className="border-b border-line-light bg-app/70 backdrop-blur">
         <div className="mx-auto max-w-5xl px-6 py-4">
           <span className="font-brand text-[15px] font-bold tracking-tight text-gold">

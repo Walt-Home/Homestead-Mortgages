@@ -54,6 +54,12 @@ export const config = {
    * rate sheet keyed on product, FICO, LTV and lock period. It is an env var so
    * the number is visible and adjustable rather than buried in a constructor.
    */
+  /**
+   * Shared passphrase for the prototype gate. Unset disables the gate, which
+   * is what local development wants. See middleware/access-gate.ts.
+   */
+  accessPassphrase: process.env.ACCESS_PASSPHRASE,
+
   defaultProduct: {
     code: process.env.DEFAULT_PRODUCT_CODE ?? "CONF-30-FIXED",
     termMonths: parseInt(process.env.DEFAULT_TERM_MONTHS ?? "360", 10),

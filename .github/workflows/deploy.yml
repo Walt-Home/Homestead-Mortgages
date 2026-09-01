@@ -145,6 +145,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.SUPERMORTGAGE_MIGRATION_URL }}
 
+      # --allow-unauthenticated is deliberate and is NOT the same as open.
+      #
+      # Cloud Run's IAM auth requires an OIDC token on every request, which a
+      # browser will not send — an IAM-protected URL cannot be handed to a
+      # colleague as a link. So the service is publicly routable and the
+      # ACCESS_PASSPHRASE gate in the app decides who gets in.
+      #
+      # That trade is only acceptable while CONNECTOR_MODE=fixture and no real
+      # borrower data exists. Before this holds anything real, the gate is
+      # replaced with actual authentication and this flag comes back off.
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE }} \
@@ -152,9 +162,9 @@ jobs:
             --region ${{ env.REGION }} \
             --service-account ${{ env.RUNTIME_SA }} \
             --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
-            --set-secrets "DATABASE_URL=SUPERMORTGAGE_DATABASE_URL_STAGING:latest" \
+            --set-secrets "DATABASE_URL=SUPERMORTGAGE_DATABASE_URL_STAGING:latest,ACCESS_PASSPHRASE=SUPERMORTGAGE_ACCESS_PASSPHRASE:latest" \
             --set-env-vars "NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture" \
-            --no-allow-unauthenticated \
+            --allow-unauthenticated \
             --port 8080 \
             --memory 1Gi \
             --cpu 1 \

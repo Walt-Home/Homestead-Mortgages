@@ -87,12 +87,24 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
+      # Artifact Registry returns a transient 502 on the manifest push often
+      # enough to fail a deploy that was otherwise fine — seen once already,
+      # with every layer pushed and only the manifest rejected. Retried rather
+      # than left for a human to notice and re-run.
       - name: Build and push
         run: |
           IMAGE=${{ env.REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE }}:${{ github.sha }}
           docker build -t "$IMAGE" .
-          docker push "$IMAGE"
-          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+          for attempt in 1 2 3; do
+            if docker push "$IMAGE"; then
+              echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+              exit 0
+            fi
+            echo "push attempt $attempt failed; retrying in $((attempt * 10))s"
+            sleep $((attempt * 10))
+          done
+          echo "docker push failed after 3 attempts"
+          exit 1
 
       # Migrations run before the new revision serves traffic. Prisma's
       # `migrate deploy` applies committed migrations only — it never generates

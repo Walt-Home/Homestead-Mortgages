@@ -137,6 +137,15 @@ containing a holiday.
 
 ## Operational gotchas that cost real time
 
+**Helmet's `Cross-Origin-Opener-Policy: same-origin` breaks Google sign-in
+invisibly.** The popup GIS opens gets a severed `window.opener`, so it cannot
+post the credential back. The modal renders blank and never returns, with no
+error in either window — and it looks exactly like an unregistered OAuth
+origin, which is what we chased first. `same-origin-allow-popups` fixes it and
+keeps the isolation that actually matters. `headers.test.ts` pins it, because
+no other test can see it: the API is fine, the button renders, and only a real
+browser doing a real popup exposes the fault.
+
 **Secret values must not end in a newline.** A secret created from a file
 written by `python3 -c "print(...)"` carries a trailing `\n`. Cloud Run injects secret bytes into the environment verbatim,
 and a newline in an env var value makes the container fail to start — with

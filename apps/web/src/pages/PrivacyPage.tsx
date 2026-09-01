@@ -65,43 +65,60 @@ export function PrivacyPage() {
         </p>
       </div>
 
-      <div className="mt-8 rounded-card border border-line-light bg-app p-6">
-        {!confirming ? (
-          <>
-            <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
-              Delete everything
-            </h2>
-            <p className="mt-1.5 text-[13px] text-muted">
-              Signed in as {user?.email}.
-            </p>
-            <button className="btn-secondary mt-4" onClick={() => setConfirming(true)}>
-              Delete my account and files
-            </button>
-          </>
-        ) : (
-          <>
-            <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
-              Delete everything, permanently?
-            </h2>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
-              Your account and every file you started will be removed. This
-              cannot be undone.
-            </p>
-            <div className="mt-4 flex gap-3">
-              <button
-                className="rounded-control bg-danger px-5 py-2.5 text-[15px] font-medium text-white disabled:opacity-40"
-                onClick={() => void deleteEverything()}
-                disabled={busy}
-              >
-                {busy ? "Deleting…" : "Yes, delete everything"}
+      {/* The banner links here from the sign-in page, so this renders for people
+          who have not signed in and have nothing to delete yet. Showing them a
+          delete button would offer an action that cannot work — and "Signed in
+          as ." with a dangling period, which is how this was caught. */}
+      {user ? (
+        <div className="mt-8 rounded-card border border-line-light bg-app p-6">
+          {!confirming ? (
+            <>
+              <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
+                Delete everything
+              </h2>
+              <p className="mt-1.5 text-[13px] text-muted">Signed in as {user.email}.</p>
+              <button className="btn-secondary mt-4" onClick={() => setConfirming(true)}>
+                Delete my account and files
               </button>
-              <button className="btn-secondary" onClick={() => setConfirming(false)} disabled={busy}>
-                Keep it
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+            </>
+          ) : (
+            <>
+              <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
+                Delete everything, permanently?
+              </h2>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+                Your account and every file you started will be removed. This cannot be undone.
+              </p>
+              <div className="mt-4 flex gap-3">
+                <button
+                  className="rounded-control bg-danger px-5 py-2.5 text-[15px] font-medium text-white disabled:opacity-40"
+                  onClick={() => void deleteEverything()}
+                  disabled={busy}
+                >
+                  {busy ? "Deleting…" : "Yes, delete everything"}
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => setConfirming(false)}
+                  disabled={busy}
+                >
+                  Keep it
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="mt-8 rounded-card border border-line-light bg-app p-6">
+          <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
+            Nothing stored for you yet
+          </h2>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+            You are not signed in, so there is nothing of yours here. Sign in and this is where
+            you can delete it again.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

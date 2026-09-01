@@ -110,6 +110,25 @@ alternative references.
 **Recent derogatory.** 24 months, matching the tri-merge's payment history
 window. The sheet does not define "recent".
 
+## Two engine errors found by the readiness audit, and fixed
+
+**QM was decided from DTI.** The 43% back-end limit everyone remembers was
+replaced: since the CFPB's General QM Final Rule took mandatory effect in
+October 2022, first-lien General QM is a **price test** — APR minus APOR
+against a threshold that tiers by loan size. DTI must still be considered and
+documented, which is what the ATR determination is for, but it does not decide
+the question. Deciding it from DTI produced a confidently wrong legal
+determination in both directions, and without APR and APOR the honest answer is
+that we do not know. `compliance.ts` now blocks rather than guessing.
+
+**PITIA omitted mortgage insurance and association dues.** The A in PITIA is
+dues, and every conventional loan above 80% LTV pays MI. Omitting both
+understated the housing payment for exactly the borrowers whose DTI is
+tightest. The effect was not cosmetic: the thin-file fixture at 95% LTV showed
+46.4% DTI and actually sat at 50.35% — over the maximum. It had to be resized
+to a loan the borrower can genuinely carry. **A missing term in PITIA is a
+borrower being told they qualify when they do not.**
+
 ## Known wrong, and shipped anyway
 
 **The LLPA grid in `pricing.ts` is illustrative.** The shape is right — additive

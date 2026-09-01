@@ -571,9 +571,12 @@ export const EVALUATORS: Record<string, Evaluator> = {
 
   "UW-006": (f) => {
     const c = f.decision?.compliance;
-    return c?.atrDetermination === "documented"
-      ? ok(`ATR documented, ${c.qmStatus}`)
-      : no("ATR / QM determination not made");
+    if (c?.atrDetermination !== "documented") return no("ATR / QM determination not made");
+    // QM is a price test needing APR and APOR. ATR can be documented while QM
+    // status is genuinely unknown, and saying "documented, null" was worse
+    // than saying which half is missing.
+    if (c.qmStatus === null) return wait("APR and APOR, for the QM price test");
+    return ok(`ATR documented, ${c.qmStatus}`);
   },
 
   "UW-007": (f) => {

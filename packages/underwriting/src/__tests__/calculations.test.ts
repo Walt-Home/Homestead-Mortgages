@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import type { LoanFile } from "@hm/shared";
 import { DerivationLog } from "../derive.js";
 import { housingPitia, loanToValue, representativeFico, reserves } from "../calculations.js";
+import { runComplianceTests } from "../compliance.js";
 import { pointsAndFeesCap, GUIDELINES } from "../guidelines.js";
 
 function file(overrides: Partial<LoanFile> = {}): LoanFile {
@@ -216,5 +217,80 @@ describe("points and fees cap", () => {
     for (let i = 1; i < caps.length; i++) {
       expect(caps[i]).toBeGreaterThanOrEqual(caps[i - 1]!);
     }
+  });
+});
+
+describe("mortgage insurance and association dues", () => {
+  it("charges MI above 80% LTV and not at or below it", () => {
+    const at80 = housingPitia(file(), new DerivationLog());
+    const f = file();
+    // Same property, bigger loan: 95% LTV.
+    const at95 = housingPitia(
+      { ...f, loan: { ...f.loan!, loanAmount: 380_000 } },
+      new DerivationLog(),
+    );
+    expect(at80).not.toBeNull();
+    expect(at95).not.toBeNull();
+
+    // The 95% payment must exceed the 80% payment by MORE than the extra P&I
+    // alone — the difference is the MI that used to be missing entirely.
+    const log = new DerivationLog();
+    housingPitia({ ...f, loan: { ...f.loan!, loanAmount: 380_000 } }, log);
+    const entry = log.all().find((d) => d.label === "Housing PITIA");
+    expect(entry?.inputs.mortgage_insurance_applies).toBe(true);
+    expect(Number(entry?.inputs.estimated_mortgage_insurance)).toBeGreaterThan(0);
+
+    const clean = new DerivationLog();
+    housingPitia(file(), clean);
+    const at80Entry = clean.all().find((d) => d.label === "Housing PITIA");
+    expect(at80Entry?.inputs.mortgage_insurance_applies).toBe(false);
+  });
+
+  it("includes association dues, because the A in PITIA is dues", () => {
+    const f = file();
+    const withDues = housingPitia(
+      { ...f, property: { ...f.property!, monthlyAssociationDues: 350 } },
+      new DerivationLog(),
+    );
+    const without = housingPitia(f, new DerivationLog());
+    expect(withDues! - without!).toBeCloseTo(350, 1);
+  });
+});
+
+describe("QM is a price test, not a DTI test", () => {
+  const market = { apr: 6.4, apor: 6.1, pointsAndFeesAmount: 5_000 };
+
+  function complianceFor(overrides: Parameters<typeof runComplianceTests>[1], dti: number | null) {
+    const f = file();
+    const log = new DerivationLog();
+    return runComplianceTests(
+      {
+        ...f,
+        credit: { scores: [], tradelines: [], publicRecords: [], inquiries: [] } as never,
+        assets: { accounts: [] } as never,
+        incomeSources: [{ type: "base_wage" }] as never,
+      },
+      overrides,
+      dti,
+      log,
+    );
+  }
+
+  it("does not decide QM from DTI", () => {
+    // 55% DTI is above the old 43% rule and above this engine's own AUS
+    // maximum, and yet a well-priced loan is still General QM. Deciding from
+    // DTI got this backwards.
+    const c = complianceFor(market, 55);
+    expect(c.qmStatus).toBe("qm");
+  });
+
+  it("fails QM on price, however good the DTI", () => {
+    const c = complianceFor({ ...market, apr: 10.5 }, 20);
+    expect(c.qmStatus).toBe("non_qm");
+  });
+
+  it("refuses to guess without APR and APOR", () => {
+    const c = complianceFor({ pointsAndFeesAmount: 5_000 }, 35);
+    expect(c.qmStatus).toBeNull();
   });
 });

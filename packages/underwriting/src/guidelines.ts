@@ -69,6 +69,40 @@ export const GUIDELINES = {
   },
 
   /**
+   * General QM price thresholds: APR minus APOR, in percentage points.
+   *
+   * The 43% back-end DTI limit people remember was REPLACED. The CFPB's
+   * General QM Final Rule (mandatory compliance October 2022) made the bright
+   * line a price test — DTI must be considered and documented, but it is no
+   * longer what decides QM status. Deciding it from DTI, as this engine did,
+   * produces a confidently wrong legal determination in both directions: a
+   * high-DTI loan priced well is QM, and a low-DTI loan priced badly is not.
+   *
+   * Tiers are by loan amount and adjust annually.
+   */
+  generalQm: [
+    { minLoanAmount: 132_756, maxAprOverApor: 2.25 },
+    { minLoanAmount: 79_654, maxAprOverApor: 3.5 },
+    { minLoanAmount: 0, maxAprOverApor: 6.5 },
+  ],
+
+  /**
+   * Borrower-paid monthly mortgage insurance, as an annual percentage of the
+   * loan amount, by LTV band.
+   *
+   * ⚠ ESTIMATE. Real MI rates come from an insurer's rate card and vary by
+   * FICO, term, coverage and product. But omitting MI entirely — which this
+   * engine did — understates PITIA and therefore DTI for every loan above 80%
+   * LTV, which is exactly the population where the DTI answer is tightest.
+   */
+  mortgageInsurance: [
+    { minLtv: 95.01, annualRate: 0.0112 },
+    { minLtv: 90.01, annualRate: 0.0076 },
+    { minLtv: 85.01, annualRate: 0.0051 },
+    { minLtv: 80.01, annualRate: 0.0032 },
+  ],
+
+  /**
    * QM points-and-fees caps. Tiered by loan amount, adjusted annually for
    * inflation by the CFPB. 2025 figures.
    */
@@ -101,6 +135,22 @@ export const GUIDELINES = {
     defaultRecoupMonths: 60,
   },
 } as const;
+
+/** The General QM APR-over-APOR threshold for a loan of this size. */
+export function generalQmSpreadCap(loanAmount: number): number {
+  for (const tier of GUIDELINES.generalQm) {
+    if (loanAmount >= tier.minLoanAmount) return tier.maxAprOverApor;
+  }
+  return 6.5;
+}
+
+/** Annual MI rate for an LTV, or 0 at or below 80% where none is required. */
+export function mortgageInsuranceRate(ltv: number): number {
+  for (const band of GUIDELINES.mortgageInsurance) {
+    if (ltv >= band.minLtv) return band.annualRate;
+  }
+  return 0;
+}
 
 /** The points-and-fees cap that applies to a loan of this size. */
 export function pointsAndFeesCap(loanAmount: number): number {

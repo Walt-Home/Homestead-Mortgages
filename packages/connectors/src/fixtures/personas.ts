@@ -244,14 +244,19 @@ const thinFileRenter: Persona = {
   exercises: "non-traditional credit (CRD-013), rent history (CRD-018), cash flow (CRD-017)",
   scenario: {
     purpose: "purchase",
-    valueOrPrice: 340_000,
-    downPayment: 17_000,
-    loanAmount: 323_000,
+    // Resized when mortgage insurance was added to PITIA. At the original
+    // $340,000 this persona sat at 46.4% DTI only because MI was missing
+    // entirely; with it he was at 50.35% and failed outright. A 95% LTV
+    // borrower pays MI, and the fixture has to be a borrower who actually
+    // qualifies if it is going to demonstrate a thin file being made lendable.
+    valueOrPrice: 299_000,
+    downPayment: 14_950,
+    loanAmount: 284_050,
     propertyType: "condo",
     occupancy: "primary_residence",
     state: "GA",
     expectation:
-      "qualifies with an elevated-DTI finding at 95% LTV; the 12-month bank report is what makes the thin file workable",
+      "qualifies with an elevated-DTI finding at 95% LTV, mortgage insurance included; the 12-month bank report and four alternative references are what make the thin file workable",
   },
   credit: (ref) => ({
     reportId: "fixture-credit-thin",

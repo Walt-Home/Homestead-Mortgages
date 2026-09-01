@@ -10,7 +10,7 @@
 
 import type { ComplianceTests, LoanFile } from "@hm/shared";
 import { DerivationLog, round } from "./derive.js";
-import { GUIDELINES, pointsAndFeesCap } from "./guidelines.js";
+import { generalQmSpreadCap, GUIDELINES, pointsAndFeesCap } from "./guidelines.js";
 
 /**
  * Market inputs the flow does not collect from the borrower.
@@ -58,12 +58,43 @@ export function runComplianceTests(
     },
   );
 
-  const qmStatus: ComplianceTests["qmStatus"] =
-    dtiBack === null ? null : dtiBack <= GUIDELINES.ratios.maxDtiBack ? "qm" : "non_qm";
-  if (qmStatus) {
-    log.record("UW-006", "QM status", qmStatus, `back-end DTI vs ${GUIDELINES.ratios.maxDtiBack}%`, {
-      dti_back: dtiBack,
+  /**
+   * General QM is a PRICE test, not a DTI test.
+   *
+   * The 43% DTI limit everyone remembers was replaced: since the CFPB's
+   * General QM Final Rule took mandatory effect in October 2022, a first-lien
+   * loan is General QM when its APR does not exceed APOR by more than the
+   * threshold for its size. DTI must still be considered and documented — that
+   * is what `atrDetermination` above is for — but it does not decide the
+   * question.
+   *
+   * Deciding it from DTI produced a confidently wrong legal determination in
+   * both directions, and without APR and APOR the honest answer is that we do
+   * not know rather than a number derived from the wrong input.
+   */
+  let qmStatus: ComplianceTests["qmStatus"] = null;
+  if (market.apr === undefined || market.apor === undefined) {
+    log.blocked("UW-006", "QM status", [
+      market.apr === undefined ? "APR" : null,
+      market.apor === undefined ? "APOR (FFIEC weekly table)" : null,
+    ].filter((x): x is string => x !== null));
+  } else if (atrDetermination !== "documented") {
+    // No ATR determination means no QM, whatever the price says.
+    qmStatus = "non_qm";
+    log.record("UW-006", "QM status", qmStatus, "ATR was not documented", {
+      atr_determination: atrDetermination,
     });
+  } else {
+    const cap = generalQmSpreadCap(loanAmount);
+    const spread = round(market.apr - market.apor);
+    qmStatus = spread <= cap ? "qm" : "non_qm";
+    log.record(
+      "UW-006",
+      "QM status",
+      qmStatus,
+      `General QM price test: apr - apor (${spread}) vs the ${cap} point threshold for this loan size`,
+      { apr: market.apr, apor: market.apor, spread, threshold: cap, dti_back_considered: dtiBack },
+    );
   }
 
   /* ── Points and fees (UW-007) ─────────────────────────────────────────── */

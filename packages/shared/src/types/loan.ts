@@ -34,6 +34,12 @@ export interface SubjectProperty {
   readonly valuationSource: "borrower_stated" | "attom_estimate" | "appraisal" | "avm";
   /** Count of financed properties the borrower owns. Drives reserve tiers. */
   readonly financedPropertyCount: number;
+  /**
+   * HOA or condo association dues. The A in PITIA, and part of the housing
+   * payment DTI is measured against — assuming zero for a condo understates
+   * the payment by a few hundred dollars a month.
+   */
+  readonly monthlyAssociationDues?: number;
 }
 
 export interface ExistingLoan {

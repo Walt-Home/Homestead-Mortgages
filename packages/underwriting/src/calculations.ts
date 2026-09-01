@@ -9,7 +9,7 @@
 
 import type { LoanFile } from "@hm/shared";
 import { DerivationLog, round } from "./derive.js";
-import { GUIDELINES } from "./guidelines.js";
+import { GUIDELINES, mortgageInsuranceRate } from "./guidelines.js";
 
 /**
  * Escrow estimate, as a fraction of property value per year.
@@ -108,6 +108,15 @@ function monthlyPrincipalAndInterest(amount: number, annualRate: number, termMon
   return (amount * r) / (1 - Math.pow(1 + r, -termMonths));
 }
 
+/**
+ * Housing PITIA — principal, interest, taxes, insurance, and Association dues.
+ *
+ * The A is association dues, and mortgage insurance belongs here too. Omitting
+ * both understated the payment for exactly the borrowers whose DTI is
+ * tightest: anyone above 80% LTV pays MI, and any condo owner pays dues. The
+ * `thin_file_renter` fixture sits at 95% LTV, so its DTI was wrong by the
+ * entire MI premium.
+ */
 export function housingPitia(file: LoanFile, log: DerivationLog): number | null {
   if (!file.loan || !file.product || !file.property) {
     return log.blocked("UW-004", "Housing PITIA", ["loan terms", "product", "property"]);
@@ -119,15 +128,30 @@ export function housingPitia(file: LoanFile, log: DerivationLog): number | null 
   );
   const taxes = (file.property.valueOrPrice * ESCROW_ASSUMPTION.annualTaxRate) / 12;
   const insurance = (file.property.valueOrPrice * ESCROW_ASSUMPTION.annualInsuranceRate) / 12;
+
+  const ltv =
+    file.property.valueOrPrice === 0
+      ? 0
+      : (file.loan.loanAmount / file.property.valueOrPrice) * 100;
+  const miRate = mortgageInsuranceRate(ltv);
+  const mortgageInsurance = (file.loan.loanAmount * miRate) / 12;
+
+  const hoa = file.property.monthlyAssociationDues ?? 0;
+
   return log.record(
     "UW-004",
     "Housing PITIA",
-    round(pi + taxes + insurance),
-    "P&I + escrowed taxes and insurance (ESTIMATED from national averages — no tax bill or insurance quote is collected)",
+    round(pi + taxes + insurance + mortgageInsurance + hoa),
+    "P&I + escrowed taxes and insurance + mortgage insurance + association dues " +
+      "(taxes, insurance and MI are ESTIMATED — no tax bill, insurance quote or MI rate card is collected)",
     {
       principal_and_interest: round(pi),
       estimated_monthly_taxes: round(taxes),
       estimated_monthly_insurance: round(insurance),
+      estimated_mortgage_insurance: round(mortgageInsurance),
+      mortgage_insurance_applies: miRate > 0,
+      ltv: round(ltv),
+      association_dues: round(hoa),
       note_rate: file.product.noteRate,
       term_months: file.product.termMonths,
     },

@@ -1,0 +1,384 @@
+// SuperMortgage — the underwriting file.
+//
+// Two shapes live here and they answer to different masters.
+//
+// The RELATIONAL tables are things the product queries: files, borrowers,
+// consents, conditions, events. The JSONB SNAPSHOT tables are what a vendor
+// actually returned, stored verbatim and never updated. That split is
+// deliberate — a credit report is evidence, and evidence that gets normalized
+// into columns loses the thing that made it evidence. When an auditor asks
+// what the bureau said on the day we decided, the answer has to be the bytes
+// the bureau sent, not our reading of them.
+//
+// Every snapshot is append-only. Nothing in this schema updates one.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── THE FILE ───────────────────────────────────────────────────────────────
+
+enum FlowStage {
+  PROPERTY_LOAN
+  IDENTITY
+  CREDIT
+  BANK
+  PAYROLL
+  IRS_TRANSCRIPT
+  UPLOAD_FALLBACK
+  DECISION
+  PERSISTENT_CONSENT
+  COMPLETE
+}
+
+enum LoanPurpose {
+  PURCHASE
+  RATE_TERM_REFINANCE
+  CASH_OUT_REFINANCE
+}
+
+model LoanFile {
+  id        String    @id @default(uuid()) @db.Uuid
+  stage     FlowStage @default(PROPERTY_LOAN)
+
+  // Screen 1. Nullable because a file exists the moment somebody starts, and
+  // the whole point of the flow is that it is useful before it is complete.
+  purpose          LoanPurpose?
+  loanAmount       Decimal?     @map("loan_amount") @db.Decimal(14, 2)
+  downPayment      Decimal?     @map("down_payment") @db.Decimal(14, 2)
+  cashToBorrower   Decimal?     @map("cash_to_borrower") @db.Decimal(14, 2)
+  cashOutPurpose   String?      @map("cash_out_purpose")
+  juniorLienBalance     Decimal @default(0) @map("junior_lien_balance") @db.Decimal(14, 2)
+  juniorLienCreditLimit Decimal @default(0) @map("junior_lien_credit_limit") @db.Decimal(14, 2)
+  interestedPartyContributions Decimal @default(0) @map("interested_party_contributions") @db.Decimal(14, 2)
+
+  // Subject property, flattened — one property per file, always.
+  propertyLine1        String?  @map("property_line1")
+  propertyLine2        String?  @map("property_line2")
+  propertyCity         String?  @map("property_city")
+  propertyState        String?  @map("property_state") @db.VarChar(2)
+  propertyPostalCode   String?  @map("property_postal_code")
+  propertyType         String?  @map("property_type")
+  occupancy            String?
+  valueOrPrice         Decimal? @map("value_or_price") @db.Decimal(14, 2)
+  valuationSource      String?  @map("valuation_source")
+  addressVerified      Boolean  @default(false) @map("address_verified")
+  financedPropertyCount Int     @default(1) @map("financed_property_count")
+
+  // Product
+  productCode  String?  @map("product_code")
+  termMonths   Int?     @map("term_months")
+  amortization String?
+  noteRate     Decimal? @map("note_rate") @db.Decimal(6, 4)
+  overlays     String[] @default([])
+
+  // The TRID application moment (APP-002). A timestamp, not a computed flag —
+  // it starts a three-business-day clock whose miss is a regulatory violation,
+  // and a clock that can be recomputed is a clock that can be restarted.
+  applicationReceivedAt DateTime? @map("application_received_at")
+  applicationSixPieces  Json?     @map("application_six_pieces")
+
+  intentToProceedAt   DateTime? @map("intent_to_proceed_at")
+  deliveryMethod      String    @default("electronic") @map("delivery_method")
+  sanctionsScreenClear Boolean? @map("sanctions_screen_clear")
+  ssnValidatedWithSsa  Boolean? @map("ssn_validated_with_ssa")
+  fraudReviewComplete  Boolean  @default(false) @map("fraud_review_complete")
+
+  // Existing loan, on a refinance.
+  existingServicer       String?  @map("existing_servicer")
+  existingLoanNumber     String?  @map("existing_loan_number")
+  existingBalance        Decimal? @map("existing_balance") @db.Decimal(14, 2)
+  existingRate           Decimal? @map("existing_rate") @db.Decimal(6, 4)
+  existingMonthlyPayment Decimal? @map("existing_monthly_payment") @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  borrowers      Borrower[]
+  consents       Consent[]
+  links          ConnectorLink[]
+  snapshots      ConnectorSnapshot[]
+  documents      Document[]
+  disclosures    Disclosure[]
+  decisions      Decision[]
+  conditions     LoanCondition[]
+  events         FileEvent[]
+  incomeSources  IncomeSource[]
+  employments    Employment[]
+
+  @@index([stage])
+  @@index([createdAt])
+  @@map("loan_files")
+}
+
+// ─── PEOPLE ─────────────────────────────────────────────────────────────────
+
+model Borrower {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+
+  firstName String @map("first_name")
+  lastName  String @map("last_name")
+  email     String
+  phone     String
+
+  dateOfBirth DateTime @map("date_of_birth") @db.Date
+
+  // SSN NEVER lands here. `ssnVaultHandle` is an opaque reference the identity
+  // vault exchanges for the real value, server-side, at exactly three call
+  // sites: the credit pull, the SSA-89 validation and the 4506-C. `ssnLast4`
+  // is display only. A migration that adds a plaintext SSN column to this
+  // table is the single change most likely to turn a prototype into a breach.
+  ssnLast4      String @map("ssn_last4") @db.VarChar(4)
+  ssnVaultHandle String @map("ssn_vault_handle")
+
+  addressLine1 String  @map("address_line1")
+  addressLine2 String? @map("address_line2")
+  addressCity  String  @map("address_city")
+  addressState String  @map("address_state") @db.VarChar(2)
+  addressPostalCode String @map("address_postal_code")
+
+  maritalStatus String  @map("marital_status")
+  nonBorrowingSpouseName String? @map("non_borrowing_spouse_name")
+  nonBorrowingSpouseSignatureRequired Boolean @default(false) @map("non_borrowing_spouse_signature_required")
+
+  preferredLanguage String  @default("en") @map("preferred_language")
+  demographics      Json?
+  firstTimeHomebuyer Boolean? @map("first_time_homebuyer")
+  isMilitary        Boolean  @default(false) @map("is_military")
+  currentHousing    String   @default("rent") @map("current_housing")
+  monthlyRent       Decimal? @map("monthly_rent") @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  consents Consent[]
+
+  @@index([loanFileId])
+  @@map("borrowers")
+}
+
+/// A consent, and the evidence it was given. APP-005 is the one that gates
+/// every connector call in the product.
+model Consent {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+  borrowerId String   @map("borrower_id") @db.Uuid
+  borrower   Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+
+  kind       String
+  grantedAt  DateTime @map("granted_at")
+  revokedAt  DateTime? @map("revoked_at")
+  envelopeId String?  @map("envelope_id")
+  ipAddress  String   @map("ip_address")
+  userAgent  String   @map("user_agent")
+
+  @@index([loanFileId, kind])
+  @@map("consents")
+}
+
+// ─── CONNECTORS ─────────────────────────────────────────────────────────────
+
+/// A live connection to a data source. `persistentMonitoringEnabled` is what
+/// screen 9 turns on, and it is the switch the whole refinance-monitoring
+/// product depends on. V1 records it; it does not yet act on it.
+model ConnectorLink {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+
+  kind     String
+  provider String
+  status   String @default("active")
+
+  linkedAt     DateTime @map("linked_at")
+  lastSyncedAt DateTime @map("last_synced_at")
+  persistentMonitoringEnabled Boolean @default(false) @map("persistent_monitoring_enabled")
+
+  /// Set when monitoring is on. Null means nothing is scheduled.
+  nextSyncDueAt DateTime? @map("next_sync_due_at")
+
+  @@unique([loanFileId, kind])
+  @@index([persistentMonitoringEnabled, nextSyncDueAt])
+  @@map("connector_links")
+}
+
+/// Verbatim vendor output. Append-only: a re-pull writes a NEW row.
+///
+/// Keeping every pull rather than the latest is what makes the monitoring
+/// product possible at all — "your situation changed" is a diff between two
+/// snapshots, and you cannot diff against a row you overwrote.
+model ConnectorSnapshot {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+
+  kind       String
+  provider   String
+  externalId String   @map("external_id")
+  /// The domain-shaped payload. Vendor-native JSON stays in `raw`.
+  payload    Json
+  raw        Json?
+  retrievedAt DateTime @map("retrieved_at")
+
+  @@index([loanFileId, kind, retrievedAt])
+  @@map("connector_snapshots")
+}
+
+// ─── DERIVED INCOME AND EMPLOYMENT ──────────────────────────────────────────
+
+/// Income as finally determined, which is not the same as income a connector
+/// reported. The reconciliation between the two is the underwriting.
+model IncomeSource {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+
+  type             String
+  monthlyAmount    Decimal  @map("monthly_amount") @db.Decimal(12, 2)
+  historyMonths    Int      @map("history_months")
+  continuanceEndDate DateTime? @map("continuance_end_date") @db.Date
+  /// Null until INC-027 runs. Null is not false.
+  continuanceEstablished Boolean? @map("continuance_established")
+  evidenceDocumentIds String[] @default([]) @map("evidence_document_ids")
+
+  @@index([loanFileId])
+  @@map("income_sources")
+}
+
+model Employment {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+
+  employerName String   @map("employer_name")
+  employerEin  String?  @map("employer_ein")
+  position     String
+  startDate    DateTime @map("start_date") @db.Date
+  endDate      DateTime? @map("end_date") @db.Date
+  status       String
+  isMilitary   Boolean  @default(false) @map("is_military")
+  verificationMethod String @map("verification_method")
+
+  @@index([loanFileId])
+  @@map("employments")
+}
+
+// ─── DOCUMENTS AND DISCLOSURES ──────────────────────────────────────────────
+
+model Document {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+
+  filename    String
+  contentType String  @map("content_type")
+  bytes       Int
+  storageUri  String  @map("storage_uri")
+  /// Which requirement the borrower was asked to satisfy with this file.
+  satisfiesRequirementId String @map("satisfies_requirement_id")
+  uploadedAt  DateTime @default(now()) @map("uploaded_at")
+
+  @@index([loanFileId, satisfiesRequirementId])
+  @@map("documents")
+}
+
+/// Delivery of a disclosure, with the timestamp that proves the clock was met.
+model Disclosure {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+
+  kind        String
+  deliveredAt DateTime @map("delivered_at")
+  method      String
+  documentId  String   @map("document_id")
+
+  @@index([loanFileId, kind])
+  @@map("disclosures")
+}
+
+// ─── DECISION ───────────────────────────────────────────────────────────────
+
+/// A decision is a SNAPSHOT, not a mutable row. Every recomputation appends.
+///
+/// This is what makes the monitoring loop expressible: "your options changed"
+/// is decision N against decision N-1. It is also the only honest way to store
+/// a verdict that was produced by an engine whose version can change.
+model Decision {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+
+  outcome        String
+  computedAt     DateTime @map("computed_at")
+
+  /// "shadow" until a real DU or LPA integration exists. Never inferred.
+  ausEngine         String  @map("aus_engine")
+  ausEngineVersion  String  @map("aus_engine_version")
+  ausCasefileId     String  @map("aus_casefile_id")
+  ausRecommendation String  @map("aus_recommendation")
+  ausFindings       Json    @map("aus_findings")
+
+  ratios      Json
+  reserves    Json
+  compliance  Json
+  pricing     Json
+  /// The full audit trail behind every number above (screen 8's "show the
+  /// reasoning"). Stored rather than recomputed, because the guidelines
+  /// constants change and a re-derivation would silently rewrite history.
+  derivations Json
+  adverseActionReasons String[] @default([]) @map("adverse_action_reasons")
+
+  @@index([loanFileId, computedAt])
+  @@map("decisions")
+}
+
+model LoanCondition {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+
+  requirementId String  @map("requirement_id")
+  description   String
+  status        String  @default("open")
+  owner         String
+  issuedAt      DateTime @map("issued_at")
+  clearedAt     DateTime? @map("cleared_at")
+  documentIds   String[] @default([]) @map("document_ids")
+
+  @@index([loanFileId, status])
+  @@map("loan_conditions")
+}
+
+// ─── EVENTS ─────────────────────────────────────────────────────────────────
+
+/// Append-only event stream for the file.
+///
+/// V1 writes it for the audit trail. It is also the substrate the realtime
+/// re-evaluation loop will read from, which is why it exists before that loop
+/// does — the events a monitoring product needs are the ones that happened
+/// before anybody built it.
+model FileEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+
+  kind      String
+  /// The requirement this event advanced, where it advanced one.
+  requirementId String? @map("requirement_id")
+  payload   Json
+  occurredAt DateTime @default(now()) @map("occurred_at")
+  /// Who caused it: "borrower", "system", or a connector provider name.
+  actor     String
+
+  @@index([loanFileId, occurredAt])
+  @@index([kind, occurredAt])
+  @@map("file_events")
+}

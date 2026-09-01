@@ -1,0 +1,39 @@
+{
+  "name": "supermortgage",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "check": "tsc -b && npm run requirements:verify",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,css,md}\"",
+    "requirements:build": "node scripts/build-requirements.mjs",
+    "requirements:verify": "node scripts/build-requirements.mjs --verify",
+    "db:generate": "npm run generate --workspace=@sm/db",
+    "db:migrate": "npm run migrate --workspace=@sm/db",
+    "db:studio": "npm run studio --workspace=@sm/db",
+    "clean": "turbo clean && rm -rf node_modules",
+    "seed:demo": "tsx apps/api/src/scripts/seed-demo.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "eslint": "^10.5.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^16.0.0",
+    "prettier": "^3.2.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0",
+    "typescript-eslint": "^8.62.0"
+  },
+  "packageManager": "npm@10.5.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

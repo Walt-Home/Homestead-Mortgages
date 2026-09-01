@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Design tokens, ported from Homestead's `--hs-*` block.
+   Source: Homestead client/src/index.css:17-115 and docs/design-system.md.
+
+   What came across: the colour palette and the type stacks. What did not: the
+   component layer, the `.hs-*` classes, and the kit. Homestead's own design
+   doc says eleven of the kit's fourteen components have zero consumers and
+   that several tokens are aliased to each other by accident, so lifting it
+   wholesale would import a known-inconsistent system into a product that
+   needs different surfaces anyway.
+
+   Two of Homestead's documented inconsistencies are fixed rather than copied:
+     · `--sm-danger` is its own colour here. In Homestead `colors.danger`
+       resolves to the validation red, so destructive actions and form errors
+       render identically.
+     · The canvas/app ink split is not reproduced. Homestead declares two
+       primary inks and renders one; this declares one.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* Surfaces */
+  --sm-canvas: #fffdf8;
+  --sm-surface: #fffefb;
+  --sm-app: #ffffff;
+  --sm-raised: #f8f6f1;
+  --sm-inset: #f2efe9;
+  --sm-hover: #f1ede4;
+
+  /* Ink */
+  --sm-ink: #20231f;
+  --sm-ink-prose: #272923;
+  --sm-ink-editorial: #1a1714;
+  --sm-ink-soft: #4e514b;
+  --sm-text-muted: #6e7068;
+  --sm-meta: #817d74;
+  --sm-subtle: #9a948a;
+
+  /* Rules */
+  --sm-border: #e2dbce;
+  --sm-border-light: #ece6dc;
+  --sm-border-form: #ddd9d1;
+  --sm-border-strong: #bbb4a7;
+
+  /* Olive — verified, connected, affirmative */
+  --sm-olive: #465340;
+  --sm-olive-hover: #394535;
+  --sm-olive-chat: #596653;
+  --sm-olive-tint: #edf0eb;
+  --sm-olive-light: #eef2ea;
+  --sm-olive-border: #d9e3d4;
+
+  /* Gold — money, ownership, the commit action */
+  --sm-gold: #9b6412;
+  --sm-gold-hover: #82530f;
+  --sm-gold-fill: #faf2e2;
+  --sm-gold-border: #e9d9b8;
+
+  /* Status */
+  --sm-error: #a3483d;
+  --sm-danger: #8c2b1f;
+  --sm-notice-bg: #fbf6ee;
+  --sm-notice-border: #e5d5c2;
+
+  /* Focus */
+  --sm-focus: rgba(153, 99, 22, 0.25);
+
+  /* Radius */
+  --sm-r-form: 2px;
+  --sm-r-row: 10px;
+  --sm-r-control: 11px;
+  --sm-r-card: 14px;
+  --sm-r-pill: 999px;
+
+  /* Shadow — this list is closed. */
+  --sm-shadow-card: 0 1px 2px rgba(38, 34, 27, 0.025), 0 4px 14px rgba(51, 46, 38, 0.045);
+  --sm-shadow-cta: 0 6px 24px rgba(155, 100, 18, 0.28);
+}
+
+@layer base {
+  body {
+    @apply bg-canvas text-ink font-ui antialiased;
+  }
+
+  /* Money and any figure the borrower is meant to weigh renders in the serif.
+     Homestead reserves the prose stack for reading and money; a DTI is money. */
+  .figure {
+    font-family: theme("fontFamily.prose");
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .field-label {
+    @apply block text-[13px] font-medium text-ink-soft mb-1.5;
+  }
+
+  .field-input {
+    @apply w-full rounded-form border border-line-form bg-app px-3 py-2.5 text-[15px] text-ink
+           outline-none transition-shadow;
+  }
+  .field-input:focus {
+    box-shadow: 0 0 0 3px var(--sm-focus);
+    border-color: var(--sm-border-strong);
+  }
+
+  .btn-primary {
+    @apply rounded-control bg-gold px-5 py-2.5 text-[15px] font-medium text-white
+           transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--sm-gold-hover);
+  }
+
+  .btn-secondary {
+    @apply rounded-control border border-line bg-surface px-5 py-2.5 text-[15px]
+           font-medium text-ink-soft transition-colors;
+  }
+  .btn-secondary:hover {
+    background: var(--sm-hover);
+  }
+
+  .card {
+    @apply rounded-card border border-line-light bg-app p-6 shadow-card;
+  }
+}

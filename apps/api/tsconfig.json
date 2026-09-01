@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "paths": {
+      "@sm/shared": ["../../packages/shared/src/index.ts"],
+      "@sm/requirements": ["../../packages/requirements/src/index.ts"],
+      "@sm/connectors": ["../../packages/connectors/src/index.ts"],
+      "@sm/underwriting": ["../../packages/underwriting/src/index.ts"],
+      "@sm/db": ["../../packages/db/src/index.ts"]
+    }
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/requirements" },
+    { "path": "../../packages/connectors" },
+    { "path": "../../packages/underwriting" },
+    { "path": "../../packages/db" }
+  ]
+}

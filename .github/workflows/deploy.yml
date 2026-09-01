@@ -1,0 +1,135 @@
+name: Deploy SuperMortgage
+
+# Deploys into Walt's GCP project, on Walt's Cloud SQL instance, in
+# SuperMortgage's own database and its own Cloud Run service.
+#
+# ⚠ ONE-TIME PREREQUISITE, and this workflow cannot authenticate without it.
+# The Workload Identity provider allowlists repositories by name:
+#
+#   attribute.repository=='Walt-Home/Walt' || attribute.repository=='Walt-Home/Homestead'
+#
+# and `walt-github-actions@` grants roles/iam.workloadIdentityUser to exactly
+# those two principalSets. Both need Walt-Home/SuperMortgage added:
+#
+#   gcloud iam workload-identity-pools providers update-oidc github \
+#     --location=global --workload-identity-pool=github --project=walt-489214 \
+#     --attribute-condition="attribute.repository=='Walt-Home/Walt' || attribute.repository=='Walt-Home/Homestead' || attribute.repository=='Walt-Home/SuperMortgage'"
+#
+#   gcloud iam service-accounts add-iam-policy-binding \
+#     walt-github-actions@walt-489214.iam.gserviceaccount.com --project=walt-489214 \
+#     --role=roles/iam.workloadIdentityUser \
+#     --member="principalSet://iam.googleapis.com/projects/859792949607/locations/global/workloadIdentityPools/github/attribute.repository/Walt-Home/SuperMortgage"
+
+on:
+  push:
+    branches: [main]
+
+env:
+  GCP_PROJECT: walt-489214
+  REGION: us-central1
+  ARTIFACT_REPO: walt-app
+  SERVICE: supermortgage-staging
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+
+      # The registry is generated from data/v1-build.csv and committed. This
+      # regenerates it in memory and fails on drift, so a sheet edit that was
+      # never rebuilt cannot ship a stale requirement set.
+      - name: Requirement registry matches the sheet
+        run: npm run requirements:verify
+
+      - name: TypeScript
+        run: npx tsc -b packages/shared packages/requirements packages/connectors packages/underwriting packages/db apps/api
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push
+        run: |
+          IMAGE=${{ env.REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE }}:${{ github.sha }}
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      # Migrations run before the new revision serves traffic. Prisma's
+      # `migrate deploy` applies committed migrations only — it never generates
+      # one, so it cannot invent a destructive change against a live database.
+      #
+      # Reached through the Cloud SQL Auth Proxy rather than the instance's
+      # public IP: GitHub runners have dynamic addresses, so the alternative is
+      # an authorized-network entry wide enough to expose an instance that also
+      # holds two production databases.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Start Cloud SQL Auth Proxy
+        run: |
+          curl -sSo cloud-sql-proxy \
+            https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy --port 5432 \
+            ${{ env.GCP_PROJECT }}:${{ env.REGION }}:walt-db &
+          for i in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+      - name: Apply migrations
+        run: |
+          npm ci
+          npm run db:generate
+          npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
+        env:
+          DATABASE_URL: ${{ secrets.SUPERMORTGAGE_MIGRATION_URL }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image "$IMAGE" \
+            --region ${{ env.REGION }} \
+            --service-account walt-cloud-run@${{ env.GCP_PROJECT }}.iam.gserviceaccount.com \
+            --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:walt-db \
+            --set-secrets "DATABASE_URL=SUPERMORTGAGE_DATABASE_URL_STAGING:latest" \
+            --set-env-vars "NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture" \
+            --no-allow-unauthenticated \
+            --port 8080 \
+            --memory 1Gi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --timeout 120

@@ -1,0 +1,25 @@
+# Local Postgres for development.
+#
+# Port 5433 rather than 5432 on purpose — several of this team's other repos
+# run their own Postgres, and a collision means the app silently connects to
+# somebody else's database and migrates it.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: supermortgage-postgres
+    environment:
+      POSTGRES_USER: supermortgage
+      POSTGRES_PASSWORD: supermortgage
+      POSTGRES_DB: supermortgage
+    ports:
+      - "5433:5432"
+    volumes:
+      - supermortgage-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U supermortgage"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  supermortgage-pgdata:

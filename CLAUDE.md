@@ -96,16 +96,15 @@ images and nothing else. Terraform manages all of it.
 
 ## Reaching the deployed app
 
-Not by URL. The org forbids `allUsers` in any IAM policy
-(`iam.allowedPolicyMemberDomains`), so Cloud Run 403s an anonymous browser.
-Invoker is `domain:trywalt.ai`, which browsers cannot satisfy, so:
+Publicly, at the Cloud Run URL, signed in with any Google account. That needed
+a project-level exception to the org's `iam.allowedPolicyMemberDomains`
+constraint, which forbids `allUsers` everywhere else under trywalt.ai.
 
-```bash
-gcloud run services proxy homestead-mortgages-staging \
-  --region us-central1 --project homestead-mortgages --port 5173
-```
-
-Port 5173 because it is a registered OAuth origin. See docs/decisions.md.
+Know the failure mode: `gcloud run deploy --allow-unauthenticated` does **not**
+fail when that constraint blocks it. It logs and continues, leaving a service
+with no invoker bindings that 403s everything and reads exactly like a broken
+container. The deploy workflow asserts the binding afterwards and fails if it
+is missing.
 
 ## Commands
 

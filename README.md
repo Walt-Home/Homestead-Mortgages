@@ -71,22 +71,13 @@ every adapter against an unauthorized file and fails if any returns data.
 
 ## Opening the deployed app
 
-```bash
-gcloud run services proxy homestead-mortgages-staging \
-  --region us-central1 --project homestead-mortgages --port 5173
-```
+**https://homestead-mortgages-staging-dhlswvsiia-uc.a.run.app**
 
-Then open **http://localhost:5173** and sign in with your trywalt.ai account.
-
-Port 5173 is not arbitrary — it is a registered origin on the OAuth client, so
-Google sign-in works through the proxy without touching the console.
-
-The service is not reachable by a plain link, and that is the org's decision
-rather than ours: `constraints/iam.allowedPolicyMemberDomains` forbids adding
-`allUsers` to any IAM policy under trywalt.ai. Invoker is granted to
-`domain:trywalt.ai`, which a browser cannot satisfy on its own because browsers
-do not send OIDC tokens — hence the proxy. A shareable link needs an
-org-policy exception for this project, which sits with `gcp-organization-admins@`.
+Sign in with any Google account. The service is publicly reachable, which
+required a project-level exception to the org's Domain Restricted Sharing
+constraint — see `docs/decisions.md`. Public means the sign-in page is
+reachable, not the data: every `/api` route past `/health` and `/auth` requires
+a session, and files are scoped to their owner.
 
 ## Infrastructure
 

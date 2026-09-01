@@ -136,22 +136,19 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
 
-      # NOT --allow-unauthenticated, because the org forbids it.
+      # Public, deliberately.
       #
-      # constraints/iam.allowedPolicyMemberDomains (Domain Restricted Sharing)
-      # is set org-wide to customer C02l6gns3, so `allUsers` cannot be added to
-      # any IAM policy under trywalt.ai. gcloud does not fail the deploy when
-      # this happens — it logs and moves on, leaving a service with NO invoker
-      # bindings that answers 403 to everything. Asking for what the org permits
-      # makes that visible instead of silent.
+      # The org-wide Domain Restricted Sharing constraint
+      # (iam.allowedPolicyMemberDomains) forbids `allUsers` by default, so this
+      # project carries an explicit exception — see docs/decisions.md. Without
+      # it gcloud does NOT fail here: it logs and continues, leaving a service
+      # with no invoker bindings that 403s everything and looks exactly like a
+      # broken container. That cost a debugging round once already.
       #
-      # domain:trywalt.ai is permitted, and it means a browser cannot reach the
-      # service directly (browsers do not send OIDC tokens). The team reaches it
-      # through `gcloud run services proxy` — see README. Google sign-in inside
-      # the app is still the real gate; this is the outer door.
-      #
-      # For a plain shareable link, an org-policy exception for this project is
-      # needed, and that sits with gcp-organization-admins@.
+      # Public means the sign-in page is reachable, not that data is. Every
+      # /api route past /health and /auth requires a session, and files are
+      # scoped to their owner. With sign-in now open to any Google account,
+      # ownership is what protects a person's data — see assertFileAccess.
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE }} \
@@ -161,7 +158,7 @@ jobs:
             --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
             --set-secrets "DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET:latest" \
             --set-env-vars "NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}" \
-            --no-allow-unauthenticated \
+            --allow-unauthenticated \
             --port 8080 \
             --memory 1Gi \
             --cpu 1 \
@@ -169,11 +166,20 @@ jobs:
             --max-instances 3 \
             --timeout 120
 
-      # Re-asserted every deploy: `gcloud run deploy` does not preserve invoker
-      # bindings when the service is recreated, and a silently-unreachable
-      # service is the failure mode this whole comment block exists to avoid.
-      - name: Allow the Workspace domain to invoke
+      # Belt and braces, and not redundant: --allow-unauthenticated fails
+      # SILENTLY when the org policy blocks it. Asserting the binding
+      # afterwards and reading it back turns that into a red build instead of a
+      # service nobody can open.
+      - name: Confirm the service is actually reachable
         run: |
           gcloud run services add-iam-policy-binding ${{ env.SERVICE }} \
             --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
-            --member="domain:trywalt.ai" --role=roles/run.invoker --quiet
+            --member="allUsers" --role=roles/run.invoker --quiet
+          MEMBERS=$(gcloud run services get-iam-policy ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(bindings.members)")
+          echo "invokers: $MEMBERS"
+          case "$MEMBERS" in
+            *allUsers*) echo "service is publicly reachable" ;;
+            *) echo "::error::allUsers is not bound — the service will 403 everyone"; exit 1 ;;
+          esac

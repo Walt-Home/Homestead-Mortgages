@@ -131,11 +131,17 @@ jobs:
             sleep 1
           done
 
+      # Run through the workspace script, NOT `npx prisma migrate deploy
+      # --schema <path>` from the repo root. Prisma 7 takes the datasource URL
+      # from prisma.config.ts, and it looks for that file in the working
+      # directory — pointing --schema at the package while standing in the root
+      # finds the schema and misses the config, which fails as "datasource.url
+      # is required" and reads like a missing secret rather than a wrong cwd.
       - name: Apply migrations
         run: |
           npm ci
           npm run db:generate
-          npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
+          npm run migrate:deploy --workspace=@sm/db
         env:
           DATABASE_URL: ${{ secrets.SUPERMORTGAGE_MIGRATION_URL }}
 

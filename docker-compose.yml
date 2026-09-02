@@ -8,15 +8,15 @@ services:
     image: postgres:16-alpine
     container_name: homestead-mortgages-postgres
     environment:
-      POSTGRES_USER: homestead-mortgages
-      POSTGRES_PASSWORD: homestead-mortgages
-      POSTGRES_DB: homestead-mortgages
+      POSTGRES_USER: homestead_mortgages
+      POSTGRES_PASSWORD: homestead_mortgages
+      POSTGRES_DB: homestead_mortgages
     ports:
       - "5433:5432"
     volumes:
       - homestead-mortgages-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U homestead-mortgages"]
+      test: ["CMD-SHELL", "pg_isready -U homestead_mortgages"]
       interval: 5s
       timeout: 5s
       retries: 5

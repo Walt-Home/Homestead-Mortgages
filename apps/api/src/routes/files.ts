@@ -175,6 +175,9 @@ const identitySchema = z.object({
   ssnLast4: z.string().length(4).optional(),
   currentAddress: addressSchema,
   maritalStatus: z.enum(["married", "unmarried", "separated"]),
+  citizenship: z
+    .enum(["us_citizen", "permanent_resident", "non_permanent_resident"])
+    .default("us_citizen"),
   nonBorrowingSpouseName: z.string().optional(),
   preferredLanguage: z.string().default("en"),
   firstTimeHomebuyer: z.boolean(),
@@ -224,7 +227,8 @@ fileRouter.post(
         addressCity: input.currentAddress.city,
         addressState: input.currentAddress.state.toUpperCase(),
         addressPostalCode: input.currentAddress.postalCode,
-        maritalStatus: input.maritalStatus,
+      maritalStatus: input.maritalStatus,
+      citizenship: input.citizenship,
         nonBorrowingSpouseName: input.nonBorrowingSpouseName ?? null,
         // In a community property state a married borrower's spouse must be
         // identified and may have to sign even when not on the loan.

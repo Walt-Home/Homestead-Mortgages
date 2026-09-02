@@ -3,30 +3,27 @@ import { Link } from "react-router-dom";
 import { hasReached, type FlowStage } from "../lib/file.js";
 
 /**
- * The nine screens, and the way back to any of them you have already reached.
+ * Four steps.
  *
- * This used to be inert text. There was no back navigation anywhere in the
- * product — not a link, not a button — so a person who mistyped their income
- * on screen 1 had no way to fix it short of abandoning the file. Browser-back
- * technically moved the URL but landed on a screen that re-submitted.
+ * It was nine, one per screen in Drew's sheet, which mistook the sheet's
+ * structure for the borrower's. The sheet is organised by where evidence comes
+ * from; a person experiences the flow by what they are being asked to do. Those
+ * are not the same shape — three of the nine screens asked the borrower for
+ * nothing at all beyond a button, and one of them (the IRS transcript) asked
+ * for a signature that belongs in the package they sign at the end anyway.
  *
- * Steps ahead of where you have got to stay unlinked: they are not "locked" so
- * much as meaningless, since the data they read does not exist yet.
+ * Steps ahead of where the file has got to are not links: they are not locked
+ * so much as meaningless, because the data they read does not exist yet.
  */
 
 export const SCREENS = [
-  { id: "property_loan", stage: "PROPERTY_LOAN", path: "property", label: "Property & loan" },
-  { id: "identity", stage: "IDENTITY", path: "identity", label: "Identity" },
-  { id: "credit", stage: "CREDIT", path: "credit", label: "Credit" },
+  { id: "property", stage: "PROPERTY_LOAN", path: "property", label: "Property & loan" },
+  { id: "identity", stage: "IDENTITY", path: "identity", label: "Identity & credit" },
   { id: "bank", stage: "BANK", path: "bank", label: "Bank" },
-  { id: "payroll", stage: "PAYROLL", path: "payroll", label: "Payroll" },
-  { id: "irs_transcript", stage: "IRS_TRANSCRIPT", path: "irs", label: "IRS" },
-  { id: "upload_fallback", stage: "UPLOAD_FALLBACK", path: "upload", label: "Documents" },
-  { id: "decision", stage: "DECISION", path: "decision", label: "Decision" },
-  { id: "persistent_consent", stage: "PERSISTENT_CONSENT", path: "consent", label: "Stay connected" },
+  { id: "confirm", stage: "DECISION", path: "confirm", label: "Confirm & sign" },
 ] as const;
 
-export type ScreenPath = (typeof SCREENS)[number]["path"];
+export type ScreenPath = (typeof SCREENS)[number]["path"] | "result" | "payroll" | "documents";
 
 export function Stepper({
   current,
@@ -35,17 +32,21 @@ export function Stepper({
 }: {
   current: ScreenPath;
   fileId?: string;
-  /** How far the file has actually got. Steps beyond this are not linked. */
   reached?: FlowStage;
 }) {
-  const currentIndex = SCREENS.findIndex((s) => s.path === current);
+  // The fallback screens are not steps of their own — they belong to the step
+  // that forked to them, and showing them as extra steps would make the flow
+  // look longer for exactly the people having the hardest time.
+  const owner: Record<string, string> =
+    { payroll: "bank", documents: "bank", result: "confirm" };
+  const effective = owner[current] ?? current;
+  const currentIndex = SCREENS.findIndex((s) => s.path === effective);
 
   return (
-    <ol className="flex flex-wrap items-center gap-x-1 gap-y-2 text-[13px]">
+    <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-2 text-[13px]">
       {SCREENS.map((screen, index) => {
-        const state = index < currentIndex ? "done" : index === currentIndex ? "current" : "upcoming";
-        // Linkable when the file exists and has reached this stage. The current
-        // screen is not a link to itself.
+        const state =
+          index < currentIndex ? "done" : index === currentIndex ? "current" : "upcoming";
         const linkable =
           Boolean(fileId) && state !== "current" && hasReached(reached, screen.stage);
 
@@ -54,12 +55,12 @@ export function Stepper({
           state === "done" && "bg-olive-light text-olive",
           state === "current" && "bg-gold-fill text-gold font-medium",
           state === "upcoming" && "text-subtle",
-          linkable && "hover:bg-hover cursor-pointer",
-          !linkable && state !== "current" && "cursor-default",
+          linkable && "cursor-pointer hover:bg-hover",
         );
 
         return (
-          <li key={screen.id} className="flex items-center gap-1">
+          <li key={screen.id} className="flex items-center gap-1.5">
+            <span className="figure text-[11px] text-subtle">{index + 1}</span>
             {linkable ? (
               <Link to={`/f/${fileId}/${screen.path}`} className={className}>
                 {screen.label}
@@ -67,7 +68,7 @@ export function Stepper({
             ) : (
               <span className={className}>{screen.label}</span>
             )}
-            {index < SCREENS.length - 1 && <span className="text-subtle/50">·</span>}
+            {index < SCREENS.length - 1 && <span className="text-subtle/40">·</span>}
           </li>
         );
       })}

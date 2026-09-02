@@ -20,6 +20,7 @@ import type {
   AssetReport,
   Consent,
   CreditReport,
+  IdentityVerification,
   LoanFile,
   PayrollData,
   TaxTranscript,
@@ -92,7 +93,26 @@ export interface EsignConnector {
   getCompletedConsent(envelopeId: string): Promise<Consent | null>;
 }
 
+/**
+ * Proving the borrower is who they say they are.
+ *
+ * APP-001 wants a government photo ID; typed fields cannot evidence that. The
+ * shape follows the document-and-selfie vendors — Stripe Identity, Persona,
+ * Socure — where you create a session, send the person to it, and read the
+ * result back. It is NOT the same as validating an SSN against the SSA
+ * (CRD-011), which is a separate check with a separate vendor.
+ */
+export interface IdentityConnector {
+  readonly capabilities: ConnectorCapabilities;
+  createVerificationSession(
+    file: LoanFile,
+    borrowerId: string,
+  ): Promise<{ verificationId: string; verificationUrl: string }>;
+  getVerification(verificationId: string): Promise<IdentityVerification | null>;
+}
+
 export interface ConnectorRegistry {
+  readonly identity: IdentityConnector;
   readonly credit: CreditConnector;
   readonly bank: BankConnector;
   readonly payroll: PayrollConnector;

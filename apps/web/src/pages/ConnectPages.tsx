@@ -125,7 +125,7 @@ export function BankPage() {
 
 /** Screen 5 — precision on employment and variable income. */
 export function PayrollPage() {
-  const { fileId, file, readOnly, onDone } = useStep("irs");
+  const { fileId, file, readOnly, onDone } = useStep("confirm");
   return (
     <ConnectorStep
       fileId={fileId}

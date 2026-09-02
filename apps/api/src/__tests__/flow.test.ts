@@ -69,6 +69,12 @@ function afterIdentity(): LoanFile {
         phone: "512-555-0100",
         currentAddress: { line1: "9 Rent Rd", city: "Austin", state: "TX", postalCode: "78704" },
         maritalStatus: "unmarried",
+        citizenship: "us_citizen",
+        identityVerification: {
+          verificationId: "fixture-idv.b1",
+          status: "verified",
+          verifiedAt: "2026-06-15T12:00:00.000Z",
+        },
         nonBorrowingSpouseSignatureRequired: false,
         preferredLanguage: "en",
         demographics: {

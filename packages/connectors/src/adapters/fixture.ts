@@ -21,6 +21,7 @@ import type {
 } from "@hm/shared";
 import type {
   BankConnector,
+  IdentityConnector,
   ConnectorRegistry,
   ConnectorResult,
   CreditConnector,
@@ -232,8 +233,42 @@ export function fixtureEsignConnector(options: FixtureOptions = {}): EsignConnec
   };
 }
 
+/**
+ * Identity verification, stateless for the same reason e-sign is: a session
+ * created on one Cloud Run instance must be readable on another.
+ */
+export function fixtureIdentityConnector(options: FixtureOptions = {}): IdentityConnector {
+  const { latencyMs } = resolve(options);
+  const PREFIX = "fixture-idv";
+
+  return {
+    capabilities: {
+      provider: "fixture-identity",
+      mode: "fixture",
+      satisfies: ["APP-001"],
+    },
+    async createVerificationSession(_file, borrowerId) {
+      await sleep(latencyMs);
+      const verificationId = `${PREFIX}.${borrowerId}`;
+      return { verificationId, verificationUrl: `/verify/${verificationId}` };
+    },
+    async getVerification(verificationId) {
+      if (!verificationId.startsWith(`${PREFIX}.`)) return null;
+      await sleep(latencyMs);
+      return {
+        verificationId,
+        status: "verified",
+        verifiedAt: new Date().toISOString(),
+        documentName: "Fixture Borrower",
+        documentDateOfBirth: "1988-04-12",
+      };
+    },
+  };
+}
+
 export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry {
   return {
+    identity: fixtureIdentityConnector(options),
     credit: fixtureCreditConnector(options),
     bank: fixtureBankConnector(options),
     payroll: fixturePayrollConnector(options),

@@ -38,17 +38,26 @@ export const STAGE_ORDER: FlowStage[] = [
   "COMPLETE",
 ];
 
+/**
+ * Where each stored stage resumes to, under the four-step flow.
+ *
+ * The stage enum still has nine values because it is what past files were
+ * written with and the column is append-only history. Several of them now
+ * resume to the same step: CREDIT is part of identity, PAYROLL and
+ * IRS_TRANSCRIPT and UPLOAD_FALLBACK all belong to the bank step or its
+ * forks, and everything past the signature lands on the result.
+ */
 export const STAGE_TO_PATH: Record<FlowStage, string> = {
   PROPERTY_LOAN: "property",
   IDENTITY: "identity",
-  CREDIT: "credit",
+  CREDIT: "identity",
   BANK: "bank",
-  PAYROLL: "payroll",
-  IRS_TRANSCRIPT: "irs",
-  UPLOAD_FALLBACK: "upload",
-  DECISION: "decision",
-  PERSISTENT_CONSENT: "consent",
-  COMPLETE: "decision",
+  PAYROLL: "bank",
+  IRS_TRANSCRIPT: "bank",
+  UPLOAD_FALLBACK: "bank",
+  DECISION: "confirm",
+  PERSISTENT_CONSENT: "result",
+  COMPLETE: "result",
 };
 
 export interface LoanFileView {
@@ -91,6 +100,7 @@ export interface LoanFileView {
   links: { kind: string; provider: string; persistentMonitoringEnabled: boolean }[];
   decision: unknown | null;
   intentToProceedAt: string | null;
+  applicationSignedAt: string | null;
 }
 
 export interface LoanFileResponse {

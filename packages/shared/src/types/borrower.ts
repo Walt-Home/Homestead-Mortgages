@@ -5,6 +5,31 @@ import type { Address, StateCode } from "./loan.js";
 export type MaritalStatus = "married" | "unmarried" | "separated";
 
 /**
+ * Residency, which changes product eligibility and the documents an
+ * underwriter will ask for. Not in the V1 sheet; asking it alongside the rest
+ * of identity is cheaper than discovering it at underwriting.
+ */
+export type Citizenship = "us_citizen" | "permanent_resident" | "non_permanent_resident";
+
+/**
+ * Identity proven against a government document rather than typed.
+ *
+ * APP-001 asks that the borrower "is who they claim to be", with evidence of a
+ * government photo ID. Typed fields cannot evidence that; a document-and-selfie
+ * check can. The port is vendor-shaped (Stripe Identity, Persona, Socure) and
+ * the adapter is a fixture like every other connector.
+ */
+export interface IdentityVerification {
+  readonly verificationId: string;
+  readonly status: "pending" | "verified" | "failed";
+  readonly verifiedAt?: string;
+  /** What the document said, for comparison against what was typed. */
+  readonly documentName?: string;
+  readonly documentDateOfBirth?: string;
+  readonly failureReason?: string;
+}
+
+/**
  * SSN is never stored or passed in the clear.
  *
  * Everything outside the identity vault sees this: the last four for display,
@@ -37,6 +62,8 @@ export interface Borrower {
   readonly phone: string;
   readonly currentAddress: Address;
   readonly maritalStatus: MaritalStatus;
+  readonly citizenship: Citizenship;
+  readonly identityVerification: IdentityVerification | null;
   /** Community-property states require the spouse even when not borrowing. */
   readonly nonBorrowingSpouseName?: string;
   readonly nonBorrowingSpouseSignatureRequired: boolean;

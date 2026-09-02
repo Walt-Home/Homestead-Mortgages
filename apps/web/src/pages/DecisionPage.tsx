@@ -101,16 +101,28 @@ export function DecisionPage() {
     if (!fileId) return;
     api
       .get<{ decision: DecisionResponse["decision"] | null }>(`/files/${fileId}/decision`)
-      .then((r) => {
-        if (cancelled || !r.decision) return;
-        setResult(r.decision);
-        setState("done");
+      .then(async (r) => {
+        if (cancelled) return;
+        if (r.decision) {
+          setResult(r.decision);
+          setState("done");
+          return;
+        }
+        // A signed application has already asked the question. Making the
+        // borrower press "get my answer" afterwards is a step in the counter
+        // and not in the work.
+        const signed = Boolean(
+          (fileData?.file as { applicationSignedAt?: string | null } | undefined)
+            ?.applicationSignedAt,
+        );
+        if (signed && !readOnly) await compute();
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [fileId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId, fileData?.file, readOnly]);
 
   async function compute() {
     setState("running");
@@ -150,7 +162,7 @@ export function DecisionPage() {
         <div className="mt-6 border-t border-line-light pt-4">
           <button
             className="text-[13px] text-subtle underline-offset-2 hover:underline"
-            onClick={() => navigate(`/f/${fileId}/upload`)}
+            onClick={() => navigate(`/f/${fileId}/confirm`)}
           >
             Back
           </button>
@@ -282,9 +294,9 @@ export function DecisionPage() {
 
       <div className="flex flex-wrap items-center gap-3">
         <button className="btn-primary" onClick={() => navigate(`/f/${fileId}/consent`)}>
-          Continue
+          Keep my connections live
         </button>
-        <button className="btn-secondary" onClick={() => navigate(`/f/${fileId}/upload`)}>
+        <button className="btn-secondary" onClick={() => navigate(`/f/${fileId}/confirm`)}>
           Back
         </button>
         {!readOnly && (

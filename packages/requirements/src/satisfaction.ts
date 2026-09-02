@@ -106,7 +106,15 @@ export const EVALUATORS: Record<string, Evaluator> = {
       b.ssn.vaultHandle ? null : "SSN",
       b.currentAddress.line1 ? null : "physical address",
     ].filter((x): x is string => x !== null);
-    return missing.length ? no(missing.join(", ")) : ok("identity established");
+    if (missing.length) return no(missing.join(", "));
+    // The sheet's evidence column is "Government photo ID; SSN; DOB; physical
+    // address". Typed fields are the last three; only a document check is the
+    // first, and the requirement is that the borrower IS who they claim rather
+    // than that they typed a plausible name.
+    if (b.identityVerification?.status !== "verified") {
+      return no("identity not yet verified against a government ID");
+    }
+    return ok(`identity verified ${b.identityVerification.verifiedAt?.slice(0, 10)}`);
   },
 
   "APP-005": (f) =>
@@ -359,9 +367,23 @@ export const EVALUATORS: Record<string, Evaluator> = {
   /* ── Screen 5 · Payroll ──────────────────────────────────────────────── */
 
   "INC-002": (f) => {
-    if (!f.payroll) return no("payroll not connected");
-    const covered = f.payroll.paystubs.length > 0;
-    return check(covered, `${f.payroll.paystubs.length} paystub(s)`, "no paystubs covering 30 days");
+    // Paystubs are the classic evidence, but not the only one the sheet
+    // accepts: INC-002 carries "Day 1 Certainty: Yes - income", which is the
+    // program where a validated asset report stands in for them. A salaried
+    // borrower whose twelve months of deposits verify does not need a payroll
+    // step, and demanding one would put a screen in front of every borrower to
+    // serve the minority whose income is variable.
+    if (f.payroll?.paystubs.length) {
+      return ok(`${f.payroll.paystubs.length} paystub(s)`);
+    }
+    if (f.assets?.incomeConfidence === "verified") {
+      return ok("income validated from the 12-month asset report (Day 1 Certainty)");
+    }
+    if (!f.assets && !f.payroll) return no("no income source connected");
+    return no(
+      f.assets?.incomeConfidenceReason ??
+        "the asset report could not validate income on its own — paystubs needed",
+    );
   },
 
   "INC-005": (f) => {

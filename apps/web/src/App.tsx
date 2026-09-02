@@ -10,8 +10,10 @@ import { SignInPage } from "./pages/SignInPage.js";
 import { PrivacyPage } from "./pages/PrivacyPage.js";
 import { FilesPage } from "./pages/FilesPage.js";
 import { PropertyLoanPage } from "./pages/PropertyLoanPage.js";
-import { IdentityPage } from "./pages/IdentityPage.js";
-import { BankPage, CreditPage, IrsPage, PayrollPage } from "./pages/ConnectPages.js";
+import { Step2IdentityCredit } from "./pages/Step2IdentityCredit.js";
+import { Step3Bank } from "./pages/Step3Bank.js";
+import { Step4Confirm } from "./pages/Step4Confirm.js";
+import { PayrollPage } from "./pages/ConnectPages.js";
 import { UploadPage } from "./pages/UploadPage.js";
 import { DecisionPage } from "./pages/DecisionPage.js";
 import { ConsentPage } from "./pages/ConsentPage.js";
@@ -52,15 +54,21 @@ export function App() {
       <Route path="/f/:fileId" element={<FileShell />}>
         {/* Bare /f/:id used to render an empty shell. It now resumes. */}
         <Route index element={<ResumeToStage />} />
+        {/* Four steps. `payroll` and `documents` are forks off step 3, not
+            steps of their own; `result` is the outcome, not a fifth step. */}
         <Route path="property" element={<PropertyLoanPage />} />
-        <Route path="identity" element={<IdentityPage />} />
-        <Route path="credit" element={<CreditPage />} />
-        <Route path="bank" element={<BankPage />} />
+        <Route path="identity" element={<Step2IdentityCredit />} />
+        <Route path="bank" element={<Step3Bank />} />
+        <Route path="confirm" element={<Step4Confirm />} />
+        <Route path="result" element={<DecisionPage />} />
         <Route path="payroll" element={<PayrollPage />} />
-        <Route path="irs" element={<IrsPage />} />
-        <Route path="upload" element={<UploadPage />} />
-        <Route path="decision" element={<DecisionPage />} />
+        <Route path="documents" element={<UploadPage />} />
         <Route path="consent" element={<ConsentPage />} />
+        {/* Links minted by the nine-screen flow still resolve. */}
+        <Route path="credit" element={<Navigate to="../identity" replace />} />
+        <Route path="irs" element={<Navigate to="../bank" replace />} />
+        <Route path="upload" element={<Navigate to="../documents" replace />} />
+        <Route path="decision" element={<Navigate to="../result" replace />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

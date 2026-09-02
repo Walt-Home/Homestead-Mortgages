@@ -123,6 +123,8 @@ model LoanFile {
   applicationSixPieces  Json?     @map("application_six_pieces")
 
   intentToProceedAt   DateTime? @map("intent_to_proceed_at")
+  /// When the borrower signed the application package in step 4.
+  applicationSignedAt DateTime? @map("application_signed_at")
   deliveryMethod      String    @default("electronic") @map("delivery_method")
   sanctionsScreenClear Boolean? @map("sanctions_screen_clear")
   ssnValidatedWithSsa  Boolean? @map("ssn_validated_with_ssa")
@@ -186,6 +188,20 @@ model Borrower {
   addressPostalCode String @map("address_postal_code")
 
   maritalStatus String  @map("marital_status")
+
+  /// US citizen, permanent resident, or non-permanent resident.
+  ///
+  /// Not in Drew's V1 sheet, and it belongs in the flow anyway: residency
+  /// changes product eligibility and the documentation an underwriter needs,
+  /// and asking it at the end is worse than asking it with the rest of
+  /// identity.
+  citizenship String @default("us_citizen")
+
+  /// Identity verified against a government document, rather than typed.
+  /// Null means never attempted.
+  identityVerifiedAt     DateTime? @map("identity_verified_at")
+  identityVerificationId String?   @map("identity_verification_id")
+  identityVerificationStatus String? @map("identity_verification_status")
   nonBorrowingSpouseName String? @map("non_borrowing_spouse_name")
   nonBorrowingSpouseSignatureRequired Boolean @default(false) @map("non_borrowing_spouse_signature_required")
 

@@ -93,6 +93,14 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
       postalCode: b.addressPostalCode,
     },
     maritalStatus: b.maritalStatus as Borrower["maritalStatus"],
+    citizenship: b.citizenship as Borrower["citizenship"],
+    identityVerification: b.identityVerifiedAt
+      ? {
+          verificationId: b.identityVerificationId ?? "",
+          status: (b.identityVerificationStatus ?? "verified") as "verified" | "pending" | "failed",
+          verifiedAt: b.identityVerifiedAt.toISOString(),
+        }
+      : null,
     nonBorrowingSpouseName: b.nonBorrowingSpouseName ?? undefined,
     nonBorrowingSpouseSignatureRequired: b.nonBorrowingSpouseSignatureRequired,
     preferredLanguage: b.preferredLanguage,

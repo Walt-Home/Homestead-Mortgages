@@ -140,6 +140,21 @@ model LoanFile {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  /// The identity session started to PREFILL screen 2, before any borrower
+  /// row exists.
+  ///
+  /// A hosted vendor cannot read a document synchronously: it sends the person
+  /// to its own site and answers "pending" until they finish. So the id has to
+  /// outlive the request that created it, and there is nowhere else to put it —
+  /// Borrower requires a name, a date of birth and an SSN, which are the very
+  /// things this session exists to discover, so a placeholder row would mean
+  /// inventing them.
+  ///
+  /// Scoping, not convenience: the completion route reads the id from HERE and
+  /// ignores whatever the client sends, so one file owner cannot read another
+  /// verification's outputs by guessing a session id.
+  identityPrefillVerificationId String? @map("identity_prefill_verification_id")
+
   borrowers     Borrower[]
   consents      Consent[]
   links         ConnectorLink[]

@@ -20,6 +20,8 @@ interface AuthConfig {
   googleClientId: string | null;
   allowedDomain: string | null;
   developerSignInAvailable: boolean;
+  /** Whether the ID check navigates away to a vendor. */
+  identityRequiresRedirect?: boolean;
 }
 
 interface AuthState {

@@ -47,6 +47,38 @@ applicationRouter.post(
     }
 
     const identity = connectors().identity;
+
+    /*
+     * Adopt the check the borrower already passed.
+     *
+     * With a hosted vendor the ID is verified at the TOP of screen 2, before a
+     * borrower row exists — so the session is recorded against the file. By
+     * the time Continue is pressed the row exists and is unverified, and
+     * without this the route dutifully starts a second verification and sends
+     * the borrower back to Stripe to do the whole thing again. It did exactly
+     * that, twice, before this existed.
+     */
+    const prefill = await prisma.loanFile.findUnique({
+      where: { id },
+      select: { identityPrefillVerificationId: true },
+    });
+    if (prefill?.identityPrefillVerificationId) {
+      const existing = await identity.getVerification(prefill.identityPrefillVerificationId);
+      if (existing?.status === "verified") {
+        await prisma.borrower.update({
+          where: { id: borrower.id },
+          data: {
+            identityVerificationId: prefill.identityPrefillVerificationId,
+            identityVerificationStatus: "verified",
+            identityVerifiedAt: new Date(),
+          },
+        });
+        await recordEvent(id, "identity_verified", "borrower", { adopted: true }, "APP-001");
+        res.json({ alreadyVerified: true, verifiedAt: existing.verifiedAt });
+        return;
+      }
+    }
+
     const session = await identity.createVerificationSession(file!, borrower.id);
     await prisma.borrower.update({
       where: { id: borrower.id },

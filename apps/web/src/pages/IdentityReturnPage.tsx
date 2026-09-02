@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
 import { useLoanFile } from "../lib/file.js";
+import { readDraft } from "../lib/identity.js";
 
 /**
  * Where the borrower lands after a hosted identity check.
@@ -18,6 +19,16 @@ import { useLoanFile } from "../lib/file.js";
  * landing here before a result exists is normal and is not a failure. Saying
  * "we couldn't verify you" to somebody whose check is still running is both
  * false and alarming.
+ *
+ * TWO ways in, and they end somewhere different. A borrower who pressed the
+ * ID button at the top of screen 2 has not filled the form yet, so they go
+ * BACK to screen 2 with their name, date of birth and address now known. A
+ * borrower who pressed Continue has already saved everything, so the pulls
+ * that the redirect interrupted run here and they go on to the bank.
+ *
+ * The discriminator is the borrower row: it only exists once Continue has
+ * been pressed. Sending a mid-form borrower to the bank screen would silently
+ * skip their SSN, their consents and APP-005.
  */
 export function IdentityReturnPage() {
   const { fileId = "" } = useParams<{ fileId: string }>();
@@ -30,6 +41,58 @@ export function IdentityReturnPage() {
   const attempts = useRef(0);
 
   const verificationId = data?.file.borrowers[0]?.identityVerification?.verificationId;
+
+  /*
+   * A saved draft is what says they left from the ID button.
+   *
+   * The first version of this asked whether a borrower row existed, which is
+   * wrong: a file can already have one from an earlier pass through screen 2,
+   * and a borrower re-verifying then got routed down the post-Continue path
+   * and shown the result of a stale verification. The draft is written
+   * immediately before the prefill redirect and cleared on submit, so its
+   * presence answers the question exactly.
+   */
+  const fromPrefill = Boolean(data) && Boolean(fileId) && Boolean(readDraft(fileId));
+
+  /* The mid-form return: complete the prefill session and hand them back to
+   * screen 2, which reads the document fields off the file. */
+  useEffect(() => {
+    if (!fromPrefill || !fileId) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let tries = 0;
+
+    async function pick() {
+      tries += 1;
+      try {
+        const r = await api.post<{ status: string; failureReason: string | null }>(
+          `/files/${fileId}/identity-document/complete`,
+          {},
+        );
+        if (cancelled) return;
+        if (r.status === "verified") {
+          setStatus("verified");
+          navigate(`/f/${fileId}/identity`, { replace: true });
+          return;
+        }
+        if (r.status === "failed") {
+          setReason(r.failureReason);
+          setStatus("failed");
+          return;
+        }
+        setStatus("pending");
+        if (tries < 8) timer = setTimeout(pick, Math.min(1500 * tries, 6000));
+      } catch {
+        if (!cancelled) setStatus("pending");
+      }
+    }
+
+    void pick();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [fromPrefill, fileId, navigate]);
 
   useEffect(() => {
     if (!verificationId) return;
@@ -86,7 +149,7 @@ export function IdentityReturnPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileId, verificationId, navigate, queryClient]);
 
-  if (!verificationId && data) {
+  if (!verificationId && !fromPrefill && data) {
     return (
       <div className="card">
         <h1 className="font-brand text-[22px] font-semibold text-ink-editorial">

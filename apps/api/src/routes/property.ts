@@ -25,6 +25,7 @@ import {
 } from "../services/repository.js";
 import { AddressNotFoundError } from "@hm/connectors";
 import { connectors } from "../services/connectors.js";
+import { prisma } from "@hm/db";
 import { config } from "../config.js";
 
 export const propertyRouter = Router();
@@ -360,14 +361,79 @@ propertyFileRouter.post(
     const identity = connectors().identity;
     const session = await identity.createVerificationSession(file, "prefill");
     const result = await identity.getVerification(session.verificationId);
+
+    /*
+     * A hosted vendor cannot answer this synchronously, and treating that as a
+     * failure made screen 2 impassable.
+     *
+     * Stripe returns "pending" the instant a session is created — the borrower
+     * has not been to Stripe yet. The old code demanded "verified" here and
+     * threw DOCUMENT_UNREADABLE otherwise, which under a real vendor fired
+     * every single time: the scan never succeeded, `identity` was never set,
+     * and the Continue button it gates stayed disabled forever. With the
+     * fixture it never fired, because a fixture verifies in place.
+     *
+     * So: 202 and the URL, and the borrower goes and does the check.
+     */
     if (!result || result.status !== "verified") {
+      if (session.verificationUrl) {
+        await prisma.loanFile.update({
+          where: { id },
+          data: { identityPrefillVerificationId: session.verificationId },
+        });
+        res.status(202).json({ requiresRedirect: true, verificationUrl: session.verificationUrl });
+        return;
+      }
       throw new AppError(422, "We could not read that document.", "DOCUMENT_UNREADABLE");
     }
 
     res.status(201).json({
+      requiresRedirect: false,
       documentName: result.documentName ?? null,
       documentDateOfBirth: result.documentDateOfBirth ?? null,
       documentAddress: result.documentAddress ?? null,
+    });
+  }),
+);
+
+/**
+ * What the borrower's trip to the vendor produced.
+ *
+ * Reads the session id from the FILE, never from the request. The client knows
+ * its own verification id, but honouring one it sent would let any file owner
+ * read the outputs of any verification whose id they could obtain — a document
+ * name, date of birth and home address belonging to somebody else.
+ *
+ * Unguarded for the same reason as the scan above: it runs before APP-005.
+ */
+propertyFileRouter.post(
+  "/:id/identity-document/complete",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    // requireFile is the ownership check; the domain LoanFile it returns does
+    // not carry storage-only columns, so the id comes from the row.
+    await requireFile(id, req.user!.id);
+    const row = await prisma.loanFile.findUnique({
+      where: { id },
+      select: { identityPrefillVerificationId: true },
+    });
+
+    const verificationId = row?.identityPrefillVerificationId;
+    if (!verificationId) {
+      throw new AppError(404, "No document check is in progress.", "NO_PREFILL");
+    }
+
+    const result = await connectors().identity.getVerification(verificationId);
+    if (!result) throw new AppError(404, "That verification was not found.", "NOT_FOUND");
+
+    // "pending" is a real answer, not a failure — Stripe reviews a document
+    // asynchronously, so landing back here before a result exists is normal.
+    res.json({
+      status: result.status,
+      documentName: result.documentName ?? null,
+      documentDateOfBirth: result.documentDateOfBirth ?? null,
+      documentAddress: result.documentAddress ?? null,
+      failureReason: result.failureReason ?? null,
     });
   }),
 );

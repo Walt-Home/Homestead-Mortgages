@@ -15,16 +15,19 @@
  * when the occupancy makes them lawful to collect.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
 import { hasConsent, useLoanFile } from "../lib/file.js";
 import { useAuth } from "../lib/auth.js";
 import { Why } from "../components/Why.js";
+import { clearDraft, readDraft, saveDraft } from "../lib/identity.js";
 import { Working } from "../components/Working.js";
 
 interface DocumentRead {
+  requiresRedirect?: boolean;
+  verificationUrl?: string;
   documentName: string | null;
   documentDateOfBirth: string | null;
   documentAddress: {
@@ -86,7 +89,7 @@ export function IdentityPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const { data } = useLoanFile(fileId);
-  const { user } = useAuth();
+  const { user, config: authConfig } = useAuth();
   const readOnly = data?.file.isDemo === true;
 
   // They signed in to get here, so we already have this. Asking again is asking
@@ -96,18 +99,84 @@ export function IdentityPage() {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [scanning, setScanning] = useState(false);
 
+  // Deliberately NOT seeded from the draft: the SSN is never written to
+  // browser storage, so it is retyped after a redirect.
   const [ssn, setSsn] = useState("");
-  const [phone, setPhone] = useState("");
-  const [citizenship, setCitizenship] = useState("us_citizen");
-  const [maritalStatus, setMaritalStatus] = useState("unmarried");
-  const [authorized, setAuthorized] = useState(false);
-  const [econsent, setEconsent] = useState(true);
-  const [smsConsent, setSmsConsent] = useState(true);
+  const [phone, setPhone] = useState(() => (fileId ? (readDraft(fileId)?.phone ?? "") : ""));
+  const [citizenship, setCitizenship] = useState(
+    () => (fileId ? readDraft(fileId)?.citizenship : null) ?? "us_citizen",
+  );
+  const [maritalStatus, setMaritalStatus] = useState(
+    () => (fileId ? readDraft(fileId)?.maritalStatus : null) ?? "unmarried",
+  );
+  const [authorized, setAuthorized] = useState(
+    () => (fileId ? readDraft(fileId)?.authorized : null) ?? false,
+  );
+  const [econsent, setEconsent] = useState(
+    () => (fileId ? readDraft(fileId)?.econsent : null) ?? true,
+  );
+  const [smsConsent, setSmsConsent] = useState(
+    () => (fileId ? readDraft(fileId)?.smsConsent : null) ?? true,
+  );
+
+  /** Only used when the vendor's verified outputs carry no date of birth. */
+  const [dobInput, setDobInput] = useState("");
 
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const statedIncome = Number((location.state as { income?: number } | null)?.income ?? 0);
+  const draft = fileId ? readDraft(fileId) : null;
+
+  /*
+   * Screen 1 hands the income over on router state, which a redirect to the
+   * identity vendor destroys along with everything else. The draft carries it.
+   */
+  const statedIncome =
+    Number((location.state as { income?: number } | null)?.income ?? 0) || (draft?.statedIncome ?? 0);
+
+  /** Whether pressing the button leaves this site. */
+  const identityRedirects = authConfig?.identityRequiresRedirect === true;
+
+  /*
+   * Coming back from the vendor.
+   *
+   * The redirect destroyed the component that started the check, so nothing on
+   * this screen knows it happened — without this the borrower returns to the
+   * same button they already pressed and is asked to verify a second time.
+   *
+   * A saved draft is the signal: it is only written immediately before the
+   * redirect. If the check has not finished yet, the answer is "pending" and
+   * `identity` simply stays null, which is the state the screen already knows
+   * how to render.
+   */
+  useEffect(() => {
+    if (!fileId || identity || !draft) return;
+    let cancelled = false;
+    void api
+      .post<DocumentRead & { status?: string }>(`/files/${fileId}/identity-document/complete`, {})
+      .then((doc) => {
+        if (cancelled || doc.status !== "verified") return;
+        const [firstName, ...rest] = (doc.documentName ?? "").split(" ");
+        // A date of birth is NOT required here. Stripe's verified outputs
+        // carry name and address and, depending on the document, no dob at
+        // all — its own test identity has none. Refusing the whole result
+        // over one absent field would strand a borrower whose ID genuinely
+        // verified; the screen asks for the date instead.
+        if (!firstName || !doc.documentAddress) return;
+        setIdentity({
+          firstName,
+          lastName: rest.join(" "),
+          dateOfBirth: doc.documentDateOfBirth ?? "",
+          address: doc.documentAddress,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // `draft` is read once at mount; re-running on its identity would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId, identity]);
 
   async function scan() {
     if (!fileId) return;
@@ -115,14 +184,36 @@ export function IdentityPage() {
     setError(null);
     try {
       const doc = await api.post<DocumentRead>(`/files/${fileId}/identity-document`, {});
+
+      /*
+       * A hosted vendor cannot read the document here — it takes the borrower
+       * to its own site and answers later. Everything typed so far is saved
+       * first, because the redirect replaces this document and would otherwise
+       * wipe the form.
+       */
+      if (doc.requiresRedirect && doc.verificationUrl) {
+        saveDraft(fileId, {
+          phone,
+          citizenship,
+          maritalStatus,
+          authorized,
+          econsent,
+          smsConsent,
+          statedIncome,
+        });
+        window.location.assign(doc.verificationUrl);
+        return;
+      }
+
       const [firstName, ...rest] = (doc.documentName ?? "").split(" ");
-      if (!firstName || !doc.documentDateOfBirth || !doc.documentAddress) {
+      if (!firstName || !doc.documentAddress) {
         throw new Error("That document was missing something we need.");
       }
       setIdentity({
         firstName,
         lastName: rest.join(" "),
-        dateOfBirth: doc.documentDateOfBirth,
+        // See the note in the return effect: absent is normal, and asked for.
+        dateOfBirth: doc.documentDateOfBirth ?? "",
         address: doc.documentAddress,
       });
     } catch (err) {
@@ -135,6 +226,10 @@ export function IdentityPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!fileId || !identity) return;
+    if (!identity.dateOfBirth && !dobInput) {
+      setError("We need your date of birth — your ID did not carry one.");
+      return;
+    }
     setRunning(true);
     setError(null);
 
@@ -143,7 +238,7 @@ export function IdentityPage() {
       await api.post(`/files/${fileId}/borrowers`, {
         firstName: identity.firstName,
         lastName: identity.lastName,
-        dateOfBirth: identity.dateOfBirth,
+        dateOfBirth: identity.dateOfBirth || dobInput,
         currentAddress: {
           line1: identity.address.line1,
           city: identity.address.city,
@@ -253,6 +348,7 @@ export function IdentityPage() {
         await api.post(`/files/${fileId}/liens`, { apn }).catch(() => undefined);
       }
 
+      if (fileId) clearDraft(fileId);
       await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
       await queryClient.invalidateQueries({ queryKey: ["assessment"] });
 
@@ -291,9 +387,35 @@ export function IdentityPage() {
               {identity.firstName} {identity.lastName}
             </p>
             <p className="mt-1 text-[13px] text-ink-soft">
-              Born {identity.dateOfBirth} · {identity.address.line1}, {identity.address.city}{" "}
-              {identity.address.state}
+              {identity.dateOfBirth ? `Born ${identity.dateOfBirth} · ` : ""}
+              {identity.address.line1}, {identity.address.city} {identity.address.state}
             </p>
+            {/*
+              Asked for only when the vendor did not return it.
+
+              Stripe's verified outputs carry name and address and, for many
+              documents, no date of birth — so the screen's promise that the
+              ID saves you typing holds for everything it actually supplies,
+              and the one field it does not is asked for plainly rather than
+              guessed at or silently defaulted.
+            */}
+            {!identity.dateOfBirth && (
+              <div className="mt-3">
+                <label className="field-label" htmlFor="dob">
+                  Date of birth
+                </label>
+                <input
+                  id="dob"
+                  type="date"
+                  className="field-input"
+                  value={dobInput}
+                  onChange={(e) => setDobInput(e.target.value)}
+                />
+                <p className="mt-1 text-[12px] text-meta">
+                  Your ID confirmed your name and address but not your date of birth.
+                </p>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => setIdentity(null)}
@@ -319,11 +441,20 @@ export function IdentityPage() {
               onClick={() => void scan()}
               disabled={readOnly}
             >
-              Scan your ID and take a selfie
+              {/*
+                Named, because pressing it leaves our site.
+                A button reading "Scan your ID and take a selfie" that instead
+                navigates to a Stripe domain asking for a government ID looks
+                exactly like the thing people are told to be suspicious of.
+              */}
+              {identityRedirects ? "Verify your ID with Stripe" : "Scan your ID and take a selfie"}
             </button>
             <Why>
-              We have to confirm you are who you say you are before we can pull anything. The scan
+              We have to confirm you are who you say you are before we can pull anything. The check
               also saves you typing your name, date of birth and address.
+              {identityRedirects
+                ? " Stripe handles it and brings you straight back — we never see your document."
+                : ""}
             </Why>
           </>
         )}
@@ -462,7 +593,11 @@ export function IdentityPage() {
       >
         {running ? "Working…" : "Continue"}
       </button>
-      {!identity && <p className="mt-2 text-[12px] text-subtle">Scan your ID to continue.</p>}
+      {!identity && (
+        <p className="mt-2 text-[12px] text-subtle">
+          {identityRedirects ? "Verify your ID to continue." : "Scan your ID to continue."}
+        </p>
+      )}
     </form>
   );
 }

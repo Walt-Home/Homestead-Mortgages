@@ -557,6 +557,51 @@ successful end-to-end run went 202 → 502 → 202 → 202 → 201. Without the
 tolerance the borrower would have seen "that connection did not go through"
 and lost a bank link that was working.
 
+## Screen 2 under a hosted identity vendor
+
+Turning Stripe on made screen 2 impassable, and every piece of it looked fine
+in isolation.
+
+The screen scans the ID *first* and uses what is on it to fill in name, date of
+birth and address — so `/identity-document` created a session and immediately
+read it back, requiring `verified`. A fixture verifies in place, so that held
+for as long as everything was a fixture. Stripe returns `pending` the instant a
+session exists, because the borrower has not been to Stripe yet. The route
+threw DOCUMENT_UNREADABLE every single time, `identity` was never set, and the
+Continue button it gates stayed disabled forever.
+
+So the scan now answers 202 with the hosted URL and the borrower goes and does
+the check. Four things that fell out of that, each of which broke something:
+
+**The session has nowhere to live.** It is created before any borrower exists,
+and `Borrower` requires a name, a date of birth and an SSN — the very things
+the session exists to discover — so a placeholder row would mean inventing
+them. It goes on `LoanFile.identityPrefillVerificationId`, and the completion
+route reads the id from there rather than from the request: honouring a
+client-supplied id would let any file owner read the name, date of birth and
+home address attached to any verification whose id they could obtain.
+
+**The redirect wipes the form.** Everything typed on screen 2 — and the income
+screen 1 passed on router state — is gone on return. A draft in
+`sessionStorage` carries it, minus the SSN, which is the one field that must
+never sit in browser storage.
+
+**Stripe returns no date of birth.** Its verified outputs carry name and
+address; its own test identity has no `dob` at all. Refusing the whole result
+over one absent field would strand a borrower whose ID genuinely verified, so
+the screen shows a date field and says why: "Your ID confirmed your name and
+address but not your date of birth."
+
+**Continue sent them back to Stripe a second time.** The verification was
+recorded against the file and the newly created borrower row was unverified,
+so `/identity-verification` dutifully started another one. It now adopts the
+file's verified session onto the borrower and answers `alreadyVerified`.
+
+The return page routes on the presence of the draft, not on whether a borrower
+row exists — the first version asked the latter and got it wrong, because a
+file can already have a borrower from an earlier pass, and a borrower
+re-verifying was shown the result of a stale check.
+
 ## Vendor credentials at rest
 
 A Plaid `access_token` reads a named person's bank transactions on demand, for

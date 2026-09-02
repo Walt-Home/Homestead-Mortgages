@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "@hm/db";
 import { config } from "../config.js";
+import { connectors } from "../services/connectors.js";
 import { asyncRoute } from "../middleware/error-handler.js";
 import { requireAuth } from "../middleware/require-auth.js";
 import { signInAsLocalDeveloper, signInWithGoogle } from "../services/auth.js";
@@ -20,6 +21,17 @@ authRouter.get("/config", (_req, res) => {
     // Tells the client whether to offer the local shortcut. False in
     // production regardless of anything else.
     developerSignInAvailable: config.nodeEnv !== "production" && !config.googleClientId,
+    /*
+     * Whether the ID check navigates away to a vendor.
+     *
+     * Screen 2's button has to name where it is about to send somebody: a
+     * control reading "Scan your ID and take a selfie" that instead lands them
+     * on a Stripe domain asking for a government ID looks precisely like the
+     * thing people are warned about. The client cannot infer this — a fixture
+     * and a hosted vendor answer the same endpoint differently — so the server
+     * says it, next to the other "what should the client render" flags.
+     */
+    identityRequiresRedirect: connectors().identity.capabilities.mode !== "fixture",
   });
 });
 

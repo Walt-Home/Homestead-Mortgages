@@ -177,8 +177,7 @@ const identitySchema = z.object({
   maritalStatus: z.enum(["married", "unmarried", "separated"]),
   citizenship: z
     .enum(["us_citizen", "permanent_resident", "non_permanent_resident"])
-    .nullable()
-    .default(null),
+    .default("us_citizen"),
   nonBorrowingSpouseName: z.string().optional(),
   preferredLanguage: z.string().default("en"),
   firstTimeHomebuyer: z.boolean(),

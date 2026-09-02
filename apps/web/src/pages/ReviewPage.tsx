@@ -27,12 +27,11 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
-import { useLoanFile, hasConsent } from "../lib/file.js";
+import { useLoanFile } from "../lib/file.js";
 import {
   DemographicQuestions,
   type DemographicAnswers,
 } from "../components/DemographicQuestions.js";
-import { SignDocument } from "../components/SignDocument.js";
 import { Branches } from "../components/Branches.js";
 import { Working } from "../components/Working.js";
 import { branchesFor } from "../lib/flow.js";
@@ -75,7 +74,10 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   const [error, setError] = useState<string | null>(null);
   const [intentSaving, setIntentSaving] = useState(false);
 
-  const signed = hasConsent(file, "application_signature");
+  // One source of truth for "this application is signed": the column the
+  // server sets in /sign-application. There is deliberately no parallel
+  // consent kind for it.
+  const signed = Boolean(file?.applicationSignedAt);
   const intentRecorded = Boolean(file?.intentToProceedAt);
   const primaryResidence = file?.property?.occupancy === "primary_residence";
   const decision = file?.decision as { ratios: Ratios } | null | undefined;
@@ -173,14 +175,9 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     if (!fileId) return;
     setFinishing(true);
     try {
-      const started = await api.post<{ alreadySigned: boolean; envelopeId?: string }>(
-        `/files/${fileId}/esign`,
-        { kind: "form_4506c" },
-      );
-      if (!started.alreadySigned && started.envelopeId) {
-        await api.post(`/files/${fileId}/esign/complete`, { envelopeId: started.envelopeId });
-      }
-      await api.post(`/files/${fileId}/irs`, {}).catch(() => undefined);
+      // Signs the application and the 4506-C together, pulls the transcripts
+      // and advances the stage — all server-side.
+      await api.post(`/files/${fileId}/sign-application`, {});
       await api.post(`/files/${fileId}/decision`, {}).catch(() => undefined);
     } catch {
       // The application is signed either way. What follows is our work, and a
@@ -416,14 +413,27 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
 
         <div className="mt-7 border-t border-line-light pt-6">
           {readyToSign ? (
-            <SignDocument
-              fileId={fileId!}
-              kind="application_signature"
-              label="Sign and submit"
-              onSigned={() => {
-                void finishSubmission();
-              }}
-            />
+            <div className="rounded-row border border-line bg-app p-5">
+              <p className="font-brand text-[16px] font-semibold text-ink-editorial">
+                Your application
+              </p>
+              <p className="mt-2 font-prose text-[15px] leading-relaxed text-ink-prose">
+                This is the application itself — the property, the loan, your details and the
+                declarations above. It also includes IRS Form 4506-C, which lets us request your tax
+                records directly rather than asking you to find them.
+              </p>
+              <p className="mt-2 font-prose text-[15px] leading-relaxed text-ink-prose">
+                Signing submits it. It does not commit you to borrowing anything, and it is not an
+                agreement to any particular rate or terms.
+              </p>
+              <button
+                className="btn-primary mt-4"
+                onClick={() => void finishSubmission()}
+                disabled={readOnly}
+              >
+                Sign and submit
+              </button>
+            </div>
           ) : (
             <>
               <button

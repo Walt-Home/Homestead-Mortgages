@@ -39,7 +39,6 @@ function afterIdentity(): LoanFile {
     flood: null,
     sanctions: null,
     lienSearch: null,
-    identityVerification: null,
     property: {
       address: { line1: "1 Example St", city: "Austin", state: "TX", postalCode: "78701" },
       deliverableAddressVerified: true,
@@ -76,6 +75,11 @@ function afterIdentity(): LoanFile {
         currentAddress: { line1: "9 Rent Rd", city: "Austin", state: "TX", postalCode: "78704" },
         maritalStatus: "unmarried",
         citizenship: "us_citizen",
+        identityVerification: {
+          verificationId: "fixture-idv.b1",
+          status: "verified",
+          verifiedAt: "2026-06-15T12:00:00.000Z",
+        },
         nonBorrowingSpouseSignatureRequired: false,
         preferredLanguage: "en",
         demographics: {
@@ -115,6 +119,7 @@ function afterIdentity(): LoanFile {
     sanctionsScreenClear: true,
     ssnValidatedWithSsa: null,
     fraudReviewComplete: false,
+    applicationSignedAt: null,
     intentToProceedAt: null,
     deliveryMethod: "electronic",
   };

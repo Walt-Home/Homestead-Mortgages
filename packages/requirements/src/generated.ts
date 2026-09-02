@@ -6,1477 +6,1805 @@ import type { Requirement, DanglingReference } from "./types.js";
 
 export const REQUIREMENTS: readonly Requirement[] = [
   {
-    id: "APP-002",
-    family: "APP",
-    screen: "property_loan",
-    screenOrdinal: 1,
-    source: "borrower_input",
-    statement: "Six pieces of information received",
-    fields: "Name, income, SSN, property address, value estimate, loan amount all present",
-    evidence: ["Completed 1003 / URLA"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "starts_clock",
-      clock: "le_3_business_day",
-      prose: "Starts 3-business-day LE clock",
-    },
-  },
-  {
-    id: "APP-003",
-    family: "APP",
-    screen: "property_loan",
-    screenOrdinal: 1,
-    source: "borrower_input",
-    statement: "Loan purpose, occupancy and property type declared",
-    fields: "purpose, occupancy_type, property_type as declared",
-    evidence: ["URLA Section 4"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "at",
-      event: "application",
-      prose: "At application",
-    },
-  },
-  {
-    id: "APP-004",
-    family: "APP",
-    screen: "property_loan",
-    screenOrdinal: 1,
-    source: "borrower_input",
-    statement: "Subject property address identified",
-    fields: "Deliverable address matching public record",
-    evidence: ["URLA", "purchase contract", "existing note"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "at",
-      event: "application",
-      prose: "At application",
-    },
-  },
-  {
-    id: "APP-021",
-    family: "APP",
-    screen: "property_loan",
-    screenOrdinal: 1,
-    source: "borrower_input",
-    statement: "First-time homebuyer status determined",
-    fields: "fthb_flag per Fannie definition; no ownership interest in prior 3 years",
-    evidence: ["URLA declarations", "credit report", "title search"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "at",
-      event: "application",
-      prose: "At application",
-    },
-  },
-  {
-    id: "AST-012",
-    family: "AST",
-    screen: "property_loan",
-    screenOrdinal: 1,
-    source: "borrower_input",
-    statement: "Cash-out proceeds purpose documented",
-    fields: "cash_to_borrower vs limited_cash_out threshold",
-    evidence: ["Borrower statement", "disbursement instructions"],
-    condition: "cash_out_refinance",
-    conditionProse: "Cash-out refinance",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "APP-001",
-    family: "APP",
-    screen: "identity",
-    screenOrdinal: 2,
-    source: "borrower_input",
-    statement: "Borrower identity established",
-    fields: "Borrower is who they claim to be; not a sanctioned party",
-    evidence: ["Government photo ID", "SSN", "DOB", "physical address"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "at",
-      event: "application",
-      prose: "At application",
-    },
-  },
-  {
-    id: "APP-005",
-    family: "APP",
-    screen: "identity",
-    screenOrdinal: 2,
-    source: "esign",
-    statement: "Borrower authorization to verify executed",
-    fields: "Signed consent to pull credit and verify employment, income, assets",
-    evidence: ["Signed borrower authorization form"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "before",
-      event: "any_verification_pull",
-      prose: "Before any verification pull",
-    },
-  },
-  {
-    id: "APP-011",
-    family: "APP",
-    screen: "identity",
-    screenOrdinal: 2,
-    source: "borrower_input",
-    statement: "Demographic information collected",
-    fields: "Ethnicity, race, sex requested; visual observation noted if declined",
-    evidence: ["URLA Section 7 / Demographic Information Addendum"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "at",
-      event: "application",
-      prose: "At application",
-    },
-  },
-  {
-    id: "APP-012",
-    family: "APP",
-    screen: "identity",
-    screenOrdinal: 2,
-    source: "esign",
-    statement: "eConsent obtained",
-    fields: "Borrower consented to electronic delivery and demonstrated access",
-    evidence: ["E-SIGN consent record"],
-    condition: "electronic_delivery",
-    conditionProse: "Electronic delivery used",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      event: "first_electronic_disclosure",
-      prose: "Before first electronic disclosure",
-    },
-  },
-  {
-    id: "APP-015",
-    family: "APP",
-    screen: "identity",
-    screenOrdinal: 2,
-    source: "borrower_input",
-    statement: "Non-borrowing spouse identified",
-    fields: "marital_status; non_borrowing_spouse_name; signature_required flag",
-    evidence: ["Application", "marital status declaration"],
-    condition: "community_property_state",
-    conditionProse: "Community property state",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "at",
-      event: "application",
-      prose: "At application",
-    },
-  },
-  {
-    id: "APP-017",
-    family: "APP",
-    screen: "identity",
-    screenOrdinal: 2,
-    source: "borrower_input",
-    statement: "Language preference captured and LEP handling applied",
-    fields: "Preferred language recorded; required translations provided",
-    evidence: ["URLA language preference", "translation log"],
-    condition: "borrower_lep",
-    conditionProse: "Borrower LEP",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "at",
-      event: "application",
-      prose: "At application",
-    },
-  },
-  {
-    id: "CRD-010",
-    family: "CRD",
-    screen: "identity",
-    screenOrdinal: 2,
-    source: "third_party_order",
-    statement: "OFAC / SDN screening cleared",
-    fields: "No borrower, seller or party is on a sanctions list",
-    evidence: ["Screening result"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "at",
-      event: "application_and_before_funding",
-      prose: "At application and before funding",
-    },
-  },
-  {
-    id: "APP-018",
-    family: "APP",
-    screen: "credit",
-    screenOrdinal: 3,
-    source: "connect_credit",
-    statement: "Existing loan and current servicer identified",
-    fields: "existing_servicer, existing_loan_number, existing_balance, existing_rate",
-    evidence: ["Mortgage statement", "credit report", "title"],
-    condition: "refinance",
-    conditionProse: "Refinance only",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "at",
-      event: "application",
-      prose: "At application",
-    },
-  },
-  {
-    id: "AST-011",
-    family: "AST",
-    screen: "credit",
-    screenOrdinal: 3,
-    source: "connect_credit",
-    statement: "Secured borrowed funds documented",
-    fields: "Loan is secured by an owned asset and payment included in DTI",
-    evidence: ["Loan agreement", "collateral evidence"],
-    condition: "borrowed_funds_used",
-    conditionProse: "Borrowed funds used",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-004"],
-      prose: "Before UW-004",
-    },
-  },
-  {
-    id: "CRD-001",
-    family: "CRD",
-    screen: "credit",
-    screenOrdinal: 3,
-    source: "connect_credit",
-    statement: "Tri-merge credit report obtained",
-    fields: "three bureau scores, tradelines, inquiries, public records, report_date",
-    evidence: ["Tri-merge report"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "after",
-      refs: ["APP-005"],
-      prose: "After APP-005",
-    },
-  },
-  {
-    id: "CRD-002",
-    family: "CRD",
-    screen: "credit",
-    screenOrdinal: 3,
-    source: "connect_credit",
-    statement: "Representative FICO determined",
-    fields: "representative_fico = middle score per borrower, lowest across borrowers",
-    evidence: ["Credit report scores"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "after",
-      refs: ["CRD-001"],
-      prose: "After CRD-001",
-    },
-  },
-  {
-    id: "CRD-003",
-    family: "CRD",
-    screen: "credit",
-    screenOrdinal: 3,
-    source: "connect_credit",
-    statement: "Liabilities reconciled to application",
-    fields: "every tradeline either in monthly_liabilities or excluded with reason_code",
-    evidence: ["Credit report", "application", "exclusion documentation"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-004"],
-      prose: "Before UW-004",
-    },
-  },
-  {
-    id: "CRD-004",
-    family: "CRD",
-    screen: "credit",
-    screenOrdinal: 3,
-    source: "connect_credit",
-    statement: "Public records reviewed",
-    fields: "bankruptcy, foreclosure, judgment, tax_lien: type, date, status",
-    evidence: ["Credit report public records", "court search"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "after",
-      refs: ["CRD-001"],
-      prose: "After CRD-001",
-    },
-  },
-  {
-    id: "CRD-005",
-    family: "CRD",
-    screen: "credit",
-    screenOrdinal: 3,
-    source: "connect_credit",
-    statement: "Housing payment history verified",
-    fields: "mortgage_or_rent_rating for prior 12-24 months, max_delinquency",
-    evidence: ["Credit report tradeline", "VOM", "VOR", "cancelled checks"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-002"],
-      prose: "Before UW-002",
-    },
-  },
-  {
-    id: "CRD-007",
-    family: "CRD",
-    screen: "credit",
-    screenOrdinal: 3,
-    source: "connect_credit",
-    statement: "Foreclosure / short sale / DIL seasoning satisfied",
-    fields: "months_since_event >= product minimum; event_type",
-    evidence: ["Title search", "credit report", "settlement statement"],
-    condition: "prior_significant_derogatory",
-    conditionProse: "Prior significant derogatory",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "CRD-014",
-    family: "CRD",
-    screen: "credit",
-    screenOrdinal: 3,
-    source: "connect_credit",
-    statement: "Disputed tradeline resolved",
-    fields: "Dispute removed or underwriter documented treatment",
-    evidence: ["Updated report", "dispute resolution letter"],
-    condition: "dispute_flag",
-    conditionProse: "Dispute flag on report",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-002"],
-      prose: "Before UW-002",
-    },
-  },
-  {
-    id: "CRD-016",
-    family: "CRD",
-    screen: "credit",
-    screenOrdinal: 3,
-    source: "connect_credit",
-    statement: "Revolving credit utilization assessed",
-    fields: "revolving_balance / revolving_limit; trended payment behaviour over 24 months",
-    evidence: ["Tri-merge report with trended data"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "after",
-      refs: ["CRD-001"],
-      prose: "After CRD-001",
-    },
-  },
-  {
-    id: "AST-001",
-    family: "AST",
-    screen: "bank",
-    screenOrdinal: 4,
-    source: "connect_bank",
-    statement: "Deposit accounts documented",
-    fields: "account_type, institution, balance, two_month_history per account",
-    evidence: ["Bank statements", "VOD", "asset verification report"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: "assets",
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-001"],
-      prose: "Before UW-001",
-    },
-  },
-  {
-    id: "AST-005",
-    family: "AST",
-    screen: "bank",
-    screenOrdinal: 4,
-    source: "connect_bank",
-    statement: "Large deposit sourced",
-    fields: "each deposit > 50% of monthly_income has source_type and evidence",
-    evidence: ["Transfer records", "sale documents", "explanation letter"],
-    condition: "large_deposit_present",
-    conditionProse: "Deposit exceeds 50% of monthly income",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-015"],
-      prose: "Before UW-015",
-    },
-  },
-  {
-    id: "AST-007",
-    family: "AST",
-    screen: "bank",
-    screenOrdinal: 4,
-    source: "connect_bank",
-    statement: "Earnest money deposit sourced",
-    fields: "EMD came from an acceptable, verified source",
-    evidence: ["Cancelled check", "bank statement", "escrow receipt"],
-    condition: "purchase",
-    conditionProse: "Purchase only",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-015"],
-      prose: "Before UW-015",
-    },
-  },
-  {
-    id: "AST-008",
-    family: "AST",
-    screen: "bank",
-    screenOrdinal: 4,
-    source: "connect_bank",
-    statement: "Retirement account liquidity verified",
-    fields: "vested_balance, outstanding_plan_loans, withdrawal_eligibility",
-    evidence: ["Statement", "plan terms", "loan balance"],
-    condition: "retirement_assets_used",
-    conditionProse: "Retirement assets used",
-    dayOneCertainty: "assets",
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "CRD-013",
-    family: "CRD",
-    screen: "bank",
-    screenOrdinal: 4,
-    source: "connect_bank",
-    statement: "Non-traditional credit established",
-    fields: "alternative_reference_count >= 3, each with 12 month history",
-    evidence: ["12 months of rent, utility, insurance payment records"],
-    condition: "thin_credit_file",
-    conditionProse: "Thin or no credit file",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-002"],
-      prose: "Before UW-002",
-    },
-  },
-  {
-    id: "CRD-017",
-    family: "CRD",
-    screen: "bank",
-    screenOrdinal: 4,
-    source: "connect_bank",
-    statement: "Cash flow assessment performed",
-    fields: "cash_flow_assessment_result from 12 months of bank data",
-    evidence: ["12-month asset verification report from an authorized DU vendor"],
-    condition: "asset_report_available",
-    conditionProse: "12-month asset verification report available",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-001"],
-      prose: "Before UW-001",
-    },
-  },
-  {
-    id: "CRD-018",
-    family: "CRD",
-    screen: "bank",
-    screenOrdinal: 4,
-    source: "connect_bank",
-    statement: "Rent payment history identified",
-    fields: "monthly_rent >= 300; 12 months of on-time rent payments identified",
-    evidence: ["12-month asset verification report", "or credit report tradeline"],
-    condition: "renter_limited_mortgage_history",
-    conditionProse: "Renter with limited or no mortgage history",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-001"],
-      prose: "Before UW-001",
-    },
-  },
-  {
-    id: "INC-001",
-    family: "INC",
-    screen: "bank",
-    screenOrdinal: 4,
-    source: "connect_bank",
-    statement: "Employment verified",
-    fields: "employer_name, position, start_date, employment_status = active",
-    evidence: ["Written VOE", "or paystub + W-2 combination"],
-    condition: "wage_earner",
-    conditionProse: "Wage earner",
-    dayOneCertainty: "employment",
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-001"],
-      prose: "Before UW-001",
-    },
-  },
-  {
-    id: "INC-019",
-    family: "INC",
-    screen: "bank",
-    screenOrdinal: 4,
-    source: "connect_bank",
-    statement: "Retirement, pension or SSA income documented",
-    fields: "monthly_amount, source_type, continuance_end_date",
-    evidence: ["Award letter", "1099", "bank statements"],
-    condition: "retirement_income_used",
-    conditionProse: "Retirement income used",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-004"],
-      prose: "Before UW-004",
-    },
-  },
-  {
-    id: "INC-020",
-    family: "INC",
-    screen: "bank",
-    screenOrdinal: 4,
-    source: "connect_bank",
-    statement: "Investment or dividend income documented",
-    fields: "Two-year history and continuance established",
-    evidence: ["Tax returns", "brokerage statements"],
-    condition: "investment_income_used",
-    conditionProse: "Investment income used",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-004"],
-      prose: "Before UW-004",
-    },
-  },
-  {
-    id: "INC-002",
-    family: "INC",
-    screen: "payroll",
-    screenOrdinal: 5,
-    source: "connect_payroll",
-    statement: "Paystubs covering 30 days obtained",
-    fields: "gross_pay, pay_period_end_date, ytd_gross covering 30 days",
-    evidence: ["Paystubs"],
-    condition: "wage_earner",
-    conditionProse: "Wage earner",
-    dayOneCertainty: "income",
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-001"],
-      prose: "Before UW-001",
-    },
-  },
-  {
-    id: "INC-005",
-    family: "INC",
-    screen: "payroll",
-    screenOrdinal: 5,
-    source: "connect_payroll",
-    statement: "Variable income averaged",
-    fields: "monthly average of overtime, bonus, commission over 12 or 24 months",
-    evidence: ["Paystub YTD", "W-2s", "VOE breakout"],
-    condition: "variable_income_present",
-    conditionProse: "OT, bonus or commission present",
-    dayOneCertainty: "income",
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-004"],
-      prose: "Before UW-004",
-    },
-  },
-  {
-    id: "INC-006",
-    family: "INC",
-    screen: "payroll",
-    screenOrdinal: 5,
-    source: "connect_payroll",
-    statement: "Employment gap explained",
-    fields: "gap_start_date, gap_end_date, gap_days, reason_code",
-    evidence: ["Letter of explanation", "supporting documents"],
-    condition: "employment_gap",
-    conditionProse: "Gap over 30 days in 2 years",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "before",
-      refs: ["UW-015"],
-      prose: "Before UW-015",
-    },
-  },
-  {
-    id: "INC-022",
-    family: "INC",
-    screen: "payroll",
-    screenOrdinal: 5,
-    source: "connect_payroll",
-    statement: "Military entitlements documented",
-    fields: "Base pay and entitlements identified separately",
-    evidence: ["Leave and Earnings Statement"],
-    condition: "military_borrower",
-    conditionProse: "Military borrower",
-    dayOneCertainty: "income",
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-004"],
-      prose: "Before UW-004",
-    },
-  },
-  {
-    id: "INC-003",
-    family: "INC",
-    screen: "irs_transcript",
-    screenOrdinal: 6,
-    source: "connect_irs",
-    statement: "W-2s for two years obtained",
-    fields: "w2_wages for each of prior two years, employer_ein",
-    evidence: ["W-2 forms"],
-    condition: "wage_earner",
-    conditionProse: "Wage earner",
-    dayOneCertainty: "income",
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-001"],
-      prose: "Before UW-001",
-    },
-  },
-  {
-    id: "INC-008",
-    family: "INC",
-    screen: "irs_transcript",
-    screenOrdinal: 6,
-    source: "esign",
-    statement: "4506-C executed",
-    fields: "Borrower authorized IRS transcript release",
-    evidence: ["Signed 4506-C"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["INC-009"],
-      prose: "Before INC-009",
-    },
-  },
-  {
-    id: "INC-009",
-    family: "INC",
-    screen: "irs_transcript",
-    screenOrdinal: 6,
-    source: "connect_irs",
-    statement: "Tax transcripts obtained and reconciled",
-    fields: "transcript_agi and transcript_wages match documented income within tolerance",
-    evidence: ["IRS tax return transcript"],
-    condition: "self_employed_variable_or_rental",
-    conditionProse: "Self-employed; variable; rental",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "AST-006",
-    family: "AST",
-    screen: "upload_fallback",
-    screenOrdinal: 7,
-    source: "connect_bank",
-    statement: "Gift funds documented",
-    fields: "gift_amount, donor_relationship, transfer_date, donor_ability_evidence",
-    evidence: ["Gift letter", "donor statement", "transfer evidence"],
-    condition: "gift_funds_used",
-    conditionProse: "Gift used",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["CLS-013"],
-      prose: "Before CLS-013",
-    },
-  },
-  {
-    id: "CRD-006",
-    family: "CRD",
-    screen: "upload_fallback",
-    screenOrdinal: 7,
-    source: "document_upload",
-    statement: "Bankruptcy seasoning satisfied",
-    fields: "months_since_discharge >= product minimum; chapter_type",
-    evidence: ["Discharge order", "credit report date"],
-    condition: "prior_bankruptcy",
-    conditionProse: "Prior bankruptcy",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "CRD-008",
-    family: "CRD",
-    screen: "upload_fallback",
-    screenOrdinal: 7,
-    source: "borrower_input",
-    statement: "Derogatory account explanation obtained",
-    fields: "Borrower explanation on record and assessed",
-    evidence: ["Letter of explanation", "supporting documents"],
-    condition: "recent_derogatory",
-    conditionProse: "Recent derogatory present",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "before",
-      refs: ["UW-015"],
-      prose: "Before UW-015",
-    },
-  },
-  {
-    id: "CRD-009",
-    family: "CRD",
-    screen: "upload_fallback",
-    screenOrdinal: 7,
-    source: "borrower_input",
-    statement: "Recent inquiry explanation obtained",
-    fields: "inquiry_count_90d; each resolved to new_debt yes/no",
-    evidence: ["Letter of explanation", "creditor confirmation"],
-    condition: "recent_inquiries",
-    conditionProse: "Inquiries in last 90 days",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "CRD-011",
-    family: "CRD",
-    screen: "upload_fallback",
-    screenOrdinal: 7,
-    source: "third_party_order",
-    statement: "SSN validated with SSA",
-    fields: "SSN belongs to the borrower",
-    evidence: ["SSA-89 result"],
-    condition: "ssn_mismatch_or_fraud_alert",
-    conditionProse: "SSN mismatch or fraud alert",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "INC-021",
-    family: "INC",
-    screen: "upload_fallback",
-    screenOrdinal: 7,
-    source: "connect_bank",
-    statement: "Alimony or child support documented",
-    fields: "monthly_award, receipt_months_documented, continuance_end_date",
-    evidence: ["Court order", "6-12 months receipt evidence"],
-    condition: "support_income_used",
-    conditionProse: "Support income used",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-004"],
-      prose: "Before UW-004",
-    },
-  },
-  {
-    id: "INC-023",
-    family: "INC",
-    screen: "upload_fallback",
-    screenOrdinal: 7,
-    source: "connect_payroll",
-    statement: "Equity compensation income documented",
-    fields: "vested_value_prior_24mo, future_vest_schedule, share_price_basis",
-    evidence: ["Vesting schedule", "paystub", "brokerage statement"],
-    condition: "equity_comp_used",
-    conditionProse: "RSU or stock comp used",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-004"],
-      prose: "Before UW-004",
-    },
-  },
-  {
-    id: "APP-006",
-    family: "APP",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Loan Estimate delivered",
-    fields: "LE delivered or placed in mail within 3 business days of application",
-    evidence: ["LE with delivery timestamp"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "deadline",
-      from: "requirement",
-      refs: ["APP-002"],
-      amount: 3,
-      unit: "business_days",
-      prose: "3 business days from APP-002",
-    },
-  },
-  {
-    id: "APP-007",
-    family: "APP",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "borrower_input",
-    statement: "Intent to Proceed documented",
-    fields: "Borrower affirmatively indicated intent after receiving LE",
-    evidence: ["Dated, recorded intent to proceed"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "after",
-      event: "le_receipt",
-      prose: "After LE receipt",
-    },
-  },
-  {
-    id: "APP-008",
-    family: "APP",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Written List of Service Providers delivered",
-    fields: "Borrower given list of providers for shoppable services",
-    evidence: ["WLSP with delivery timestamp"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "with",
-      event: "le_delivery",
-      prose: "With LE",
-    },
-  },
-  {
-    id: "APP-009",
-    family: "APP",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "third_party_order",
-    statement: "Homeownership counseling list delivered",
-    fields: "Borrower given list of HUD-approved counselors within 10 miles",
-    evidence: ["Counseling list with timestamp"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "deadline",
-      from: "application",
-      amount: 3,
-      unit: "business_days",
-      prose: "3 business days from application",
-    },
-  },
-  {
-    id: "APP-010",
-    family: "APP",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Your Home Loan Toolkit delivered",
-    fields: "Booklet delivered to borrower",
-    evidence: ["Toolkit with delivery timestamp"],
-    condition: "purchase",
-    conditionProse: "Purchase only",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "deadline",
-      from: "application",
-      amount: 3,
-      unit: "business_days",
-      prose: "3 business days from application",
-    },
-  },
-  {
-    id: "APP-019",
-    family: "APP",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Net tangible benefit test satisfied",
-    fields: "payment_delta, rate_delta, recoup_months vs state threshold",
-    evidence: ["NTB worksheet", "comparison of old vs new terms"],
-    condition: "refi_ntb_required",
-    conditionProse: "Refi; state or investor requires",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      event: "closing",
-      prose: "Before closing",
-    },
-  },
-  {
-    id: "AST-002",
-    family: "AST",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Funds to close calculated",
-    fields: "funds_to_close = price_or_payoff + fees + prepaids - credits - loan_amount",
-    evidence: ["Funds to close worksheet"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-002"],
-      prose: "Before UW-002",
-    },
-  },
-  {
-    id: "AST-003",
-    family: "AST",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Reserve requirement determined",
-    fields: "required_reserve_months from AUS, occupancy, property_count",
-    evidence: ["AUS findings", "product matrix"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "after",
-      refs: ["UW-002"],
-      prose: "After UW-002",
-    },
-  },
-  {
-    id: "AST-004",
-    family: "AST",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "connect_bank",
-    statement: "Reserves satisfied",
-    fields: "actual_reserve_months = eligible_post_close_assets / monthly_PITIA",
-    evidence: ["Asset statements", "eligibility worksheet"],
-    condition: "reserves_required",
-    conditionProse: "Reserves required",
-    dayOneCertainty: "assets",
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "AST-016",
-    family: "AST",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Interested party contribution limit tested",
-    fields: "ipc_total / sales_price vs allowable_pct for LTV and occupancy",
-    evidence: ["Contract", "CD credits"],
-    condition: "ipc_present",
-    conditionProse: "Seller or lender credits present",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["CLS-002"],
-      prose: "Before CLS-002",
-    },
-  },
-  {
-    id: "INC-004",
-    family: "INC",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Base income calculated",
-    fields: "monthly_base_income from pay_rate, pay_frequency, scheduled_hours",
-    evidence: ["Paystub", "VOE", "offer letter"],
-    condition: "wage_earner",
-    conditionProse: "Wage earner",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-004"],
-      prose: "Before UW-004",
-    },
-  },
-  {
-    id: "INC-026",
-    family: "INC",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Total qualifying income finalized",
-    fields: "total_qualifying_monthly_income = sum of all approved components",
-    evidence: ["Income worksheet"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "before",
-      refs: ["UW-004"],
-      prose: "Before UW-004",
-    },
-  },
-  {
-    id: "INC-027",
-    family: "INC",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Income continuance determination made",
-    fields: "continuance_flag per source; each >= 36 months or documented exception",
-    evidence: ["Continuance worksheet", "supporting docs"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-006"],
-      prose: "Before UW-006",
-    },
-  },
-  {
-    id: "UW-001",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "AUS submitted",
-    fields: "Complete case submitted to DU or Loan Product Advisor",
-    evidence: ["AUS submission record"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "after",
-      event: "intake_complete",
-      prose: "After credit, income and asset intake",
-    },
-  },
-  {
-    id: "UW-002",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "AUS recommendation obtained",
-    fields: "aus_recommendation, aus_casefile_id, submission_date",
-    evidence: ["AUS findings report"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "after",
-      refs: ["UW-001"],
-      prose: "After UW-001",
-    },
-  },
-  {
-    id: "UW-003",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "AUS findings mapped to condition list",
-    fields: "Every AUS verification message converted to a trackable condition",
-    evidence: ["Findings report", "condition list"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "after",
-      refs: ["UW-002"],
-      prose: "After UW-002",
-    },
-  },
-  {
-    id: "UW-004",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "DTI calculated",
-    fields: "dti_front = housing_PITIA / income; dti_back = total_debt / income",
-    evidence: ["DTI worksheet"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-006"],
-      prose: "Before UW-006",
-    },
-  },
-  {
-    id: "UW-005",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "LTV, CLTV and HCLTV calculated",
-    fields: "ltv, cltv, hcltv from loan_amount, junior_liens, value",
-    evidence: ["Ratio worksheet"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-010"],
-      prose: "Before UW-010",
-    },
-  },
-  {
-    id: "UW-006",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "ATR / QM determination made",
-    fields: "atr_determination = documented; qm_status; qm_type",
-    evidence: ["ATR/QM worksheet", "supporting docs"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "UW-007",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "QM points and fees test performed",
-    fields: "points_and_fees_amount / loan_amount vs threshold",
-    evidence: ["Points and fees worksheet"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "financial_loss",
-    timing: {
-      kind: "before",
-      refs: ["CLS-002"],
-      prose: "Before CLS-002",
-    },
-  },
-  {
-    id: "UW-008",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "HPML threshold tested",
-    fields: "apr - apor spread vs hpml threshold for lien_position",
-    evidence: ["HPML test result"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "before",
-      refs: ["CLS-002"],
-      prose: "Before CLS-002",
-    },
-  },
-  {
-    id: "UW-009",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "HOEPA high-cost threshold tested",
-    fields: "Loan confirmed not high-cost, or ineligible",
-    evidence: ["HOEPA test result"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["CLS-002"],
-      prose: "Before CLS-002",
-    },
-  },
-  {
-    id: "UW-010",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Pricing adjustments applied",
-    fields: "llpa_total_bps from fico, ltv, occupancy, property_type, purpose",
-    evidence: ["Pricing worksheet", "lock confirmation"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "financial_loss",
-    timing: {
-      kind: "before",
-      refs: ["CLS-001"],
-      prose: "Before CLS-001",
-    },
-  },
-  {
-    id: "UW-011",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Manual underwrite performed",
-    fields: "Loan underwritten to manual guidelines with documented rationale",
-    evidence: ["Manual underwriting worksheet", "approval memo"],
-    condition: "aus_refer_or_ineligible",
-    conditionProse: "AUS Refer or ineligible",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "UW-012",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Product eligibility matrix confirmed",
-    fields: "each product parameter within limits; eligibility_status",
-    evidence: ["Eligibility checklist"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "UW-013",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Investor overlays applied",
-    fields: "Lender and investor overlays checked in addition to agency guides",
-    evidence: ["Overlay checklist"],
-    condition: "overlays_exist",
-    conditionProse: "Overlays exist for the product",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "UW-014",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Condition list issued",
-    fields: "Conditions communicated to borrower and processing",
-    evidence: ["Condition list with timestamp"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "after",
-      refs: ["UW-002"],
-      prose: "After UW-002",
-    },
-  },
-  {
-    id: "UW-015",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Conditions cleared and documented",
-    fields: "open_condition_count = 0",
-    evidence: ["Cleared condition records with attachments"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
-  {
-    id: "UW-016",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Adverse action or counteroffer issued",
-    fields: "Borrower notified with specific principal reasons",
-    evidence: ["Adverse action notice with timestamp"],
-    condition: "denial_or_counteroffer",
-    conditionProse: "Denial or counteroffer",
-    dayOneCertainty: null,
-    failureSeverity: "regulatory_violation",
-    timing: {
-      kind: "deadline",
-      from: "complete_application",
-      amount: 30,
-      unit: "calendar_days",
-      prose: "Within 30 days of complete application",
-    },
-  },
-  {
-    id: "UW-017",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Clear to Close issued",
-    fields: "All conditions cleared; loan authorized to proceed to closing",
-    evidence: ["CTC record"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "rework_delay",
-    timing: {
-      kind: "after",
-      refs: ["UW-015"],
-      prose: "After UW-015",
-    },
-  },
-  {
-    id: "UW-018",
-    family: "UW",
-    screen: "decision",
-    screenOrdinal: 8,
-    source: "derived",
-    statement: "Fraud and red flag review completed",
-    fields: "alert_count by severity; adjudication_status per alert",
-    evidence: ["Fraud report", "red flag checklist"],
-    condition: "universal",
-    conditionProse: "Universal",
-    dayOneCertainty: null,
-    failureSeverity: "repurchase_unsaleable",
-    timing: {
-      kind: "before",
-      refs: ["UW-017"],
-      prose: "Before UW-017",
-    },
-  },
+    "id": "APP-002",
+    "family": "APP",
+    "screen": "property_loan",
+    "screenOrdinal": 1,
+    "source": "borrower_input",
+    "statement": "Six pieces of information received",
+    "fields": "Name, income, SSN, property address, value estimate, loan amount all present",
+    "evidence": [
+      "Completed 1003 / URLA"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "starts_clock",
+      "clock": "le_3_business_day",
+      "prose": "Starts 3-business-day LE clock"
+    }
+  },
+  {
+    "id": "APP-003",
+    "family": "APP",
+    "screen": "property_loan",
+    "screenOrdinal": 1,
+    "source": "borrower_input",
+    "statement": "Loan purpose, occupancy and property type declared",
+    "fields": "purpose, occupancy_type, property_type as declared",
+    "evidence": [
+      "URLA Section 4"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "at",
+      "event": "application",
+      "prose": "At application"
+    }
+  },
+  {
+    "id": "APP-004",
+    "family": "APP",
+    "screen": "property_loan",
+    "screenOrdinal": 1,
+    "source": "borrower_input",
+    "statement": "Subject property address identified",
+    "fields": "Deliverable address matching public record",
+    "evidence": [
+      "URLA",
+      "purchase contract",
+      "existing note"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "at",
+      "event": "application",
+      "prose": "At application"
+    }
+  },
+  {
+    "id": "APP-021",
+    "family": "APP",
+    "screen": "property_loan",
+    "screenOrdinal": 1,
+    "source": "borrower_input",
+    "statement": "First-time homebuyer status determined",
+    "fields": "fthb_flag per Fannie definition; no ownership interest in prior 3 years",
+    "evidence": [
+      "URLA declarations",
+      "credit report",
+      "title search"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "at",
+      "event": "application",
+      "prose": "At application"
+    }
+  },
+  {
+    "id": "AST-012",
+    "family": "AST",
+    "screen": "property_loan",
+    "screenOrdinal": 1,
+    "source": "borrower_input",
+    "statement": "Cash-out proceeds purpose documented",
+    "fields": "cash_to_borrower vs limited_cash_out threshold",
+    "evidence": [
+      "Borrower statement",
+      "disbursement instructions"
+    ],
+    "condition": "cash_out_refinance",
+    "conditionProse": "Cash-out refinance",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "APP-001",
+    "family": "APP",
+    "screen": "identity",
+    "screenOrdinal": 2,
+    "source": "borrower_input",
+    "statement": "Borrower identity established",
+    "fields": "Borrower is who they claim to be; not a sanctioned party",
+    "evidence": [
+      "Government photo ID",
+      "SSN",
+      "DOB",
+      "physical address"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "at",
+      "event": "application",
+      "prose": "At application"
+    }
+  },
+  {
+    "id": "APP-005",
+    "family": "APP",
+    "screen": "identity",
+    "screenOrdinal": 2,
+    "source": "esign",
+    "statement": "Borrower authorization to verify executed",
+    "fields": "Signed consent to pull credit and verify employment, income, assets",
+    "evidence": [
+      "Signed borrower authorization form"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "before",
+      "event": "any_verification_pull",
+      "prose": "Before any verification pull"
+    }
+  },
+  {
+    "id": "APP-011",
+    "family": "APP",
+    "screen": "identity",
+    "screenOrdinal": 2,
+    "source": "borrower_input",
+    "statement": "Demographic information collected",
+    "fields": "Ethnicity, race, sex requested; visual observation noted if declined",
+    "evidence": [
+      "URLA Section 7 / Demographic Information Addendum"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "at",
+      "event": "application",
+      "prose": "At application"
+    }
+  },
+  {
+    "id": "APP-012",
+    "family": "APP",
+    "screen": "identity",
+    "screenOrdinal": 2,
+    "source": "esign",
+    "statement": "eConsent obtained",
+    "fields": "Borrower consented to electronic delivery and demonstrated access",
+    "evidence": [
+      "E-SIGN consent record"
+    ],
+    "condition": "electronic_delivery",
+    "conditionProse": "Electronic delivery used",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "event": "first_electronic_disclosure",
+      "prose": "Before first electronic disclosure"
+    }
+  },
+  {
+    "id": "APP-015",
+    "family": "APP",
+    "screen": "identity",
+    "screenOrdinal": 2,
+    "source": "borrower_input",
+    "statement": "Non-borrowing spouse identified",
+    "fields": "marital_status; non_borrowing_spouse_name; signature_required flag",
+    "evidence": [
+      "Application",
+      "marital status declaration"
+    ],
+    "condition": "community_property_state",
+    "conditionProse": "Community property state",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "at",
+      "event": "application",
+      "prose": "At application"
+    }
+  },
+  {
+    "id": "APP-017",
+    "family": "APP",
+    "screen": "identity",
+    "screenOrdinal": 2,
+    "source": "borrower_input",
+    "statement": "Language preference captured and LEP handling applied",
+    "fields": "Preferred language recorded; required translations provided",
+    "evidence": [
+      "URLA language preference",
+      "translation log"
+    ],
+    "condition": "borrower_lep",
+    "conditionProse": "Borrower LEP",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "at",
+      "event": "application",
+      "prose": "At application"
+    }
+  },
+  {
+    "id": "CRD-010",
+    "family": "CRD",
+    "screen": "identity",
+    "screenOrdinal": 2,
+    "source": "third_party_order",
+    "statement": "OFAC / SDN screening cleared",
+    "fields": "No borrower, seller or party is on a sanctions list",
+    "evidence": [
+      "Screening result"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "at",
+      "event": "application_and_before_funding",
+      "prose": "At application and before funding"
+    }
+  },
+  {
+    "id": "APP-018",
+    "family": "APP",
+    "screen": "credit",
+    "screenOrdinal": 3,
+    "source": "connect_credit",
+    "statement": "Existing loan and current servicer identified",
+    "fields": "existing_servicer, existing_loan_number, existing_balance, existing_rate",
+    "evidence": [
+      "Mortgage statement",
+      "credit report",
+      "title"
+    ],
+    "condition": "refinance",
+    "conditionProse": "Refinance only",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "at",
+      "event": "application",
+      "prose": "At application"
+    }
+  },
+  {
+    "id": "AST-011",
+    "family": "AST",
+    "screen": "credit",
+    "screenOrdinal": 3,
+    "source": "connect_credit",
+    "statement": "Secured borrowed funds documented",
+    "fields": "Loan is secured by an owned asset and payment included in DTI",
+    "evidence": [
+      "Loan agreement",
+      "collateral evidence"
+    ],
+    "condition": "borrowed_funds_used",
+    "conditionProse": "Borrowed funds used",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-004"
+      ],
+      "prose": "Before UW-004"
+    }
+  },
+  {
+    "id": "CRD-001",
+    "family": "CRD",
+    "screen": "credit",
+    "screenOrdinal": 3,
+    "source": "connect_credit",
+    "statement": "Tri-merge credit report obtained",
+    "fields": "three bureau scores, tradelines, inquiries, public records, report_date",
+    "evidence": [
+      "Tri-merge report"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "after",
+      "refs": [
+        "APP-005"
+      ],
+      "prose": "After APP-005"
+    }
+  },
+  {
+    "id": "CRD-002",
+    "family": "CRD",
+    "screen": "credit",
+    "screenOrdinal": 3,
+    "source": "connect_credit",
+    "statement": "Representative FICO determined",
+    "fields": "representative_fico = middle score per borrower, lowest across borrowers",
+    "evidence": [
+      "Credit report scores"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "after",
+      "refs": [
+        "CRD-001"
+      ],
+      "prose": "After CRD-001"
+    }
+  },
+  {
+    "id": "CRD-003",
+    "family": "CRD",
+    "screen": "credit",
+    "screenOrdinal": 3,
+    "source": "connect_credit",
+    "statement": "Liabilities reconciled to application",
+    "fields": "every tradeline either in monthly_liabilities or excluded with reason_code",
+    "evidence": [
+      "Credit report",
+      "application",
+      "exclusion documentation"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-004"
+      ],
+      "prose": "Before UW-004"
+    }
+  },
+  {
+    "id": "CRD-004",
+    "family": "CRD",
+    "screen": "credit",
+    "screenOrdinal": 3,
+    "source": "connect_credit",
+    "statement": "Public records reviewed",
+    "fields": "bankruptcy, foreclosure, judgment, tax_lien: type, date, status",
+    "evidence": [
+      "Credit report public records",
+      "court search"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "after",
+      "refs": [
+        "CRD-001"
+      ],
+      "prose": "After CRD-001"
+    }
+  },
+  {
+    "id": "CRD-005",
+    "family": "CRD",
+    "screen": "credit",
+    "screenOrdinal": 3,
+    "source": "connect_credit",
+    "statement": "Housing payment history verified",
+    "fields": "mortgage_or_rent_rating for prior 12-24 months, max_delinquency",
+    "evidence": [
+      "Credit report tradeline",
+      "VOM",
+      "VOR",
+      "cancelled checks"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-002"
+      ],
+      "prose": "Before UW-002"
+    }
+  },
+  {
+    "id": "CRD-007",
+    "family": "CRD",
+    "screen": "credit",
+    "screenOrdinal": 3,
+    "source": "connect_credit",
+    "statement": "Foreclosure / short sale / DIL seasoning satisfied",
+    "fields": "months_since_event >= product minimum; event_type",
+    "evidence": [
+      "Title search",
+      "credit report",
+      "settlement statement"
+    ],
+    "condition": "prior_significant_derogatory",
+    "conditionProse": "Prior significant derogatory",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "CRD-014",
+    "family": "CRD",
+    "screen": "credit",
+    "screenOrdinal": 3,
+    "source": "connect_credit",
+    "statement": "Disputed tradeline resolved",
+    "fields": "Dispute removed or underwriter documented treatment",
+    "evidence": [
+      "Updated report",
+      "dispute resolution letter"
+    ],
+    "condition": "dispute_flag",
+    "conditionProse": "Dispute flag on report",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-002"
+      ],
+      "prose": "Before UW-002"
+    }
+  },
+  {
+    "id": "CRD-016",
+    "family": "CRD",
+    "screen": "credit",
+    "screenOrdinal": 3,
+    "source": "connect_credit",
+    "statement": "Revolving credit utilization assessed",
+    "fields": "revolving_balance / revolving_limit; trended payment behaviour over 24 months",
+    "evidence": [
+      "Tri-merge report with trended data"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "after",
+      "refs": [
+        "CRD-001"
+      ],
+      "prose": "After CRD-001"
+    }
+  },
+  {
+    "id": "AST-001",
+    "family": "AST",
+    "screen": "bank",
+    "screenOrdinal": 4,
+    "source": "connect_bank",
+    "statement": "Deposit accounts documented",
+    "fields": "account_type, institution, balance, two_month_history per account",
+    "evidence": [
+      "Bank statements",
+      "VOD",
+      "asset verification report"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": "assets",
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-001"
+      ],
+      "prose": "Before UW-001"
+    }
+  },
+  {
+    "id": "AST-005",
+    "family": "AST",
+    "screen": "bank",
+    "screenOrdinal": 4,
+    "source": "connect_bank",
+    "statement": "Large deposit sourced",
+    "fields": "each deposit > 50% of monthly_income has source_type and evidence",
+    "evidence": [
+      "Transfer records",
+      "sale documents",
+      "explanation letter"
+    ],
+    "condition": "large_deposit_present",
+    "conditionProse": "Deposit exceeds 50% of monthly income",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-015"
+      ],
+      "prose": "Before UW-015"
+    }
+  },
+  {
+    "id": "AST-007",
+    "family": "AST",
+    "screen": "bank",
+    "screenOrdinal": 4,
+    "source": "connect_bank",
+    "statement": "Earnest money deposit sourced",
+    "fields": "EMD came from an acceptable, verified source",
+    "evidence": [
+      "Cancelled check",
+      "bank statement",
+      "escrow receipt"
+    ],
+    "condition": "purchase",
+    "conditionProse": "Purchase only",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-015"
+      ],
+      "prose": "Before UW-015"
+    }
+  },
+  {
+    "id": "AST-008",
+    "family": "AST",
+    "screen": "bank",
+    "screenOrdinal": 4,
+    "source": "connect_bank",
+    "statement": "Retirement account liquidity verified",
+    "fields": "vested_balance, outstanding_plan_loans, withdrawal_eligibility",
+    "evidence": [
+      "Statement",
+      "plan terms",
+      "loan balance"
+    ],
+    "condition": "retirement_assets_used",
+    "conditionProse": "Retirement assets used",
+    "dayOneCertainty": "assets",
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "CRD-013",
+    "family": "CRD",
+    "screen": "bank",
+    "screenOrdinal": 4,
+    "source": "connect_bank",
+    "statement": "Non-traditional credit established",
+    "fields": "alternative_reference_count >= 3, each with 12 month history",
+    "evidence": [
+      "12 months of rent, utility, insurance payment records"
+    ],
+    "condition": "thin_credit_file",
+    "conditionProse": "Thin or no credit file",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-002"
+      ],
+      "prose": "Before UW-002"
+    }
+  },
+  {
+    "id": "CRD-017",
+    "family": "CRD",
+    "screen": "bank",
+    "screenOrdinal": 4,
+    "source": "connect_bank",
+    "statement": "Cash flow assessment performed",
+    "fields": "cash_flow_assessment_result from 12 months of bank data",
+    "evidence": [
+      "12-month asset verification report from an authorized DU vendor"
+    ],
+    "condition": "asset_report_available",
+    "conditionProse": "12-month asset verification report available",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-001"
+      ],
+      "prose": "Before UW-001"
+    }
+  },
+  {
+    "id": "CRD-018",
+    "family": "CRD",
+    "screen": "bank",
+    "screenOrdinal": 4,
+    "source": "connect_bank",
+    "statement": "Rent payment history identified",
+    "fields": "monthly_rent >= 300; 12 months of on-time rent payments identified",
+    "evidence": [
+      "12-month asset verification report",
+      "or credit report tradeline"
+    ],
+    "condition": "renter_limited_mortgage_history",
+    "conditionProse": "Renter with limited or no mortgage history",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-001"
+      ],
+      "prose": "Before UW-001"
+    }
+  },
+  {
+    "id": "INC-001",
+    "family": "INC",
+    "screen": "bank",
+    "screenOrdinal": 4,
+    "source": "connect_bank",
+    "statement": "Employment verified",
+    "fields": "employer_name, position, start_date, employment_status = active",
+    "evidence": [
+      "Written VOE",
+      "or paystub + W-2 combination"
+    ],
+    "condition": "wage_earner",
+    "conditionProse": "Wage earner",
+    "dayOneCertainty": "employment",
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-001"
+      ],
+      "prose": "Before UW-001"
+    }
+  },
+  {
+    "id": "INC-019",
+    "family": "INC",
+    "screen": "bank",
+    "screenOrdinal": 4,
+    "source": "connect_bank",
+    "statement": "Retirement, pension or SSA income documented",
+    "fields": "monthly_amount, source_type, continuance_end_date",
+    "evidence": [
+      "Award letter",
+      "1099",
+      "bank statements"
+    ],
+    "condition": "retirement_income_used",
+    "conditionProse": "Retirement income used",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-004"
+      ],
+      "prose": "Before UW-004"
+    }
+  },
+  {
+    "id": "INC-020",
+    "family": "INC",
+    "screen": "bank",
+    "screenOrdinal": 4,
+    "source": "connect_bank",
+    "statement": "Investment or dividend income documented",
+    "fields": "Two-year history and continuance established",
+    "evidence": [
+      "Tax returns",
+      "brokerage statements"
+    ],
+    "condition": "investment_income_used",
+    "conditionProse": "Investment income used",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-004"
+      ],
+      "prose": "Before UW-004"
+    }
+  },
+  {
+    "id": "INC-002",
+    "family": "INC",
+    "screen": "payroll",
+    "screenOrdinal": 5,
+    "source": "connect_payroll",
+    "statement": "Paystubs covering 30 days obtained",
+    "fields": "gross_pay, pay_period_end_date, ytd_gross covering 30 days",
+    "evidence": [
+      "Paystubs"
+    ],
+    "condition": "wage_earner",
+    "conditionProse": "Wage earner",
+    "dayOneCertainty": "income",
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-001"
+      ],
+      "prose": "Before UW-001"
+    }
+  },
+  {
+    "id": "INC-005",
+    "family": "INC",
+    "screen": "payroll",
+    "screenOrdinal": 5,
+    "source": "connect_payroll",
+    "statement": "Variable income averaged",
+    "fields": "monthly average of overtime, bonus, commission over 12 or 24 months",
+    "evidence": [
+      "Paystub YTD",
+      "W-2s",
+      "VOE breakout"
+    ],
+    "condition": "variable_income_present",
+    "conditionProse": "OT, bonus or commission present",
+    "dayOneCertainty": "income",
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-004"
+      ],
+      "prose": "Before UW-004"
+    }
+  },
+  {
+    "id": "INC-006",
+    "family": "INC",
+    "screen": "payroll",
+    "screenOrdinal": 5,
+    "source": "connect_payroll",
+    "statement": "Employment gap explained",
+    "fields": "gap_start_date, gap_end_date, gap_days, reason_code",
+    "evidence": [
+      "Letter of explanation",
+      "supporting documents"
+    ],
+    "condition": "employment_gap",
+    "conditionProse": "Gap over 30 days in 2 years",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-015"
+      ],
+      "prose": "Before UW-015"
+    }
+  },
+  {
+    "id": "INC-022",
+    "family": "INC",
+    "screen": "payroll",
+    "screenOrdinal": 5,
+    "source": "connect_payroll",
+    "statement": "Military entitlements documented",
+    "fields": "Base pay and entitlements identified separately",
+    "evidence": [
+      "Leave and Earnings Statement"
+    ],
+    "condition": "military_borrower",
+    "conditionProse": "Military borrower",
+    "dayOneCertainty": "income",
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-004"
+      ],
+      "prose": "Before UW-004"
+    }
+  },
+  {
+    "id": "INC-003",
+    "family": "INC",
+    "screen": "irs_transcript",
+    "screenOrdinal": 6,
+    "source": "connect_irs",
+    "statement": "W-2s for two years obtained",
+    "fields": "w2_wages for each of prior two years, employer_ein",
+    "evidence": [
+      "W-2 forms"
+    ],
+    "condition": "wage_earner",
+    "conditionProse": "Wage earner",
+    "dayOneCertainty": "income",
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-001"
+      ],
+      "prose": "Before UW-001"
+    }
+  },
+  {
+    "id": "INC-008",
+    "family": "INC",
+    "screen": "irs_transcript",
+    "screenOrdinal": 6,
+    "source": "esign",
+    "statement": "4506-C executed",
+    "fields": "Borrower authorized IRS transcript release",
+    "evidence": [
+      "Signed 4506-C"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "INC-009"
+      ],
+      "prose": "Before INC-009"
+    }
+  },
+  {
+    "id": "INC-009",
+    "family": "INC",
+    "screen": "irs_transcript",
+    "screenOrdinal": 6,
+    "source": "connect_irs",
+    "statement": "Tax transcripts obtained and reconciled",
+    "fields": "transcript_agi and transcript_wages match documented income within tolerance",
+    "evidence": [
+      "IRS tax return transcript"
+    ],
+    "condition": "self_employed_variable_or_rental",
+    "conditionProse": "Self-employed; variable; rental",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "AST-006",
+    "family": "AST",
+    "screen": "upload_fallback",
+    "screenOrdinal": 7,
+    "source": "connect_bank",
+    "statement": "Gift funds documented",
+    "fields": "gift_amount, donor_relationship, transfer_date, donor_ability_evidence",
+    "evidence": [
+      "Gift letter",
+      "donor statement",
+      "transfer evidence"
+    ],
+    "condition": "gift_funds_used",
+    "conditionProse": "Gift used",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "CLS-013"
+      ],
+      "prose": "Before CLS-013"
+    }
+  },
+  {
+    "id": "CRD-006",
+    "family": "CRD",
+    "screen": "upload_fallback",
+    "screenOrdinal": 7,
+    "source": "document_upload",
+    "statement": "Bankruptcy seasoning satisfied",
+    "fields": "months_since_discharge >= product minimum; chapter_type",
+    "evidence": [
+      "Discharge order",
+      "credit report date"
+    ],
+    "condition": "prior_bankruptcy",
+    "conditionProse": "Prior bankruptcy",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "CRD-008",
+    "family": "CRD",
+    "screen": "upload_fallback",
+    "screenOrdinal": 7,
+    "source": "borrower_input",
+    "statement": "Derogatory account explanation obtained",
+    "fields": "Borrower explanation on record and assessed",
+    "evidence": [
+      "Letter of explanation",
+      "supporting documents"
+    ],
+    "condition": "recent_derogatory",
+    "conditionProse": "Recent derogatory present",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-015"
+      ],
+      "prose": "Before UW-015"
+    }
+  },
+  {
+    "id": "CRD-009",
+    "family": "CRD",
+    "screen": "upload_fallback",
+    "screenOrdinal": 7,
+    "source": "borrower_input",
+    "statement": "Recent inquiry explanation obtained",
+    "fields": "inquiry_count_90d; each resolved to new_debt yes/no",
+    "evidence": [
+      "Letter of explanation",
+      "creditor confirmation"
+    ],
+    "condition": "recent_inquiries",
+    "conditionProse": "Inquiries in last 90 days",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "CRD-011",
+    "family": "CRD",
+    "screen": "upload_fallback",
+    "screenOrdinal": 7,
+    "source": "third_party_order",
+    "statement": "SSN validated with SSA",
+    "fields": "SSN belongs to the borrower",
+    "evidence": [
+      "SSA-89 result"
+    ],
+    "condition": "ssn_mismatch_or_fraud_alert",
+    "conditionProse": "SSN mismatch or fraud alert",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "INC-021",
+    "family": "INC",
+    "screen": "upload_fallback",
+    "screenOrdinal": 7,
+    "source": "connect_bank",
+    "statement": "Alimony or child support documented",
+    "fields": "monthly_award, receipt_months_documented, continuance_end_date",
+    "evidence": [
+      "Court order",
+      "6-12 months receipt evidence"
+    ],
+    "condition": "support_income_used",
+    "conditionProse": "Support income used",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-004"
+      ],
+      "prose": "Before UW-004"
+    }
+  },
+  {
+    "id": "INC-023",
+    "family": "INC",
+    "screen": "upload_fallback",
+    "screenOrdinal": 7,
+    "source": "connect_payroll",
+    "statement": "Equity compensation income documented",
+    "fields": "vested_value_prior_24mo, future_vest_schedule, share_price_basis",
+    "evidence": [
+      "Vesting schedule",
+      "paystub",
+      "brokerage statement"
+    ],
+    "condition": "equity_comp_used",
+    "conditionProse": "RSU or stock comp used",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-004"
+      ],
+      "prose": "Before UW-004"
+    }
+  },
+  {
+    "id": "APP-006",
+    "family": "APP",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Loan Estimate delivered",
+    "fields": "LE delivered or placed in mail within 3 business days of application",
+    "evidence": [
+      "LE with delivery timestamp"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "deadline",
+      "from": "requirement",
+      "refs": [
+        "APP-002"
+      ],
+      "amount": 3,
+      "unit": "business_days",
+      "prose": "3 business days from APP-002"
+    }
+  },
+  {
+    "id": "APP-007",
+    "family": "APP",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "borrower_input",
+    "statement": "Intent to Proceed documented",
+    "fields": "Borrower affirmatively indicated intent after receiving LE",
+    "evidence": [
+      "Dated, recorded intent to proceed"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "after",
+      "event": "le_receipt",
+      "prose": "After LE receipt"
+    }
+  },
+  {
+    "id": "APP-008",
+    "family": "APP",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Written List of Service Providers delivered",
+    "fields": "Borrower given list of providers for shoppable services",
+    "evidence": [
+      "WLSP with delivery timestamp"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "with",
+      "event": "le_delivery",
+      "prose": "With LE"
+    }
+  },
+  {
+    "id": "APP-009",
+    "family": "APP",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "third_party_order",
+    "statement": "Homeownership counseling list delivered",
+    "fields": "Borrower given list of HUD-approved counselors within 10 miles",
+    "evidence": [
+      "Counseling list with timestamp"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "deadline",
+      "from": "application",
+      "amount": 3,
+      "unit": "business_days",
+      "prose": "3 business days from application"
+    }
+  },
+  {
+    "id": "APP-010",
+    "family": "APP",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Your Home Loan Toolkit delivered",
+    "fields": "Booklet delivered to borrower",
+    "evidence": [
+      "Toolkit with delivery timestamp"
+    ],
+    "condition": "purchase",
+    "conditionProse": "Purchase only",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "deadline",
+      "from": "application",
+      "amount": 3,
+      "unit": "business_days",
+      "prose": "3 business days from application"
+    }
+  },
+  {
+    "id": "APP-019",
+    "family": "APP",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Net tangible benefit test satisfied",
+    "fields": "payment_delta, rate_delta, recoup_months vs state threshold",
+    "evidence": [
+      "NTB worksheet",
+      "comparison of old vs new terms"
+    ],
+    "condition": "refi_ntb_required",
+    "conditionProse": "Refi; state or investor requires",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "event": "closing",
+      "prose": "Before closing"
+    }
+  },
+  {
+    "id": "AST-002",
+    "family": "AST",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Funds to close calculated",
+    "fields": "funds_to_close = price_or_payoff + fees + prepaids - credits - loan_amount",
+    "evidence": [
+      "Funds to close worksheet"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-002"
+      ],
+      "prose": "Before UW-002"
+    }
+  },
+  {
+    "id": "AST-003",
+    "family": "AST",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Reserve requirement determined",
+    "fields": "required_reserve_months from AUS, occupancy, property_count",
+    "evidence": [
+      "AUS findings",
+      "product matrix"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "after",
+      "refs": [
+        "UW-002"
+      ],
+      "prose": "After UW-002"
+    }
+  },
+  {
+    "id": "AST-004",
+    "family": "AST",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "connect_bank",
+    "statement": "Reserves satisfied",
+    "fields": "actual_reserve_months = eligible_post_close_assets / monthly_PITIA",
+    "evidence": [
+      "Asset statements",
+      "eligibility worksheet"
+    ],
+    "condition": "reserves_required",
+    "conditionProse": "Reserves required",
+    "dayOneCertainty": "assets",
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "AST-016",
+    "family": "AST",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Interested party contribution limit tested",
+    "fields": "ipc_total / sales_price vs allowable_pct for LTV and occupancy",
+    "evidence": [
+      "Contract",
+      "CD credits"
+    ],
+    "condition": "ipc_present",
+    "conditionProse": "Seller or lender credits present",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "CLS-002"
+      ],
+      "prose": "Before CLS-002"
+    }
+  },
+  {
+    "id": "INC-004",
+    "family": "INC",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Base income calculated",
+    "fields": "monthly_base_income from pay_rate, pay_frequency, scheduled_hours",
+    "evidence": [
+      "Paystub",
+      "VOE",
+      "offer letter"
+    ],
+    "condition": "wage_earner",
+    "conditionProse": "Wage earner",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-004"
+      ],
+      "prose": "Before UW-004"
+    }
+  },
+  {
+    "id": "INC-026",
+    "family": "INC",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Total qualifying income finalized",
+    "fields": "total_qualifying_monthly_income = sum of all approved components",
+    "evidence": [
+      "Income worksheet"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-004"
+      ],
+      "prose": "Before UW-004"
+    }
+  },
+  {
+    "id": "INC-027",
+    "family": "INC",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Income continuance determination made",
+    "fields": "continuance_flag per source; each >= 36 months or documented exception",
+    "evidence": [
+      "Continuance worksheet",
+      "supporting docs"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-006"
+      ],
+      "prose": "Before UW-006"
+    }
+  },
+  {
+    "id": "UW-001",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "AUS submitted",
+    "fields": "Complete case submitted to DU or Loan Product Advisor",
+    "evidence": [
+      "AUS submission record"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "after",
+      "event": "intake_complete",
+      "prose": "After credit, income and asset intake"
+    }
+  },
+  {
+    "id": "UW-002",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "AUS recommendation obtained",
+    "fields": "aus_recommendation, aus_casefile_id, submission_date",
+    "evidence": [
+      "AUS findings report"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "after",
+      "refs": [
+        "UW-001"
+      ],
+      "prose": "After UW-001"
+    }
+  },
+  {
+    "id": "UW-003",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "AUS findings mapped to condition list",
+    "fields": "Every AUS verification message converted to a trackable condition",
+    "evidence": [
+      "Findings report",
+      "condition list"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "after",
+      "refs": [
+        "UW-002"
+      ],
+      "prose": "After UW-002"
+    }
+  },
+  {
+    "id": "UW-004",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "DTI calculated",
+    "fields": "dti_front = housing_PITIA / income; dti_back = total_debt / income",
+    "evidence": [
+      "DTI worksheet"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-006"
+      ],
+      "prose": "Before UW-006"
+    }
+  },
+  {
+    "id": "UW-005",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "LTV, CLTV and HCLTV calculated",
+    "fields": "ltv, cltv, hcltv from loan_amount, junior_liens, value",
+    "evidence": [
+      "Ratio worksheet"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-010"
+      ],
+      "prose": "Before UW-010"
+    }
+  },
+  {
+    "id": "UW-006",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "ATR / QM determination made",
+    "fields": "atr_determination = documented; qm_status; qm_type",
+    "evidence": [
+      "ATR/QM worksheet",
+      "supporting docs"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "UW-007",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "QM points and fees test performed",
+    "fields": "points_and_fees_amount / loan_amount vs threshold",
+    "evidence": [
+      "Points and fees worksheet"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "financial_loss",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "CLS-002"
+      ],
+      "prose": "Before CLS-002"
+    }
+  },
+  {
+    "id": "UW-008",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "HPML threshold tested",
+    "fields": "apr - apor spread vs hpml threshold for lien_position",
+    "evidence": [
+      "HPML test result"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "CLS-002"
+      ],
+      "prose": "Before CLS-002"
+    }
+  },
+  {
+    "id": "UW-009",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "HOEPA high-cost threshold tested",
+    "fields": "Loan confirmed not high-cost, or ineligible",
+    "evidence": [
+      "HOEPA test result"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "CLS-002"
+      ],
+      "prose": "Before CLS-002"
+    }
+  },
+  {
+    "id": "UW-010",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Pricing adjustments applied",
+    "fields": "llpa_total_bps from fico, ltv, occupancy, property_type, purpose",
+    "evidence": [
+      "Pricing worksheet",
+      "lock confirmation"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "financial_loss",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "CLS-001"
+      ],
+      "prose": "Before CLS-001"
+    }
+  },
+  {
+    "id": "UW-011",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Manual underwrite performed",
+    "fields": "Loan underwritten to manual guidelines with documented rationale",
+    "evidence": [
+      "Manual underwriting worksheet",
+      "approval memo"
+    ],
+    "condition": "aus_refer_or_ineligible",
+    "conditionProse": "AUS Refer or ineligible",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "UW-012",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Product eligibility matrix confirmed",
+    "fields": "each product parameter within limits; eligibility_status",
+    "evidence": [
+      "Eligibility checklist"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "UW-013",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Investor overlays applied",
+    "fields": "Lender and investor overlays checked in addition to agency guides",
+    "evidence": [
+      "Overlay checklist"
+    ],
+    "condition": "overlays_exist",
+    "conditionProse": "Overlays exist for the product",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "UW-014",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Condition list issued",
+    "fields": "Conditions communicated to borrower and processing",
+    "evidence": [
+      "Condition list with timestamp"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "after",
+      "refs": [
+        "UW-002"
+      ],
+      "prose": "After UW-002"
+    }
+  },
+  {
+    "id": "UW-015",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Conditions cleared and documented",
+    "fields": "open_condition_count = 0",
+    "evidence": [
+      "Cleared condition records with attachments"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  },
+  {
+    "id": "UW-016",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Adverse action or counteroffer issued",
+    "fields": "Borrower notified with specific principal reasons",
+    "evidence": [
+      "Adverse action notice with timestamp"
+    ],
+    "condition": "denial_or_counteroffer",
+    "conditionProse": "Denial or counteroffer",
+    "dayOneCertainty": null,
+    "failureSeverity": "regulatory_violation",
+    "timing": {
+      "kind": "deadline",
+      "from": "complete_application",
+      "amount": 30,
+      "unit": "calendar_days",
+      "prose": "Within 30 days of complete application"
+    }
+  },
+  {
+    "id": "UW-017",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Clear to Close issued",
+    "fields": "All conditions cleared; loan authorized to proceed to closing",
+    "evidence": [
+      "CTC record"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "rework_delay",
+    "timing": {
+      "kind": "after",
+      "refs": [
+        "UW-015"
+      ],
+      "prose": "After UW-015"
+    }
+  },
+  {
+    "id": "UW-018",
+    "family": "UW",
+    "screen": "decision",
+    "screenOrdinal": 8,
+    "source": "derived",
+    "statement": "Fraud and red flag review completed",
+    "fields": "alert_count by severity; adjudication_status per alert",
+    "evidence": [
+      "Fraud report",
+      "red flag checklist"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "before",
+      "refs": [
+        "UW-017"
+      ],
+      "prose": "Before UW-017"
+    }
+  }
 ] as const;
 
 /**
@@ -1486,27 +1814,27 @@ export const REQUIREMENTS: readonly Requirement[] = [
  */
 export const DANGLING_REFERENCES: readonly DanglingReference[] = [
   {
-    from: "AST-006",
-    to: "CLS-013",
+    "from": "AST-006",
+    "to": "CLS-013"
   },
   {
-    from: "AST-016",
-    to: "CLS-002",
+    "from": "AST-016",
+    "to": "CLS-002"
   },
   {
-    from: "UW-007",
-    to: "CLS-002",
+    "from": "UW-007",
+    "to": "CLS-002"
   },
   {
-    from: "UW-008",
-    to: "CLS-002",
+    "from": "UW-008",
+    "to": "CLS-002"
   },
   {
-    from: "UW-009",
-    to: "CLS-002",
+    "from": "UW-009",
+    "to": "CLS-002"
   },
   {
-    from: "UW-010",
-    to: "CLS-001",
-  },
+    "from": "UW-010",
+    "to": "CLS-001"
+  }
 ] as const;

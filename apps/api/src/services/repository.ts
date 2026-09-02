@@ -26,7 +26,6 @@ import type {
   FloodDetermination,
   SanctionsScreening,
   LienSearch,
-  IdentityVerification,
 } from "@hm/shared";
 import type { Prisma } from "@hm/db";
 import { AppError } from "../middleware/error-handler.js";
@@ -99,8 +98,14 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
       postalCode: b.addressPostalCode,
     },
     maritalStatus: b.maritalStatus as Borrower["maritalStatus"],
-    // Null means "not asked yet" — files predate screen 2 collecting it.
-    citizenship: (b.citizenship as Borrower["citizenship"]) ?? null,
+    citizenship: b.citizenship as Borrower["citizenship"],
+    identityVerification: b.identityVerifiedAt
+      ? {
+          verificationId: b.identityVerificationId ?? "",
+          status: (b.identityVerificationStatus ?? "verified") as "verified" | "pending" | "failed",
+          verifiedAt: b.identityVerifiedAt.toISOString(),
+        }
+      : null,
     nonBorrowingSpouseName: b.nonBorrowingSpouseName ?? undefined,
     nonBorrowingSpouseSignatureRequired: b.nonBorrowingSpouseSignatureRequired,
     preferredLanguage: b.preferredLanguage,
@@ -220,7 +225,6 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
     flood: latest<FloodDetermination>("flood"),
     sanctions: latest<SanctionsScreening>("sanctions"),
     lienSearch: latest<LienSearch>("lien_search"),
-    identityVerification: latest<IdentityVerification>("identity"),
 
     credit: latest<CreditReport>("credit"),
     assets: latest<AssetReport>("bank"),
@@ -292,6 +296,7 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
     sanctionsScreenClear: row.sanctionsScreenClear,
     ssnValidatedWithSsa: row.ssnValidatedWithSsa,
     fraudReviewComplete: row.fraudReviewComplete,
+    applicationSignedAt: row.applicationSignedAt?.toISOString() ?? null,
     intentToProceedAt: row.intentToProceedAt?.toISOString() ?? null,
     deliveryMethod: row.deliveryMethod as LoanFile["deliveryMethod"],
   };

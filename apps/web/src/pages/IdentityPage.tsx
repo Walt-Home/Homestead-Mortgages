@@ -24,11 +24,22 @@ import { useAuth } from "../lib/auth.js";
 import { Why } from "../components/Why.js";
 import { Working } from "../components/Working.js";
 
+interface DocumentRead {
+  documentName: string | null;
+  documentDateOfBirth: string | null;
+  documentAddress: {
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+  } | null;
+}
+
 interface Identity {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
-  documentType: string;
   address: { line1: string; line2?: string; city: string; state: string; postalCode: string };
 }
 
@@ -103,8 +114,17 @@ export function IdentityPage() {
     setScanning(true);
     setError(null);
     try {
-      const res = await api.post<{ identity: Identity }>(`/files/${fileId}/identity-check`, {});
-      setIdentity(res.identity);
+      const doc = await api.post<DocumentRead>(`/files/${fileId}/identity-document`, {});
+      const [firstName, ...rest] = (doc.documentName ?? "").split(" ");
+      if (!firstName || !doc.documentDateOfBirth || !doc.documentAddress) {
+        throw new Error("That document was missing something we need.");
+      }
+      setIdentity({
+        firstName,
+        lastName: rest.join(" "),
+        dateOfBirth: doc.documentDateOfBirth,
+        address: doc.documentAddress,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "That scan did not go through.");
     } finally {
@@ -180,6 +200,24 @@ export function IdentityPage() {
         }
         if (smsConsent && !hasConsent(data?.file, "sms_contact")) {
           await api.post(`/files/${fileId}/consents`, { kind: "sms_contact", borrowerId });
+        }
+      }
+
+      if (borrowerId) {
+        // Now that a borrower row exists, record the verification against it.
+        // The scan above only read the document to save them typing.
+        const session = await api
+          .post<{ alreadyVerified: boolean; verificationId?: string }>(
+            `/files/${fileId}/identity-verification`,
+            { borrowerId },
+          )
+          .catch(() => null);
+        if (session && !session.alreadyVerified && session.verificationId) {
+          await api
+            .post(`/files/${fileId}/identity-verification/complete`, {
+              verificationId: session.verificationId,
+            })
+            .catch(() => undefined);
         }
       }
 

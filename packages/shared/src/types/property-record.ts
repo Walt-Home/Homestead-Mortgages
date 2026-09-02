@@ -152,29 +152,3 @@ export interface LienSearch {
   readonly foreclosureOrShortSaleInHistory: boolean;
   readonly searchedAt: string;
 }
-
-/* ── Identity ───────────────────────────────────────────────────────────── */
-
-export type IdentityDocumentType = "drivers_license" | "passport" | "state_id";
-
-/**
- * The result of a document scan and selfie check.
- *
- * Name, date of birth and address come off the document, which is why screen 2
- * asks for seven items rather than the eleven the old identity screen asked
- * for. Unguarded, for the same reason the e-sign adapter is: this runs before
- * the verification authorization is signed, and guarding it would make the
- * authorization unobtainable.
- */
-export interface IdentityVerification {
-  readonly documentType: IdentityDocumentType;
-  readonly documentExpiresOn: string;
-  readonly firstName: string;
-  readonly lastName: string;
-  readonly dateOfBirth: string;
-  readonly address: Address;
-  /** 0–100 liveness score from the selfie comparison. */
-  readonly selfieLiveness: number;
-  readonly documentAuthentic: boolean;
-  readonly verifiedAt: string;
-}

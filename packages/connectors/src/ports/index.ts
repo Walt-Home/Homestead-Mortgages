@@ -170,25 +170,25 @@ export interface LienConnector {
 }
 
 /**
- * Document scan and selfie (screen 2).
+ * Proving the borrower is who they say they are.
  *
- * Unguarded, deliberately, and this is the uncomfortable one. It handles a
- * government ID, which is about as sensitive as this product gets — but it
- * runs *before* the authorization is signed, because name, date of birth and
- * address come off the document and the authorization is a document the
- * borrower signs with that name. Guarding it would make APP-005 unobtainable,
- * the same trap the e-sign adapter documents.
- *
- * The protection here is not the guard, it is scope: this verifies an identity
- * the borrower is presenting to us in the moment. It pulls nothing about them
- * from anywhere else.
+ * APP-001 wants a government photo ID; typed fields cannot evidence that. The
+ * shape follows the document-and-selfie vendors — Stripe Identity, Persona,
+ * Socure — where you create a session, send the person to it, and read the
+ * result back. It is NOT the same as validating an SSN against the SSA
+ * (CRD-011), which is a separate check with a separate vendor.
  */
 export interface IdentityConnector {
   readonly capabilities: ConnectorCapabilities;
-  verifyIdentity(file: LoanFile): Promise<ConnectorResult<IdentityVerification>>;
+  createVerificationSession(
+    file: LoanFile,
+    borrowerId: string,
+  ): Promise<{ verificationId: string; verificationUrl: string }>;
+  getVerification(verificationId: string): Promise<IdentityVerification | null>;
 }
 
 export interface ConnectorRegistry {
+  readonly identity: IdentityConnector;
   readonly credit: CreditConnector;
   readonly bank: BankConnector;
   readonly payroll: PayrollConnector;
@@ -197,5 +197,4 @@ export interface ConnectorRegistry {
   readonly propertyData: PropertyDataConnector;
   readonly screening: ScreeningConnector;
   readonly liens: LienConnector;
-  readonly identity: IdentityConnector;
 }

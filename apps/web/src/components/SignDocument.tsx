@@ -14,16 +14,6 @@ import { api } from "../lib/api.js";
  */
 
 const DOCUMENTS: Record<string, { title: string; body: string[]; commit: string }> = {
-  application_signature: {
-    title: "Your application",
-    body: [
-      "This is the application itself — the property, the loan, your details, and the declarations you just confirmed.",
-      "It also includes IRS Form 4506-C, which lets us request your tax records directly rather than asking you to find them. That is the step that would otherwise become a whole screen.",
-      "Signing submits it. It does not commit you to borrowing anything, and it is not an agreement to any particular rate or terms.",
-    ],
-    commit: "Sign and submit",
-  },
-
   form_4506c: {
     title: "IRS Form 4506-C",
     body: [

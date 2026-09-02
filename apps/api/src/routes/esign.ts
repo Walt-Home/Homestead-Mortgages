@@ -24,20 +24,12 @@ import { connectors } from "../services/connectors.js";
 export const esignRouter = Router();
 
 /** Only these are signable. `persistent_monitoring` is an opt-in, not a signature. */
-const SIGNABLE = [
-  "verification_authorization",
-  "econsent",
-  "form_4506c",
-  "application_signature",
-] as const;
+const SIGNABLE = ["verification_authorization", "econsent", "form_4506c"] as const;
 
 const REQUIREMENT_FOR: Record<(typeof SIGNABLE)[number], string> = {
   verification_authorization: "APP-005",
   econsent: "APP-012",
   form_4506c: "INC-008",
-  // Screen 4. APP-012 covers electronic delivery; this is the signature on
-  // the application itself.
-  application_signature: "APP-006",
 };
 
 const startSchema = z.object({ kind: z.enum(SIGNABLE) });

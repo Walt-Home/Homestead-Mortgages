@@ -22,7 +22,6 @@ import type { Decision, DisclosureRecord } from "./decision.js";
 import type {
   AvmEstimate,
   FloodDetermination,
-  IdentityVerification,
   LienSearch,
   PropertyRecord,
   SanctionsScreening,
@@ -101,7 +100,6 @@ export interface LoanFile {
   /** Screen 2's screening and search. Null until run. */
   readonly sanctions: SanctionsScreening | null;
   readonly lienSearch: LienSearch | null;
-  readonly identityVerification: IdentityVerification | null;
 
   readonly credit: CreditReport | null;
   readonly assets: AssetReport | null;
@@ -129,6 +127,14 @@ export interface LoanFile {
   readonly ssnValidatedWithSsa: boolean | null;
   /** Fraud and red-flag review (UW-018). */
   readonly fraudReviewComplete: boolean;
+  /**
+   * When the borrower signed the application (screen 4).
+   *
+   * The column existed but was never surfaced, so the client had no way to
+   * know a file was signed. It is the single source of truth for that — there
+   * is deliberately no parallel `application_signature` consent.
+   */
+  readonly applicationSignedAt: string | null;
   /** True once the borrower affirmatively indicates intent after the LE. */
   readonly intentToProceedAt: string | null;
   /** Delivery channel in use; decides whether eConsent applies (APP-012). */

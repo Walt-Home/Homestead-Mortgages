@@ -68,19 +68,15 @@ export function BankPage() {
       setReport(res.report);
 
       /*
-       * Then try the employer records, without asking.
+       * No payroll call here any more.
        *
-       * This is what makes payroll a branch rather than a step. The system
-       * attempts it first; the borrower only hears about it if it comes back
-       * with something a person has to explain — an employment gap, commission
-       * without enough history. A borrower whose employer resolves cleanly
-       * never learns this step existed.
-       *
-       * Failure is expected and survivable: the engine will report income as
-       * blocked, the panel below shows a dash rather than a number, and the
-       * review screen offers the branch.
+       * The engine now accepts a validated twelve-month asset report as
+       * evidence for INC-002 (Day 1 Certainty), so a salaried borrower's
+       * income verifies from this one connection. Reaching for payroll from
+       * the client was a workaround for that gap and is now just a second
+       * request nobody needs. Borrowers whose income the report cannot
+       * characterise still get the payroll branch on the review screen.
        */
-      await api.post(`/files/${fileId}/payroll`, {}).catch(() => undefined);
 
       // Compute where they stand against everything verified so far.
       const decision = await api.post<{ decision: Decision }>(`/files/${fileId}/decision`, {});
@@ -197,7 +193,6 @@ export function BankPage() {
               { label: "Opening a secure connection", ms: 1200 },
               { label: "Reading twelve months of activity", ms: 2000 },
               { label: "Finding your income and rent history", ms: 2000 },
-              { label: "Checking your employer records", ms: 1800 },
               { label: "Working out where you stand", ms: 2500 },
             ]}
             note="This is the longest step, and the last one you have to do anything for."

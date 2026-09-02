@@ -67,6 +67,7 @@ export interface LoanFileView {
   documents: { id: string; filename: string; satisfiesRequirementId: string; bytes: number }[];
   links: { kind: string; provider: string; persistentMonitoringEnabled: boolean }[];
   decision: unknown | null;
+  applicationSignedAt: string | null;
   intentToProceedAt: string | null;
 }
 

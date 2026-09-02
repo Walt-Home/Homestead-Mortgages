@@ -170,6 +170,28 @@ const cleanW2: Persona = {
       },
     ],
     largeDeposits: [],
+    // Salaried W-2: twelve months of identical deposits from one employer is
+    // exactly the case deposit-derived income handles well, so no payroll step.
+    incomeConfidence: "verified",
+    incomeSources: [
+      {
+        type: "base_wage",
+        monthlyAmount: 7_843,
+        historyMonths: 12,
+        continuanceEstablished: true,
+        evidenceDocumentIds: [],
+      },
+    ],
+    employments: [
+      {
+        employerName: "Fixture Health Systems",
+        position: "Registered Nurse",
+        startDate: monthsBefore(ref, 52),
+        status: "active",
+        isMilitary: false,
+        verificationMethod: "bank_inference",
+      },
+    ],
     cashFlowAssessmentResult: "positive",
     alternativeReferences: [
       {
@@ -340,6 +362,26 @@ const thinFileRenter: Persona = {
         amount: 6_000,
         description: "TRANSFER FROM FIXTURE BROKERAGE",
         // Deliberately unsourced — this is what makes AST-005 fire.
+      },
+    ],
+    incomeConfidence: "verified",
+    incomeSources: [
+      {
+        type: "base_wage",
+        monthlyAmount: 5_222,
+        historyMonths: 12,
+        continuanceEstablished: true,
+        evidenceDocumentIds: [],
+      },
+    ],
+    employments: [
+      {
+        employerName: "Fixture Logistics",
+        position: "Dispatch Supervisor",
+        startDate: monthsBefore(ref, 26),
+        status: "active",
+        isMilitary: false,
+        verificationMethod: "bank_inference",
       },
     ],
     cashFlowAssessmentResult: "positive",
@@ -523,6 +565,31 @@ const variableIncome: Persona = {
         amount: 20_000,
         description: "GIFT — R RAMAN",
         sourceType: "gift",
+      },
+    ],
+    // Deposits show roughly $10,300 a month arriving and cannot say how much of
+    // it is base and how much is commission. INC-005 turns on exactly that
+    // split, so this borrower is the one the payroll step exists for.
+    incomeConfidence: "insufficient",
+    incomeConfidenceReason:
+      "Your deposits vary month to month, so we can't tell base pay from commission.",
+    incomeSources: [
+      {
+        type: "base_wage",
+        monthlyAmount: 7_083,
+        historyMonths: 12,
+        continuanceEstablished: null,
+        evidenceDocumentIds: [],
+      },
+    ],
+    employments: [
+      {
+        employerName: "Fixture Software",
+        position: "Account Executive",
+        startDate: monthsBefore(ref, 14),
+        status: "active",
+        isMilitary: false,
+        verificationMethod: "bank_inference",
       },
     ],
     cashFlowAssessmentResult: "positive",

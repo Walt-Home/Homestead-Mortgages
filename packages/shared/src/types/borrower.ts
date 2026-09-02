@@ -5,11 +5,31 @@ import type { Address, StateCode } from "./loan.js";
 export type MaritalStatus = "married" | "unmarried" | "separated";
 
 /**
- * Residency status. Asked on screen 2 because eligibility genuinely turns on
- * it and no connector can tell us — a permanent resident and a non-permanent
- * resident alien qualify under different agency rules.
+ * Residency, which changes product eligibility and the documents an
+ * underwriter will ask for. Not in the V1 sheet; asking it alongside the rest
+ * of identity is cheaper than discovering it at underwriting.
  */
 export type Citizenship = "us_citizen" | "permanent_resident" | "non_permanent_resident";
+
+/**
+ * Identity proven against a government document rather than typed.
+ *
+ * APP-001 asks that the borrower "is who they claim to be", with evidence of a
+ * government photo ID. Typed fields cannot evidence that; a document-and-selfie
+ * check can. The port is vendor-shaped (Stripe Identity, Persona, Socure) and
+ * the adapter is a fixture like every other connector.
+ */
+export interface IdentityVerification {
+  readonly verificationId: string;
+  readonly status: "pending" | "verified" | "failed";
+  readonly verifiedAt?: string;
+  /** What the document said, for comparison against what was typed. */
+  readonly documentName?: string;
+  readonly documentDateOfBirth?: string;
+  /** The address on the document, so screen 2 does not have to ask for it. */
+  readonly documentAddress?: Address;
+  readonly failureReason?: string;
+}
 
 /**
  * SSN is never stored or passed in the clear.
@@ -44,8 +64,8 @@ export interface Borrower {
   readonly phone: string;
   readonly currentAddress: Address;
   readonly maritalStatus: MaritalStatus;
-  /** Null on files created before screen 2 started asking. */
-  readonly citizenship: Citizenship | null;
+  readonly citizenship: Citizenship;
+  readonly identityVerification: IdentityVerification | null;
   /** Community-property states require the spouse even when not borrowing. */
   readonly nonBorrowingSpouseName?: string;
   readonly nonBorrowingSpouseSignatureRequired: boolean;
@@ -70,11 +90,9 @@ export interface Consent {
     | "econsent"
     | "form_4506c"
     | "persistent_monitoring"
-    /** The borrower's signature on the application itself (screen 4). */
-    | "application_signature"
     /**
-     * Agreement to be contacted by text. A checkbox, not a signature — it is
-     * never in SIGNABLE, because there is no document to execute.
+     * Agreement to be contacted by text. A checkbox, not a signature — never
+     * in SIGNABLE, because there is no document to execute.
      */
     | "sms_contact";
   readonly borrowerId: string;

@@ -26,12 +26,31 @@ import type {
   Address,
   AvmEstimate,
   FloodDetermination,
-  IdentityVerification,
   LienSearch,
   PropertyRecord,
   SanctionsScreening,
 } from "@hm/shared";
 import type { PersonaId } from "./personas.js";
+
+/**
+ * What a document-and-selfie check reads off the ID.
+ *
+ * Local to the fixtures on purpose. The shared `IdentityVerification` is the
+ * *stored result* of a check — id, status, timestamp — and this is the raw
+ * document content that produces it. Screen 2 prefills name, date of birth and
+ * address from here rather than asking for them.
+ */
+export interface IdentityDocument {
+  readonly documentType: "drivers_license" | "passport" | "state_id";
+  readonly documentExpiresOn: string;
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly dateOfBirth: string;
+  readonly address: Address;
+  readonly selfieLiveness: number;
+  readonly documentAuthentic: boolean;
+  readonly verifiedAt: string;
+}
 
 export interface PublicRecordFixture {
   readonly address: Address;
@@ -40,7 +59,7 @@ export interface PublicRecordFixture {
   readonly flood: (ref: Date) => FloodDetermination;
   readonly sanctions: (ref: Date) => SanctionsScreening;
   readonly liens: (ref: Date) => LienSearch;
-  readonly identity: (ref: Date) => IdentityVerification;
+  readonly identity: (ref: Date) => IdentityDocument;
 }
 
 /** ISO date `years` before the reference date. */

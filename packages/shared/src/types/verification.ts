@@ -118,35 +118,6 @@ export interface AlternativeReference {
   readonly onTime: boolean;
 }
 
-/**
- * The 12-month bank connection. Drew calls this "the one that matters" and the
- * sheet agrees — 13 requirements name it as their source, and it is the only
- * connector that produces assets, income, employment, cash flow and rent
- * history from a single handshake.
- */
-export interface AssetReport {
-  readonly reportId: string;
-  readonly generatedAt: string;
-  readonly monthsCovered: number;
-  /** Only a DU-authorized vendor's report satisfies CRD-017. */
-  readonly vendorAuthorizedForDu: boolean;
-  readonly accounts: readonly DepositAccount[];
-  readonly largeDeposits: readonly Deposit[];
-  readonly cashFlowAssessmentResult?: string;
-  /** Consecutive on-time rent payments the report could identify (CRD-018). */
-  readonly identifiedRentPayments: number;
-  /**
-   * Recurring obligations the report can evidence as alternative credit —
-   * rent, utilities, insurance, phone. CRD-013 wants three with twelve months
-   * of history each, which is why this is a list and not a rent-only count.
-   */
-  readonly alternativeReferences: readonly AlternativeReference[];
-  readonly identifiedMonthlyRent?: number;
-  readonly gifts: readonly GiftFunds[];
-  readonly borrowedFunds: readonly BorrowedFunds[];
-  readonly earnestMoneyVerified: boolean;
-}
-
 /* ── Employment and income ──────────────────────────────────────────────── */
 
 export type IncomeSourceType =
@@ -215,6 +186,57 @@ export interface PayrollData {
   readonly paystubs: readonly Paystub[];
   readonly gaps: readonly EmploymentGap[];
   readonly incomeSources: readonly IncomeSource[];
+}
+
+/**
+ * The 12-month bank connection. Drew calls this "the one that matters" and the
+ * sheet agrees — 13 requirements name it as their source, and it is the only
+ * connector that produces assets, income, employment, cash flow and rent
+ * history from a single handshake.
+ */
+export interface AssetReport {
+  readonly reportId: string;
+  readonly generatedAt: string;
+  readonly monthsCovered: number;
+  /** Only a DU-authorized vendor's report satisfies CRD-017. */
+  readonly vendorAuthorizedForDu: boolean;
+  readonly accounts: readonly DepositAccount[];
+  readonly largeDeposits: readonly Deposit[];
+  readonly cashFlowAssessmentResult?: string;
+
+  /**
+   * Income and employment the report itself evidences.
+   *
+   * Drew's sheet says screen 4 yields "Assets + income + employment + cash
+   * flow + rent history", and the real products behave that way — Plaid CRA,
+   * Finicity, AccountChek and Truv all derive income and employer from twelve
+   * months of deposits. The connector previously returned assets only, which
+   * meant income existed nowhere but the payroll step. Collapsing the flow to
+   * four steps made that visible immediately: no payroll step, no income, no
+   * DTI, no decision at all.
+   *
+   * `incomeConfidence` is what decides whether the payroll step is needed.
+   * Deposit-derived income is good enough for a salaried W-2 borrower and is
+   * not good enough to separate base pay from commission — which is exactly
+   * the distinction INC-005 turns on.
+   */
+  readonly incomeSources: readonly IncomeSource[];
+  readonly employments: readonly EmploymentRecord[];
+  readonly incomeConfidence: "verified" | "estimated" | "insufficient";
+  /** Why the report could not stand alone, when it cannot. Shown to the borrower. */
+  readonly incomeConfidenceReason?: string;
+  /** Consecutive on-time rent payments the report could identify (CRD-018). */
+  readonly identifiedRentPayments: number;
+  /**
+   * Recurring obligations the report can evidence as alternative credit —
+   * rent, utilities, insurance, phone. CRD-013 wants three with twelve months
+   * of history each, which is why this is a list and not a rent-only count.
+   */
+  readonly alternativeReferences: readonly AlternativeReference[];
+  readonly identifiedMonthlyRent?: number;
+  readonly gifts: readonly GiftFunds[];
+  readonly borrowedFunds: readonly BorrowedFunds[];
+  readonly earnestMoneyVerified: boolean;
 }
 
 /* ── IRS ────────────────────────────────────────────────────────────────── */

@@ -30,11 +30,11 @@ import type {
 import { AddressNotFoundError } from "../ports/index.js";
 import type {
   BankConnector,
+  IdentityConnector,
   ConnectorRegistry,
   ConnectorResult,
   CreditConnector,
   EsignConnector,
-  IdentityConnector,
   IrsConnector,
   LienConnector,
   LinkSession,
@@ -373,45 +373,40 @@ export function fixtureLienConnector(options: FixtureOptions = {}): LienConnecto
 
 /* ── Identity ───────────────────────────────────────────────────────────── */
 
-/**
- * Document scan and selfie.
- *
- * UNGUARDED, and this is the one that deserves an argument rather than an
- * assertion. It handles a government ID — about as sensitive as this product
- * gets — but it runs before the authorization is signed, because the name and
- * date of birth on that authorization come off this document. Guarding it
- * makes APP-005 unobtainable.
- *
- * What stands in for the guard is scope: this verifies an identity the
- * borrower is presenting to us, in the moment, on purpose. It retrieves
- * nothing about them from anywhere else. A real Stripe Identity integration
- * must hold that line — the moment it also returns a watchlist hit, it has
- * become a screening connector and belongs behind the guard.
- */
 export function fixtureIdentityConnector(options: FixtureOptions = {}): IdentityConnector {
   const { persona, latencyMs, ref } = resolve(options);
+  const PREFIX = "fixture-idv";
+
   return {
     capabilities: {
       provider: "fixture-identity",
       mode: "fixture",
-      satisfies: ["APP-001", "CRD-011"],
+      satisfies: ["APP-001"],
     },
-    async verifyIdentity(_file: LoanFile): Promise<ConnectorResult<IdentityVerification>> {
-      // Longer than the others on purpose. A document scan and a selfie is the
-      // slowest thing the borrower does, and screen 2 has to be designed for
-      // it rather than around it.
-      await sleep(latencyMs * 2);
-      return result(
-        PUBLIC_RECORDS[persona].identity(ref),
-        "fixture-identity",
-        `identity-${persona}`,
-      );
+    async createVerificationSession(_file, borrowerId) {
+      await sleep(latencyMs);
+      const verificationId = `${PREFIX}.${borrowerId}`;
+      return { verificationId, verificationUrl: `/verify/${verificationId}` };
+    },
+    async getVerification(verificationId) {
+      if (!verificationId.startsWith(`${PREFIX}.`)) return null;
+      await sleep(latencyMs);
+      const doc = PUBLIC_RECORDS[persona].identity(ref);
+      return {
+        verificationId,
+        status: "verified",
+        verifiedAt: new Date().toISOString(),
+        documentName: `${doc.firstName} ${doc.lastName}`,
+        documentDateOfBirth: doc.dateOfBirth,
+        documentAddress: doc.address,
+      };
     },
   };
 }
 
 export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry {
   return {
+    identity: fixtureIdentityConnector(options),
     credit: fixtureCreditConnector(options),
     bank: fixtureBankConnector(options),
     payroll: fixturePayrollConnector(options),
@@ -420,6 +415,5 @@ export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry
     propertyData: fixturePropertyDataConnector(options),
     screening: fixtureScreeningConnector(options),
     liens: fixtureLienConnector(options),
-    identity: fixtureIdentityConnector(options),
   };
 }

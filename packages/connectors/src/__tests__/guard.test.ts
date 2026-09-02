@@ -35,7 +35,6 @@ function emptyFile(consents: LoanFile["consents"] = []): LoanFile {
     flood: null,
     sanctions: null,
     lienSearch: null,
-    identityVerification: null,
     credit: null,
     assets: null,
     payroll: null,
@@ -49,6 +48,7 @@ function emptyFile(consents: LoanFile["consents"] = []): LoanFile {
     sanctionsScreenClear: null,
     ssnValidatedWithSsa: null,
     fraudReviewComplete: false,
+    applicationSignedAt: null,
     intentToProceedAt: null,
     deliveryMethod: "electronic",
   };
@@ -148,9 +148,14 @@ describe("authorization guard", () => {
   });
 
   it("does NOT guard the ID scan, which is how the authorization gets a name on it", async () => {
-    const identity = await registry.identity.verifyIdentity(emptyFile());
-    expect(identity.data.firstName).toBeTruthy();
-    expect(identity.data.documentAuthentic).toBe(true);
+    const session = await registry.identity.createVerificationSession(emptyFile(), "b1");
+    expect(session.verificationId).toBeTruthy();
+    const result = await registry.identity.getVerification(session.verificationId);
+    expect(result?.status).toBe("verified");
+    // Name, date of birth and address come off the document, which is what
+    // lets screen 2 ask for seven things instead of eleven.
+    expect(result?.documentName).toBeTruthy();
+    expect(result?.documentAddress?.line1).toBeTruthy();
   });
 
   it("refuses a lien search with no APN rather than reporting a clean result", async () => {

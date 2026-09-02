@@ -340,6 +340,39 @@ propertyFileRouter.post(
 );
 
 /**
+ * Read the document, before a borrower row exists.
+ *
+ * Joe's `/identity-verification` records a verification against a borrower,
+ * which is the right shape for APP-001 — but screen 2 scans the ID *first* and
+ * uses what is on it to fill in the name, date of birth and address, so there
+ * is no borrower to attach it to yet. This reads the document for that
+ * prefill; the verification proper is still recorded afterwards.
+ *
+ * Unguarded, like the property lookups: it runs before APP-005 exists, and
+ * guarding it would make the authorization unobtainable.
+ */
+propertyFileRouter.post(
+  "/:id/identity-document",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    const file = await requireFile(id, req.user!.id);
+
+    const identity = connectors().identity;
+    const session = await identity.createVerificationSession(file, "prefill");
+    const result = await identity.getVerification(session.verificationId);
+    if (!result || result.status !== "verified") {
+      throw new AppError(422, "We could not read that document.", "DOCUMENT_UNREADABLE");
+    }
+
+    res.status(201).json({
+      documentName: result.documentName ?? null,
+      documentDateOfBirth: result.documentDateOfBirth ?? null,
+      documentAddress: result.documentAddress ?? null,
+    });
+  }),
+);
+
+/**
  * A borrower's disagreement with the county record.
  *
  * Recorded, not applied. The assessor's file is the system of record for
@@ -376,36 +409,6 @@ propertyFileRouter.post(
     );
 
     res.status(201).json({ recorded: true });
-  }),
-);
-
-/** The ID scan and selfie. Unguarded — see the port commentary. */
-propertyFileRouter.post(
-  "/:id/identity-check",
-  asyncRoute(async (req, res) => {
-    const id = z.string().uuid().parse(req.params.id);
-    const file = await requireFile(id, req.user!.id);
-
-    const result = await connectors().identity.verifyIdentity(file);
-    await recordSnapshot(
-      id,
-      "identity",
-      result.provider,
-      result.externalId,
-      result.data,
-      result.retrievedAt,
-    );
-    await recordEvent(
-      id,
-      "identity_verified",
-      result.provider,
-      {
-        documentType: result.data.documentType,
-      },
-      "APP-001",
-    );
-
-    res.status(201).json({ identity: result.data });
   }),
 );
 

@@ -150,18 +150,57 @@ connectorRouter.post(
     );
     await upsertLink(id, "bank", result.provider);
 
-    // The bank report carries employment the payroll connector will later
-    // refine. Recording it now is what makes INC-001 satisfiable on screen 4,
-    // which is what the sheet's "Day 1 Certainty: Yes - employment" claims.
-    await syncEmploymentFromBank(id, result.data.accounts.length > 0);
+    // The bank report carries income and employment, not just assets — the
+    // sheet says so ("Assets + income + employment + cash flow + rent
+    // history") and the real vendors behave that way. Writing them here is
+    // what lets a salaried borrower reach a decision without a payroll step.
+    //
+    // Replaced wholesale rather than merged: a re-pull is the newer truth
+    // about the same twelve months, and merging would double the income.
+    await prisma.$transaction([
+      prisma.incomeSource.deleteMany({ where: { loanFileId: id } }),
+      prisma.incomeSource.createMany({
+        data: result.data.incomeSources.map((s) => ({
+          loanFileId: id,
+          type: s.type,
+          monthlyAmount: s.monthlyAmount,
+          historyMonths: s.historyMonths,
+          continuanceEndDate: s.continuanceEndDate ? new Date(s.continuanceEndDate) : null,
+          continuanceEstablished: s.continuanceEstablished,
+          evidenceDocumentIds: [...s.evidenceDocumentIds],
+        })),
+      }),
+      prisma.employment.deleteMany({ where: { loanFileId: id } }),
+      prisma.employment.createMany({
+        data: result.data.employments.map((e) => ({
+          loanFileId: id,
+          employerName: e.employerName,
+          employerEin: e.employerEin ?? null,
+          position: e.position,
+          startDate: new Date(e.startDate),
+          endDate: e.endDate ? new Date(e.endDate) : null,
+          status: e.status,
+          isMilitary: e.isMilitary,
+          verificationMethod: e.verificationMethod,
+        })),
+      }),
+    ]);
     await recordEvent(id, "connector_pull", result.provider, { kind: "bank" }, "AST-001");
     await advanceStage(id, "PAYROLL");
 
-    res.status(201).json({ report: result.data, provider: result.provider });
+    res.status(201).json({
+      report: result.data,
+      provider: result.provider,
+      // The flow branches on this. "verified" means the borrower is done;
+      // anything else means the payroll step is worth showing them.
+      incomeConfidence: result.data.incomeConfidence,
+      incomeConfidenceReason: result.data.incomeConfidenceReason ?? null,
+      payrollNeeded: result.data.incomeConfidence !== "verified",
+    });
   }),
 );
 
-/** Screen 5 — consumer-permissioned payroll. */
+/** Consumer-permissioned payroll. Conditional: only when the bank cannot stand alone. */
 connectorRouter.post(
   "/:id/payroll",
   asyncRoute(async (req, res) => {
@@ -280,12 +319,4 @@ async function upsertLink(loanFileId: string, kind: string, provider: string): P
     create: { loanFileId, kind, provider, linkedAt: now, lastSyncedAt: now },
     update: { lastSyncedAt: now, status: "active" },
   });
-}
-
-async function syncEmploymentFromBank(loanFileId: string, hasAccounts: boolean): Promise<void> {
-  if (!hasAccounts) return;
-  // Deliberately a no-op beyond the guard: bank-inferred employment is weaker
-  // evidence than the payroll connector, and writing a placeholder record here
-  // would make INC-001 look satisfied by a deposit pattern. Left explicit so
-  // the omission reads as a decision rather than an oversight.
 }

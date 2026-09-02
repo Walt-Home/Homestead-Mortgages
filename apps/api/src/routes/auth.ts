@@ -90,6 +90,11 @@ authRouter.post("/signout", (req, res) => {
 });
 
 /** Never return googleSub or hostedDomain to the browser; neither is its business. */
-function publicUser(user: { id: string; email: string; name: string | null; pictureUrl: string | null }) {
+function publicUser(user: {
+  id: string;
+  email: string;
+  name: string | null;
+  pictureUrl: string | null;
+}) {
   return { id: user.id, email: user.email, name: user.name, pictureUrl: user.pictureUrl };
 }

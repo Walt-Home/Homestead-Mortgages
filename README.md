@@ -23,15 +23,23 @@ API on `:8080`, web on `:5173`.
 
 ## What is here
 
-| Package | What it is |
-|---|---|
+| Package                 | What it is                                                                                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `packages/requirements` | The 77 requirements as a typed registry, with a condition predicate and a satisfaction evaluator for each, plus the dependency graph hiding in the timing column |
-| `packages/underwriting` | The shadow AUS — ratios, reserves, compliance tests and pricing, every number carrying its own derivation |
-| `packages/connectors` | Ports for credit, bank, payroll, IRS and e-sign, with fixture adapters and the authorization guard |
-| `packages/shared` | Domain types. `LoanFile` is the object everything reads |
-| `packages/db` | Prisma schema. Relational for what we query, JSONB snapshots for what a vendor actually said |
-| `apps/api` | Express 5 |
-| `apps/web` | React 19 + Vite. Palette and type stacks ported from Homestead |
+| `packages/underwriting` | The shadow AUS — ratios, reserves, compliance tests and pricing, every number carrying its own derivation                                                        |
+| `packages/connectors`   | Ports for credit, bank, payroll, IRS and e-sign, with fixture adapters and the authorization guard                                                               |
+| `packages/shared`       | Domain types. `LoanFile` is the object everything reads                                                                                                          |
+| `packages/db`           | Prisma schema. Relational for what we query, JSONB snapshots for what a vendor actually said                                                                     |
+| `apps/api`              | Express 5                                                                                                                                                        |
+| `apps/web`              | React 19 + Vite. Palette and type stacks ported from Homestead                                                                                                   |
+
+## The borrower sees four screens
+
+Property → About you → Your bank → Review. The engine still evaluates all 77
+requirements across its own nine screens; it simply stopped rendering to the
+borrower. Payroll, IRS transcripts and document upload are conditional
+branches that most files never see. `?debug=1` on any file URL shows the
+engine view. See `CLAUDE.md` for the rules and the list of known stubs.
 
 ## The three things worth knowing before changing anything
 

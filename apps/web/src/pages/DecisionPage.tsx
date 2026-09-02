@@ -73,7 +73,9 @@ export function DecisionPage() {
   const [showWork, setShowWork] = useState(false);
   const [recomputing, setRecomputing] = useState(false);
   const [intentSaving, setIntentSaving] = useState(false);
-  const intentRecorded = Boolean(fileData?.file && (fileData.file as { intentToProceedAt?: string | null }).intentToProceedAt);
+  const intentRecorded = Boolean(
+    fileData?.file && (fileData.file as { intentToProceedAt?: string | null }).intentToProceedAt,
+  );
 
   async function recordIntent() {
     setIntentSaving(true);
@@ -135,7 +137,8 @@ export function DecisionPage() {
       <div className="card">
         <h1 className="font-brand text-[22px] font-semibold text-ink-editorial">Where you stand</h1>
         <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
-          We have what we need. This takes a moment and shows you the arithmetic, not just a verdict.
+          We have what we need. This takes a moment and shows you the arithmetic, not just a
+          verdict.
         </p>
         {readOnly ? (
           <p className="mt-6 text-[13px] text-subtle">
@@ -173,12 +176,7 @@ export function DecisionPage() {
         <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-4 border-t border-line-light pt-5 sm:grid-cols-4">
           <Figure label="Debt-to-income" value={result.ratios.dtiBack} suffix="%" />
           <Figure label="Loan-to-value" value={result.ratios.ltv} suffix="%" />
-          <Figure
-            label="Monthly payment"
-            value={result.ratios.housingPitia}
-            prefix="$"
-            round
-          />
+          <Figure label="Monthly payment" value={result.ratios.housingPitia} prefix="$" round />
           <Figure label="Reserves" value={result.reserves.actualMonths} suffix=" mo" />
         </div>
 
@@ -268,7 +266,11 @@ export function DecisionPage() {
             Saying yes tells us to keep working on this. It is not a commitment to borrow, and you
             can stop at any point.
           </p>
-          <button className="btn-primary mt-4" onClick={() => void recordIntent()} disabled={intentSaving}>
+          <button
+            className="btn-primary mt-4"
+            onClick={() => void recordIntent()}
+            disabled={intentSaving}
+          >
             {intentSaving ? "Saving…" : "Yes, keep going"}
           </button>
         </div>

@@ -39,10 +39,7 @@ export type RequirementSource =
 
 /** What happens if the requirement is not satisfied. Drives triage order. */
 export type FailureSeverity =
-  | "regulatory_violation"
-  | "repurchase_unsaleable"
-  | "financial_loss"
-  | "rework_delay";
+  "regulatory_violation" | "repurchase_unsaleable" | "financial_loss" | "rework_delay";
 
 /**
  * Whether a connector can satisfy this on day one without human follow-up.

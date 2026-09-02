@@ -23,7 +23,7 @@ import { GUIDELINES, mortgageInsuranceRate } from "./guidelines.js";
  * Replacing this with a real tax and insurance lookup is the single highest-
  * value accuracy improvement available to the decision engine.
  */
-const ESCROW_ASSUMPTION = {
+export const ESCROW_ASSUMPTION = {
   annualTaxRate: 0.011,
   annualInsuranceRate: 0.0035,
 };
@@ -52,7 +52,9 @@ export function representativeFico(file: LoanFile, log: DerivationLog): number |
 
 export function revolvingUtilization(file: LoanFile, log: DerivationLog): number | null {
   if (!file.credit) return log.blocked("CRD-016", "Revolving utilization", ["credit report"]);
-  const revolving = file.credit.tradelines.filter((t) => t.type === "revolving" || t.type === "heloc");
+  const revolving = file.credit.tradelines.filter(
+    (t) => t.type === "revolving" || t.type === "heloc",
+  );
   const limit = revolving.reduce((sum, t) => sum + (t.creditLimit ?? 0), 0);
   if (limit === 0) {
     return log.record("CRD-016", "Revolving utilization", 0, "no revolving limit on file", {
@@ -102,7 +104,11 @@ export function monthlyBaseIncome(file: LoanFile, log: DerivationLog): number | 
 }
 
 /** Principal and interest on a fully amortizing fixed-rate loan. */
-function monthlyPrincipalAndInterest(amount: number, annualRate: number, termMonths: number): number {
+export function monthlyPrincipalAndInterest(
+  amount: number,
+  annualRate: number,
+  termMonths: number,
+): number {
   const r = annualRate / 100 / 12;
   if (r === 0) return amount / termMonths;
   return (amount * r) / (1 - Math.pow(1 + r, -termMonths));
@@ -189,10 +195,14 @@ export function debtToIncome(file: LoanFile, log: DerivationLog): DtiResult {
   const liabilities = monthlyLiabilities(file, log);
 
   if (income === null || income === 0 || pitia === null) {
-    log.blocked("UW-004", "DTI", [
-      income === null || income === 0 ? "qualifying income" : null,
-      pitia === null ? "housing payment" : null,
-    ].filter((x): x is string => x !== null));
+    log.blocked(
+      "UW-004",
+      "DTI",
+      [
+        income === null || income === 0 ? "qualifying income" : null,
+        pitia === null ? "housing payment" : null,
+      ].filter((x): x is string => x !== null),
+    );
     return { front: null, back: null, pitia, totalDebt: null, income };
   }
 
@@ -244,7 +254,13 @@ export function loanToValue(file: LoanFile, log: DerivationLog): LtvResult {
   };
 
   return {
-    ltv: log.record("UW-005", "LTV", round((file.loan.loanAmount / value) * 100), "loan_amount / value", inputs),
+    ltv: log.record(
+      "UW-005",
+      "LTV",
+      round((file.loan.loanAmount / value) * 100),
+      "loan_amount / value",
+      inputs,
+    ),
     cltv: log.record(
       "UW-005",
       "CLTV",
@@ -309,7 +325,12 @@ export function reserves(
 ): ReserveResult {
   if (!file.property) {
     log.blocked("AST-003", "Reserve requirement", ["property"]);
-    return { requiredMonths: null, actualMonths: null, eligiblePostCloseAssets: null, satisfied: null };
+    return {
+      requiredMonths: null,
+      actualMonths: null,
+      eligiblePostCloseAssets: null,
+      satisfied: null,
+    };
   }
 
   const g = GUIDELINES.reserves;
@@ -333,11 +354,15 @@ export function reserves(
   );
 
   if (!file.assets || pitia === null || fundsNeeded === null) {
-    log.blocked("AST-004", "Reserves satisfied", [
-      !file.assets ? "bank connection" : null,
-      pitia === null ? "housing payment" : null,
-      fundsNeeded === null ? "funds to close" : null,
-    ].filter((x): x is string => x !== null));
+    log.blocked(
+      "AST-004",
+      "Reserves satisfied",
+      [
+        !file.assets ? "bank connection" : null,
+        pitia === null ? "housing payment" : null,
+        fundsNeeded === null ? "funds to close" : null,
+      ].filter((x): x is string => x !== null),
+    );
     return { requiredMonths, actualMonths: null, eligiblePostCloseAssets: null, satisfied: null };
   }
 
@@ -349,9 +374,7 @@ export function reserves(
     .reduce(
       (sum, a) =>
         sum +
-        (a.type === "retirement"
-          ? (a.vestedBalance ?? 0) * RETIREMENT_HAIRCUT
-          : a.currentBalance),
+        (a.type === "retirement" ? (a.vestedBalance ?? 0) * RETIREMENT_HAIRCUT : a.currentBalance),
       0,
     );
 

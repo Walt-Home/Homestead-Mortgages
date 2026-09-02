@@ -10,11 +10,7 @@
  * same interface — see `docs/decisions.md`.
  */
 export type AusRecommendation =
-  | "approve_eligible"
-  | "approve_ineligible"
-  | "refer"
-  | "refer_with_caution"
-  | "out_of_scope";
+  "approve_eligible" | "approve_ineligible" | "refer" | "refer_with_caution" | "out_of_scope";
 
 export interface AusFinding {
   /** The requirement this finding maps to, where one exists (UW-003). */
@@ -107,11 +103,7 @@ export interface ComplianceTests {
 }
 
 export type DecisionOutcome =
-  | "pending"
-  | "approved_with_conditions"
-  | "clear_to_close"
-  | "counteroffer"
-  | "denied";
+  "pending" | "approved_with_conditions" | "clear_to_close" | "counteroffer" | "denied";
 
 export interface Decision {
   readonly outcome: DecisionOutcome;

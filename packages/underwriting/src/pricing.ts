@@ -21,11 +21,46 @@ export interface PricingResult {
 
 /** FICO band → LTV band → basis points. Illustrative; see the file header. */
 const FICO_LTV_GRID: { minFico: number; bands: { maxLtv: number; bps: number }[] }[] = [
-  { minFico: 780, bands: [{ maxLtv: 60, bps: 0 }, { maxLtv: 80, bps: 0 }, { maxLtv: 97, bps: 38 }] },
-  { minFico: 740, bands: [{ maxLtv: 60, bps: 0 }, { maxLtv: 80, bps: 13 }, { maxLtv: 97, bps: 63 }] },
-  { minFico: 700, bands: [{ maxLtv: 60, bps: 0 }, { maxLtv: 80, bps: 50 }, { maxLtv: 97, bps: 113 }] },
-  { minFico: 660, bands: [{ maxLtv: 60, bps: 25 }, { maxLtv: 80, bps: 100 }, { maxLtv: 97, bps: 175 }] },
-  { minFico: 620, bands: [{ maxLtv: 60, bps: 63 }, { maxLtv: 80, bps: 163 }, { maxLtv: 97, bps: 288 }] },
+  {
+    minFico: 780,
+    bands: [
+      { maxLtv: 60, bps: 0 },
+      { maxLtv: 80, bps: 0 },
+      { maxLtv: 97, bps: 38 },
+    ],
+  },
+  {
+    minFico: 740,
+    bands: [
+      { maxLtv: 60, bps: 0 },
+      { maxLtv: 80, bps: 13 },
+      { maxLtv: 97, bps: 63 },
+    ],
+  },
+  {
+    minFico: 700,
+    bands: [
+      { maxLtv: 60, bps: 0 },
+      { maxLtv: 80, bps: 50 },
+      { maxLtv: 97, bps: 113 },
+    ],
+  },
+  {
+    minFico: 660,
+    bands: [
+      { maxLtv: 60, bps: 25 },
+      { maxLtv: 80, bps: 100 },
+      { maxLtv: 97, bps: 175 },
+    ],
+  },
+  {
+    minFico: 620,
+    bands: [
+      { maxLtv: 60, bps: 63 },
+      { maxLtv: 80, bps: 163 },
+      { maxLtv: 97, bps: 288 },
+    ],
+  },
 ];
 
 export function priceLoan(
@@ -35,11 +70,15 @@ export function priceLoan(
   log: DerivationLog,
 ): PricingResult {
   if (fico === null || ltv === null || !file.property || !file.loan) {
-    log.blocked("UW-010", "Pricing adjustments", [
-      fico === null ? "representative FICO" : null,
-      ltv === null ? "LTV" : null,
-      !file.property ? "property" : null,
-    ].filter((x): x is string => x !== null));
+    log.blocked(
+      "UW-010",
+      "Pricing adjustments",
+      [
+        fico === null ? "representative FICO" : null,
+        ltv === null ? "LTV" : null,
+        !file.property ? "property" : null,
+      ].filter((x): x is string => x !== null),
+    );
     return { llpaTotalBps: null, adjustments: [] };
   }
 

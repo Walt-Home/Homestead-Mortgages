@@ -195,7 +195,14 @@ function parseTiming(prose) {
 
   m = /^3 business days from ([A-Z]{2,3}-\d{3})$/.exec(prose);
   if (m)
-    return { kind: "deadline", from: "requirement", refs: [m[1]], amount: 3, unit: "business_days", prose };
+    return {
+      kind: "deadline",
+      from: "requirement",
+      refs: [m[1]],
+      amount: 3,
+      unit: "business_days",
+      prose,
+    };
 
   throw new Error(`Unrecognised timing constraint: ${JSON.stringify(prose)}`);
 }
@@ -284,17 +291,23 @@ if (verify) {
   try {
     current = readFileSync(OUT, "utf8");
   } catch {
-    console.error("✗ packages/requirements/src/generated.ts is missing. Run: npm run requirements:build");
+    console.error(
+      "✗ packages/requirements/src/generated.ts is missing. Run: npm run requirements:build",
+    );
     process.exit(1);
   }
   if (current !== out) {
-    console.error("✗ generated.ts is out of date with data/v1-build.csv. Run: npm run requirements:build");
+    console.error(
+      "✗ generated.ts is out of date with data/v1-build.csv. Run: npm run requirements:build",
+    );
     process.exit(1);
   }
   console.log(`✓ ${requirements.length} requirements, registry matches the sheet`);
 } else {
   writeFileSync(OUT, out);
-  console.log(`✓ wrote ${requirements.length} requirements to packages/requirements/src/generated.ts`);
+  console.log(
+    `✓ wrote ${requirements.length} requirements to packages/requirements/src/generated.ts`,
+  );
   if (dangling.length) {
     console.log(`  ${dangling.length} dangling reference(s) to undefined requirements:`);
     for (const d of dangling) console.log(`    ${d.from} → ${d.to}`);

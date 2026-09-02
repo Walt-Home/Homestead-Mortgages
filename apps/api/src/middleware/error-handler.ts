@@ -19,7 +19,11 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   // step, and it can only do that if the response says which consent.
   if (err instanceof AuthorizationError) {
     res.status(403).json({
-      error: { message: err.message, code: "AUTHORIZATION_REQUIRED", requirementId: err.requirementId },
+      error: {
+        message: err.message,
+        code: "AUTHORIZATION_REQUIRED",
+        requirementId: err.requirementId,
+      },
     });
     return;
   }

@@ -100,7 +100,10 @@ export function assessAll(file: LoanFile): readonly Assessment[] {
     return {
       requirement,
       applies: applicabilities.get(requirement.id) ?? null,
-      satisfaction: satisfactions.get(requirement.id) ?? { status: "blocked", waitingFor: "unknown" },
+      satisfaction: satisfactions.get(requirement.id) ?? {
+        status: "blocked",
+        waitingFor: "unknown",
+      },
       blockedBy,
     };
   });
@@ -121,7 +124,8 @@ export function outstanding(file: LoanFile): readonly Assessment[] {
     .filter((a) => a.blockedBy.length === 0)
     .sort(
       (a, b) =>
-        SEVERITY_RANK[a.requirement.failureSeverity] - SEVERITY_RANK[b.requirement.failureSeverity] ||
+        SEVERITY_RANK[a.requirement.failureSeverity] -
+          SEVERITY_RANK[b.requirement.failureSeverity] ||
         a.requirement.screenOrdinal - b.requirement.screenOrdinal ||
         a.requirement.id.localeCompare(b.requirement.id),
     );

@@ -1,20 +1,21 @@
 import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Stepper, type ScreenPath } from "./components/Stepper.js";
-import { RequirementRail } from "./components/RequirementRail.js";
+import { Stepper } from "./components/Stepper.js";
 import { PrototypeBanner } from "./components/PrototypeBanner.js";
+import { DebugPanel } from "./components/DebugPanel.js";
 import { api, ApiError, type Assessment } from "./lib/api.js";
 import { useAuth } from "./lib/auth.js";
-import { STAGE_TO_PATH, useLoanFile } from "./lib/file.js";
+import { useLoanFile } from "./lib/file.js";
+import { STAGE_TO_SCREEN, debugEnabled, screenIndex, type ScreenPath } from "./lib/flow.js";
 import { SignInPage } from "./pages/SignInPage.js";
 import { PrivacyPage } from "./pages/PrivacyPage.js";
 import { FilesPage } from "./pages/FilesPage.js";
 import { PropertyLoanPage } from "./pages/PropertyLoanPage.js";
 import { IdentityPage } from "./pages/IdentityPage.js";
-import { BankPage, CreditPage, IrsPage, PayrollPage } from "./pages/ConnectPages.js";
+import { BankPage } from "./pages/BankPage.js";
+import { ReviewPage } from "./pages/ReviewPage.js";
+import { IrsPage, PayrollPage } from "./pages/ConnectPages.js";
 import { UploadPage } from "./pages/UploadPage.js";
-import { DecisionPage } from "./pages/DecisionPage.js";
-import { ConsentPage } from "./pages/ConsentPage.js";
 
 export function App() {
   const { status } = useAuth();
@@ -26,8 +27,6 @@ export function App() {
   if (status === "signed-out") {
     return (
       <Routes>
-        {/* The banner links here from the sign-in page too, so somebody deciding
-            whether to hand over their details can read what happens to them. */}
         <Route path="/privacy" element={<Chrome />}>
           <Route index element={<PrivacyPage />} />
         </Route>
@@ -43,24 +42,34 @@ export function App() {
         <Route path="privacy" element={<PrivacyPage />} />
       </Route>
 
-      {/* Screen 1 runs before a file exists, so there is nothing to assess yet
-          and no rail to show. Every later screen has both. */}
-      <Route path="/f/new" element={<Shell screen="property" hideRail />}>
+      {/* Screen 1 runs before a file exists. */}
+      <Route path="/f/new" element={<Shell screen="property" />}>
         <Route path="property" element={<PropertyLoanPage />} />
       </Route>
 
       <Route path="/f/:fileId" element={<FileShell />}>
-        {/* Bare /f/:id used to render an empty shell. It now resumes. */}
         <Route index element={<ResumeToStage />} />
+        {/* The four screens. */}
         <Route path="property" element={<PropertyLoanPage />} />
         <Route path="identity" element={<IdentityPage />} />
-        <Route path="credit" element={<CreditPage />} />
         <Route path="bank" element={<BankPage />} />
+        <Route path="review" element={<ReviewShim />} />
+        {/*
+          The three branches. Reachable, routable, resumable — and absent from
+          `SCREENS`, so they never appear in the step nav or the step count.
+        */}
         <Route path="payroll" element={<PayrollPage />} />
         <Route path="irs" element={<IrsPage />} />
-        <Route path="upload" element={<UploadPage />} />
-        <Route path="decision" element={<DecisionPage />} />
-        <Route path="consent" element={<ConsentPage />} />
+        <Route path="documents" element={<UploadPage />} />
+        {/*
+          Old paths. Screens 3–7 of the previous flow were bookmarkable and
+          somebody has those links open; a 404 for "credit" would read as a
+          lost file rather than a moved screen.
+        */}
+        <Route path="credit" element={<Navigate to="../identity" replace />} />
+        <Route path="upload" element={<Navigate to="../documents" replace />} />
+        <Route path="decision" element={<Navigate to="../review" replace />} />
+        <Route path="consent" element={<Navigate to="../review" replace />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -75,32 +84,46 @@ function ResumeToStage() {
   if (isLoading) return <p className="text-[13px] text-subtle">Finding your place…</p>;
   const stage = data?.file.stage;
   if (!stage) return <Navigate to="/" replace />;
-  return <Navigate to={`/f/${fileId}/${STAGE_TO_PATH[stage]}`} replace />;
+  return <Navigate to={`/f/${fileId}/${STAGE_TO_SCREEN[stage]}`} replace />;
 }
 
 /**
- * The shell for a file that exists.
- *
- * The rail is keyed on the path as well as the file, so moving between screens
- * refetches — a connector call on the previous screen changes what is
- * outstanding on this one, and a cached rail reads as the product not noticing
- * what you just did.
+ * The review screen needs the assessment to decide which branches to offer.
+ * It is the only screen that does, which is why the query lives here rather
+ * than in the shell — every other screen used to pay for a rail it now has no
+ * use for.
  */
-function FileShell() {
+function ReviewShim() {
   const { fileId } = useParams<{ fileId: string }>();
-  const location = useLocation();
-  const screen = (location.pathname.split("/").pop() ?? "identity") as ScreenPath;
-
-  const file = useLoanFile(fileId);
   const assessment = useQuery({
-    queryKey: ["assessment", fileId, screen],
+    queryKey: ["assessment", fileId, "review"],
     queryFn: () => api.get<Assessment>(`/requirements/${fileId}/assessment`),
     enabled: Boolean(fileId),
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
   });
+  return <ReviewPage assessment={assessment.data} />;
+}
 
-  // A 404 on the file means it is not this account's, which is exactly what a
-  // shared link produces. Saying so beats a blank screen and a console error.
+function FileShell() {
+  const { fileId } = useParams<{ fileId: string }>();
+  const location = useLocation();
+  const last = location.pathname.split("/").pop() ?? "property";
+  // Branch paths are not steps. While on one, the nav keeps showing the step
+  // the borrower is actually inside — which is the review screen they came
+  // from and will go back to.
+  const screen = (screenIndex(last) === -1 ? "review" : last) as ScreenPath;
+
+  const file = useLoanFile(fileId);
+  const debug = debugEnabled(location.search);
+
+  const assessment = useQuery({
+    queryKey: ["assessment", fileId, "debug"],
+    queryFn: () => api.get<Assessment>(`/requirements/${fileId}/assessment`),
+    // Only fetched for the debug surface. The borrower flow does not need it.
+    enabled: Boolean(fileId) && debug,
+    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
+  });
+
   if (file.error instanceof ApiError && file.error.status === 404) {
     return <NotYours />;
   }
@@ -110,9 +133,11 @@ function FileShell() {
       screen={screen}
       fileId={fileId}
       reached={file.data?.file.stage}
+      isDemo={file.data?.file.isDemo}
+      debug={debug}
       assessment={assessment.data}
       assessmentFailed={Boolean(assessment.error)}
-      isDemo={file.data?.file.isDemo}
+      file={file.data?.file}
     />
   );
 }
@@ -122,7 +147,7 @@ function NotYours() {
     <div className="min-h-screen bg-canvas">
       <PrototypeBanner />
       <Header />
-      <div className="mx-auto max-w-2xl px-6 py-16">
+      <div className="mx-auto max-w-2xl px-5 py-16 sm:px-6">
         <h1 className="font-brand text-[24px] font-semibold text-ink-editorial">
           We can&rsquo;t find that file
         </h1>
@@ -138,7 +163,6 @@ function NotYours() {
   );
 }
 
-/** Header and banner without the flow chrome, for pages outside a file. */
 function Chrome() {
   return (
     <div className="min-h-screen bg-canvas">
@@ -153,14 +177,14 @@ function Header({ children }: { children?: React.ReactNode }) {
   const { user, signOut } = useAuth();
   return (
     <header className="border-b border-line-light bg-app/70 backdrop-blur">
-      <div className="mx-auto max-w-5xl px-6 py-4">
+      <div className="mx-auto max-w-2xl px-5 py-4 sm:px-6">
         <div className="flex items-center justify-between gap-4">
           <a href="/" className="font-brand text-[15px] font-bold tracking-tight text-gold">
             Homestead Mortgages
           </a>
           {user && (
             <div className="flex items-center gap-3 text-[12px]">
-              <span className="text-meta">{user.email}</span>
+              <span className="hidden text-meta sm:inline">{user.email}</span>
               <button
                 className="text-subtle underline-offset-2 hover:underline"
                 onClick={() => void signOut()}
@@ -170,28 +194,37 @@ function Header({ children }: { children?: React.ReactNode }) {
             </div>
           )}
         </div>
-        {children && <div className="mt-3">{children}</div>}
+        {children && <div className="mt-4">{children}</div>}
       </div>
     </header>
   );
 }
 
+/**
+ * One card, centred, single column. No rail.
+ *
+ * `max-w-2xl` rather than the old `max-w-5xl`: that width existed to seat a
+ * 20rem sidebar beside the content, and without it a form line grows past a
+ * comfortable measure.
+ */
 function Shell({
   screen,
   fileId,
   reached,
+  isDemo,
+  debug,
   assessment,
   assessmentFailed,
-  isDemo,
-  hideRail = false,
+  file,
 }: {
   screen: ScreenPath;
   fileId?: string;
-  reached?: import("./lib/file.js").FlowStage;
+  reached?: import("./lib/flow.js").FlowStage;
+  isDemo?: boolean;
+  debug?: boolean;
   assessment?: Assessment;
   assessmentFailed?: boolean;
-  isDemo?: boolean;
-  hideRail?: boolean;
+  file?: unknown;
 }) {
   return (
     <div className="min-h-screen bg-canvas">
@@ -202,18 +235,15 @@ function Shell({
 
       {isDemo && (
         <div className="border-b border-olive-border bg-olive-light">
-          <p className="mx-auto max-w-5xl px-6 py-2 text-[12px] text-olive">
-            A sample borrower, shared with everyone and read-only. Start your own file to walk
-            through the flow.
+          <p className="mx-auto max-w-2xl px-5 py-2 text-[12px] text-olive sm:px-6">
+            A sample borrower, shared with everyone and read-only.
           </p>
         </div>
       )}
 
-      <main className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10 lg:flex-row">
-        <div className="min-w-0 flex-1">
-          <Outlet />
-        </div>
-        {!hideRail && <RequirementRail assessment={assessment} failed={assessmentFailed} />}
+      <main className="mx-auto max-w-2xl px-5 py-8 sm:px-6 sm:py-10">
+        <Outlet />
+        {debug && <DebugPanel assessment={assessment} failed={assessmentFailed} file={file} />}
       </main>
     </div>
   );

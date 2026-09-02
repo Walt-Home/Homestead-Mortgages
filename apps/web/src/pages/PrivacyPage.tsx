@@ -25,21 +25,19 @@ export function PrivacyPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <h1 className="font-brand text-[26px] font-semibold text-ink-editorial">
-        What this keeps
-      </h1>
+      <h1 className="font-brand text-[26px] font-semibold text-ink-editorial">What this keeps</h1>
 
       <div className="mt-6 space-y-5 font-prose text-[16px] leading-relaxed text-ink-prose">
         <p>
-          This is a prototype we are testing. It is not a lender, nothing it
-          shows you is an offer, and no part of it touches your real credit,
-          bank or payroll.
+          This is a prototype we are testing. It is not a lender, nothing it shows you is an offer,
+          and no part of it touches your real credit, bank or payroll.
         </p>
         <p>
-          <strong className="font-semibold">Your Social Security number never leaves your browser.</strong>{" "}
-          The form asks for it because the real product would, but only the last
-          four digits are ever sent to us. The rest is discarded the moment you
-          move to the next screen.
+          <strong className="font-semibold">
+            Your Social Security number never leaves your browser.
+          </strong>{" "}
+          The form asks for it because the real product would, but only the last four digits are
+          ever sent to us. The rest is discarded the moment you move to the next screen.
         </p>
         <p>What we do store, because the flow needs it:</p>
       </div>
@@ -54,14 +52,12 @@ export function PrivacyPage() {
 
       <div className="mt-6 space-y-5 font-prose text-[16px] leading-relaxed text-ink-prose">
         <p>
-          It sits in a private database that only our team can reach. We do not
-          sell it, share it, or send it anywhere else. There is no marketing
-          list.
+          It sits in a private database that only our team can reach. We do not sell it, share it,
+          or send it anywhere else. There is no marketing list.
         </p>
         <p>
-          You can take all of it back at any time. Deleting removes your
-          account, every file you started and everything attached to them, for
-          good — there is no archive and no undo.
+          You can take all of it back at any time. Deleting removes your account, every file you
+          started and everything attached to them, for good — there is no archive and no undo.
         </p>
       </div>
 
@@ -114,8 +110,8 @@ export function PrivacyPage() {
             Nothing stored for you yet
           </h2>
           <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
-            You are not signed in, so there is nothing of yours here. Sign in and this is where
-            you can delete it again.
+            You are not signed in, so there is nothing of yours here. Sign in and this is where you
+            can delete it again.
           </p>
         </div>
       )}

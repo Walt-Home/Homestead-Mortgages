@@ -11,6 +11,7 @@ import { authRouter } from "./routes/auth.js";
 import { healthRouter } from "./routes/health.js";
 import { fileRouter } from "./routes/files.js";
 import { connectorRouter } from "./routes/connectors.js";
+import { propertyRouter, propertyFileRouter } from "./routes/property.js";
 import { requirementRouter } from "./routes/requirements.js";
 import { decisionRouter } from "./routes/decision.js";
 import { esignRouter } from "./routes/esign.js";
@@ -68,11 +69,13 @@ app.use("/api/auth", authRouter);
 app.use("/api", requireAuth);
 
 app.use("/api/requirements", requirementRouter);
+app.use("/api/property", propertyRouter);
 app.use("/api/files", fileRouter);
 app.use("/api/files", connectorRouter);
 app.use("/api/files", decisionRouter);
 app.use("/api/files", esignRouter);
 app.use("/api/files", documentRouter);
+app.use("/api/files", propertyFileRouter);
 
 // An unmatched /api path fell through to the SPA fallback and returned HTML,
 // which the client then tried to parse as JSON — turning "no such endpoint"
@@ -96,7 +99,9 @@ app.listen(config.port, () => {
   if (config.connectorMode === "fixture") {
     console.log(`Fixture persona: ${config.fixturePersona}`);
   }
-  console.log(`SPA: ${spaServed ? "served from apps/web/dist" : "not built (Vite serves it in dev)"}`);
+  console.log(
+    `SPA: ${spaServed ? "served from apps/web/dist" : "not built (Vite serves it in dev)"}`,
+  );
   console.log(
     `Auth: Google sign-in${config.googleClientId ? "" : " (NOT CONFIGURED — developer sign-in only)"}` +
       `${config.allowedDomain ? `, limited to ${config.allowedDomain}` : ""}`,

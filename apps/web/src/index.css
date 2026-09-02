@@ -97,9 +97,18 @@
     @apply block text-[13px] font-medium text-ink-soft mb-1.5;
   }
 
+  /*
+   * 16px on small screens, not 15px.
+   *
+   * iOS Safari zooms the viewport on focus for any input under 16px, and it
+   * does not zoom back out. On a mobile-first flow that turns every field in
+   * the form into a jarring jump the borrower has to pinch their way out of.
+   * The 15px is kept above the breakpoint, where it is a type choice rather
+   * than a behaviour trigger.
+   */
   .field-input {
-    @apply w-full rounded-form border border-line-form bg-app px-3 py-2.5 text-[15px] text-ink
-           outline-none transition-shadow;
+    @apply w-full rounded-form border border-line-form bg-app px-3 py-2.5 text-[16px] text-ink
+           outline-none transition-shadow sm:text-[15px];
   }
   .field-input:focus {
     box-shadow: 0 0 0 3px var(--hm-focus);

@@ -34,6 +34,12 @@ function afterIdentity(): LoanFile {
     createdAt: REFERENCE.toISOString(),
     updatedAt: REFERENCE.toISOString(),
     stage: "credit",
+    propertyRecord: null,
+    valuation: null,
+    flood: null,
+    sanctions: null,
+    lienSearch: null,
+    identityVerification: null,
     property: {
       address: { line1: "1 Example St", city: "Austin", state: "TX", postalCode: "78701" },
       deliverableAddressVerified: true,
@@ -69,6 +75,7 @@ function afterIdentity(): LoanFile {
         phone: "512-555-0100",
         currentAddress: { line1: "9 Rent Rd", city: "Austin", state: "TX", postalCode: "78704" },
         maritalStatus: "unmarried",
+        citizenship: "us_citizen",
         nonBorrowingSpouseSignatureRequired: false,
         preferredLanguage: "en",
         demographics: {

@@ -97,14 +97,21 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
     if (bankruptcy) {
       const reference = bankruptcy.dischargeDate ?? bankruptcy.date;
       const months = monthsBetween(reference, now);
-      const minimum = bankruptcy.chapter === "13"
-        ? GUIDELINES.credit.bankruptcyChapter13SeasoningMonths
-        : GUIDELINES.credit.bankruptcyChapter7SeasoningMonths;
-      log.record("CRD-006", "Bankruptcy seasoning", months, `months since discharge vs ${minimum} minimum`, {
-        chapter_type: bankruptcy.chapter ?? "unknown",
-        discharge_date: reference,
-        minimum_months: minimum,
-      });
+      const minimum =
+        bankruptcy.chapter === "13"
+          ? GUIDELINES.credit.bankruptcyChapter13SeasoningMonths
+          : GUIDELINES.credit.bankruptcyChapter7SeasoningMonths;
+      log.record(
+        "CRD-006",
+        "Bankruptcy seasoning",
+        months,
+        `months since discharge vs ${minimum} minimum`,
+        {
+          chapter_type: bankruptcy.chapter ?? "unknown",
+          discharge_date: reference,
+          minimum_months: minimum,
+        },
+      );
       if (months < minimum) {
         findings.push({
           requirementId: "CRD-006",
@@ -124,11 +131,17 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
         significant.type === "foreclosure"
           ? GUIDELINES.credit.foreclosureSeasoningMonths
           : GUIDELINES.credit.shortSaleOrDilSeasoningMonths;
-      log.record("CRD-007", "Derogatory seasoning", months, `months since event vs ${minimum} minimum`, {
-        event_type: significant.type,
-        event_date: significant.date,
-        minimum_months: minimum,
-      });
+      log.record(
+        "CRD-007",
+        "Derogatory seasoning",
+        months,
+        `months since event vs ${minimum} minimum`,
+        {
+          event_type: significant.type,
+          event_date: significant.date,
+          minimum_months: minimum,
+        },
+      );
       if (months < minimum) {
         findings.push({
           requirementId: "CRD-007",
@@ -148,7 +161,10 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
     const annualDocumented = file.incomeSources.reduce((s, i) => s + i.monthlyAmount, 0) * 12;
     const latest = [...file.transcripts].sort((a, b) => b.taxYear - a.taxYear)[0];
     if (latest) {
-      const variance = annualDocumented === 0 ? 0 : round(((annualDocumented - latest.wages) / latest.wages) * 100);
+      const variance =
+        annualDocumented === 0
+          ? 0
+          : round(((annualDocumented - latest.wages) / latest.wages) * 100);
       const TOLERANCE_PERCENT = 10;
       log.record(
         "INC-009",
@@ -224,13 +240,20 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
       file.property.occupancy === "investment"
         ? GUIDELINES.ipc.investmentMaxPercent
         : (GUIDELINES.ipc.primaryAndSecondHome.find((b) => ltv.ltv! >= b.minLtv)?.maxPercent ?? 9);
-    const ratio = file.property.valueOrPrice === 0 ? 0 : round((ipcTotal / file.property.valueOrPrice) * 100);
-    log.record("AST-016", "Interested party contributions", ratio, `ipc_total / sales_price vs a ${cap}% cap`, {
-      ipc_total: ipcTotal,
-      sales_price: file.property.valueOrPrice,
-      cap_percent: cap,
-      ltv: ltv.ltv,
-    });
+    const ratio =
+      file.property.valueOrPrice === 0 ? 0 : round((ipcTotal / file.property.valueOrPrice) * 100);
+    log.record(
+      "AST-016",
+      "Interested party contributions",
+      ratio,
+      `ipc_total / sales_price vs a ${cap}% cap`,
+      {
+        ipc_total: ipcTotal,
+        sales_price: file.property.valueOrPrice,
+        cap_percent: cap,
+        ltv: ltv.ltv,
+      },
+    );
     if (ratio > cap) {
       findings.push({
         requirementId: "AST-016",
@@ -288,9 +311,15 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
   );
 
   if (file.product && file.product.overlays.length > 0) {
-    log.record("UW-013", "Investor overlays", file.product.overlays.length, "overlays checked in addition to the agency guide", {
-      overlays: file.product.overlays.join(", "),
-    });
+    log.record(
+      "UW-013",
+      "Investor overlays",
+      file.product.overlays.length,
+      "overlays checked in addition to the agency guide",
+      {
+        overlays: file.product.overlays.join(", "),
+      },
+    );
   }
 
   /* ── Recommendation ───────────────────────────────────────────────────── */
@@ -352,7 +381,10 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
   };
 }
 
-function determineRecommendation(findings: readonly AusFinding[], hasBlockedInputs: boolean): AusRecommendation {
+function determineRecommendation(
+  findings: readonly AusFinding[],
+  hasBlockedInputs: boolean,
+): AusRecommendation {
   const ineligible = findings.some((f) => f.category === "eligibility");
   if (ineligible) return "approve_ineligible";
   // A file with unresolved inputs is a Refer, not an Approve. The distinction

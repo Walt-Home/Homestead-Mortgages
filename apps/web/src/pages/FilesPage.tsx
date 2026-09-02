@@ -1,30 +1,31 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api.js";
-import { STAGE_TO_PATH, type FlowStage } from "../lib/file.js";
-
 /**
- * What you can open: your own files, and the shared demo set.
+ * The front door.
  *
- * The demo files are the reason this page exists. Without somewhere to list
- * them they are reachable only by pasting a UUID, which makes "here is a
- * completed decision to critique" a thing that has to be arranged rather than
- * found.
+ * This used to be a file manager — "Your files", a list, a table of stages.
+ * That is the right first screen for the team and the wrong one for a
+ * borrower, who arrives wanting a mortgage and gets shown an inbox.
+ *
+ * Now it is a pitch and two doors: start, or pick up where you left off. The
+ * second only exists when there is something to pick up.
+ *
+ * The sample borrowers are still reachable, deliberately demoted to a line at
+ * the bottom. They are the team's shared artifact to critique and losing them
+ * would mean arranging a UUID by hand again.
  */
+
+import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../lib/api.js";
+import { STAGE_TO_SCREEN, type FlowStage } from "../lib/flow.js";
 
 interface FileRow {
   id: string;
   stage: string;
   isDemo: boolean;
   createdAt: string;
-  purpose: string | null;
-  loanAmount: string | null;
-  valueOrPrice: string | null;
   propertyCity: string | null;
   propertyState: string | null;
   borrowers: { firstName: string; lastName: string }[];
-  decisions: { outcome: string; ausRecommendation: string }[];
 }
 
 export function FilesPage() {
@@ -37,122 +38,81 @@ export function FilesPage() {
   const files = data?.files ?? [];
   const mine = files.filter((f) => !f.isDemo);
   const demos = files.filter((f) => f.isDemo);
+  // The most recent unfinished file. A completed one is not something to
+  // "continue", and offering to resume it reads as though it did not take.
+  const inProgress = mine.find((f) => f.stage !== "COMPLETE");
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12">
-      <div className="flex items-baseline justify-between">
-        <h1 className="font-brand text-[26px] font-semibold text-ink-editorial">Your files</h1>
+    <div className="mx-auto max-w-2xl px-5 py-14 sm:px-6 sm:py-20">
+      <p className="text-[13px] font-medium uppercase tracking-wide text-gold">Homestead</p>
+      <h1 className="mt-3 font-brand text-[38px] font-semibold leading-[1.1] text-ink-editorial sm:text-[46px]">
+        The Supermortgage
+      </h1>
+      <p className="mt-5 max-w-prose font-prose text-[18px] leading-relaxed text-ink-prose">
+        A better rate, in four screens and about five minutes. Connect your accounts instead of
+        hunting for statements, and we retrieve almost everything underwriting needs.
+      </p>
+      <p className="mt-4 max-w-prose font-prose text-[16px] leading-relaxed text-ink-prose">
+        No documents to dig out. No forms asking what your bank already knows. A decision that
+        explains itself.
+      </p>
+
+      <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
         <button className="btn-primary" onClick={() => navigate("/f/new/property")}>
-          Start a new one
+          Start now
         </button>
+
+        {inProgress && (
+          <Link
+            className="btn-secondary text-center"
+            to={`/f/${inProgress.id}/${STAGE_TO_SCREEN[inProgress.stage as FlowStage] ?? "review"}`}
+          >
+            Pick up where you left off
+          </Link>
+        )}
       </div>
 
-      {isLoading && <p className="mt-8 text-[14px] text-subtle">Loading…</p>}
-
-      {!isLoading && mine.length === 0 && (
-        <p className="mt-6 font-prose text-[16px] leading-relaxed text-ink-prose">
-          You haven&rsquo;t started one yet. It takes about two minutes.
+      {inProgress && (
+        <p className="mt-3 text-[13px] text-meta">
+          You have one in progress
+          {inProgress.propertyCity ? ` on ${inProgress.propertyCity}` : ""}
+          {inProgress.propertyState ? `, ${inProgress.propertyState}` : ""}.
         </p>
       )}
 
-      {mine.length > 0 && mine[0] && mine[0].stage !== "COMPLETE" && (
-        <div className="mt-6 rounded-card border border-gold-border bg-gold-fill p-5">
-          <p className="text-[14px] text-ink-editorial">
-            You have a file in progress. Pick up where you left off.
-          </p>
-          <Link
-            to={`/f/${mine[0].id}/${STAGE_TO_PATH[mine[0].stage as FlowStage] ?? "decision"}`}
-            className="btn-primary mt-3 inline-block"
-          >
-            Continue
-          </Link>
-        </div>
-      )}
+      {isLoading && <p className="mt-8 text-[13px] text-subtle">Loading…</p>}
 
-      {mine.length > 0 && <Group files={mine} deletable />}
+      <p className="mt-14 border-t border-line-light pt-5 text-[12px] leading-relaxed text-subtle">
+        Nothing here is a loan offer, and no credit is checked. Every connection returns invented
+        data.{" "}
+        <Link className="text-gold underline underline-offset-2" to="/privacy">
+          What we keep, and how to delete it
+        </Link>
+        .
+      </p>
 
       {demos.length > 0 && (
-        <section className="mt-12">
-          <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
-            Sample borrowers
-          </h2>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
-            Completed files everyone can open, so there is something shared to look at. Read-only —
-            each one exercises a different part of the underwriting.
-          </p>
-          <Group files={demos} />
-        </section>
+        <details className="mt-4">
+          <summary className="cursor-pointer list-none text-[12px] text-subtle underline-offset-2 hover:underline">
+            Sample borrowers ({demos.length})
+          </summary>
+          <ul className="mt-2 flex flex-col gap-1">
+            {demos.map((f) => (
+              <li key={f.id}>
+                <Link
+                  className="text-[13px] text-gold underline underline-offset-2"
+                  to={`/f/${f.id}/${STAGE_TO_SCREEN[f.stage as FlowStage] ?? "review"}`}
+                >
+                  {f.borrowers[0]
+                    ? `${f.borrowers[0].firstName} ${f.borrowers[0].lastName}`
+                    : "Sample file"}
+                  {f.propertyCity ? ` — ${f.propertyCity}, ${f.propertyState}` : ""}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
-  );
-}
-
-function Group({ files, deletable = false }: { files: FileRow[]; deletable?: boolean }) {
-  const queryClient = useQueryClient();
-  const [confirming, setConfirming] = useState<string | null>(null);
-  const remove = useMutation({
-    mutationFn: (id: string) => api.del(`/files/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["files"] }),
-  });
-
-  return (
-    <ul className="mt-5 space-y-2.5">
-      {files.map((f) => {
-        const name = f.borrowers[0]
-          ? `${f.borrowers[0].firstName} ${f.borrowers[0].lastName}`
-          : "Unnamed file";
-        const decision = f.decisions[0];
-        return (
-          <li key={f.id} className="relative">
-            {deletable && (
-              <div className="absolute right-3 top-3 z-10">
-                {confirming === f.id ? (
-                  <span className="flex items-center gap-2 text-[12px]">
-                    <button
-                      className="text-danger underline underline-offset-2"
-                      onClick={() => remove.mutate(f.id)}
-                      disabled={remove.isPending}
-                    >
-                      delete for good
-                    </button>
-                    <button className="text-subtle" onClick={() => setConfirming(null)}>
-                      cancel
-                    </button>
-                  </span>
-                ) : (
-                  <button
-                    className="text-[12px] text-subtle underline-offset-2 hover:underline"
-                    onClick={() => setConfirming(f.id)}
-                  >
-                    delete
-                  </button>
-                )}
-              </div>
-            )}
-            <Link
-              // Typed against FlowStage, so a new stage is a compile error
-              // rather than a silent fallback to the decision screen.
-              to={`/f/${f.id}/${STAGE_TO_PATH[f.stage as FlowStage] ?? "decision"}`}
-              className="block rounded-row border border-line-light bg-app px-4 py-3.5 transition-colors hover:bg-hover"
-            >
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="text-[15px] text-ink-editorial">{name}</span>
-                <span className="figure text-[13px] text-meta">
-                  {f.loanAmount ? `$${Number(f.loanAmount).toLocaleString()}` : "—"}
-                </span>
-              </div>
-              <div className="mt-1 flex items-baseline justify-between gap-4 text-[12px]">
-                <span className="text-subtle">
-                  {f.propertyCity ? `${f.propertyCity}, ${f.propertyState}` : "No address yet"}
-                </span>
-                <span className="text-subtle">
-                  {decision ? decision.outcome.replace(/_/g, " ") : f.stage.toLowerCase().replace(/_/g, " ")}
-                </span>
-              </div>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
   );
 }

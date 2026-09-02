@@ -12,25 +12,39 @@
  */
 
 import type {
+  Address,
+  AddressSuggestion,
   AssetReport,
+  AvmEstimate,
   Consent,
   CreditReport,
+  FloodDetermination,
+  IdentityVerification,
+  LienSearch,
   LoanFile,
   PayrollData,
+  PropertyRecord,
+  SanctionsScreening,
   TaxTranscript,
 } from "@hm/shared";
+import { AddressNotFoundError } from "../ports/index.js";
 import type {
   BankConnector,
   ConnectorRegistry,
   ConnectorResult,
   CreditConnector,
   EsignConnector,
+  IdentityConnector,
   IrsConnector,
+  LienConnector,
   LinkSession,
   PayrollConnector,
+  PropertyDataConnector,
+  ScreeningConnector,
 } from "../ports/index.js";
 import { assert4506cExecuted, assertVerificationAuthorized } from "../guard.js";
 import { PERSONAS, type PersonaId, DEFAULT_PERSONA } from "../fixtures/personas.js";
+import { ADDRESS_BOOK, PUBLIC_RECORDS } from "../fixtures/public-records.js";
 
 export interface FixtureOptions {
   readonly persona?: PersonaId;
@@ -193,9 +207,7 @@ function encodeEnvelope(kind: Consent["kind"], borrowerId: string): string {
   return `${ENVELOPE_PREFIX}.${kind}.${borrowerId}`;
 }
 
-function decodeEnvelope(
-  envelopeId: string,
-): { kind: Consent["kind"]; borrowerId: string } | null {
+function decodeEnvelope(envelopeId: string): { kind: Consent["kind"]; borrowerId: string } | null {
   const parts = envelopeId.split(".");
   if (parts.length !== 3 || parts[0] !== ENVELOPE_PREFIX) return null;
   const [, kind, borrowerId] = parts;
@@ -232,6 +244,172 @@ export function fixtureEsignConnector(options: FixtureOptions = {}): EsignConnec
   };
 }
 
+/* ── Property data ──────────────────────────────────────────────────────── */
+
+/** Single-line form, for the autocomplete dropdown. */
+function oneLine(address: Address): string {
+  const street = address.line2 ? `${address.line1}, ${address.line2}` : address.line1;
+  return `${street}, ${address.city}, ${address.state} ${address.postalCode}`;
+}
+
+function sameAddress(a: Address, b: Address): boolean {
+  return a.line1.toLowerCase() === b.line1.toLowerCase() && a.postalCode === b.postalCode;
+}
+
+/**
+ * Assessor, AVM and flood, plus address autocomplete.
+ *
+ * UNGUARDED, deliberately. These run on screen 1, before the authorization on
+ * screen 2 exists, and a guard here would make the flow unreachable from its
+ * own first step — the trap `fixtureEsignConnector` documents below.
+ *
+ * The reason that is acceptable is narrower than "it comes first": nothing
+ * here is about a person. An address the borrower is typing into our form, and
+ * public county records about a building, are not what APP-005 gates. The
+ * moment a lookup keys on a *name* it moves to `fixtureScreeningConnector` or
+ * `fixtureLienConnector`, both of which are guarded.
+ *
+ * A lookup for an address we hold no fixture for throws `AddressNotFoundError`
+ * rather than falling back to the active persona's record. Returning somebody
+ * else's building would put fabricated square footage in front of a borrower
+ * and ask them to confirm it — and a borrower who confirms invented
+ * characteristics has been walked into a false attestation by the UI. Not
+ * knowing is a legitimate answer; guessing is not.
+ */
+export function fixturePropertyDataConnector(options: FixtureOptions = {}): PropertyDataConnector {
+  const { persona, latencyMs, ref } = resolve(options);
+  const fixtureFor = (address: Address) => {
+    const match = Object.values(PUBLIC_RECORDS).find((r) => sameAddress(r.address, address));
+    if (!match) throw new AddressNotFoundError(oneLine(address));
+    return match;
+  };
+
+  return {
+    capabilities: {
+      provider: "fixture-property",
+      mode: "fixture",
+      satisfies: ["APP-004"],
+    },
+    async suggestAddresses(query: string): Promise<readonly AddressSuggestion[]> {
+      const q = query.trim().toLowerCase();
+      if (q.length < 3) return [];
+      // A third of the usual latency: an autocomplete that takes 900ms is an
+      // autocomplete nobody waits for.
+      await sleep(Math.round(latencyMs / 3));
+      return ADDRESS_BOOK.filter((a) => oneLine(a).toLowerCase().includes(q)).map((a) => ({
+        id: `${a.line1}|${a.postalCode}`.replace(/\s+/g, "-").toLowerCase(),
+        label: oneLine(a),
+        address: a,
+      }));
+    },
+    async lookupRecord(address: Address): Promise<ConnectorResult<PropertyRecord>> {
+      await sleep(latencyMs);
+      return result(fixtureFor(address).record, "fixture-property", `record-${address.postalCode}`);
+    },
+    async estimateValue(address: Address): Promise<ConnectorResult<AvmEstimate>> {
+      await sleep(latencyMs);
+      return result(fixtureFor(address).avm(ref), "fixture-avm", `avm-${address.postalCode}`);
+    },
+    async determineFlood(address: Address): Promise<ConnectorResult<FloodDetermination>> {
+      await sleep(latencyMs);
+      return result(fixtureFor(address).flood(ref), "fixture-flood", `flood-${address.postalCode}`);
+    },
+  };
+}
+
+/* ── Screening ──────────────────────────────────────────────────────────── */
+
+/**
+ * OFAC/SDN screening (CRD-010).
+ *
+ * Guarded — this one screens a named person against government watchlists.
+ * It replaces the inline `sanctionsScreenClear: true` the credit route used to
+ * assert without screening anything.
+ */
+export function fixtureScreeningConnector(options: FixtureOptions = {}): ScreeningConnector {
+  const { persona, latencyMs, ref } = resolve(options);
+  return {
+    capabilities: {
+      provider: "fixture-screening",
+      mode: "fixture",
+      satisfies: ["CRD-010"],
+    },
+    async screenSanctions(file: LoanFile): Promise<ConnectorResult<SanctionsScreening>> {
+      assertVerificationAuthorized(file);
+      await sleep(latencyMs);
+      return result(PUBLIC_RECORDS[persona].sanctions(ref), "fixture-screening", `ofac-${persona}`);
+    },
+  };
+}
+
+/* ── Liens ──────────────────────────────────────────────────────────────── */
+
+/**
+ * Ownership and encumbrance search against the APN from screen 1.
+ *
+ * Guarded — it ties a named borrower to recorded debts.
+ */
+export function fixtureLienConnector(options: FixtureOptions = {}): LienConnector {
+  const { persona, latencyMs, ref } = resolve(options);
+  return {
+    capabilities: {
+      provider: "fixture-liens",
+      mode: "fixture",
+      satisfies: ["UW-005", "APP-016"],
+    },
+    async searchLiens(file: LoanFile, apn: string): Promise<ConnectorResult<LienSearch>> {
+      assertVerificationAuthorized(file);
+      if (!apn) {
+        // The search is keyed on the APN the assessor lookup returned. Calling
+        // it without one silently searches nothing and reports a clean result,
+        // which is the worst possible answer to "are there liens".
+        throw new Error("Lien search requires an APN. Run the assessor lookup first.");
+      }
+      await sleep(latencyMs);
+      return result(PUBLIC_RECORDS[persona].liens(ref), "fixture-liens", `liens-${apn}`);
+    },
+  };
+}
+
+/* ── Identity ───────────────────────────────────────────────────────────── */
+
+/**
+ * Document scan and selfie.
+ *
+ * UNGUARDED, and this is the one that deserves an argument rather than an
+ * assertion. It handles a government ID — about as sensitive as this product
+ * gets — but it runs before the authorization is signed, because the name and
+ * date of birth on that authorization come off this document. Guarding it
+ * makes APP-005 unobtainable.
+ *
+ * What stands in for the guard is scope: this verifies an identity the
+ * borrower is presenting to us, in the moment, on purpose. It retrieves
+ * nothing about them from anywhere else. A real Stripe Identity integration
+ * must hold that line — the moment it also returns a watchlist hit, it has
+ * become a screening connector and belongs behind the guard.
+ */
+export function fixtureIdentityConnector(options: FixtureOptions = {}): IdentityConnector {
+  const { persona, latencyMs, ref } = resolve(options);
+  return {
+    capabilities: {
+      provider: "fixture-identity",
+      mode: "fixture",
+      satisfies: ["APP-001", "CRD-011"],
+    },
+    async verifyIdentity(_file: LoanFile): Promise<ConnectorResult<IdentityVerification>> {
+      // Longer than the others on purpose. A document scan and a selfie is the
+      // slowest thing the borrower does, and screen 2 has to be designed for
+      // it rather than around it.
+      await sleep(latencyMs * 2);
+      return result(
+        PUBLIC_RECORDS[persona].identity(ref),
+        "fixture-identity",
+        `identity-${persona}`,
+      );
+    },
+  };
+}
+
 export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry {
   return {
     credit: fixtureCreditConnector(options),
@@ -239,5 +417,9 @@ export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry
     payroll: fixturePayrollConnector(options),
     irs: fixtureIrsConnector(options),
     esign: fixtureEsignConnector(options),
+    propertyData: fixturePropertyDataConnector(options),
+    screening: fixtureScreeningConnector(options),
+    liens: fixtureLienConnector(options),
+    identity: fixtureIdentityConnector(options),
   };
 }

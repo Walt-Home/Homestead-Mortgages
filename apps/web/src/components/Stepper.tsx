@@ -1,32 +1,26 @@
-import clsx from "clsx";
-import { Link } from "react-router-dom";
-import { hasReached, type FlowStage } from "../lib/file.js";
-
 /**
- * The nine screens, and the way back to any of them you have already reached.
+ * Four steps, and a count.
  *
- * This used to be inert text. There was no back navigation anywhere in the
- * product — not a link, not a button — so a person who mistyped their income
- * on screen 1 had no way to fix it short of abandoning the file. Browser-back
- * technically moved the URL but landed on a screen that re-submitted.
+ * The previous stepper rendered nine pills that wrapped to three rows on a
+ * phone and named internal stages at the borrower. This one is a progress
+ * line: which step you are on, out of how many, plus the ability to go back to
+ * something you have finished.
  *
- * Steps ahead of where you have got to stay unlinked: they are not "locked" so
- * much as meaningless, since the data they read does not exist yet.
+ * Conditional branches are deliberately absent. A borrower sent to confirm
+ * their employer is still on step 3 of 4 — the branch is work inside a step,
+ * not a step of its own, and showing it here would turn "four screens" into
+ * "four screens, or six, depending".
  */
 
-export const SCREENS = [
-  { id: "property_loan", stage: "PROPERTY_LOAN", path: "property", label: "Property & loan" },
-  { id: "identity", stage: "IDENTITY", path: "identity", label: "Identity" },
-  { id: "credit", stage: "CREDIT", path: "credit", label: "Credit" },
-  { id: "bank", stage: "BANK", path: "bank", label: "Bank" },
-  { id: "payroll", stage: "PAYROLL", path: "payroll", label: "Payroll" },
-  { id: "irs_transcript", stage: "IRS_TRANSCRIPT", path: "irs", label: "IRS" },
-  { id: "upload_fallback", stage: "UPLOAD_FALLBACK", path: "upload", label: "Documents" },
-  { id: "decision", stage: "DECISION", path: "decision", label: "Decision" },
-  { id: "persistent_consent", stage: "PERSISTENT_CONSENT", path: "consent", label: "Stay connected" },
-] as const;
-
-export type ScreenPath = (typeof SCREENS)[number]["path"];
+import { Link } from "react-router-dom";
+import clsx from "clsx";
+import {
+  SCREENS,
+  reachedIndex,
+  screenIndex,
+  type FlowStage,
+  type ScreenPath,
+} from "../lib/flow.js";
 
 export function Stepper({
   current,
@@ -35,42 +29,56 @@ export function Stepper({
 }: {
   current: ScreenPath;
   fileId?: string;
-  /** How far the file has actually got. Steps beyond this are not linked. */
   reached?: FlowStage;
 }) {
-  const currentIndex = SCREENS.findIndex((s) => s.path === current);
+  const currentIndex = screenIndex(current);
+  const reachedAt = reachedIndex(reached);
 
   return (
-    <ol className="flex flex-wrap items-center gap-x-1 gap-y-2 text-[13px]">
-      {SCREENS.map((screen, index) => {
-        const state = index < currentIndex ? "done" : index === currentIndex ? "current" : "upcoming";
-        // Linkable when the file exists and has reached this stage. The current
-        // screen is not a link to itself.
-        const linkable =
-          Boolean(fileId) && state !== "current" && hasReached(reached, screen.stage);
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <ol className="flex items-center gap-1.5">
+        {SCREENS.map((screen, i) => {
+          const state = i < currentIndex ? "done" : i === currentIndex ? "current" : "upcoming";
+          // Only backwards, and only to somewhere already finished. A stepper
+          // that lets you skip ahead is a stepper that lands you on a screen
+          // whose data does not exist yet.
+          const linkable = Boolean(fileId) && state === "done" && i <= reachedAt;
 
-        const className = clsx(
-          "rounded-pill px-2.5 py-1 transition-colors",
-          state === "done" && "bg-olive-light text-olive",
-          state === "current" && "bg-gold-fill text-gold font-medium",
-          state === "upcoming" && "text-subtle",
-          linkable && "hover:bg-hover cursor-pointer",
-          !linkable && state !== "current" && "cursor-default",
-        );
+          const dot = (
+            <span
+              className={clsx(
+                "block h-1.5 w-8 rounded-pill transition-colors sm:w-10",
+                state === "done" && "bg-olive",
+                state === "current" && "bg-gold",
+                state === "upcoming" && "bg-inset",
+              )}
+            />
+          );
 
-        return (
-          <li key={screen.id} className="flex items-center gap-1">
-            {linkable ? (
-              <Link to={`/f/${fileId}/${screen.path}`} className={className}>
-                {screen.label}
-              </Link>
-            ) : (
-              <span className={className}>{screen.label}</span>
-            )}
-            {index < SCREENS.length - 1 && <span className="text-subtle/50">·</span>}
-          </li>
-        );
-      })}
-    </ol>
+          return (
+            <li key={screen.path} className="flex items-center">
+              {linkable ? (
+                <Link
+                  to={`/f/${fileId}/${screen.path}`}
+                  aria-label={`Back to ${screen.label}`}
+                  className="block py-1"
+                >
+                  {dot}
+                </Link>
+              ) : (
+                <span className="block py-1" aria-hidden="true">
+                  {dot}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+
+      <p className="text-[12px] text-meta">
+        Step {currentIndex + 1} of {SCREENS.length}
+        <span className="text-subtle"> · {SCREENS[currentIndex]?.label}</span>
+      </p>
+    </div>
   );
 }

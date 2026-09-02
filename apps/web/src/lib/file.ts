@@ -12,44 +12,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "./api.js";
 
-export type FlowStage =
-  | "PROPERTY_LOAN"
-  | "IDENTITY"
-  | "CREDIT"
-  | "BANK"
-  | "PAYROLL"
-  | "IRS_TRANSCRIPT"
-  | "UPLOAD_FALLBACK"
-  | "DECISION"
-  | "PERSISTENT_CONSENT"
-  | "COMPLETE";
-
-/** The order the flow runs in. Index is what makes "already reached" meaningful. */
-export const STAGE_ORDER: FlowStage[] = [
-  "PROPERTY_LOAN",
-  "IDENTITY",
-  "CREDIT",
-  "BANK",
-  "PAYROLL",
-  "IRS_TRANSCRIPT",
-  "UPLOAD_FALLBACK",
-  "DECISION",
-  "PERSISTENT_CONSENT",
-  "COMPLETE",
-];
-
-export const STAGE_TO_PATH: Record<FlowStage, string> = {
-  PROPERTY_LOAN: "property",
-  IDENTITY: "identity",
-  CREDIT: "credit",
-  BANK: "bank",
-  PAYROLL: "payroll",
-  IRS_TRANSCRIPT: "irs",
-  UPLOAD_FALLBACK: "upload",
-  DECISION: "decision",
-  PERSISTENT_CONSENT: "consent",
-  COMPLETE: "decision",
-};
+export type { FlowStage } from "./flow.js";
+import type { FlowStage } from "./flow.js";
 
 export interface LoanFileView {
   id: string;
@@ -65,6 +29,7 @@ export interface LoanFileView {
     ssn: { last4: string };
     currentAddress: { line1: string; city: string; state: string; postalCode: string };
     maritalStatus: string;
+    citizenship: string | null;
     currentHousing: string;
     monthlyRent?: number;
     firstTimeHomebuyer: boolean | null;
@@ -83,6 +48,18 @@ export interface LoanFileView {
     occupancy: string;
     valueOrPrice: number;
   } | null;
+  propertyRecord: {
+    apn: string;
+    county: string;
+    propertyType: string;
+    priorOwnershipInLastThreeYears: boolean;
+    monthlyAssociationDues?: number;
+  } | null;
+  valuation: unknown | null;
+  flood: unknown | null;
+  sanctions: unknown | null;
+  lienSearch: unknown | null;
+  identityVerification: unknown | null;
   credit: unknown | null;
   assets: unknown | null;
   payroll: unknown | null;
@@ -106,12 +83,6 @@ export function useLoanFile(fileId: string | undefined) {
     // A 404 here means "not yours or not there" and will never become a 200.
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
   });
-}
-
-/** Has the flow already got at least as far as this stage? */
-export function hasReached(current: FlowStage | undefined, target: FlowStage): boolean {
-  if (!current) return false;
-  return STAGE_ORDER.indexOf(current) >= STAGE_ORDER.indexOf(target);
 }
 
 export function hasConsent(file: LoanFileView | undefined, kind: string): boolean {

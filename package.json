@@ -35,5 +35,11 @@
   "packageManager": "npm@10.5.0",
   "engines": {
     "node": ">=20.0.0"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.10.0": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true,
+    "prisma@7.10.0": true
   }
 }

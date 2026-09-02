@@ -3,12 +3,7 @@
 export type LoanPurpose = "purchase" | "rate_term_refinance" | "cash_out_refinance";
 export type OccupancyType = "primary_residence" | "second_home" | "investment";
 export type PropertyType =
-  | "single_family"
-  | "condo"
-  | "townhouse"
-  | "two_to_four_unit"
-  | "manufactured"
-  | "co_op";
+  "single_family" | "condo" | "townhouse" | "two_to_four_unit" | "manufactured" | "co_op";
 
 /** US state, two letters. Kept as a string so the sheet's community-property
  *  and state-NTB lists stay data rather than a type-level enumeration. */

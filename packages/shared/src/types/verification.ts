@@ -11,13 +11,7 @@ export interface CreditScore {
 }
 
 export type TradelineType =
-  | "mortgage"
-  | "revolving"
-  | "installment"
-  | "auto"
-  | "student"
-  | "heloc"
-  | "other";
+  "mortgage" | "revolving" | "installment" | "auto" | "student" | "heloc" | "other";
 
 export interface Tradeline {
   readonly id: string;
@@ -40,12 +34,7 @@ export interface Tradeline {
 }
 
 export type PublicRecordType =
-  | "bankruptcy"
-  | "foreclosure"
-  | "short_sale"
-  | "deed_in_lieu"
-  | "judgment"
-  | "tax_lien";
+  "bankruptcy" | "foreclosure" | "short_sale" | "deed_in_lieu" | "judgment" | "tax_lien";
 
 export interface PublicRecord {
   readonly type: PublicRecordType;
@@ -78,11 +67,7 @@ export interface CreditReport {
 /* ── Assets ─────────────────────────────────────────────────────────────── */
 
 export type DepositAccountType =
-  | "checking"
-  | "savings"
-  | "money_market"
-  | "brokerage"
-  | "retirement";
+  "checking" | "savings" | "money_market" | "brokerage" | "retirement";
 
 export interface DepositAccount {
   readonly id: string;

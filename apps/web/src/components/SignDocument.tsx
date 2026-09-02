@@ -14,6 +14,16 @@ import { api } from "../lib/api.js";
  */
 
 const DOCUMENTS: Record<string, { title: string; body: string[]; commit: string }> = {
+  application_signature: {
+    title: "Your application",
+    body: [
+      "This is the application itself — the property, the loan, your details, and the declarations you just confirmed.",
+      "It also includes IRS Form 4506-C, which lets us request your tax records directly rather than asking you to find them. That is the step that would otherwise become a whole screen.",
+      "Signing submits it. It does not commit you to borrowing anything, and it is not an agreement to any particular rate or terms.",
+    ],
+    commit: "Sign and submit",
+  },
+
   form_4506c: {
     title: "IRS Form 4506-C",
     body: [
@@ -102,8 +112,8 @@ export function SignDocument({
         ))}
       </div>
       <p className="mt-4 text-[12px] leading-relaxed text-subtle">
-        This is a prototype: nothing is actually sent to the IRS or anyone else, and the
-        transcripts you will see are invented.
+        This is a prototype: nothing is actually sent to the IRS or anyone else, and the transcripts
+        you will see are invented.
       </p>
       {error && <p className="mt-3 text-[13px] text-error">{error}</p>}
       <div className="mt-5 flex gap-3">

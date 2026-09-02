@@ -40,7 +40,11 @@ decisionRouter.post(
     const decision = underwrite(file, {
       casefileId: randomUUID(),
       now: new Date().toISOString(),
-      market: { apor: market.apor, apr: market.apr, pointsAndFeesAmount: market.pointsAndFeesAmount },
+      market: {
+        apor: market.apor,
+        apr: market.apr,
+        pointsAndFeesAmount: market.pointsAndFeesAmount,
+      },
       estimatedFees: market.estimatedFees,
       estimatedPrepaids: market.estimatedPrepaids,
     });
@@ -94,11 +98,17 @@ decisionRouter.post(
 
     await advanceStage(id, "PERSISTENT_CONSENT");
 
-    await recordEvent(id, "decision_computed", "system", {
-      outcome: decision.outcome,
-      recommendation: decision.aus?.recommendation,
-      engine: decision.aus?.engine,
-    }, "UW-002");
+    await recordEvent(
+      id,
+      "decision_computed",
+      "system",
+      {
+        outcome: decision.outcome,
+        recommendation: decision.aus?.recommendation,
+        engine: decision.aus?.engine,
+      },
+      "UW-002",
+    );
 
     res.status(201).json({ decision });
   }),

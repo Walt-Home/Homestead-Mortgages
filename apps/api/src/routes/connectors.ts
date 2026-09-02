@@ -34,7 +34,13 @@ async function requireFile(id: string, userId: string) {
 
 /** Record a consent. This is what unlocks every connector below. */
 const consentSchema = z.object({
-  kind: z.enum(["verification_authorization", "econsent", "form_4506c", "persistent_monitoring"]),
+  kind: z.enum([
+    "verification_authorization",
+    "econsent",
+    "form_4506c",
+    "persistent_monitoring",
+    "sms_contact",
+  ]),
   borrowerId: z.string().uuid(),
   envelopeId: z.string().optional(),
 });
@@ -73,7 +79,14 @@ connectorRouter.post(
     const file = await requireFile(id, req.user!.id);
 
     const result = await connectors().credit.pullTriMerge(file);
-    await recordSnapshot(id, "credit", result.provider, result.externalId, result.data, result.retrievedAt);
+    await recordSnapshot(
+      id,
+      "credit",
+      result.provider,
+      result.externalId,
+      result.data,
+      result.retrievedAt,
+    );
     await upsertLink(id, "credit", result.provider);
     // APP-018 names the credit pull as its source: a refinance's existing
     // servicer and balance come off the report. Nothing wrote them back, so a
@@ -92,17 +105,21 @@ connectorRouter.post(
       });
     }
 
-    // CRD-010 (OFAC/SDN) is sourced "Third-party order" — nobody's to-do, and
-    // it had no path at all, so it sat at the top of every borrower's list
-    // forever. Screening runs alongside the first pull, which is when a real
-    // build would order it.
+    // CRD-010 (OFAC/SDN) used to be asserted true right here, without any
+    // screening having run. That is worse than not screening at all: it puts a
+    // clean value in the exact field an auditor would check. Real screening now
+    // lives behind the `screening` connector — see routes/property.ts — and
+    // this route no longer claims anything it did not do.
+    //
+    // UW-018's fraud and red-flag review has no provider either, but it is a
+    // review rather than a lookup, so it stays a recorded system assertion.
     await prisma.loanFile.update({
       where: { id },
-      data: { sanctionsScreenClear: true, fraudReviewComplete: true },
+      data: { fraudReviewComplete: true },
     });
     await recordEvent(id, "screening_completed", "system", {
-      checks: ["ofac_sdn", "fraud_red_flag"],
-      note: "fixture — no real screening provider is wired",
+      checks: ["fraud_red_flag"],
+      note: "fixture — no real fraud review provider is wired",
     });
 
     await recordEvent(id, "connector_pull", result.provider, { kind: "credit" }, "CRD-001");
@@ -123,7 +140,14 @@ connectorRouter.post(
     const session = await bank.createLinkSession(file);
     const result = await bank.fetchAssetReport(file, session.sessionId, 12);
 
-    await recordSnapshot(id, "bank", result.provider, result.externalId, result.data, result.retrievedAt);
+    await recordSnapshot(
+      id,
+      "bank",
+      result.provider,
+      result.externalId,
+      result.data,
+      result.retrievedAt,
+    );
     await upsertLink(id, "bank", result.provider);
 
     // The bank report carries employment the payroll connector will later
@@ -148,7 +172,14 @@ connectorRouter.post(
     const session = await payroll.createLinkSession(file);
     const result = await payroll.fetchPayroll(file, session.sessionId);
 
-    await recordSnapshot(id, "payroll", result.provider, result.externalId, result.data, result.retrievedAt);
+    await recordSnapshot(
+      id,
+      "payroll",
+      result.provider,
+      result.externalId,
+      result.data,
+      result.retrievedAt,
+    );
     await upsertLink(id, "payroll", result.provider);
 
     // Payroll is the precise source, so it REPLACES what the bank inferred
@@ -157,17 +188,17 @@ connectorRouter.post(
     await prisma.$transaction([
       prisma.employment.deleteMany({ where: { loanFileId: id } }),
       prisma.employment.createMany({
-      data: result.data.employments.map((e) => ({
-        loanFileId: id,
-        employerName: e.employerName,
-        employerEin: e.employerEin ?? null,
-        position: e.position,
-        startDate: new Date(e.startDate),
-        endDate: e.endDate ? new Date(e.endDate) : null,
-        status: e.status,
-        isMilitary: e.isMilitary,
-        verificationMethod: e.verificationMethod,
-      })),
+        data: result.data.employments.map((e) => ({
+          loanFileId: id,
+          employerName: e.employerName,
+          employerEin: e.employerEin ?? null,
+          position: e.position,
+          startDate: new Date(e.startDate),
+          endDate: e.endDate ? new Date(e.endDate) : null,
+          status: e.status,
+          isMilitary: e.isMilitary,
+          verificationMethod: e.verificationMethod,
+        })),
       }),
       prisma.incomeSource.deleteMany({ where: { loanFileId: id } }),
       prisma.incomeSource.createMany({
@@ -198,9 +229,19 @@ connectorRouter.post(
     const file = await requireFile(id, req.user!.id);
 
     const currentYear = new Date().getFullYear();
-    const result = await connectors().irs.fetchTranscripts(file, [currentYear - 1, currentYear - 2]);
+    const result = await connectors().irs.fetchTranscripts(file, [
+      currentYear - 1,
+      currentYear - 2,
+    ]);
 
-    await recordSnapshot(id, "irs", result.provider, result.externalId, result.data, result.retrievedAt);
+    await recordSnapshot(
+      id,
+      "irs",
+      result.provider,
+      result.externalId,
+      result.data,
+      result.retrievedAt,
+    );
     await upsertLink(id, "irs", result.provider);
     await recordEvent(id, "connector_pull", result.provider, { kind: "irs" }, "INC-003");
     await advanceStage(id, "UPLOAD_FALLBACK");
@@ -222,7 +263,9 @@ connectorRouter.post(
       data: { persistentMonitoringEnabled: enabled, nextSyncDueAt: null },
     });
     await advanceStage(id, "COMPLETE");
-    await recordEvent(id, enabled ? "monitoring_enabled" : "monitoring_declined", "borrower", { enabled });
+    await recordEvent(id, enabled ? "monitoring_enabled" : "monitoring_declined", "borrower", {
+      enabled,
+    });
 
     // nextSyncDueAt stays null: nothing schedules re-pulls yet. The consent is
     // recorded so the loop can be switched on without asking again.

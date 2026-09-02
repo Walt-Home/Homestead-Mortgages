@@ -186,6 +186,9 @@ model Borrower {
   addressPostalCode String @map("address_postal_code")
 
   maritalStatus String  @map("marital_status")
+  // Nullable because files created before screen 2 started asking have none,
+  // and a default would assert a residency status nobody stated.
+  citizenship   String? @map("citizenship")
   nonBorrowingSpouseName String? @map("non_borrowing_spouse_name")
   nonBorrowingSpouseSignatureRequired Boolean @default(false) @map("non_borrowing_spouse_signature_required")
 

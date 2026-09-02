@@ -27,7 +27,8 @@ async function seed(personaId: PersonaId): Promise<void> {
   const persona = PERSONAS[personaId];
   const s = persona.scenario;
   const registry = fixtureRegistry({ persona: personaId, latencyMs: 0 });
-  const [firstName = "Demo", lastName = "Borrower"] = persona.label.split(" — ")[0]?.split(" ") ?? [];
+  const [firstName = "Demo", lastName = "Borrower"] =
+    persona.label.split(" — ")[0]?.split(" ") ?? [];
 
   const created = await prisma.loanFile.create({
     data: {
@@ -111,13 +112,34 @@ async function seed(personaId: PersonaId): Promise<void> {
   let file = (await loadLoanFile(created.id))!;
 
   const credit = await registry.credit.pullTriMerge(file);
-  await recordSnapshot(created.id, "credit", credit.provider, credit.externalId, credit.data, credit.retrievedAt);
+  await recordSnapshot(
+    created.id,
+    "credit",
+    credit.provider,
+    credit.externalId,
+    credit.data,
+    credit.retrievedAt,
+  );
 
   const bank = await registry.bank.fetchAssetReport(file, "seed", 12);
-  await recordSnapshot(created.id, "bank", bank.provider, bank.externalId, bank.data, bank.retrievedAt);
+  await recordSnapshot(
+    created.id,
+    "bank",
+    bank.provider,
+    bank.externalId,
+    bank.data,
+    bank.retrievedAt,
+  );
 
   const payroll = await registry.payroll.fetchPayroll(file, "seed");
-  await recordSnapshot(created.id, "payroll", payroll.provider, payroll.externalId, payroll.data, payroll.retrievedAt);
+  await recordSnapshot(
+    created.id,
+    "payroll",
+    payroll.provider,
+    payroll.externalId,
+    payroll.data,
+    payroll.retrievedAt,
+  );
 
   await prisma.employment.createMany({
     data: payroll.data.employments.map((e) => ({
@@ -149,7 +171,13 @@ async function seed(personaId: PersonaId): Promise<void> {
 
   for (const kind of ["credit", "bank", "payroll", "irs"] as const) {
     await prisma.connectorLink.create({
-      data: { loanFileId: created.id, kind, provider: `fixture-${kind}`, linkedAt: now, lastSyncedAt: now },
+      data: {
+        loanFileId: created.id,
+        kind,
+        provider: `fixture-${kind}`,
+        linkedAt: now,
+        lastSyncedAt: now,
+      },
     });
   }
 
@@ -179,10 +207,16 @@ async function seed(personaId: PersonaId): Promise<void> {
   const p = progress((await loadLoanFile(created.id))!);
   console.log(`\n${persona.label}`);
   console.log(`  file            ${created.id}`);
-  console.log(`  loan            $${s.loanAmount.toLocaleString()} on $${s.valueOrPrice.toLocaleString()}`);
+  console.log(
+    `  loan            $${s.loanAmount.toLocaleString()} on $${s.valueOrPrice.toLocaleString()}`,
+  );
   console.log(`  outcome         ${decision.outcome} (${decision.aus!.recommendation})`);
-  console.log(`  DTI / LTV       ${decision.ratios.dtiBack ?? "—"}% / ${decision.ratios.ltv ?? "—"}%`);
-  console.log(`  requirements    ${p.satisfied} satisfied, ${p.outstanding} needed, ${p.blocked} waiting`);
+  console.log(
+    `  DTI / LTV       ${decision.ratios.dtiBack ?? "—"}% / ${decision.ratios.ltv ?? "—"}%`,
+  );
+  console.log(
+    `  requirements    ${p.satisfied} satisfied, ${p.outstanding} needed, ${p.blocked} waiting`,
+  );
   console.log(`  findings        ${decision.aus!.findings.length}`);
   console.log(`  expected        ${s.expectation}`);
 }

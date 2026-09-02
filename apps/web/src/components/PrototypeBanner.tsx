@@ -16,9 +16,9 @@ export function PrototypeBanner() {
   return (
     <div className="border-b border-notice-border bg-notice-bg">
       <p className="mx-auto max-w-5xl px-6 py-2 text-[12px] leading-relaxed text-ink-soft">
-        <span className="font-medium">Prototype.</span> Nothing here is a loan
-        offer, no credit is checked, and every connection returns invented data.
-        Anything you type is stored so the flow works —{" "}
+        <span className="font-medium">Prototype.</span> Nothing here is a loan offer, no credit is
+        checked, and every connection returns invented data. Anything you type is stored so the flow
+        works —{" "}
         <Link to="/privacy" className="text-gold underline underline-offset-2">
           what we keep, and how to delete it
         </Link>

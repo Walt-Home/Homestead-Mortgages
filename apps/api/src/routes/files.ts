@@ -175,6 +175,10 @@ const identitySchema = z.object({
   ssnLast4: z.string().length(4).optional(),
   currentAddress: addressSchema,
   maritalStatus: z.enum(["married", "unmarried", "separated"]),
+  citizenship: z
+    .enum(["us_citizen", "permanent_resident", "non_permanent_resident"])
+    .nullable()
+    .default(null),
   nonBorrowingSpouseName: z.string().optional(),
   preferredLanguage: z.string().default("en"),
   firstTimeHomebuyer: z.boolean(),
@@ -212,29 +216,30 @@ fileRouter.post(
     }
 
     const borrowerData = {
-        firstName: input.firstName,
-        lastName: input.lastName,
-        email: input.email,
-        phone: input.phone,
-        dateOfBirth: new Date(input.dateOfBirth),
-        ...(input.ssnVaultHandle ? { ssnVaultHandle: input.ssnVaultHandle } : {}),
-        ...(input.ssnLast4 ? { ssnLast4: input.ssnLast4 } : {}),
-        addressLine1: input.currentAddress.line1,
-        addressLine2: input.currentAddress.line2 ?? null,
-        addressCity: input.currentAddress.city,
-        addressState: input.currentAddress.state.toUpperCase(),
-        addressPostalCode: input.currentAddress.postalCode,
-        maritalStatus: input.maritalStatus,
-        nonBorrowingSpouseName: input.nonBorrowingSpouseName ?? null,
-        // In a community property state a married borrower's spouse must be
-        // identified and may have to sign even when not on the loan.
-        nonBorrowingSpouseSignatureRequired:
-          input.maritalStatus === "married" && Boolean(input.nonBorrowingSpouseName),
-        preferredLanguage: input.preferredLanguage,
-        demographics: input.demographics ?? undefined,
-        firstTimeHomebuyer: input.firstTimeHomebuyer,
-        isMilitary: input.isMilitary,
-        currentHousing: input.currentHousing,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email,
+      phone: input.phone,
+      dateOfBirth: new Date(input.dateOfBirth),
+      ...(input.ssnVaultHandle ? { ssnVaultHandle: input.ssnVaultHandle } : {}),
+      ...(input.ssnLast4 ? { ssnLast4: input.ssnLast4 } : {}),
+      addressLine1: input.currentAddress.line1,
+      addressLine2: input.currentAddress.line2 ?? null,
+      addressCity: input.currentAddress.city,
+      addressState: input.currentAddress.state.toUpperCase(),
+      addressPostalCode: input.currentAddress.postalCode,
+      maritalStatus: input.maritalStatus,
+      citizenship: input.citizenship,
+      nonBorrowingSpouseName: input.nonBorrowingSpouseName ?? null,
+      // In a community property state a married borrower's spouse must be
+      // identified and may have to sign even when not on the loan.
+      nonBorrowingSpouseSignatureRequired:
+        input.maritalStatus === "married" && Boolean(input.nonBorrowingSpouseName),
+      preferredLanguage: input.preferredLanguage,
+      demographics: input.demographics ?? undefined,
+      firstTimeHomebuyer: input.firstTimeHomebuyer,
+      isMilitary: input.isMilitary,
+      currentHousing: input.currentHousing,
       monthlyRent: input.monthlyRent ?? null,
     };
 
@@ -270,7 +275,10 @@ fileRouter.post(
       stage: "credit",
       applicationReceivedAt: stampedAt,
       loanEstimateDueAt: stampedAt
-        ? loanEstimateDueAt({ ...refreshed!, application: { receivedAt: stampedAt, sixPieces: {} as never } })
+        ? loanEstimateDueAt({
+            ...refreshed!,
+            application: { receivedAt: stampedAt, sixPieces: {} as never },
+          })
         : null,
     });
   }),

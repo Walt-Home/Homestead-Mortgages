@@ -266,9 +266,9 @@ projects. So the client has to be made in the console, once:
 3. Authorised JavaScript origins:
    - `https://<the Cloud Run URL>`
    - `http://localhost:5173`
-   No redirect URIs are needed. Google Identity Services returns the ID token
-   to the page; there is no server-side redirect leg and therefore no client
-   secret to keep.
+     No redirect URIs are needed. Google Identity Services returns the ID token
+     to the page; there is no server-side redirect leg and therefore no client
+     secret to keep.
 4. **Authorised JavaScript origins must list every host the app is served
    from.** Cloud Run gives a service TWO live hostnames — the hash form
    (`SERVICE-HASH-uc.a.run.app`) and the numeric form
@@ -287,7 +287,7 @@ projects. So the client has to be made in the console, once:
 
 The deploy job is skipped while that variable is empty, so nothing ships a
 sign-in page that cannot work. The client id is public — it is embedded in
-every page offering the button — which is why it is a repo *variable* and not
+every page offering the button — which is why it is a repo _variable_ and not
 a secret.
 
 ## The org policy that shapes access
@@ -366,13 +366,13 @@ honest outcome for a product that has not generated a single disclosure.
 Five vendor decisions plus sandbox credentials, none obtainable from inside
 this repo:
 
-| Connector | Constraint |
-|---|---|
-| Credit (soft tri-merge) | Reseller or bureau-direct; needs FCRA permissible purpose |
-| Bank (12-month asset report) | **Must be a DU-authorized vendor** — CRD-017 says so explicitly |
-| Payroll (consumer-permissioned) | Aggregator |
-| IRS transcripts | IVES participant or a reseller |
-| E-sign | For APP-005, APP-012 and INC-008 |
+| Connector                       | Constraint                                                      |
+| ------------------------------- | --------------------------------------------------------------- |
+| Credit (soft tri-merge)         | Reseller or bureau-direct; needs FCRA permissible purpose       |
+| Bank (12-month asset report)    | **Must be a DU-authorized vendor** — CRD-017 says so explicitly |
+| Payroll (consumer-permissioned) | Aggregator                                                      |
+| IRS transcripts                 | IVES participant or a reseller                                  |
+| E-sign                          | For APP-005, APP-012 and INC-008                                |
 
 Plus: the CLS-* closing-stage sheet, the requirements for the monitoring loop,
 a real tax/insurance source, the real LLPA matrix, and an APOR feed.

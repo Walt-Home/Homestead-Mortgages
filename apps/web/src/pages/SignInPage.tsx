@@ -117,8 +117,8 @@ export function SignInPage() {
                   Continue as local developer
                 </button>
                 <p className="mt-3 text-[12px] leading-relaxed text-subtle">
-                  No Google client is configured, so this is running the local
-                  development shortcut. It is unavailable in production.
+                  No Google client is configured, so this is running the local development shortcut.
+                  It is unavailable in production.
                 </p>
               </>
             ) : (
@@ -131,8 +131,8 @@ export function SignInPage() {
 
         {scriptFailed && (
           <p className="mt-5 text-[13px] leading-relaxed text-error">
-            Google&rsquo;s sign-in script didn&rsquo;t load. An ad blocker or a blocked
-            third-party script will do this.
+            Google&rsquo;s sign-in script didn&rsquo;t load. An ad blocker or a blocked third-party
+            script will do this.
           </p>
         )}
 
@@ -148,8 +148,8 @@ export function SignInPage() {
             go looking for it. */}
         <p className="mt-10 text-[11px] leading-relaxed text-subtle">
           Trouble signing in? This page is served from{" "}
-          <code className="text-meta">{window.location.origin}</code>, which must be an
-          authorised JavaScript origin on the OAuth client.
+          <code className="text-meta">{window.location.origin}</code>, which must be an authorised
+          JavaScript origin on the OAuth client.
         </p>
       </div>
     </>

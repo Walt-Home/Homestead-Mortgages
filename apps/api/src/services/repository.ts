@@ -21,6 +21,12 @@ import type {
   LoanFile,
   PayrollData,
   TaxTranscript,
+  PropertyRecord,
+  AvmEstimate,
+  FloodDetermination,
+  SanctionsScreening,
+  LienSearch,
+  IdentityVerification,
 } from "@hm/shared";
 import type { Prisma } from "@hm/db";
 import { AppError } from "../middleware/error-handler.js";
@@ -93,6 +99,8 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
       postalCode: b.addressPostalCode,
     },
     maritalStatus: b.maritalStatus as Borrower["maritalStatus"],
+    // Null means "not asked yet" — files predate screen 2 collecting it.
+    citizenship: (b.citizenship as Borrower["citizenship"]) ?? null,
     nonBorrowingSpouseName: b.nonBorrowingSpouseName ?? undefined,
     nonBorrowingSpouseSignatureRequired: b.nonBorrowingSpouseSignatureRequired,
     preferredLanguage: b.preferredLanguage,
@@ -207,6 +215,13 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
         }
       : null,
 
+    propertyRecord: latest<PropertyRecord>("property_record"),
+    valuation: latest<AvmEstimate>("valuation"),
+    flood: latest<FloodDetermination>("flood"),
+    sanctions: latest<SanctionsScreening>("sanctions"),
+    lienSearch: latest<LienSearch>("lien_search"),
+    identityVerification: latest<IdentityVerification>("identity"),
+
     credit: latest<CreditReport>("credit"),
     assets: latest<AssetReport>("bank"),
     payroll: latest<PayrollData>("payroll"),
@@ -242,14 +257,12 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
       storageUri: d.storageUri,
     })),
 
-    disclosures: row.disclosures.map(
-      (d): DisclosureRecord => ({
-        kind: d.kind as DisclosureRecord["kind"],
-        deliveredAt: d.deliveredAt.toISOString(),
-        method: d.method as DisclosureRecord["method"],
-        documentId: d.documentId,
-      }),
-    ),
+    disclosures: row.disclosures.map((d): DisclosureRecord => ({
+      kind: d.kind as DisclosureRecord["kind"],
+      deliveredAt: d.deliveredAt.toISOString(),
+      method: d.method as DisclosureRecord["method"],
+      documentId: d.documentId,
+    })),
 
     links: row.links.map((l) => ({
       kind: l.kind as never,

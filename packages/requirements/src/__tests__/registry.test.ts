@@ -81,8 +81,7 @@ describe("APP-011 — demographic collection", () => {
   // the strength of it — recording that a person declined a question they were
   // never shown. That is the only place this codebase asserted something false
   // about a borrower.
-  const borrower = (demographics: unknown) =>
-    ({ borrowers: [{ demographics }] }) as never;
+  const borrower = (demographics: unknown) => ({ borrowers: [{ demographics }] }) as never;
 
   it("is unsatisfied when the questions were never asked", () => {
     const r = EVALUATORS["APP-011"]!(borrower(null));

@@ -17,13 +17,37 @@
  */
 
 import type {
+  Address,
+  AddressSuggestion,
   AssetReport,
+  AvmEstimate,
   Consent,
   CreditReport,
+  FloodDetermination,
+  IdentityVerification,
+  LienSearch,
   LoanFile,
   PayrollData,
+  PropertyRecord,
+  SanctionsScreening,
   TaxTranscript,
 } from "@hm/shared";
+
+/**
+ * No public record exists for this address, as far as the provider knows.
+ *
+ * A distinct error rather than a null return, because callers must not be
+ * able to treat "we found nothing" as "there is nothing". An address with no
+ * assessor record is a normal outcome — new construction, a bad parse, a
+ * county we do not cover — and the screen above has to say so rather than
+ * render a blank card.
+ */
+export class AddressNotFoundError extends Error {
+  constructor(readonly address: string) {
+    super(`No public record found for ${address}.`);
+    this.name = "AddressNotFoundError";
+  }
+}
 
 /** Which requirements an adapter claims it can satisfy. Checked in tests. */
 export interface ConnectorCapabilities {
@@ -78,7 +102,10 @@ export interface PayrollConnector {
 export interface IrsConnector {
   readonly capabilities: ConnectorCapabilities;
   /** Requires an executed 4506-C (INC-008) on top of the APP-005 guard. */
-  fetchTranscripts(file: LoanFile, taxYears: readonly number[]): Promise<ConnectorResult<readonly TaxTranscript[]>>;
+  fetchTranscripts(
+    file: LoanFile,
+    taxYears: readonly number[],
+  ): Promise<ConnectorResult<readonly TaxTranscript[]>>;
 }
 
 export interface EsignConnector {
@@ -92,10 +119,83 @@ export interface EsignConnector {
   getCompletedConsent(envelopeId: string): Promise<Consent | null>;
 }
 
+/**
+ * Address autocomplete and public property data.
+ *
+ * Deviates from the one-argument-is-always-`file` convention above, and has
+ * to: both run on screen 1 while the borrower is still typing, before a loan
+ * file exists to pass. They take an `Address` instead.
+ *
+ * Unguarded, for the same reason the e-sign adapter is unguarded — APP-005 is
+ * signed on screen 2, and a guard here would make screen 1 unreachable. What
+ * makes that acceptable is the payload: a partial street address the borrower
+ * is typing into our own form, and public county records about a building.
+ * Neither is borrower data in the sense APP-005 exists to protect. Nothing
+ * here touches a person.
+ */
+export interface PropertyDataConnector {
+  readonly capabilities: ConnectorCapabilities;
+  /** Autocomplete candidates for a partial address. */
+  suggestAddresses(query: string): Promise<readonly AddressSuggestion[]>;
+  /** The assessor record — APN, characteristics, tax, prior ownership (APP-004). */
+  lookupRecord(address: Address): Promise<ConnectorResult<PropertyRecord>>;
+  /** Automated valuation. Not an appraisal, and the file records the difference. */
+  estimateValue(address: Address): Promise<ConnectorResult<AvmEstimate>>;
+  /** FEMA flood-zone determination. */
+  determineFlood(address: Address): Promise<ConnectorResult<FloodDetermination>>;
+}
+
+/**
+ * OFAC/SDN screening (CRD-010).
+ *
+ * Guarded. This one screens a *person* against government watchlists, it runs
+ * on screen 2 after the authorization is signed, and it is exactly the kind of
+ * third-party lookup APP-005 exists to gate.
+ */
+export interface ScreeningConnector {
+  readonly capabilities: ConnectorCapabilities;
+  screenSanctions(file: LoanFile): Promise<ConnectorResult<SanctionsScreening>>;
+}
+
+/**
+ * Ownership-and-encumbrance search against the APN from screen 1.
+ *
+ * Guarded — it ties a named borrower to recorded debts. Two of screen 4's
+ * derived declarations come from here, which is how that screen states facts
+ * instead of asking questions.
+ */
+export interface LienConnector {
+  readonly capabilities: ConnectorCapabilities;
+  searchLiens(file: LoanFile, apn: string): Promise<ConnectorResult<LienSearch>>;
+}
+
+/**
+ * Document scan and selfie (screen 2).
+ *
+ * Unguarded, deliberately, and this is the uncomfortable one. It handles a
+ * government ID, which is about as sensitive as this product gets — but it
+ * runs *before* the authorization is signed, because name, date of birth and
+ * address come off the document and the authorization is a document the
+ * borrower signs with that name. Guarding it would make APP-005 unobtainable,
+ * the same trap the e-sign adapter documents.
+ *
+ * The protection here is not the guard, it is scope: this verifies an identity
+ * the borrower is presenting to us in the moment. It pulls nothing about them
+ * from anywhere else.
+ */
+export interface IdentityConnector {
+  readonly capabilities: ConnectorCapabilities;
+  verifyIdentity(file: LoanFile): Promise<ConnectorResult<IdentityVerification>>;
+}
+
 export interface ConnectorRegistry {
   readonly credit: CreditConnector;
   readonly bank: BankConnector;
   readonly payroll: PayrollConnector;
   readonly irs: IrsConnector;
   readonly esign: EsignConnector;
+  readonly propertyData: PropertyDataConnector;
+  readonly screening: ScreeningConnector;
+  readonly liens: LienConnector;
+  readonly identity: IdentityConnector;
 }

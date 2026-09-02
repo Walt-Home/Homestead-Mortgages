@@ -1,147 +1,174 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+/**
+ * Screen 2 — identity and credit.
+ *
+ * Seven items, and nothing between the SSN and the pull firing. The old screen
+ * asked for eleven fields including name, date of birth and current address;
+ * those three now come off the scanned document, which is both faster and more
+ * accurate than asking somebody to type their own legal name.
+ *
+ * Submitting fires three calls: the soft tri-merge, OFAC screening, and an
+ * ownership-and-encumbrance search against the APN screen 1 retrieved. All
+ * three run after the authorization consent is written, which is what makes
+ * them legal to run at all.
+ *
+ * Demographics are deliberately NOT here. They belong on screen 4, and only
+ * when the occupancy makes them lawful to collect.
+ */
+
+import { useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api.js";
+import { api, ApiError } from "../lib/api.js";
 import { hasConsent, useLoanFile } from "../lib/file.js";
-import {
-  DemographicQuestions,
-  type DemographicAnswers,
-} from "../components/DemographicQuestions.js";
+import { useAuth } from "../lib/auth.js";
+import { Why } from "../components/Why.js";
+import { Working } from "../components/Working.js";
+
+interface Identity {
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  documentType: string;
+  address: { line1: string; line2?: string; city: string; state: string; postalCode: string };
+}
+
+interface CreditResult {
+  report: {
+    scores: { bureau: string; score: number; model: string }[];
+    tradelines: unknown[];
+  };
+}
 
 /**
- * Screen 2. Required before any pull, because APP-005's timing constraint is
- * "Before any verification pull" and the guard in the connector layer enforces
- * it — a pull attempted without the signature returns 403, not data.
+ * Hyphenate as they type, in the shape the placeholder promised.
  *
- * The SSN never reaches our API as a number. In a real build this field posts
- * to an identity vault and we keep the handle it returns; the prototype
- * simulates that exchange client-side so no code above ever learns to expect
- * a plaintext SSN in a request body.
+ * Both fields show a formatted placeholder, so both have to accept a formatted
+ * value — a field that shows `000-00-0000` and then keeps whatever raw string
+ * you paste has lied about what it wants. Digits are extracted, capped, and
+ * regrouped on every keystroke, which also means a pasted "(512) 555-0142" or
+ * "512.555.0142" lands correctly instead of failing validation later.
  */
+function group(digits: string, sizes: number[]): string {
+  const out: string[] = [];
+  let i = 0;
+  for (const size of sizes) {
+    if (i >= digits.length) break;
+    out.push(digits.slice(i, i + size));
+    i += size;
+  }
+  return out.join("-");
+}
+
+/** 123456789 → 123-45-6789 */
+function formatSsn(input: string): string {
+  return group(input.replace(/\D/g, "").slice(0, 9), [3, 2, 4]);
+}
+
+/** 5125550142 → 512-555-0142 */
+function formatPhone(input: string): string {
+  return group(input.replace(/\D/g, "").slice(0, 10), [3, 3, 4]);
+}
+
 export function IdentityPage() {
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { data } = useLoanFile(fileId);
-  const existing = data?.file.borrowers[0];
+  const { user } = useAuth();
   const readOnly = data?.file.isDemo === true;
 
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // They signed in to get here, so we already have this. Asking again is asking
+  // somebody to prove they are the person we just authenticated.
+  const email = user?.email ?? "";
+
+  const [identity, setIdentity] = useState<Identity | null>(null);
+  const [scanning, setScanning] = useState(false);
+
+  const [ssn, setSsn] = useState("");
+  const [phone, setPhone] = useState("");
+  const [citizenship, setCitizenship] = useState("us_citizen");
+  const [maritalStatus, setMaritalStatus] = useState("unmarried");
   const [authorized, setAuthorized] = useState(false);
-  const [econsent, setEconsent] = useState(false);
-  // Starts empty, not "declined". Declining is an answer somebody gives, and
-  // recording it for a question they were never shown is a false statement in
-  // a compliance record.
-  const [demographics, setDemographics] = useState<DemographicAnswers>({
-    ethnicity: [],
-    race: [],
-    sex: "",
-    visualObservationNoted: false,
-  });
+  const [econsent, setEconsent] = useState(true);
+  const [smsConsent, setSmsConsent] = useState(true);
 
-  const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    dateOfBirth: "",
-    ssn: "",
-    line1: "",
-    city: "",
-    state: "",
-    postalCode: "",
-    maritalStatus: "unmarried",
-    currentHousing: "rent",
-    monthlyRent: "",
-    statedMonthlyIncome: "",
-    firstTimeHomebuyer: "false",
-  });
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  /**
-   * Prefill on a revisit.
-   *
-   * Coming back to fix one field used to show an empty form, and saving it
-   * created a SECOND borrower. The SSN is deliberately not prefilled — we only
-   * hold the last four — and the server keeps the existing one when the field
-   * is left blank, so nobody is asked to retype it.
-   */
-  useEffect(() => {
-    if (!existing) return;
-    setForm((f) => ({
-      ...f,
-      firstName: existing.firstName,
-      lastName: existing.lastName,
-      email: existing.email,
-      phone: existing.phone,
-      dateOfBirth: existing.dateOfBirth?.slice(0, 10) ?? "",
-      line1: existing.currentAddress.line1,
-      city: existing.currentAddress.city,
-      state: existing.currentAddress.state,
-      postalCode: existing.currentAddress.postalCode,
-      maritalStatus: existing.maritalStatus,
-      currentHousing: existing.currentHousing,
-      monthlyRent: existing.monthlyRent ? String(existing.monthlyRent) : "",
-      firstTimeHomebuyer: String(existing.firstTimeHomebuyer ?? false),
-    }));
-    setAuthorized(hasConsent(data?.file, "verification_authorization"));
-    setEconsent(hasConsent(data?.file, "econsent"));
-  }, [existing, data?.file]);
+  const statedIncome = Number((location.state as { income?: number } | null)?.income ?? 0);
 
-  function set(key: keyof typeof form) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm((f) => ({ ...f, [key]: e.target.value }));
+  async function scan() {
+    if (!fileId) return;
+    setScanning(true);
+    setError(null);
+    try {
+      const res = await api.post<{ identity: Identity }>(`/files/${fileId}/identity-check`, {});
+      setIdentity(res.identity);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That scan did not go through.");
+    } finally {
+      setScanning(false);
+    }
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!fileId) return;
-    setSubmitting(true);
+    if (!fileId || !identity) return;
+    setRunning(true);
     setError(null);
+
     try {
-      const digits = form.ssn.replace(/\D/g, "");
-      const created = await api.post<{ id: string }>(`/files/${fileId}/borrowers`, {
-        firstName: form.firstName,
-        lastName: form.lastName,
-        email: form.email,
-        phone: form.phone,
-        dateOfBirth: form.dateOfBirth,
-        // Stand-in for the vault exchange. The real number is never sent, and
-        // on a revisit with the field left blank nothing is sent at all — the
-        // server keeps what it has.
+      const digits = ssn.replace(/\D/g, "");
+      await api.post(`/files/${fileId}/borrowers`, {
+        firstName: identity.firstName,
+        lastName: identity.lastName,
+        dateOfBirth: identity.dateOfBirth,
+        currentAddress: {
+          line1: identity.address.line1,
+          city: identity.address.city,
+          state: identity.address.state.toUpperCase(),
+          postalCode: identity.address.postalCode,
+        },
+        email,
+        phone,
+        maritalStatus,
+        citizenship,
+        preferredLanguage: "en",
         ...(digits.length >= 4
           ? {
               ssnVaultHandle: `vault:${digits.slice(-4)}:${crypto.randomUUID()}`,
               ssnLast4: digits.slice(-4),
             }
           : {}),
-        currentAddress: {
-          line1: form.line1,
-          city: form.city,
-          state: form.state.toUpperCase(),
-          postalCode: form.postalCode,
-        },
-        maritalStatus: form.maritalStatus,
-        preferredLanguage: "en",
-        firstTimeHomebuyer: form.firstTimeHomebuyer === "true",
-        currentHousing: form.currentHousing,
-        monthlyRent: form.monthlyRent ? Number(form.monthlyRent) : undefined,
-        demographics: {
-          ethnicity: demographics.ethnicity === "declined" ? "declined" : demographics.ethnicity,
-          race: demographics.race === "declined" ? "declined" : demographics.race,
-          sex: demographics.sex === "" ? "declined" : demographics.sex,
-          visualObservationNoted: false,
-        },
-        statedMonthlyIncome: Number(form.statedMonthlyIncome || 1),
+        // Derived from the county record rather than asked — screen 1 already
+        // retrieved whether this borrower held an ownership interest.
+        firstTimeHomebuyer: data?.file.propertyRecord
+          ? !data.file.propertyRecord.priorOwnershipInLastThreeYears
+          : true,
+        // KNOWN GAP, not a derivation.
+        //
+        // The four-screen flow does not ask whether the borrower rents or
+        // owns, and no retrieval establishes it either. The server schema
+        // requires the field, so this sends "rent" — which is an assertion
+        // nobody made, and the one place in the rebuilt flow where that is
+        // still true.
+        //
+        // The honest fix is one of: ask it as an eighth item on this screen,
+        // derive it from `assets.identifiedRentPayments` after the bank
+        // connection (present for a renter, absent for an owner — but absent
+        // is also what a cash-paying renter looks like), or make the field
+        // nullable so "we did not ask" is representable. The third is right
+        // and touches the requirements engine, which this rebuild does not.
+        currentHousing: "rent",
+        // Screen 4 collects these, and only when occupancy makes it lawful.
+        demographics: null,
+        statedMonthlyIncome: statedIncome || 1,
       });
 
-      // Record the two consents the flow depends on. Everything downstream is
-      // refused without the first.
       const file = await api.get<{ file: { borrowers: { id: string }[] } }>(`/files/${fileId}`);
       const borrowerId = file.file.borrowers[0]?.id;
       if (borrowerId) {
-        // Idempotent server-side: re-saving this screen will not duplicate a
-        // consent that already exists.
         if (!hasConsent(data?.file, "verification_authorization")) {
           await api.post(`/files/${fileId}/consents`, {
             kind: "verification_authorization",
@@ -151,183 +178,228 @@ export function IdentityPage() {
         if (econsent && !hasConsent(data?.file, "econsent")) {
           await api.post(`/files/${fileId}/consents`, { kind: "econsent", borrowerId });
         }
+        if (smsConsent && !hasConsent(data?.file, "sms_contact")) {
+          await api.post(`/files/${fileId}/consents`, { kind: "sms_contact", borrowerId });
+        }
       }
+
+      // The three calls. Credit first because it is the one the borrower is
+      // waiting to see; screening and the lien search are ours.
+      await api.post<CreditResult>(`/files/${fileId}/credit`, {});
+
+      await api.post(`/files/${fileId}/screening`, {}).catch(() => undefined);
+      const apn = data?.file.propertyRecord?.apn;
+      if (apn) {
+        await api.post(`/files/${fileId}/liens`, { apn }).catch(() => undefined);
+      }
+
       await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
       await queryClient.invalidateQueries({ queryKey: ["assessment"] });
-      navigate(`/f/${created.id}/credit`);
+
+      // No interstitial. The credit result was a screen whose entire content
+      // was a number and a Continue button, which is a step the borrower pays
+      // for and we get nothing from. It is now a bar at the top of the bank
+      // screen — same reassurance, no extra click.
+      navigate(`/f/${fileId}/bank`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save your details.");
-      setSubmitting(false);
+      if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {
+        setError("This is a sample file, so it is read-only. Start your own to walk the flow.");
+      } else {
+        setError(err instanceof Error ? err.message : "Something did not go through.");
+      }
+    } finally {
+      setRunning(false);
     }
   }
 
+  /* ── The form ─────────────────────────────────────────────────────────── */
+
   return (
-    <form className="card" onSubmit={submit}>
-      <h1 className="font-brand text-[22px] font-semibold text-ink-editorial">About you</h1>
-      <p className="mt-2 text-[14px] text-muted">
-        We need this before we can check anything on your behalf.
+    <form onSubmit={submit} className="card">
+      <h1 className="font-brand text-[24px] font-semibold leading-tight text-ink-editorial sm:text-[26px]">
+        Now, about you
+      </h1>
+      <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
+        Your ID gives us your name, date of birth and address, so you do not have to type them.
       </p>
 
-      <div className="mt-6 grid gap-5">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="field-label">First name</label>
-            <input className="field-input" value={form.firstName} onChange={set("firstName")} required />
-          </div>
-          <div>
-            <label className="field-label">Last name</label>
-            <input className="field-input" value={form.lastName} onChange={set("lastName")} required />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="field-label">Email</label>
-            <input className="field-input" type="email" value={form.email} onChange={set("email")} required />
-          </div>
-          <div>
-            <label className="field-label">Phone</label>
-            <input className="field-input" value={form.phone} onChange={set("phone")} required />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="field-label">Date of birth</label>
-            <input
-              className="field-input"
-              type="date"
-              value={form.dateOfBirth}
-              onChange={set("dateOfBirth")}
-              required
-            />
-          </div>
-          <div>
-            <label className="field-label">Social Security number</label>
-            <input
-              className="field-input figure"
-              value={form.ssn}
-              onChange={set("ssn")}
-              placeholder="000-00-0000"
-              required
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="field-label">Your current address</label>
-          <input className="field-input" value={form.line1} onChange={set("line1")} required />
-          <div className="mt-2 grid grid-cols-[1fr_5rem_7rem] gap-2">
-            <input className="field-input" value={form.city} onChange={set("city")} placeholder="City" required />
-            <input
-              className="field-input"
-              value={form.state}
-              onChange={set("state")}
-              placeholder="ST"
-              maxLength={2}
-              required
-            />
-            <input
-              className="field-input"
-              value={form.postalCode}
-              onChange={set("postalCode")}
-              placeholder="ZIP"
-              required
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="field-label">Marital status</label>
-            <select className="field-input" value={form.maritalStatus} onChange={set("maritalStatus")}>
-              <option value="unmarried">Unmarried</option>
-              <option value="married">Married</option>
-              <option value="separated">Separated</option>
-            </select>
-          </div>
-          <div>
-            <label className="field-label">You currently</label>
-            <select className="field-input" value={form.currentHousing} onChange={set("currentHousing")}>
-              <option value="rent">Rent</option>
-              <option value="own">Own</option>
-              <option value="rent_free">Live rent-free</option>
-            </select>
-          </div>
-          <div>
-            <label className="field-label">First home?</label>
-            <select
-              className="field-input"
-              value={form.firstTimeHomebuyer}
-              onChange={set("firstTimeHomebuyer")}
-            >
-              <option value="false">No</option>
-              <option value="true">Yes</option>
-            </select>
-          </div>
-        </div>
-
-        {form.currentHousing === "rent" && (
-          <div>
-            <label className="field-label">Monthly rent</label>
-            <input
-              className="field-input figure"
-              value={form.monthlyRent}
-              onChange={set("monthlyRent")}
-              inputMode="numeric"
-              placeholder="2150"
-            />
-            <p className="mt-1.5 text-[12px] text-subtle">
-              Twelve months of on-time rent can count as credit if your file is thin.
+      {/* 1 — ID scan and selfie */}
+      <div className="mt-7">
+        {identity ? (
+          <div className="rounded-row border border-olive-border bg-olive-light p-4">
+            <p className="text-[14px] font-medium text-ink-editorial">
+              {identity.firstName} {identity.lastName}
             </p>
+            <p className="mt-1 text-[13px] text-ink-soft">
+              Born {identity.dateOfBirth} · {identity.address.line1}, {identity.address.city}{" "}
+              {identity.address.state}
+            </p>
+            <button
+              type="button"
+              onClick={() => setIdentity(null)}
+              className="mt-2 text-[13px] text-olive underline underline-offset-2"
+            >
+              Not you? Scan again
+            </button>
           </div>
+        ) : scanning ? (
+          <Working
+            steps={[
+              { label: "Reading your document", ms: 1100 },
+              { label: "Checking it is genuine", ms: 1100 },
+              { label: "Matching your selfie", ms: 1400 },
+            ]}
+            note="Hold steady — this is the slowest part of the whole thing."
+          />
+        ) : (
+          <>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => void scan()}
+              disabled={readOnly}
+            >
+              Scan your ID and take a selfie
+            </button>
+            <Why>
+              We have to confirm you are who you say you are before we can pull anything. The scan
+              also saves you typing your name, date of birth and address.
+            </Why>
+          </>
         )}
       </div>
 
-      <DemographicQuestions value={demographics} onChange={setDemographics} />
+      {/* 2 — SSN */}
+      <div className="mt-6">
+        <label className="field-label" htmlFor="ssn">
+          Social security number
+        </label>
+        <input
+          id="ssn"
+          className="field-input"
+          required
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="000-00-0000"
+          value={ssn}
+          onChange={(e) => setSsn(formatSsn(e.target.value))}
+        />
+        <Why>
+          It is the only way to pull your credit. We keep the last four digits; the rest goes
+          straight to the credit bureaus and is never stored here.
+        </Why>
+      </div>
 
-      <div className="mt-6 space-y-3 border-t border-line-light pt-5">
-        <label className="flex gap-3 text-[13px] leading-relaxed text-ink-soft">
+      {/* 3 — Phone. Email comes from the account they signed in with. */}
+      <div className="mt-5">
+        <label className="field-label" htmlFor="phone">
+          Phone
+        </label>
+        <input
+          id="phone"
+          type="tel"
+          required
+          inputMode="numeric"
+          placeholder="000-000-0000"
+          className="field-input"
+          value={phone}
+          onChange={(e) => setPhone(formatPhone(e.target.value))}
+        />
+        <p className="mt-1.5 text-[12px] text-meta">
+          We will use {email || "the email on your account"} for everything in writing.
+        </p>
+      </div>
+
+      {/* 4 — Citizenship */}
+      <div className="mt-5">
+        <label className="field-label" htmlFor="citizenship">
+          Citizenship
+        </label>
+        <select
+          id="citizenship"
+          className="field-input"
+          value={citizenship}
+          onChange={(e) => setCitizenship(e.target.value)}
+        >
+          <option value="us_citizen">U.S. citizen</option>
+          <option value="permanent_resident">Permanent resident</option>
+          <option value="non_permanent_resident">Non-permanent resident</option>
+        </select>
+      </div>
+
+      {/* 5 — Marital status */}
+      <div className="mt-5">
+        <label className="field-label" htmlFor="marital">
+          Marital status
+        </label>
+        <select
+          id="marital"
+          className="field-input"
+          value={maritalStatus}
+          onChange={(e) => setMaritalStatus(e.target.value)}
+        >
+          <option value="unmarried">Unmarried</option>
+          <option value="married">Married</option>
+          <option value="separated">Separated</option>
+        </select>
+      </div>
+
+      {/* 6 & 7 — The two consents */}
+      <div className="mt-7 flex flex-col gap-3 border-t border-line-light pt-6">
+        <label className="flex items-start gap-3 text-[15px] leading-relaxed text-ink-prose">
           <input
             type="checkbox"
-            className="mt-0.5"
+            className="mt-1"
             checked={authorized}
             onChange={(e) => setAuthorized(e.target.checked)}
-            required
           />
-          <span>
-            I authorize a soft credit check and verification of my employment, income and assets.
-            <span className="block text-subtle">
-              Nothing is checked until you agree. A soft pull does not affect your score.
-            </span>
-          </span>
+          <span>Authorize verification of my credit, employment, income and assets</span>
         </label>
-        <label className="flex gap-3 text-[13px] leading-relaxed text-ink-soft">
+        <label className="flex items-start gap-3 text-[15px] leading-relaxed text-ink-prose">
           <input
             type="checkbox"
-            className="mt-0.5"
+            className="mt-1"
             checked={econsent}
             onChange={(e) => setEconsent(e.target.checked)}
           />
-          <span>I agree to receive disclosures electronically.</span>
+          <span>Agree to receive disclosures electronically</span>
+        </label>
+        <label className="flex items-start gap-3 text-[15px] leading-relaxed text-ink-prose">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={smsConsent}
+            onChange={(e) => setSmsConsent(e.target.checked)}
+          />
+          <span>
+            Text me updates about my application
+            <span className="block text-[13px] text-meta">
+              Optional, and separate from the disclosures above. Reply STOP any time.
+            </span>
+          </span>
         </label>
       </div>
 
+      {running && (
+        <Working
+          steps={[
+            { label: "Checking your credit", ms: 1400 },
+            { label: "Running required screening", ms: 1200 },
+            { label: "Searching the property records", ms: 1600 },
+          ]}
+          note="A soft pull. This does not affect your score."
+        />
+      )}
+
       {error && <p className="mt-4 text-[13px] text-error">{error}</p>}
 
-      <div className="mt-6 flex items-center gap-3">
-        <button className="btn-primary" disabled={submitting || !authorized || readOnly}>
-          {submitting ? "Saving…" : existing ? "Save and continue" : "Continue"}
-        </button>
-        <button type="button" className="btn-secondary" onClick={() => navigate(-1)}>
-          Back
-        </button>
-      </div>
-      {readOnly && (
-        <p className="mt-3 text-[13px] text-subtle">
-          This is a sample file and can&rsquo;t be edited.
-        </p>
-      )}
+      <button
+        className="btn-primary mt-7"
+        disabled={running || !authorized || !identity || readOnly}
+      >
+        {running ? "Working…" : "Continue"}
+      </button>
+      {!identity && <p className="mt-2 text-[12px] text-subtle">Scan your ID to continue.</p>}
     </form>
   );
 }

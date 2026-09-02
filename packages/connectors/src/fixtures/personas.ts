@@ -12,12 +12,7 @@
  * date would quietly stop exercising them.
  */
 
-import type {
-  AssetReport,
-  CreditReport,
-  PayrollData,
-  TaxTranscript,
-} from "@hm/shared";
+import type { AssetReport, CreditReport, PayrollData, TaxTranscript } from "@hm/shared";
 
 export type PersonaId = "clean_w2" | "thin_file_renter" | "variable_income";
 
@@ -96,7 +91,8 @@ const cleanW2: Persona = {
     propertyType: "single_family",
     occupancy: "primary_residence",
     state: "TX",
-    expectation: "approves — DTI around 40%, 80% LTV, no conditions beyond blocked compliance inputs",
+    expectation:
+      "approves — DTI around 40%, 80% LTV, no conditions beyond blocked compliance inputs",
   },
   credit: (ref) => ({
     reportId: "fixture-credit-clean",
@@ -176,9 +172,27 @@ const cleanW2: Persona = {
     largeDeposits: [],
     cashFlowAssessmentResult: "positive",
     alternativeReferences: [
-      { kind: "rent", payeeName: "Fixture Property Management", monthsOfHistory: 12, monthlyAmount: 2_150, onTime: true },
-      { kind: "utility", payeeName: "Fixture Energy", monthsOfHistory: 12, monthlyAmount: 141, onTime: true },
-      { kind: "insurance", payeeName: "Fixture Mutual", monthsOfHistory: 12, monthlyAmount: 96, onTime: true },
+      {
+        kind: "rent",
+        payeeName: "Fixture Property Management",
+        monthsOfHistory: 12,
+        monthlyAmount: 2_150,
+        onTime: true,
+      },
+      {
+        kind: "utility",
+        payeeName: "Fixture Energy",
+        monthsOfHistory: 12,
+        monthlyAmount: 141,
+        onTime: true,
+      },
+      {
+        kind: "insurance",
+        payeeName: "Fixture Mutual",
+        monthsOfHistory: 12,
+        monthlyAmount: 96,
+        onTime: true,
+      },
     ],
     identifiedRentPayments: 12,
     identifiedMonthlyRent: 2_150,
@@ -332,10 +346,34 @@ const thinFileRenter: Persona = {
     // Four references, which is the whole point of this persona: a thin credit
     // file that the 12-month bank report can still make lendable.
     alternativeReferences: [
-      { kind: "rent", payeeName: "Fixture Residential", monthsOfHistory: 12, monthlyAmount: 1_680, onTime: true },
-      { kind: "utility", payeeName: "Fixture Power & Light", monthsOfHistory: 12, monthlyAmount: 118, onTime: true },
-      { kind: "insurance", payeeName: "Fixture Renters Insurance", monthsOfHistory: 12, monthlyAmount: 22, onTime: true },
-      { kind: "phone", payeeName: "Fixture Mobile", monthsOfHistory: 12, monthlyAmount: 65, onTime: true },
+      {
+        kind: "rent",
+        payeeName: "Fixture Residential",
+        monthsOfHistory: 12,
+        monthlyAmount: 1_680,
+        onTime: true,
+      },
+      {
+        kind: "utility",
+        payeeName: "Fixture Power & Light",
+        monthsOfHistory: 12,
+        monthlyAmount: 118,
+        onTime: true,
+      },
+      {
+        kind: "insurance",
+        payeeName: "Fixture Renters Insurance",
+        monthsOfHistory: 12,
+        monthlyAmount: 22,
+        onTime: true,
+      },
+      {
+        kind: "phone",
+        payeeName: "Fixture Mobile",
+        monthsOfHistory: 12,
+        monthlyAmount: 65,
+        onTime: true,
+      },
     ],
     identifiedRentPayments: 12,
     identifiedMonthlyRent: 1_680,
@@ -489,8 +527,20 @@ const variableIncome: Persona = {
     ],
     cashFlowAssessmentResult: "positive",
     alternativeReferences: [
-      { kind: "rent", payeeName: "Fixture Lofts", monthsOfHistory: 12, monthlyAmount: 2_900, onTime: true },
-      { kind: "utility", payeeName: "Fixture Utilities", monthsOfHistory: 12, monthlyAmount: 173, onTime: true },
+      {
+        kind: "rent",
+        payeeName: "Fixture Lofts",
+        monthsOfHistory: 12,
+        monthlyAmount: 2_900,
+        onTime: true,
+      },
+      {
+        kind: "utility",
+        payeeName: "Fixture Utilities",
+        monthsOfHistory: 12,
+        monthlyAmount: 173,
+        onTime: true,
+      },
     ],
     identifiedRentPayments: 12,
     identifiedMonthlyRent: 2_900,

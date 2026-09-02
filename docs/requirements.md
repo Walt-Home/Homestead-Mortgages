@@ -35,14 +35,14 @@ so.
 
 ## The three questions, kept apart
 
-| Question | Lives in | Answers |
-|---|---|---|
-| Does it apply to this borrower? | `conditions.ts` | `true` / `false` / `null` |
-| Is the evidence here? | `satisfaction.ts` | satisfied / unsatisfied / blocked |
-| Can it be worked on yet? | `graph.ts` | dependencies, from the timing column |
+| Question                        | Lives in          | Answers                              |
+| ------------------------------- | ----------------- | ------------------------------------ |
+| Does it apply to this borrower? | `conditions.ts`   | `true` / `false` / `null`            |
+| Is the evidence here?           | `satisfaction.ts` | satisfied / unsatisfied / blocked    |
+| Can it be worked on yet?        | `graph.ts`        | dependencies, from the timing column |
 
 A borrower is only shown the intersection: applicable, unsatisfied, unblocked.
-Everything else is not their problem, or not their problem *yet*, and showing
+Everything else is not their problem, or not their problem _yet_, and showing
 it is how a 77-row compliance sheet becomes a form nobody finishes.
 
 ### Why applicability is three-valued
@@ -55,7 +55,7 @@ This is also why `progress()` counts only requirements that **definitely**
 apply. Several evaluators are vacuously satisfied against empty data — "0
 investment income sources with a two-year history" is trivially true before any
 income exists. Counting those while applicability is unknown inflated the
-satisfied count early and then *deflated* it when payroll resolved them to
+satisfied count early and then _deflated_ it when payroll resolved them to
 inapplicable: 23 → 21 across one connection, on five requirements at once. A
 borrower watching their progress go backwards for connecting an account is
 exactly what this product exists to prevent. There is a regression test.
@@ -91,5 +91,5 @@ fallback" or "Decision" but name a connector as their source: AST-006 (gift
 funds), INC-021 (support income), INC-023 (equity comp), AST-004 (reserves).
 If screen 7 is "only what didn't connect", these are miscategorised. If they
 are genuinely connector-derived with an upload fallback, then the real model is
-that *every* requirement has a connector path and a fallback path, and the
+that _every_ requirement has a connector path and a fallback path, and the
 sheet should say so uniformly. The code is built to the second reading.

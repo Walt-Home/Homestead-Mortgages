@@ -207,7 +207,9 @@ export const EVALUATORS: Record<string, Evaluator> = {
   },
 
   "CRD-004": (f) =>
-    !f.credit ? wait("the credit pull") : ok(`${f.credit.publicRecords.length} public record(s) reviewed`),
+    !f.credit
+      ? wait("the credit pull")
+      : ok(`${f.credit.publicRecords.length} public record(s) reviewed`),
 
   "CRD-005": (f) => {
     if (!f.credit) return wait("the credit pull");
@@ -275,7 +277,9 @@ export const EVALUATORS: Record<string, Evaluator> = {
 
   "AST-008": (f) => {
     if (!f.assets) return wait("the bank connection");
-    const retirement = f.assets.accounts.filter((a) => a.type === "retirement" && a.usedForQualifying);
+    const retirement = f.assets.accounts.filter(
+      (a) => a.type === "retirement" && a.usedForQualifying,
+    );
     const incomplete = retirement.filter(
       (a) => a.vestedBalance === undefined || a.withdrawalEligible === undefined,
     );
@@ -361,7 +365,11 @@ export const EVALUATORS: Record<string, Evaluator> = {
   "INC-002": (f) => {
     if (!f.payroll) return no("payroll not connected");
     const covered = f.payroll.paystubs.length > 0;
-    return check(covered, `${f.payroll.paystubs.length} paystub(s)`, "no paystubs covering 30 days");
+    return check(
+      covered,
+      `${f.payroll.paystubs.length} paystub(s)`,
+      "no paystubs covering 30 days",
+    );
   },
 
   "INC-005": (f) => {
@@ -404,8 +412,7 @@ export const EVALUATORS: Record<string, Evaluator> = {
     );
   },
 
-  "INC-008": (f) =>
-    check(hasConsent(f, "form_4506c"), "4506-C executed", "4506-C not signed"),
+  "INC-008": (f) => check(hasConsent(f, "form_4506c"), "4506-C executed", "4506-C not signed"),
 
   "INC-009": derived("INC-009", "transcript reconciliation"),
 
@@ -657,7 +664,11 @@ export const EVALUATORS: Record<string, Evaluator> = {
       : no("not yet clear to close"),
 
   "UW-018": (f) =>
-    check(f.fraudReviewComplete, "fraud and red flag review complete", "fraud review not performed"),
+    check(
+      f.fraudReviewComplete,
+      "fraud and red flag review complete",
+      "fraud review not performed",
+    ),
 };
 
 export function evaluateSatisfaction(requirement: Requirement, file: LoanFile): Satisfaction {

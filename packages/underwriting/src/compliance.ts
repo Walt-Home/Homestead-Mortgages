@@ -41,7 +41,10 @@ export function runComplianceTests(
   // ATR is "documented" only when income, assets and liabilities are all
   // verified and DTI actually computed. Anything less is undocumented.
   const atrInputsPresent =
-    file.credit !== null && file.assets !== null && file.incomeSources.length > 0 && dtiBack !== null;
+    file.credit !== null &&
+    file.assets !== null &&
+    file.incomeSources.length > 0 &&
+    dtiBack !== null;
   const atrDetermination: ComplianceTests["atrDetermination"] = atrInputsPresent
     ? "documented"
     : "not_documented";
@@ -74,10 +77,14 @@ export function runComplianceTests(
    */
   let qmStatus: ComplianceTests["qmStatus"] = null;
   if (market.apr === undefined || market.apor === undefined) {
-    log.blocked("UW-006", "QM status", [
-      market.apr === undefined ? "APR" : null,
-      market.apor === undefined ? "APOR (FFIEC weekly table)" : null,
-    ].filter((x): x is string => x !== null));
+    log.blocked(
+      "UW-006",
+      "QM status",
+      [
+        market.apr === undefined ? "APR" : null,
+        market.apor === undefined ? "APOR (FFIEC weekly table)" : null,
+      ].filter((x): x is string => x !== null),
+    );
   } else if (atrDetermination !== "documented") {
     // No ATR determination means no QM, whatever the price says.
     qmStatus = "non_qm";
@@ -119,10 +126,14 @@ export function runComplianceTests(
   let hpmlSpread: number | null = null;
   let isHpml: boolean | null = null;
   if (market.apr === undefined || market.apor === undefined) {
-    log.blocked("UW-008", "HPML test", [
-      market.apr === undefined ? "APR" : null,
-      market.apor === undefined ? "APOR (FFIEC weekly table)" : null,
-    ].filter((x): x is string => x !== null));
+    log.blocked(
+      "UW-008",
+      "HPML test",
+      [
+        market.apr === undefined ? "APR" : null,
+        market.apor === undefined ? "APOR (FFIEC weekly table)" : null,
+      ].filter((x): x is string => x !== null),
+    );
   } else {
     hpmlSpread = round(market.apr - market.apor);
     const threshold =
@@ -130,12 +141,18 @@ export function runComplianceTests(
         ? GUIDELINES.hpml.firstLienJumboSpread
         : GUIDELINES.hpml.firstLienSpread;
     isHpml = hpmlSpread > threshold;
-    log.record("UW-008", "HPML spread", hpmlSpread, `apr - apor vs the ${threshold} first-lien threshold`, {
-      apr: market.apr,
-      apor: market.apor,
-      threshold,
-      jumbo: loanAmount > GUIDELINES.hpml.conformingLoanLimit,
-    });
+    log.record(
+      "UW-008",
+      "HPML spread",
+      hpmlSpread,
+      `apr - apor vs the ${threshold} first-lien threshold`,
+      {
+        apr: market.apr,
+        apor: market.apor,
+        threshold,
+        jumbo: loanAmount > GUIDELINES.hpml.conformingLoanLimit,
+      },
+    );
   }
 
   /* ── HOEPA (UW-009) ───────────────────────────────────────────────────── */
@@ -159,7 +176,11 @@ export function runComplianceTests(
   let netTangibleBenefit: ComplianceTests["netTangibleBenefit"];
   const existing = file.loan?.existingLoan;
   if (file.loan && file.loan.purpose !== "purchase" && existing && file.product) {
-    const newPayment = estimateNewPayment(file.loan.loanAmount, file.product.noteRate, file.product.termMonths);
+    const newPayment = estimateNewPayment(
+      file.loan.loanAmount,
+      file.product.noteRate,
+      file.product.termMonths,
+    );
     const paymentDelta = round(existing.monthlyPayment - newPayment);
     const rateDelta = round(existing.rate - file.product.noteRate);
     // Recoup is closing cost divided by monthly saving. Without a fee total we
@@ -175,10 +196,16 @@ export function runComplianceTests(
         thresholdMonths: GUIDELINES.netTangibleBenefit.defaultRecoupMonths,
         satisfied: false,
       };
-      log.record("APP-019", "Net tangible benefit", false, "new payment is not lower than the old", {
-        old_payment: existing.monthlyPayment,
-        new_payment: round(newPayment),
-      });
+      log.record(
+        "APP-019",
+        "Net tangible benefit",
+        false,
+        "new payment is not lower than the old",
+        {
+          old_payment: existing.monthlyPayment,
+          new_payment: round(newPayment),
+        },
+      );
     } else {
       const recoupMonths = round(fees / paymentDelta, 1);
       const thresholdMonths = GUIDELINES.netTangibleBenefit.defaultRecoupMonths;

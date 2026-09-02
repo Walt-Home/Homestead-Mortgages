@@ -30,7 +30,11 @@ const uploadSchema = z.object({
   satisfiesRequirementId: z.string().regex(/^[A-Z]{2,3}-\d{3}$/),
   filename: z.string().min(1).max(255),
   contentType: z.string().min(1).max(128),
-  bytes: z.number().int().min(1).max(50 * 1024 * 1024),
+  bytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(50 * 1024 * 1024),
 });
 
 documentRouter.post(

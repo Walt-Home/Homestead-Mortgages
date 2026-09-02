@@ -179,7 +179,8 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
     return f.credit.inquiries.some((i) => daysAgo(i.date, now) <= 90);
   },
 
-  ssn_mismatch_or_fraud_alert: (f) => (f.credit ? f.credit.ssnMismatch || f.credit.fraudAlert : null),
+  ssn_mismatch_or_fraud_alert: (f) =>
+    f.credit ? f.credit.ssnMismatch || f.credit.fraudAlert : null,
 
   support_income_used: (f) =>
     f.incomeSources.length === 0

@@ -108,11 +108,19 @@ export async function signInAsLocalDeveloper(): Promise<User> {
   if (config.nodeEnv === "production") {
     throw new AppError(500, "Developer sign-in is not available.", "NOT_AVAILABLE");
   }
-  const email = "dev@localhost";
+  // `example.com` rather than `localhost`: the borrower record now takes its
+  // email from the signed-in account instead of asking for one, and screen 2
+  // validates it. "dev@localhost" has no TLD, fails that validation, and made
+  // the whole flow unusable under developer sign-in. example.com is reserved
+  // by IANA for exactly this.
+  //
+  // Updated on every sign-in, not just on create, so a developer row written
+  // before this change is repaired rather than left broken.
+  const email = "dev@example.com";
   return prisma.user.upsert({
     where: { googleSub: "local-developer" },
     create: { googleSub: "local-developer", email, name: "Local Developer" },
-    update: { lastSeenAt: new Date() },
+    update: { email, lastSeenAt: new Date() },
   });
 }
 

@@ -5,6 +5,13 @@ import type { Address, StateCode } from "./loan.js";
 export type MaritalStatus = "married" | "unmarried" | "separated";
 
 /**
+ * Residency status. Asked on screen 2 because eligibility genuinely turns on
+ * it and no connector can tell us — a permanent resident and a non-permanent
+ * resident alien qualify under different agency rules.
+ */
+export type Citizenship = "us_citizen" | "permanent_resident" | "non_permanent_resident";
+
+/**
  * SSN is never stored or passed in the clear.
  *
  * Everything outside the identity vault sees this: the last four for display,
@@ -37,6 +44,8 @@ export interface Borrower {
   readonly phone: string;
   readonly currentAddress: Address;
   readonly maritalStatus: MaritalStatus;
+  /** Null on files created before screen 2 started asking. */
+  readonly citizenship: Citizenship | null;
   /** Community-property states require the spouse even when not borrowing. */
   readonly nonBorrowingSpouseName?: string;
   readonly nonBorrowingSpouseSignatureRequired: boolean;
@@ -60,7 +69,14 @@ export interface Consent {
     | "verification_authorization"
     | "econsent"
     | "form_4506c"
-    | "persistent_monitoring";
+    | "persistent_monitoring"
+    /** The borrower's signature on the application itself (screen 4). */
+    | "application_signature"
+    /**
+     * Agreement to be contacted by text. A checkbox, not a signature — it is
+     * never in SIGNABLE, because there is no document to execute.
+     */
+    | "sms_contact";
   readonly borrowerId: string;
   readonly grantedAt: string;
   readonly revokedAt?: string;

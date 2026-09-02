@@ -6,6 +6,18 @@ import { useLoanFile } from "../lib/file.js";
 import { SignDocument } from "../components/SignDocument.js";
 
 /**
+ * NOTE, and a known rough edge of the four-screen rebuild.
+ *
+ * The items on this branch render `statement` and `appliesBecause` straight
+ * from the requirements registry, which is the sheet's own wording — so
+ * phrases like "4506-C executed" still reach a borrower here. Everywhere else
+ * in the flow the internal vocabulary is gone; this is the one surface where
+ * it survives, because the alternative is hand-writing borrower-facing copy
+ * for all 77 requirements and a half-done map reads worse than a consistent
+ * one. Worth doing before this is shown to anybody real.
+ */
+
+/**
  * Screen 7. Drew's note: "Only what didn't connect. Should feel like an
  * exception, not a step."
  *
@@ -76,9 +88,12 @@ export function UploadPage() {
 
       {signable.length > 0 && (
         <div className="mt-6 space-y-4">
-          <p className="text-[14px] text-muted">These need your signature.</p>
+          <p className="text-[14px] text-muted">These two need your signature.</p>
           {signable.map((item) => (
-            <div key={item.id} className="rounded-row border border-line-light bg-raised px-4 py-3.5">
+            <div
+              key={item.id}
+              className="rounded-row border border-line-light bg-raised px-4 py-3.5"
+            >
               <p className="text-[15px] text-ink-editorial">{item.statement}</p>
               <p className="mt-1 text-[13px] text-muted">{item.missing}</p>
               {!readOnly && (
@@ -104,14 +119,19 @@ export function UploadPage() {
       {items.length > 0 && (
         <>
           <p className="mt-6 text-[14px] text-muted">
-            Your connections covered most of it. These {items.length} need you.
+            Your connections covered the rest. These {items.length} have to come from you.
           </p>
           <ul className="mt-4 space-y-4">
             {items.map((item) => (
-              <li key={item.id} className="rounded-row border border-line-light bg-raised px-4 py-3.5">
+              <li
+                key={item.id}
+                className="rounded-row border border-line-light bg-raised px-4 py-3.5"
+              >
                 <p className="text-[15px] text-ink-editorial">{item.statement}</p>
                 <p className="mt-1 text-[13px] text-muted">{item.missing}</p>
-                <p className="mt-1 text-[12px] text-subtle">Asked because: {item.appliesBecause}</p>
+                <p className="mt-1 text-[12px] text-subtle">
+                  Why we need it: {item.appliesBecause}
+                </p>
                 {!readOnly && <AttachControl fileId={fileId} requirementId={item.id} />}
               </li>
             ))}
@@ -120,10 +140,10 @@ export function UploadPage() {
       )}
 
       <div className="mt-8 flex items-center gap-3">
-        <button className="btn-primary" onClick={() => navigate(`/f/${fileId}/decision`)}>
+        <button className="btn-primary" onClick={() => navigate(`/f/${fileId}/review`)}>
           See where I stand
         </button>
-        <button className="btn-secondary" onClick={() => navigate(`/f/${fileId}/irs`)}>
+        <button className="btn-secondary" onClick={() => navigate(`/f/${fileId}/review`)}>
           Back
         </button>
       </div>

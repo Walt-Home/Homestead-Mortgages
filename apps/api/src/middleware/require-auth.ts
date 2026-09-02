@@ -20,11 +20,7 @@ declare global {
   }
 }
 
-export async function requireAuth(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
+export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: { message: "Sign in to continue.", code: "SIGN_IN_REQUIRED" } });

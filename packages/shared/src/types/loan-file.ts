@@ -19,6 +19,14 @@ import type {
   UploadedDocument,
 } from "./verification.js";
 import type { Decision, DisclosureRecord } from "./decision.js";
+import type {
+  AvmEstimate,
+  FloodDetermination,
+  IdentityVerification,
+  LienSearch,
+  PropertyRecord,
+  SanctionsScreening,
+} from "./property-record.js";
 
 /** Which of the nine screens the borrower has completed. */
 export type FlowStage =
@@ -81,6 +89,19 @@ export interface LoanFile {
   readonly consents: readonly Consent[];
 
   readonly application: ApplicationReceipt | null;
+
+  /**
+   * Public record about the property, retrieved on screen 1 rather than asked.
+   * Null until the lookup has run — which is a different fact from "the county
+   * has nothing", and the UI must not render them the same way.
+   */
+  readonly propertyRecord: PropertyRecord | null;
+  readonly valuation: AvmEstimate | null;
+  readonly flood: FloodDetermination | null;
+  /** Screen 2's screening and search. Null until run. */
+  readonly sanctions: SanctionsScreening | null;
+  readonly lienSearch: LienSearch | null;
+  readonly identityVerification: IdentityVerification | null;
 
   readonly credit: CreditReport | null;
   readonly assets: AssetReport | null;

@@ -21,6 +21,12 @@ function file(overrides: Partial<LoanFile> = {}): LoanFile {
     createdAt: "",
     updatedAt: "",
     stage: "decision",
+    propertyRecord: null,
+    valuation: null,
+    flood: null,
+    sanctions: null,
+    lienSearch: null,
+    identityVerification: null,
     property: {
       address: { line1: "1 St", city: "C", state: "TX", postalCode: "1" },
       deliverableAddressVerified: true,

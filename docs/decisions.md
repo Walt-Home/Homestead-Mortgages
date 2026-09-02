@@ -361,6 +361,37 @@ leaves them outstanding and labels them as ours. The consequence is that a file
 reaches "approved with conditions" and never "clear to close", which is the
 honest outcome for a product that has not generated a single disclosure.
 
+## Vendors, one at a time
+
+The registry used to be a single `CONNECTOR_MODE`: everything fixture or
+everything real. Vendors do not arrive that way. Address autocomplete needs an
+API key and an afternoon; a credit reseller needs an entity licence and a site
+inspection. Each connector now reads its own variable and falls back to the
+fixture, and `/health` reports the resulting mix.
+
+**Google Places** implements one method of `PropertyDataConnector`. It knows
+which addresses exist and nothing else — the assessor record, the valuation and
+the flood determination stay with the fixture, and the adapter claims no
+requirements at all, because APP-004 is satisfied by the public-record match
+rather than by autocomplete.
+
+**Stripe Identity refuses a live key** unless `STRIPE_ALLOW_LIVE_IDENTITY=true`,
+and nothing sets it. This is not squeamishness about a few dollars per
+verification. Live mode collects a real government ID and a real face scan from
+everyone who walks the flow, friends and family included. Face geometry is
+biometric data: Illinois BIPA and its equivalents attach consent, notice and
+retention duties to collecting it, and BIPA carries a private right of action.
+This product has no retention policy, which is documented above. Collecting
+real biometrics into a prototype is the one integration mistake that cannot be
+undone by deleting a row — test mode proves the entire integration against
+Stripe's own sample documents and collects nothing real.
+
+Verified against Stripe in test mode: a session is created with
+`require_matching_selfie` (without it you have verified a document, not the
+person holding it), `livemode: false`, and reads back with
+`verified_outputs` expanded — unexpanded, a verified session returns nothing
+about who was verified.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

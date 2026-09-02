@@ -54,6 +54,26 @@ export const config = {
    */
   googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY,
 
+  /**
+   * Stripe. The SANDBOX key is preferred deliberately and the live key is only
+   * reached by setting STRIPE_ALLOW_LIVE_IDENTITY=true.
+   *
+   * Live identity verification collects a real government ID and a real face
+   * scan from every person who walks the flow. Face geometry is biometric data
+   * with statutory duties attached under BIPA and its equivalents, and this
+   * deployment has no retention policy. Test mode proves the entire
+   * integration against Stripe's sample documents and collects nothing real.
+   */
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY_SANDBOX ?? process.env.STRIPE_SECRET_KEY,
+    publishableKey:
+      process.env.STRIPE_PUBLISHABLE_KEY_SANDBOX ?? process.env.STRIPE_PUBLISHABLE_KEY,
+    allowLiveIdentity: process.env.STRIPE_ALLOW_LIVE_IDENTITY === "true",
+  },
+
+  /** Where Stripe returns the borrower after the hosted identity flow. */
+  publicOrigin: process.env.PUBLIC_ORIGIN ?? "http://localhost:5173",
+
   /** Fixture persona for local development. */
   fixturePersona: process.env.FIXTURE_PERSONA ?? "clean_w2",
 

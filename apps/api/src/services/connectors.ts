@@ -16,6 +16,7 @@
 import {
   fixtureRegistry,
   googlePlacesConnector,
+  stripeIdentityConnector,
   type ConnectorRegistry,
   type PersonaId,
 } from "@hm/connectors";
@@ -63,7 +64,25 @@ export function connectors(): ConnectorRegistry {
     chosen.propertyData = "google-places (+ fixture for records)";
   }
 
-  registry = { ...fixtures, propertyData };
+  let identity = fixtures.identity;
+  if (config.providers.identity === "stripe") {
+    if (!config.stripe.secretKey) {
+      throw new Error(
+        "IDENTITY_PROVIDER=stripe but no Stripe secret key is set. " +
+          "Set STRIPE_SECRET_KEY_SANDBOX.",
+      );
+    }
+    identity = stripeIdentityConnector({
+      secretKey: config.stripe.secretKey,
+      // Stripe sends the borrower back here after the hosted flow; screen 2
+      // reads the result when they land.
+      returnUrl: `${config.publicOrigin}/identity/return`,
+      allowLiveMode: config.stripe.allowLiveIdentity,
+    });
+    chosen.identity = identity.capabilities.provider;
+  }
+
+  registry = { ...fixtures, propertyData, identity };
   mix = chosen;
   return registry;
 }

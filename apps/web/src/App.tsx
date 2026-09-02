@@ -13,6 +13,7 @@ import { FilesPage } from "./pages/FilesPage.js";
 import { PropertyLoanPage } from "./pages/PropertyLoanPage.js";
 import { IdentityPage } from "./pages/IdentityPage.js";
 import { IdentityReturnPage } from "./pages/IdentityReturnPage.js";
+import { PlaidReturnPage } from "./pages/PlaidReturnPage.js";
 import { BankPage } from "./pages/BankPage.js";
 import { ReviewPage } from "./pages/ReviewPage.js";
 import { IrsPage, PayrollPage } from "./pages/ConnectPages.js";
@@ -41,6 +42,17 @@ export function App() {
       <Route path="/" element={<Chrome />}>
         <Route index element={<FilesPage />} />
         <Route path="privacy" element={<PrivacyPage />} />
+        {/*
+          Where an OAuth bank returns the borrower.
+
+          Top level, not under /f/:fileId, because Plaid forbids query
+          parameters on a redirect URI and requires it registered verbatim in
+          the dashboard — so the path cannot carry a file id. The page
+          recovers it from the stored attempt instead. Without this route the
+          catch-all below would silently redirect the borrower to their file
+          list, mid-handoff, with no explanation.
+        */}
+        <Route path="plaid/return" element={<PlaidReturnPage />} />
       </Route>
 
       {/* Screen 1 runs before a file exists. */}

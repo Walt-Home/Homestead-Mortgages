@@ -90,6 +90,22 @@ export const config = {
      * without the decision quietly resting on the wrong evidence.
      */
     product: (process.env.PLAID_PRODUCT ?? "cra") as "cra" | "assets",
+    /**
+     * Where an OAuth bank returns the borrower. **Unset by default, and that
+     * is deliberate.**
+     *
+     * Plaid rejects `/link/token/create` outright — INVALID_FIELD — when the
+     * redirect URI is not registered under Developers > API > Allowed
+     * Redirect URIs. Not just for OAuth banks: for every link token. So
+     * defaulting this to a plausible-looking URL takes the whole screen down
+     * until somebody happens to add it in the dashboard, which is a
+     * configuration step this repo cannot perform or verify.
+     *
+     * Unset, Link works for every non-OAuth institution and OAuth ones are
+     * simply unavailable. Set it once `${PUBLIC_ORIGIN}/plaid/return` is
+     * registered, and they light up.
+     */
+    redirectUri: process.env.PLAID_REDIRECT_URI,
   },
 
   /**

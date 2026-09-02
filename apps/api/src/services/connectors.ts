@@ -100,14 +100,16 @@ export function connectors(): ConnectorRegistry {
       // Throws if VENDOR_TOKEN_KEY is missing or the wrong length. Better here
       // than at the first borrower's bank login.
       tokens: vendorTokenStore(prisma, config.vendorTokenKey),
-      // OAuth banks bounce the borrower out to their own site and back. The
-      // URI has to be registered in the Plaid dashboard or Link refuses it.
-      redirectUri: `${config.publicOrigin}/plaid/return`,
+      // Only when it is registered. Plaid refuses every link token — not just
+      // the OAuth ones — if this is sent and not on the dashboard allowlist.
+      ...(config.plaid.redirectUri ? { redirectUri: config.plaid.redirectUri } : {}),
       // /cra/check_report/create refuses to run without somewhere to announce
       // completion. The client still polls; this satisfies the endpoint.
       publicOrigin: config.publicOrigin,
     });
-    chosen.bank = bank.capabilities.provider;
+    chosen.bank = config.plaid.redirectUri
+      ? bank.capabilities.provider
+      : `${bank.capabilities.provider}, no OAuth banks`;
   }
 
   registry = { ...fixtures, propertyData, identity, bank };

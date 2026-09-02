@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
-import { AuthorizationError } from "@hm/connectors";
+import { AuthorizationError, PlaidRequestError } from "@hm/connectors";
 
 export class AppError extends Error {
   constructor(
@@ -23,6 +23,27 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
         message: err.message,
         code: "AUTHORIZATION_REQUIRED",
         requirementId: err.requirementId,
+      },
+    });
+    return;
+  }
+  /**
+   * A vendor error is not our server failing.
+   *
+   * Two of Plaid's are recoverable by the borrower doing the thing again, and
+   * a 500 tells the client nothing it can act on. The vendor's own message
+   * goes to the log and never to the response: it is written for a developer
+   * and routinely names internal state.
+   */
+  if (err instanceof PlaidRequestError) {
+    const relink = err.code === "ITEM_LOGIN_REQUIRED" || err.code === "INVALID_PUBLIC_TOKEN";
+    console.error(`plaid ${err.code}: ${err.message}`);
+    res.status(relink ? 409 : 502).json({
+      error: {
+        message: relink
+          ? "Your bank needs signing into again."
+          : "We could not reach your bank just now.",
+        code: relink ? "BANK_RELINK_REQUIRED" : "BANK_CONNECTION_FAILED",
       },
     });
     return;

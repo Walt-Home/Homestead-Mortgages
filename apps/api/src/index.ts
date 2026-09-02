@@ -18,41 +18,12 @@ import { decisionRouter } from "./routes/decision.js";
 import { esignRouter } from "./routes/esign.js";
 import { documentRouter } from "./routes/documents.js";
 import { applicationRouter } from "./routes/application.js";
+import { securityHeaders } from "./security-policy.js";
 
 const app = express();
 
 app.set("trust proxy", config.trustProxy);
-// Two of helmet's defaults break Google Identity Services, and both fail
-// silently — which is the expensive part.
-//
-// 1. CSP `script-src 'self'` blocks the GIS script, so the button never
-//    renders. Visible enough to catch.
-//
-// 2. `Cross-Origin-Opener-Policy: same-origin` severs `window.opener` for the
-//    popup GIS opens. The popup loads, tries to post the credential back to
-//    us, and cannot — so it sits there blank forever with no error in either
-//    window. It looks exactly like an unregistered OAuth origin, and it cost a
-//    round of chasing the wrong thing. `same-origin-allow-popups` keeps the
-//    isolation that matters (other sites still cannot get a handle on our
-//    window) while letting our own popups talk back.
-app.use(
-  helmet({
-    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
-    contentSecurityPolicy: {
-      directives: {
-        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        "script-src": ["'self'", "https://accounts.google.com/gsi/client"],
-        // Whole origin rather than the /gsi/ path prefix: GIS moves between
-        // several paths on accounts.google.com and a path-scoped source is a
-        // subtle breakage waiting for the next SDK change.
-        "connect-src": ["'self'", "https://accounts.google.com"],
-        "frame-src": ["'self'", "https://accounts.google.com"],
-        // Google serves the avatar from the ID token here.
-        "img-src": ["'self'", "data:", "https://lh3.googleusercontent.com"],
-      },
-    },
-  }),
-);
+app.use(helmet(securityHeaders(config.plaid.environment)));
 app.use(
   cors({
     origin: config.nodeEnv === "production" ? config.corsOrigins : true,

@@ -488,6 +488,75 @@ contains no realistic paycheque. Income inference finds nothing against it. Use
 Link's custom-user seed (`user_custom` as the username, a transactions JSON as
 the password) for data with a real deposit in it.
 
+## The Link widget
+
+No npm package. `react-plaid-link` does not remove the CDN dependency — it
+injects the same `link-initialize.js` from cdn.plaid.com, which Plaid requires
+and forbids you to bundle — and `loadGsi` in `SignInPage.tsx` is already this
+repo's pattern for exactly that. The package also does not list its callbacks
+as effect dependencies, so an `onSuccess` closing over state reads whatever was
+current at mount; `components/PlaidLink.tsx` routes every callback through a
+ref written each render, which makes that impossible rather than something to
+work around.
+
+Three hazards the component exists to absorb:
+
+**onExit fires after onSuccess.** Teardown calls `exit({ force: true })` and
+Plaid answers with `onExit` — after the success already being acted on.
+Unguarded, that knocks screen 3 from "assembling" back to "connect your bank"
+at the moment the report starts building. A `done` flag makes a post-success
+exit a no-op, and the parent's handler uses the updater form as a second line.
+
+**Silence.** If `frame-src` blocks cdn.plaid.com, or an ad blocker null-routes
+it, the script loads, `create()` returns, `open()` runs — and then nothing. No
+error, no callback, and an overlay whose close button lives inside the frame
+that never booted. A 20-second watchdog, disarmed by `onEvent("OPEN")`, is the
+only way to detect it.
+
+**The page goes away.** OAuth institutions navigate the whole document to the
+bank and back, so React state is gone on return and Plaid requires the *same*
+link token to resume. `hm.plaid.attempt.v1.<fileId>` in localStorage carries
+it. Per-file because a single global key meant two loan files in two tabs
+overwrote each other; versioned so a later shape change cannot resurrect a
+record the new reader misparses.
+
+`/plaid/return` is a top-level route, not under `/f/:fileId`, because Plaid
+forbids query parameters on a redirect URI — the file id cannot be in the path,
+so the page recovers it from the record. It is a courier: it captures the
+public token and hands the borrower back to screen 3, so exactly one component
+talks to `POST /files/:id/bank`. Two writers would mean two rows in two
+append-only tables for one pull.
+
+**`PLAID_REDIRECT_URI` is unset by default and that is not laziness.** Plaid
+rejects `/link/token/create` with INVALID_FIELD when the redirect URI is not on
+the dashboard allowlist — for *every* link token, not only OAuth ones. A
+plausible-looking default takes the whole screen down until somebody happens to
+register it. Unset, every non-OAuth institution works; `/health` reports
+`plaid-assets (sandbox), no OAuth banks` so the gap is visible rather than
+inferred.
+
+### What the first live run changed
+
+The CSP needed `cdn.plaid.com` in `script-src` **and** `frame-src`, and the
+environment-matched API host in `connect-src`. `security-policy.ts` now holds
+that once: `headers.test.ts` used to re-declare the whole helmet config, so it
+asserted against its own copy and would have kept passing while the server
+served something else.
+
+Two things the run caught that no test had:
+
+**A poll raced the token exchange.** StrictMode invokes the resume effect
+twice; the second run polled before the first run's `/item/public_token/exchange`
+returned, and the server answered NO_PUBLIC_TOKEN. The retry tolerance absorbed
+it, which is precisely why it would have gone unnoticed. The effect now guards
+on a `resumedFor` ref — the deps hold callbacks whose identity changes, so
+"runs once" was never guaranteed by the dependency list.
+
+**Tolerating consecutive poll failures earned itself immediately.** The first
+successful end-to-end run went 202 → 502 → 202 → 202 → 201. Without the
+tolerance the borrower would have seen "that connection did not go through"
+and lost a bank link that was working.
+
 ## Vendor credentials at rest
 
 A Plaid `access_token` reads a named person's bank transactions on demand, for

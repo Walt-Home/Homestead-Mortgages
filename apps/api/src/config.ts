@@ -37,6 +37,23 @@ export const config = {
    * change with a visible default, not a code path somebody discovers later.
    */
   connectorMode: (process.env.CONNECTOR_MODE ?? "fixture") as "fixture" | "sandbox" | "production",
+  /**
+   * Which adapter serves each connector. Anything unset stays on the fixture,
+   * so a new vendor is one variable rather than a global switch.
+   */
+  providers: {
+    propertyData: process.env.PROPERTY_DATA_PROVIDER ?? "fixture",
+    identity: process.env.IDENTITY_PROVIDER ?? "fixture",
+    bank: process.env.BANK_PROVIDER ?? "fixture",
+  },
+
+  /**
+   * Google Places, for address autocomplete. Restrict the key to the Places
+   * API and to this service's origins — an unrestricted Maps key found in a
+   * bundle is somebody else's bill.
+   */
+  googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY,
+
   /** Fixture persona for local development. */
   fixturePersona: process.env.FIXTURE_PERSONA ?? "clean_w2",
 

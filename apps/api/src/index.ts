@@ -7,6 +7,7 @@ import { requireAuth } from "./middleware/require-auth.js";
 import { sessionMiddleware } from "./middleware/session.js";
 import { assertAuthConfigured } from "./services/auth.js";
 import { serveSpa } from "./static.js";
+import { providerMix } from "./services/connectors.js";
 import { authRouter } from "./routes/auth.js";
 import { healthRouter } from "./routes/health.js";
 import { fileRouter } from "./routes/files.js";
@@ -98,6 +99,9 @@ assertAuthConfigured();
 app.listen(config.port, () => {
   console.log(`Homestead Mortgages API on :${config.port} (${config.nodeEnv})`);
   console.log(`Connector mode: ${config.connectorMode}`);
+  for (const [name, provider] of Object.entries(providerMix())) {
+    console.log(`  ${name.padEnd(14)} ${provider}`);
+  }
   if (config.connectorMode === "fixture") {
     console.log(`Fixture persona: ${config.fixturePersona}`);
   }

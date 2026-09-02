@@ -3,6 +3,7 @@ import { prisma } from "@hm/db";
 import { REQUIREMENTS } from "@hm/requirements";
 import { SHADOW_ENGINE_VERSION } from "@hm/underwriting";
 import { config } from "../config.js";
+import { providerMix } from "../services/connectors.js";
 
 export const healthRouter = Router();
 
@@ -38,6 +39,9 @@ healthRouter.get("/", async (_req, res) => {
     requirementCount: REQUIREMENTS.length,
     ausEngine: `shadow@${SHADOW_ENGINE_VERSION}`,
     connectorMode: config.connectorMode,
+    // Which adapter each connector is actually using. "Is this real yet?" is a
+    // question that gets asked at the worst possible moment.
+    providers: providerMix(),
     authConfigured: Boolean(config.googleClientId),
     timestamp: new Date().toISOString(),
   });

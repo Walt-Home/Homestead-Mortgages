@@ -102,6 +102,9 @@ export function connectors(): ConnectorRegistry {
       // OAuth banks bounce the borrower out to their own site and back. The
       // URI has to be registered in the Plaid dashboard or Link refuses it.
       redirectUri: `${config.publicOrigin}/plaid/return`,
+      // /cra/check_report/create refuses to run without somewhere to announce
+      // completion. The client still polls; this satisfies the endpoint.
+      publicOrigin: config.publicOrigin,
     });
     chosen.bank = bank.capabilities.provider;
   }

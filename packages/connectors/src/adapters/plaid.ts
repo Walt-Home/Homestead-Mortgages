@@ -69,10 +69,14 @@ export type PlaidEnvironment = "sandbox" | "production";
  * change with it.
  */
 export type PermissiblePurpose =
-  | "WRITTEN_INSTRUCTIONS_PREQUALIFICATION"
-  | "WRITTEN_INSTRUCTIONS_PROSPECTIVE_EMPLOYMENT"
+  | "WRITTEN_INSTRUCTION_PREQUALIFICATION"
+  | "WRITTEN_INSTRUCTION_OTHER"
   | "ACCOUNT_REVIEW_CREDIT"
-  | "EXTENSION_OF_CREDIT";
+  | "ACCOUNT_REVIEW_NON_CREDIT"
+  | "EXTENSION_OF_CREDIT"
+  | "ELIGIBILITY_FOR_GOVT_BENEFITS"
+  | "LEGITIMATE_BUSINESS_NEED_OTHER"
+  | "LEGITIMATE_BUSINESS_NEED_TENANT_SCREENING";
 
 export interface PlaidOptions {
   readonly clientId: string;
@@ -82,6 +86,9 @@ export interface PlaidOptions {
   /** Where Plaid Link returns after an OAuth bank. Must be registered with Plaid. */
   readonly redirectUri?: string;
   readonly permissiblePurpose?: PermissiblePurpose;
+  /** Where Plaid announces report completion. Required by /cra/check_report/create. */
+  readonly webhookUrl?: string;
+  readonly publicOrigin?: string;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -160,9 +167,21 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
       // /user/create would orphan the first report.
       let userToken = await options.tokens.get(file.id, USER_TOKEN);
       if (!userToken) {
-        const created = await call<{ user_token: string }>("/user/create", {
+        const created = await call<{ user_token?: string; user_id?: string }>("/user/create", {
           client_user_id: file.id,
         });
+        // On an account without CRA enabled, /user/create succeeds and returns
+        // only `user_id` — no token. Storing that undefined would surface three
+        // calls later as INVALID_USER_TOKEN, which reads like a bug in this
+        // adapter rather than a missing entitlement. Say what is actually wrong.
+        if (!created.user_token) {
+          throw new PlaidRequestError(
+            "NO_USER_TOKEN_ISSUED",
+            "Plaid issued no user_token. This account is almost certainly not enabled " +
+              "for the CRA products — request them at " +
+              "https://dashboard.plaid.com/overview/request-products",
+          );
+        }
         userToken = created.user_token;
         await options.tokens.put(file.id, USER_TOKEN, userToken);
       }
@@ -173,12 +192,14 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
         client_name: "Homestead Mortgages",
         language: "en",
         country_codes: ["US"],
-        // Empty on purpose: with CRA, the products are named under
-        // cra_enabled_products and repeating them here double-bills the item.
-        products: [],
-        cra_enabled_products: ["cra_base_report", "cra_income_insights"],
+        // The CRA products go in `products`, like any other. There is a
+        // `cra_enabled_products` field in some of Plaid's older CRA material;
+        // the live API rejects it as UNKNOWN_FIELDS, and setting
+        // `consumer_report_permissible_purpose` without a CRA product in
+        // `products` is rejected too. Verified against sandbox.
+        products: ["cra_base_report", "cra_income_insights"],
         consumer_report_permissible_purpose:
-          options.permissiblePurpose ?? "WRITTEN_INSTRUCTIONS_PREQUALIFICATION",
+          options.permissiblePurpose ?? "WRITTEN_INSTRUCTION_PREQUALIFICATION",
         cra_options: { days_requested: DAYS_REQUESTED },
         ...(options.redirectUri ? { redirect_uri: options.redirectUri } : {}),
       });
@@ -233,6 +254,12 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
         await call("/cra/check_report/create", {
           user_token: userToken,
           days_requested: DAYS_REQUESTED,
+          consumer_report_permissible_purpose:
+            options.permissiblePurpose ?? "WRITTEN_INSTRUCTION_PREQUALIFICATION",
+          // Required, not optional — the endpoint rejects the call without it.
+          // The report is still polled rather than driven by this webhook; it
+          // exists because Plaid insists on somewhere to announce completion.
+          webhook: options.webhookUrl ?? `${options.publicOrigin ?? ""}/api/webhooks/plaid`,
         });
       }
 

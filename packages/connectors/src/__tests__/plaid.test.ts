@@ -201,12 +201,25 @@ describe("plaid adapter — the link session", () => {
     expect(session.requiresClientHandoff).toBe(true);
 
     const link = calls.find((k) => k.path === "/link/token/create")!;
-    expect(link.body.cra_enabled_products).toEqual(["cra_base_report", "cra_income_insights"]);
-    expect(link.body.products).toEqual([]);
+    // All three of these were wrong in the first draft and were caught by the
+    // live sandbox, not by a fixture. Pinned so a refactor cannot undo them:
+    // the CRA products go in `products`; `cra_enabled_products` is rejected as
+    // UNKNOWN_FIELDS; and the purpose enum is INSTRUCTION, not INSTRUCTIONS.
+    expect(link.body.products).toEqual(["cra_base_report", "cra_income_insights"]);
+    expect(link.body.cra_enabled_products).toBeUndefined();
     expect(link.body.consumer_report_permissible_purpose).toBe(
-      "WRITTEN_INSTRUCTIONS_PREQUALIFICATION",
+      "WRITTEN_INSTRUCTION_PREQUALIFICATION",
     );
     expect(link.body.user_token).toBe("user-tok");
+  });
+
+  it("says what is actually wrong when the account has no CRA entitlement", async () => {
+    // /user/create SUCCEEDS on a non-CRA account and returns only user_id.
+    // Storing that undefined surfaced three calls later as INVALID_USER_TOKEN,
+    // which reads like a bug here rather than a missing product.
+    const { impl } = stubFetch({ ...routes, "/user/create": { user_id: "usr_1" } });
+    const { c } = connector(impl);
+    await expect(c.createLinkSession(file())).rejects.toThrow(/request-products/);
   });
 
   it("reuses the user token rather than orphaning the first report", async () => {
@@ -242,6 +255,12 @@ describe("plaid adapter — the report", () => {
     expect(out.result.data.accounts).toHaveLength(2);
     expect(out.result.data.vendorAuthorizedForDu).toBe(true);
     expect(calls.map((k) => k.path)).toContain("/cra/check_report/create");
+    // The endpoint rejects the call without both of these.
+    const create = calls.find((k) => k.path === "/cra/check_report/create")!;
+    expect(create.body.webhook).toBeTruthy();
+    expect(create.body.consumer_report_permissible_purpose).toBe(
+      "WRITTEN_INSTRUCTION_PREQUALIFICATION",
+    );
   });
 
   it("does not re-exchange on a later poll that has no public token", async () => {

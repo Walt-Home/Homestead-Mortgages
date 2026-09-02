@@ -177,3 +177,46 @@ variable "public_origin" {
   type        = string
   default     = ""
 }
+
+# ── Stripe Identity and Google Places ────────────────────────────────────────
+
+variable "stripe_secret_key_secret" {
+  description = <<-EOT
+    Secret Manager secret holding the Stripe SANDBOX key.
+
+    Named for the sandbox deliberately. Live identity verification collects a
+    real government ID and a real face scan from every person who walks the
+    flow — biometric data carrying consent, notice and retention duties under
+    Illinois BIPA and its equivalents, and BIPA has a private right of action.
+    This deployment has no retention policy. The adapter refuses an sk_live_
+    key unless STRIPE_ALLOW_LIVE_IDENTITY is set, which is why that variable
+    does not exist here.
+  EOT
+  type        = string
+  default     = "HOMESTEAD_MORTGAGES_STRIPE_SECRET_KEY_SANDBOX"
+}
+
+variable "google_places_api_key_secret" {
+  description = <<-EOT
+    Secret Manager secret holding the Places API key.
+
+    Called server-side from Cloud Run, which has no static egress IP, so an
+    application restriction is not available — the meaningful control is the
+    API restriction, and the key is narrowed to places.googleapis.com alone
+    rather than the 35 Maps Platform services a default key carries.
+  EOT
+  type        = string
+  default     = "HOMESTEAD_MORTGAGES_GOOGLE_PLACES_API_KEY"
+}
+
+variable "plaid_redirect_uri" {
+  description = <<-EOT
+    Where an OAuth bank returns the borrower. Must be registered EXACTLY under
+    Developers > API > Allowed Redirect URIs before it is set: Plaid rejects
+    /link/token/create with INVALID_FIELD otherwise, for every link token
+    rather than only the OAuth ones. Empty means non-OAuth banks work and
+    OAuth ones do not, which /health reports as "no OAuth banks".
+  EOT
+  type        = string
+  default     = ""
+}

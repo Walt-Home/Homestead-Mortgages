@@ -175,18 +175,32 @@ jobs:
           ENV_VARS="$ENV_VARS,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}"
           ENV_VARS="$ENV_VARS,BANK_PROVIDER=plaid,PLAID_ENV=sandbox,PLAID_PRODUCT=assets"
           ENV_VARS="$ENV_VARS,PLAID_CLIENT_ID=${{ vars.PLAID_CLIENT_ID }}"
+          ENV_VARS="$ENV_VARS,IDENTITY_PROVIDER=stripe,PROPERTY_DATA_PROVIDER=google_places"
+          #
+          # STRIPE_ALLOW_LIVE_IDENTITY is deliberately absent, and the secret
+          # deliberately names the sandbox key. Live identity collects a real
+          # government ID and a real face scan from everyone who walks the
+          # flow — biometric data with statutory duties under BIPA and its
+          # equivalents — and this deployment has no retention policy. The
+          # adapter refuses an sk_live_ key without that flag, so the omission
+          # is enforced rather than trusted.
           # Omitted rather than set empty when the URL is not resolvable yet:
           # an empty string is not nullish, so it would defeat the fallback in
           # config.ts instead of deferring to it.
           if [ -n "$SERVICE_URL" ]; then
             ENV_VARS="$ENV_VARS,PUBLIC_ORIGIN=$SERVICE_URL"
+            # Registered in the Plaid dashboard. Sent ONLY when the origin
+            # resolved, because an unregistered redirect URI makes Plaid reject
+            # every link token — not just the OAuth ones — and takes screen 3
+            # down completely.
+            ENV_VARS="$ENV_VARS,PLAID_REDIRECT_URI=$SERVICE_URL/plaid/return"
           fi
           gcloud run deploy ${{ env.SERVICE }} \
             --image "$IMAGE" \
             --region ${{ env.REGION }} \
             --service-account ${{ env.RUNTIME_SA }} \
             --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
-            --set-secrets "DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET:latest,PLAID_SECRET=HOMESTEAD_MORTGAGES_PLAID_SECRET:latest,VENDOR_TOKEN_KEY=HOMESTEAD_MORTGAGES_VENDOR_TOKEN_KEY:latest" \
+            --set-secrets "DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET:latest,PLAID_SECRET=HOMESTEAD_MORTGAGES_PLAID_SECRET:latest,VENDOR_TOKEN_KEY=HOMESTEAD_MORTGAGES_VENDOR_TOKEN_KEY:latest,STRIPE_SECRET_KEY_SANDBOX=HOMESTEAD_MORTGAGES_STRIPE_SECRET_KEY_SANDBOX:latest,GOOGLE_PLACES_API_KEY=HOMESTEAD_MORTGAGES_GOOGLE_PLACES_API_KEY:latest" \
             --set-env-vars "$ENV_VARS" \
             --allow-unauthenticated \
             --port 8080 \
@@ -212,6 +226,28 @@ jobs:
           case "$MEMBERS" in
             *allUsers*) echo "service is publicly reachable" ;;
             *) echo "::error::allUsers is not bound — the service will 403 everyone"; exit 1 ;;
+          esac
+
+      # A connector that fell back to its fixture is invisible in every other
+      # check: the service is up, the database answers, and screen 1 quietly
+      # offers three hard-coded addresses. Assert the mix the deploy asked for.
+      - name: Confirm the vendors the deploy asked for are the ones running
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)")
+          PROVIDERS=$(curl -fsS --max-time 30 "$URL/api/health")
+          echo "$PROVIDERS"
+          for expected in "plaid-assets (sandbox)" "stripe-identity (test)" "google-places"; do
+            case "$PROVIDERS" in
+              *"$expected"*) echo "ok: $expected" ;;
+              *) echo "::error::expected provider not running: $expected"; exit 1 ;;
+            esac
+          done
+          # An sk_live_ key would make the adapter throw at boot rather than
+          # report "(test)", so this doubles as a live-mode tripwire.
+          case "$PROVIDERS" in
+            *"stripe-identity (LIVE)"*) echo "::error::LIVE Stripe identity on staging"; exit 1 ;;
           esac
 
       # Reachable is not the same as working. A malformed Cloud SQL socket path

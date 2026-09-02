@@ -205,6 +205,54 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
+        name  = "PLAID_REDIRECT_URI"
+        value = var.plaid_redirect_uri
+      }
+
+      # ── Stripe Identity ────────────────────────────────────────────────────
+      #
+      # STRIPE_ALLOW_LIVE_IDENTITY is absent on purpose. See
+      # stripe_secret_key_secret in variables.tf: the adapter refuses a live
+      # key without it, so the omission is enforced rather than trusted.
+
+      env {
+        name  = "IDENTITY_PROVIDER"
+        value = "stripe"
+      }
+
+      env {
+        name = "STRIPE_SECRET_KEY_SANDBOX"
+        value_source {
+          secret_key_ref {
+            secret  = var.stripe_secret_key_secret
+            version = "latest"
+          }
+        }
+      }
+
+      # ── Google Places ──────────────────────────────────────────────────────
+      #
+      # Autocomplete only. The assessor record, valuation and flood lookups
+      # stay on the fixture — they are separate vendors, and a flood
+      # determination on a federally related mortgage has to be a certified
+      # one rather than a map read.
+
+      env {
+        name  = "PROPERTY_DATA_PROVIDER"
+        value = "google_places"
+      }
+
+      env {
+        name = "GOOGLE_PLACES_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = var.google_places_api_key_secret
+            version = "latest"
+          }
+        }
+      }
+
+      env {
         name  = "CORS_ORIGIN"
         value = var.cors_origin
       }

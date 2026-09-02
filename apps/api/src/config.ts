@@ -82,6 +82,14 @@ export const config = {
     clientId: process.env.PLAID_CLIENT_ID,
     secret: process.env.PLAID_SECRET,
     environment: (process.env.PLAID_ENV ?? "sandbox") as "sandbox" | "production",
+    /**
+     * "cra" is the target; "assets" is the stand-in while CRA access is being
+     * granted. Assets returns real transactions from a real bank login and is
+     * NOT a consumer report, so it sets `vendorAuthorizedForDu: false` and
+     * CRD-017 stays unsatisfied. That is deliberate: the flow becomes walkable
+     * without the decision quietly resting on the wrong evidence.
+     */
+    product: (process.env.PLAID_PRODUCT ?? "cra") as "cra" | "assets",
   },
 
   /**

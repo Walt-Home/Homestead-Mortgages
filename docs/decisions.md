@@ -436,6 +436,58 @@ payer and never a hire date, and `new Date("")` is an Invalid Date that would
 have failed at the insert. Nothing in the registry computes from the field; it
 is displayed.
 
+### Assets mode, and what it deliberately does not claim
+
+CRA products are enabled per account by a sales request, so `PLAID_PRODUCT=assets`
+exists to make screen 3 walkable in the meantime. It is a real bank login
+returning real transactions, and it is **not** a consumer report. So it reports
+`vendorAuthorizedForDu: false`, CRD-017 reads "asset report did not come from a
+DU-authorized vendor", INC-002 is not claimed, and income is *inferred from
+deposits* rather than determined by a vendor — which is why it can never reach
+`incomeConfidence: "verified"`, however clean the pattern looks. "Verified" is
+what lets a borrower skip the payroll step, and that is a claim only Day 1
+Certainty earns.
+
+The inference leans one way on purpose. Income is the figure that makes a
+borrower look qualified, so: transfers between their own accounts are excluded,
+the monthly figure is the median rather than the mean, small recurring credits
+are ignored, and a payer whose amount swings more than 40% is not a salary.
+
+### What running against the real sandbox changed
+
+Five bugs survived a full unit suite and died on first contact with live data.
+Recorded because four of them were invisible by construction:
+
+**Liabilities were being counted as assets.** Plaid returns *every* account at
+the institution — mortgage, student loan, auto loan, credit cards — each with a
+positive `balances.current` representing what the borrower OWES. The subtype
+fallback mapped all of them to "checking". Against the sandbox that turned about
+$150k of debt into $150k of verified assets. Accounts are now filtered to
+`depository` and `investment`, and a loan account's transactions are excluded
+too: a servicer's ledger is not the borrower's cash flow, and the mortgage
+payment recorded there would double-count the one in their checking account.
+
+**A coffee subscription counted as alternative credit.** Unclassified recurring
+debits were returned with `kind: "other"`, and CRD-013 wants three twelve-month
+references to extend credit to a thin file. A $4-a-month Starbucks and a
+$12-a-month McDonald's both qualified. `classify` now returns null for anything
+that is not rent, a utility, insurance or phone, and the caller drops it.
+
+**`historical_balances` is daily, not monthly.** 357 rows for a year, each
+sliced to `YYYY-MM`, gave 357 entries with the same month repeated — so
+AST-001's "two months of history" check passed on one month of data.
+
+**Asset reports key the id as `asset_report_id`**, not `report_id`, so every
+stored snapshot had an empty id.
+
+**And one that was not a bug:** the sandbox's canned payroll line
+`ACH Electronic CreditGUSTO PAY` is recorded as `+5850` — an outflow. Plaid's
+documented convention is positive-is-out, which the interest payment and the
+refund in the same dataset both honour, so the default sandbox dataset simply
+contains no realistic paycheque. Income inference finds nothing against it. Use
+Link's custom-user seed (`user_custom` as the username, a transactions JSON as
+the password) for data with a real deposit in it.
+
 ## Vendor credentials at rest
 
 A Plaid `access_token` reads a named person's bank transactions on demand, for

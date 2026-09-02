@@ -59,6 +59,22 @@ import type {
 export type PlaidEnvironment = "sandbox" | "production";
 
 /**
+ * Which Plaid product backs the report.
+ *
+ * `cra` is the real target and the only one that satisfies CRD-017 — see the
+ * header. `assets` exists because CRA is enabled per account by a sales
+ * request, and waiting on that would mean nobody can walk screen 3 with a real
+ * bank in the meantime.
+ *
+ * The difference is not cosmetic and is not hidden. Assets mode sets
+ * `vendorAuthorizedForDu: false`, so CRD-017 reads "asset report did not come
+ * from a DU-authorized vendor" and the file cannot reach a decision on the
+ * strength of it. That is the honest result: the transactions are real, the
+ * consumer-report status is not, and the requirement turns on the status.
+ */
+export type PlaidProduct = "cra" | "assets";
+
+/**
  * The FCRA purpose under which the report is pulled.
  *
  * This is a legal assertion, not a configuration constant, which is why it is
@@ -82,6 +98,8 @@ export interface PlaidOptions {
   readonly clientId: string;
   readonly secret: string;
   readonly environment: PlaidEnvironment;
+  /** Defaults to "cra". See PlaidProduct. */
+  readonly product?: PlaidProduct;
   readonly tokens: VendorTokenStore;
   /** Where Plaid Link returns after an OAuth bank. Must be registered with Plaid. */
   readonly redirectUri?: string;
@@ -100,6 +118,7 @@ const HOSTS: Record<PlaidEnvironment, string> = {
 /** Keys under which this adapter's credentials live in the token store. */
 const USER_TOKEN = "plaid.user_token";
 const ACCESS_TOKEN = "plaid.access_token";
+const ASSET_REPORT_TOKEN = "plaid.asset_report_token";
 
 /** CRD-017 and CRD-018 both want a full year; 365 days is what buys both. */
 const DAYS_REQUESTED = 365;
@@ -137,8 +156,11 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
     return payload;
   }
 
+  const product: PlaidProduct = options.product ?? "cra";
+  const cra = product === "cra";
+
   const capabilities: ConnectorCapabilities = {
-    provider: `plaid-cra (${options.environment})`,
+    provider: `plaid-${product} (${options.environment})`,
     mode: options.environment === "sandbox" ? "sandbox" : "production",
     /*
      * Two entries the fixture claims and this does not, deliberately:
@@ -152,8 +174,78 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
      * "cash flow assessment not performed" — which is the truth until there is
      * a DU submission.
      */
-    satisfies: ["AST-001", "AST-005", "AST-008", "CRD-013", "CRD-018", "INC-001", "INC-002"],
+    satisfies: cra
+      ? ["AST-001", "AST-005", "AST-008", "CRD-013", "CRD-018", "INC-001", "INC-002"]
+      : // Assets mode drops INC-002. Day 1 Certainty is what lets deposits
+        // stand in for paystubs, and it is precisely what an unvalidated
+        // report does not carry. The asset and rent requirements survive
+        // because they turn on the transactions, which are the same either way.
+        ["AST-001", "AST-005", "AST-008", "CRD-013", "CRD-018", "INC-001"],
   };
+
+  /**
+   * The Assets path.
+   *
+   * Same three round trips as CRA, different endpoints: exchange the public
+   * token, create a report, poll for it. `/asset_report/get` answers
+   * PRODUCT_NOT_READY while Plaid assembles, exactly as the CRA one does.
+   */
+  async function fetchAssetsReport(file: LoanFile, handoff: LinkHandoff): Promise<AssetReportResult> {
+    let accessToken = await options.tokens.get(file.id, ACCESS_TOKEN);
+    if (!accessToken) {
+      if (!handoff.publicToken) {
+        throw new PlaidRequestError(
+          "NO_PUBLIC_TOKEN",
+          "Plaid Link has not returned a public token for this file yet.",
+        );
+      }
+      const exchanged = await call<{ access_token: string }>("/item/public_token/exchange", {
+        public_token: handoff.publicToken,
+      });
+      accessToken = exchanged.access_token;
+      await options.tokens.put(file.id, ACCESS_TOKEN, accessToken);
+    }
+
+    let reportToken = await options.tokens.get(file.id, ASSET_REPORT_TOKEN);
+    if (!reportToken) {
+      const created = await call<{ asset_report_token: string }>("/asset_report/create", {
+        access_tokens: [accessToken],
+        days_requested: DAYS_REQUESTED,
+        options: {
+          client_report_id: file.id,
+          ...(options.webhookUrl || options.publicOrigin
+            ? { webhook: options.webhookUrl ?? `${options.publicOrigin}/api/webhooks/plaid` }
+            : {}),
+        },
+      });
+      reportToken = created.asset_report_token;
+      await options.tokens.put(file.id, ASSET_REPORT_TOKEN, reportToken);
+    }
+
+    try {
+      const base = await call<PlaidBaseReport>("/asset_report/get", {
+        asset_report_token: reportToken,
+      });
+      return {
+        status: "ready",
+        result: {
+          // No income insights here — that is a separate gated product. Income
+          // is inferred from recurring deposits instead, and marked
+          // "estimated" rather than "verified" because an inference from
+          // deposits is not a vendor's income determination.
+          data: toAssetReport(base, null, { vendorAuthorizedForDu: false, deriveIncome: true }),
+          provider: capabilities.provider,
+          retrievedAt: new Date().toISOString(),
+          externalId: base.report?.asset_report_id ?? file.id,
+        },
+      };
+    } catch (err) {
+      if (err instanceof PlaidRequestError && err.code === "PRODUCT_NOT_READY") {
+        return { status: "pending", retryAfterMs: 4_000 };
+      }
+      throw err;
+    }
+  }
 
   return {
     capabilities,
@@ -161,6 +253,28 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
     async createLinkSession(file: LoanFile): Promise<LinkSession> {
       // Rule 4. Before any network call, not after.
       assertVerificationAuthorized(file);
+
+      if (!cra) {
+        // Assets needs no user token and no permissible purpose: it is not a
+        // consumer report, which is the entire difference.
+        const link = await call<{ link_token: string; expiration: string }>(
+          "/link/token/create",
+          {
+            user: { client_user_id: file.id },
+            client_name: "Homestead Mortgages",
+            language: "en",
+            country_codes: ["US"],
+            products: ["assets"],
+            ...(options.redirectUri ? { redirect_uri: options.redirectUri } : {}),
+          },
+        );
+        return {
+          sessionId: file.id,
+          linkToken: link.link_token,
+          expiresAt: link.expiration,
+          requiresClientHandoff: true,
+        };
+      }
 
       // The user token outlives the link token and is what the report is keyed
       // on, so reuse it if this borrower has been here before. A second
@@ -230,6 +344,8 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
         );
       }
 
+      if (!cra) return fetchAssetsReport(file, handoff);
+
       const userToken = await options.tokens.get(file.id, USER_TOKEN);
       if (!userToken) {
         throw new PlaidRequestError(
@@ -278,7 +394,7 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
         return {
           status: "ready",
           result: {
-            data: toAssetReport(base, income),
+            data: toAssetReport(base, income, { vendorAuthorizedForDu: true }),
             provider: capabilities.provider,
             retrievedAt: new Date().toISOString(),
             externalId: base.report?.report_id ?? file.id,
@@ -311,13 +427,23 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
 export interface PlaidTransaction {
   amount?: number;
   date?: string;
+  /** CRA base reports. */
   description?: string;
+  /** Asset reports use this name for the same thing. */
+  original_description?: string;
+}
+
+/** Whichever of the two names this payload happens to use. */
+function describe(t: PlaidTransaction): string {
+  return t.description ?? t.original_description ?? "";
 }
 
 export interface PlaidAccount {
   account_id?: string;
   name?: string;
   mask?: string;
+  /** depository | credit | loan | investment | brokerage | other */
+  type?: string;
   subtype?: string;
   balances?: { current?: number; available?: number };
   historical_balances?: { date?: string; current?: number }[];
@@ -327,6 +453,8 @@ export interface PlaidAccount {
 export interface PlaidBaseReport {
   report?: {
     report_id?: string;
+    /** Asset reports use this name. CRA base reports use report_id. */
+    asset_report_id?: string;
     date_generated?: string;
     days_requested?: number;
     items?: { institution_name?: string; accounts?: PlaidAccount[] }[];
@@ -348,17 +476,98 @@ export interface PlaidIncomeInsights {
   };
 }
 
+/**
+ * Which Plaid account types are ASSETS.
+ *
+ * This filter is the most consequential line in the file, and it was missing.
+ * Plaid returns every account at the institution — including the borrower's
+ * mortgage, student loans, auto loan and credit cards, each with a positive
+ * `balances.current` representing what they OWE. Mapping unrecognised subtypes
+ * to "checking" counted all of it as money in the bank: against the sandbox
+ * that turned roughly $150k of debt into $150k of verified assets.
+ *
+ * Assets are `depository` and `investment`. Everything else is a liability or
+ * is not an asset, and belongs nowhere near a down payment or a reserves
+ * calculation.
+ */
+const ASSET_ACCOUNT_TYPES = new Set(["depository", "investment", "brokerage"]);
+
+/**
+ * Is this an account whose balance the borrower owns?
+ *
+ * `type` is the authority. When it is absent — which the CRA payload shape is
+ * not yet confirmed to avoid — fall back to whether the SUBTYPE is one this
+ * adapter recognises as an asset. That fallback excludes by default: "mortgage"
+ * and "credit card" are not in the subtype map, so an unlabelled liability
+ * still does not become a down payment.
+ */
+function isAssetAccount(a: PlaidAccount): boolean {
+  const type = (a.type ?? "").toLowerCase();
+  if (type) return ASSET_ACCOUNT_TYPES.has(type);
+  return Boolean(ACCOUNT_TYPE[(a.subtype ?? "").toLowerCase()]);
+}
+
 const ACCOUNT_TYPE: Record<string, DepositAccount["type"]> = {
   checking: "checking",
   savings: "savings",
   "money market": "money_market",
+  "cash management": "checking",
+  prepaid: "checking",
+  paypal: "checking",
+  cd: "savings",
+  hsa: "savings",
   brokerage: "brokerage",
   ira: "retirement",
+  roth: "retirement",
+  "roth ira": "retirement",
   "401k": "retirement",
   "roth 401k": "retirement",
+  "401a": "retirement",
   "403b": "retirement",
-  roth: "retirement",
+  "457b": "retirement",
+  sep_ira: "retirement",
+  simple_ira: "retirement",
+  keogh: "retirement",
+  pension: "retirement",
+  "thrift savings plan": "retirement",
 };
+
+/**
+ * Retirement money is not spendable money.
+ *
+ * An investment account we cannot place is treated as retirement rather than
+ * brokerage, because retirement is the type AST-008 forces a liquidity
+ * question about — vested balance and withdrawal eligibility, neither of which
+ * a bank feed supplies. Guessing "brokerage" would let an untouchable balance
+ * count toward the down payment in full and silently skip that check.
+ */
+function accountType(a: PlaidAccount): DepositAccount["type"] {
+  const mapped = ACCOUNT_TYPE[(a.subtype ?? "").toLowerCase()];
+  if (mapped) return mapped;
+  return (a.type ?? "").toLowerCase() === "depository" ? "checking" : "retirement";
+}
+
+/**
+ * One balance per month — the latest date in each — newest first.
+ *
+ * The daily series is not what any statement or requirement means by "months
+ * of history", and passing it through made one month look like a year.
+ */
+export function monthEndBalances(
+  daily: readonly { date?: string; current?: number }[],
+): { month: string; balance: number }[] {
+  const latest = new Map<string, { date: string; balance: number }>();
+  for (const h of daily) {
+    const date = h.date ?? "";
+    const month = date.slice(0, 7);
+    if (month.length !== 7) continue;
+    const seen = latest.get(month);
+    if (!seen || date > seen.date) latest.set(month, { date, balance: h.current ?? 0 });
+  }
+  return [...latest.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([month, v]) => ({ month, balance: v.balance }));
+}
 
 /** Plaid returns money as either a bare number or a {amount, iso_currency_code}. */
 function money(v: { amount?: number } | number | undefined): number {
@@ -366,60 +575,87 @@ function money(v: { amount?: number } | number | undefined): number {
   return v?.amount ?? 0;
 }
 
+export interface MappingOptions {
+  /**
+   * False in Assets mode. CRD-017 turns on this flag, and turning it on for a
+   * report that is not a consumer report would satisfy the requirement with
+   * the wrong thing.
+   */
+  readonly vendorAuthorizedForDu: boolean;
+  /**
+   * Infer income from recurring deposits, because Assets mode has no income
+   * product behind it. Never produces "verified" — see `incomeConfidence`.
+   */
+  readonly deriveIncome?: boolean;
+}
+
 export function toAssetReport(
   base: PlaidBaseReport,
   income: PlaidIncomeInsights | null,
+  opts: MappingOptions,
 ): AssetReport {
   const items = base.report?.items ?? [];
 
   const accounts: DepositAccount[] = items.flatMap((item) =>
-    (item.accounts ?? []).map((a) => ({
+    (item.accounts ?? [])
+      .filter(isAssetAccount)
+      .map((a) => ({
       id: a.account_id ?? "",
       institution: item.institution_name ?? "Unknown institution",
-      // Anything Plaid names that this map does not know becomes checking,
-      // which is the conservative direction: a checking balance counts in
-      // full, where a mis-typed retirement account would need vesting and
-      // withdrawal eligibility it does not have and would fail AST-008.
-      type: ACCOUNT_TYPE[(a.subtype ?? "").toLowerCase()] ?? "checking",
+      type: accountType(a),
       mask: a.mask ?? "",
       currentBalance: a.balances?.current ?? 0,
-      balanceHistory: (a.historical_balances ?? []).map((h) => ({
-        month: (h.date ?? "").slice(0, 7),
-        balance: h.current ?? 0,
-      })),
-      // Every connected account is presumed usable. The borrower deselecting
-      // one is a product decision this adapter does not get to make.
+      // Plaid returns DAILY balances — 357 rows for a year. Slicing each to
+      // YYYY-MM produced 357 entries with the same month over and over, which
+      // satisfied AST-001's "two months of history" check with one month of
+      // data repeated. Collapse to the last observed balance in each month,
+      // newest first, which is what a statement shows.
+      balanceHistory: monthEndBalances(a.historical_balances ?? []),
+      // Every connected asset account is presumed usable. The borrower
+      // deselecting one is a product decision this adapter does not make.
       usedForQualifying: true,
     })),
   );
 
+  // Same filter: a loan account's transaction list is the servicer's ledger,
+  // not the borrower's cash flow, and a mortgage payment appearing there would
+  // be double-counted against the one in their checking account.
   const allTransactions = items.flatMap((item) =>
-    (item.accounts ?? []).flatMap((a) =>
-      (a.transactions ?? []).map((t) => ({ ...t, accountId: a.account_id ?? "" })),
-    ),
+    (item.accounts ?? [])
+      .filter(isAssetAccount)
+      .flatMap((a) => (a.transactions ?? []).map((t) => ({ ...t, accountId: a.account_id ?? "" }))),
   );
 
   const sources = (income?.report?.items ?? []).flatMap((i) => i.bank_income_sources ?? []);
 
-  const incomeSources: IncomeSource[] = sources.map((s) => ({
-    // Plaid's categories are coarser than the sheet's. Anything it cannot
-    // place becomes base wage, which is the conservative reading: base wage
-    // counts toward qualifying income and therefore raises the denominator of
-    // nothing and the numerator of DTI's income side in full.
-    type: s.income_category === "SELF_EMPLOYMENT" ? "self_employment" : "base_wage",
-    monthlyAmount: Math.round(money(s.mean_amount)),
-    historyMonths: (s.historical_summary ?? []).length,
-    // Continuance is an underwriting judgment about the next three years, not
-    // a fact in a bank feed. Null is "not yet determined" — which is exactly
-    // the state INC-027 exists to resolve, and is not "no".
-    continuanceEstablished: null,
-    evidenceDocumentIds: [],
-  }));
+  const inferred = opts.deriveIncome ? detectRecurringDeposits(allTransactions) : [];
 
-  const employments: EmploymentRecord[] = sources
-    .filter((s) => s.employer_name)
+  const incomeSources: IncomeSource[] = sources.length
+    ? sources.map((s) => ({
+        // Plaid's categories are coarser than the sheet's. Anything it cannot
+        // place becomes base wage, which is the conservative reading: base
+        // wage counts toward qualifying income in full.
+        type:
+          s.income_category === "SELF_EMPLOYMENT"
+            ? ("self_employment" as const)
+            : ("base_wage" as const),
+        monthlyAmount: Math.round(money(s.mean_amount)),
+        historyMonths: (s.historical_summary ?? []).length,
+        // Continuance is an underwriting judgment about the next three years,
+        // not a fact in a bank feed. Null is "not yet determined" — which is
+        // exactly the state INC-027 exists to resolve, and is not "no".
+        continuanceEstablished: null,
+        evidenceDocumentIds: [],
+      }))
+    : inferred;
+
+  const employments: EmploymentRecord[] = (
+    sources.length
+      ? sources.filter((s) => s.employer_name).map((s) => ({ employer_name: s.employer_name! }))
+      : inferredPayers(opts.deriveIncome ? allTransactions : [])
+  )
     .map((s) => ({
-      employerName: s.employer_name!,
+      employerName: s.employer_name,
       // Deposits name a payer, never a job title or a start date. Empty and
       // null are honest; a guess here would be shown to an underwriter as fact.
       position: "",
@@ -441,15 +677,25 @@ export function toAssetReport(
   // exactly what INC-005 turns on. One steady source is safe to stand alone;
   // several, or none, is where the payroll step earns its place.
   const incomeConfidence: AssetReport["incomeConfidence"] =
-    incomeSources.length === 0 ? "insufficient" : incomeSources.length === 1 ? "verified" : "estimated";
+    incomeSources.length === 0
+      ? "insufficient"
+      : // An inference from deposits is not a vendor's income determination,
+        // so it never reaches "verified" however clean the pattern looks.
+        // "verified" is what lets a borrower skip the payroll step, and that
+        // is a claim only Day 1 Certainty earns.
+        !sources.length
+        ? "estimated"
+        : incomeSources.length === 1
+          ? "verified"
+          : "estimated";
 
   return {
-    reportId: base.report?.report_id ?? "",
+    reportId: base.report?.asset_report_id ?? base.report?.report_id ?? "",
     generatedAt: base.report?.date_generated ?? new Date().toISOString(),
     monthsCovered: Math.round((base.report?.days_requested ?? DAYS_REQUESTED) / 30),
-    // True only because these are the CRA products. An Assets-only integration
-    // would have to set this false and would lose CRD-017 with it.
-    vendorAuthorizedForDu: true,
+    // True only for the CRA products. Assets mode sets it false and loses
+    // CRD-017 with it, which is the correct outcome rather than a limitation.
+    vendorAuthorizedForDu: opts.vendorAuthorizedForDu,
     accounts,
     largeDeposits: detectLargeDeposits(allTransactions, monthlyIncome, payers),
     // Left undefined on purpose: Plaid supplies the report, DU performs the
@@ -470,7 +716,9 @@ export function toAssetReport(
         ? undefined
         : incomeConfidence === "insufficient"
           ? "We could not identify a steady paycheque in your deposits."
-          : "Your deposits vary month to month, so we can't tell base pay from commission.",
+          : !sources.length
+            ? "We worked your income out from your deposits, which is a good estimate rather than a confirmed figure."
+            : "Your deposits vary month to month, so we can't tell base pay from commission.",
   };
 }
 
@@ -493,13 +741,30 @@ const UTILITY_WORDS = /ELECTRIC|POWER|ENERGY|GAS|WATER|SEWER|UTILIT|MUNICIPAL/;
 const INSURANCE_WORDS = /INSUR|GEICO|ALLSTATE|STATE FARM|PROGRESSIVE|LEMONADE/;
 const PHONE_WORDS = /VERIZON|ATT|T MOBILE|TMOBILE|SPRINT|WIRELESS|MOBILE|XFINITY|COMCAST|SPECTRUM/;
 
-function classify(key: string): AlternativeReference["kind"] {
+/**
+ * Null rather than "other" for anything unrecognised, and the caller drops it.
+ *
+ * This was "other" and it was wrong in a way only real data showed: against a
+ * live sandbox, a $4-a-month coffee and a $12-a-month burger both came back as
+ * twelve-month alternative credit references, and CRD-013 wants three of those
+ * to call a thin-file borrower creditworthy. Three subscriptions are not a
+ * credit history.
+ *
+ * Fannie's alternative credit is non-discretionary recurring obligations —
+ * rent, utilities, insurance, phone. A merchant charging the same amount every
+ * month is a subscription. Under-claiming here costs a borrower an alternative
+ * route they might have had; over-claiming grants credit on a coffee habit.
+ */
+function classify(key: string): AlternativeReference["kind"] | null {
   if (RENT_WORDS.test(key)) return "rent";
   if (UTILITY_WORDS.test(key)) return "utility";
   if (INSURANCE_WORDS.test(key)) return "insurance";
   if (PHONE_WORDS.test(key)) return "phone";
-  return "other";
+  return null;
 }
+
+/** Below this, a recurring debit is a subscription, not an obligation. */
+const MIN_OBLIGATION = 25;
 
 function monthIndex(yyyymm: string): number {
   const [y, m] = yyyymm.split("-").map(Number);
@@ -533,7 +798,7 @@ export function detectRecurringObligations(
     if (!t.amount || t.amount <= 0) continue;
     const month = (t.date ?? "").slice(0, 7);
     if (month.length !== 7) continue;
-    const key = norm(t.description);
+    const key = norm(describe(t));
     if (key.length < 3) continue;
     const byMonth = groups.get(key) ?? new Map<string, number>();
     byMonth.set(month, (byMonth.get(month) ?? 0) + t.amount);
@@ -571,8 +836,11 @@ export function detectRecurringObligations(
     const consistent = amounts.every((a) => Math.abs(a - median) <= median * 0.25);
     if (!consistent) continue;
 
+    const kind = classify(key);
+    if (!kind || median < MIN_OBLIGATION) continue;
+
     found.push({
-      kind: classify(key),
+      kind,
       payeeName: key,
       monthsOfHistory: run.length,
       monthlyAmount: Math.round(median),
@@ -582,6 +850,113 @@ export function detectRecurringObligations(
   }
 
   return found.sort((a, b) => b.monthsOfHistory - a.monthsOfHistory);
+}
+
+
+/**
+ * Income inferred from recurring deposits, for Assets mode.
+ *
+ * The CRA income product does this properly, with a model and a consumer
+ * report behind it. This is the honest approximation for when that product is
+ * not available, and every choice below leans the same way: **underestimate**.
+ * Income is the denominator's friend — an inflated figure makes a borrower
+ * look more qualified than they are, which is the one direction a mortgage
+ * system must never be wrong in.
+ *
+ * So: transfers between the borrower's own accounts are excluded rather than
+ * counted, the monthly figure is the median rather than the mean (one bonus
+ * month cannot lift it), small recurring credits like interest are ignored,
+ * and the result is never labelled "verified" — see `incomeConfidence`.
+ */
+
+/** Money moving between a person's own accounts is not income. */
+const TRANSFER_WORDS =
+  /TRANSFER|XFER|ZELLE|VENMO|CASH APP|PAYPAL|WIRE|DEPOSIT MOBILE|CHECK DEP|ATM|REFUND|RETURN|REVERSAL|INTRST|INTEREST|DIVIDEND/;
+
+/** Below this a recurring credit is interest or a rebate, not a paycheque. */
+const MIN_MONTHLY_INCOME = 500;
+
+interface RecurringDeposit {
+  readonly payee: string;
+  readonly monthlyAmount: number;
+  readonly months: number;
+}
+
+function recurringDeposits(transactions: readonly PlaidTransaction[]): RecurringDeposit[] {
+  const groups = new Map<string, Map<string, number>>();
+
+  for (const t of transactions) {
+    // Negative is money arriving. The mirror of the obligations detector, and
+    // the same sign convention it is pinned on.
+    if (!t.amount || t.amount >= 0) continue;
+    const month = (t.date ?? "").slice(0, 7);
+    if (month.length !== 7) continue;
+    const key = norm(describe(t));
+    if (key.length < 3 || TRANSFER_WORDS.test(key)) continue;
+    const byMonth = groups.get(key) ?? new Map<string, number>();
+    byMonth.set(month, (byMonth.get(month) ?? 0) + Math.abs(t.amount));
+    groups.set(key, byMonth);
+  }
+
+  const found: RecurringDeposit[] = [];
+
+  for (const [key, byMonth] of groups) {
+    const months = [...byMonth.keys()].sort();
+    if (months.length < 3) continue;
+
+    let bestStart = 0;
+    let bestLength = 1;
+    let runStart = 0;
+    for (let i = 1; i <= months.length; i++) {
+      const contiguous =
+        i < months.length && monthIndex(months[i]!) === monthIndex(months[i - 1]!) + 1;
+      if (!contiguous) {
+        if (i - runStart > bestLength) {
+          bestLength = i - runStart;
+          bestStart = runStart;
+        }
+        runStart = i;
+      }
+    }
+
+    const run = months.slice(bestStart, bestStart + bestLength);
+    if (run.length < 3) continue;
+
+    const amounts = run.map((m) => byMonth.get(m)!).sort((a, b) => a - b);
+    const median = amounts[Math.floor(amounts.length / 2)]!;
+    if (median < MIN_MONTHLY_INCOME) continue;
+
+    // Wider than the 25% the obligations detector allows: a paycheque moves
+    // with overtime and pay-period drift in a way rent does not. Still bounded,
+    // because a payer whose amount is arbitrary is not a salary.
+    if (!amounts.every((a) => Math.abs(a - median) <= median * 0.4)) continue;
+
+    found.push({ payee: key, monthlyAmount: Math.round(median), months: run.length });
+  }
+
+  return found.sort((a, b) => b.monthlyAmount - a.monthlyAmount);
+}
+
+export function detectRecurringDeposits(
+  transactions: readonly PlaidTransaction[],
+): IncomeSource[] {
+  return recurringDeposits(transactions).map((d) => ({
+    // Deposits cannot separate base pay from commission or overtime — that is
+    // the distinction INC-005 turns on, and it is why this never reads
+    // "verified". Base wage is the conservative label.
+    type: "base_wage" as const,
+    monthlyAmount: d.monthlyAmount,
+    historyMonths: d.months,
+    continuanceEstablished: null,
+    evidenceDocumentIds: [],
+  }));
+}
+
+/** The payers behind those deposits, as employer names. */
+function inferredPayers(
+  transactions: readonly PlaidTransaction[],
+): { employer_name: string }[] {
+  return recurringDeposits(transactions).map((d) => ({ employer_name: d.payee }));
 }
 
 /**
@@ -606,13 +981,13 @@ export function detectLargeDeposits(
   return transactions
     .filter((t) => (t.amount ?? 0) < 0 && Math.abs(t.amount!) >= threshold)
     .map((t) => {
-      const key = norm(t.description);
+      const key = norm(describe(t));
       const matched = [...knownPayers].some((p) => p && (p.includes(key) || key.includes(p)));
       return {
         accountId: t.accountId ?? "",
         date: t.date ?? "",
         amount: Math.abs(t.amount!),
-        description: t.description ?? "",
+        description: describe(t),
         ...(matched ? { sourceType: "payroll" } : {}),
       };
     })

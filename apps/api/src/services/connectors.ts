@@ -96,6 +96,7 @@ export function connectors(): ConnectorRegistry {
       clientId: config.plaid.clientId,
       secret: config.plaid.secret,
       environment: config.plaid.environment,
+      product: config.plaid.product,
       // Throws if VENDOR_TOKEN_KEY is missing or the wrong length. Better here
       // than at the first borrower's bank login.
       tokens: vendorTokenStore(prisma, config.vendorTokenKey),

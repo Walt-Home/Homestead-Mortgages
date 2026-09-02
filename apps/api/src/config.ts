@@ -115,8 +115,16 @@ export const config = {
    */
   vendorTokenKey: process.env.VENDOR_TOKEN_KEY,
 
-  /** Where Stripe returns the borrower after the hosted identity flow. */
-  publicOrigin: process.env.PUBLIC_ORIGIN ?? "http://localhost:5173",
+  /**
+   * Where hosted vendors send the borrower back — Stripe Identity, and Plaid's
+   * report webhook.
+   *
+   * `||` and not `??`: an empty string is not nullish, and a deploy that sets
+   * this from an unresolved shell variable would otherwise produce return URLs
+   * beginning "/f/..." with no origin at all. Falling back to the local
+   * default is wrong in production, but it is visibly wrong.
+   */
+  publicOrigin: process.env.PUBLIC_ORIGIN || "http://localhost:5173",
 
   /** Fixture persona for local development. */
   fixturePersona: process.env.FIXTURE_PERSONA ?? "clean_w2",

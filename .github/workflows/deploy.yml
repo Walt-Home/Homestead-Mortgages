@@ -149,15 +149,45 @@ jobs:
       # /api route past /health and /auth requires a session, and files are
       # scoped to their owner. With sign-in now open to any Google account,
       # ownership is what protects a person's data — see assertFileAccess.
+      # PUBLIC_ORIGIN is where hosted vendors send the borrower back — Stripe
+      # Identity to /f/:id/identity/return, and Plaid's report webhook. It was
+      # never set here, so production has been falling back to the
+      # http://localhost:5173 default in config.ts: a return URL pointing at a
+      # machine that is not the borrower's. Cloud Run assigns the URL at
+      # create time and keeps it, so it can be read before this deploy and
+      # passed into it.
+      - name: Resolve the service URL
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)" 2>/dev/null || true)
+          if [ -z "$URL" ]; then
+            # First ever deploy: no service to describe yet. The next deploy
+            # picks it up, and nothing in the flow needs it until a hosted
+            # vendor is switched on.
+            echo "::warning::service does not exist yet; PUBLIC_ORIGIN will be set on the next deploy"
+          fi
+          echo "SERVICE_URL=$URL" >> "$GITHUB_ENV"
+
       - name: Deploy to Cloud Run
         run: |
+          ENV_VARS="NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture"
+          ENV_VARS="$ENV_VARS,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}"
+          ENV_VARS="$ENV_VARS,BANK_PROVIDER=plaid,PLAID_ENV=sandbox,PLAID_PRODUCT=assets"
+          ENV_VARS="$ENV_VARS,PLAID_CLIENT_ID=${{ vars.PLAID_CLIENT_ID }}"
+          # Omitted rather than set empty when the URL is not resolvable yet:
+          # an empty string is not nullish, so it would defeat the fallback in
+          # config.ts instead of deferring to it.
+          if [ -n "$SERVICE_URL" ]; then
+            ENV_VARS="$ENV_VARS,PUBLIC_ORIGIN=$SERVICE_URL"
+          fi
           gcloud run deploy ${{ env.SERVICE }} \
             --image "$IMAGE" \
             --region ${{ env.REGION }} \
             --service-account ${{ env.RUNTIME_SA }} \
             --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
-            --set-secrets "DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET:latest" \
-            --set-env-vars "NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}" \
+            --set-secrets "DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET:latest,PLAID_SECRET=HOMESTEAD_MORTGAGES_PLAID_SECRET:latest,VENDOR_TOKEN_KEY=HOMESTEAD_MORTGAGES_VENDOR_TOKEN_KEY:latest" \
+            --set-env-vars "$ENV_VARS" \
             --allow-unauthenticated \
             --port 8080 \
             --memory 1Gi \

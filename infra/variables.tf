@@ -119,3 +119,61 @@ variable "invoker_members" {
   type        = list(string)
   default     = []
 }
+
+# ── Plaid ────────────────────────────────────────────────────────────────────
+
+variable "plaid_client_id" {
+  description = <<-EOT
+    Plaid client id. Not a secret in the way the secret is — it identifies the
+    account rather than authenticating to it — so it travels as a variable,
+    the same treatment google_client_id gets.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "plaid_secret_secret" {
+  description = "Secret Manager secret holding the Plaid API secret."
+  type        = string
+  default     = "HOMESTEAD_MORTGAGES_PLAID_SECRET"
+}
+
+variable "vendor_token_key_secret" {
+  description = <<-EOT
+    Secret Manager secret holding the AES-256-GCM key that encrypts vendor
+    bearer credentials at rest.
+
+    Deliberately NOT the key any developer machine uses. A Plaid access token
+    reads a named person's bank transactions on demand for as long as the item
+    lives, and a key shared with a laptop is not encryption at rest. The API
+    refuses to boot without this when BANK_PROVIDER=plaid, rather than falling
+    back to writing plaintext into a table.
+  EOT
+  type        = string
+  default     = "HOMESTEAD_MORTGAGES_VENDOR_TOKEN_KEY"
+}
+
+variable "plaid_product" {
+  description = <<-EOT
+    "cra" or "assets".
+
+    CRA is the target: only a consumer report satisfies CRD-017's "authorized
+    DU vendor". "assets" is the stand-in while that access is granted — real
+    bank, real transactions, and honestly NOT a consumer report, so it reports
+    vendorAuthorizedForDu:false and CRD-017 stays unsatisfied rather than being
+    met by the wrong evidence.
+  EOT
+  type        = string
+  default     = "assets"
+}
+
+variable "public_origin" {
+  description = <<-EOT
+    Where hosted vendors return the borrower — Stripe Identity's return URL and
+    Plaid's report webhook. Must be the service's own https URL; empty means
+    the API falls back to its localhost default, which is wrong everywhere but
+    a developer machine.
+  EOT
+  type        = string
+  default     = ""
+}

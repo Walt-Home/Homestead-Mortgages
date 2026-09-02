@@ -140,12 +140,68 @@ resource "google_cloud_run_v2_service" "api" {
         value = "1"
       }
 
-      # Fixture connectors are the ONLY implementation. Any other value makes
-      # the API throw at boot rather than fall back, so a deploy that believes
-      # it has real vendors fails visibly.
+      # Superseded by the per-connector variables below, and kept because it
+      # is still what /health reports. Vendors arrive one at a time and over
+      # months, so an all-or-nothing switch would make the whole registry wait
+      # for the slowest member; `providerMix()` in the boot log is the truth.
       env {
         name  = "CONNECTOR_MODE"
         value = var.connector_mode
+      }
+
+      # ── Plaid ──────────────────────────────────────────────────────────────
+      #
+      # Note what is NOT here: PLAID_REDIRECT_URI. Plaid rejects
+      # /link/token/create with INVALID_FIELD when the redirect URI is not on
+      # the dashboard allowlist, and it rejects it for EVERY link token rather
+      # than only the OAuth ones — so a plausible-looking value set here takes
+      # screen 3 down entirely until somebody registers it. Add it only once
+      # "${var.public_origin}/plaid/return" is registered under
+      # Developers > API > Allowed Redirect URIs.
+
+      env {
+        name  = "BANK_PROVIDER"
+        value = "plaid"
+      }
+
+      env {
+        name  = "PLAID_ENV"
+        value = "sandbox"
+      }
+
+      env {
+        name  = "PLAID_PRODUCT"
+        value = var.plaid_product
+      }
+
+      env {
+        name  = "PLAID_CLIENT_ID"
+        value = var.plaid_client_id
+      }
+
+      env {
+        name = "PLAID_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = var.plaid_secret_secret
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "VENDOR_TOKEN_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = var.vendor_token_key_secret
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "PUBLIC_ORIGIN"
+        value = var.public_origin
       }
 
       env {

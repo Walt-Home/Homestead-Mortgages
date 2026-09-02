@@ -16,11 +16,14 @@
 import {
   fixtureRegistry,
   googlePlacesConnector,
+  plaidConnector,
   stripeIdentityConnector,
   type ConnectorRegistry,
   type PersonaId,
 } from "@hm/connectors";
+import { prisma } from "@hm/db";
 import { config } from "../config.js";
+import { vendorTokenStore } from "./vendor-tokens.js";
 
 let registry: ConnectorRegistry | undefined;
 
@@ -82,7 +85,28 @@ export function connectors(): ConnectorRegistry {
     chosen.identity = identity.capabilities.provider;
   }
 
-  registry = { ...fixtures, propertyData, identity };
+  let bank = fixtures.bank;
+  if (config.providers.bank === "plaid") {
+    if (!config.plaid.clientId || !config.plaid.secret) {
+      throw new Error(
+        "BANK_PROVIDER=plaid but PLAID_CLIENT_ID or PLAID_SECRET is not set.",
+      );
+    }
+    bank = plaidConnector({
+      clientId: config.plaid.clientId,
+      secret: config.plaid.secret,
+      environment: config.plaid.environment,
+      // Throws if VENDOR_TOKEN_KEY is missing or the wrong length. Better here
+      // than at the first borrower's bank login.
+      tokens: vendorTokenStore(prisma, config.vendorTokenKey),
+      // OAuth banks bounce the borrower out to their own site and back. The
+      // URI has to be registered in the Plaid dashboard or Link refuses it.
+      redirectUri: `${config.publicOrigin}/plaid/return`,
+    });
+    chosen.bank = bank.capabilities.provider;
+  }
+
+  registry = { ...fixtures, propertyData, identity, bank };
   mix = chosen;
   return registry;
 }

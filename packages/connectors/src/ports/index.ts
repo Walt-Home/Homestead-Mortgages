@@ -74,7 +74,62 @@ export interface LinkSession {
   readonly sessionId: string;
   readonly linkToken: string;
   readonly expiresAt: string;
+  /**
+   * Whether the borrower must complete the vendor's own widget before any data
+   * exists.
+   *
+   * A fixture can mint a session and answer with a report in the same call. A
+   * real aggregator cannot: the borrower authenticates with their bank inside
+   * the vendor's UI, and the server learns nothing until that returns a token.
+   * The client cannot infer which it is dealing with, and inferring wrong means
+   * either a widget that never opens or a fetch against a bank nobody has
+   * logged into.
+   */
+  readonly requiresClientHandoff: boolean;
 }
+
+/**
+ * Where an adapter keeps a vendor credential between calls.
+ *
+ * Plaid's CRA flow spans three round trips and a borrower logging into their
+ * bank: create a user, create a link token, and later exchange what the widget
+ * returned and pull a report. The `user_token` from the first call is needed by
+ * the last, and the two are separated by however long somebody takes to find
+ * their banking password.
+ *
+ * An earlier adapter in this repo kept that kind of state in a Map on the
+ * instance. That works on one process and fails intermittently the moment Cloud
+ * Run scales past one — created on instance A, read on instance B, not found.
+ * Handing the adapter a store makes the persistence explicit rather than
+ * accidental.
+ *
+ * ⚠ These values are bearer credentials for a person's bank data. The
+ * implementation must encrypt them at rest before this is pointed at anything
+ * real; see docs/decisions.md on the vault work.
+ */
+export interface VendorTokenStore {
+  get(loanFileId: string, key: string): Promise<string | null>;
+  put(loanFileId: string, key: string, value: string): Promise<void>;
+}
+
+/** What the vendor's widget handed back, on its way to the report fetch. */
+export interface LinkHandoff {
+  readonly sessionId: string;
+  /** Absent for a fixture, required by an aggregator. */
+  readonly publicToken?: string;
+}
+
+/**
+ * A twelve-month asset report is not always ready when asked for.
+ *
+ * Aggregators assemble one asynchronously — a bank with slow transaction
+ * history can take minutes. Modelling that as a value rather than a timeout
+ * keeps "still building" distinguishable from "failed", which are different
+ * things to tell a borrower.
+ */
+export type AssetReportResult =
+  | { readonly status: "ready"; readonly result: ConnectorResult<AssetReport> }
+  | { readonly status: "pending"; readonly retryAfterMs: number };
 
 export interface CreditConnector {
   readonly capabilities: ConnectorCapabilities;
@@ -88,9 +143,9 @@ export interface BankConnector {
   /** The 12-month asset report. `monthsRequested` is 12 for every V1 call. */
   fetchAssetReport(
     file: LoanFile,
-    sessionId: string,
+    handoff: LinkHandoff,
     monthsRequested: number,
-  ): Promise<ConnectorResult<AssetReport>>;
+  ): Promise<AssetReportResult>;
 }
 
 export interface PayrollConnector {

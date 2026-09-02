@@ -134,7 +134,9 @@ describe("the onboarding flow", () => {
     file = { ...file, credit: credit.data };
     const afterCredit = progress(file);
 
-    const bank = await registry.bank.fetchAssetReport(file, "s", 12);
+    const bankOutcome = await registry.bank.fetchAssetReport(file, { sessionId: "s" }, 12);
+    if (bankOutcome.status !== "ready") throw new Error("fixture must answer immediately");
+    const bank = bankOutcome.result;
     file = { ...file, assets: bank.data };
     const afterBank = progress(file);
 
@@ -166,7 +168,9 @@ describe("the onboarding flow", () => {
     file = { ...file, credit: credit.data };
     counts.push(progress(file).satisfied);
 
-    const bank = await registry.bank.fetchAssetReport(file, "s", 12);
+    const bankOutcome = await registry.bank.fetchAssetReport(file, { sessionId: "s" }, 12);
+    if (bankOutcome.status !== "ready") throw new Error("fixture must answer immediately");
+    const bank = bankOutcome.result;
     file = { ...file, assets: bank.data };
     counts.push(progress(file).satisfied);
 
@@ -195,7 +199,9 @@ describe("the onboarding flow", () => {
 
     const credit = await registry.credit.pullTriMerge(file);
     file = { ...file, credit: credit.data };
-    const bank = await registry.bank.fetchAssetReport(file, "s", 12);
+    const bankOutcome = await registry.bank.fetchAssetReport(file, { sessionId: "s" }, 12);
+    if (bankOutcome.status !== "ready") throw new Error("fixture must answer immediately");
+    const bank = bankOutcome.result;
     file = { ...file, assets: bank.data };
     const payroll = await registry.payroll.fetchPayroll(file, "s");
     file = {
@@ -239,7 +245,9 @@ describe("the decision", () => {
     let file = afterIdentity();
     const credit = await registry.credit.pullTriMerge(file);
     file = { ...file, credit: credit.data };
-    const bank = await registry.bank.fetchAssetReport(file, "s", 12);
+    const bankOutcome = await registry.bank.fetchAssetReport(file, { sessionId: "s" }, 12);
+    if (bankOutcome.status !== "ready") throw new Error("fixture must answer immediately");
+    const bank = bankOutcome.result;
     file = { ...file, assets: bank.data };
     const payroll = await registry.payroll.fetchPayroll(file, "s");
     file = {

@@ -137,8 +137,46 @@ connectorRouter.post(
     const file = await requireFile(id, req.user!.id);
 
     const bank = connectors().bank;
-    const session = await bank.createLinkSession(file);
-    const result = await bank.fetchAssetReport(file, session.sessionId, 12);
+    const publicToken = req.body?.publicToken as string | undefined;
+    let sessionId = req.body?.sessionId as string | undefined;
+
+    // Only open a session when the client does not already hold one. The
+    // borrower polls this route while the report assembles, and minting a new
+    // link token on every poll would both bill for sessions nobody opens and
+    // hand back a token that invalidates the one Link is using.
+    if (!sessionId && !publicToken) {
+      const session = await bank.createLinkSession(file);
+      sessionId = session.sessionId;
+
+      // A real aggregator needs the borrower to log in inside its own widget
+      // before any data exists, and hands the client a token to send back. The
+      // client drives that; this route only reaches the fetch below when the
+      // provider can answer without one.
+      if (session.requiresClientHandoff) {
+        res.status(202).json({
+          requiresClientHandoff: true,
+          linkToken: session.linkToken,
+          sessionId: session.sessionId,
+          expiresAt: session.expiresAt,
+        });
+        return;
+      }
+    }
+
+    const outcome = await bank.fetchAssetReport(
+      file,
+      { sessionId: sessionId ?? id, publicToken },
+      12,
+    );
+
+    // "Still building" is not "failed". A twelve-month report from a bank with
+    // slow history can take minutes, and telling the borrower it went wrong
+    // would be false.
+    if (outcome.status === "pending") {
+      res.status(202).json({ pending: true, retryAfterMs: outcome.retryAfterMs });
+      return;
+    }
+    const result = outcome.result;
 
     await recordSnapshot(
       id,
@@ -177,7 +215,7 @@ connectorRouter.post(
           employerName: e.employerName,
           employerEin: e.employerEin ?? null,
           position: e.position,
-          startDate: new Date(e.startDate),
+          startDate: e.startDate ? new Date(e.startDate) : null,
           endDate: e.endDate ? new Date(e.endDate) : null,
           status: e.status,
           isMilitary: e.isMilitary,
@@ -232,7 +270,7 @@ connectorRouter.post(
           employerName: e.employerName,
           employerEin: e.employerEin ?? null,
           position: e.position,
-          startDate: new Date(e.startDate),
+          startDate: e.startDate ? new Date(e.startDate) : null,
           endDate: e.endDate ? new Date(e.endDate) : null,
           status: e.status,
           isMilitary: e.isMilitary,

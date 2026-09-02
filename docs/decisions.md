@@ -392,15 +392,73 @@ person holding it), `livemode: false`, and reads back with
 `verified_outputs` expanded — unexpanded, a verified session returns nothing
 about who was verified.
 
+## Bank: Plaid, and CRA rather than Assets
+
+CRD-017 wants "a 12-month asset verification report from an authorized DU
+vendor". That phrase does not describe a bank-data feed — it names Fannie
+Mae's Day 1 Certainty programme, and Day 1 Certainty is why the flow can be
+four screens: a validated report is what lets INC-002 take deposits instead of
+paystubs, which is what lets a salaried borrower skip the payroll step.
+
+Plaid's ordinary **Assets** product returns the same transactions and carries
+none of that status. The **CRA** products — `cra_base_report` and
+`cra_income_insights` — are the ones issued as consumer reports under the FCRA.
+They are enabled per account and are not on by default: a client id that works
+for Assets fails at `/link/token/create` the moment the CRA products are named.
+Sandbox needs no approval; production does.
+
+Three consequences worth knowing before reading the adapter:
+
+**The borrower is in the middle of the call.** Every other connector is a
+server-side request. This one is create-session → the borrower signs into
+their bank inside Plaid's own widget → the client hands back a `public_token`.
+That is why `LinkSession` grew `requiresClientHandoff` and `fetchAssetReport`
+can answer `pending` — a twelve-month report from a bank with slow history
+takes minutes, and "still building" must not render as "failed".
+
+**Plaid supplies the report; DU performs the assessment.** So
+`vendorAuthorizedForDu` is true and `cashFlowAssessmentResult` stays undefined,
+and CRD-017 reads "cash flow assessment not performed" — which is the truth
+until there is a DU submission. Filling that field in would turn the
+requirement green on the strength of nothing.
+
+**Rent and alternative credit are derived here, not supplied.** Plaid does not
+label a payment "rent". `detectRecurringObligations` groups outflows by
+normalised payee and requires a consistent amount across consecutive months.
+Two limits it does not hide: bank data cannot see a due date, so `onTime` means
+"no month skipped" — the same test Fannie's own bank-statement rent history
+uses (B3-5.4) — and a payee whose amount swings more than 25% around its median
+is not treated as one obligation at all, because a false positive here reaches
+an underwriter as a claimed credit reference.
+
+Employment start dates became nullable in the same change. Deposits name a
+payer and never a hire date, and `new Date("")` is an Invalid Date that would
+have failed at the insert. Nothing in the registry computes from the field; it
+is displayed.
+
+## Vendor credentials at rest
+
+A Plaid `access_token` reads a named person's bank transactions on demand, for
+as long as the item lives, with no further action by them — which makes a
+leaked row worse than a leaked session cookie, not better. `vendor_tokens`
+holds AES-256-GCM ciphertext under `VENDOR_TOKEN_KEY`, which lives in Secret
+Manager and not in the database that holds the ciphertext. GCM rather than CBC
+because it authenticates: a tampered row fails to decrypt instead of yielding a
+token of somebody else's choosing.
+
+There is no default key and no plaintext fallback, so a missing
+`VENDOR_TOKEN_KEY` is a boot failure. And unlike `connector_snapshots` and
+`decisions`, this table is deliberately **not** append-only — a re-link
+replaces the credential. Old live bearer tokens are a liability, not history.
+
 ## Still outstanding
 
-Five vendor decisions plus sandbox credentials, none obtainable from inside
+Four vendor decisions plus sandbox credentials, none obtainable from inside
 this repo:
 
 | Connector                       | Constraint                                                      |
 | ------------------------------- | --------------------------------------------------------------- |
 | Credit (soft tri-merge)         | Reseller or bureau-direct; needs FCRA permissible purpose       |
-| Bank (12-month asset report)    | **Must be a DU-authorized vendor** — CRD-017 says so explicitly |
 | Payroll (consumer-permissioned) | Aggregator                                                      |
 | IRS transcripts                 | IVES participant or a reseller                                  |
 | E-sign                          | For APP-005, APP-012 and INC-008                                |

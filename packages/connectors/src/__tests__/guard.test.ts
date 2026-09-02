@@ -75,7 +75,7 @@ describe("authorization guard", () => {
     await expect(registry.bank.createLinkSession(emptyFile())).rejects.toBeInstanceOf(
       AuthorizationError,
     );
-    await expect(registry.bank.fetchAssetReport(emptyFile(), "s", 12)).rejects.toBeInstanceOf(
+    await expect(registry.bank.fetchAssetReport(emptyFile(), { sessionId: "s" }, 12)).rejects.toBeInstanceOf(
       AuthorizationError,
     );
   });
@@ -112,7 +112,7 @@ describe("authorization guard", () => {
 
   it("refuses an asset report shorter than the 12 months CRD-017 requires", async () => {
     await expect(
-      registry.bank.fetchAssetReport(emptyFile([authorization]), "s", 2),
+      registry.bank.fetchAssetReport(emptyFile([authorization]), { sessionId: "s" }, 2),
     ).rejects.toThrow(/require 12/);
   });
 

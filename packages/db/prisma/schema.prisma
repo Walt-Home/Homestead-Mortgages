@@ -34,12 +34,12 @@ datasource db {
 /// token. `hostedDomain` records what the token actually asserted, because
 /// "Google enforces it" is a claim worth being able to audit.
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  googleSub    String   @unique @map("google_sub")
-  email        String   @unique
+  id           String  @id @default(uuid()) @db.Uuid
+  googleSub    String  @unique @map("google_sub")
+  email        String  @unique
   name         String?
-  pictureUrl   String?  @map("picture_url")
-  hostedDomain String?  @map("hosted_domain")
+  pictureUrl   String? @map("picture_url")
+  hostedDomain String? @map("hosted_domain")
 
   createdAt  DateTime @default(now()) @map("created_at")
   lastSeenAt DateTime @default(now()) @map("last_seen_at")
@@ -71,8 +71,8 @@ enum LoanPurpose {
 }
 
 model LoanFile {
-  id        String    @id @default(uuid()) @db.Uuid
-  stage     FlowStage @default(PROPERTY_LOAN)
+  id    String    @id @default(uuid()) @db.Uuid
+  stage FlowStage @default(PROPERTY_LOAN)
 
   /// Who created it. Null only for the shared demo files, which belong to
   /// nobody on purpose — see `isDemo`.
@@ -87,27 +87,27 @@ model LoanFile {
 
   // Screen 1. Nullable because a file exists the moment somebody starts, and
   // the whole point of the flow is that it is useful before it is complete.
-  purpose          LoanPurpose?
-  loanAmount       Decimal?     @map("loan_amount") @db.Decimal(14, 2)
-  downPayment      Decimal?     @map("down_payment") @db.Decimal(14, 2)
-  cashToBorrower   Decimal?     @map("cash_to_borrower") @db.Decimal(14, 2)
-  cashOutPurpose   String?      @map("cash_out_purpose")
-  juniorLienBalance     Decimal @default(0) @map("junior_lien_balance") @db.Decimal(14, 2)
-  juniorLienCreditLimit Decimal @default(0) @map("junior_lien_credit_limit") @db.Decimal(14, 2)
-  interestedPartyContributions Decimal @default(0) @map("interested_party_contributions") @db.Decimal(14, 2)
+  purpose                      LoanPurpose?
+  loanAmount                   Decimal?     @map("loan_amount") @db.Decimal(14, 2)
+  downPayment                  Decimal?     @map("down_payment") @db.Decimal(14, 2)
+  cashToBorrower               Decimal?     @map("cash_to_borrower") @db.Decimal(14, 2)
+  cashOutPurpose               String?      @map("cash_out_purpose")
+  juniorLienBalance            Decimal      @default(0) @map("junior_lien_balance") @db.Decimal(14, 2)
+  juniorLienCreditLimit        Decimal      @default(0) @map("junior_lien_credit_limit") @db.Decimal(14, 2)
+  interestedPartyContributions Decimal      @default(0) @map("interested_party_contributions") @db.Decimal(14, 2)
 
   // Subject property, flattened — one property per file, always.
-  propertyLine1        String?  @map("property_line1")
-  propertyLine2        String?  @map("property_line2")
-  propertyCity         String?  @map("property_city")
-  propertyState        String?  @map("property_state") @db.VarChar(2)
-  propertyPostalCode   String?  @map("property_postal_code")
-  propertyType         String?  @map("property_type")
-  occupancy            String?
-  valueOrPrice         Decimal? @map("value_or_price") @db.Decimal(14, 2)
-  valuationSource      String?  @map("valuation_source")
-  addressVerified      Boolean  @default(false) @map("address_verified")
-  financedPropertyCount Int     @default(1) @map("financed_property_count")
+  propertyLine1         String?  @map("property_line1")
+  propertyLine2         String?  @map("property_line2")
+  propertyCity          String?  @map("property_city")
+  propertyState         String?  @map("property_state") @db.VarChar(2)
+  propertyPostalCode    String?  @map("property_postal_code")
+  propertyType          String?  @map("property_type")
+  occupancy             String?
+  valueOrPrice          Decimal? @map("value_or_price") @db.Decimal(14, 2)
+  valuationSource       String?  @map("valuation_source")
+  addressVerified       Boolean  @default(false) @map("address_verified")
+  financedPropertyCount Int      @default(1) @map("financed_property_count")
 
   // Product
   productCode  String?  @map("product_code")
@@ -122,13 +122,13 @@ model LoanFile {
   applicationReceivedAt DateTime? @map("application_received_at")
   applicationSixPieces  Json?     @map("application_six_pieces")
 
-  intentToProceedAt   DateTime? @map("intent_to_proceed_at")
+  intentToProceedAt    DateTime? @map("intent_to_proceed_at")
   /// When the borrower signed the application package in step 4.
-  applicationSignedAt DateTime? @map("application_signed_at")
-  deliveryMethod      String    @default("electronic") @map("delivery_method")
-  sanctionsScreenClear Boolean? @map("sanctions_screen_clear")
-  ssnValidatedWithSsa  Boolean? @map("ssn_validated_with_ssa")
-  fraudReviewComplete  Boolean  @default(false) @map("fraud_review_complete")
+  applicationSignedAt  DateTime? @map("application_signed_at")
+  deliveryMethod       String    @default("electronic") @map("delivery_method")
+  sanctionsScreenClear Boolean?  @map("sanctions_screen_clear")
+  ssnValidatedWithSsa  Boolean?  @map("ssn_validated_with_ssa")
+  fraudReviewComplete  Boolean   @default(false) @map("fraud_review_complete")
 
   // Existing loan, on a refinance.
   existingServicer       String?  @map("existing_servicer")
@@ -140,17 +140,18 @@ model LoanFile {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  borrowers      Borrower[]
-  consents       Consent[]
-  links          ConnectorLink[]
-  snapshots      ConnectorSnapshot[]
-  documents      Document[]
-  disclosures    Disclosure[]
-  decisions      Decision[]
-  conditions     LoanCondition[]
-  events         FileEvent[]
-  incomeSources  IncomeSource[]
-  employments    Employment[]
+  borrowers     Borrower[]
+  consents      Consent[]
+  links         ConnectorLink[]
+  vendorTokens  VendorToken[]
+  snapshots     ConnectorSnapshot[]
+  documents     Document[]
+  disclosures   Disclosure[]
+  decisions     Decision[]
+  conditions    LoanCondition[]
+  events        FileEvent[]
+  incomeSources IncomeSource[]
+  employments   Employment[]
 
   @@index([stage])
   @@index([createdAt])
@@ -178,16 +179,16 @@ model Borrower {
   // sites: the credit pull, the SSA-89 validation and the 4506-C. `ssnLast4`
   // is display only. A migration that adds a plaintext SSN column to this
   // table is the single change most likely to turn a prototype into a breach.
-  ssnLast4      String @map("ssn_last4") @db.VarChar(4)
+  ssnLast4       String @map("ssn_last4") @db.VarChar(4)
   ssnVaultHandle String @map("ssn_vault_handle")
 
-  addressLine1 String  @map("address_line1")
-  addressLine2 String? @map("address_line2")
-  addressCity  String  @map("address_city")
-  addressState String  @map("address_state") @db.VarChar(2)
-  addressPostalCode String @map("address_postal_code")
+  addressLine1      String  @map("address_line1")
+  addressLine2      String? @map("address_line2")
+  addressCity       String  @map("address_city")
+  addressState      String  @map("address_state") @db.VarChar(2)
+  addressPostalCode String  @map("address_postal_code")
 
-  maritalStatus String  @map("marital_status")
+  maritalStatus String @map("marital_status")
 
   /// US citizen, permanent resident, or non-permanent resident.
   ///
@@ -199,18 +200,18 @@ model Borrower {
 
   /// Identity verified against a government document, rather than typed.
   /// Null means never attempted.
-  identityVerifiedAt     DateTime? @map("identity_verified_at")
-  identityVerificationId String?   @map("identity_verification_id")
-  identityVerificationStatus String? @map("identity_verification_status")
-  nonBorrowingSpouseName String? @map("non_borrowing_spouse_name")
-  nonBorrowingSpouseSignatureRequired Boolean @default(false) @map("non_borrowing_spouse_signature_required")
+  identityVerifiedAt                  DateTime? @map("identity_verified_at")
+  identityVerificationId              String?   @map("identity_verification_id")
+  identityVerificationStatus          String?   @map("identity_verification_status")
+  nonBorrowingSpouseName              String?   @map("non_borrowing_spouse_name")
+  nonBorrowingSpouseSignatureRequired Boolean   @default(false) @map("non_borrowing_spouse_signature_required")
 
-  preferredLanguage String  @default("en") @map("preferred_language")
-  demographics      Json?
+  preferredLanguage  String   @default("en") @map("preferred_language")
+  demographics       Json?
   firstTimeHomebuyer Boolean? @map("first_time_homebuyer")
-  isMilitary        Boolean  @default(false) @map("is_military")
-  currentHousing    String   @default("rent") @map("current_housing")
-  monthlyRent       Decimal? @map("monthly_rent") @db.Decimal(10, 2)
+  isMilitary         Boolean  @default(false) @map("is_military")
+  currentHousing     String   @default("rent") @map("current_housing")
+  monthlyRent        Decimal? @map("monthly_rent") @db.Decimal(10, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -231,11 +232,11 @@ model Consent {
   borrower   Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
 
   kind       String
-  grantedAt  DateTime @map("granted_at")
+  grantedAt  DateTime  @map("granted_at")
   revokedAt  DateTime? @map("revoked_at")
-  envelopeId String?  @map("envelope_id")
-  ipAddress  String   @map("ip_address")
-  userAgent  String   @map("user_agent")
+  envelopeId String?   @map("envelope_id")
+  ipAddress  String    @map("ip_address")
+  userAgent  String    @map("user_agent")
 
   @@index([loanFileId, kind])
   @@map("consents")
@@ -246,6 +247,36 @@ model Consent {
 /// A live connection to a data source. `persistentMonitoringEnabled` is what
 /// screen 9 turns on, and it is the switch the whole refinance-monitoring
 /// product depends on. V1 records it; it does not yet act on it.
+
+/// Bearer credentials a vendor handed back, encrypted at rest.
+///
+/// A Plaid access token is not a session id. It reads a named person's bank
+/// transactions for as long as the item lives, and it does so without any
+/// further interaction from them — which makes a leaked row here worse than a
+/// leaked session cookie, not better. AES-256-GCM under `VENDOR_TOKEN_KEY`,
+/// which lives in Secret Manager and is not in the database.
+///
+/// Unlike `connector_snapshots` and `decisions`, this is deliberately NOT
+/// append-only: a re-link replaces the credential rather than accumulating
+/// live ones. Old bearer tokens are a liability, not history.
+model VendorToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+
+  /// Namespaced by vendor, e.g. "plaid.access_token".
+  key String
+
+  /// base64(iv):base64(authTag):base64(ciphertext)
+  ciphertext String
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([loanFileId, key])
+  @@map("vendor_tokens")
+}
+
 model ConnectorLink {
   id         String   @id @default(uuid()) @db.Uuid
   loanFileId String   @map("loan_file_id") @db.Uuid
@@ -255,9 +286,9 @@ model ConnectorLink {
   provider String
   status   String @default("active")
 
-  linkedAt     DateTime @map("linked_at")
-  lastSyncedAt DateTime @map("last_synced_at")
-  persistentMonitoringEnabled Boolean @default(false) @map("persistent_monitoring_enabled")
+  linkedAt                    DateTime @map("linked_at")
+  lastSyncedAt                DateTime @map("last_synced_at")
+  persistentMonitoringEnabled Boolean  @default(false) @map("persistent_monitoring_enabled")
 
   /// Set when monitoring is on. Null means nothing is scheduled.
   nextSyncDueAt DateTime? @map("next_sync_due_at")
@@ -277,12 +308,12 @@ model ConnectorSnapshot {
   loanFileId String   @map("loan_file_id") @db.Uuid
   loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
 
-  kind       String
-  provider   String
-  externalId String   @map("external_id")
+  kind        String
+  provider    String
+  externalId  String   @map("external_id")
   /// The domain-shaped payload. Vendor-native JSON stays in `raw`.
-  payload    Json
-  raw        Json?
+  payload     Json
+  raw         Json?
   retrievedAt DateTime @map("retrieved_at")
 
   @@index([loanFileId, kind, retrievedAt])
@@ -298,13 +329,13 @@ model IncomeSource {
   loanFileId String   @map("loan_file_id") @db.Uuid
   loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
 
-  type             String
-  monthlyAmount    Decimal  @map("monthly_amount") @db.Decimal(12, 2)
-  historyMonths    Int      @map("history_months")
-  continuanceEndDate DateTime? @map("continuance_end_date") @db.Date
+  type                   String
+  monthlyAmount          Decimal   @map("monthly_amount") @db.Decimal(12, 2)
+  historyMonths          Int       @map("history_months")
+  continuanceEndDate     DateTime? @map("continuance_end_date") @db.Date
   /// Null until INC-027 runs. Null is not false.
-  continuanceEstablished Boolean? @map("continuance_established")
-  evidenceDocumentIds String[] @default([]) @map("evidence_document_ids")
+  continuanceEstablished Boolean?  @map("continuance_established")
+  evidenceDocumentIds    String[]  @default([]) @map("evidence_document_ids")
 
   @@index([loanFileId])
   @@map("income_sources")
@@ -315,14 +346,14 @@ model Employment {
   loanFileId String   @map("loan_file_id") @db.Uuid
   loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
 
-  employerName String   @map("employer_name")
-  employerEin  String?  @map("employer_ein")
-  position     String
-  startDate    DateTime @map("start_date") @db.Date
-  endDate      DateTime? @map("end_date") @db.Date
-  status       String
-  isMilitary   Boolean  @default(false) @map("is_military")
-  verificationMethod String @map("verification_method")
+  employerName       String    @map("employer_name")
+  employerEin        String?   @map("employer_ein")
+  position           String
+  startDate          DateTime? @map("start_date") @db.Date
+  endDate            DateTime? @map("end_date") @db.Date
+  status             String
+  isMilitary         Boolean   @default(false) @map("is_military")
+  verificationMethod String    @map("verification_method")
 
   @@index([loanFileId])
   @@map("employments")
@@ -335,13 +366,13 @@ model Document {
   loanFileId String   @map("loan_file_id") @db.Uuid
   loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
 
-  filename    String
-  contentType String  @map("content_type")
-  bytes       Int
-  storageUri  String  @map("storage_uri")
+  filename               String
+  contentType            String   @map("content_type")
+  bytes                  Int
+  storageUri             String   @map("storage_uri")
   /// Which requirement the borrower was asked to satisfy with this file.
-  satisfiesRequirementId String @map("satisfies_requirement_id")
-  uploadedAt  DateTime @default(now()) @map("uploaded_at")
+  satisfiesRequirementId String   @map("satisfies_requirement_id")
+  uploadedAt             DateTime @default(now()) @map("uploaded_at")
 
   @@index([loanFileId, satisfiesRequirementId])
   @@map("documents")
@@ -374,24 +405,24 @@ model Decision {
   loanFileId String   @map("loan_file_id") @db.Uuid
   loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
 
-  outcome        String
-  computedAt     DateTime @map("computed_at")
+  outcome    String
+  computedAt DateTime @map("computed_at")
 
   /// "shadow" until a real DU or LPA integration exists. Never inferred.
-  ausEngine         String  @map("aus_engine")
-  ausEngineVersion  String  @map("aus_engine_version")
-  ausCasefileId     String  @map("aus_casefile_id")
-  ausRecommendation String  @map("aus_recommendation")
-  ausFindings       Json    @map("aus_findings")
+  ausEngine         String @map("aus_engine")
+  ausEngineVersion  String @map("aus_engine_version")
+  ausCasefileId     String @map("aus_casefile_id")
+  ausRecommendation String @map("aus_recommendation")
+  ausFindings       Json   @map("aus_findings")
 
-  ratios      Json
-  reserves    Json
-  compliance  Json
-  pricing     Json
+  ratios               Json
+  reserves             Json
+  compliance           Json
+  pricing              Json
   /// The full audit trail behind every number above (screen 8's "show the
   /// reasoning"). Stored rather than recomputed, because the guidelines
   /// constants change and a re-derivation would silently rewrite history.
-  derivations Json
+  derivations          Json
   adverseActionReasons String[] @default([]) @map("adverse_action_reasons")
 
   @@index([loanFileId, computedAt])
@@ -403,13 +434,13 @@ model LoanCondition {
   loanFileId String   @map("loan_file_id") @db.Uuid
   loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
 
-  requirementId String  @map("requirement_id")
+  requirementId String    @map("requirement_id")
   description   String
-  status        String  @default("open")
+  status        String    @default("open")
   owner         String
-  issuedAt      DateTime @map("issued_at")
+  issuedAt      DateTime  @map("issued_at")
   clearedAt     DateTime? @map("cleared_at")
-  documentIds   String[] @default([]) @map("document_ids")
+  documentIds   String[]  @default([]) @map("document_ids")
 
   @@index([loanFileId, status])
   @@map("loan_conditions")
@@ -428,13 +459,13 @@ model FileEvent {
   loanFileId String   @map("loan_file_id") @db.Uuid
   loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
 
-  kind      String
+  kind          String
   /// The requirement this event advanced, where it advanced one.
-  requirementId String? @map("requirement_id")
-  payload   Json
-  occurredAt DateTime @default(now()) @map("occurred_at")
+  requirementId String?  @map("requirement_id")
+  payload       Json
+  occurredAt    DateTime @default(now()) @map("occurred_at")
   /// Who caused it: "borrower", "system", or a connector provider name.
-  actor     String
+  actor         String
 
   @@index([loanFileId, occurredAt])
   @@index([kind, occurredAt])

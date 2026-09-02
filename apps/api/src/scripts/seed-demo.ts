@@ -121,7 +121,11 @@ async function seed(personaId: PersonaId): Promise<void> {
     credit.retrievedAt,
   );
 
-  const bank = await registry.bank.fetchAssetReport(file, "seed", 12);
+  const bankOutcome = await registry.bank.fetchAssetReport(file, { sessionId: "seed" }, 12);
+  if (bankOutcome.status !== "ready") {
+    throw new Error("The fixture bank connector must answer immediately.");
+  }
+  const bank = bankOutcome.result;
   await recordSnapshot(
     created.id,
     "bank",
@@ -147,7 +151,7 @@ async function seed(personaId: PersonaId): Promise<void> {
       employerName: e.employerName,
       employerEin: e.employerEin ?? null,
       position: e.position,
-      startDate: new Date(e.startDate),
+      startDate: e.startDate ? new Date(e.startDate) : null,
       endDate: e.endDate ? new Date(e.endDate) : null,
       status: e.status,
       isMilitary: e.isMilitary,

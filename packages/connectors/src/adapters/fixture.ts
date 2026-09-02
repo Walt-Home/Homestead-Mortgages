@@ -29,8 +29,10 @@ import type {
 } from "@hm/shared";
 import { AddressNotFoundError } from "../ports/index.js";
 import type {
+  AssetReportResult,
   BankConnector,
   IdentityConnector,
+  LinkHandoff,
   ConnectorRegistry,
   ConnectorResult,
   CreditConnector,
@@ -80,6 +82,8 @@ function session(prefix: string, ref: Date): LinkSession {
     sessionId: `${prefix}-session`,
     linkToken: `${prefix}-token`,
     expiresAt: expires.toISOString(),
+    // A fixture needs nobody to log in anywhere.
+    requiresClientHandoff: false,
   };
 }
 
@@ -122,9 +126,9 @@ export function fixtureBankConnector(options: FixtureOptions = {}): BankConnecto
     },
     async fetchAssetReport(
       file: LoanFile,
-      _sessionId: string,
+      _handoff: LinkHandoff,
       monthsRequested: number,
-    ): Promise<ConnectorResult<AssetReport>> {
+    ): Promise<AssetReportResult> {
       assertVerificationAuthorized(file);
       // The 12-month window is not a preference. CRD-017's cash flow assessment
       // and CRD-018's rent history both need twelve, and a shorter report
@@ -135,7 +139,10 @@ export function fixtureBankConnector(options: FixtureOptions = {}): BankConnecto
         );
       }
       await sleep(latencyMs);
-      return result(PERSONAS[persona].assets(ref), "fixture-bank", `assets-${persona}`);
+      return {
+        status: "ready",
+        result: result(PERSONAS[persona].assets(ref), "fixture-bank", `assets-${persona}`),
+      };
     },
   };
 }

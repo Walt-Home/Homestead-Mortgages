@@ -71,6 +71,26 @@ export const config = {
     allowLiveIdentity: process.env.STRIPE_ALLOW_LIVE_IDENTITY === "true",
   },
 
+  /**
+   * Plaid, for the twelve-month CRA report behind screen 3.
+   *
+   * CRA products are enabled per account and are not on by default — a client
+   * id that works for Assets will fail at /link/token/create with the CRA
+   * products named. Sandbox needs no approval; production does.
+   */
+  plaid: {
+    clientId: process.env.PLAID_CLIENT_ID,
+    secret: process.env.PLAID_SECRET,
+    environment: (process.env.PLAID_ENV ?? "sandbox") as "sandbox" | "production",
+  },
+
+  /**
+   * Encrypts vendor bearer credentials at rest — base64 of 32 random bytes.
+   * There is no default: see `services/vendor-tokens.ts` for why a missing
+   * key is a boot failure rather than a fallback.
+   */
+  vendorTokenKey: process.env.VENDOR_TOKEN_KEY,
+
   /** Where Stripe returns the borrower after the hosted identity flow. */
   publicOrigin: process.env.PUBLIC_ORIGIN ?? "http://localhost:5173",
 

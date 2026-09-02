@@ -153,7 +153,13 @@ export interface EmploymentRecord {
   readonly employerName: string;
   readonly employerEin?: string;
   readonly position: string;
-  readonly startDate: string;
+  /**
+   * Null when the source cannot know it. Deposits name a payer and never a
+   * hire date, and the alternative — a plausible-looking date nobody
+   * observed — would be shown to an underwriter as fact. Nothing in the
+   * registry computes from this today; it is displayed.
+   */
+  readonly startDate: string | null;
   readonly endDate?: string;
   readonly status: "active" | "ended";
   readonly isMilitary: boolean;

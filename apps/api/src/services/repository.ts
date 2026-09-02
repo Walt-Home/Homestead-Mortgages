@@ -251,7 +251,7 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
       employerName: e.employerName,
       employerEin: e.employerEin ?? undefined,
       position: e.position,
-      startDate: e.startDate.toISOString().slice(0, 10),
+      startDate: e.startDate?.toISOString().slice(0, 10) ?? null,
       endDate: e.endDate?.toISOString().slice(0, 10),
       status: e.status as never,
       isMilitary: e.isMilitary,

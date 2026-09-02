@@ -99,11 +99,18 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
     },
     maritalStatus: b.maritalStatus as Borrower["maritalStatus"],
     citizenship: b.citizenship as Borrower["citizenship"],
-    identityVerification: b.identityVerifiedAt
+    // Keyed on the ID, not on the verified timestamp. A verification that has
+    // been STARTED but not finished has an id and no timestamp, and that is
+    // precisely the state the return page needs to read: the borrower has come
+    // back from the hosted flow and we have to look up which session was
+    // theirs. Keying on `identityVerifiedAt` made a pending verification
+    // invisible, so the return page reported no check in progress for every
+    // document Stripe was still reviewing.
+    identityVerification: b.identityVerificationId
       ? {
-          verificationId: b.identityVerificationId ?? "",
-          status: (b.identityVerificationStatus ?? "verified") as "verified" | "pending" | "failed",
-          verifiedAt: b.identityVerifiedAt.toISOString(),
+          verificationId: b.identityVerificationId,
+          status: (b.identityVerificationStatus ?? "pending") as "verified" | "pending" | "failed",
+          verifiedAt: b.identityVerifiedAt?.toISOString(),
         }
       : null,
     nonBorrowingSpouseName: b.nonBorrowingSpouseName ?? undefined,

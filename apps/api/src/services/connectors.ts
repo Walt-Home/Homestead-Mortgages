@@ -74,9 +74,9 @@ export function connectors(): ConnectorRegistry {
     }
     identity = stripeIdentityConnector({
       secretKey: config.stripe.secretKey,
-      // Stripe sends the borrower back here after the hosted flow; screen 2
-      // reads the result when they land.
-      returnUrl: `${config.publicOrigin}/identity/return`,
+      // Stripe sends the borrower back to {origin}/f/{fileId}/identity/return
+      // after the hosted flow; screen 2 reads the result when they land.
+      origin: config.publicOrigin,
       allowLiveMode: config.stripe.allowLiveIdentity,
     });
     chosen.identity = identity.capabilities.provider;

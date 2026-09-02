@@ -12,8 +12,8 @@ import { describe, expect, it, vi } from "vitest";
 import { stripeIdentityConnector } from "../adapters/stripe-identity.js";
 import type { LoanFile } from "@hm/shared";
 
-const file = { id: "f" } as unknown as LoanFile;
-const RETURN_URL = "https://example.test/f/1/identity";
+const file = { id: "file-123" } as unknown as LoanFile;
+const ORIGIN = "https://example.test";
 
 function stub(body: unknown, ok = true) {
   return vi.fn(async () =>
@@ -26,7 +26,7 @@ function stub(body: unknown, ok = true) {
 describe("live-mode refusal", () => {
   it("refuses a live secret key", () => {
     expect(() =>
-      stripeIdentityConnector({ secretKey: "sk_live_abc", returnUrl: RETURN_URL }),
+      stripeIdentityConnector({ secretKey: "sk_live_abc", origin: ORIGIN }),
     ).toThrow(/Refusing a live Stripe key/);
   });
 
@@ -34,14 +34,14 @@ describe("live-mode refusal", () => {
     // The next person to hit this needs to know why it is not about a few
     // dollars per verification.
     expect(() =>
-      stripeIdentityConnector({ secretKey: "sk_live_abc", returnUrl: RETURN_URL }),
+      stripeIdentityConnector({ secretKey: "sk_live_abc", origin: ORIGIN }),
     ).toThrow(/biometric|BIPA/i);
   });
 
   it("allows live only on a deliberate opt-in", () => {
     const c = stripeIdentityConnector({
       secretKey: "sk_live_abc",
-      returnUrl: RETURN_URL,
+      origin: ORIGIN,
       allowLiveMode: true,
     });
     expect(c.capabilities.provider).toContain("LIVE");
@@ -49,7 +49,7 @@ describe("live-mode refusal", () => {
   });
 
   it("accepts a test key without ceremony, and says it is test", () => {
-    const c = stripeIdentityConnector({ secretKey: "sk_test_abc", returnUrl: RETURN_URL });
+    const c = stripeIdentityConnector({ secretKey: "sk_test_abc", origin: ORIGIN });
     expect(c.capabilities.mode).toBe("sandbox");
     expect(c.capabilities.satisfies).toContain("APP-001");
   });
@@ -58,19 +58,22 @@ describe("live-mode refusal", () => {
 describe("sessions", () => {
   it("asks for a matching selfie and a live capture", async () => {
     const fetchImpl = stub({ id: "vs_1", url: "https://verify.stripe.test/vs_1" });
-    const c = stripeIdentityConnector({ secretKey: "sk_test_x", returnUrl: RETURN_URL, fetchImpl });
+    const c = stripeIdentityConnector({ secretKey: "sk_test_x", origin: ORIGIN, fetchImpl });
     const s = await c.createVerificationSession(file, "b1");
 
     expect(s).toEqual({ verificationId: "vs_1", verificationUrl: "https://verify.stripe.test/vs_1" });
     const body = String((fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]![1]!.body);
     // Without the selfie this verifies a document, not the person holding it.
     expect(body).toContain("require_matching_selfie");
+    // The borrower comes back to a fresh page load, so the return URL has to
+    // say which application they were filling in.
+    expect(decodeURIComponent(body)).toContain("/f/file-123/identity/return");
     expect(body).toContain("metadata%5Bborrower_id%5D=b1");
   });
 
   it("throws rather than returning a session Stripe did not create", async () => {
     const c = stripeIdentityConnector({
-      secretKey: "sk_test_x", returnUrl: RETURN_URL, fetchImpl: stub({}, false),
+      secretKey: "sk_test_x", origin: ORIGIN, fetchImpl: stub({}, false),
     });
     await expect(c.createVerificationSession(file, "b1")).rejects.toThrow(/did not return/);
   });
@@ -90,7 +93,7 @@ describe("reading a result", () => {
 
   it("maps a verified session, including the document address", async () => {
     const c = stripeIdentityConnector({
-      secretKey: "sk_test_x", returnUrl: RETURN_URL, fetchImpl: stub(verified),
+      secretKey: "sk_test_x", origin: ORIGIN, fetchImpl: stub(verified),
     });
     const r = await c.getVerification("vs_1");
     expect(r?.status).toBe("verified");
@@ -103,7 +106,7 @@ describe("reading a result", () => {
 
   it("expands verified_outputs, or a verified session tells us nothing", async () => {
     const fetchImpl = stub(verified);
-    const c = stripeIdentityConnector({ secretKey: "sk_test_x", returnUrl: RETURN_URL, fetchImpl });
+    const c = stripeIdentityConnector({ secretKey: "sk_test_x", origin: ORIGIN, fetchImpl });
     await c.getVerification("vs_1");
     const url = String((fetchImpl as unknown as { mock: { calls: [string][] } }).mock.calls[0]![0]);
     expect(url).toContain("expand[]=verified_outputs");
@@ -112,7 +115,7 @@ describe("reading a result", () => {
   it("drops a partial document address rather than half-filling the form", async () => {
     const c = stripeIdentityConnector({
       secretKey: "sk_test_x",
-      returnUrl: RETURN_URL,
+      origin: ORIGIN,
       fetchImpl: stub({ ...verified, verified_outputs: { ...verified.verified_outputs, address: { city: "Austin" } } }),
     });
     expect((await c.getVerification("vs_1"))?.documentAddress).toBeUndefined();
@@ -120,7 +123,7 @@ describe("reading a result", () => {
 
   it("treats processing as pending, not as failure", async () => {
     const c = stripeIdentityConnector({
-      secretKey: "sk_test_x", returnUrl: RETURN_URL, fetchImpl: stub({ id: "vs_1", status: "processing" }),
+      secretKey: "sk_test_x", origin: ORIGIN, fetchImpl: stub({ id: "vs_1", status: "processing" }),
     });
     const r = await c.getVerification("vs_1");
     expect(r?.status).toBe("pending");
@@ -130,7 +133,7 @@ describe("reading a result", () => {
   it("surfaces why a verification failed", async () => {
     const c = stripeIdentityConnector({
       secretKey: "sk_test_x",
-      returnUrl: RETURN_URL,
+      origin: ORIGIN,
       fetchImpl: stub({ id: "vs_1", status: "canceled", last_error: { reason: "The document was expired." } }),
     });
     const r = await c.getVerification("vs_1");

@@ -46,7 +46,8 @@ applicationRouter.post(
       return;
     }
 
-    const session = await connectors().identity.createVerificationSession(file!, borrower.id);
+    const identity = connectors().identity;
+    const session = await identity.createVerificationSession(file!, borrower.id);
     await prisma.borrower.update({
       where: { id: borrower.id },
       data: {
@@ -54,7 +55,13 @@ applicationRouter.post(
         identityVerificationStatus: "pending",
       },
     });
-    res.status(201).json({ alreadyVerified: false, ...session });
+
+    // A fixture finishes in place; a hosted vendor sends the borrower away and
+    // brings them back on a fresh page load. The client cannot guess which,
+    // and guessing wrong means either a dead redirect or a verification that
+    // is never completed.
+    const requiresRedirect = identity.capabilities.mode !== "fixture";
+    res.status(201).json({ alreadyVerified: false, requiresRedirect, ...session });
   }),
 );
 
@@ -84,7 +91,16 @@ applicationRouter.post(
       },
     });
     await recordEvent(id, "identity_verified", "borrower", { status: result.status }, "APP-001");
-    res.json({ status: result.status, verifiedAt: result.verifiedAt });
+
+    // "pending" is a real answer here, not a failure. Stripe processes a
+    // document asynchronously, so a borrower can land back on our page before
+    // the result exists — telling them it failed would be false, and telling
+    // them it succeeded would be worse.
+    res.json({
+      status: result.status,
+      verifiedAt: result.verifiedAt,
+      failureReason: result.failureReason ?? null,
+    });
   }),
 );
 

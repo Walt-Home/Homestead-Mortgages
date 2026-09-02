@@ -206,12 +206,34 @@ export function IdentityPage() {
       if (borrowerId) {
         // Now that a borrower row exists, record the verification against it.
         // The scan above only read the document to save them typing.
+        //
+        // Two shapes, and the server says which rather than the client
+        // guessing. A fixture verifies in place. A hosted vendor sends the
+        // borrower to its own site and returns them to /identity/return on a
+        // fresh page load — which is why everything they typed is saved BEFORE
+        // this point rather than after. Losing a filled-in form to a redirect
+        // is the classic way this breaks.
         const session = await api
-          .post<{ alreadyVerified: boolean; verificationId?: string }>(
-            `/files/${fileId}/identity-verification`,
-            { borrowerId },
-          )
+          .post<{
+            alreadyVerified: boolean;
+            requiresRedirect?: boolean;
+            verificationId?: string;
+            verificationUrl?: string;
+          }>(`/files/${fileId}/identity-verification`, { borrowerId })
           .catch(() => null);
+
+        if (
+          session &&
+          !session.alreadyVerified &&
+          session.requiresRedirect &&
+          session.verificationUrl
+        ) {
+          // Leaves the app entirely, so nothing below runs. The credit pull and
+          // the rest happen when they land back on the return page.
+          window.location.assign(session.verificationUrl);
+          return;
+        }
+
         if (session && !session.alreadyVerified && session.verificationId) {
           await api
             .post(`/files/${fileId}/identity-verification/complete`, {

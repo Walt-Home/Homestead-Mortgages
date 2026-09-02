@@ -12,6 +12,7 @@ import { PrivacyPage } from "./pages/PrivacyPage.js";
 import { FilesPage } from "./pages/FilesPage.js";
 import { PropertyLoanPage } from "./pages/PropertyLoanPage.js";
 import { IdentityPage } from "./pages/IdentityPage.js";
+import { IdentityReturnPage } from "./pages/IdentityReturnPage.js";
 import { BankPage } from "./pages/BankPage.js";
 import { ReviewPage } from "./pages/ReviewPage.js";
 import { IrsPage, PayrollPage } from "./pages/ConnectPages.js";
@@ -52,6 +53,8 @@ export function App() {
         {/* The four screens. */}
         <Route path="property" element={<PropertyLoanPage />} />
         <Route path="identity" element={<IdentityPage />} />
+        {/* Where a hosted identity vendor returns the borrower. */}
+        <Route path="identity/return" element={<IdentityReturnPage />} />
         <Route path="bank" element={<BankPage />} />
         <Route path="review" element={<ReviewShim />} />
         {/*

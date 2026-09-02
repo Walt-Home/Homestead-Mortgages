@@ -33,6 +33,12 @@ export interface LoanFileView {
     currentHousing: string;
     monthlyRent?: number;
     firstTimeHomebuyer: boolean | null;
+    /** Present once a verification has been started, whatever its outcome. */
+    identityVerification: {
+      verificationId: string;
+      status: "pending" | "verified" | "failed";
+      verifiedAt?: string;
+    } | null;
   }[];
   consents: { kind: string; grantedAt: string; revokedAt?: string }[];
   loan: {

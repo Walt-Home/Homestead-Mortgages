@@ -29,8 +29,13 @@ import type { ConnectorCapabilities, IdentityConnector } from "../ports/index.js
 
 export interface StripeIdentityOptions {
   readonly secretKey: string;
-  /** Where Stripe returns the borrower after the hosted flow. */
-  readonly returnUrl: string;
+  /**
+   * Origin the borrower is returned to. The return URL is built per session as
+   * `{origin}/f/{fileId}/identity/return` — it has to carry the file, because
+   * the borrower comes back to a fresh page load with no memory of which
+   * application they were filling in.
+   */
+  readonly origin: string;
   /**
    * Permit an `sk_live_` key. Deliberately awkward: see the note above. A
    * caller setting this is asserting that real biometric collection is
@@ -129,12 +134,12 @@ export function stripeIdentityConnector(options: StripeIdentityOptions): Identit
   return {
     capabilities,
 
-    async createVerificationSession(_file: LoanFile, borrowerId: string) {
+    async createVerificationSession(file: LoanFile, borrowerId: string) {
       const session = await call("/identity/verification_sessions", {
         method: "POST",
         body: form({
           type: "document",
-          return_url: options.returnUrl,
+          return_url: `${options.origin}/f/${file.id}/identity/return`,
           // Ties the session back to the borrower without putting anything
           // identifying in Stripe's metadata.
           "metadata[borrower_id]": borrowerId,

@@ -371,11 +371,14 @@ export function IdentityPage() {
             checked={smsConsent}
             onChange={(e) => setSmsConsent(e.target.checked)}
           />
+          {/*
+            The STOP language belongs in the first message, not here. Putting
+            it on the checkbox spends three lines of the last screen before a
+            credit pull explaining how to undo something the borrower has not
+            opted into yet.
+          */}
           <span>
-            Text me updates about my application
-            <span className="block text-[13px] text-meta">
-              Optional, and separate from the disclosures above. Reply STOP any time.
-            </span>
+            Text me updates about my application <span className="text-meta">(optional)</span>
           </span>
         </label>
       </div>

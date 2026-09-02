@@ -92,12 +92,37 @@ function toAddress(a: NonNullable<StripeSession["verified_outputs"]>["address"])
   };
 }
 
+/**
+ * Stripe's status is not enough on its own.
+ *
+ * `requires_input` means two opposite things, and the difference is
+ * `last_error`. With no error it is a session nobody has started — which is
+ * exactly what a freshly created one looks like. WITH an error, Stripe has
+ * seen the document and rejected it, and the borrower has to do something.
+ *
+ * Collapsing both into "pending" told a borrower whose ID had been refused
+ * that it "is being reviewed" — indefinitely, with a spinner, and no way
+ * forward. That is the same failure this codebase guards against everywhere
+ * else, running the other way: an answer we HAVE, rendered as an answer we
+ * are still waiting for.
+ */
 const STATUS: Record<string, IdentityVerification["status"]> = {
   requires_input: "pending",
   processing: "pending",
   verified: "verified",
   canceled: "failed",
 };
+
+export function statusFor(
+  stripeStatus: string | undefined,
+  lastError: { code?: string; reason?: string } | null | undefined,
+): IdentityVerification["status"] {
+  const mapped = STATUS[stripeStatus ?? ""] ?? "pending";
+  if (mapped === "pending" && stripeStatus === "requires_input" && lastError?.code) {
+    return "failed";
+  }
+  return mapped;
+}
 
 export function stripeIdentityConnector(options: StripeIdentityOptions): IdentityConnector {
   const live = options.secretKey.startsWith("sk_live_");
@@ -163,7 +188,7 @@ export function stripeIdentityConnector(options: StripeIdentityOptions): Identit
       );
       if (!session?.id) return null;
 
-      const status = STATUS[session.status ?? ""] ?? "pending";
+      const status = statusFor(session.status, session.last_error);
       const out = session.verified_outputs;
       const name = [out?.first_name, out?.last_name].filter(Boolean).join(" ") || undefined;
 

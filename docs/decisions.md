@@ -602,6 +602,28 @@ row exists — the first version asked the latter and got it wrong, because a
 file can already have a borrower from an earlier pass, and a borrower
 re-verifying was shown the result of a stale check.
 
+### `requires_input` means two opposite things
+
+Stripe uses one status for "nobody has started this yet" and "we looked at the
+document and refused it". The discriminator is `last_error`. Reading the status
+alone told a borrower whose ID had been rejected that it "is being reviewed" —
+indefinitely, with a spinner and no way forward. That is the same failure this
+codebase guards against everywhere else, running the other way: an answer we
+HAVE, rendered as an answer we are still waiting for.
+
+`statusFor` takes both. And the failure copy now uses Stripe's own `reason`
+when there is one instead of appending a guess about blurry photos to a
+sentence that already explains itself — which matters, because in test mode
+that reason is the actual instruction: walking the hosted UI via "Preview user
+experience" always comes back unverified, and "Complete with test data" is the
+path that passes.
+
+The pending panel's "Carry on" also had to learn where it was. After Continue
+the form and consents are saved, so the rest of the flow works while the check
+finishes. From the ID button nothing is saved — no borrower, no APP-005 — so
+the bank screen answered 403 and told the borrower they needed an
+authorisation they had never been offered.
+
 ## Vendor credentials at rest
 
 A Plaid `access_token` reads a named person's bank transactions on demand, for

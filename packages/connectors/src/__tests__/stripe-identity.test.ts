@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { stripeIdentityConnector } from "../adapters/stripe-identity.js";
+import { statusFor, stripeIdentityConnector } from "../adapters/stripe-identity.js";
 import type { LoanFile } from "@hm/shared";
 
 const file = { id: "file-123" } as unknown as LoanFile;
@@ -139,5 +139,49 @@ describe("reading a result", () => {
     const r = await c.getVerification("vs_1");
     expect(r?.status).toBe("failed");
     expect(r?.failureReason).toBe("The document was expired.");
+  });
+});
+
+/* ── Status, and the one Stripe overloads ───────────────────────────────── */
+
+describe("requires_input means two opposite things", () => {
+  /**
+   * From a real session: a borrower completed the hosted flow, Stripe refused
+   * the document, and the session came back `requires_input` with
+   * `last_error.code = "document_unverified_other"`. Reading the status alone
+   * called that "pending", so the borrower was told their ID "is being
+   * reviewed" — indefinitely, with no way forward and nothing being reviewed.
+   */
+  it("is failed once Stripe has seen the document and rejected it", () => {
+    expect(
+      statusFor("requires_input", {
+        code: "document_unverified_other",
+        reason: "The document could not be verified.",
+      }),
+    ).toBe("failed");
+  });
+
+  it("is pending when nobody has started it — which is every new session", () => {
+    // The state a session is in the instant it is created. Calling this
+    // "failed" would refuse every borrower before they had done anything.
+    expect(statusFor("requires_input", null)).toBe("pending");
+    expect(statusFor("requires_input", undefined)).toBe("pending");
+    expect(statusFor("requires_input", {})).toBe("pending");
+  });
+
+  it("leaves the unambiguous statuses alone", () => {
+    expect(statusFor("verified", null)).toBe("verified");
+    expect(statusFor("processing", null)).toBe("pending");
+    expect(statusFor("canceled", null)).toBe("failed");
+  });
+
+  it("does not let an error override a verified session", () => {
+    // A session can carry a last_error from an earlier attempt and still end
+    // up verified. The final status wins.
+    expect(statusFor("verified", { code: "document_unverified_other" })).toBe("verified");
+  });
+
+  it("treats an unknown status as pending rather than guessing", () => {
+    expect(statusFor("some_future_status", null)).toBe("pending");
   });
 });

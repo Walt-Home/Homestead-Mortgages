@@ -200,11 +200,27 @@ export function IdentityReturnPage() {
             occasionally a few minutes.
           </p>
           <p className="mt-3 text-[14px] text-muted">
-            You don&rsquo;t have to wait here — carry on, and we&rsquo;ll pick it up.
+            {fromPrefill
+              ? "You can go back and pick up where you left off."
+              : "You don\u2019t have to wait here — carry on, and we\u2019ll pick it up."}
           </p>
           <div className="mt-6 flex gap-3">
-            <button className="btn-primary" onClick={() => navigate(`/f/${fileId}/bank`)}>
-              Carry on
+            {/*
+              Where "carry on" goes depends on how they got here, and sending
+              everyone to the bank screen was wrong.
+
+              After Continue, the form and the consents are already saved, so
+              the rest of the flow works while the check finishes. From the ID
+              button nothing is saved at all — no borrower, no APP-005 — so
+              the bank screen answers 403 and the borrower is told they need
+              an authorisation they were never offered. Back to screen 2,
+              where the form they were filling in is waiting.
+            */}
+            <button
+              className="btn-primary"
+              onClick={() => navigate(`/f/${fileId}/${fromPrefill ? "identity" : "bank"}`)}
+            >
+              {fromPrefill ? "Back to your details" : "Carry on"}
             </button>
             <button className="btn-secondary" onClick={() => window.location.reload()}>
               Check again
@@ -219,8 +235,14 @@ export function IdentityReturnPage() {
             We couldn&rsquo;t confirm that
           </h1>
           <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
-            {reason ?? "The check didn't go through."} It happens — a blurry photo or an expired
-            document is usually the reason.
+            {/*
+              Stripe's own reason when it gives one — it is written for a
+              person and is more use than a guess. The hint only stands in
+              when there is nothing better to say, rather than being appended
+              to a reason that already explains it.
+            */}
+            {reason ??
+              "The check didn't go through. It happens — a blurry photo or an expired document is usually the reason."}
           </p>
           <div className="mt-6 flex gap-3">
             <button className="btn-primary" onClick={() => navigate(`/f/${fileId}/identity`)}>

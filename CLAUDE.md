@@ -4,6 +4,11 @@ Mortgage underwriting onboarding, built against Drew's V1 flow sheet. Read
 `docs/requirements.md` before touching anything in `packages/requirements`, and
 `docs/decisions.md` before trusting any number the engine produces.
 
+`docs/states.md` is the model for user states and account states — what a
+person is trying to do, and where it stands. It covers both what is built today
+and the Party / Application / Loan model replacing it, and marks which is which.
+Read it before adding anything that looks like a status.
+
 ## The shape
 
 npm workspaces + Turbo, following the HMX pattern. Express 5 API, React 19 SPA,

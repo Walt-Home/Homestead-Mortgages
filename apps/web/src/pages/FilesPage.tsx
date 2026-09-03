@@ -16,6 +16,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
+import { PRODUCT_NAME } from "../components/Wordmark.js";
 import { STAGE_TO_SCREEN, type FlowStage } from "../lib/flow.js";
 
 interface FileRow {
@@ -44,7 +45,7 @@ export function FilesPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-14 sm:px-6 sm:py-20">
-      <p className="super-eyebrow text-accent">Homestead</p>
+      <p className="super-eyebrow text-accent">{PRODUCT_NAME}</p>
       <h1 className="mt-3 font-display text-4xl text-ink sm:text-5xl">The Supermortgage</h1>
       <p className="mt-5 max-w-measure-prose text-lg text-ink-soft">
         A better rate, in four screens and about five minutes. Connect your accounts instead of

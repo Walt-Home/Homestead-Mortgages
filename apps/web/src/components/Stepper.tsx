@@ -48,9 +48,12 @@ export function Stepper({
             <span
               className={clsx(
                 "block h-1.5 w-8 rounded-pill transition-colors sm:w-10",
-                state === "done" && "bg-olive",
-                state === "current" && "bg-gold",
-                state === "upcoming" && "bg-inset",
+                state === "done" && "bg-ok",
+                state === "current" && "bg-accent",
+                // `raised` is only a shade off the ground, which on a 1.5px
+                // track reads as no dot at all — and a progress line that
+                // hides its remaining steps stops being a progress line.
+                state === "upcoming" && "bg-rule",
               )}
             />
           );
@@ -75,9 +78,9 @@ export function Stepper({
         })}
       </ol>
 
-      <p className="text-[12px] text-meta">
+      <p className="text-xs text-ink-muted">
         Step {currentIndex + 1} of {SCREENS.length}
-        <span className="text-subtle"> · {SCREENS[currentIndex]?.label}</span>
+        <span className="text-ink-faint"> · {SCREENS[currentIndex]?.label}</span>
       </p>
     </div>
   );

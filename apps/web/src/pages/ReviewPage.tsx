@@ -205,10 +205,8 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
 
   if (finishing) {
     return (
-      <div className="card">
-        <h1 className="font-brand text-[24px] font-semibold leading-tight text-ink-editorial sm:text-[26px]">
-          Putting it together
-        </h1>
+      <div className="super-card">
+        <h1 className="font-display text-2xl text-ink sm:text-3xl">Putting it together</h1>
         <Working
           steps={[
             { label: "Recording your signature", ms: 900 },
@@ -236,15 +234,13 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
 
     if (canEstimate && ratios) {
       return (
-        <div className="card">
-          <h1 className="font-brand text-[24px] font-semibold leading-tight text-ink-editorial sm:text-[26px]">
-            Your Loan Estimate
-          </h1>
-          <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
+        <div className="super-card">
+          <h1 className="font-display text-2xl text-ink sm:text-3xl">Your Loan Estimate</h1>
+          <p className="mt-2 text-base text-ink-soft">
             Sent to your email, and here it is. Read it before you decide anything.
           </p>
 
-          <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-line-light pt-5 sm:grid-cols-4">
+          <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-rule-soft pt-5 sm:grid-cols-4">
             <Figure label="Monthly payment" value={money(ratios.housingPitia!)} />
             <Figure label="Debt-to-income" value={`${ratios.dtiBack}%`} />
             {ratios.ltv != null && <Figure label="Loan-to-value" value={`${ratios.ltv}%`} />}
@@ -253,37 +249,37 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
             )}
           </dl>
 
-          <p className="mt-5 text-[12px] leading-relaxed text-subtle">
+          <p className="mt-5 text-xs text-ink-faint">
             Computed by our own underwriting engine, not by a Fannie Mae submission. A real agency
             submission may reach a different answer.
           </p>
 
-          <div className="mt-7 border-t border-line-light pt-6">
+          <div className="mt-7 border-t border-rule-soft pt-6">
             {intentRecorded ? (
-              <p className="font-prose text-[16px] leading-relaxed text-ink-prose">
+              <p className="text-base text-ink-soft">
                 You told us to proceed. Nothing else is needed from you right now — we will be in
                 touch about next steps.
               </p>
             ) : (
               <>
-                <p className="font-prose text-[16px] leading-relaxed text-ink-prose">
+                <p className="text-base text-ink-soft">
                   Take your time with it. When you are ready, tell us to go ahead.
                 </p>
                 <button
-                  className="btn-primary mt-4"
+                  className="super-btn super-btn-primary mt-4"
                   onClick={() => void recordIntent()}
                   disabled={intentSaving || readOnly}
                 >
                   {intentSaving ? "Saving…" : "Yes, proceed"}
                 </button>
-                <p className="mt-2 text-[12px] leading-relaxed text-subtle">
+                <p className="mt-2 text-xs text-ink-faint">
                   Saying yes is not a commitment to borrow. It lets us keep working.
                 </p>
               </>
             )}
           </div>
 
-          <button className="btn-secondary mt-7" onClick={() => navigate("/")}>
+          <button className="super-btn super-btn-outline mt-7" onClick={() => navigate("/")}>
             Done
           </button>
         </div>
@@ -292,30 +288,28 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
 
     if (branches.length > 0) {
       return (
-        <div className="card">
-          <h1 className="font-brand text-[24px] font-semibold leading-tight text-ink-editorial sm:text-[26px]">
+        <div className="super-card">
+          <h1 className="font-display text-2xl text-ink sm:text-3xl">
             Almost — we need one more thing
           </h1>
-          <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
+          <p className="mt-2 text-base text-ink-soft">
             Your application is in. We could not finish your Loan Estimate without{" "}
             {branches.length === 1 ? "this" : "these"}, and it is quick.
           </p>
 
-          <ul className="mt-6 flex flex-col gap-3 border-t border-line-light pt-5">
+          <ul className="mt-6 flex flex-col gap-3 border-t border-rule-soft pt-5">
             {branches.map((branch) => (
               <li
                 key={branch.path}
-                className="flex flex-col gap-2 rounded-row border border-line-light bg-raised p-4 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-2 rounded-md border border-rule-soft bg-raised p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
-                  <p className="text-[15px] font-medium text-ink-editorial">{branch.title}</p>
-                  <p className="mt-0.5 text-[13px] leading-relaxed text-ink-soft">
-                    {branch.because}
-                  </p>
+                  <p className="text-base font-medium text-ink">{branch.title}</p>
+                  <p className="mt-0.5 text-sm text-ink-soft">{branch.because}</p>
                 </div>
                 <Link
                   to={`/f/${fileId}/${branch.path}`}
-                  className="btn-primary shrink-0 text-center"
+                  className="super-btn super-btn-primary shrink-0 text-center"
                 >
                   Add this
                 </Link>
@@ -323,7 +317,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
             ))}
           </ul>
 
-          <p className="mt-6 text-[13px] leading-relaxed text-meta">
+          <p className="mt-6 text-sm text-ink-muted">
             Nothing here is urgent — your application is already submitted, and your Loan Estimate
             will follow within three business days either way.
           </p>
@@ -332,18 +326,16 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     }
 
     return (
-      <div className="card">
-        <h1 className="font-brand text-[24px] font-semibold leading-tight text-ink-editorial sm:text-[26px]">
-          That is everything we need
-        </h1>
-        <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
+      <div className="super-card">
+        <h1 className="font-display text-2xl text-ink sm:text-3xl">That is everything we need</h1>
+        <p className="mt-2 text-base text-ink-soft">
           Your application is in, and there is nothing left for you to do. One of our underwriters
           is looking at a couple of figures that need a person rather than a calculation.
         </p>
-        <p className="mt-3 font-prose text-[16px] leading-relaxed text-ink-prose">
+        <p className="mt-3 text-base text-ink-soft">
           Your Loan Estimate will reach you by email within three business days.
         </p>
-        <button className="btn-secondary mt-7" onClick={() => navigate("/")}>
+        <button className="super-btn super-btn-outline mt-7" onClick={() => navigate("/")}>
           Done
         </button>
       </div>
@@ -356,47 +348,43 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     <>
       <Branches assessment={assessment} fileId={fileId} />
 
-      <div className="card">
-        <h1 className="font-brand text-[24px] font-semibold leading-tight text-ink-editorial sm:text-[26px]">
-          Nearly done
-        </h1>
-        <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
-          Here is what we found. Signing confirms it.
-        </p>
+      <div className="super-card">
+        <h1 className="font-display text-2xl text-ink sm:text-3xl">Nearly done</h1>
+        <p className="mt-2 text-base text-ink-soft">Here is what we found. Signing confirms it.</p>
 
-        <div className="mt-7 border-t border-line-light pt-5">
+        <div className="mt-7 border-t border-rule-soft pt-5">
           <ul className="flex flex-col gap-2">
             {declarations
               .filter((d) => !d.flagged)
               .map((d) => (
-                <li key={d.clean} className="flex items-start justify-between gap-4 text-[15px]">
-                  <span className="flex items-start gap-2.5 text-ink-prose">
-                    <span aria-hidden="true" className="mt-0.5 text-olive">
+                <li key={d.clean} className="flex items-start justify-between gap-4 text-base">
+                  <span className="flex items-start gap-2.5 text-ink-soft">
+                    <span aria-hidden="true" className="mt-0.5 text-ok">
                       ✓
                     </span>
                     {d.clean}
                   </span>
-                  <span className="shrink-0 text-[12px] text-subtle">{d.source}</span>
+                  <span className="shrink-0 text-xs text-ink-faint">{d.source}</span>
                 </li>
               ))}
           </ul>
         </div>
 
         {flagged.length > 0 && (
-          <div className="mt-6 rounded-row border border-notice-border bg-notice-bg p-4">
-            <p className="text-[14px] font-medium text-ink-editorial">
+          <div className="super-notice mt-6">
+            <p className="text-sm font-medium text-ink">
               {flagged.length === 1
                 ? "One thing we need to ask about"
                 : "A couple of things to ask about"}
             </p>
             {flagged.map((d) => (
               <div key={d.clean} className="mt-3">
-                <label className="field-label" htmlFor={`q-${d.clean}`}>
+                <label className="super-label" htmlFor={`q-${d.clean}`}>
                   {d.question}
                 </label>
                 <input
                   id={`q-${d.clean}`}
-                  className="field-input"
+                  className="super-input"
                   value={answers[d.clean] ?? ""}
                   onChange={(e) => setAnswers((a) => ({ ...a, [d.clean]: e.target.value }))}
                 />
@@ -409,25 +397,23 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
           <DemographicQuestions value={demographics} onChange={setDemographics} />
         )}
 
-        {error && <p className="mt-4 text-[13px] text-error">{error}</p>}
+        {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
-        <div className="mt-7 border-t border-line-light pt-6">
+        <div className="mt-7 border-t border-rule-soft pt-6">
           {readyToSign ? (
-            <div className="rounded-row border border-line bg-app p-5">
-              <p className="font-brand text-[16px] font-semibold text-ink-editorial">
-                Your application
-              </p>
-              <p className="mt-2 font-prose text-[15px] leading-relaxed text-ink-prose">
+            <div className="super-notice">
+              <p className="font-display text-base text-ink">Your application</p>
+              <p className="mt-2 text-base text-ink-soft">
                 This is the application itself — the property, the loan, your details and the
                 declarations above. It also includes IRS Form 4506-C, which lets us request your tax
                 records directly rather than asking you to find them.
               </p>
-              <p className="mt-2 font-prose text-[15px] leading-relaxed text-ink-prose">
+              <p className="mt-2 text-base text-ink-soft">
                 Signing submits it. It does not commit you to borrowing anything, and it is not an
                 agreement to any particular rate or terms.
               </p>
               <button
-                className="btn-primary mt-4"
+                className="super-btn super-btn-primary mt-4"
                 onClick={() => void finishSubmission()}
                 disabled={readOnly}
               >
@@ -437,14 +423,14 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
           ) : (
             <>
               <button
-                className="btn-primary"
+                className="super-btn super-btn-primary"
                 onClick={() => void saveAndContinue()}
                 disabled={!demographicsAnswered || saving || readOnly}
               >
                 {saving ? "Saving…" : "Continue to sign"}
               </button>
               {!demographicsAnswered && (
-                <p className="mt-2 text-[12px] text-subtle">
+                <p className="mt-2 text-xs text-ink-faint">
                   Answer the three questions above, or decline them, to continue.
                 </p>
               )}
@@ -459,8 +445,8 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
 function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[13px] text-subtle">{label}</dt>
-      <dd className="figure mt-1 text-[22px] leading-none text-ink-editorial">{value}</dd>
+      <dt className="text-sm text-ink-faint">{label}</dt>
+      <dd className="super-figure mt-1 text-2xl text-ink">{value}</dd>
     </div>
   );
 }

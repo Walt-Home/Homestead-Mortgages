@@ -15,6 +15,7 @@ packages/requirements      the 77 requirements, executable
 packages/underwriting      the shadow AUS
 packages/connectors        five ports, fixture adapters, the authorization guard
 packages/shared            domain types; LoanFile is the object everything reads
+packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5
 apps/web                   React + Vite
@@ -112,6 +113,50 @@ also returns `refer` rather than `approve_eligible` when any input was blocked
 — "we could not compute this" and "we computed it and you passed" must never
 collapse into the same checkmark.
 
+## The design system is a package, and it has one source of truth
+
+The product wears **Supermortgage**: black ground, one red accent, Georgia
+display, Helvetica text. The identity is documented in `docs/brand.md`;
+`packages/brand` is how it reaches a screen.
+
+**To change a colour or a font, edit `packages/brand/tokens.mjs` and run
+`npm run brand:build`.** That is the whole procedure, and it is the reason the
+package exists. `tokens.css` is generated from that file, the Tailwind preset
+reads that file, and every utility, custom property and `.super-*` component
+follows. `npm run brand:verify` runs in CI and fails when the generated CSS is
+stale, exactly like `requirements:verify`.
+
+Three tiers, and product code only ever names the last two:
+
+```
+primitives   grey-600, red-500, serif           named by what they ARE
+semantic     rule → grey-600, accent → red-500  named by what they are FOR
+outputs      border-rule, --sm-color-rule       generated; never hand-edited
+```
+
+**Tailwind's default palette is replaced, not extended.** There is no
+`text-gray-500`, no `bg-white`, no `font-sans`, no `shadow-md`. A value that is
+not a token cannot reach a component by accident, and a typo'd class is a class
+that generates nothing rather than one that silently works. If you need a
+value, add the token.
+
+**Nothing in `apps/web` declares a colour, a face or a size.**
+`apps/web/src/index.css` is an assembly of imports and nothing else. A style
+that belongs to the brand belongs in `packages/brand`, where the marketing
+surface and any future app get it too.
+
+**The display face is never bold.** Georgia at weight 400 is the brand;
+`font-display` forces it, and a `font-semibold` alongside it is a bug. Bold
+weights are fine on sans text.
+
+**`danger` is never the accent.** Red means "you can act on this". A screen
+that also uses red for "something is wrong" has made both meaningless, so the
+error colour is its own primitive and a test enforces the split.
+
+The contrast floors are tests, not guidance — `packages/brand/test` fails the
+build if a token edit drops body text, a label, a status colour or an input
+border below its WCAG minimum. That is what makes changing a colour safe.
+
 ## Storage
 
 Relational tables are what the product queries. `connector_snapshots` and
@@ -166,5 +211,6 @@ npm run dev                  # API :8080, web :5173
 npm test                     # all workspaces
 npm run check                # tsc -b + registry verify
 npm run requirements:build   # after editing data/v1-build.csv
+npm run brand:build          # after editing packages/brand/tokens.mjs
 npm run db:migrate           # prisma migrate dev
 ```

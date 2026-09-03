@@ -132,7 +132,8 @@ export function IdentityPage() {
    * identity vendor destroys along with everything else. The draft carries it.
    */
   const statedIncome =
-    Number((location.state as { income?: number } | null)?.income ?? 0) || (draft?.statedIncome ?? 0);
+    Number((location.state as { income?: number } | null)?.income ?? 0) ||
+    (draft?.statedIncome ?? 0);
 
   /** Whether pressing the button leaves this site. */
   const identityRedirects = authConfig?.identityRequiresRedirect === true;
@@ -371,22 +372,20 @@ export function IdentityPage() {
   /* ── The form ─────────────────────────────────────────────────────────── */
 
   return (
-    <form onSubmit={submit} className="card">
-      <h1 className="font-brand text-[24px] font-semibold leading-tight text-ink-editorial sm:text-[26px]">
-        Now, about you
-      </h1>
-      <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
+    <form onSubmit={submit} className="super-card">
+      <h1 className="font-display text-2xl text-ink sm:text-3xl">Now, about you</h1>
+      <p className="mt-2 text-base text-ink-soft">
         Your ID gives us your name, date of birth and address, so you do not have to type them.
       </p>
 
       {/* 1 — ID scan and selfie */}
       <div className="mt-7">
         {identity ? (
-          <div className="rounded-row border border-olive-border bg-olive-light p-4">
-            <p className="text-[14px] font-medium text-ink-editorial">
+          <div className="super-notice super-notice-ok">
+            <p className="text-sm font-medium text-ink">
               {identity.firstName} {identity.lastName}
             </p>
-            <p className="mt-1 text-[13px] text-ink-soft">
+            <p className="mt-1 text-sm text-ink-soft">
               {identity.dateOfBirth ? `Born ${identity.dateOfBirth} · ` : ""}
               {identity.address.line1}, {identity.address.city} {identity.address.state}
             </p>
@@ -401,17 +400,17 @@ export function IdentityPage() {
             */}
             {!identity.dateOfBirth && (
               <div className="mt-3">
-                <label className="field-label" htmlFor="dob">
+                <label className="super-label" htmlFor="dob">
                   Date of birth
                 </label>
                 <input
                   id="dob"
                   type="date"
-                  className="field-input"
+                  className="super-input"
                   value={dobInput}
                   onChange={(e) => setDobInput(e.target.value)}
                 />
-                <p className="mt-1 text-[12px] text-meta">
+                <p className="mt-1 text-xs text-ink-muted">
                   Your ID confirmed your name and address but not your date of birth.
                 </p>
               </div>
@@ -419,7 +418,7 @@ export function IdentityPage() {
             <button
               type="button"
               onClick={() => setIdentity(null)}
-              className="mt-2 text-[13px] text-olive underline underline-offset-2"
+              className="super-link-quiet mt-2 text-sm"
             >
               Not you? Scan again
             </button>
@@ -437,7 +436,7 @@ export function IdentityPage() {
           <>
             <button
               type="button"
-              className="btn-primary"
+              className="super-btn super-btn-primary"
               onClick={() => void scan()}
               disabled={readOnly}
             >
@@ -462,12 +461,12 @@ export function IdentityPage() {
 
       {/* 2 — SSN */}
       <div className="mt-6">
-        <label className="field-label" htmlFor="ssn">
+        <label className="super-label" htmlFor="ssn">
           Social security number
         </label>
         <input
           id="ssn"
-          className="field-input"
+          className="super-input"
           required
           inputMode="numeric"
           autoComplete="off"
@@ -483,7 +482,7 @@ export function IdentityPage() {
 
       {/* 3 — Phone. Email comes from the account they signed in with. */}
       <div className="mt-5">
-        <label className="field-label" htmlFor="phone">
+        <label className="super-label" htmlFor="phone">
           Phone
         </label>
         <input
@@ -492,23 +491,23 @@ export function IdentityPage() {
           required
           inputMode="numeric"
           placeholder="000-000-0000"
-          className="field-input"
+          className="super-input"
           value={phone}
           onChange={(e) => setPhone(formatPhone(e.target.value))}
         />
-        <p className="mt-1.5 text-[12px] text-meta">
+        <p className="mt-1.5 text-xs text-ink-muted">
           We will use {email || "the email on your account"} for everything in writing.
         </p>
       </div>
 
       {/* 4 — Citizenship */}
       <div className="mt-5">
-        <label className="field-label" htmlFor="citizenship">
+        <label className="super-label" htmlFor="citizenship">
           Citizenship
         </label>
         <select
           id="citizenship"
-          className="field-input"
+          className="super-input"
           value={citizenship}
           onChange={(e) => setCitizenship(e.target.value)}
         >
@@ -520,12 +519,12 @@ export function IdentityPage() {
 
       {/* 5 — Marital status */}
       <div className="mt-5">
-        <label className="field-label" htmlFor="marital">
+        <label className="super-label" htmlFor="marital">
           Marital status
         </label>
         <select
           id="marital"
-          className="field-input"
+          className="super-input"
           value={maritalStatus}
           onChange={(e) => setMaritalStatus(e.target.value)}
         >
@@ -536,8 +535,8 @@ export function IdentityPage() {
       </div>
 
       {/* 6 & 7 — The two consents */}
-      <div className="mt-7 flex flex-col gap-3 border-t border-line-light pt-6">
-        <label className="flex items-start gap-3 text-[15px] leading-relaxed text-ink-prose">
+      <div className="mt-7 flex flex-col gap-3 border-t border-rule-soft pt-6">
+        <label className="flex items-start gap-3 text-base text-ink-soft">
           <input
             type="checkbox"
             className="mt-1"
@@ -546,7 +545,7 @@ export function IdentityPage() {
           />
           <span>Authorize verification of my credit, employment, income and assets</span>
         </label>
-        <label className="flex items-start gap-3 text-[15px] leading-relaxed text-ink-prose">
+        <label className="flex items-start gap-3 text-base text-ink-soft">
           <input
             type="checkbox"
             className="mt-1"
@@ -555,7 +554,7 @@ export function IdentityPage() {
           />
           <span>Agree to receive disclosures electronically</span>
         </label>
-        <label className="flex items-start gap-3 text-[15px] leading-relaxed text-ink-prose">
+        <label className="flex items-start gap-3 text-base text-ink-soft">
           <input
             type="checkbox"
             className="mt-1"
@@ -569,7 +568,7 @@ export function IdentityPage() {
             opted into yet.
           */}
           <span>
-            Text me updates about my application <span className="text-meta">(optional)</span>
+            Text me updates about my application <span className="text-ink-muted">(optional)</span>
           </span>
         </label>
       </div>
@@ -585,16 +584,16 @@ export function IdentityPage() {
         />
       )}
 
-      {error && <p className="mt-4 text-[13px] text-error">{error}</p>}
+      {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
       <button
-        className="btn-primary mt-7"
+        className="super-btn super-btn-primary mt-7"
         disabled={running || !authorized || !identity || readOnly}
       >
         {running ? "Working…" : "Continue"}
       </button>
       {!identity && (
-        <p className="mt-2 text-[12px] text-subtle">
+        <p className="mt-2 text-xs text-ink-faint">
           {identityRedirects ? "Verify your ID to continue." : "Scan your ID to continue."}
         </p>
       )}

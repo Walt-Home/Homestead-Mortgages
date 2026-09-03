@@ -1,137 +1,30 @@
+/*
+ * The app's stylesheet is an assembly, not a design.
+ *
+ * Everything visual comes from @hm/brand: the custom properties, the element
+ * defaults, and the `.super-*` components. Nothing in this file declares a
+ * colour, a font or a size — if you find yourself wanting to, the token
+ * belongs in packages/brand/tokens.mjs instead, where it reaches the
+ * marketing site and any future surface at the same time.
+ *
+ * ── Why every @import is at the top ──────────────────────────────────────
+ *
+ * CSS requires @import to precede every other statement. Interleaving them
+ * with the @tailwind directives to "get the order right" does not merely warn:
+ * PostCSS rejects the out-of-place imports and Vite drops those files from the
+ * bundle entirely, so the build succeeds and ships with no component layer at
+ * all. It was caught here once already.
+ *
+ * Ordering is instead handled by the @layer blocks inside the imported files.
+ * base.css wraps itself in `@layer base` and components.css in
+ * `@layer components`, which Tailwind hoists into the right layer wherever the
+ * import happened to sit. So a utility like `mt-6` still beats a component's
+ * own margin, and preflight still runs before the element defaults.
+ */
+@import "@hm/brand/tokens.css";
+@import "@hm/brand/base.css";
+@import "@hm/brand/components.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* ══════════════════════════════════════════════════════════════════════════
-   Design tokens, ported from Homestead's `--hs-*` block.
-   Source: Homestead client/src/index.css:17-115 and docs/design-system.md.
-
-   What came across: the colour palette and the type stacks. What did not: the
-   component layer, the `.hs-*` classes, and the kit. Homestead's own design
-   doc says eleven of the kit's fourteen components have zero consumers and
-   that several tokens are aliased to each other by accident, so lifting it
-   wholesale would import a known-inconsistent system into a product that
-   needs different surfaces anyway.
-
-   Two of Homestead's documented inconsistencies are fixed rather than copied:
-     · `--hm-danger` is its own colour here. In Homestead `colors.danger`
-       resolves to the validation red, so destructive actions and form errors
-       render identically.
-     · The canvas/app ink split is not reproduced. Homestead declares two
-       primary inks and renders one; this declares one.
-   ══════════════════════════════════════════════════════════════════════════ */
-:root {
-  /* Surfaces */
-  --hm-canvas: #fffdf8;
-  --hm-surface: #fffefb;
-  --hm-app: #ffffff;
-  --hm-raised: #f8f6f1;
-  --hm-inset: #f2efe9;
-  --hm-hover: #f1ede4;
-
-  /* Ink */
-  --hm-ink: #20231f;
-  --hm-ink-prose: #272923;
-  --hm-ink-editorial: #1a1714;
-  --hm-ink-soft: #4e514b;
-  --hm-text-muted: #6e7068;
-  --hm-meta: #817d74;
-  --hm-subtle: #9a948a;
-
-  /* Rules */
-  --hm-border: #e2dbce;
-  --hm-border-light: #ece6dc;
-  --hm-border-form: #ddd9d1;
-  --hm-border-strong: #bbb4a7;
-
-  /* Olive — verified, connected, affirmative */
-  --hm-olive: #465340;
-  --hm-olive-hover: #394535;
-  --hm-olive-chat: #596653;
-  --hm-olive-tint: #edf0eb;
-  --hm-olive-light: #eef2ea;
-  --hm-olive-border: #d9e3d4;
-
-  /* Gold — money, ownership, the commit action */
-  --hm-gold: #9b6412;
-  --hm-gold-hover: #82530f;
-  --hm-gold-fill: #faf2e2;
-  --hm-gold-border: #e9d9b8;
-
-  /* Status */
-  --hm-error: #a3483d;
-  --hm-danger: #8c2b1f;
-  --hm-notice-bg: #fbf6ee;
-  --hm-notice-border: #e5d5c2;
-
-  /* Focus */
-  --hm-focus: rgba(153, 99, 22, 0.25);
-
-  /* Radius */
-  --hm-r-form: 2px;
-  --hm-r-row: 10px;
-  --hm-r-control: 11px;
-  --hm-r-card: 14px;
-  --hm-r-pill: 999px;
-
-  /* Shadow — this list is closed. */
-  --hm-shadow-card: 0 1px 2px rgba(38, 34, 27, 0.025), 0 4px 14px rgba(51, 46, 38, 0.045);
-  --hm-shadow-cta: 0 6px 24px rgba(155, 100, 18, 0.28);
-}
-
-@layer base {
-  body {
-    @apply bg-canvas text-ink font-ui antialiased;
-  }
-
-  /* Money and any figure the borrower is meant to weigh renders in the serif.
-     Homestead reserves the prose stack for reading and money; a DTI is money. */
-  .figure {
-    font-family: theme("fontFamily.prose");
-    font-variant-numeric: tabular-nums;
-  }
-}
-
-@layer components {
-  .field-label {
-    @apply block text-[13px] font-medium text-ink-soft mb-1.5;
-  }
-
-  /*
-   * 16px on small screens, not 15px.
-   *
-   * iOS Safari zooms the viewport on focus for any input under 16px, and it
-   * does not zoom back out. On a mobile-first flow that turns every field in
-   * the form into a jarring jump the borrower has to pinch their way out of.
-   * The 15px is kept above the breakpoint, where it is a type choice rather
-   * than a behaviour trigger.
-   */
-  .field-input {
-    @apply w-full rounded-form border border-line-form bg-app px-3 py-2.5 text-[16px] text-ink
-           outline-none transition-shadow sm:text-[15px];
-  }
-  .field-input:focus {
-    box-shadow: 0 0 0 3px var(--hm-focus);
-    border-color: var(--hm-border-strong);
-  }
-
-  .btn-primary {
-    @apply rounded-control bg-gold px-5 py-2.5 text-[15px] font-medium text-white
-           transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
-  }
-  .btn-primary:hover:not(:disabled) {
-    background: var(--hm-gold-hover);
-  }
-
-  .btn-secondary {
-    @apply rounded-control border border-line bg-surface px-5 py-2.5 text-[15px]
-           font-medium text-ink-soft transition-colors;
-  }
-  .btn-secondary:hover {
-    background: var(--hm-hover);
-  }
-
-  .card {
-    @apply rounded-card border border-line-light bg-app p-6 shadow-card;
-  }
-}

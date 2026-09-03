@@ -151,14 +151,15 @@ export function IdentityReturnPage() {
 
   if (!verificationId && !fromPrefill && data) {
     return (
-      <div className="card">
-        <h1 className="font-brand text-[22px] font-semibold text-ink-editorial">
-          We don&rsquo;t have a check in progress
-        </h1>
-        <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
+      <div className="super-card">
+        <h1 className="font-display text-2xl text-ink">We don&rsquo;t have a check in progress</h1>
+        <p className="mt-2 text-base text-ink-soft">
           Start again from the identity step and we&rsquo;ll take you through it.
         </p>
-        <button className="btn-primary mt-6" onClick={() => navigate(`/f/${fileId}/identity`)}>
+        <button
+          className="super-btn super-btn-primary mt-6"
+          onClick={() => navigate(`/f/${fileId}/identity`)}
+        >
           Back to your details
         </button>
       </div>
@@ -166,25 +167,19 @@ export function IdentityReturnPage() {
   }
 
   return (
-    <div className="card">
+    <div className="super-card">
       {status === "checking" && (
         <>
-          <h1 className="font-brand text-[22px] font-semibold text-ink-editorial">
-            Checking your ID
-          </h1>
-          <p className="mt-2 text-[14px] text-muted">One moment.</p>
+          <h1 className="font-display text-2xl text-ink">Checking your ID</h1>
+          <p className="mt-2 text-sm text-ink-muted">One moment.</p>
         </>
       )}
 
       {status === "verified" && (
         <>
-          <div className="mb-4 inline-flex items-center gap-2 rounded-pill bg-olive-light px-3 py-1 text-[12px] font-medium text-olive">
-            Verified
-          </div>
-          <h1 className="font-brand text-[22px] font-semibold text-ink-editorial">
-            That&rsquo;s you confirmed
-          </h1>
-          <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
+          <div className="super-pill super-pill-ok mb-4">Verified</div>
+          <h1 className="font-display text-2xl text-ink">That&rsquo;s you confirmed</h1>
+          <p className="mt-2 text-base text-ink-soft">
             Checking your credit, then on to the next step.
           </p>
         </>
@@ -192,14 +187,12 @@ export function IdentityReturnPage() {
 
       {status === "pending" && (
         <>
-          <h1 className="font-brand text-[22px] font-semibold text-ink-editorial">
-            Still checking
-          </h1>
-          <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
-            Your ID is being reviewed. This usually takes a few seconds, and
-            occasionally a few minutes.
+          <h1 className="font-display text-2xl text-ink">Still checking</h1>
+          <p className="mt-2 text-base text-ink-soft">
+            Your ID is being reviewed. This usually takes a few seconds, and occasionally a few
+            minutes.
           </p>
-          <p className="mt-3 text-[14px] text-muted">
+          <p className="mt-3 text-sm text-ink-muted">
             {fromPrefill
               ? "You can go back and pick up where you left off."
               : "You don\u2019t have to wait here — carry on, and we\u2019ll pick it up."}
@@ -217,12 +210,15 @@ export function IdentityReturnPage() {
               where the form they were filling in is waiting.
             */}
             <button
-              className="btn-primary"
+              className="super-btn super-btn-primary"
               onClick={() => navigate(`/f/${fileId}/${fromPrefill ? "identity" : "bank"}`)}
             >
               {fromPrefill ? "Back to your details" : "Carry on"}
             </button>
-            <button className="btn-secondary" onClick={() => window.location.reload()}>
+            <button
+              className="super-btn super-btn-outline"
+              onClick={() => window.location.reload()}
+            >
               Check again
             </button>
           </div>
@@ -231,10 +227,8 @@ export function IdentityReturnPage() {
 
       {status === "failed" && (
         <>
-          <h1 className="font-brand text-[22px] font-semibold text-ink-editorial">
-            We couldn&rsquo;t confirm that
-          </h1>
-          <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
+          <h1 className="font-display text-2xl text-ink">We couldn&rsquo;t confirm that</h1>
+          <p className="mt-2 text-base text-ink-soft">
             {/*
               Stripe's own reason when it gives one — it is written for a
               person and is more use than a guess. The hint only stands in
@@ -245,7 +239,10 @@ export function IdentityReturnPage() {
               "The check didn't go through. It happens — a blurry photo or an expired document is usually the reason."}
           </p>
           <div className="mt-6 flex gap-3">
-            <button className="btn-primary" onClick={() => navigate(`/f/${fileId}/identity`)}>
+            <button
+              className="super-btn super-btn-primary"
+              onClick={() => navigate(`/f/${fileId}/identity`)}
+            >
               Try again
             </button>
           </div>

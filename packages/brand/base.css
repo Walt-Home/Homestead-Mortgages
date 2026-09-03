@@ -1,0 +1,68 @@
+/*
+ * Element defaults for a Supermortgage surface. Tokens only — nothing in this
+ * file names a colour or a face directly.
+ *
+ * Wrapped in `@layer base` so that, under Tailwind, it lands after preflight
+ * and before components; in a plain-CSS consumer it is a native cascade
+ * layer, which gives unlayered app styles the last word either way.
+ */
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--sm-color-ground);
+    font-family: var(--sm-font-text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--sm-color-ground);
+    color: var(--sm-color-ink);
+    font-size: var(--sm-text-base);
+    line-height: var(--sm-leading-base);
+  }
+
+  ::selection {
+    background: rgb(var(--sm-color-accent-rgb) / 0.35);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--sm-color-focus);
+    outline-offset: 2px;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"],
+  progress {
+    accent-color: var(--sm-color-accent);
+  }
+
+  /*
+   * The display treatment, wherever the display face is used.
+   *
+   * Weight and tracking travel with the FACE, not with the size. Georgia is
+   * always regular — a bold Georgia is not the brand — and always tracked in
+   * slightly. Putting the tracking on the large size steps instead meant any
+   * sans element that happened to be 24px, such as a tabular money figure,
+   * silently picked up display tracking.
+   *
+   * Sits in the base layer, so a deliberate `tracking-normal` or `font-medium`
+   * utility still wins.
+   */
+  .font-display {
+    font-weight: var(--sm-weight-regular);
+    letter-spacing: var(--sm-tracking-display);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

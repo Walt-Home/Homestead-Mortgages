@@ -85,32 +85,36 @@ export function SignDocument({
 
   if (!open) {
     return (
-      <button className="btn-primary" onClick={() => setOpen(true)}>
+      <button className="super-btn super-btn-primary" onClick={() => setOpen(true)}>
         {label}
       </button>
     );
   }
 
   return (
-    <div className="rounded-card border border-line bg-app p-5">
-      <h3 className="font-brand text-[16px] font-semibold text-ink-editorial">{doc.title}</h3>
+    <div className="super-card">
+      <h3 className="font-display text-base text-ink">{doc.title}</h3>
       <div className="mt-3 space-y-2.5">
         {doc.body.map((p, i) => (
-          <p key={i} className="text-[13px] leading-relaxed text-ink-soft">
+          <p key={i} className="text-sm text-ink-soft">
             {p}
           </p>
         ))}
       </div>
-      <p className="mt-4 text-[12px] leading-relaxed text-subtle">
+      <p className="mt-4 text-xs text-ink-faint">
         This is a prototype: nothing is actually sent to the IRS or anyone else, and the transcripts
         you will see are invented.
       </p>
-      {error && <p className="mt-3 text-[13px] text-error">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
       <div className="mt-5 flex gap-3">
-        <button className="btn-primary" onClick={() => void sign()} disabled={busy}>
+        <button className="super-btn super-btn-primary" onClick={() => void sign()} disabled={busy}>
           {busy ? "Signing…" : doc.commit}
         </button>
-        <button className="btn-secondary" onClick={() => setOpen(false)} disabled={busy}>
+        <button
+          className="super-btn super-btn-outline"
+          onClick={() => setOpen(false)}
+          disabled={busy}
+        >
           Not now
         </button>
       </div>

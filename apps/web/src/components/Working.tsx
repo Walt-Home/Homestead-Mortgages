@@ -36,38 +36,38 @@ export function Working({ steps, note }: { steps: readonly WorkingStep[]; note?:
   }, [done, steps]);
 
   return (
-    <div className="mt-6 rounded-row border border-line-light bg-raised p-5">
+    <div className="mt-6 rounded-md border border-rule-soft bg-raised p-5">
       <ul className="flex flex-col gap-2.5">
         {steps.map((step, i) => {
           const state = i < done ? "done" : i === done ? "active" : "waiting";
           return (
-            <li key={step.label} className="flex items-center gap-3 text-[14px]">
+            <li key={step.label} className="flex items-center gap-3 text-sm">
               <span
                 aria-hidden="true"
                 className={clsx(
-                  "flex h-4 w-4 shrink-0 items-center justify-center rounded-pill border text-[10px]",
-                  state === "done" && "border-olive-border bg-olive text-white",
-                  state === "active" && "border-gold-border bg-gold-fill",
-                  state === "waiting" && "border-line bg-app",
+                  "flex h-4 w-4 shrink-0 items-center justify-center rounded-pill border text-xs",
+                  state === "done" && "border-ok/30 bg-ok text-ground",
+                  state === "active" && "border-warn/30 bg-warn/10",
+                  state === "waiting" && "border-rule bg-ground",
                 )}
               >
                 {state === "done" ? "✓" : ""}
               </span>
               <span
                 className={clsx(
-                  state === "done" && "text-olive",
+                  state === "done" && "text-ok",
                   state === "active" && "text-ink",
-                  state === "waiting" && "text-subtle",
+                  state === "waiting" && "text-ink-faint",
                 )}
               >
                 {step.label}
-                {state === "active" && <span className="text-meta">…</span>}
+                {state === "active" && <span className="text-ink-muted">…</span>}
               </span>
             </li>
           );
         })}
       </ul>
-      {note && <p className="mt-4 text-[12px] leading-relaxed text-meta">{note}</p>}
+      {note && <p className="mt-4 text-xs text-ink-muted">{note}</p>}
     </div>
   );
 }

@@ -32,7 +32,7 @@ export function PlaidReturnPage() {
   }, []);
 
   if (attempt === undefined) {
-    return <p className="text-[13px] text-subtle">Picking up where you left off…</p>;
+    return <p className="text-sm text-ink-faint">Picking up where you left off…</p>;
   }
 
   if (attempt === null) {
@@ -41,15 +41,13 @@ export function PlaidReturnPage() {
     // aged out. There is no file id to route to, and guessing one would be
     // worse than asking.
     return (
-      <div className="card">
-        <h1 className="font-brand text-[24px] font-semibold leading-tight text-ink-editorial">
-          We couldn&rsquo;t pick that back up
-        </h1>
-        <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
-          Your bank sent you back, but too much time passed for us to match it to your
-          application. Nothing was lost — open your file and connect again.
+      <div className="super-card">
+        <h1 className="font-display text-2xl text-ink">We couldn&rsquo;t pick that back up</h1>
+        <p className="mt-2 text-base text-ink-soft">
+          Your bank sent you back, but too much time passed for us to match it to your application.
+          Nothing was lost — open your file and connect again.
         </p>
-        <a href="/" className="btn-primary mt-6 inline-block">
+        <a href="/" className="super-btn super-btn-primary mt-6">
           Back to your files
         </a>
       </div>
@@ -58,11 +56,9 @@ export function PlaidReturnPage() {
 
   return (
     <>
-      <div className="card">
-        <h1 className="font-brand text-[24px] font-semibold leading-tight text-ink-editorial">
-          Finishing up with your bank
-        </h1>
-        <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
+      <div className="super-card">
+        <h1 className="font-display text-2xl text-ink">Finishing up with your bank</h1>
+        <p className="mt-2 text-base text-ink-soft">
           One moment — we&rsquo;re picking up where your bank left off.
         </p>
       </div>

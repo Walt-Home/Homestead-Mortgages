@@ -13,12 +13,10 @@
 export function Why({ children }: { children: React.ReactNode }) {
   return (
     <details className="group mt-2">
-      <summary className="cursor-pointer list-none text-[13px] text-meta underline-offset-2 hover:underline">
+      <summary className="super-link-quiet cursor-pointer list-none text-sm">
         Why do you need this?
       </summary>
-      <p className="mt-2 max-w-prose font-prose text-[14px] leading-relaxed text-ink-prose">
-        {children}
-      </p>
+      <p className="mt-2 max-w-measure-prose text-sm text-ink-soft">{children}</p>
     </details>
   );
 }

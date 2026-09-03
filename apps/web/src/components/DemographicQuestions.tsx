@@ -79,23 +79,17 @@ export function DemographicQuestions({
   const listValue = (v: string[] | "declined") => (v === DECLINED ? DECLINED : (v[0] ?? ""));
 
   return (
-    <fieldset className="mt-6 border-t border-line-light pt-5">
+    <fieldset className="mt-6 border-t border-rule-soft pt-5">
       <legend className="sr-only">Demographic information</legend>
 
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
-          Three questions we have to ask
-        </h2>
-        <button
-          type="button"
-          onClick={declineAll}
-          className="text-[13px] text-gold underline underline-offset-2"
-        >
+        <h2 className="font-display text-base text-ink">Three questions we have to ask</h2>
+        <button type="button" onClick={declineAll} className="super-link text-sm">
           {allDeclined ? "Declined ✓" : "I'd rather not answer these"}
         </button>
       </div>
 
-      <p className="mt-1.5 max-w-prose text-[13px] leading-relaxed text-meta">
+      <p className="mt-1.5 max-w-measure-prose text-sm text-ink-muted">
         The government asks lenders to collect this so it can check people are treated fairly. It is
         not used to decide your application, and you may decline.
       </p>
@@ -104,7 +98,7 @@ export function DemographicQuestions({
         <Row label="Ethnicity" htmlFor="d-ethnicity">
           <select
             id="d-ethnicity"
-            className="field-input"
+            className="super-input"
             value={listValue(value.ethnicity)}
             onChange={pickList("ethnicity")}
           >
@@ -121,7 +115,7 @@ export function DemographicQuestions({
         <Row label="Race" htmlFor="d-race">
           <select
             id="d-race"
-            className="field-input"
+            className="super-input"
             value={listValue(value.race)}
             onChange={pickList("race")}
           >
@@ -138,7 +132,7 @@ export function DemographicQuestions({
         <Row label="Sex" htmlFor="d-sex">
           <select
             id="d-sex"
-            className="field-input"
+            className="super-input"
             value={value.sex}
             onChange={(e) => onChange({ ...value, sex: e.target.value })}
           >
@@ -167,7 +161,7 @@ function Row({
 }) {
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
-      <label className="w-24 shrink-0 text-[13px] font-medium text-ink-soft" htmlFor={htmlFor}>
+      <label className="w-24 shrink-0 text-sm font-medium text-ink-soft" htmlFor={htmlFor}>
         {label}
       </label>
       <div className="flex-1">{children}</div>

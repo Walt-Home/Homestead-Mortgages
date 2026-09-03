@@ -3,13 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Homestead Mortgages</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap"
-      rel="stylesheet"
+    <title>Supermortgage</title>
+    <meta
+      name="description"
+      content="A mortgage application in four screens. Connect your accounts instead of hunting for statements."
     />
+    <!--
+      No web fonts, deliberately.
+
+      The brand is Georgia and Helvetica Neue as installed — see
+      packages/brand/tokens.mjs and docs/brand.md. That means no render-blocking
+      stylesheet, no layout shift, and no third-party request before sign-in.
+      If a licensed face is adopted, its @font-face goes in
+      packages/brand/base.css and the stack changes in tokens.mjs; this file
+      does not change.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#000000" />
   </head>
   <body>
     <div id="root"></div>

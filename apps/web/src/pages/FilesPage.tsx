@@ -44,27 +44,25 @@ export function FilesPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-14 sm:px-6 sm:py-20">
-      <p className="text-[13px] font-medium uppercase tracking-wide text-gold">Homestead</p>
-      <h1 className="mt-3 font-brand text-[38px] font-semibold leading-[1.1] text-ink-editorial sm:text-[46px]">
-        The Supermortgage
-      </h1>
-      <p className="mt-5 max-w-prose font-prose text-[18px] leading-relaxed text-ink-prose">
+      <p className="super-eyebrow text-accent">Homestead</p>
+      <h1 className="mt-3 font-display text-4xl text-ink sm:text-5xl">The Supermortgage</h1>
+      <p className="mt-5 max-w-measure-prose text-lg text-ink-soft">
         A better rate, in four screens and about five minutes. Connect your accounts instead of
         hunting for statements, and we retrieve almost everything underwriting needs.
       </p>
-      <p className="mt-4 max-w-prose font-prose text-[16px] leading-relaxed text-ink-prose">
+      <p className="mt-4 max-w-measure-prose text-base text-ink-soft">
         No documents to dig out. No forms asking what your bank already knows. A decision that
         explains itself.
       </p>
 
       <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <button className="btn-primary" onClick={() => navigate("/f/new/property")}>
+        <button className="super-btn super-btn-primary" onClick={() => navigate("/f/new/property")}>
           Start now
         </button>
 
         {inProgress && (
           <Link
-            className="btn-secondary text-center"
+            className="super-btn super-btn-outline text-center"
             to={`/f/${inProgress.id}/${STAGE_TO_SCREEN[inProgress.stage as FlowStage] ?? "review"}`}
           >
             Pick up where you left off
@@ -73,19 +71,19 @@ export function FilesPage() {
       </div>
 
       {inProgress && (
-        <p className="mt-3 text-[13px] text-meta">
+        <p className="mt-3 text-sm text-ink-muted">
           You have one in progress
           {inProgress.propertyCity ? ` on ${inProgress.propertyCity}` : ""}
           {inProgress.propertyState ? `, ${inProgress.propertyState}` : ""}.
         </p>
       )}
 
-      {isLoading && <p className="mt-8 text-[13px] text-subtle">Loading…</p>}
+      {isLoading && <p className="mt-8 text-sm text-ink-faint">Loading…</p>}
 
-      <p className="mt-14 border-t border-line-light pt-5 text-[12px] leading-relaxed text-subtle">
+      <p className="mt-14 border-t border-rule-soft pt-5 text-xs text-ink-faint">
         Nothing here is a loan offer, and no credit is checked. Every connection returns invented
         data.{" "}
-        <Link className="text-gold underline underline-offset-2" to="/privacy">
+        <Link className="super-link" to="/privacy">
           What we keep, and how to delete it
         </Link>
         .
@@ -93,14 +91,14 @@ export function FilesPage() {
 
       {demos.length > 0 && (
         <details className="mt-4">
-          <summary className="cursor-pointer list-none text-[12px] text-subtle underline-offset-2 hover:underline">
+          <summary className="super-link-quiet cursor-pointer list-none text-xs">
             Sample borrowers ({demos.length})
           </summary>
           <ul className="mt-2 flex flex-col gap-1">
             {demos.map((f) => (
               <li key={f.id}>
                 <Link
-                  className="text-[13px] text-gold underline underline-offset-2"
+                  className="super-link text-sm"
                   to={`/f/${f.id}/${STAGE_TO_SCREEN[f.stage as FlowStage] ?? "review"}`}
                 >
                   {f.borrowers[0]

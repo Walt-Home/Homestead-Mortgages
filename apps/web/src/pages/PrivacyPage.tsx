@@ -25,9 +25,9 @@ export function PrivacyPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <h1 className="font-brand text-[26px] font-semibold text-ink-editorial">What this keeps</h1>
+      <h1 className="font-display text-3xl text-ink">What this keeps</h1>
 
-      <div className="mt-6 space-y-5 font-prose text-[16px] leading-relaxed text-ink-prose">
+      <div className="mt-6 space-y-5 text-base text-ink-soft">
         <p>
           This is a prototype we are testing. It is not a lender, nothing it shows you is an offer,
           and no part of it touches your real credit, bank or payroll.
@@ -42,7 +42,7 @@ export function PrivacyPage() {
         <p>What we do store, because the flow needs it:</p>
       </div>
 
-      <ul className="mt-4 space-y-1.5 text-[14px] leading-relaxed text-ink-soft">
+      <ul className="mt-4 space-y-1.5 text-sm text-ink-soft">
         <li>· Your name, date of birth, email, phone and address</li>
         <li>· The property and loan details you enter</li>
         <li>· The last four digits of your SSN</li>
@@ -50,7 +50,7 @@ export function PrivacyPage() {
         <li>· Your Google account name, email and picture</li>
       </ul>
 
-      <div className="mt-6 space-y-5 font-prose text-[16px] leading-relaxed text-ink-prose">
+      <div className="mt-6 space-y-5 text-base text-ink-soft">
         <p>
           It sits in a private database that only our team can reach. We do not sell it, share it,
           or send it anywhere else. There is no marketing list.
@@ -66,35 +66,40 @@ export function PrivacyPage() {
           delete button would offer an action that cannot work — and "Signed in
           as ." with a dangling period, which is how this was caught. */}
       {user ? (
-        <div className="mt-8 rounded-card border border-line-light bg-app p-6">
+        <div className="super-card mt-8">
           {!confirming ? (
             <>
-              <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
-                Delete everything
-              </h2>
-              <p className="mt-1.5 text-[13px] text-muted">Signed in as {user.email}.</p>
-              <button className="btn-secondary mt-4" onClick={() => setConfirming(true)}>
+              <h2 className="font-display text-base text-ink">Delete everything</h2>
+              <p className="mt-1.5 text-sm text-ink-muted">Signed in as {user.email}.</p>
+              <button
+                className="super-btn super-btn-outline mt-4"
+                onClick={() => setConfirming(true)}
+              >
                 Delete my account and files
               </button>
             </>
           ) : (
             <>
-              <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
-                Delete everything, permanently?
-              </h2>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+              <h2 className="font-display text-base text-ink">Delete everything, permanently?</h2>
+              <p className="mt-1.5 text-sm text-ink-muted">
                 Your account and every file you started will be removed. This cannot be undone.
               </p>
               <div className="mt-4 flex gap-3">
                 <button
-                  className="rounded-control bg-danger px-5 py-2.5 text-[15px] font-medium text-white disabled:opacity-40"
+                  className="super-btn super-btn-danger"
                   onClick={() => void deleteEverything()}
                   disabled={busy}
                 >
                   {busy ? "Deleting…" : "Yes, delete everything"}
                 </button>
+                {/*
+                  Ghost, not outline. The outline variant is red, and beside a
+                  red danger button it made the safe choice look like the
+                  destructive one — on the screen where getting that wrong
+                  deletes somebody's account.
+                */}
                 <button
-                  className="btn-secondary"
+                  className="super-btn super-btn-ghost"
                   onClick={() => setConfirming(false)}
                   disabled={busy}
                 >
@@ -105,11 +110,9 @@ export function PrivacyPage() {
           )}
         </div>
       ) : (
-        <div className="mt-8 rounded-card border border-line-light bg-app p-6">
-          <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
-            Nothing stored for you yet
-          </h2>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+        <div className="super-card mt-8">
+          <h2 className="font-display text-base text-ink">Nothing stored for you yet</h2>
+          <p className="mt-1.5 text-sm text-ink-muted">
             You are not signed in, so there is nothing of yours here. Sign in and this is where you
             can delete it again.
           </p>

@@ -30,11 +30,11 @@ export function Branches({
   if (branches.length === 0 || !fileId) return null;
 
   return (
-    <div className="card mb-5 border-gold-border bg-gold-fill">
-      <h2 className="font-brand text-[17px] font-semibold text-ink-editorial">
+    <div className="super-card mb-5 border-warn/30 bg-warn/10">
+      <h2 className="font-display text-base text-ink">
         {branches.length === 1 ? "One more thing" : "A couple more things"}
       </h2>
-      <p className="mt-1.5 font-prose text-[15px] leading-relaxed text-ink-prose">
+      <p className="mt-1.5 text-base text-ink-soft">
         Your bank covered most of it. These did not come through.
       </p>
 
@@ -42,13 +42,16 @@ export function Branches({
         {branches.map((branch) => (
           <li
             key={branch.path}
-            className="flex flex-col gap-2 rounded-row border border-line-light bg-app p-4 sm:flex-row sm:items-center sm:justify-between"
+            className="flex flex-col gap-2 rounded-md border border-rule-soft bg-ground p-4 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="min-w-0">
-              <p className="text-[15px] font-medium text-ink-editorial">{branch.title}</p>
-              <p className="mt-0.5 text-[13px] leading-relaxed text-ink-soft">{branch.because}</p>
+              <p className="text-base font-medium text-ink">{branch.title}</p>
+              <p className="mt-0.5 text-sm text-ink-soft">{branch.because}</p>
             </div>
-            <Link to={`/f/${fileId}/${branch.path}`} className="btn-secondary shrink-0 text-center">
+            <Link
+              to={`/f/${fileId}/${branch.path}`}
+              className="super-btn super-btn-outline shrink-0 text-center"
+            >
               Sort this out
             </Link>
           </li>

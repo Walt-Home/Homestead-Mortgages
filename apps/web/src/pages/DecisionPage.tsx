@@ -146,25 +146,29 @@ export function DecisionPage() {
 
   if (state !== "done" || !result) {
     return (
-      <div className="card">
-        <h1 className="font-brand text-[22px] font-semibold text-ink-editorial">Where you stand</h1>
-        <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
+      <div className="super-card">
+        <h1 className="font-display text-2xl text-ink">Where you stand</h1>
+        <p className="mt-2 text-base text-ink-soft">
           We have what we need. This takes a moment and shows you the arithmetic, not just a
           verdict.
         </p>
         {readOnly ? (
-          <p className="mt-6 text-[13px] text-subtle">
+          <p className="mt-6 text-sm text-ink-faint">
             This sample file has no stored decision yet.
           </p>
         ) : (
-          <button className="btn-primary mt-6" onClick={compute} disabled={state === "running"}>
+          <button
+            className="super-btn super-btn-primary mt-6"
+            onClick={compute}
+            disabled={state === "running"}
+          >
             {state === "running" ? "Computing…" : "Get my answer"}
           </button>
         )}
-        {error && <p className="mt-4 text-[13px] text-error">{error}</p>}
-        <div className="mt-6 border-t border-line-light pt-4">
+        {error && <p className="mt-4 text-sm text-danger">{error}</p>}
+        <div className="mt-6 border-t border-rule-soft pt-4">
           <button
-            className="text-[13px] text-subtle underline-offset-2 hover:underline"
+            className="super-link-quiet text-sm"
             onClick={() => navigate(`/f/${fileId}/confirm`)}
           >
             Back
@@ -179,34 +183,30 @@ export function DecisionPage() {
 
   return (
     <div className="space-y-5">
-      <div className="card">
-        <h1 className="font-brand text-[26px] font-semibold leading-snug text-ink-editorial">
-          {copy.headline}
-        </h1>
-        <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">{copy.body}</p>
+      <div className="super-card">
+        <h1 className="font-display text-3xl text-ink">{copy.headline}</h1>
+        <p className="mt-2 text-base text-ink-soft">{copy.body}</p>
 
-        <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-4 border-t border-line-light pt-5 sm:grid-cols-4">
+        <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-4 border-t border-rule-soft pt-5 sm:grid-cols-4">
           <Figure label="Debt-to-income" value={result.ratios.dtiBack} suffix="%" />
           <Figure label="Loan-to-value" value={result.ratios.ltv} suffix="%" />
           <Figure label="Monthly payment" value={result.ratios.housingPitia} prefix="$" round />
           <Figure label="Reserves" value={result.reserves.actualMonths} suffix=" mo" />
         </div>
 
-        <p className="mt-5 text-[12px] leading-relaxed text-subtle">
+        <p className="mt-5 text-xs text-ink-faint">
           Computed by our own underwriting engine ({result.aus.engine}), not by Fannie Mae&rsquo;s
           Desktop Underwriter. A real agency submission may reach a different answer.
         </p>
       </div>
 
       {result.conditions.length > 0 && (
-        <div className="card">
-          <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
-            What is still open
-          </h2>
+        <div className="super-card">
+          <h2 className="font-display text-base text-ink">What is still open</h2>
           <ul className="mt-4 space-y-2.5">
             {result.conditions.map((c, i) => (
-              <li key={i} className="flex gap-2.5 text-[14px] leading-relaxed text-ink-soft">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-pill bg-gold" />
+              <li key={i} className="flex gap-2.5 text-sm text-ink-soft">
+                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-pill bg-accent" />
                 {c.description}
               </li>
             ))}
@@ -215,29 +215,26 @@ export function DecisionPage() {
       )}
 
       {blocked.length > 0 && (
-        <div className="card border-notice-border bg-notice-bg">
-          <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
-            What we could not compute
-          </h2>
-          <p className="mt-1.5 text-[13px] text-muted">
+        <div className="super-card border-rule bg-raised">
+          <h2 className="font-display text-base text-ink">What we could not compute</h2>
+          <p className="mt-1.5 text-sm text-ink-muted">
             These are missing inputs, not failures. Nothing below counted against you.
           </p>
-          <ul className="mt-4 space-y-2 text-[13px]">
+          <ul className="mt-4 space-y-2 text-sm">
             {blocked.map((d, i) => (
               <li key={i} className="flex justify-between gap-4">
                 <span className="text-ink-soft">{d.label}</span>
-                <span className="text-right text-meta">waiting on {d.blockedBy?.join(", ")}</span>
+                <span className="text-right text-ink-muted">
+                  waiting on {d.blockedBy?.join(", ")}
+                </span>
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      <div className="card">
-        <button
-          className="font-brand text-[16px] font-semibold text-ink-editorial"
-          onClick={() => setShowWork((s) => !s)}
-        >
+      <div className="super-card">
+        <button className="font-display text-base text-ink" onClick={() => setShowWork((s) => !s)}>
           {showWork ? "Hide the arithmetic" : "Show the arithmetic"}
         </button>
 
@@ -246,23 +243,21 @@ export function DecisionPage() {
             {result.derivations
               .filter((d) => !d.blockedBy?.length)
               .map((d, i) => (
-                <div key={i} className="border-t border-line-light pt-4 first:border-0 first:pt-0">
+                <div key={i} className="border-t border-rule-soft pt-4 first:border-0 first:pt-0">
                   <div className="flex items-baseline justify-between gap-4">
-                    <span className="text-[14px] text-ink-editorial">{d.label}</span>
-                    <span className="figure text-[15px] text-ink">{String(d.value)}</span>
+                    <span className="text-sm text-ink">{d.label}</span>
+                    <span className="super-figure text-base text-ink">{String(d.value)}</span>
                   </div>
-                  <p className="mt-1 text-[12px] text-muted">{d.formula}</p>
-                  <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[12px] text-subtle">
+                  <p className="mt-1 text-xs text-ink-muted">{d.formula}</p>
+                  <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-faint">
                     {Object.entries(d.inputs).map(([key, value]) => (
                       <div key={key} className="flex gap-1.5">
                         <dt>{key.replace(/_/g, " ")}</dt>
-                        <dd className="figure text-meta">{String(value)}</dd>
+                        <dd className="super-figure text-ink-muted">{String(value)}</dd>
                       </div>
                     ))}
                   </dl>
-                  <p className="mt-1.5 text-[11px] uppercase tracking-wide text-subtle">
-                    {d.requirementId}
-                  </p>
+                  <p className="super-eyebrow mt-1.5">{d.requirementId}</p>
                 </div>
               ))}
           </div>
@@ -270,16 +265,14 @@ export function DecisionPage() {
       </div>
 
       {!readOnly && !intentRecorded && (
-        <div className="card">
-          <h2 className="font-brand text-[16px] font-semibold text-ink-editorial">
-            Want to go ahead?
-          </h2>
-          <p className="mt-1.5 font-prose text-[15px] leading-relaxed text-ink-prose">
+        <div className="super-card">
+          <h2 className="font-display text-base text-ink">Want to go ahead?</h2>
+          <p className="mt-1.5 text-base text-ink-soft">
             Saying yes tells us to keep working on this. It is not a commitment to borrow, and you
             can stop at any point.
           </p>
           <button
-            className="btn-primary mt-4"
+            className="super-btn super-btn-primary mt-4"
             onClick={() => void recordIntent()}
             disabled={intentSaving}
           >
@@ -289,24 +282,26 @@ export function DecisionPage() {
       )}
 
       {intentRecorded && (
-        <p className="text-[13px] text-olive">
+        <p className="text-sm text-ok">
           You&rsquo;ve told us to keep going. That&rsquo;s on the record.
         </p>
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <button className="btn-primary" onClick={() => navigate(`/f/${fileId}/consent`)}>
+        <button
+          className="super-btn super-btn-primary"
+          onClick={() => navigate(`/f/${fileId}/consent`)}
+        >
           Keep my connections live
         </button>
-        <button className="btn-secondary" onClick={() => navigate(`/f/${fileId}/confirm`)}>
+        <button
+          className="super-btn super-btn-outline"
+          onClick={() => navigate(`/f/${fileId}/confirm`)}
+        >
           Back
         </button>
         {!readOnly && (
-          <button
-            className="text-[13px] text-subtle underline-offset-2 hover:underline"
-            onClick={compute}
-            disabled={recomputing}
-          >
+          <button className="super-link-quiet text-sm" onClick={compute} disabled={recomputing}>
             {recomputing ? "Recomputing…" : "Recompute"}
           </button>
         )}
@@ -330,8 +325,8 @@ function Figure({
 }) {
   return (
     <div>
-      <span className="block text-[12px] text-subtle">{label}</span>
-      <span className="figure text-[22px] text-ink-editorial">
+      <span className="block text-xs text-ink-faint">{label}</span>
+      <span className="super-figure text-2xl text-ink">
         {value === null
           ? "—"
           : `${prefix}${round ? Math.round(value).toLocaleString() : value}${suffix}`}

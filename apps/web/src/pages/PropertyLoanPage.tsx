@@ -310,32 +310,32 @@ export function PropertyLoanPage() {
   const downPercent = priceNum > 0 ? Math.round((downNum / priceNum) * 100) : 0;
 
   return (
-    <form onSubmit={submit} className="card">
-      <h1 className="font-brand text-[24px] font-semibold leading-tight text-ink-editorial sm:text-[26px]">
+    <form onSubmit={submit} className="super-card">
+      <h1 className="font-display text-2xl text-ink sm:text-3xl">
         Let&rsquo;s start with the property
       </h1>
 
       {/* 1 — Address */}
       <div className="mt-7">
-        <label className="field-label" htmlFor="address">
+        <label className="super-label" htmlFor="address">
           Property address
         </label>
         <div className="relative">
           <input
             id="address"
-            className="field-input"
+            className="super-input"
             value={query}
             autoComplete="off"
             placeholder="Start typing an address"
             onChange={(e) => onQueryChange(e.target.value)}
           />
           {suggestions.length > 0 && (
-            <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-row border border-line bg-app shadow-card">
+            <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-rule bg-ground shadow-menu">
               {suggestions.map((s) => (
                 <li key={s.id}>
                   <button
                     type="button"
-                    className="block w-full px-3 py-2.5 text-left text-[14px] text-ink hover:bg-hover"
+                    className="block w-full px-3 py-2.5 text-left text-sm text-ink hover:bg-raised"
                     onClick={() => void choose(s)}
                   >
                     {s.label}
@@ -352,8 +352,8 @@ export function PropertyLoanPage() {
 
         {/* Nothing matched. Never a dead end. */}
         {query.trim().length >= 3 && suggestions.length === 0 && !address && !looking && (
-          <div className="mt-3 rounded-row border border-line-light bg-raised p-4">
-            <p className="text-[13px] leading-relaxed text-ink-soft">
+          <div className="super-notice mt-3">
+            <p className="text-sm text-ink-soft">
               No match. This prototype can only retrieve records for three sample addresses:
             </p>
             <ul className="mt-2 flex flex-col gap-1">
@@ -361,7 +361,7 @@ export function PropertyLoanPage() {
                 <li key={sample.label}>
                   <button
                     type="button"
-                    className="text-left text-[13px] text-gold underline underline-offset-2"
+                    className="super-link text-left text-sm"
                     onClick={() => {
                       setQuery(sample.label);
                       setSuggestions([]);
@@ -375,7 +375,7 @@ export function PropertyLoanPage() {
             </ul>
             <button
               type="button"
-              className="mt-3 text-[13px] text-meta underline underline-offset-2"
+              className="super-link-quiet mt-3 text-sm"
               onClick={() => setManual((m) => !m)}
             >
               {manual ? "Never mind" : "Or enter any address manually"}
@@ -384,27 +384,27 @@ export function PropertyLoanPage() {
             {manual && (
               <div className="mt-3 flex flex-col gap-2">
                 <input
-                  className="field-input"
+                  className="super-input"
                   placeholder="Street address"
                   value={manualFields.line1}
                   onChange={(e) => setManualFields((f) => ({ ...f, line1: e.target.value }))}
                 />
                 <input
-                  className="field-input"
+                  className="super-input"
                   placeholder="City"
                   value={manualFields.city}
                   onChange={(e) => setManualFields((f) => ({ ...f, city: e.target.value }))}
                 />
                 <div className="flex gap-2">
                   <input
-                    className="field-input"
+                    className="super-input"
                     placeholder="ST"
                     maxLength={2}
                     value={manualFields.state}
                     onChange={(e) => setManualFields((f) => ({ ...f, state: e.target.value }))}
                   />
                   <input
-                    className="field-input"
+                    className="super-input"
                     placeholder="Postcode"
                     value={manualFields.postalCode}
                     onChange={(e) => setManualFields((f) => ({ ...f, postalCode: e.target.value }))}
@@ -412,7 +412,7 @@ export function PropertyLoanPage() {
                 </div>
                 <button
                   type="button"
-                  className="btn-secondary self-start"
+                  className="super-btn super-btn-outline self-start"
                   onClick={useManualAddress}
                 >
                   Use this address
@@ -456,21 +456,21 @@ export function PropertyLoanPage() {
         the LTV ceiling and the reserve tier.
       */}
       {noRecord && address && (
-        <div className="mt-5 rounded-row border border-notice-border bg-notice-bg p-4">
-          <p className="text-[14px] font-medium text-ink-editorial">
+        <div className="super-notice mt-5">
+          <p className="text-sm font-medium text-ink">
             We could not find public records for this address
           </p>
-          <p className="mt-1 text-[13px] leading-relaxed text-ink-prose">
+          <p className="mt-1 text-sm text-ink-soft">
             That happens with new builds and some counties. It does not stop your application — we
             will just confirm the details later.
           </p>
           <div className="mt-3">
-            <label className="field-label" htmlFor="ptype">
+            <label className="super-label" htmlFor="ptype">
               What kind of property is it?
             </label>
             <select
               id="ptype"
-              className="field-input"
+              className="super-input"
               value={propertyType}
               onChange={(e) => setPropertyType(e.target.value)}
             >
@@ -489,7 +489,7 @@ export function PropertyLoanPage() {
       <Field className="mt-7" label="Are you buying or refinancing?" htmlFor="purpose">
         <select
           id="purpose"
-          className="field-input"
+          className="super-input"
           value={purpose}
           onChange={(e) => setPurpose(e.target.value)}
         >
@@ -503,7 +503,7 @@ export function PropertyLoanPage() {
       <Field className="mt-5" label="How will you use it?" htmlFor="occupancy">
         <select
           id="occupancy"
-          className="field-input"
+          className="super-input"
           value={occupancy}
           onChange={(e) => setOccupancy(e.target.value)}
         >
@@ -521,14 +521,14 @@ export function PropertyLoanPage() {
       >
         <input
           id="price"
-          className="field-input"
+          className="super-input"
           inputMode="numeric"
           required
           value={price}
           onChange={(e) => setPrice(e.target.value.replace(/[^\d]/g, ""))}
         />
         {lookup && (
-          <p className="mt-1.5 text-[12px] text-meta">
+          <p className="mt-1.5 text-xs text-ink-muted">
             Our estimate for this address is {money(lookup.valuation.value)}.
           </p>
         )}
@@ -541,7 +541,7 @@ export function PropertyLoanPage() {
       >
         <input
           id="down"
-          className="field-input"
+          className="super-input"
           inputMode="numeric"
           required
           value={down}
@@ -553,7 +553,7 @@ export function PropertyLoanPage() {
         <Field className="mt-5" label="How much cash do you want to take out?" htmlFor="cashout">
           <input
             id="cashout"
-            className="field-input"
+            className="super-input"
             inputMode="numeric"
             value={cashOut}
             onChange={(e) => setCashOut(e.target.value.replace(/[^\d]/g, ""))}
@@ -565,7 +565,7 @@ export function PropertyLoanPage() {
       <Field className="mt-5" label="Roughly, what do you earn a month?" htmlFor="income">
         <input
           id="income"
-          className="field-input"
+          className="super-input"
           inputMode="numeric"
           required
           placeholder="Before tax"
@@ -579,18 +579,18 @@ export function PropertyLoanPage() {
       </Field>
 
       {priceNum > 0 && (
-        <div className="mt-6 rounded-row bg-raised px-4 py-3 text-[14px] text-ink-soft">
-          That is a <span className="figure text-ink">{money(loanAmount)}</span> loan
+        <div className="mt-6 rounded-md bg-raised px-4 py-3 text-sm text-ink-soft">
+          That is a <span className="super-figure text-ink">{money(loanAmount)}</span> loan
           {downPercent > 0 && <> · {downPercent}% down</>}
         </div>
       )}
 
       {gate && <GateNotice gate={gate} />}
 
-      {error && <p className="mt-4 text-[13px] text-error">{error}</p>}
+      {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
       <div className="mt-7 flex flex-wrap items-center gap-3">
-        <button className="btn-primary" disabled={submitting || looking}>
+        <button className="super-btn super-btn-primary" disabled={submitting || looking}>
           {submitting ? "Checking…" : "Continue"}
         </button>
       </div>
@@ -611,7 +611,7 @@ function Field({
 }) {
   return (
     <div className={className}>
-      <label className="field-label" htmlFor={htmlFor}>
+      <label className="super-label" htmlFor={htmlFor}>
         {label}
       </label>
       {children}
@@ -681,13 +681,13 @@ function PropertyCard({
   }
 
   return (
-    <div className="mt-5 rounded-row border border-olive-border bg-olive-light p-4">
-      <p className="text-[14px] font-medium text-ink-editorial">
+    <div className="super-notice super-notice-ok mt-5">
+      <p className="text-sm font-medium text-ink">
         {r.county} County · APN {r.apn}
       </p>
-      <p className="mt-1 text-[14px] text-ink-soft">{facts.join(" · ")}</p>
+      <p className="mt-1 text-sm text-ink-soft">{facts.join(" · ")}</p>
 
-      <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-ink-soft">
+      <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-ink-soft">
         <Fact label="Assessed" value={money(r.assessedValue)} />
         <Fact label="Property tax" value={`${money(r.annualPropertyTax)}/yr`} />
         <Fact label="Flood zone" value={lookup.flood.zone} />
@@ -697,40 +697,40 @@ function PropertyCard({
       </dl>
 
       {lookup.flood.insuranceRequired && (
-        <p className="mt-3 text-[13px] leading-relaxed text-ink-prose">
+        <p className="mt-3 text-sm text-ink-soft">
           This one sits in a flood zone, so flood insurance will be required. Worth knowing now
           rather than at closing.
         </p>
       )}
 
       {correction ? (
-        <div className="mt-3 border-t border-olive-border pt-3">
-          <p className="text-[13px] leading-relaxed text-ink-prose">
+        <div className="mt-3 border-t border-ok/30 pt-3">
+          <p className="text-sm text-ink-soft">
             Thanks — we have your correction and someone will check it against the county record. It
             will not hold anything up, so carry on.
           </p>
           <button
             type="button"
             onClick={() => onCorrect(null)}
-            className="mt-1.5 text-[13px] text-olive underline underline-offset-2"
+            className="super-link-quiet mt-1.5 text-sm"
           >
             Undo
           </button>
         </div>
       ) : open ? (
-        <div className="mt-3 border-t border-olive-border pt-3">
-          <p className="text-[13px] leading-relaxed text-ink-prose">
+        <div className="mt-3 border-t border-ok/30 pt-3">
+          <p className="text-sm text-ink-soft">
             Tell us what is off. We will check it — you do not need to wait.
           </p>
           <div className="mt-3 flex flex-col gap-2">
             {FIELDS.map((f) => (
               <div key={f.key} className="flex items-center gap-3">
-                <label className="w-28 shrink-0 text-[13px] text-ink-soft" htmlFor={`c-${f.key}`}>
+                <label className="w-28 shrink-0 text-sm text-ink-soft" htmlFor={`c-${f.key}`}>
                   {f.label}
                 </label>
                 <input
                   id={`c-${f.key}`}
-                  className="field-input"
+                  className="super-input"
                   placeholder={f.current}
                   value={draft[f.key] ?? ""}
                   onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
@@ -738,7 +738,7 @@ function PropertyCard({
               </div>
             ))}
             <textarea
-              className="field-input mt-1"
+              className="super-input mt-1"
               rows={2}
               placeholder="Anything else we should know about it?"
               value={note}
@@ -746,12 +746,16 @@ function PropertyCard({
             />
           </div>
           <div className="mt-3 flex flex-wrap gap-3">
-            <button type="button" className="btn-secondary" onClick={submitCorrection}>
+            <button
+              type="button"
+              className="super-btn super-btn-outline"
+              onClick={submitCorrection}
+            >
               Send correction
             </button>
             <button
               type="button"
-              className="text-[13px] text-olive underline underline-offset-2"
+              className="super-link-quiet text-sm"
               onClick={() => setOpen(false)}
             >
               Cancel
@@ -760,18 +764,10 @@ function PropertyCard({
         </div>
       ) : (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="text-[13px] text-olive underline underline-offset-2"
-          >
+          <button type="button" onClick={() => setOpen(true)} className="super-link-quiet text-sm">
             Something here is wrong
           </button>
-          <button
-            type="button"
-            onClick={onWrongAddress}
-            className="text-[13px] text-meta underline underline-offset-2"
-          >
+          <button type="button" onClick={onWrongAddress} className="super-link-quiet text-sm">
             This is not my property
           </button>
         </div>
@@ -783,8 +779,8 @@ function PropertyCard({
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="inline text-subtle">{label} </dt>
-      <dd className="figure inline text-ink">{value}</dd>
+      <dt className="inline text-ink-soft">{label} </dt>
+      <dd className="super-figure inline text-ink">{value}</dd>
     </div>
   );
 }
@@ -798,16 +794,14 @@ function Fact({ label, value }: { label: string; value: string }) {
  */
 function GateNotice({ gate }: { gate: Affordability }) {
   return (
-    <div className="mt-6 rounded-row border border-notice-border bg-notice-bg p-4">
-      <p className="font-brand text-[16px] font-semibold text-ink-editorial">
-        These numbers do not work yet
-      </p>
-      <ul className="mt-2 flex flex-col gap-1.5 font-prose text-[15px] leading-relaxed text-ink-prose">
+    <div className="super-notice mt-6">
+      <p className="font-display text-base text-ink">These numbers do not work yet</p>
+      <ul className="mt-2 flex flex-col gap-1.5 text-base text-ink-soft">
         {gate.reasons.map((r) => (
           <li key={r}>{r}</li>
         ))}
       </ul>
-      <p className="mt-3 text-[13px] leading-relaxed text-meta">
+      <p className="mt-3 text-sm text-ink-muted">
         We have not checked your credit and nothing has been recorded. Adjust the numbers above and
         try again.
       </p>

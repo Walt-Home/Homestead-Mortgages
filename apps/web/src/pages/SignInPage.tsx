@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/auth.js";
 import { PrototypeBanner } from "../components/PrototypeBanner.js";
+import { Wordmark } from "../components/Wordmark.js";
 
 /**
  * Sign-in.
@@ -95,13 +96,9 @@ export function SignInPage() {
     <>
       <PrototypeBanner />
       <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-6">
-        <span className="font-brand text-[15px] font-bold tracking-tight text-gold">
-          Homestead Mortgages
-        </span>
-        <h1 className="mt-6 font-brand text-[28px] font-semibold leading-tight text-ink-editorial">
-          Sign in to continue
-        </h1>
-        <p className="mt-3 font-prose text-[16px] leading-relaxed text-ink-prose">
+        <Wordmark />
+        <h1 className="mt-6 font-display text-3xl text-ink">Sign in to continue</h1>
+        <p className="mt-3 text-base text-ink-soft">
           {config?.allowedDomain
             ? `Use your ${config.allowedDomain} account.`
             : "Any Google account works."}
@@ -113,43 +110,42 @@ export function SignInPage() {
           <div className="mt-2">
             {config.developerSignInAvailable ? (
               <>
-                <button className="btn-secondary" onClick={() => void signInAsDeveloper()}>
+                <button
+                  className="super-btn super-btn-outline"
+                  onClick={() => void signInAsDeveloper()}
+                >
                   Continue as local developer
                 </button>
-                <p className="mt-3 text-[12px] leading-relaxed text-subtle">
+                <p className="mt-3 text-xs text-ink-faint">
                   No Google client is configured, so this is running the local development shortcut.
                   It is unavailable in production.
                 </p>
               </>
             ) : (
-              <p className="text-[13px] leading-relaxed text-error">
-                Sign-in is not configured on this deployment.
-              </p>
+              <p className="text-sm text-danger">Sign-in is not configured on this deployment.</p>
             )}
           </div>
         )}
 
         {scriptFailed && (
-          <p className="mt-5 text-[13px] leading-relaxed text-error">
+          <p className="mt-5 text-sm text-danger">
             Google&rsquo;s sign-in script didn&rsquo;t load. An ad blocker or a blocked third-party
             script will do this.
           </p>
         )}
 
-        {googleError && (
-          <p className="mt-5 text-[13px] leading-relaxed text-error">{googleError}</p>
-        )}
+        {googleError && <p className="mt-5 text-sm text-danger">{googleError}</p>}
 
-        {error && <p className="mt-5 text-[13px] text-error">{error}</p>}
+        {error && <p className="mt-5 text-sm text-danger">{error}</p>}
 
         {/* The popup can also die without firing error_callback at all — an
             unregistered origin is the common case. Showing the origin
             unconditionally means the answer is on screen before anyone has to
             go looking for it. */}
-        <p className="mt-10 text-[11px] leading-relaxed text-subtle">
+        <p className="mt-10 text-xs text-ink-faint">
           Trouble signing in? This page is served from{" "}
-          <code className="text-meta">{window.location.origin}</code>, which must be an authorised
-          JavaScript origin on the OAuth client.
+          <code className="text-ink-muted">{window.location.origin}</code>, which must be an
+          authorised JavaScript origin on the OAuth client.
         </p>
       </div>
     </>

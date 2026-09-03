@@ -37,8 +37,15 @@ jobs:
       - name: Requirement registry matches the sheet
         run: npm run requirements:verify
 
+      # Same discipline for the design system: tokens.css is generated from
+      # packages/brand/tokens.mjs and committed. A colour edited in the source
+      # but never rebuilt would ship a stylesheet that disagrees with the
+      # Tailwind preset — half the app on the new value, half on the old.
+      - name: Design tokens match their source
+        run: npm run brand:verify
+
       - name: TypeScript
-        run: npx tsc -b packages/shared packages/requirements packages/connectors packages/underwriting packages/db apps/api
+        run: npx tsc -b packages/shared packages/requirements packages/connectors packages/underwriting packages/db apps/api apps/web
 
       - name: Test
         run: npm test

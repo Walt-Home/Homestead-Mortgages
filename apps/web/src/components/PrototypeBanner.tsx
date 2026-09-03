@@ -29,13 +29,13 @@ import { Link } from "react-router-dom";
 
 export function PrototypeBanner() {
   return (
-    <div className="border-b border-notice-border bg-notice-bg">
-      <p className="mx-auto max-w-5xl px-6 py-2 text-[12px] leading-relaxed text-ink-soft">
-        <span className="font-medium">Prototype.</span> Not a loan offer, and no credit is
-        checked. Bank and ID checks run in the vendors&rsquo; test modes, so please use their test
+    <div className="border-b border-rule bg-raised">
+      <p className="mx-auto max-w-5xl px-6 py-2 text-xs text-ink-soft">
+        <span className="font-medium">Prototype.</span> Not a loan offer, and no credit is checked.
+        Bank and ID checks run in the vendors&rsquo; test modes, so please use their test
         credentials rather than a real ID. Address search is live. Anything you type is stored so
         the flow works —{" "}
-        <Link to="/privacy" className="text-gold underline underline-offset-2">
+        <Link to="/privacy" className="super-link">
           what we keep, and how to delete it
         </Link>
         .

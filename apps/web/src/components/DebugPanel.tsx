@@ -44,11 +44,11 @@ export function DebugPanel({
   const [tab, setTab] = useState<"outstanding" | "blocked" | "file">("outstanding");
 
   return (
-    <aside className="mt-10 rounded-card border border-dashed border-line-strong bg-inset p-5 font-mono text-[12px]">
+    <aside className="mt-10 rounded-lg border border-dashed border-rule-strong bg-raised p-5 font-mono text-xs">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="font-ui text-[13px] font-semibold text-ink-editorial">
+        <p className="font-text text-sm font-semibold text-ink">
           Engine view{" "}
-          <span className="font-normal text-subtle">· ?debug=1 · not borrower-facing</span>
+          <span className="font-normal text-ink-faint">· ?debug=1 · not borrower-facing</span>
         </p>
         <div className="flex gap-1">
           {(["outstanding", "blocked", "file"] as const).map((t) => (
@@ -56,8 +56,12 @@ export function DebugPanel({
               key={t}
               onClick={() => setTab(t)}
               className={clsx(
-                "rounded-form px-2 py-1 font-ui text-[12px]",
-                tab === t ? "bg-ink text-white" : "bg-app text-ink-soft hover:bg-hover",
+                "rounded-md px-2 py-1 font-text text-xs",
+                tab === t
+                  ? "bg-primary text-primary-ink"
+                  : // Hovering to `raised` would match the panel behind it and
+                    // make the chip vanish under the cursor.
+                    "bg-ground text-ink-soft hover:bg-rule-soft",
               )}
             >
               {t}
@@ -66,8 +70,8 @@ export function DebugPanel({
         </div>
       </div>
 
-      {failed && <p className="mt-4 text-error">assessment request failed</p>}
-      {!assessment && !failed && <p className="mt-4 text-subtle">loading assessment…</p>}
+      {failed && <p className="mt-4 text-danger">assessment request failed</p>}
+      {!assessment && !failed && <p className="mt-4 text-ink-faint">loading assessment…</p>}
 
       {assessment && tab === "outstanding" && (
         <>
@@ -90,18 +94,18 @@ export function DebugPanel({
 
       {assessment && tab === "blocked" && (
         <ul className="mt-4 flex flex-col gap-1.5">
-          {assessment.blocked.length === 0 && <li className="text-subtle">nothing blocked</li>}
+          {assessment.blocked.length === 0 && <li className="text-ink-faint">nothing blocked</li>}
           {assessment.blocked.map((b) => (
-            <li key={b.id} className="border-b border-line-light pb-1.5">
-              <span className="text-gold">{b.id}</span> {b.statement}
-              <div className="text-subtle">waiting on: {b.rootCauses.join(", ")}</div>
+            <li key={b.id} className="border-b border-rule-soft pb-1.5">
+              <span className="text-accent">{b.id}</span> {b.statement}
+              <div className="text-ink-faint">waiting on: {b.rootCauses.join(", ")}</div>
             </li>
           ))}
         </ul>
       )}
 
       {tab === "file" && (
-        <pre className="mt-4 max-h-96 overflow-auto whitespace-pre-wrap break-all text-[11px] leading-relaxed text-ink-soft">
+        <pre className="mt-4 max-h-96 overflow-auto whitespace-pre-wrap break-all text-xs text-ink-soft">
           {JSON.stringify(file ?? {}, null, 2)}
         </pre>
       )}
@@ -112,7 +116,7 @@ export function DebugPanel({
 function Count({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-baseline gap-2">
-      <dt className="text-subtle">{label}</dt>
+      <dt className="text-ink-faint">{label}</dt>
       <dd className="text-ink">{value}</dd>
     </div>
   );
@@ -120,15 +124,15 @@ function Count({ label, value }: { label: string; value: number }) {
 
 function Row({ item }: { item: OutstandingItem }) {
   return (
-    <li className="border-b border-line-light pb-1.5">
-      <span className="text-gold">{item.id}</span>{" "}
-      <span className="text-subtle">
+    <li className="border-b border-rule-soft pb-1.5">
+      <span className="text-accent">{item.id}</span>{" "}
+      <span className="text-ink-faint">
         [{SCREEN_GROUP[item.screen] ?? item.screen} · {item.actor} · {item.severity}
         {item.applicabilityKnown ? "" : " · may-not-apply"}]
       </span>
       <div className="text-ink-soft">{item.statement}</div>
-      {item.missing && <div className="text-subtle">missing: {item.missing}</div>}
-      {item.waitingFor && <div className="text-subtle">waiting: {item.waitingFor}</div>}
+      {item.missing && <div className="text-ink-faint">missing: {item.missing}</div>}
+      {item.waitingFor && <div className="text-ink-faint">waiting: {item.waitingFor}</div>}
     </li>
   );
 }

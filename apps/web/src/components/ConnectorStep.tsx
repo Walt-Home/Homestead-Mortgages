@@ -80,64 +80,56 @@ export function ConnectorStep(props: ConnectorStepProps) {
   }
 
   return (
-    <div className="card">
-      <h1 className="font-brand text-[22px] font-semibold text-ink-editorial">{props.title}</h1>
-      <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">{props.promise}</p>
-      <p className="mt-3 text-[14px] leading-relaxed text-muted">{props.detail}</p>
+    <div className="super-card">
+      <h1 className="font-display text-2xl text-ink">{props.title}</h1>
+      <p className="mt-2 text-base text-ink-soft">{props.promise}</p>
+      <p className="mt-3 text-sm text-ink-muted">{props.detail}</p>
 
       {!connected && props.blocked && (
-        <div className="mt-6 rounded-row border border-notice-border bg-notice-bg px-4 py-3.5">
-          <p className="text-[14px] leading-relaxed text-ink-soft">{props.blocked.message}</p>
+        <div className="super-notice mt-6">
+          <p className="text-sm text-ink-soft">{props.blocked.message}</p>
           {props.blocked.action && <div className="mt-3">{props.blocked.action}</div>}
         </div>
       )}
 
       {!connected && !props.blocked && !props.readOnly && (
         <div className="mt-6 flex items-center gap-3">
-          <button className="btn-primary" onClick={connect} disabled={pending}>
+          <button className="super-btn super-btn-primary" onClick={connect} disabled={pending}>
             {pending ? "Connecting…" : "Connect"}
           </button>
-          <span className="text-[13px] text-subtle">{props.duration}</span>
+          <span className="text-sm text-ink-faint">{props.duration}</span>
         </div>
       )}
 
       {!connected && props.readOnly && (
-        <p className="mt-6 text-[13px] text-subtle">
+        <p className="mt-6 text-sm text-ink-faint">
           This is a sample file. Start your own to walk through connecting.
         </p>
       )}
 
       {pending && (
-        <p className="mt-4 text-[13px] text-meta">
+        <p className="mt-4 text-sm text-ink-muted">
           Talking to your provider. This usually takes a few seconds.
         </p>
       )}
 
       {error && (
-        <div className="mt-5 rounded-row border border-notice-border bg-notice-bg px-4 py-3 text-[13px] text-error">
-          {error}
-        </div>
+        <div className="super-notice super-notice-danger mt-5 text-sm text-danger">{error}</div>
       )}
 
       {connected && (
-        <div className="mt-6 border-t border-line-light pt-5">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-pill bg-olive-light px-3 py-1 text-[12px] font-medium text-olive">
-            Connected
-          </div>
+        <div className="mt-6 border-t border-rule-soft pt-5">
+          <div className="super-pill super-pill-ok mb-4">Connected</div>
           {props.renderResult(result)}
           <div className="mt-6 flex items-center gap-3">
-            <button className="btn-primary" onClick={props.onDone}>
+            <button className="super-btn super-btn-primary" onClick={props.onDone}>
               Continue
             </button>
-            <button className="btn-secondary" onClick={() => navigate(-1)}>
+            <button className="super-btn super-btn-outline" onClick={() => navigate(-1)}>
               Back
             </button>
             {!props.readOnly && (
-              <button
-                className="text-[13px] text-subtle underline-offset-2 hover:underline"
-                onClick={connect}
-                disabled={pending}
-              >
+              <button className="super-link-quiet text-sm" onClick={connect} disabled={pending}>
                 {pending ? "Refreshing…" : "Pull again"}
               </button>
             )}
@@ -146,11 +138,8 @@ export function ConnectorStep(props: ConnectorStepProps) {
       )}
 
       {!connected && (
-        <div className="mt-6 border-t border-line-light pt-4">
-          <button
-            className="text-[13px] text-subtle underline-offset-2 hover:underline"
-            onClick={() => navigate(-1)}
-          >
+        <div className="mt-6 border-t border-rule-soft pt-4">
+          <button className="super-link-quiet text-sm" onClick={() => navigate(-1)}>
             Back
           </button>
         </div>

@@ -76,6 +76,7 @@ every adapter against an unauthorized file and fails if any returns data.
 
 - `docs/requirements.md` — how the registry works and how to change it
 - `docs/decisions.md` — what was decided, what is assumed, and what is known wrong
+- `docs/brand.md` — the Supermortgage brand and design system, read from Doug's prototype, and what adopting it here would take
 
 ## Opening the deployed app
 

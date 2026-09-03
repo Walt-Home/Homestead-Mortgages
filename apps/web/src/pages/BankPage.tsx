@@ -439,14 +439,14 @@ export function BankPage() {
    * sitting above whatever they are actually here to do.
    */
   const creditBar = credit?.scores?.length ? (
-    <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-row border border-olive-border bg-olive-light px-4 py-2.5">
-      <span aria-hidden="true" className="text-olive">
+    <div className="super-notice super-notice-ok mb-5 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span aria-hidden="true" className="text-ok">
         ✓
       </span>
-      <span className="text-[14px] text-ink-editorial">
-        Credit checked · <span className="figure">{middleScore(credit.scores)}</span>
+      <span className="text-sm text-ink">
+        Credit checked · <span className="super-figure">{middleScore(credit.scores)}</span>
       </span>
-      <span className="text-[13px] text-meta">Soft pull, so your score is untouched.</span>
+      <span className="text-sm text-ink-muted">Soft pull, so your score is untouched.</span>
     </div>
   ) : null;
 
@@ -456,15 +456,13 @@ export function BankPage() {
     return (
       <>
         {creditBar}
-        <div className="card">
-          <h1 className="font-brand text-[24px] font-semibold leading-tight text-ink-editorial sm:text-[26px]">
-            Here is where you stand
-          </h1>
-          <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
+        <div className="super-card">
+          <h1 className="font-display text-2xl text-ink sm:text-3xl">Here is where you stand</h1>
+          <p className="mt-2 text-base text-ink-soft">
             Not an approval and not an offer — a read of your numbers as they are today.
           </p>
 
-          <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-line-light pt-5 sm:grid-cols-3">
+          <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-rule-soft pt-5 sm:grid-cols-3">
             <Figure
               label={`Verified assets`}
               value={money(total)}
@@ -488,13 +486,16 @@ export function BankPage() {
           </dl>
 
           {typeof rent === "number" && rent >= 12 && (
-            <p className="mt-6 rounded-row border border-olive-border bg-olive-light px-4 py-3 font-prose text-[15px] leading-relaxed text-ink-prose">
+            <p className="super-notice super-notice-ok mt-6 text-base text-ink-soft">
               We found {rent} months of rent paid on time. That counts in your favour, and it is the
               kind of thing a credit score alone would miss.
             </p>
           )}
 
-          <button className="btn-primary mt-7" onClick={() => navigate(`/f/${fileId}/review`)}>
+          <button
+            className="super-btn super-btn-primary mt-7"
+            onClick={() => navigate(`/f/${fileId}/review`)}
+          >
             Continue
           </button>
         </div>
@@ -507,15 +508,13 @@ export function BankPage() {
   return (
     <>
       {creditBar}
-      <div className="card">
-        <h1 className="font-brand text-[24px] font-semibold leading-tight text-ink-editorial sm:text-[26px]">
-          Connect your bank
-        </h1>
-        <p className="mt-2 font-prose text-[16px] leading-relaxed text-ink-prose">
+      <div className="super-card">
+        <h1 className="font-display text-2xl text-ink sm:text-3xl">Connect your bank</h1>
+        <p className="mt-2 text-base text-ink-soft">
           Twelve months, read once. One connection covers your down payment, reserves, income
           deposits, rent history and cash flow.
         </p>
-        <p className="mt-3 font-prose text-[16px] leading-relaxed text-ink-prose">
+        <p className="mt-3 text-base text-ink-soft">
           It replaces every statement you would otherwise have to find, download and upload.
         </p>
 
@@ -528,9 +527,8 @@ export function BankPage() {
 
         {phase.kind === "linking" && (
           <>
-            <p className="mt-6 rounded-row border border-line-light bg-raised px-4 py-3 font-prose text-[15px] leading-relaxed text-ink-prose">
-              Your bank is open in a secure window. Sign in there and we&rsquo;ll take it from
-              here.
+            <p className="super-notice mt-6 text-base text-ink-soft">
+              Your bank is open in a secure window. Sign in there and we&rsquo;ll take it from here.
             </p>
             <PlaidLink
               key={phase.linkToken}
@@ -554,17 +552,20 @@ export function BankPage() {
         )}
 
         {phase.kind === "slow" && (
-          <div className="mt-6 rounded-row border border-gold-border bg-gold-fill px-4 py-4">
-            <p className="font-prose text-[15px] leading-relaxed text-ink-prose">
+          <div className="super-notice super-notice-warn mt-6">
+            <p className="text-base text-ink-soft">
               Your bank connected. Building twelve months of history is taking longer than usual —
               nothing is wrong, and you don&rsquo;t have to wait here.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
-              <button className="btn-primary" onClick={() => navigate(`/f/${fileId}/review`)}>
+              <button
+                className="super-btn super-btn-primary"
+                onClick={() => navigate(`/f/${fileId}/review`)}
+              >
                 Carry on
               </button>
               <button
-                className="btn-secondary"
+                className="super-btn super-btn-outline"
                 onClick={() => {
                   attempts.current = 0;
                   setPhase({ kind: "assembling" });
@@ -579,9 +580,9 @@ export function BankPage() {
 
         {phase.kind === "idle" && (
           <>
-            {notice && <p className="mt-6 text-[13px] text-meta">{notice}</p>}
+            {notice && <p className="mt-6 text-sm text-ink-muted">{notice}</p>}
             <button
-              className="btn-primary mt-6"
+              className="super-btn super-btn-primary mt-6"
               onClick={() => void begin()}
               disabled={readOnly}
             >
@@ -596,15 +597,18 @@ export function BankPage() {
         )}
 
         {readOnly && (
-          <p className="mt-4 text-[13px] text-meta">
+          <p className="mt-4 text-sm text-ink-muted">
             This is a sample file, so there is nothing to connect.
           </p>
         )}
         {error && (
           <div className="mt-4">
-            <p className="text-[13px] text-error">{error}</p>
+            <p className="text-sm text-danger">{error}</p>
             {recovery && (
-              <button className="btn-secondary mt-3" onClick={() => navigate(recovery.to)}>
+              <button
+                className="super-btn super-btn-outline mt-3"
+                onClick={() => navigate(recovery.to)}
+              >
                 {recovery.label}
               </button>
             )}
@@ -630,17 +634,17 @@ export function BankPage() {
         existing document endpoint deliberately never transmits them.
       */}
         {phase.kind !== "linking" && (
-          <div className="mt-6 border-t border-line-light pt-4">
+          <div className="mt-6 border-t border-rule-soft pt-4">
             {manualOpen ? (
               <>
-                <p className="font-prose text-[15px] leading-relaxed text-ink-prose">
+                <p className="text-base text-ink-soft">
                   Upload the last twelve months of statements for any account you would use for the
                   deposit or your income. Select as many files as you like.
                 </p>
                 <input
                   type="file"
                   multiple
-                  className="mt-3 block w-full text-[14px] text-ink-soft file:mr-3 file:rounded-control file:border file:border-line file:bg-surface file:px-4 file:py-2 file:text-[14px] file:text-ink-soft"
+                  className="mt-3 block w-full text-sm text-ink-soft file:mr-3 file:rounded-pill file:border file:border-rule file:bg-raised file:px-4 file:py-2 file:text-sm file:text-ink-soft"
                   onChange={(e) =>
                     setStatements(Array.from(e.target.files ?? []).map((f) => f.name))
                   }
@@ -649,12 +653,12 @@ export function BankPage() {
                   <>
                     <ul className="mt-3 flex flex-col gap-1">
                       {statements.map((name) => (
-                        <li key={name} className="text-[13px] text-ink-soft">
+                        <li key={name} className="text-sm text-ink-soft">
                           {name}
                         </li>
                       ))}
                     </ul>
-                    <p className="mt-3 text-[13px] leading-relaxed text-olive">
+                    <p className="mt-3 text-sm text-ok">
                       Got them — {statements.length} file{statements.length === 1 ? "" : "s"}. We
                       will read these and come back to you. It takes longer than connecting, so if
                       the connection starts working, use that instead.
@@ -665,7 +669,7 @@ export function BankPage() {
             ) : (
               <button
                 type="button"
-                className="text-[13px] text-meta underline underline-offset-2"
+                className="super-link-quiet text-sm"
                 onClick={() => setManualOpen(true)}
               >
                 {busy
@@ -696,12 +700,12 @@ function middleScore(scores: { score: number }[]): number {
 function Figure({ label, value, note }: { label: string; value: string | null; note?: string }) {
   return (
     <div>
-      <dt className="text-[13px] text-subtle">{label}</dt>
-      <dd className="figure mt-1 text-[22px] leading-none text-ink-editorial">
-        {value ?? <span className="text-subtle">—</span>}
+      <dt className="text-sm text-ink-faint">{label}</dt>
+      <dd className="super-figure mt-1 text-2xl text-ink">
+        {value ?? <span className="text-ink-faint">—</span>}
       </dd>
-      {note && <p className="mt-1 text-[12px] text-meta">{note}</p>}
-      {!value && !note && <p className="mt-1 text-[12px] text-meta">still working this out</p>}
+      {note && <p className="mt-1 text-xs text-ink-muted">{note}</p>}
+      {!value && !note && <p className="mt-1 text-xs text-ink-muted">still working this out</p>}
     </div>
   );
 }

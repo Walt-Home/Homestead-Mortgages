@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Stepper } from "./components/Stepper.js";
 import { PrototypeBanner } from "./components/PrototypeBanner.js";
 import { DebugPanel } from "./components/DebugPanel.js";
+import { Wordmark } from "./components/Wordmark.js";
 import { api, ApiError, type Assessment } from "./lib/api.js";
 import { useAuth } from "./lib/auth.js";
 import { useLoanFile } from "./lib/file.js";
@@ -24,7 +25,7 @@ export function App() {
 
   // Render nothing rather than the sign-in page while the session is still
   // being resolved — a signed-in person should never see a sign-in flash.
-  if (status === "loading") return <div className="min-h-screen bg-canvas" />;
+  if (status === "loading") return <div className="min-h-screen bg-ground" />;
 
   if (status === "signed-out") {
     return (
@@ -96,7 +97,7 @@ export function App() {
 function ResumeToStage() {
   const { fileId } = useParams<{ fileId: string }>();
   const { data, isLoading } = useLoanFile(fileId);
-  if (isLoading) return <p className="text-[13px] text-subtle">Finding your place…</p>;
+  if (isLoading) return <p className="text-sm text-ink-faint">Finding your place…</p>;
   const stage = data?.file.stage;
   if (!stage) return <Navigate to="/" replace />;
   return <Navigate to={`/f/${fileId}/${STAGE_TO_SCREEN[stage]}`} replace />;
@@ -159,18 +160,16 @@ function FileShell() {
 
 function NotYours() {
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="min-h-screen bg-ground">
       <PrototypeBanner />
       <Header />
       <div className="mx-auto max-w-2xl px-5 py-16 sm:px-6">
-        <h1 className="font-brand text-[24px] font-semibold text-ink-editorial">
-          We can&rsquo;t find that file
-        </h1>
-        <p className="mt-3 font-prose text-[16px] leading-relaxed text-ink-prose">
+        <h1 className="font-display text-2xl text-ink">We can&rsquo;t find that file</h1>
+        <p className="mt-3 text-base text-ink-soft">
           It may belong to a different account, or it may have been deleted. Files are private to
           whoever started them, so a link to one will not open for anybody else.
         </p>
-        <a href="/" className="btn-primary mt-6 inline-block">
+        <a href="/" className="super-btn super-btn-primary mt-6">
           Back to your files
         </a>
       </div>
@@ -180,7 +179,7 @@ function NotYours() {
 
 function Chrome() {
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="min-h-screen bg-ground">
       <PrototypeBanner />
       <Header />
       <Outlet />
@@ -191,19 +190,16 @@ function Chrome() {
 function Header({ children }: { children?: React.ReactNode }) {
   const { user, signOut } = useAuth();
   return (
-    <header className="border-b border-line-light bg-app/70 backdrop-blur">
+    <header className="border-b border-rule-soft bg-ground/70 backdrop-blur">
       <div className="mx-auto max-w-2xl px-5 py-4 sm:px-6">
         <div className="flex items-center justify-between gap-4">
-          <a href="/" className="font-brand text-[15px] font-bold tracking-tight text-gold">
-            Homestead Mortgages
+          <a href="/">
+            <Wordmark />
           </a>
           {user && (
-            <div className="flex items-center gap-3 text-[12px]">
-              <span className="hidden text-meta sm:inline">{user.email}</span>
-              <button
-                className="text-subtle underline-offset-2 hover:underline"
-                onClick={() => void signOut()}
-              >
+            <div className="flex items-center gap-3 text-xs">
+              <span className="hidden text-ink-muted sm:inline">{user.email}</span>
+              <button className="super-link-quiet" onClick={() => void signOut()}>
                 Sign out
               </button>
             </div>
@@ -242,15 +238,15 @@ function Shell({
   file?: unknown;
 }) {
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="min-h-screen bg-ground">
       <PrototypeBanner />
       <Header>
         <Stepper current={screen} fileId={fileId} reached={reached} />
       </Header>
 
       {isDemo && (
-        <div className="border-b border-olive-border bg-olive-light">
-          <p className="mx-auto max-w-2xl px-5 py-2 text-[12px] text-olive sm:px-6">
+        <div className="border-b border-ok/30 bg-ok/10">
+          <p className="mx-auto max-w-2xl px-5 py-2 text-xs text-ok sm:px-6">
             A sample borrower, shared with everyone and read-only.
           </p>
         </div>

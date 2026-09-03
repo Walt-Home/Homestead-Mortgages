@@ -1,0 +1,33 @@
+{
+  "name": "@hm/brand",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Supermortgage design tokens, Tailwind preset and component CSS. tokens.mjs is the source of truth; tokens.css is generated from it.",
+  "type": "module",
+  "main": "tokens.mjs",
+  "exports": {
+    ".": "./tokens.mjs",
+    "./tailwind": "./tailwind-preset.mjs",
+    "./tokens.css": "./tokens.css",
+    "./base.css": "./base.css",
+    "./components.css": "./components.css",
+    "./assets/*": "./assets/*"
+  },
+  "files": [
+    "tokens.mjs",
+    "tailwind-preset.mjs",
+    "tokens.css",
+    "base.css",
+    "components.css",
+    "assets"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "verify": "node scripts/build.mjs --verify",
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
+  }
+}

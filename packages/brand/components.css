@@ -1,0 +1,328 @@
+/*
+ * Supermortgage components, in plain CSS against the tokens.
+ *
+ * Class names follow Doug's prototype (`.super-*`) so markup ports between
+ * the marketing site and the product without renaming. No Tailwind here on
+ * purpose: this file works in any consumer that loads tokens.css first.
+ *
+ * `@layer components` puts these below utilities under Tailwind (so `mt-6`
+ * on a `.super-btn` still wins) and is a harmless native layer elsewhere.
+ */
+@layer components {
+  /* ── Buttons ──────────────────────────────────────────────────────────
+     One vocabulary: `primary` is the one white button a screen gets;
+     `outline` is the red secondary; `solid` is red emphasis; `danger` is
+     the destructive confirm; `ghost` is a text action. Same height, same
+     pill, same press. */
+  .super-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    border-radius: var(--sm-radius-pill);
+    padding: 9px 20px;
+    font-family: var(--sm-font-text);
+    font-size: var(--sm-text-sm);
+    line-height: var(--sm-leading-sm);
+    font-weight: var(--sm-weight-medium);
+    white-space: nowrap;
+    text-decoration: none;
+    transition:
+      transform var(--sm-duration-fast) var(--sm-ease-out),
+      background-color var(--sm-duration-fast),
+      border-color var(--sm-duration-fast),
+      color var(--sm-duration-fast),
+      opacity var(--sm-duration-fast);
+  }
+  .super-btn:active:not(:disabled) {
+    transform: scale(0.95);
+  }
+  .super-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .super-btn-primary {
+    background: var(--sm-color-primary);
+    border-color: var(--sm-color-primary);
+    color: var(--sm-color-primary-ink);
+    font-weight: var(--sm-weight-semibold);
+  }
+  .super-btn-primary:hover:not(:disabled) {
+    background: rgb(var(--sm-color-primary-rgb) / 0.9);
+    border-color: rgb(var(--sm-color-primary-rgb) / 0.9);
+  }
+
+  .super-btn-outline {
+    background: transparent;
+    border-color: var(--sm-color-accent);
+    color: var(--sm-color-accent);
+  }
+  .super-btn-outline:hover:not(:disabled) {
+    background: rgb(var(--sm-color-accent-rgb) / 0.1);
+  }
+
+  .super-btn-solid {
+    background: var(--sm-color-accent);
+    border-color: var(--sm-color-accent);
+    color: var(--sm-color-accent-ink);
+  }
+  .super-btn-solid:hover:not(:disabled) {
+    background: rgb(var(--sm-color-accent-rgb) / 0.9);
+    border-color: rgb(var(--sm-color-accent-rgb) / 0.9);
+  }
+
+  .super-btn-danger {
+    background: transparent;
+    border-color: var(--sm-color-danger);
+    color: var(--sm-color-danger);
+  }
+  .super-btn-danger:hover:not(:disabled) {
+    background: rgb(var(--sm-color-danger-rgb) / 0.12);
+  }
+
+  .super-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--sm-color-ink-muted);
+    padding-inline: 8px;
+  }
+  .super-btn-ghost:hover:not(:disabled) {
+    color: var(--sm-color-ink);
+  }
+
+  /* The hero call to action, at the prototype's size. Marketing surfaces
+     only; inside the product every primary action is a .super-btn-primary. */
+  .super-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 0;
+    border-radius: var(--sm-radius-pill);
+    background: var(--sm-color-primary);
+    color: var(--sm-color-primary-ink);
+    padding: 20px 44px;
+    font-family: var(--sm-font-text);
+    font-size: 17px;
+    line-height: 1.5;
+    font-weight: var(--sm-weight-semibold);
+    text-decoration: none;
+    transition:
+      transform var(--sm-duration-fast) var(--sm-ease-out),
+      background-color var(--sm-duration-fast);
+  }
+  .super-cta:hover {
+    background: rgb(var(--sm-color-primary-rgb) / 0.9);
+  }
+  .super-cta:active {
+    transform: scale(0.95);
+  }
+  @media (max-width: 640px) {
+    .super-cta {
+      width: min(100%, 276px);
+      padding: 18px 30px;
+    }
+  }
+
+  /* ── Links ─────────────────────────────────────────────────────────── */
+  .super-link {
+    color: var(--sm-color-accent);
+    font-weight: var(--sm-weight-medium);
+    text-decoration: none;
+  }
+  .super-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  /* A quiet link for the escape hatches: "Back", "Pull again", "Never mind". */
+  .super-link-quiet {
+    color: var(--sm-color-ink-muted);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: transparent;
+    transition:
+      color var(--sm-duration-fast),
+      text-decoration-color var(--sm-duration-fast);
+  }
+  .super-link-quiet:hover {
+    color: var(--sm-color-ink);
+    text-decoration-color: currentColor;
+  }
+
+  /* ── Fields ────────────────────────────────────────────────────────── */
+  .super-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: var(--sm-text-sm);
+    line-height: var(--sm-leading-sm);
+    font-weight: var(--sm-weight-medium);
+    color: var(--sm-color-ink-soft);
+  }
+
+  /* 16px, never smaller: iOS Safari zooms the viewport on focus for any input
+     under 16px and does not zoom back out. */
+  .super-input {
+    display: block;
+    width: 100%;
+    border: 1px solid var(--sm-color-rule-strong);
+    border-radius: var(--sm-radius-md);
+    background: var(--sm-color-surface);
+    color: var(--sm-color-ink);
+    padding: 10px 12px;
+    font-family: var(--sm-font-text);
+    font-size: 16px;
+    line-height: 24px;
+    transition:
+      border-color var(--sm-duration-fast),
+      box-shadow var(--sm-duration-fast);
+  }
+  .super-input::placeholder {
+    color: var(--sm-color-ink-muted);
+  }
+  .super-input:focus {
+    outline: none;
+    border-color: var(--sm-color-focus);
+    box-shadow: 0 0 0 3px rgb(var(--sm-color-focus-rgb) / 0.3);
+  }
+  .super-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .super-input[aria-invalid="true"] {
+    border-color: var(--sm-color-danger);
+  }
+  textarea.super-input {
+    min-height: 72px;
+    resize: vertical;
+  }
+  /* Selects keep the native control; `color-scheme: dark` on html draws it dark. */
+  select.super-input {
+    cursor: pointer;
+  }
+
+  /* ── Surfaces ──────────────────────────────────────────────────────── */
+  .super-card {
+    border: 1px solid var(--sm-color-rule);
+    border-radius: var(--sm-radius-lg);
+    background: var(--sm-color-ground);
+    padding: 24px;
+  }
+
+  /* A notice is a tinted box with a status. `info` is the neutral one. */
+  .super-notice {
+    border: 1px solid var(--sm-color-rule);
+    border-radius: var(--sm-radius-md);
+    background: var(--sm-color-raised);
+    padding: 14px 16px;
+  }
+  .super-notice-ok {
+    border-color: rgb(var(--sm-color-ok-rgb) / 0.3);
+    background: rgb(var(--sm-color-ok-rgb) / 0.1);
+  }
+  .super-notice-warn {
+    border-color: rgb(var(--sm-color-warn-rgb) / 0.3);
+    background: rgb(var(--sm-color-warn-rgb) / 0.1);
+  }
+  .super-notice-danger {
+    border-color: rgb(var(--sm-color-danger-rgb) / 0.3);
+    background: rgb(var(--sm-color-danger-rgb) / 0.1);
+  }
+
+  /* A pill states a status in one word: Verified, Connected. */
+  .super-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: var(--sm-radius-pill);
+    padding: 4px 12px;
+    font-size: var(--sm-text-xs);
+    line-height: var(--sm-leading-xs);
+    font-weight: var(--sm-weight-medium);
+    background: var(--sm-color-raised);
+    color: var(--sm-color-ink-soft);
+  }
+  .super-pill-ok {
+    background: rgb(var(--sm-color-ok-rgb) / 0.12);
+    color: var(--sm-color-ok);
+  }
+  .super-pill-warn {
+    background: rgb(var(--sm-color-warn-rgb) / 0.12);
+    color: var(--sm-color-warn);
+  }
+  .super-pill-danger {
+    background: rgb(var(--sm-color-danger-rgb) / 0.12);
+    color: var(--sm-color-danger);
+  }
+
+  /* ── Text ──────────────────────────────────────────────────────────── */
+  /* Money and any figure the borrower is meant to weigh. Tabular, so columns line up. */
+  .super-figure {
+    font-family: var(--sm-font-text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .super-eyebrow {
+    font-size: var(--sm-text-xs);
+    line-height: 1;
+    font-weight: var(--sm-weight-medium);
+    letter-spacing: var(--sm-tracking-label);
+    text-transform: uppercase;
+    color: var(--sm-color-ink-muted);
+  }
+
+  /* The prototype's headline, verbatim. */
+  .super-h1 {
+    margin: 0;
+    font-family: var(--sm-font-display);
+    font-size: var(--sm-text-hero);
+    line-height: var(--sm-leading-hero);
+    font-weight: var(--sm-weight-regular);
+    letter-spacing: var(--sm-tracking-display);
+    max-width: var(--sm-measure-hero);
+    text-wrap: balance;
+  }
+  .super-sub {
+    margin: 0;
+    color: var(--sm-color-ink-soft);
+    font-size: clamp(15px, 1.3vw, 18px);
+    line-height: 1.5;
+    max-width: var(--sm-measure-sub);
+  }
+  @media (max-width: 640px) {
+    .super-h1 {
+      font-size: clamp(31px, 8.5vw, 38px);
+      line-height: 1.05;
+    }
+    .super-sub {
+      max-width: 34ch;
+      line-height: 1.45;
+    }
+  }
+
+  /* ── Toast ─────────────────────────────────────────────────────────── */
+  .super-toast {
+    position: relative;
+    display: grid;
+    gap: 4px;
+    border: 1px solid var(--sm-color-rule);
+    border-radius: var(--sm-radius-sm);
+    background: var(--sm-color-ground);
+    color: var(--sm-color-ink);
+    padding: 24px 32px 24px 24px;
+    box-shadow: var(--sm-shadow-toast);
+    max-width: 420px;
+  }
+  .super-toast-title {
+    font-size: var(--sm-text-sm);
+    line-height: var(--sm-leading-sm);
+    font-weight: var(--sm-weight-semibold);
+  }
+  .super-toast-body {
+    font-size: var(--sm-text-sm);
+    line-height: var(--sm-leading-sm);
+    opacity: 0.9;
+  }
+}

@@ -52,15 +52,17 @@ export function PayrollPage() {
         return (
           <div>
             {employer && (
-              <p className="text-[15px] text-ink-editorial">
+              <p className="text-base text-ink">
                 {employer.position} at {employer.employerName}
               </p>
             )}
-            <ul className="mt-4 space-y-1.5 text-[13px]">
+            <ul className="mt-4 space-y-1.5 text-sm">
               {(payroll?.incomeSources ?? []).map((s) => (
                 <li key={s.type} className="flex justify-between">
                   <span className="capitalize text-ink-soft">{s.type.replace(/_/g, " ")}</span>
-                  <span className="figure text-meta">${s.monthlyAmount.toLocaleString()}/mo</span>
+                  <span className="super-figure text-ink">
+                    ${s.monthlyAmount.toLocaleString()}/mo
+                  </span>
                 </li>
               ))}
             </ul>
@@ -114,11 +116,11 @@ export function IrsPage() {
       renderResult={(data) => {
         const list = (data as { taxYear: number; wages: number }[] | null) ?? [];
         return (
-          <ul className="space-y-1.5 text-[13px]">
+          <ul className="space-y-1.5 text-sm">
             {list.map((t) => (
               <li key={t.taxYear} className="flex justify-between">
                 <span className="text-ink-soft">{t.taxYear} wages</span>
-                <span className="figure text-meta">${t.wages.toLocaleString()}</span>
+                <span className="super-figure text-ink">${t.wages.toLocaleString()}</span>
               </li>
             ))}
           </ul>

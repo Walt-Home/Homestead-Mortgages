@@ -3,8 +3,8 @@
  *
  * Three tiers, and product code only ever touches the last one:
  *
- *   primitives  raw values named by what they are      grey-600, red-500, serif
- *   semantic    roles that point at primitives          rule → grey-600, accent → red-500
+ *   primitives  raw values named by what they are      gray-600, red-500, serif
+ *   semantic    roles that point at primitives          rule → gray-600, accent → red-500
  *   outputs     generated from the semantic tier        border-rule, var(--sm-color-rule)
  *
  * To change the brand red, edit ONE primitive and every button, link, focus
@@ -32,25 +32,25 @@ export const primitives = Object.freeze({
     black: "#000000",
     white: "#FFFFFF",
 
-    // Greys, light to dark. Steps are named by lightness so a new one can be
+    // Grays, light to dark. Steps are named by lightness so a new one can be
     // slotted in without renaming its neighbours.
-    "grey-50": "#ECECEC", // the prototype's supporting-copy grey
-    "grey-200": "#A3A3A3", // hsl(0 0% 63.9%) — muted foreground
-    "grey-400": "#8A8A8A", // proposed: incidental text, still AA on black
-    "grey-500": "#6B6B6B", // proposed: a boundary grey that clears 3:1 on black
-    "grey-600": "#4A4A4A", // hsl(0 0% 29%) — the prototype's border
-    "grey-700": "#3B3B3B", // mobile-menu border
-    "grey-800": "#2A2A2A", // the scene's hairline. No role points here; it is
+    "gray-50": "#ECECEC", // the prototype's supporting-copy gray
+    "gray-200": "#A3A3A3", // hsl(0 0% 63.9%) — muted foreground
+    "gray-400": "#8A8A8A", // proposed: incidental text, still AA on black
+    "gray-500": "#6B6B6B", // proposed: a boundary gray that clears 3:1 on black
+    "gray-600": "#4A4A4A", // hsl(0 0% 29%) — the prototype's border
+    "gray-700": "#3B3B3B", // mobile-menu border
+    "gray-800": "#2A2A2A", // the scene's hairline. No role points here; it is
     // marketing scenery (see docs/brand.md), kept so the palette is complete.
-    "grey-850": "#1A1A1A", // hsl(0 0% 10%) — secondary / muted fills
-    "grey-900": "#111111", // mobile-menu surface
-    "grey-950": "#0B0B0E", // the road
+    "gray-850": "#1A1A1A", // hsl(0 0% 10%) — secondary / muted fills
+    "gray-900": "#111111", // mobile-menu surface
+    "gray-950": "#0B0B0E", // the road
 
     "red-500": "#FF3C2E", // hsl(4 100% 59%) — Super Red. The one accent.
     "red-300": "#FF8A8A", // proposed: error text that is not the accent
 
     // Borrowed from the pixel world for the two states a product needs and a
-    // landing page does not. Scenery colours, promoted deliberately.
+    // landing page does not. Scenery colors, promoted deliberately.
     "green-500": "#2FAE4A",
     "gold-500": "#E0A41F",
   }),
@@ -68,7 +68,7 @@ export const primitives = Object.freeze({
 /* ── Semantic ───────────────────────────────────────────────────────────── */
 
 /**
- * Colour roles. Values are primitive names, never hex.
+ * Color roles. Values are primitive names, never hex.
  *
  * The grammar: `ground` is what the page is; `surface` and `raised` sit on
  * it; `ink` writes on it; `rule` divides it; `accent` is what you can act on;
@@ -79,21 +79,21 @@ export const primitives = Object.freeze({
 export const semantic = Object.freeze({
   color: Object.freeze({
     ground: "black",
-    surface: "grey-900",
-    raised: "grey-850",
+    surface: "gray-900",
+    raised: "gray-850",
 
     // Four steps of de-emphasis, and no more. Homestead's palette had seven
     // and its own docs admit some were aliased by accident; on black the
     // useful range runs out below `ink-faint`, which is already at the AA
     // floor for small text.
     ink: "white", // headings, and anything that must be read
-    "ink-soft": "grey-50", // body copy
-    "ink-muted": "grey-200", // labels, secondary detail
-    "ink-faint": "grey-400", // captions, disclaimers, incidental
+    "ink-soft": "gray-50", // body copy
+    "ink-muted": "gray-200", // labels, secondary detail
+    "ink-faint": "gray-400", // captions, disclaimers, incidental
 
-    rule: "grey-600", // structural: card, nav, toast, menu edges
-    "rule-soft": "grey-700", // dividers inside a surface — quieter than its own edge
-    "rule-strong": "grey-500", // input boundaries and anything carrying meaning (3:1)
+    rule: "gray-600", // structural: card, nav, toast, menu edges
+    "rule-soft": "gray-700", // dividers inside a surface — quieter than its own edge
+    "rule-strong": "gray-500", // input boundaries and anything carrying meaning (3:1)
 
     accent: "red-500",
     "accent-ink": "black",
@@ -184,19 +184,19 @@ export const breakpoint = Object.freeze({ mobile: "640px" });
 
 /* ── Resolution helpers ─────────────────────────────────────────────────── */
 
-/** Hex of a semantic colour role, e.g. `resolveColor("accent")` → "#FF3C2E". */
+/** Hex of a semantic color role, e.g. `resolveColor("accent")` → "#FF3C2E". */
 export function resolveColor(role) {
   const primitive = semantic.color[role];
-  if (!primitive) throw new Error(`unknown colour role "${role}"`);
+  if (!primitive) throw new Error(`unknown color role "${role}"`);
   const hex = primitives.color[primitive];
-  if (!hex) throw new Error(`colour role "${role}" points at unknown primitive "${primitive}"`);
+  if (!hex) throw new Error(`color role "${role}" points at unknown primitive "${primitive}"`);
   return hex;
 }
 
 /** "#FF3C2E" → "255 60 46", the channel form Tailwind needs for opacity modifiers. */
 export function hexToChannels(hex) {
   const m = /^#([0-9a-f]{6})$/i.exec(hex);
-  if (!m) throw new Error(`not a six-digit hex colour: ${hex}`);
+  if (!m) throw new Error(`not a six-digit hex color: ${hex}`);
   const n = parseInt(m[1], 16);
   return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
 }

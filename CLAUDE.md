@@ -119,7 +119,7 @@ The product wears **Supermortgage**: black ground, one red accent, Georgia
 display, Helvetica text. The identity is documented in `docs/brand.md`;
 `packages/brand` is how it reaches a screen.
 
-**To change a colour or a font, edit `packages/brand/tokens.mjs` and run
+**To change a color or a font, edit `packages/brand/tokens.mjs` and run
 `npm run brand:build`.** That is the whole procedure, and it is the reason the
 package exists. `tokens.css` is generated from that file, the Tailwind preset
 reads that file, and every utility, custom property and `.super-*` component
@@ -129,8 +129,8 @@ stale, exactly like `requirements:verify`.
 Three tiers, and product code only ever names the last two:
 
 ```
-primitives   grey-600, red-500, serif           named by what they ARE
-semantic     rule → grey-600, accent → red-500  named by what they are FOR
+primitives   gray-600, red-500, serif           named by what they ARE
+semantic     rule → gray-600, accent → red-500  named by what they are FOR
 outputs      border-rule, --sm-color-rule       generated; never hand-edited
 ```
 
@@ -140,7 +140,7 @@ not a token cannot reach a component by accident, and a typo'd class is a class
 that generates nothing rather than one that silently works. If you need a
 value, add the token.
 
-**Nothing in `apps/web` declares a colour, a face or a size.**
+**Nothing in `apps/web` declares a color, a face or a size.**
 `apps/web/src/index.css` is an assembly of imports and nothing else. A style
 that belongs to the brand belongs in `packages/brand`, where the marketing
 surface and any future app get it too.
@@ -151,11 +151,11 @@ weights are fine on sans text.
 
 **`danger` is never the accent.** Red means "you can act on this". A screen
 that also uses red for "something is wrong" has made both meaningless, so the
-error colour is its own primitive and a test enforces the split.
+error color is its own primitive and a test enforces the split.
 
 The contrast floors are tests, not guidance — `packages/brand/test` fails the
-build if a token edit drops body text, a label, a status colour or an input
-border below its WCAG minimum. That is what makes changing a colour safe.
+build if a token edit drops body text, a label, a status color or an input
+border below its WCAG minimum. That is what makes changing a color safe.
 
 ## Storage
 
@@ -203,6 +203,15 @@ fail when that constraint blocks it. It logs and continues, leaving a service
 with no invoker bindings that 403s everything and reads exactly like a broken
 container. The deploy workflow asserts the binding afterwards and fails if it
 is missing.
+
+## House style
+
+American English, in code and in prose: color, gray, authorize, behavior,
+license. Token names follow it too — the palette primitives are `gray-*`.
+
+Some older comments and a few requirement statements still carry British
+spellings from earlier work. Leave them where they sit; correct one only when
+you are already editing that line, so the fix never arrives as its own diff.
 
 ## Commands
 

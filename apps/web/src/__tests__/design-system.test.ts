@@ -80,7 +80,7 @@ describe("no component names a value the tokens cannot reach", () => {
       expect(bad.map((c) => `line ${c.line}: ${c.cls}`)).toEqual([]);
     });
 
-    it(`${file.name} uses no colour outside the token set`, () => {
+    it(`${file.name} uses no color outside the token set`, () => {
       // `transparent`, `current` and `inherit` survive in the preset; the rest
       // of Tailwind's palette does not.
       const bad = classes.filter(
@@ -90,14 +90,14 @@ describe("no component names a value the tokens cannot reach", () => {
       expect(bad.map((c) => `line ${c.line}: ${c.cls}`)).toEqual([]);
     });
 
-    it(`${file.name} uses no arbitrary colour, size or radius`, () => {
+    it(`${file.name} uses no arbitrary color, size or radius`, () => {
       const bad = classes.filter((c) => ARBITRARY.test(bare(c.cls)));
       expect(bad.map((c) => `line ${c.line}: ${c.cls}`)).toEqual([]);
     });
 
     /**
      * The old component layer was unprefixed: `card`, `figure`, `btn-primary`.
-     * Those selectors are gone, and unlike a retired colour they leave no
+     * Those selectors are gone, and unlike a retired color they leave no
      * trace — a `.card` renders as an unstyled div, which reads as a layout
      * bug rather than a missing stylesheet.
      */
@@ -150,7 +150,7 @@ describe("brand rules that a class list alone would not catch", () => {
   }
 
   /**
-   * One white button per screen is the rule the whole colour system rests on:
+   * One white button per screen is the rule the whole color system rests on:
    * `primary` is the thing you came to do, `accent` is everything around it.
    * This cannot count per rendered screen, but a file with a crowd of them has
    * certainly broken it.
@@ -191,7 +191,7 @@ describe("the app defines no styling of its own", () => {
     expect(declarations).toEqual([]);
   });
 
-  it("no component hardcodes a hex colour in a style prop", () => {
+  it("no component hardcodes a hex color in a style prop", () => {
     const offenders = FILES.filter((f) => /style=\{\{[^}]*#[0-9a-fA-F]{3,8}/.test(f.text)).map(
       (f) => f.name,
     );

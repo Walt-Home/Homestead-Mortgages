@@ -3,7 +3,7 @@
  *
  * Everything visual comes from @hm/brand: the custom properties, the element
  * defaults, and the `.super-*` components. Nothing in this file declares a
- * colour, a font or a size — if you find yourself wanting to, the token
+ * color, a font or a size — if you find yourself wanting to, the token
  * belongs in packages/brand/tokens.mjs instead, where it reaches the
  * marketing site and any future surface at the same time.
  *

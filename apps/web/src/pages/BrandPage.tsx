@@ -1,5 +1,5 @@
 /**
- * /brand — the shareable one-pager: colours, fonts, logo.
+ * /brand — the shareable one-pager: colors, fonts, logo.
  *
  * Public, and deliberately outside the auth gate, because the people who most
  * need it are the ones without an account: Doug, whoever is drawing the next
@@ -15,7 +15,7 @@
  * the role — `text-2xl`, not `text-${step}`. Tailwind scans this file as text,
  * so an interpolated class name generates no CSS at all.
  *
- * Keep this page to colour, type and the mark. The full identity — voice,
+ * Keep this page to color, type and the mark. The full identity — voice,
  * motion, the pixel world, open questions — lives in docs/brand.md, and the
  * package API in packages/brand/README.md.
  */
@@ -23,11 +23,11 @@
 import { useEffect, useState } from "react";
 import { Lockup, Mark, PRODUCT_NAME, Wordmark } from "../components/Wordmark.js";
 
-/** Semantic colour roles, grouped the way somebody picking one would think. */
-const COLOUR_GROUPS: { title: string; note: string; roles: [string, string][] }[] = [
+/** Semantic color roles, grouped the way somebody picking one would think. */
+const COLOR_GROUPS: { title: string; note: string; roles: [string, string][] }[] = [
   {
     title: "Surfaces",
-    note: "Black is the ground, never a surface colour. Two steps up from it, and no further.",
+    note: "Black is the ground, never a surface color. Two steps up from it, and no further.",
     roles: [
       ["ground", "The page itself"],
       ["surface", "Inputs and menus"],
@@ -66,7 +66,7 @@ const COLOUR_GROUPS: { title: string; note: string; roles: [string, string][] }[
   },
   {
     title: "Status",
-    note: "State, never decoration. Red is the accent, so errors get a colour of their own.",
+    note: "State, never decoration. Red is the accent, so errors get a color of their own.",
     roles: [
       ["ok", "Verified, connected, done"],
       ["warn", "Needs attention"],
@@ -76,7 +76,7 @@ const COLOUR_GROUPS: { title: string; note: string; roles: [string, string][] }[
 ];
 
 /**
- * The four sanctioned colour treatments.
+ * The four sanctioned color treatments.
  *
  * Named with primitives rather than semantic roles on purpose. This page
  * documents the palette, and the system has no role for "a sheet of white
@@ -145,7 +145,7 @@ const SCALE = [
   { step: "xs", size: "text-xs" },
 ];
 
-const COLOUR_PROPS = COLOUR_GROUPS.flatMap((g) => g.roles.map(([role]) => `--sm-color-${role}`));
+const COLOR_PROPS = COLOR_GROUPS.flatMap((g) => g.roles.map(([role]) => `--sm-color-${role}`));
 const TYPE_PROPS = [
   ...FACES.map((f) => `--sm-font-${f.role}`),
   ...SCALE.map((s) => `--sm-text-${s.step}`),
@@ -165,7 +165,7 @@ function useTokens(properties: string[]): Record<string, string> {
 }
 
 export function BrandPage() {
-  const colours = useTokens(COLOUR_PROPS);
+  const colors = useTokens(COLOR_PROPS);
   const type = useTokens(TYPE_PROPS);
 
   return (
@@ -216,11 +216,11 @@ export function BrandPage() {
           </Specimen>
         </div>
 
-        <h3 className="mt-8 text-base font-medium text-ink">Colour</h3>
+        <h3 className="mt-8 text-base font-medium text-ink">Color</h3>
         <p className="mt-1 max-w-measure-prose text-sm text-ink-muted">
           Four treatments, and no others. Every piece paints with{" "}
           <code className="font-mono">currentColor</code>, so these are the same three components
-          with the text colour changed.
+          with the text color changed.
         </p>
         <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {LOGO_VARIANTS.map((variant) => (
@@ -244,16 +244,16 @@ export function BrandPage() {
         <h3 className="mt-8 text-base font-medium text-ink">Rules</h3>
         <ul className="mt-3 flex flex-col gap-2 text-sm text-ink-soft">
           <li>· Crisp edges, whole multiples, never anti-aliased and never re-drawn by hand.</li>
-          <li>· Only the four treatments above. No gradient, no outline, no second colour.</li>
+          <li>· Only the four treatments above. No gradient, no outline, no second color.</li>
           <li>· Never below 22px, where the doorway stops resolving.</li>
           <li>· Clear space of one mark-width on every side.</li>
           <li>· In prose the name is one word, capital S: {PRODUCT_NAME}.</li>
         </ul>
       </Section>
 
-      {/* ── Colour ───────────────────────────────────────────────────────── */}
-      <Section title="Colour">
-        {COLOUR_GROUPS.map((group) => (
+      {/* ── Color ───────────────────────────────────────────────────────── */}
+      <Section title="Color">
+        {COLOR_GROUPS.map((group) => (
           <div key={group.title} className="mt-8 first:mt-0">
             <h3 className="text-base font-medium text-ink">{group.title}</h3>
             <p className="mt-1 max-w-measure-prose text-sm text-ink-muted">{group.note}</p>
@@ -273,7 +273,7 @@ export function BrandPage() {
                     <span className="block text-sm text-ink-muted">{use}</span>
                   </span>
                   <code className="super-figure shrink-0 font-mono text-sm uppercase text-ink-muted">
-                    {colours[`--sm-color-${role}`] || "—"}
+                    {colors[`--sm-color-${role}`] || "—"}
                   </code>
                 </li>
               ))}

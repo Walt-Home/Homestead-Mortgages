@@ -13,7 +13,7 @@
  *
  * NOT here, deliberately: the "not a loan offer, no credit is checked"
  * disclaimer. `PrototypeBanner` already says it at the top of every page, in
- * a colour people read, and saying it twice makes both quieter.
+ * a color people read, and saying it twice makes both quieter.
  */
 
 import { Link } from "react-router-dom";

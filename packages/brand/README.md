@@ -4,7 +4,7 @@ The Supermortgage design system as code: tokens, a Tailwind preset, and the
 component CSS. The identity itself is documented in `docs/brand.md`; this
 package is how it reaches a screen.
 
-## Change a colour or a font
+## Change a color or a font
 
 Edit **`tokens.mjs`**, then:
 
@@ -33,8 +33,8 @@ change the stack in `tokens.mjs`. Nothing else moves.
 ## The three tiers
 
 ```
-primitives   grey-600, red-500, serif          named by what they ARE
-semantic     rule → grey-600, accent → red-500   named by what they are FOR
+primitives   gray-600, red-500, serif          named by what they ARE
+semantic     rule → gray-600, accent → red-500   named by what they are FOR
 outputs      border-rule, --sm-color-rule        generated; never hand-edited
 ```
 
@@ -70,9 +70,9 @@ CSS custom properties are `--sm-*`. Component classes are `.super-*`, the
 prefix Doug's prototype uses, so markup ports between the marketing site and
 the product without renaming.
 
-| Semantic colour                    | Role                                                    |
+| Semantic color                     | Role                                                    |
 | ---------------------------------- | ------------------------------------------------------- |
-| `ground`                           | the page. Black. Never a "surface colour"               |
+| `ground`                           | the page. Black. Never a "surface color"                |
 | `surface`, `raised`                | one and two steps up: fields, menus, hover washes       |
 | `ink`, `ink-soft`, `ink-muted`     | text, supporting copy, labels                           |
 | `rule`, `rule-soft`, `rule-strong` | structural divider, hairline, input boundary            |
@@ -95,4 +95,4 @@ Components: `.super-btn` (+ `-primary`, `-outline`, `-solid`, `-danger`,
 3. Display type is Georgia at regular weight. `font-display` forces 400.
 4. One `.super-btn-primary` per screen. Red is for the actions around it.
 5. `danger` is never the same primitive as `accent`; the tests enforce it.
-6. Status colours (`ok`, `warn`, `danger`) are for state. Decoration uses greys.
+6. Status colors (`ok`, `warn`, `danger`) are for state. Decoration uses grays.

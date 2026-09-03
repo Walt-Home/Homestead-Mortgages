@@ -40,17 +40,17 @@ export function render() {
   push(" * Naming:");
   push(" *   --sm-<primitive>          raw value          --sm-red-500");
   push(" *   --sm-<primitive>-rgb      channels, for rgb(var(--x) / a)");
-  push(" *   --sm-color-<role>         semantic colour    --sm-color-accent → var(--sm-red-500)");
+  push(" *   --sm-color-<role>         semantic color    --sm-color-accent → var(--sm-red-500)");
   push(
     " *   --sm-font-<role>          semantic face      --sm-font-display → var(--sm-face-serif)",
   );
   push(" */");
   push(":root {");
 
-  push("  /* primitives · colour */");
+  push("  /* primitives · color */");
   for (const [name, hex] of Object.entries(primitives.color)) {
     if (!/^#[0-9A-F]{6}$/i.test(hex)) {
-      throw new Error(`primitive ${name} is not a hex colour: ${hex}`);
+      throw new Error(`primitive ${name} is not a hex color: ${hex}`);
     }
     // Lowercased on the way out purely so the generated file is Prettier-clean
     // and `npm run format` cannot make it disagree with the generator.
@@ -65,10 +65,10 @@ export function render() {
   }
 
   push("");
-  push("  /* semantic · colour (roles point at primitives; components use only these) */");
+  push("  /* semantic · color (roles point at primitives; components use only these) */");
   for (const [role, primitive] of Object.entries(semantic.color)) {
     if (!(primitive in primitives.color)) {
-      throw new Error(`colour role "${role}" points at unknown primitive "${primitive}"`);
+      throw new Error(`color role "${role}" points at unknown primitive "${primitive}"`);
     }
     push(`  --sm-color-${role}: var(--sm-${primitive});`);
     push(`  --sm-color-${role}-rgb: var(--sm-${primitive}-rgb);`);

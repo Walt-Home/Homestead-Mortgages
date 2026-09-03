@@ -9,7 +9,7 @@
  *
  * `theme.colors`, `fontFamily`, `fontSize`, `borderRadius` and `boxShadow`
  * are REPLACED, not extended. That is deliberate: there is no `text-gray-500`
- * and no `font-sans` to fall back on, so a colour or face that is not a token
+ * and no `font-sans` to fall back on, so a color or face that is not a token
  * cannot reach a component by accident. Add the token; the utility appears.
  */
 

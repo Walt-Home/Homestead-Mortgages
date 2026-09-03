@@ -1,6 +1,6 @@
 /*
  * Element defaults for a Supermortgage surface. Tokens only — nothing in this
- * file names a colour or a face directly.
+ * file names a color or a face directly.
  *
  * Wrapped in `@layer base` so that, under Tailwind, it lands after preflight
  * and before components; in a plain-CSS consumer it is a native cascade

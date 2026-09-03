@@ -35,7 +35,7 @@ function contrast(a, b) {
 }
 
 describe("token integrity", () => {
-  it("every colour role points at a primitive that exists", () => {
+  it("every color role points at a primitive that exists", () => {
     for (const role of Object.keys(semantic.color)) {
       expect(() => resolveColor(role)).not.toThrow();
     }
@@ -49,7 +49,7 @@ describe("token integrity", () => {
 
   it("no semantic role holds a raw value", () => {
     for (const [role, value] of Object.entries(semantic.color)) {
-      expect(value, `${role} must name a primitive, not a colour`).not.toMatch(/^#/);
+      expect(value, `${role} must name a primitive, not a color`).not.toMatch(/^#/);
     }
   });
 
@@ -85,20 +85,20 @@ describe("contrast floors (WCAG 2.x)", () => {
     });
   }
 
-  it("the accent and the danger colour are not the same primitive", () => {
+  it("the accent and the danger color are not the same primitive", () => {
     expect(semantic.color.accent).not.toBe(semantic.color.danger);
   });
 });
 
 describe("tailwind preset", () => {
-  it("exposes every colour role as an opacity-capable utility", () => {
+  it("exposes every color role as an opacity-capable utility", () => {
     const flat = JSON.stringify(preset.theme.colors);
     for (const role of Object.keys(semantic.color)) {
       expect(flat).toContain(`rgb(var(--sm-color-${role}-rgb) / <alpha-value>)`);
     }
   });
 
-  it("exposes no colour that is not a token", () => {
+  it("exposes no color that is not a token", () => {
     const heads = Object.keys(preset.theme.colors).filter(
       (k) => !["transparent", "current", "inherit"].includes(k),
     );

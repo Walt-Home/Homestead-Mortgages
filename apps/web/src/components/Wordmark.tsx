@@ -6,7 +6,7 @@
  * tight nav, the lockup everywhere else. `PRODUCT_NAME` is exported for the
  * places that need the name in a sentence rather than in a lockup.
  *
- * None of them sets a colour. All three paint with `currentColor`, so the
+ * None of them sets a color. All three paint with `currentColor`, so the
  * caller decides with a text utility and the same component covers white on
  * black, red on black, black on white and red on white. See /brand.
  */
@@ -63,7 +63,7 @@ export function Mark({ size = 26, className }: { size?: number; className?: stri
  *
  * SUPER light and MORTGAGE heavy — the weight change is the whole idea, that
  * the ordinary half is the bold one. This is a stand-in for the real artwork,
- * which is still a white PNG that cannot take a colour; replacing it is a
+ * which is still a white PNG that cannot take a color; replacing it is a
  * change to this component alone.
  */
 export function Wordmark({ className }: { className?: string }) {

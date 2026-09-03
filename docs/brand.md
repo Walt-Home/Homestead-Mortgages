@@ -24,7 +24,7 @@ for.
 
 Everything else follows from that split:
 
-- Black is the ground and never a "surface colour".
+- Black is the ground and never a "surface color".
 - Red is spent only on things a borrower can act on.
 - One display face, one text face, neither of them a web font.
 - Nothing has a shadow.
@@ -54,7 +54,7 @@ which is the only place the logo shows up outside the nav.
 | Mobile nav (≤ 640 px)     | 22 px, and that is the minimum     |
 | Large (marketing, social) | whole multiples of 12: 48, 96, 144 |
 
-Rules: crisp edges always, never anti-aliased, never any colour but red (or
+Rules: crisp edges always, never anti-aliased, never any color but red (or
 white on a red field). Scale to whole multiples where you can so the grid
 stays square.
 
@@ -82,7 +82,7 @@ In prose the name is **Supermortgage**. One word, capital S. Never
 SuperMortgage, never all caps outside the wordmark. The prototype's own copy
 is consistent about this ("Thanks for your interest in Supermortgage!").
 
-## Colour
+## Color
 
 ### Core
 
@@ -92,7 +92,7 @@ is consistent about this ("Thanks for your interest in Supermortgage!").
 | White     | `#FFFFFF` | `--foreground: 0 0% 100%`, `--primary` | Type, the wordmark, the one primary CTA.                           |
 | Super Red | `#FF3C2E` | `--accent: 4 100% 59%`, `--ring`       | The mark, account buttons, links, focus rings.                     |
 
-### Greys
+### Grays
 
 | Name     | Hex       | Token                                            | Role                                           |
 | -------- | --------- | ------------------------------------------------ | ---------------------------------------------- |
@@ -180,16 +180,16 @@ headline. Italic is unused in the prototype.
 
 ### Text
 
-| Role                 | Size / weight                          | Notes                                      |
-| -------------------- | -------------------------------------- | ------------------------------------------ |
-| Sub                  | `clamp(15px, 1.3vw, 18px)` / 400 / 1.5 | colour Sub `#ECECEC`; 52ch, 34ch on mobile |
-| Body                 | 16 / 400 / 1.5                         |                                            |
-| CTA                  | 17 / 600                               |                                            |
-| Button               | 14 / 500 / 20px                        |                                            |
-| Toast title          | 14 / 600                               |                                            |
-| Toast body           | 14 / 400 at 90 % opacity               |                                            |
-| Label (**proposed**) | 12 / 500, +0.08em, uppercase, Muted    | the prototype has no type below 14 px      |
-| Mono                 | 13 / 1.5                               |                                            |
+| Role                 | Size / weight                          | Notes                                     |
+| -------------------- | -------------------------------------- | ----------------------------------------- |
+| Sub                  | `clamp(15px, 1.3vw, 18px)` / 400 / 1.5 | color Sub `#ECECEC`; 52ch, 34ch on mobile |
+| Body                 | 16 / 400 / 1.5                         |                                           |
+| CTA                  | 17 / 600                               |                                           |
+| Button               | 14 / 500 / 20px                        |                                           |
+| Toast title          | 14 / 600                               |                                           |
+| Toast body           | 14 / 400 at 90 % opacity               |                                           |
+| Label (**proposed**) | 12 / 500, +0.08em, uppercase, Muted    | the prototype has no type below 14 px     |
+| Mono                 | 13 / 1.5                               |                                           |
 
 ## Space and shape
 
@@ -415,13 +415,13 @@ Principles:
 2. **Web fonts or system fonts.** Inter is linked and unused. Either the brand
    is Georgia and Helvetica Neue as installed and the link goes, or a licensed
    serif and sans get chosen and loaded.
-3. **A vector wordmark.** It is a white PNG today: cannot be recoloured,
+3. **A vector wordmark.** It is a white PNG today: cannot be recolored,
    blurs at 3×, has no dark-on-light version.
 4. **Light surfaces.** The prototype has no light mode. The borrower flow has
    forms, documents and PDFs. Decide whether those live on black, or whether
    the product side of the brand has a paper surface, and what red does there
    (3.5 : 1 on white).
-5. **Input borders.** `--input` is the same 29 % grey as the rules, 2.4 : 1 on
+5. **Input borders.** `--input` is the same 29 % gray as the rules, 2.4 : 1 on
    black. Inputs need a lighter border or a filled field.
 6. **The guarantee.** "Lowest rates guaranteed" and "automatically
    refinances" are advertising claims on a mortgage product. Before this copy
@@ -437,12 +437,12 @@ Principles:
 The system is code, in `packages/brand`, and `apps/web` wears it. See that
 package's README for the full API; the short version:
 
-**To change a colour or a font, edit `packages/brand/tokens.mjs` and run
+**To change a color or a font, edit `packages/brand/tokens.mjs` and run
 `npm run brand:build`.** Everything follows: the generated custom properties,
 the Tailwind utilities, and the `.super-*` components. `npm run brand:verify`
 runs in CI and fails if the generated CSS was not rebuilt.
 
-Three tiers. Primitives are named for what they are (`red-500`, `grey-600`,
+Three tiers. Primitives are named for what they are (`red-500`, `gray-600`,
 `serif`), semantic roles for what they are for (`accent`, `rule`, `display`),
 and the outputs are generated. Product code names roles only, which is what
 makes a re-theme a one-file edit rather than a search across 6,500 lines.
@@ -450,7 +450,7 @@ makes a re-theme a one-file edit rather than a search across 6,500 lines.
 Tailwind's default palette is replaced rather than extended, so `text-gray-500`
 and `font-sans` do not exist and a non-token value cannot reach a component.
 The contrast floors in this document are enforced as tests: a token edit that
-drops body text, a label, a status colour or an input border below its WCAG
+drops body text, a label, a status color or an input border below its WCAG
 minimum fails the build.
 
 ### What the migration changed, and what it could not
@@ -479,5 +479,5 @@ roles under a selector and no component changes.
 
 The mark is drawn in `apps/web/src/components/Wordmark.tsx` rather than
 loaded from the prototype's PNG, because the PNG is white-only and cannot take
-the accent colour. Replacing it with the real vector wordmark, when it exists,
+the accent color. Replacing it with the real vector wordmark, when it exists,
 is a change to that one component.

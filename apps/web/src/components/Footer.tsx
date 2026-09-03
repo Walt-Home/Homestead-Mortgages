@@ -73,9 +73,25 @@ export function Footer() {
           </nav>
         </div>
 
-        <p className="text-sm text-ink-faint">
-          © {year} {PRODUCT_NAME}. All rights reserved.
-        </p>
+        {/*
+          `/` is public now, and the hero on it says "lowest rates
+          guaranteed" to anyone on the internet. That is an advertising claim
+          about a mortgage, so the page cannot be silent about what it is not.
+
+          This is the protective minimum, not a compliance sign-off: a real
+          consumer mortgage footer also needs the lending entity's legal name,
+          an NMLS ID and the Equal Housing Opportunity mark, and none of those
+          can be invented here. See docs/brand.md, "The guarantee".
+        */}
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-ink-faint">
+            Not a commitment to lend. Rates and terms shown are illustrative, subject to
+            underwriting and credit approval, and are not an offer of credit.
+          </p>
+          <p className="text-sm text-ink-faint">
+            © {year} {PRODUCT_NAME}. All rights reserved.
+          </p>
+        </div>
       </div>
     </footer>
   );

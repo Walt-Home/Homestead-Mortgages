@@ -18,6 +18,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
+import { HomeHero } from "../components/HomeHero.js";
 import { StreetScene } from "../components/StreetScene.js";
 import { STAGE_TO_SCREEN, type FlowStage } from "../lib/flow.js";
 
@@ -47,38 +48,22 @@ export function FilesPage() {
 
   return (
     <>
-      {/*
-        Centred, and sized to what it holds rather than to the viewport. The
-        prototype uses 100svh; here the header and the scene are already in
-        the frame, and a full-height hero would push the street off it.
-      */}
-      <section className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-9 px-6 py-16 text-center sm:py-24">
-        <h1 className="super-h1 super-enter text-ink">The Greatest Mortgage Ever Offered</h1>
+      <HomeHero>
+        <button className="super-cta" onClick={() => navigate("/f/new/property")}>
+          {inProgress ? "Start another" : "Start now"}
+        </button>
 
-        <p className="super-sub super-enter super-enter-1">
-          Automatically refinances when interest rates drop, with lowest rates guaranteed.{" "}
-          <Link to="/brand" className="super-link whitespace-nowrap">
-            Learn more
+        {inProgress && (
+          <Link
+            className="super-link-quiet text-sm"
+            to={`/f/${inProgress.id}/${STAGE_TO_SCREEN[inProgress.stage as FlowStage] ?? "review"}`}
+          >
+            Or pick up the one you started
+            {inProgress.propertyCity ? ` in ${inProgress.propertyCity}` : ""}
+            {inProgress.propertyState ? `, ${inProgress.propertyState}` : ""}
           </Link>
-        </p>
-
-        <div className="super-enter super-enter-2 flex flex-col items-center gap-4">
-          <button className="super-cta" onClick={() => navigate("/f/new/property")}>
-            {inProgress ? "Start another" : "Start now"}
-          </button>
-
-          {inProgress && (
-            <Link
-              className="super-link-quiet text-sm"
-              to={`/f/${inProgress.id}/${STAGE_TO_SCREEN[inProgress.stage as FlowStage] ?? "review"}`}
-            >
-              Or pick up the one you started
-              {inProgress.propertyCity ? ` in ${inProgress.propertyCity}` : ""}
-              {inProgress.propertyState ? `, ${inProgress.propertyState}` : ""}
-            </Link>
-          )}
-        </div>
-      </section>
+        )}
+      </HomeHero>
 
       <StreetScene />
 

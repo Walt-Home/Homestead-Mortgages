@@ -1,4 +1,13 @@
-import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Stepper } from "./components/Stepper.js";
 import { DebugPanel } from "./components/DebugPanel.js";
@@ -9,6 +18,7 @@ import { useAuth } from "./lib/auth.js";
 import { useLoanFile } from "./lib/file.js";
 import { STAGE_TO_SCREEN, debugEnabled, screenIndex, type ScreenPath } from "./lib/flow.js";
 import { SignInPage } from "./pages/SignInPage.js";
+import { LandingPage } from "./pages/LandingPage.js";
 import { PrivacyPage } from "./pages/PrivacyPage.js";
 import { BrandPage } from "./pages/BrandPage.js";
 import { FilesPage } from "./pages/FilesPage.js";
@@ -31,16 +41,25 @@ export function App() {
   if (status === "signed-out") {
     return (
       <Routes>
-        <Route path="/privacy" element={<Chrome />}>
-          <Route index element={<PrivacyPage />} />
-        </Route>
         {/*
-          Public on purpose, and listed here as well as below so it survives
-          the auth gate. The people who most need the brand page are the ones
-          without an account.
+          The public tree. `/` is the marketing page with sign-in on it, which
+          is what a stranger arriving at the site should get — before this they
+          got a bare sign-in form and never saw the product.
+
+          Everything else still falls through to SignInPage, rendered IN PLACE
+          rather than redirected, so a deep link like /f/:id/bank keeps its URL
+          and signing in lands on the file that was asked for.
         */}
-        <Route path="/brand" element={<Chrome />}>
-          <Route index element={<BrandPage />} />
+        <Route path="/" element={<Chrome />}>
+          <Route index element={<LandingPage />} />
+          {/*
+            /privacy and /brand are listed in BOTH auth trees on purpose. They
+            are public, and a route that existed only in the signed-in tree
+            would send an anonymous visitor to the sign-in fallback instead —
+            which is exactly where the footer links them.
+          */}
+          <Route path="privacy" element={<PrivacyPage />} />
+          <Route path="brand" element={<BrandPage />} />
         </Route>
         <Route path="*" element={<SignInPage />} />
       </Routes>
@@ -197,9 +216,9 @@ function Chrome() {
         gives it to the hero, which drops the street to just above the footer
         the way the prototype does.
       */}
-      <div className="flex flex-1 flex-col">
+      <main className="flex flex-1 flex-col">
         <Outlet />
-      </div>
+      </main>
       <Footer />
     </div>
   );
@@ -207,17 +226,29 @@ function Chrome() {
 
 function Header({ children }: { children?: React.ReactNode }) {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   return (
     <header className="border-b border-rule-soft bg-ground/70 backdrop-blur">
       <div className="mx-auto max-w-2xl px-5 py-4 sm:px-6">
         <div className="flex items-center justify-between gap-4">
-          <a href="/">
+          {/* A Link, not an <a>: an anchor here threw away the SPA and
+              reloaded the whole app, which the footer's home link never did. */}
+          <Link to="/">
             <Lockup className="text-accent" />
-          </a>
+          </Link>
           {user && (
             <div className="flex items-center gap-3 text-xs">
               <span className="hidden text-ink-muted sm:inline">{user.email}</span>
-              <button className="super-link-quiet" onClick={() => void signOut()}>
+              {/*
+                Land on `/` rather than staying put. Signing out from
+                /f/:id/bank used to leave you on a private URL behind the
+                sign-in wall; now that `/` is public there is somewhere
+                sensible to go.
+              */}
+              <button
+                className="super-link-quiet"
+                onClick={() => void signOut().then(() => navigate("/"))}
+              >
                 Sign out
               </button>
             </div>

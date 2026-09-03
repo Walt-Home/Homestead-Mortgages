@@ -154,10 +154,7 @@ const ASSEMBLY_MAX_MS = 30 * 60_000;
 /** When the wait stops being ordinary and the borrower is offered a way out. */
 export const SLOW_AFTER_MS = 3 * 60_000;
 
-export type AttemptStore = Pick<
-  Storage,
-  "getItem" | "setItem" | "removeItem" | "key" | "length"
->;
+export type AttemptStore = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 
 /**
  * Injectable so the storage rules are testable without a DOM.

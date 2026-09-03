@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/auth.js";
-import { PrototypeBanner } from "../components/PrototypeBanner.js";
 import { Lockup } from "../components/Wordmark.js";
 import { Footer } from "../components/Footer.js";
 
@@ -95,7 +94,6 @@ export function SignInPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <PrototypeBanner />
       <div className="mx-auto flex min-h-[70vh] w-full max-w-md flex-1 flex-col justify-center px-6">
         <Lockup className="text-accent" />
         <h1 className="mt-6 font-display text-3xl text-ink">Sign in to continue</h1>

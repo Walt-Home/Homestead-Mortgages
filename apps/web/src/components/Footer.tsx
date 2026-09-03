@@ -11,9 +11,8 @@
  * has never heard of. Giving one a `to` is the whole of what it takes to turn
  * it on.
  *
- * NOT here, deliberately: the "not a loan offer, no credit is checked"
- * disclaimer. `PrototypeBanner` already says it at the top of every page, in
- * a color people read, and saying it twice makes both quieter.
+ * The front door used to repeat the privacy link in its own closing
+ * paragraph. It does not any more — this is the one place it lives.
  */
 
 import { Link } from "react-router-dom";

@@ -434,6 +434,27 @@ export function IdentityPage() {
           />
         ) : (
           <>
+            {/*
+              The one line of the old global prototype banner that survives,
+              moved to the only screen where it matters.
+
+              Stripe Identity runs on the sandbox key — config.ts prefers it
+              and reaching the live key needs STRIPE_ALLOW_LIVE_IDENTITY. Test
+              mode verifies nothing, but it still RECEIVES whatever image is
+              put in front of it, into an integration with no retention
+              policy. Saying nothing here is an invitation to photograph a
+              real driver's licence, which is the outcome the banner existed
+              to prevent. Shown only when a hosted vendor is configured; a
+              fixture reads nothing.
+            */}
+            {identityRedirects && (
+              <div className="super-notice super-notice-warn mb-4">
+                <p className="text-sm text-ink-soft">
+                  This check runs in Stripe&rsquo;s test mode, so it cannot verify a real document.
+                  Please use Stripe&rsquo;s test credentials rather than your own ID.
+                </p>
+              </div>
+            )}
             <button
               type="button"
               className="super-btn super-btn-primary"

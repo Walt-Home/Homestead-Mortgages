@@ -1,22 +1,24 @@
 /**
- * The front door.
+ * The front door, and now the marketing page.
  *
- * This used to be a file manager — "Your files", a list, a table of stages.
- * That is the right first screen for the team and the wrong one for a
- * borrower, who arrives wanting a mortgage and gets shown an inbox.
+ * It used to be a file manager, then a pitch in a text column. It is now
+ * Doug's front page from supermortgage.com: the promise in Georgia on solid
+ * black, one white button, and the street underneath. See docs/brand.md.
  *
- * Now it is a pitch and two doors: start, or pick up where you left off. The
- * second only exists when there is something to pick up.
+ * The headline is the prototype's, verbatim. The ACTIONS are not, and cannot
+ * be — the prototype offers a waitlist to a stranger, and everybody who
+ * reaches this page has already signed in and can start an application right
+ * now. So the layout, type and scene match, and the button says what it does.
  *
- * The sample borrowers are still reachable, deliberately demoted to a line at
- * the bottom. They are the team's shared artifact to critique and losing them
- * would mean arranging a UUID by hand again.
+ * The sample borrowers stay, demoted to a line below the scene. They are the
+ * team's shared artifact to critique, and losing them would mean arranging a
+ * UUID by hand again.
  */
 
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
-import { PRODUCT_NAME } from "../components/Wordmark.js";
+import { StreetScene } from "../components/StreetScene.js";
 import { STAGE_TO_SCREEN, type FlowStage } from "../lib/flow.js";
 
 interface FileRow {
@@ -44,74 +46,73 @@ export function FilesPage() {
   const inProgress = mine.find((f) => f.stage !== "COMPLETE");
 
   return (
-    <div className="mx-auto max-w-2xl px-5 py-14 sm:px-6 sm:py-20">
-      <p className="super-eyebrow text-accent">{PRODUCT_NAME}</p>
-      <h1 className="mt-3 font-display text-4xl text-ink sm:text-5xl">The Supermortgage</h1>
-      <p className="mt-5 max-w-measure-prose text-lg text-ink-soft">
-        A better rate, in four screens and about five minutes. Connect your accounts instead of
-        hunting for statements, and we retrieve almost everything underwriting needs.
-      </p>
-      <p className="mt-4 max-w-measure-prose text-base text-ink-soft">
-        No documents to dig out. No forms asking what your bank already knows. A decision that
-        explains itself.
-      </p>
+    <>
+      {/*
+        Centred, and sized to what it holds rather than to the viewport. The
+        prototype uses 100svh; here the header and the scene are already in
+        the frame, and a full-height hero would push the street off it.
+      */}
+      <section className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-9 px-6 py-16 text-center sm:py-24">
+        <h1 className="super-h1 super-enter text-ink">The Greatest Mortgage Ever Offered</h1>
 
-      <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <button className="super-btn super-btn-primary" onClick={() => navigate("/f/new/property")}>
-          Start now
-        </button>
-
-        {inProgress && (
-          <Link
-            className="super-btn super-btn-outline text-center"
-            to={`/f/${inProgress.id}/${STAGE_TO_SCREEN[inProgress.stage as FlowStage] ?? "review"}`}
-          >
-            Pick up where you left off
+        <p className="super-sub super-enter super-enter-1">
+          Automatically refinances when interest rates drop, with lowest rates guaranteed.{" "}
+          <Link to="/brand" className="super-link whitespace-nowrap">
+            Learn more
           </Link>
-        )}
-      </div>
-
-      {inProgress && (
-        <p className="mt-3 text-sm text-ink-muted">
-          You have one in progress
-          {inProgress.propertyCity ? ` on ${inProgress.propertyCity}` : ""}
-          {inProgress.propertyState ? `, ${inProgress.propertyState}` : ""}.
         </p>
+
+        <div className="super-enter super-enter-2 flex flex-col items-center gap-4">
+          <button className="super-cta" onClick={() => navigate("/f/new/property")}>
+            {inProgress ? "Start another" : "Start now"}
+          </button>
+
+          {inProgress && (
+            <Link
+              className="super-link-quiet text-sm"
+              to={`/f/${inProgress.id}/${STAGE_TO_SCREEN[inProgress.stage as FlowStage] ?? "review"}`}
+            >
+              Or pick up the one you started
+              {inProgress.propertyCity ? ` in ${inProgress.propertyCity}` : ""}
+              {inProgress.propertyState ? `, ${inProgress.propertyState}` : ""}
+            </Link>
+          )}
+        </div>
+      </section>
+
+      <StreetScene />
+
+      {/*
+        Below the scene, so the marketing page ends at the street and the
+        team's tooling does not sit inside it.
+      */}
+      {(isLoading || demos.length > 0) && (
+        <div className="mx-auto max-w-2xl px-5 pt-8 sm:px-6">
+          {isLoading && <p className="text-sm text-ink-faint">Loading…</p>}
+          {demos.length > 0 && (
+            <details>
+              <summary className="super-link-quiet cursor-pointer list-none text-xs">
+                Sample borrowers ({demos.length})
+              </summary>
+              <ul className="mt-2 flex flex-col gap-1">
+                {demos.map((f) => (
+                  <li key={f.id}>
+                    <Link
+                      className="super-link text-sm"
+                      to={`/f/${f.id}/${STAGE_TO_SCREEN[f.stage as FlowStage] ?? "review"}`}
+                    >
+                      {f.borrowers[0]
+                        ? `${f.borrowers[0].firstName} ${f.borrowers[0].lastName}`
+                        : "Sample file"}
+                      {f.propertyCity ? ` — ${f.propertyCity}, ${f.propertyState}` : ""}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
       )}
-
-      {isLoading && <p className="mt-8 text-sm text-ink-faint">Loading…</p>}
-
-      <p className="mt-14 border-t border-rule-soft pt-5 text-xs text-ink-faint">
-        Nothing here is a loan offer, and no credit is checked. Every connection returns invented
-        data.{" "}
-        <Link className="super-link" to="/privacy">
-          What we keep, and how to delete it
-        </Link>
-        .
-      </p>
-
-      {demos.length > 0 && (
-        <details className="mt-4">
-          <summary className="super-link-quiet cursor-pointer list-none text-xs">
-            Sample borrowers ({demos.length})
-          </summary>
-          <ul className="mt-2 flex flex-col gap-1">
-            {demos.map((f) => (
-              <li key={f.id}>
-                <Link
-                  className="super-link text-sm"
-                  to={`/f/${f.id}/${STAGE_TO_SCREEN[f.stage as FlowStage] ?? "review"}`}
-                >
-                  {f.borrowers[0]
-                    ? `${f.borrowers[0].firstName} ${f.borrowers[0].lastName}`
-                    : "Sample file"}
-                  {f.propertyCity ? ` — ${f.propertyCity}, ${f.propertyState}` : ""}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </div>
+    </>
   );
 }

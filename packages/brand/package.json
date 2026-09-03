@@ -11,15 +11,17 @@
     "./tokens.css": "./tokens.css",
     "./base.css": "./base.css",
     "./components.css": "./components.css",
+    "./scene.css": "./scene.css",
     "./assets/*": "./assets/*"
   },
   "files": [
-    "tokens.mjs",
-    "tailwind-preset.mjs",
-    "tokens.css",
+    "assets",
     "base.css",
     "components.css",
-    "assets"
+    "scene.css",
+    "tailwind-preset.mjs",
+    "tokens.css",
+    "tokens.mjs"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",

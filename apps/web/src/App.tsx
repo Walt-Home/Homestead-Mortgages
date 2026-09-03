@@ -1,7 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Stepper } from "./components/Stepper.js";
-import { PrototypeBanner } from "./components/PrototypeBanner.js";
 import { DebugPanel } from "./components/DebugPanel.js";
 import { Lockup } from "./components/Wordmark.js";
 import { Footer } from "./components/Footer.js";
@@ -172,7 +171,6 @@ function FileShell() {
 function NotYours() {
   return (
     <div className="flex min-h-screen flex-col bg-ground">
-      <PrototypeBanner />
       <Header />
       <main className="mx-auto w-full max-w-2xl flex-1 px-5 py-16 sm:px-6">
         <h1 className="font-display text-2xl text-ink">We can&rsquo;t find that file</h1>
@@ -192,10 +190,14 @@ function NotYours() {
 function Chrome() {
   return (
     <div className="flex min-h-screen flex-col bg-ground">
-      <PrototypeBanner />
       <Header />
-      {/* flex-1 so a short page still pushes the footer to the bottom. */}
-      <div className="flex-1">
+      {/*
+        flex-1 so a short page still pushes the footer to the bottom, and a
+        flex column so a page can decide WHERE its slack goes — the front door
+        gives it to the hero, which drops the street to just above the footer
+        the way the prototype does.
+      */}
+      <div className="flex flex-1 flex-col">
         <Outlet />
       </div>
       <Footer />
@@ -255,7 +257,6 @@ function Shell({
 }) {
   return (
     <div className="flex min-h-screen flex-col bg-ground">
-      <PrototypeBanner />
       <Header>
         <Stepper current={screen} fileId={fileId} reached={reached} />
       </Header>

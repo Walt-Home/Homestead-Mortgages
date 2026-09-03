@@ -1,0 +1,211 @@
+/*
+ * The pixel street, and the only animation in the system.
+ *
+ * Doug's CSS from supermortgage.com, ported with its timings intact — see
+ * docs/brand.md, "Motion" and "The pixel world". The negative delays are the
+ * important detail: they start every actor mid-journey, so the street is
+ * already populated on the first frame instead of filling up over a minute
+ * while somebody watches an empty road.
+ *
+ * NOT wrapped in `@layer components`, unlike the rest of the package.
+ * Tailwind prunes unused classes out of that layer, and @keyframes are not
+ * class-based — the safe home for them is an unlayered file. Nothing here
+ * collides with a utility, so being unlayered costs nothing.
+ */
+
+@keyframes super-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes super-go-right {
+  from {
+    transform: translate(-160px);
+  }
+  to {
+    transform: translate(calc(100vw + 160px));
+  }
+}
+@keyframes super-go-left {
+  from {
+    transform: translate(calc(100vw + 160px)) scaleX(-1);
+  }
+  to {
+    transform: translate(-160px) scaleX(-1);
+  }
+}
+/* Two-frame walk cycle: the groups swap visibility, nothing tweens. */
+@keyframes super-frame-a {
+  0%,
+  49% {
+    visibility: visible;
+  }
+  50%,
+  100% {
+    visibility: hidden;
+  }
+}
+@keyframes super-frame-b {
+  0%,
+  49% {
+    visibility: hidden;
+  }
+  50%,
+  100% {
+    visibility: visible;
+  }
+}
+/* Arrives, parks for nine seconds, leaves. Somebody moved house. */
+@keyframes super-van-trip {
+  0% {
+    transform: translate(-240px);
+  }
+  36% {
+    transform: translate(34vw);
+  }
+  62% {
+    transform: translate(34vw);
+  }
+  100% {
+    transform: translate(calc(100vw + 240px));
+  }
+}
+/* The yard sign's arrow: a rate, dropping, on a loop. */
+@keyframes super-rate-pulse {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  20%,
+  65% {
+    opacity: 1;
+  }
+}
+
+.super-scene {
+  position: relative;
+  overflow: hidden;
+}
+.super-street-wrap {
+  border-bottom: 1px solid var(--sm-gray-800);
+  overflow-x: hidden;
+}
+.super-street {
+  zoom: 0.62;
+  display: flex;
+  align-items: flex-end;
+  gap: 34px;
+  width: max-content;
+  margin: 0 auto;
+  padding: 0 4vw;
+}
+.super-street svg {
+  shape-rendering: crispedges;
+  image-rendering: pixelated;
+  transform-origin: bottom;
+  flex: none;
+  display: block;
+}
+.super-ground-base {
+  height: 24px;
+  border-top: 2px solid var(--sm-green-500);
+  background:
+    linear-gradient(#153a1c, #153a1c) 0 0 / 100% 10px no-repeat,
+    linear-gradient(#101014, #101014) 0 10px / 100% 4px no-repeat,
+    var(--sm-color-ground);
+}
+.super-actor {
+  position: absolute;
+  left: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+.super-actor svg {
+  shape-rendering: crispedges;
+  image-rendering: pixelated;
+  display: block;
+}
+.super-walk {
+  bottom: 50px;
+}
+.super-drive {
+  bottom: 4px;
+}
+.super-walker1 {
+  animation: super-go-right 46s linear -8s infinite;
+}
+.super-walker2 {
+  animation: super-go-left 58s linear -34s infinite;
+}
+.super-jogger {
+  animation: super-go-right 24s linear -15s infinite;
+}
+.super-car1 {
+  animation: super-go-right 13s linear -4s infinite;
+}
+.super-car2 {
+  animation: super-go-left 17s linear -11s infinite;
+}
+.super-van {
+  animation: super-van-trip 34s linear -6s infinite;
+}
+.super-fA {
+  animation: super-frame-a 0.55s step-end infinite;
+}
+.super-fB {
+  animation: super-frame-b 0.55s step-end infinite;
+}
+.super-jogger .super-fA,
+.super-jogger .super-fB {
+  animation-duration: 0.3s;
+}
+.super-hubA {
+  animation: super-frame-a 0.18s step-end infinite;
+}
+.super-hubB {
+  animation: super-frame-b 0.18s step-end infinite;
+}
+.super-rate-pulse {
+  animation: super-rate-pulse 3s ease-in-out infinite;
+}
+
+/* The hero's entrance: headline, then sub, then the button. */
+.super-enter {
+  animation: super-slide-up 0.8s var(--sm-ease-out) both;
+}
+.super-enter-1 {
+  animation-delay: 0.1s;
+}
+.super-enter-2 {
+  animation-delay: 0.2s;
+}
+
+@media (max-width: 640px) {
+  .super-street {
+    zoom: 0.54;
+    margin-left: 0;
+  }
+  /* Half the props on a phone. The street is a mood, not an inventory. */
+  .super-street svg:nth-child(2n) {
+    display: none;
+  }
+}
+
+/*
+ * base.css already flattens every animation under this query. Removing the
+ * actors outright is the part that query cannot express: a walker frozen
+ * mid-stride at the end of its transform sits in the middle of the road.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .super-actor {
+    display: none;
+  }
+  .super-rate-pulse {
+    opacity: 1;
+  }
+}

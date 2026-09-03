@@ -24,6 +24,7 @@
 @import "@hm/brand/tokens.css";
 @import "@hm/brand/base.css";
 @import "@hm/brand/components.css";
+@import "@hm/brand/scene.css";
 
 @tailwind base;
 @tailwind components;

@@ -38,19 +38,37 @@ export function stageIndex(stage: FlowStage): number {
 /**
  * Advance to `stage` only if it is further along than where the file already
  * is. Returns the stage the file ends up at.
+ *
+ * ONE statement, not a read followed by a write. The read-then-write version
+ * looked correct and lost races: two connector callbacks landing together both
+ * read the old stage, both decided they were moving forward, and the slower
+ * write won — leaving the file at the LESSER of the two stages, which is the
+ * exact rewind this function exists to prevent. It is not a rare interleaving
+ * either; it is what happens whenever a borrower finishes two connectors at
+ * once. A test against a real Postgres caught it on the first run.
+ *
+ * The guard is `WHERE stage IN (everything earlier than the target)`, evaluated
+ * by Postgres under the row lock, so whichever transaction goes second sees the
+ * other's stage and matches nothing.
  */
 export async function advanceStage(loanFileId: string, stage: FlowStage): Promise<FlowStage> {
+  const earlier = STAGE_ORDER.slice(0, stageIndex(stage));
+
+  // An empty list means the target is the first stage, or is not in the order
+  // at all — either way nothing can advance TO it, and `updateMany` with an
+  // empty `in` matches no rows rather than every row.
+  if (earlier.length > 0) {
+    const { count } = await prisma.loanFile.updateMany({
+      where: { id: loanFileId, stage: { in: earlier } },
+      data: { stage },
+    });
+    if (count === 1) return stage;
+  }
+
+  // We did not move it. Either it is already at or past `stage`, or it is gone.
   const file = await prisma.loanFile.findUnique({
     where: { id: loanFileId },
     select: { stage: true },
   });
-  if (!file) return stage;
-  if (stageIndex(stage) <= stageIndex(file.stage)) return file.stage;
-
-  const updated = await prisma.loanFile.update({
-    where: { id: loanFileId },
-    data: { stage },
-    select: { stage: true },
-  });
-  return updated.stage;
+  return file?.stage ?? stage;
 }

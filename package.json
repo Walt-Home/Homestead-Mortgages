@@ -19,6 +19,7 @@
     "brand:verify": "npm run verify --workspace=@hm/brand",
     "db:generate": "npm run generate --workspace=@hm/db",
     "db:migrate": "npm run migrate --workspace=@hm/db",
+    "db:test:setup": "node scripts/setup-test-db.mjs",
     "db:studio": "npm run studio --workspace=@hm/db",
     "clean": "turbo clean && rm -rf node_modules",
     "seed:demo": "tsx apps/api/src/scripts/seed-demo.ts"

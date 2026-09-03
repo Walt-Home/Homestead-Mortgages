@@ -392,6 +392,18 @@ person holding it), `livemode: false`, and reads back with
 `verified_outputs` expanded — unexpanded, a verified session returns nothing
 about who was verified.
 
+**Resend is the email vendor.** Chosen 3 September 2026; not yet integrated.
+It matters more than a vendor pick usually does, because several regulatory
+clocks can only be _stopped_ by a delivered notice. The Loan Estimate is due
+three business days from the TRID application moment, and adverse action within
+thirty days of a complete application — and with no delivery channel at all, a
+system that opens those clocks on schedule is recording its own breach, on
+every file, in an audit trail built to be tamper-evident. So until the
+integration lands, a clock whose satisfying channel is unconfigured must not be
+opened: either the application is not taken, or the clock opens tolled with the
+reason recorded. A gap you can see is fine. Permanent evidence of a breach you
+never had the means to avoid is not.
+
 ## Bank: Plaid, and CRA rather than Assets
 
 CRD-017 wants "a 12-month asset verification report from an authorized DU
@@ -442,8 +454,8 @@ CRA products are enabled per account by a sales request, so `PLAID_PRODUCT=asset
 exists to make screen 3 walkable in the meantime. It is a real bank login
 returning real transactions, and it is **not** a consumer report. So it reports
 `vendorAuthorizedForDu: false`, CRD-017 reads "asset report did not come from a
-DU-authorized vendor", INC-002 is not claimed, and income is *inferred from
-deposits* rather than determined by a vendor — which is why it can never reach
+DU-authorized vendor", INC-002 is not claimed, and income is _inferred from
+deposits_ rather than determined by a vendor — which is why it can never reach
 `incomeConfidence: "verified"`, however clean the pattern looks. "Verified" is
 what lets a borrower skip the payroll step, and that is a claim only Day 1
 Certainty earns.
@@ -458,7 +470,7 @@ are ignored, and a payer whose amount swings more than 40% is not a salary.
 Five bugs survived a full unit suite and died on first contact with live data.
 Recorded because four of them were invisible by construction:
 
-**Liabilities were being counted as assets.** Plaid returns *every* account at
+**Liabilities were being counted as assets.** Plaid returns _every_ account at
 the institution — mortgage, student loan, auto loan, credit cards — each with a
 positive `balances.current` representing what the borrower OWES. The subtype
 fallback mapped all of them to "checking". Against the sandbox that turned about
@@ -514,7 +526,7 @@ that never booted. A 20-second watchdog, disarmed by `onEvent("OPEN")`, is the
 only way to detect it.
 
 **The page goes away.** OAuth institutions navigate the whole document to the
-bank and back, so React state is gone on return and Plaid requires the *same*
+bank and back, so React state is gone on return and Plaid requires the _same_
 link token to resume. `hm.plaid.attempt.v1.<fileId>` in localStorage carries
 it. Per-file because a single global key meant two loan files in two tabs
 overwrote each other; versioned so a later shape change cannot resurrect a
@@ -529,7 +541,7 @@ append-only tables for one pull.
 
 **`PLAID_REDIRECT_URI` is unset by default and that is not laziness.** Plaid
 rejects `/link/token/create` with INVALID_FIELD when the redirect URI is not on
-the dashboard allowlist — for *every* link token, not only OAuth ones. A
+the dashboard allowlist — for _every_ link token, not only OAuth ones. A
 plausible-looking default takes the whole screen down until somebody happens to
 register it. Unset, every non-OAuth institution works; `/health` reports
 `plaid-assets (sandbox), no OAuth banks` so the gap is visible rather than
@@ -562,7 +574,7 @@ and lost a bank link that was working.
 Turning Stripe on made screen 2 impassable, and every piece of it looked fine
 in isolation.
 
-The screen scans the ID *first* and uses what is on it to fill in name, date of
+The screen scans the ID _first_ and uses what is on it to fill in name, date of
 birth and address — so `/identity-document` created a session and immediately
 read it back, requiring `verified`. A fixture verifies in place, so that held
 for as long as everything was a fixture. Stripe returns `pending` the instant a
@@ -639,17 +651,50 @@ There is no default key and no plaintext fallback, so a missing
 `decisions`, this table is deliberately **not** append-only — a re-link
 replaces the credential. Old live bearer tokens are a liability, not history.
 
+## Tests run against a real Postgres
+
+The API suite used to mock `@hm/db`. Two files did it explicitly, and the cost
+was not the mocking style — it was that every guarantee this product keeps in
+the database was invisible to CI. `assertFileAccess` was asserted by checking
+that `findUnique` had been called; that assertion cannot fail when a column is
+renamed, and would have passed just as happily if `isDemo` had been dropped
+from the select. The cascades that `deletion.test.ts` reads out of the schema
+_text_ were never once exercised against a database.
+
+CI now runs `postgres:16-alpine` as a service on 5433 — the same image and port
+as `docker-compose.yml`, so one `DATABASE_URL` works in both places — and
+`npm run db:test:setup` creates `<database>_test` and applies every migration
+to it before the suite runs. That step is also the only check in this repo that
+the committed migrations apply cleanly to an empty database; `migrate dev`
+against a shadow database does not prove it.
+
+The tests use a separate `_test` database rather than the development one,
+because the suite truncates every table between tests and a developer running
+`npm test` should not lose the file they were half way through.
+
+**It found a live bug on the first run.** `advanceStage` was a read followed by
+a write: two connector callbacks landing together both read the old stage, both
+decided they were moving forward, and the slower write won — leaving the file
+at the _lesser_ of the two stages, which is the exact rewind the high-water
+mark exists to prevent. It is not an exotic interleaving; it is what happens
+whenever a borrower finishes two connectors at once. It is now a single
+`UPDATE ... WHERE stage IN (everything earlier than the target)`, evaluated
+under the row lock, so whichever transaction goes second matches nothing.
+
+That is the argument for the whole change, and it took one test to surface.
+
 ## Still outstanding
 
 Four vendor decisions plus sandbox credentials, none obtainable from inside
-this repo:
+this repo. Email is settled — Resend — but not yet built, and the clocks above
+depend on it:
 
-| Connector                       | Constraint                                                      |
-| ------------------------------- | --------------------------------------------------------------- |
-| Credit (soft tri-merge)         | Reseller or bureau-direct; needs FCRA permissible purpose       |
-| Payroll (consumer-permissioned) | Aggregator                                                      |
-| IRS transcripts                 | IVES participant or a reseller                                  |
-| E-sign                          | For APP-005, APP-012 and INC-008                                |
+| Connector                       | Constraint                                                |
+| ------------------------------- | --------------------------------------------------------- |
+| Credit (soft tri-merge)         | Reseller or bureau-direct; needs FCRA permissible purpose |
+| Payroll (consumer-permissioned) | Aggregator                                                |
+| IRS transcripts                 | IVES participant or a reseller                            |
+| E-sign                          | For APP-005, APP-012 and INC-008                          |
 
 Plus: the CLS-* closing-stage sheet, the requirements for the monitoring loop,
 a real tax/insurance source, the real LLPA matrix, and an APOR feed.

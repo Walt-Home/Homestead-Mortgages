@@ -22,6 +22,31 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
+
+    # The tests talk to a real database rather than mocking one. Every promise
+    # this product makes about who can read whose file, about cascades, and
+    # about a stage that only moves forward, is kept by Postgres — and a suite
+    # that mocks `@hm/db` cannot see any of it. The concurrent-advance race in
+    # services/stage.ts was invisible for exactly as long as the mock was there.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: homestead_mortgages
+          POSTGRES_PASSWORD: homestead_mortgages
+          POSTGRES_DB: homestead_mortgages
+        # 5433 matches docker-compose.yml, so one DATABASE_URL works in both.
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U homestead_mortgages"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://homestead_mortgages:homestead_mortgages@localhost:5433/homestead_mortgages
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -46,6 +71,12 @@ jobs:
 
       - name: TypeScript
         run: npx tsc -b packages/shared packages/requirements packages/connectors packages/underwriting packages/db apps/api apps/web
+
+      # Creates <db>_test and applies every migration to it. Also the check that
+      # the committed migrations actually apply to an empty database, which a
+      # `migrate dev` shadow database does not prove.
+      - name: Test database
+        run: npm run db:test:setup
 
       - name: Test
         run: npm test

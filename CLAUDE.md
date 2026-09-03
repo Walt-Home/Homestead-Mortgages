@@ -222,4 +222,11 @@ npm run check                # tsc -b + registry verify
 npm run requirements:build   # after editing data/v1-build.csv
 npm run brand:build          # after editing packages/brand/tokens.mjs
 npm run db:migrate           # prisma migrate dev
+npm run db:test:setup        # create <db>_test and apply migrations to it
 ```
+
+The API tests talk to a real Postgres and mock nothing: `docker compose up -d
+postgres`, then `npm run db:test:setup`. Every promise about who may read whose
+file, about cascades, and about a stage that only moves forward is kept by the
+database, and a suite that mocks `@hm/db` can see none of them — see
+`docs/decisions.md`, "Tests run against a real Postgres".

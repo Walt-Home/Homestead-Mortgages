@@ -10,6 +10,7 @@ import { useLoanFile } from "./lib/file.js";
 import { STAGE_TO_SCREEN, debugEnabled, screenIndex, type ScreenPath } from "./lib/flow.js";
 import { SignInPage } from "./pages/SignInPage.js";
 import { PrivacyPage } from "./pages/PrivacyPage.js";
+import { BrandPage } from "./pages/BrandPage.js";
 import { FilesPage } from "./pages/FilesPage.js";
 import { PropertyLoanPage } from "./pages/PropertyLoanPage.js";
 import { IdentityPage } from "./pages/IdentityPage.js";
@@ -33,6 +34,14 @@ export function App() {
         <Route path="/privacy" element={<Chrome />}>
           <Route index element={<PrivacyPage />} />
         </Route>
+        {/*
+          Public on purpose, and listed here as well as below so it survives
+          the auth gate. The people who most need the brand page are the ones
+          without an account.
+        */}
+        <Route path="/brand" element={<Chrome />}>
+          <Route index element={<BrandPage />} />
+        </Route>
         <Route path="*" element={<SignInPage />} />
       </Routes>
     );
@@ -43,6 +52,7 @@ export function App() {
       <Route path="/" element={<Chrome />}>
         <Route index element={<FilesPage />} />
         <Route path="privacy" element={<PrivacyPage />} />
+        <Route path="brand" element={<BrandPage />} />
         {/*
           Where an OAuth bank returns the borrower.
 

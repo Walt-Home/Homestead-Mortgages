@@ -72,6 +72,13 @@ jobs:
       - name: TypeScript
         run: npx tsc -b packages/shared packages/requirements packages/connectors packages/underwriting packages/db apps/api apps/web
 
+      # There was no eslint config in this repo until now — the dependencies
+      # were installed and every workspace's `lint` script called eslint, but
+      # nothing was ever authored, so `npm run lint` failed on main from the
+      # beginning. It went unnoticed because this job never ran it.
+      - name: Lint
+        run: npm run lint
+
       # Creates <db>_test and applies every migration to it. Also the check that
       # the committed migrations actually apply to an empty database, which a
       # `migrate dev` shadow database does not prove.

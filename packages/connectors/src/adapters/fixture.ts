@@ -14,12 +14,10 @@
 import type {
   Address,
   AddressSuggestion,
-  AssetReport,
   AvmEstimate,
   Consent,
   CreditReport,
   FloodDetermination,
-  IdentityVerification,
   LienSearch,
   LoanFile,
   PayrollData,
@@ -284,7 +282,9 @@ function sameAddress(a: Address, b: Address): boolean {
  * knowing is a legitimate answer; guessing is not.
  */
 export function fixturePropertyDataConnector(options: FixtureOptions = {}): PropertyDataConnector {
-  const { persona, latencyMs, ref } = resolve(options);
+  // No `persona` here on purpose: this connector answers from the address, not
+  // from whoever is walking the flow. See the note above.
+  const { latencyMs, ref } = resolve(options);
   const fixtureFor = (address: Address) => {
     const match = Object.values(PUBLIC_RECORDS).find((r) => sameAddress(r.address, address));
     if (!match) throw new AddressNotFoundError(oneLine(address));

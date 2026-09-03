@@ -683,6 +683,40 @@ under the row lock, so whichever transaction goes second matches nothing.
 
 That is the argument for the whole change, and it took one test to surface.
 
+## Lint was never on
+
+There was no eslint config in this repo. Not a stale `.eslintrc` waiting to be
+migrated — nothing. The dependencies were installed at the root, every
+workspace's `lint` script called `eslint .`, and `npm run lint` had therefore
+failed on main since the beginning. Nobody noticed because the `check` job ran
+requirements:verify, brand:verify, tsc, the tests and the build, and never once
+ran lint.
+
+There is now one flat config at the root. ESLint 10 searches upward from the
+working directory, so each workspace's `eslint .` finds it and every package is
+held to the same rules. Prettier keeps formatting; `eslint-config-prettier` is
+last in the array so the two cannot disagree.
+
+It found five things, in two kinds. Three were dead code and are deleted. Two
+were parameters deliberately prefixed with an underscore, which is the codebase's
+existing convention for "required by a signature I do not control" — and in one
+case load-bearing, because Express recognises error middleware **only** by its
+four-argument arity, so `errorHandler(err, _req, res, _next)` must keep `_next`
+or error handling quietly stops being error handling. That is a config fix, not
+a code fix, and `no-unused-vars` now ignores the `_` prefix.
+
+**Three React Compiler rules are off, on purpose.** `eslint-plugin-react-hooks`
+v7 ships `set-state-in-effect`, `refs` and `immutability` alongside the classic
+hook rules. They found eight real things and every one is a deliberate pattern
+whose compiler-safe rewrite is a behavioural change — reading sessionStorage
+into state on mount, prefilling a form from fetched data, resuming a bank
+session, a self-scheduling poll, and the latest-ref pattern behind the Plaid
+callbacks. Those are the OAuth-return and polling paths, which are the hardest
+screens to exercise and the worst to break. Turning lint on and refactoring the
+bank flow are two changes; shipping the second one inside the first means it
+goes in unreviewed. The classic `rules-of-hooks` and `exhaustive-deps` stay as
+errors. The reasoning is repeated at the rules themselves in `eslint.config.mjs`.
+
 ## Still outstanding
 
 Four vendor decisions plus sandbox credentials, none obtainable from inside

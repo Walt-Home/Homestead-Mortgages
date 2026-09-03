@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Stepper } from "./components/Stepper.js";
 import { PrototypeBanner } from "./components/PrototypeBanner.js";
 import { DebugPanel } from "./components/DebugPanel.js";
-import { Wordmark } from "./components/Wordmark.js";
+import { Lockup } from "./components/Wordmark.js";
+import { Footer } from "./components/Footer.js";
 import { api, ApiError, type Assessment } from "./lib/api.js";
 import { useAuth } from "./lib/auth.js";
 import { useLoanFile } from "./lib/file.js";
@@ -170,10 +171,10 @@ function FileShell() {
 
 function NotYours() {
   return (
-    <div className="min-h-screen bg-ground">
+    <div className="flex min-h-screen flex-col bg-ground">
       <PrototypeBanner />
       <Header />
-      <div className="mx-auto max-w-2xl px-5 py-16 sm:px-6">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-5 py-16 sm:px-6">
         <h1 className="font-display text-2xl text-ink">We can&rsquo;t find that file</h1>
         <p className="mt-3 text-base text-ink-soft">
           It may belong to a different account, or it may have been deleted. Files are private to
@@ -182,17 +183,22 @@ function NotYours() {
         <a href="/" className="super-btn super-btn-primary mt-6">
           Back to your files
         </a>
-      </div>
+      </main>
+      <Footer />
     </div>
   );
 }
 
 function Chrome() {
   return (
-    <div className="min-h-screen bg-ground">
+    <div className="flex min-h-screen flex-col bg-ground">
       <PrototypeBanner />
       <Header />
-      <Outlet />
+      {/* flex-1 so a short page still pushes the footer to the bottom. */}
+      <div className="flex-1">
+        <Outlet />
+      </div>
+      <Footer />
     </div>
   );
 }
@@ -204,7 +210,7 @@ function Header({ children }: { children?: React.ReactNode }) {
       <div className="mx-auto max-w-2xl px-5 py-4 sm:px-6">
         <div className="flex items-center justify-between gap-4">
           <a href="/">
-            <Wordmark />
+            <Lockup className="text-accent" />
           </a>
           {user && (
             <div className="flex items-center gap-3 text-xs">
@@ -248,7 +254,7 @@ function Shell({
   file?: unknown;
 }) {
   return (
-    <div className="min-h-screen bg-ground">
+    <div className="flex min-h-screen flex-col bg-ground">
       <PrototypeBanner />
       <Header>
         <Stepper current={screen} fileId={fileId} reached={reached} />
@@ -262,10 +268,11 @@ function Shell({
         </div>
       )}
 
-      <main className="mx-auto max-w-2xl px-5 py-8 sm:px-6 sm:py-10">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-5 py-8 sm:px-6 sm:py-10">
         <Outlet />
         {debug && <DebugPanel assessment={assessment} failed={assessmentFailed} file={file} />}
       </main>
+      <Footer />
     </div>
   );
 }

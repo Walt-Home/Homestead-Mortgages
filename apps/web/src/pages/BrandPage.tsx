@@ -21,7 +21,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Mark, PRODUCT_NAME, Wordmark } from "../components/Wordmark.js";
+import { Lockup, Mark, PRODUCT_NAME, Wordmark } from "../components/Wordmark.js";
 
 /** Semantic colour roles, grouped the way somebody picking one would think. */
 const COLOUR_GROUPS: { title: string; note: string; roles: [string, string][] }[] = [
@@ -72,6 +72,41 @@ const COLOUR_GROUPS: { title: string; note: string; roles: [string, string][] }[
       ["warn", "Needs attention"],
       ["danger", "Something went wrong"],
     ],
+  },
+];
+
+/**
+ * The four sanctioned colour treatments.
+ *
+ * Named with primitives rather than semantic roles on purpose. This page
+ * documents the palette, and the system has no role for "a sheet of white
+ * paper" — that is open question 4 in docs/brand.md. Everywhere other than
+ * this page, a component names a role.
+ */
+const LOGO_VARIANTS = [
+  {
+    name: "White on black",
+    fg: "var(--sm-white)",
+    bg: "var(--sm-black)",
+    use: "The default. Any product surface.",
+  },
+  {
+    name: "Red on black",
+    fg: "var(--sm-red-500)",
+    bg: "var(--sm-black)",
+    use: "The nav, and the mark on the moving van.",
+  },
+  {
+    name: "Black on white",
+    fg: "var(--sm-black)",
+    bg: "var(--sm-white)",
+    use: "Print, and anything that lands on paper.",
+  },
+  {
+    name: "Red on white",
+    fg: "var(--sm-red-500)",
+    bg: "var(--sm-white)",
+    use: "Sparingly. 3.5 : 1, so never small.",
   },
 ];
 
@@ -148,7 +183,12 @@ export function BrandPage() {
 
       {/* ── Logo ─────────────────────────────────────────────────────────── */}
       <Section title="Logo">
-        <div className="super-card flex flex-wrap items-end gap-8">
+        <h3 className="text-base font-medium text-ink">The mark</h3>
+        <p className="mt-1 max-w-measure-prose text-sm text-ink-muted">
+          A house on a 12 × 12 grid. The lit doorway is a hole, not black paint, so it takes
+          whatever is behind it.
+        </p>
+        <div className="super-card mt-3 flex flex-wrap items-end gap-8">
           <Specimen label="96px">
             <Mark size={96} className="text-accent" />
           </Specimen>
@@ -163,19 +203,50 @@ export function BrandPage() {
           </Specimen>
         </div>
 
-        <div className="super-card mt-3">
-          <Wordmark size={32} />
-          <p className="mt-4 text-sm text-ink-muted">
-            The lockup. SUPER light, MORTGAGE heavy — the ordinary half is the bold one.
-          </p>
+        <h3 className="mt-8 text-base font-medium text-ink">Wordmark and lockup</h3>
+        <p className="mt-1 max-w-measure-prose text-sm text-ink-muted">
+          SUPER light, MORTGAGE heavy — the ordinary half is the bold one.
+        </p>
+        <div className="super-card mt-3 flex flex-col gap-6">
+          <Specimen label="wordmark">
+            <Wordmark className="text-xl text-accent" />
+          </Specimen>
+          <Specimen label="lockup">
+            <Lockup size={26} className="text-accent" />
+          </Specimen>
         </div>
 
-        <ul className="mt-4 flex flex-col gap-2 text-sm text-ink-soft">
-          <li>· A house on a 12 × 12 grid. Crisp edges, whole multiples, never anti-aliased.</li>
-          <li>· Red, or white on red. No other colour, ever.</li>
-          <li>
-            · Never below 22px. The doorway is cut to the surface behind it, not painted black.
-          </li>
+        <h3 className="mt-8 text-base font-medium text-ink">Colour</h3>
+        <p className="mt-1 max-w-measure-prose text-sm text-ink-muted">
+          Four treatments, and no others. Every piece paints with{" "}
+          <code className="font-mono">currentColor</code>, so these are the same three components
+          with the text colour changed.
+        </p>
+        <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {LOGO_VARIANTS.map((variant) => (
+            <li key={variant.name} className="overflow-hidden rounded-lg border border-rule">
+              <div
+                className="flex flex-col items-center justify-center gap-5 px-5 py-8"
+                style={{ background: variant.bg, color: variant.fg }}
+              >
+                <Mark size={44} />
+                <Wordmark className="text-lg" />
+                <Lockup size={22} />
+              </div>
+              <div className="border-t border-rule px-4 py-3">
+                <p className="text-sm text-ink">{variant.name}</p>
+                <p className="mt-0.5 text-sm text-ink-muted">{variant.use}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <h3 className="mt-8 text-base font-medium text-ink">Rules</h3>
+        <ul className="mt-3 flex flex-col gap-2 text-sm text-ink-soft">
+          <li>· Crisp edges, whole multiples, never anti-aliased and never re-drawn by hand.</li>
+          <li>· Only the four treatments above. No gradient, no outline, no second colour.</li>
+          <li>· Never below 22px, where the doorway stops resolving.</li>
+          <li>· Clear space of one mark-width on every side.</li>
           <li>· In prose the name is one word, capital S: {PRODUCT_NAME}.</li>
         </ul>
       </Section>

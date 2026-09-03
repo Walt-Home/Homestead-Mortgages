@@ -1,22 +1,35 @@
 /**
- * The logo, in one place.
+ * The logo, in one place: the mark, the wordmark, and the lockup of both.
  *
- * Both the product name and the mark are here so that renaming, or swapping
- * the drawn mark for the real wordmark artwork, is a single edit rather than a
- * hunt through every header. `PRODUCT_NAME` is exported for the few places
- * that need the name in a sentence rather than in a lockup.
+ * The three are separate exports because they are three different things in
+ * docs/brand.md and get used separately — the mark alone in a favicon or a
+ * tight nav, the lockup everywhere else. `PRODUCT_NAME` is exported for the
+ * places that need the name in a sentence rather than in a lockup.
  *
- * The mark is the prototype's twelve-pixel house, inlined rather than loaded
- * from packages/brand/assets/mark.svg: it has to take its colour from
- * `currentColor` and its doorway from the surface behind it, and an <img>
- * cannot do either. See docs/brand.md for the drawing rules — crisp edges,
- * whole multiples, never below 22px, never any colour but the accent.
+ * None of them sets a colour. All three paint with `currentColor`, so the
+ * caller decides with a text utility and the same component covers white on
+ * black, red on black, black on white and red on white. See /brand.
  */
+
+import { useId } from "react";
 
 export const PRODUCT_NAME = "Supermortgage";
 
-/** The house, on its 12 × 12 grid. Takes its colour from the text around it. */
+/**
+ * The house, on its 12 × 12 grid, drawn in `currentColor`.
+ *
+ * The lit doorway is punched out with a mask rather than painted black. That
+ * matters: a black rectangle is invisible on black and a black smear on white,
+ * so the mark could only ever sit on one background. As a hole it takes
+ * whatever is behind it, which is what makes the light variants possible.
+ *
+ * Inlined rather than loaded from packages/brand/assets/mark.svg because an
+ * <img> can do neither `currentColor` nor the cut-out.
+ */
 export function Mark({ size = 26, className }: { size?: number; className?: string }) {
+  // Unique per instance: /brand renders this a dozen times on one page, and
+  // duplicate mask ids would have every copy reference the first one.
+  const maskId = `mark-doorway-${useId().replace(/:/g, "")}`;
   return (
     <svg
       viewBox="0 0 12 12"
@@ -29,33 +42,45 @@ export function Mark({ size = 26, className }: { size?: number; className?: stri
       className={className}
       style={{ display: "block", flex: "none" }}
     >
-      <rect x="5" y="1" width="2" height="1" fill="currentColor" />
-      <rect x="4" y="2" width="4" height="1" fill="currentColor" />
-      <rect x="3" y="3" width="6" height="1" fill="currentColor" />
-      <rect x="2" y="4" width="8" height="1" fill="currentColor" />
-      <rect x="1" y="5" width="10" height="1" fill="currentColor" />
-      <rect x="2" y="6" width="8" height="5" fill="currentColor" />
-      {/* The lit doorway is a hole cut to the surface behind, not black paint. */}
-      <rect x="5" y="8" width="2" height="3" fill="var(--sm-color-ground)" />
+      <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="12" height="12">
+        <rect width="12" height="12" fill="#fff" />
+        <rect x="5" y="8" width="2" height="3" fill="#000" />
+      </mask>
+      <g mask={`url(#${maskId})`} fill="currentColor">
+        <rect x="5" y="1" width="2" height="1" />
+        <rect x="4" y="2" width="4" height="1" />
+        <rect x="3" y="3" width="6" height="1" />
+        <rect x="2" y="4" width="8" height="1" />
+        <rect x="1" y="5" width="10" height="1" />
+        <rect x="2" y="6" width="8" height="5" />
+      </g>
     </svg>
   );
 }
 
 /**
- * Mark plus name. `SUPER` light, `MORTGAGE` heavy — the weight change is the
- * point, and it is why this is set rather than shipped as the prototype's PNG:
- * the PNG is white-only and cannot take the accent colour. Replacing this with
- * the real vector wordmark when it exists is a change to this component alone.
+ * SUPERMORTGAGE, set in type.
+ *
+ * SUPER light and MORTGAGE heavy — the weight change is the whole idea, that
+ * the ordinary half is the bold one. This is a stand-in for the real artwork,
+ * which is still a white PNG that cannot take a colour; replacing it is a
+ * change to this component alone.
  */
-export function Wordmark({ size = 26 }: { size?: number }) {
-  const [light, heavy] = ["Super", "mortgage"];
+export function Wordmark({ className }: { className?: string }) {
   return (
-    <span className="inline-flex items-center gap-2.5 text-accent">
+    <span className={`uppercase tracking-label ${className ?? ""}`}>
+      <span className="font-normal">Super</span>
+      <span className="font-bold">mortgage</span>
+    </span>
+  );
+}
+
+/** Mark plus wordmark, at the nav's proportions. */
+export function Lockup({ size = 26, className }: { size?: number; className?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-2.5 ${className ?? ""}`}>
       <Mark size={size} />
-      <span className="text-base uppercase tracking-label">
-        <span className="font-normal">{light}</span>
-        <span className="font-bold">{heavy}</span>
-      </span>
+      <Wordmark className="text-base" />
     </span>
   );
 }

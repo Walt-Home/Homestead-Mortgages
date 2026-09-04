@@ -25,6 +25,16 @@ function parseTrustProxy(v: string | undefined): number | boolean {
 export const config = {
   port: parseInt(process.env.PORT ?? "8080", 10),
   nodeEnv: process.env.NODE_ENV ?? "development",
+  /**
+   * The state gallery at /states — every state and its copy, side by side.
+   *
+   * Off unless asked for. It is a design surface rather than a feature, it
+   * shows states most of which have no column behind them yet, and it should
+   * not be something a borrower stumbles into from a stray link. Sign-in is
+   * still required on top of this; the flag is what lets us turn it off
+   * without a deploy of the client.
+   */
+  stateGalleryEnabled: process.env.STATE_GALLERY === "true",
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   corsOrigins: (process.env.CORS_ORIGIN ?? "http://localhost:5173")
     .split(",")

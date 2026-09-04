@@ -15,6 +15,7 @@ import { Lockup } from "./components/Wordmark.js";
 import { Footer } from "./components/Footer.js";
 import { api, ApiError, type Assessment } from "./lib/api.js";
 import { useAuth } from "./lib/auth.js";
+import { StatesGalleryPage } from "./pages/StatesGalleryPage.js";
 import { useLoanFile } from "./lib/file.js";
 import { STAGE_TO_SCREEN, debugEnabled, screenIndex, type ScreenPath } from "./lib/flow.js";
 import { SignInPage } from "./pages/SignInPage.js";
@@ -32,7 +33,7 @@ import { IrsPage, PayrollPage } from "./pages/ConnectPages.js";
 import { UploadPage } from "./pages/UploadPage.js";
 
 export function App() {
-  const { status } = useAuth();
+  const { status, config } = useAuth();
 
   // Render nothing rather than the sign-in page while the session is still
   // being resolved — a signed-in person should never see a sign-in flash.
@@ -72,6 +73,14 @@ export function App() {
         <Route index element={<FilesPage />} />
         <Route path="privacy" element={<PrivacyPage />} />
         <Route path="brand" element={<BrandPage />} />
+        {/*
+          The state gallery. Only in the signed-in tree, and only when the
+          server says so: it is a design surface rather than a feature, and
+          most of the states it renders have no column behind them yet. With
+          the flag off it falls through to the catch-all, which is the same
+          answer any unknown path gets.
+        */}
+        {config?.stateGalleryEnabled && <Route path="states" element={<StatesGalleryPage />} />}
         {/*
           Where an OAuth bank returns the borrower.
 

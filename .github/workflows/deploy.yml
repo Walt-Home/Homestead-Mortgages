@@ -216,7 +216,7 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
-          ENV_VARS="NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture"
+          ENV_VARS="NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture,STATE_GALLERY=true"
           ENV_VARS="$ENV_VARS,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}"
           ENV_VARS="$ENV_VARS,BANK_PROVIDER=plaid,PLAID_ENV=sandbox,PLAID_PRODUCT=assets"
           ENV_VARS="$ENV_VARS,PLAID_CLIENT_ID=${{ vars.PLAID_CLIENT_ID }}"

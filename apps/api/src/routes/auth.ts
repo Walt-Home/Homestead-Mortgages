@@ -21,6 +21,7 @@ authRouter.get("/config", (_req, res) => {
     // Tells the client whether to offer the local shortcut. False in
     // production regardless of anything else.
     developerSignInAvailable: config.nodeEnv !== "production" && !config.googleClientId,
+    stateGalleryEnabled: config.stateGalleryEnabled,
     /*
      * Whether the ID check navigates away to a vendor.
      *

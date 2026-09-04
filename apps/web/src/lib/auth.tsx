@@ -22,6 +22,8 @@ interface AuthConfig {
   developerSignInAvailable: boolean;
   /** Whether the ID check navigates away to a vendor. */
   identityRequiresRedirect?: boolean;
+  /** Whether /states is served. A design surface, off by default. */
+  stateGalleryEnabled?: boolean;
 }
 
 interface AuthState {

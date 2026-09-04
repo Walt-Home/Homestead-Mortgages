@@ -74,8 +74,10 @@ every adapter against an unauthorized file and fails if any returns data.
 
 ## Docs
 
+- `docs/architecture.md` — the whole system in one place: infrastructure, data flow, the two vocabularies, and what is built versus designed. **WIP**
 - `docs/requirements.md` — how the registry works and how to change it
 - `docs/decisions.md` — what was decided, what is assumed, and what is known wrong
+- `docs/states.md` — user states and account states, both halves, with the built/designed boundary marked
 - `docs/brand.md` — the Supermortgage brand and design system, read from Doug's prototype, and what adopting it here would take
 
 ## Opening the deployed app

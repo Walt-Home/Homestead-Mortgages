@@ -8,9 +8,9 @@
  *
  * Two rules it exists to hold:
  *
- * 1. **No colour here.** Each entry carries a `tone`, which is a meaning, and
- *    exactly one .tsx maps a tone to a class. A colour in a .ts module is a
- *    colour the design-system test cannot see, because it only reads
+ * 1. **No color here.** Each entry carries a `tone`, which is a meaning, and
+ *    exactly one .tsx maps a tone to a class. A color in a .ts module is a
+ *    color the design-system test cannot see, because it only reads
  *    `className` in .tsx files.
  *
  * 2. **No promise the system cannot keep.** There is no mailer in this repo —
@@ -23,7 +23,7 @@
  * are written out so the sentence can be judged at its real length.
  */
 
-/** What a state means about the outcome — never what colour to paint it. */
+/** What a state means about the outcome — never what color to paint it. */
 export type Tone = "neutral" | "ok" | "warn" | "danger";
 
 export interface StateEntry {
@@ -75,13 +75,13 @@ export const STATE_GROUPS: readonly StateGroup[] = [
     states: [
       {
         id: "draft",
-        pill: "In progress",
+        pill: "You've started",
         tone: "neutral",
         terminal: false,
         meaning:
           "Started; fewer than six TRID pieces pinned. Not an application under Reg B or TRID.",
         heading: "In progress",
-        body: "You've started, and you can stop here as long as you like — we haven't pulled anything about you, and this isn't an application yet. Next up is your bank connection, which takes about two minutes.",
+        body: "You can stop here as long as you like — we haven't pulled anything about you, and this isn't an application yet. Next is a few questions about you: your name, your date of birth, and your Social Security number.",
         action: "Continue",
       },
       {
@@ -92,7 +92,7 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "All six pieces pinned. The Loan Estimate clock is running. Stamped once and never un-stamped.",
         heading: "We have your application",
-        body: "That's everything we need to call this an application, which starts a clock on our side: your Loan Estimate is due by 9 September. We'll put it here as soon as it exists. Nothing is needed from you right now.",
+        body: "That's everything we need to call this an application, which starts a clock on our side: your Loan Estimate is due by September 9. We'll put it here as soon as it exists. Your bank connection is next, and that's the last thing we need from you for now.",
         action: "See what happens next",
       },
     ],
@@ -121,18 +121,18 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "At least one open obligation names a borrower. The state today's forward-only stage cannot express.",
         heading: "Two things left for you",
-        body: "Your last two payslips — about a minute if they're in your email. And a short note about the $4,200 deposit on 14 August, so we can count it. Everything else is with us or a vendor, and none of it needs you.",
+        body: "Your last two paystubs — about a minute if they're in your email. And a short note about the $4,200 deposit on August 14, so we can count it as yours. We need both by September 2; if we don't have them by then we'll close this application without deciding on it. Everything else is ours to do, and none of it needs you.",
         action: "Start with the deposit note",
       },
       {
         id: "suspended",
         pill: "Waiting",
-        tone: "warn",
+        tone: "neutral",
         terminal: false,
         meaning:
           "Blocked on a third party — an appraisal, a payoff quote, a sanctions near-match. Clocks keep running unless tolling is lawful and recorded.",
         heading: "Waiting on someone else",
-        body: "The appraiser has been out to the property and we're waiting on their report. That's ours to chase, not yours. We expect it by 11 September and we'll say so here if that slips.",
+        body: "The appraiser has been out to the property and we're waiting on their report. That's ours to chase, not yours. We expect it by September 11 and we'll say so here if that slips.",
         action: null,
       },
       {
@@ -142,8 +142,8 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         terminal: false,
         meaning:
           "A named actor holds the file — an underwriter, or later the AI reviewer inside its bounded authority. Assignment is a real, contended, auditable fact.",
-        heading: "With an underwriter",
-        body: "Someone is looking at a couple of figures that need a person rather than a calculation. There's nothing for you to do, and we'll put the answer here.",
+        heading: "Being decided",
+        body: "A couple of the figures need judgment rather than a calculation, so your file is being looked at rather than run through. There's nothing for you to do, and we'll put the answer here.",
         action: null,
       },
     ],
@@ -162,17 +162,17 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "Creditworthy, wrong loan. Reachable today on LTV over the cap. Not a denial and must not be routed as one.",
         heading: "Not that loan — but here's one we can do",
-        body: "As you've structured it, the loan is 97.8% of the property's value, and this program stops at 97%. At $412,000 instead of $416,000 it fits, and your payment goes down about $22. You have until 18 September to decide.",
+        body: "The loan you asked for, $416,000, is 97.8% of what the property is worth, and this program stops at 97%. Borrowing $412,000 instead fits — that's $4,000 less loan, so $4,000 more for you to bring to closing, and about $22 off your monthly payment. You have until September 18 to decide, and if you'd rather not, you'll still get the reasons we couldn't do the loan the way you asked.",
         action: "Look at the alternative",
       },
       {
         id: "conditionally_approved",
-        pill: "Approved",
+        pill: "Approved with conditions",
         tone: "ok",
         terminal: false,
         meaning: "Risk accepted, product eligible, conditions open with named owners.",
         heading: "Approved, with a short list left",
-        body: "You're approved subject to four things. Three are ours or a vendor's — the appraisal, the title search, and the flood determination — and you don't need to do anything about those. One is yours: a copy of your homeowner's insurance binder.",
+        body: "You're approved subject to four things. Three are ours or a vendor's — the appraisal, the title search, and the flood determination — and none of them needs anything from you today. If the flood determination comes back saying the property sits in a flood zone, you'll need flood insurance too, and we'll say so here. One is yours: a copy of your homeowner's insurance binder.",
         action: "Upload the insurance binder",
       },
       {
@@ -194,7 +194,7 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "Every obligation, every phase, each disclosure with a delivery record. Honestly unreachable today: no document generation exists, and that gap stays visible rather than papered over.",
         heading: "Clear to close",
-        body: "Everything is done and every document you're owed has reached you. Your closing is booked for 22 September at 10am.",
+        body: "Everything on our side is done, and your closing is booked for September 22 at 10 a.m. Your Closing Disclosure comes first: by law you get three business days with it before you sign.",
         action: "See your closing details",
       },
     ],
@@ -213,18 +213,18 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "Closing Disclosure delivered with its own three-day receipt clock; documents out for signature; pre-funding re-screen pending.",
         heading: "Closing",
-        body: "Your Closing Disclosure went out on 19 September and by law you have three business days with it before signing. Your documents are ready when that window closes.",
+        body: "Your Closing Disclosure — your final rate, payment and costs — is here, dated September 17. By law you get three business days with it before you sign, counted from when it reaches you. Your closing is booked for September 22, and your documents are ready when that window closes.",
         action: "Read your Closing Disclosure",
       },
       {
         id: "rescission_pending",
-        pill: "Can be cancelled",
+        pill: "Can be canceled",
         tone: "warn",
         terminal: false,
         meaning:
           "TILA three-day right to rescind. Funding is barred until it expires, and the clock starts from the LATER of consummation, disclosure delivery, and two copies of the notice per entitled consumer.",
         heading: "Signed — and you can still change your mind",
-        body: "You've signed, and by law you have three business days to cancel. We can't fund until 25 September at midnight. The notice explains exactly how to use that right if you want to.",
+        body: "You've signed, and by law you can cancel until the end of Friday, September 25 — three business days from the later of signing, getting your disclosures, and getting this notice. Anyone with an ownership interest in the home can cancel, not only whoever signed the note, and one of you canceling cancels it for everyone. Nothing can be paid out until that window closes, and the notice below says exactly what to do.",
         action: "Read the cancellation notice",
       },
       {
@@ -235,7 +235,7 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "Disbursed. The application's job is over and a Loan now exists; questions about the mortgage move to that object.",
         heading: "It's done",
-        body: "Your mortgage funded on 25 September. We're setting it up with your servicer now, and your first payment date will appear here once they've boarded it.",
+        body: "Your mortgage funded on September 28, once your cancellation window had closed. We're handing your account to the company that will collect your payments, and your first payment date will appear here once they're set up.",
         action: "See your mortgage",
       },
     ],
@@ -253,8 +253,8 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         terminal: false,
         meaning:
           "Declined, notice not yet delivered. THIS is the compliance dashboard — a 30-day clock is running and this row is the alertable object. There is no path from here to any approval word.",
-        heading: "We can't move forward",
-        body: "We've decided we can't approve this, and you're owed a written explanation with the specific reasons — by law, within 30 days. Here are the reasons as we recorded them: the debt-to-income ratio is 51%, above this program's limit of 45%. The formal notice isn't ready yet, and we'll put it here when it is.",
+        heading: "We can't approve this",
+        body: "You're owed a written explanation with the specific reasons — by law, within 30 days of the day your application was complete, which makes yours due by September 26. Here are the reasons as we recorded them: the debt-to-income ratio is 51%, above this program's limit of 45%. The formal notice isn't ready yet, and we'll put it here when it is.",
         action: "Read the reasons",
       },
       {
@@ -265,18 +265,18 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "Told, with specific principal reasons traced to derivation nodes, within the window. Requires a delivered notice for every applicant.",
         heading: "Not approved",
-        body: "The reasons are your debt-to-income ratio at 51%, against this program's limit of 45%. Your notice is dated 26 September and you can read it here. A credit report was part of this decision, and the notice tells you which bureau and how to get your file from them free of charge.",
+        body: "The reasons are your debt-to-income ratio at 51%, against this program's limit of 45%. Your notice is dated September 26 and you can read it here. A credit report was part of this decision, and the notice tells you which bureau and how to get your file from them free of charge.",
         action: "Read your notice",
       },
       {
         id: "incomplete_closed",
-        pill: "Closed",
+        pill: "Lapsed",
         tone: "neutral",
         terminal: true,
         meaning:
           "Reg B 1002.9(c) — a notice of incomplete application was delivered and the response window lapsed. Separately reportable, and never recorded as a denial or a withdrawal.",
         heading: "Closed because we didn't hear back",
-        body: "We asked for your payslips on 12 August and didn't hear back by 2 September, so this application is closed. Nothing about this counts against you. Starting again is quick — most of what we hold is still current, and we'll say exactly what's gone stale.",
+        body: "We asked for your paystubs on August 12 and didn't hear back by September 2, so this application is closed. That isn't a decision about your credit and we haven't recorded it as a denial. The credit check we already ran stays on your credit file, the way any credit check does. Starting again is quick — most of what we hold is still current, and we'll say exactly what's gone stale.",
         action: "Start again",
       },
       {
@@ -287,18 +287,18 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "The borrower stopped it. Guarded on actor kind so staff cannot write this state. Withdrawal is not deletion.",
         heading: "Withdrawn at your request",
-        body: "We've stopped every retrieval and switched off any monitoring tied to this application. We keep the record until September 2028 because the law requires it, and you can see exactly what we kept and what we removed.",
-        action: "See what we kept",
+        body: "We've stopped every retrieval and switched off any monitoring tied to this application. Withdrawing stops the work; it doesn't erase the file. We keep the record until September 2028 because the law requires it, and you can see exactly what we hold.",
+        action: "See what we hold",
       },
       {
         id: "canceled",
-        pill: "Cancelled",
+        pill: "Canceled",
         tone: "neutral",
         terminal: true,
         meaning:
           "We stopped it, for a reason that is not a credit decision — a duplicate file, an out-of-footprint property, a licensing gap. Cancellation after substantive evaluation is flagged for compliance review, so it cannot be used to avoid a notice.",
         heading: "We closed this application",
-        body: "You started a second application for the same property on 30 August, so we've closed this one to keep them from getting tangled. Nothing about it counts against you.",
+        body: "You started a second application for the same property on August 30, so we've closed this one to keep them from getting tangled. That's our doing, not a decision about your credit, and we haven't recorded it as one. The newer application carries on unaffected.",
         action: "Open the newer one",
       },
       {
@@ -309,7 +309,7 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "A draft that never became an application. No notice is owed because nothing was applied for — the distinction from incomplete_closed exists for reporting and retention.",
         heading: "This one timed out",
-        body: "You started this in June and it never became an application, so we've closed it. We didn't retrieve anything about you and there's nothing to report. Starting again takes about a minute.",
+        body: "You started this in June and it never became an application, so we've closed it. We didn't look anything up about you, so there's no trace of it anywhere else. Starting again means doing it from the beginning — about fifteen minutes.",
         action: "Start again",
       },
     ],
@@ -326,10 +326,10 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         tone: "warn",
         terminal: false,
         meaning:
-          "Two sources disagree on one predicate. The engine holds the derived figure rather than picking one quietly.",
+          "Two numbers don't match on one predicate. The engine holds the derived figure rather than picking one quietly.",
         heading: "Two sources disagree",
-        body: "Your payslip says $8,200 a month and your employer's records say $7,950. We're not going to pick one quietly — someone here is looking at it, and until they do we're holding your affordability figure rather than guessing. If you know which is right, telling us will speed it up.",
-        action: "Tell us which is right",
+        body: "Your paystub says $8,200 a month and your employer's records say $7,950. We're not going to pick one quietly. Someone here is looking at it, and until they've finished we won't put a number on what you can borrow. If you know why they differ — a raise in July, a month of overtime — telling us will help whoever looks at it.",
+        action: "Tell us why they differ",
       },
     ],
   },
@@ -357,8 +357,8 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         terminal: false,
         meaning:
           "Transfer file sent, not yet acknowledged. A real state because it is the window in which a payment can be misdirected and nobody can find the borrower.",
-        heading: "Almost there",
-        body: "Grander has your account and is finishing the setup. Don't make a payment anywhere yet — we'll show you where and when as soon as they confirm.",
+        heading: "Don't send a payment yet",
+        body: "Grander has your account and is finishing the setup. There's nothing to send yet — your first payment isn't due until November 1, and we'll show you where to send it well before then.",
         action: null,
       },
       {
@@ -380,7 +380,7 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "Serviced and current in our system of record. Delinquency is an attribute of the newest servicing observation, not a state.",
         heading: "Your mortgage",
-        body: "$408,220 at 5.99%. Next payment of $2,847 is due 1 October, serviced by Grander. We re-check your rate against the market every month and only get in touch when it's worth your time.",
+        body: "$408,220 at 5.99%. Your next payment of $2,847 is due October 1, and Grander collects it. We re-check your rate against the market every month, and we'll put something here when it's worth your time.",
         action: "Manage this mortgage",
       },
       {
@@ -391,7 +391,7 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "We watch it and can offer better; we neither own nor service it. The right state for a claimed portfolio loan we did not originate, and for one sold servicing-released.",
         heading: "We're watching this one",
-        body: "42 Oak Street at 6.875%, serviced by someone else. We don't handle your payments — we just check monthly whether you could do better, and tell you when you could. You can switch that off whenever you like.",
+        body: "42 Oak Street at 6.875%. Another company handles your payments, not us — we check every month whether you could do better, and we'll say so here when you could. You can switch that off whenever you like.",
         action: "Turn this off",
       },
       {
@@ -402,7 +402,7 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "Servicing is moving, to us or away. Notices are owed ahead of the transfer date and the borrower's error-resolution rights follow the loan.",
         heading: "Your servicer is changing",
-        body: "From 1 November your mortgage will be serviced by Grander instead of us. Your rate, your balance and your payment don't change. Keep paying us until 31 October, then them — and there's a 60-day grace period if a payment goes to the wrong place.",
+        body: "From January 1 your mortgage will be serviced by Cardinal Servicing instead of Grander. Your rate, your balance and your payment don't change. Keep paying Grander until December 31, then Cardinal. If you send Grander a payment by mistake in the first 60 days, it can't be charged a late fee or reported as late, as long as it arrives by its due date. The due dates themselves don't move.",
         action: "See what changes",
       },
       {
@@ -413,7 +413,7 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "Satisfied by any means other than our own refinance — a sale, or a competitor's payoff.",
         heading: "Paid off",
-        body: "This mortgage was paid off on 14 March 2029 and the lien has been released. Nothing further is owed on it.",
+        body: "This mortgage was paid off on March 14, 2029 and the lien has been released. Nothing further is owed on it, and anything left in your escrow account comes back to you within 20 business days.",
         action: null,
       },
       {
@@ -424,7 +424,7 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "Paid off by a loan we originated. Kept distinct from paid_off because it is the monitoring loop's success metric and the one attributable chain the product exists to produce.",
         heading: "Refinanced",
-        body: "This one was paid off on 14 March 2029 by the mortgage you refinanced into, which took your rate from 6.875% to 5.49%.",
+        body: "This one was paid off on March 14, 2029 by the mortgage you refinanced into, which took your rate from 6.875% to 5.99%.",
         action: "See the new mortgage",
       },
       {
@@ -435,28 +435,28 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "Servicing sold or the loan sold servicing-released. We may keep the relationship and the opportunity surface even though the servicing data stops — which is why Loan and Party are different records.",
         heading: "Serviced by someone else now",
-        body: "Your mortgage moved to Cardinal Servicing on 1 November, so payments and statements are with them. We can keep watching your rate if you want us to.",
+        body: "Your mortgage moved to Cardinal Servicing on January 1, so you pay them now and your statements come from them. We can keep watching your rate if you want us to.",
         action: "Keep watching my rate",
       },
       {
         id: "loan_charged_off",
-        pill: "Closed",
+        pill: "Charged off",
         tone: "danger",
         terminal: true,
         meaning:
           "Terminal loss after foreclosure, short sale or deed in lieu. Different retention and reporting, and it starts the party's seasoning clocks.",
-        heading: "This mortgage is closed",
-        body: "This account was closed following the sale of the property in 2029. If you're thinking about borrowing again, there are waiting periods that depend on how it was resolved, and we can tell you where you stand.",
-        action: "Talk to someone",
+        heading: "Closed without being paid in full",
+        body: "The property was sold in 2029 and this account was closed. If you're thinking about borrowing again, there are waiting periods, and how long depends on how this one ended. What that means for you is here.",
+        action: "See where you stand",
       },
       {
         id: "loan_matured",
-        pill: "Paid off",
+        pill: "Term ended",
         tone: "ok",
         terminal: true,
         meaning: "Term completed and satisfied.",
-        heading: "Paid in full",
-        body: "You reached the end of the term on 1 October 2055 and the mortgage is satisfied. The lien has been released.",
+        heading: "You reached the end of the term",
+        body: "The last payment was due October 1, 2055 and the mortgage is satisfied. The lien has been released, and anything left in your escrow account comes back to you within 20 business days.",
         action: null,
       },
     ],
@@ -470,12 +470,12 @@ export const STATE_GROUPS: readonly StateGroup[] = [
       {
         id: "opportunity_refinance",
         pill: "Worth a look",
-        tone: "ok",
+        tone: "neutral",
         terminal: false,
         meaning:
           "A monthly review found a material opportunity. Accepting creates a NEW application while the old loan keeps being paid — which is why the home screen has to hold more than one thing.",
         heading: "You could be paying about $240 less a month",
-        body: "Your loan is at 6.875% and we'd quote around 5.99% today. That's worked out from your own loan's numbers and our current rate sheet — we haven't run your credit for it. It's an estimate, not an offer. Applying would take about ten minutes, and we'd reuse eleven things we already hold.",
+        body: "Your loan is at 6.875% and we'd quote around 5.99% today, on a fresh 30-year term. Part of that $240 is the lower rate and part is the term starting over, which is worth knowing before you count it all as money saved. That's worked out from your own loan's numbers and our current rate sheet — we haven't run your credit for it. It's an estimate, not an offer. Applying would take about ten minutes, and we'd reuse eleven things we already hold.",
         action: "See what applying involves",
       },
       {
@@ -486,7 +486,7 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "A refresh whose re-pull failed records link_degraded and computes NOTHING. An incomplete refresh yields blocked derivations, blocked yields refer, and an appended refer is a verdict the borrower did not earn.",
         heading: "We couldn't check this month",
-        body: "Your bank connection needs signing into again, so we couldn't compare your rate. This isn't a result — it's a check we weren't able to run, and we'd rather say that than show you a number we made up.",
+        body: "Your bank needs you to sign in again, so we couldn't finish this month's check. This isn't a result — it's a check we weren't able to run, and we'd rather say that than show you a number we made up.",
         action: "Reconnect your bank",
       },
     ],

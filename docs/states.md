@@ -302,7 +302,8 @@ year's pull.
 | ---------------------------------------------- | --------------------------------------------------------------- |
 | `FlowStage`, four screens, decision outcomes   | Built — and being replaced                                      |
 | Tests against a real Postgres                  | Built                                                           |
-| Party, facts, authorizations                   | Designed                                                        |
+| Party, facts, principals                       | **Built** — schema and constraints; not yet wired to a route    |
+| Authorizations, evidence artifacts             | Designed                                                        |
 | Applications, scenarios, the transition ledger | Designed                                                        |
 | Rewritten decision engine (three-axis)         | Designed                                                        |
 | Loans and servicing                            | Designed                                                        |

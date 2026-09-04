@@ -486,3 +486,211 @@ model FileEvent {
   @@index([kind, occurredAt])
   @@map("file_events")
 }
+
+// ─── THE RELATIONSHIP LAYER ─────────────────────────────────────────────────
+//
+// The first slice of the model in `docs/states.md`. It lands ALONGSIDE the
+// loan-file tables above rather than replacing them: nothing here is wired into
+// a route yet, and the four screens keep running on `loan_files` until the
+// application layer exists to move them.
+//
+// The rule that makes this worth having is that a Party outlives every
+// application. A Grander portfolio member has a mortgage and no application; a
+// returning borrower's second file must reuse what we already verified rather
+// than re-scan and re-charge. Neither is expressible while identity is a
+// cascade child of a loan file.
+
+/// Whether a fact is about a person, a building, or something else.
+///
+/// A plain string would do, and would let a typo create a whole parallel
+/// universe of facts nobody queries.
+enum FactSubjectType {
+  PARTY
+  PROPERTY
+  LOAN
+}
+
+/// Where an assertion came from. Not how much we trust it — that is `confidence`.
+enum FactSourceKind {
+  SELF_ATTESTED
+  STAFF_ENTERED
+  VENDOR_RETRIEVED
+  PUBLIC_RECORD
+  DOCUMENT_EXTRACTED
+  PARTNER_SHARED
+  AI_INFERRED
+  DERIVED
+}
+
+/// How well we know something. ORDERED, weakest first — Postgres compares enum
+/// values by declaration order, so `confidence >= 'CORROBORATED'` is a real
+/// query and the ladder is a property of the type rather than a lookup table.
+///
+/// The distinction that earns its keep is VERIFIED vs everything below it.
+/// Plaid Assets and Plaid CRA return identical bytes from the same bank login,
+/// and only CRA carries FCRA consumer-report status — same data, different
+/// tier, and the requirement turns on the tier, not the bytes.
+enum ConfidenceTier {
+  ATTESTED
+  UNVERIFIED
+  INFERRED
+  ESTIMATED
+  CORROBORATED
+  VERIFIED
+  VALIDATED_D1C
+}
+
+enum PrincipalKind {
+  BORROWER
+  STAFF
+  SERVICE
+  PARTNER
+  AI_AGENT
+}
+
+enum PartyKind {
+  PERSON
+  ENTITY
+}
+
+/// How far along a party is in becoming a person who has agreed to be here.
+///
+/// PROVISIONAL is the Grander import: a record about somebody who has never
+/// contacted us. It is deliberately a state rather than a boolean, because the
+/// things you may do with a provisional party are narrower than the things you
+/// may do with a claimed one, and that is a rule worth being able to name.
+enum PartyClaimStatus {
+  PROVISIONAL
+  CLAIM_PENDING
+  CLAIMED
+  MERGED
+}
+
+/// A durable person or legal entity. Trusts and LLCs hold investment property,
+/// which is why this is not called `Person`.
+///
+/// It carries NO name, date of birth or SSN column. Those are facts, with a
+/// source and a time — because "what did the borrower tell us, and when" is the
+/// axis an ECOA complaint runs along, and a mutable column cannot answer it.
+model Party {
+  id          String           @id @default(uuid()) @db.Uuid
+  kind        PartyKind        @default(PERSON)
+  claimStatus PartyClaimStatus @default(PROVISIONAL) @map("claim_status")
+
+  /// Set when a duplicate is folded into another party. The row stays, so a
+  /// fact asserted against the old id is still reachable.
+  mergedIntoPartyId String? @map("merged_into_party_id") @db.Uuid
+  mergedInto        Party?  @relation("PartyMerge", fields: [mergedIntoPartyId], references: [id], onDelete: SetNull)
+  mergedFrom        Party[] @relation("PartyMerge")
+
+  /// How we first heard of them: "self_signup", "grander_import", a partner name.
+  /// Free text on purpose — a new partner should not need a migration.
+  sourceFirstSeen String? @map("source_first_seen")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  facts      Fact[]
+  principals Principal[]
+
+  @@index([claimStatus])
+  @@index([mergedIntoPartyId])
+  @@map("parties")
+}
+
+/// Any actor that can assert something: a borrower, a member of staff, a
+/// scheduled job, a partner system, or an AI agent.
+///
+/// This replaces the prototype's free-string `FileEvent.actor`, which is only
+/// ever "borrower", "system", or a provider name — and which therefore cannot
+/// answer "which agent decided this". An AI model upgrade is a NEW principal
+/// row, so `model_version` resolves to the thing that actually ran.
+model Principal {
+  id      String        @id @default(uuid()) @db.Uuid
+  kind    PrincipalKind
+  /// Human-readable handle: an email, a job name, a partner slug, a model alias.
+  subject String
+
+  /// Set only for BORROWER principals.
+  partyId String? @map("party_id") @db.Uuid
+  party   Party?  @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  modelId      String? @map("model_id")
+  modelVersion String? @map("model_version")
+
+  deprovisionedAt DateTime? @map("deprovisioned_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  assertedFacts Fact[] @relation("FactAssertedBy")
+
+  @@unique([kind, subject])
+  @@index([partyId])
+  @@map("principals")
+}
+
+/// The append-only provenance ledger for regulated attributes.
+///
+/// One row per assertion. Legal name, date of birth, citizenship, marital
+/// status, military service, income, employers, credit scores — anything a
+/// requirement's applicability or evidence path might read, and that has no
+/// lifecycle of its own beyond being asserted, superseded or expiring.
+///
+/// Anything WITH a lifecycle of its own gets a table instead: a certified flood
+/// determination has a certificate, a life-of-loan monitoring duty and a
+/// borrower notice; an appraisal has an order, a licence and a 120-day
+/// validity. Flattening those into key-value rows loses the structure the
+/// obligation attaches to.
+///
+/// APPEND-ONLY, and enforced by a trigger rather than by convention — see the
+/// migration. The only columns anything may update are `superseded_by_id`,
+/// `retracted_at` and `retraction_reason`.
+model Fact {
+  id String @id @default(uuid()) @db.Uuid
+
+  subjectType FactSubjectType @map("subject_type")
+  subjectId   String          @map("subject_id") @db.Uuid
+  /// Present when the subject is a party, so the FK can do its job. Null for a
+  /// property or loan subject, which do not have tables yet.
+  party       Party?          @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  partyId     String?         @map("party_id") @db.Uuid
+
+  /// What is being asserted: "legal_name", "date_of_birth", "annual_income".
+  predicate String
+  /// Discriminates repeated facts of the same predicate — an employer id, an
+  /// account id. Empty string for a singleton, never null, so the uniqueness
+  /// and ordering indexes do not have to reason about three-valued logic.
+  subjectKey String @default("") @map("subject_key")
+
+  value Json
+
+  sourceKind FactSourceKind @map("source_kind")
+  confidence ConfidenceTier
+
+  assertedByPrincipalId String    @map("asserted_by_principal_id") @db.Uuid
+  assertedBy            Principal @relation("FactAssertedBy", fields: [assertedByPrincipalId], references: [id])
+
+  /// When the thing was true in the world, versus when we wrote it down. A
+  /// backdated correction is a new row with an earlier `observed_at` and a
+  /// later `recorded_at`, never an edit.
+  observedAt DateTime @map("observed_at")
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  /// When this assertion stops being usable. Null means it does not expire on
+  /// its own — a filed tax year never goes stale; a credit pull does.
+  expiresAt DateTime? @map("expires_at")
+
+  /// Points at the row that replaced this one.
+  supersededById String? @unique @map("superseded_by_id") @db.Uuid
+  supersededBy   Fact?   @relation("FactSupersession", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes     Fact?   @relation("FactSupersession")
+
+  /// Withdrawn rather than replaced — the borrower says they never said it.
+  retractedAt      DateTime? @map("retracted_at")
+  retractionReason String?   @map("retraction_reason")
+
+  @@index([subjectType, subjectId, predicate, subjectKey, observedAt(sort: Desc)])
+  @@index([partyId])
+  @@index([assertedByPrincipalId])
+  @@index([expiresAt])
+  @@map("facts")
+}

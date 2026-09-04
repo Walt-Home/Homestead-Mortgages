@@ -590,8 +590,9 @@ model Party {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  facts      Fact[]
-  principals Principal[]
+  facts          Fact[]
+  principals     Principal[]
+  authorizations Authorization[]
 
   @@index([claimStatus])
   @@index([mergedIntoPartyId])
@@ -621,7 +622,8 @@ model Principal {
   deprovisionedAt DateTime? @map("deprovisioned_at")
   createdAt       DateTime  @default(now()) @map("created_at")
 
-  assertedFacts Fact[] @relation("FactAssertedBy")
+  assertedFacts        Fact[]          @relation("FactAssertedBy")
+  revokedAuthorizations Authorization[] @relation("AuthorizationRevokedBy")
 
   @@unique([kind, subject])
   @@index([partyId])
@@ -693,4 +695,89 @@ model Fact {
   @@index([assertedByPrincipalId])
   @@index([expiresAt])
   @@map("facts")
+}
+
+/// What a grant permits. Named for the legal basis, not for the screen that
+/// collected it.
+///
+/// The prototype's `Consent.kind` is a free string with five values and no
+/// scope: one "verification_authorization" covers every pull, of every data
+/// category, from every vendor, forever. These are narrower on purpose —
+/// pulling a tax transcript and re-pulling a bank feed for monthly monitoring
+/// are different permissions with different lifetimes, and a borrower who
+/// agreed to one has not agreed to the other.
+enum AuthorizationPurpose {
+  /// FCRA 604(a)(2) written instruction of the consumer. The origination pull.
+  FCRA_WRITTEN_INSTRUCTION
+  /// FCRA 604(a)(3)(F)(ii) account review. What monthly monitoring runs under,
+  /// and NOT what an origination authorization covers.
+  FCRA_ACCOUNT_REVIEW
+  FCRA_PRESCREEN
+  IRS_4506C
+  SSA_89
+  BIOMETRIC_IDV
+  ELECTRONIC_DELIVERY
+  PARTNER_DATA_SHARE
+  MARKETING_CONTACT
+}
+
+/// What may be retrieved under a grant.
+///
+/// Only person-keyed categories appear here. An address lookup — assessor
+/// record, AVM, flood — is keyed on a building and needs no permission from
+/// anybody, which is why screen 1 can run before any authorization exists.
+enum DataCategory {
+  CREDIT_REPORT
+  BANK_TRANSACTIONS
+  PAYROLL_INCOME
+  TAX_TRANSCRIPT
+  IDENTITY_DOCUMENT
+  SANCTIONS_SCREENING
+}
+
+/// A scoped, expiring, revocable grant by one party.
+///
+/// Three differences from the `Consent` row it replaces, each of which is a
+/// defect it closes. It names a PARTY rather than a file, so one borrower's
+/// signature cannot authorize a pull about their co-borrower. It carries data
+/// categories, so a bank authorization is not also a tax-transcript
+/// authorization. And `expires_at` is NOT NULL, because a permission with no
+/// end is one nobody ever has to look at again.
+model Authorization {
+  id      String @id @default(uuid()) @db.Uuid
+  partyId String @map("party_id") @db.Uuid
+  party   Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  purpose        AuthorizationPurpose
+  dataCategories DataCategory[]       @map("data_categories")
+
+  /// Who the data may be shared with or retrieved from. Empty means the grant
+  /// names no counterparty and the caller must not infer one.
+  counterparties String[] @default([]) @map("counterparties")
+
+  grantedAt DateTime @map("granted_at")
+  /// NOT NULL on purpose. Origination grants run ~120 days; an account-review
+  /// grant for monitoring is renewable and measured in months.
+  expiresAt DateTime @map("expires_at")
+
+  revokedAt             DateTime?  @map("revoked_at")
+  revokedByPrincipalId  String?    @map("revoked_by_principal_id") @db.Uuid
+  revokedBy             Principal? @relation("AuthorizationRevokedBy", fields: [revokedByPrincipalId], references: [id])
+  revocationReason      String?    @map("revocation_reason")
+
+  /// Hash of the exact words shown when it was granted. Content-addressed, so
+  /// "what did they actually agree to" survives a copy edit to the template.
+  disclosureTextHash String? @map("disclosure_text_hash")
+  /// Set once signing is wired. Null means the grant was recorded without an
+  /// executed document behind it, which is a fact worth being able to query.
+  signatureEnvelopeId String? @map("signature_envelope_id")
+
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([partyId, purpose])
+  @@index([expiresAt])
+  @@map("authorizations")
 }

@@ -298,19 +298,20 @@ year's pull.
 
 ## Built, or not
 
-| Piece                                          | Status                                                             |
-| ---------------------------------------------- | ------------------------------------------------------------------ |
-| `FlowStage`, four screens, decision outcomes   | Built — and being replaced                                         |
-| Tests against a real Postgres                  | Built                                                              |
-| Party, facts, principals                       | **Built** — schema and constraints; not yet wired to a route       |
-| Authorizations and the purpose token           | **Built** — schema, constraints and minting; guard not yet swapped |
-| Evidence artifacts, retrieval requests         | Designed                                                           |
-| Applications, scenarios, the transition ledger | Designed                                                           |
-| Rewritten decision engine (three-axis)         | Designed                                                           |
-| Loans and servicing                            | Designed                                                           |
-| Roles and staff tooling                        | Designed                                                           |
-| Monitoring, notifications                      | Designed, deferred                                                 |
-| Notice generation and delivery                 | **Not designed in detail. Resend is chosen and not integrated**    |
+| Piece                                        | Status                                                             |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| `FlowStage`, four screens, decision outcomes | Built — and being replaced                                         |
+| Tests against a real Postgres                | Built                                                              |
+| Party, facts, principals                     | **Built** — schema and constraints; not yet wired to a route       |
+| Authorizations and the purpose token         | **Built** — schema, constraints and minting; guard not yet swapped |
+| Evidence artifacts, retrieval requests       | Designed                                                           |
+| Applications and the transition ledger       | **Built** — 19 states, the machine, and the ledger; no routes yet  |
+| Scenarios and pinned evidence                | Designed                                                           |
+| Rewritten decision engine (three-axis)       | Designed                                                           |
+| Loans and servicing                          | Designed                                                           |
+| Roles and staff tooling                      | Designed                                                           |
+| Monitoring, notifications                    | Designed, deferred                                                 |
+| Notice generation and delivery               | **Not designed in detail. Resend is chosen and not integrated**    |
 
 That last row governs more than it looks like it does. Several regulatory clocks
 can only be _stopped_ by a delivered notice, so until Resend is wired in, a clock

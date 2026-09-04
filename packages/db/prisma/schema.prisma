@@ -593,6 +593,7 @@ model Party {
   facts          Fact[]
   principals     Principal[]
   authorizations Authorization[]
+  applications   ApplicationParty[]
 
   @@index([claimStatus])
   @@index([mergedIntoPartyId])
@@ -622,8 +623,9 @@ model Principal {
   deprovisionedAt DateTime? @map("deprovisioned_at")
   createdAt       DateTime  @default(now()) @map("created_at")
 
-  assertedFacts        Fact[]          @relation("FactAssertedBy")
-  revokedAuthorizations Authorization[] @relation("AuthorizationRevokedBy")
+  assertedFacts         Fact[]                  @relation("FactAssertedBy")
+  revokedAuthorizations Authorization[]         @relation("AuthorizationRevokedBy")
+  transitionsCaused     ApplicationTransition[] @relation("TransitionActor")
 
   @@unique([kind, subject])
   @@index([partyId])
@@ -780,4 +782,138 @@ model Authorization {
   @@index([partyId, purpose])
   @@index([expiresAt])
   @@map("authorizations")
+}
+
+// ─── THE APPLICATION LAYER ──────────────────────────────────────────────────
+
+/// Nineteen states, mirroring packages/shared/src/application-machine.ts.
+///
+/// The machine there is the authority on which moves are legal; this enum only
+/// says which values may be stored. A test asserts the two agree, because a
+/// state added to one and not the other is a file that can enter a state
+/// nothing knows how to render.
+enum ApplicationState {
+  DRAFT
+  INTAKE_RECEIVED
+  IN_PROCESSING
+  AWAITING_BORROWER
+  SUSPENDED
+  IN_UNDERWRITING
+  COUNTEROFFER_OUTSTANDING
+  CONDITIONALLY_APPROVED
+  APPROVED
+  CLEAR_TO_CLOSE
+  CLOSING
+  RESCISSION_PENDING
+  FUNDED
+  ADVERSE_ACTION_PENDING
+  DENIED
+  INCOMPLETE_CLOSED
+  WITHDRAWN
+  CANCELED
+  EXPIRED
+}
+
+enum ApplicationPartyRole {
+  PRIMARY_BORROWER
+  CO_BORROWER
+  NON_OCCUPANT_CO_BORROWER
+  NON_BORROWING_SPOUSE
+  GUARANTOR
+}
+
+/// A credit request. Transient — it starts, it ends, and it is never reopened.
+///
+/// It holds no borrower fields, no property columns and no income. Those are
+/// facts on a party, and an application BORROWS them. What lives here is the
+/// request itself and where it stands.
+///
+/// `status` is written ONLY by the transition service. Two database triggers
+/// enforce that rather than trusting it: one refuses a status change that does
+/// not also advance `statusSeq`, and a deferred constraint trigger refuses to
+/// let a transaction commit if it moved the status without writing the matching
+/// ledger row. A bare `prisma.application.update({ data: { status } })` fails.
+model Application {
+  id String @id @default(uuid()) @db.Uuid
+
+  status ApplicationState @default(DRAFT)
+  /// Increments on every transition. The ledger row for a move carries the same
+  /// number, and `(application_id, seq)` is unique — so two writers racing is an
+  /// insert conflict rather than a lost update.
+  statusSeq Int @default(0) @map("status_seq")
+  /// When the file entered its current state. What an ops queue sorts on, and
+  /// the reason a stored state beats a derived one: you cannot age a function.
+  statusEnteredAt DateTime @default(now()) @map("status_entered_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  parties     ApplicationParty[]
+  transitions ApplicationTransition[]
+
+  /// The queue query this exists to make cheap: everything in one state,
+  /// oldest first.
+  @@index([status, statusEnteredAt])
+  @@map("applications")
+}
+
+/// Which parties are on an application, and in what capacity.
+///
+/// Plural from the start. The prototype reads `borrowers[0]` in a dozen places,
+/// and every one of them is a co-borrower quietly ignored — which is also how
+/// one person's signature came to authorize a pull about somebody else.
+model ApplicationParty {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  partyId       String      @map("party_id") @db.Uuid
+  party         Party       @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  role ApplicationPartyRole
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([applicationId, partyId])
+  @@index([partyId])
+  @@map("application_parties")
+}
+
+/// Every move, in order, with its cause. Append-only.
+///
+/// A transition is itself a regulated act — the ECOA clock runs from the
+/// decision, the Reg B window from the notice, rescission from consummation —
+/// so a state with no recorded timestamp, actor and reason cannot lawfully
+/// start a clock. This is also what makes "what state was this file in on 14
+/// March 2027" answerable after a deploy that changed the code.
+model ApplicationTransition {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  /// Matches the application's `statusSeq` after the move. Gapless from 1.
+  seq Int
+
+  fromState ApplicationState? @map("from_state")
+  toState   ApplicationState  @map("to_state")
+  event     String
+
+  /// Who caused it. An AI reviewer resolves to a specific model version here,
+  /// which is what makes "which agent decided this" answerable.
+  actorPrincipalId String    @map("actor_principal_id") @db.Uuid
+  actor            Principal @relation("TransitionActor", fields: [actorPrincipalId], references: [id])
+
+  /// A code from a closed set, not free text — this is what an ops report
+  /// groups by, and what a compliance review reads.
+  reasonCode String? @map("reason_code")
+  /// What produced it: a decision run, a delivered notice, a failed retrieval.
+  causedBy   String? @map("caused_by")
+
+  /// Bitemporal. A backdated correction is a NEW row with an earlier
+  /// `occurredAt` and a later `recordedAt`, never an edit to this one.
+  occurredAt DateTime @map("occurred_at")
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  @@unique([applicationId, seq])
+  @@index([applicationId, occurredAt])
+  @@map("application_transitions")
 }

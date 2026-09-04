@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { APPLICATION_STATES } from "@hm/shared";
 import { ALL_STATES, STATE_GROUPS } from "../states.js";
 
 describe("every state is written out", () => {
@@ -177,5 +178,34 @@ describe("the worked example holds together", () => {
     const rates = [...everything.matchAll(/(\d\.\d{2,3})%/g)].map((m) => m[1] ?? "");
     const allowed = new Set(["6.875", "5.99"]);
     expect([...new Set(rates)].filter((r) => !allowed.has(r))).toEqual([]);
+  });
+});
+
+describe("the copy keeps up with the machine", () => {
+  // packages/shared/src/application-machine.ts is the authority on which states
+  // exist. A state added there and not here renders as a blank card; a state
+  // here that the machine has never heard of is copy for something that cannot
+  // happen. Both are silent without this test.
+  const written = new Set(ALL_STATES.map((s) => s.id));
+
+  for (const state of APPLICATION_STATES) {
+    it(`${state} has words`, () => {
+      expect(written.has(state), `${state} is in the machine with no copy`).toBe(true);
+    });
+  }
+
+  it("has no copy for a state the machine cannot reach", () => {
+    // The loan, opportunity and pre-application entries are deliberately not
+    // application states, so they are excluded by prefix rather than by a list
+    // somebody has to remember to update.
+    const machineStates = new Set<string>(APPLICATION_STATES);
+    const orphans = ALL_STATES.map((s) => s.id).filter(
+      (id) =>
+        !machineStates.has(id) &&
+        !id.startsWith("loan_") &&
+        !id.startsWith("opportunity_") &&
+        !["quoted", "contested", "monitoring_failed"].includes(id),
+    );
+    expect(orphans).toEqual([]);
   });
 });

@@ -1,0 +1,207 @@
+/**
+ * Properties of the machine, not examples of it.
+ *
+ * A table of nineteen states is too big to review by reading. These assert the
+ * things a reviewer would have to hold in their head all at once — that nothing
+ * is unreachable, that nothing is a dead end, that an ending is really an
+ * ending — so a future edge can be added without re-deriving all of it.
+ */
+
+import { describe, expect, it } from "vitest";
+import {
+  APPLICATION_EVENTS,
+  APPLICATION_STATES,
+  IllegalTransition,
+  MACHINE,
+  TERMINAL,
+  eventsFrom,
+  isTerminal,
+  nextState,
+  requireNextState,
+  type ApplicationState,
+} from "../application-machine.js";
+
+const states = APPLICATION_STATES as readonly ApplicationState[];
+
+/** Everything reachable from `start`, following legal edges. */
+function reachableFrom(start: ApplicationState): Set<ApplicationState> {
+  const seen = new Set<ApplicationState>([start]);
+  const queue: ApplicationState[] = [start];
+  while (queue.length) {
+    const here = queue.shift()!;
+    for (const event of eventsFrom(here)) {
+      const to = nextState(here, event)!;
+      if (!seen.has(to)) {
+        seen.add(to);
+        queue.push(to);
+      }
+    }
+  }
+  return seen;
+}
+
+describe("the table is well formed", () => {
+  it("covers every state", () => {
+    expect(Object.keys(MACHINE).sort()).toEqual([...states].sort());
+  });
+
+  it("only ever lands in a real state", () => {
+    for (const from of states) {
+      for (const event of eventsFrom(from)) {
+        expect(states, `${from} --${event}-->`).toContain(nextState(from, event));
+      }
+    }
+  });
+
+  it("only uses declared events", () => {
+    for (const from of states) {
+      for (const event of eventsFrom(from)) {
+        expect(APPLICATION_EVENTS, from).toContain(event);
+      }
+    }
+  });
+
+  it("never has an edge to itself", () => {
+    // A self-edge means a transition that records history without changing
+    // anything, which is a state change nobody can see.
+    for (const from of states) {
+      for (const event of eventsFrom(from)) {
+        expect(nextState(from, event), `${from} --${event}-->`).not.toBe(from);
+      }
+    }
+  });
+});
+
+describe("nothing is unreachable and nothing is a dead end", () => {
+  it("can reach every state from draft", () => {
+    // A state nothing can reach is a state nobody has thought through, and it
+    // gets discovered by a borrower rather than by us.
+    const reached = reachableFrom("draft");
+    const orphans = states.filter((s) => !reached.has(s));
+    expect(orphans).toEqual([]);
+  });
+
+  it("can always get to an ending", () => {
+    // No file may be stuck forever in a state with no way out. Every
+    // non-terminal state must be able to reach at least one terminal one.
+    for (const from of states) {
+      if (isTerminal(from)) continue;
+      const reached = [...reachableFrom(from)];
+      expect(reached.some(isTerminal), `${from} cannot reach any ending`).toBe(true);
+    }
+  });
+
+  it("lets every live state be stopped by the borrower", () => {
+    // Withdrawal is the borrower's own act, and there must be no live state in
+    // which the product refuses to hear it. `rescission_pending` counts: that
+    // is what rescinding is.
+    for (const from of states) {
+      if (isTerminal(from) || from === "adverse_action_pending") continue;
+      expect(eventsFrom(from), `${from}`).toContain("borrower_withdrew");
+    }
+  });
+});
+
+describe("an ending is an ending", () => {
+  it("has no outgoing edges", () => {
+    for (const state of TERMINAL) {
+      expect(eventsFrom(state), state).toEqual([]);
+    }
+  });
+
+  it("marks exactly the states with no way out as terminal", () => {
+    const stuck = states.filter((s) => eventsFrom(s).length === 0);
+    expect([...stuck].sort()).toEqual([...TERMINAL].sort());
+  });
+
+  it("reopens nothing — a new attempt is a new application", () => {
+    // Un-setting a dated latch would contradict how applicationReceivedAt and
+    // intentToProceedAt already behave, and every verification would have to be
+    // re-run anyway.
+    for (const state of TERMINAL) {
+      for (const event of APPLICATION_EVENTS) {
+        expect(nextState(state, event), `${state} --${event}-->`).toBeUndefined();
+      }
+    }
+  });
+});
+
+describe("a decline stays a decline", () => {
+  it("leaves adverse_action_pending only by telling the borrower why", () => {
+    expect(eventsFrom("adverse_action_pending")).toEqual(["adverse_action_delivered"]);
+    expect(nextState("adverse_action_pending", "adverse_action_delivered")).toBe("denied");
+  });
+
+  it("has no path from a decline back to any approval", () => {
+    // The generalised form of the bug this product already shipped once. Once
+    // the decision is made, no sequence of events may produce an approval word.
+    const approvals: ApplicationState[] = [
+      "approved",
+      "conditionally_approved",
+      "clear_to_close",
+      "closing",
+      "funded",
+    ];
+    const reached = reachableFrom("adverse_action_pending");
+    expect(approvals.filter((a) => reached.has(a))).toEqual([]);
+  });
+
+  it("routes a lapsed counteroffer to a notice, not to a silent close", () => {
+    // Silence on a counteroffer is a decline, and it owes the borrower reasons
+    // like any other.
+    expect(nextState("counteroffer_outstanding", "counteroffer_lapsed")).toBe(
+      "adverse_action_pending",
+    );
+  });
+});
+
+describe("illegal edges throw rather than pretending", () => {
+  it("refuses an event the state cannot handle", () => {
+    expect(() => requireNextState("draft", "disbursed")).toThrow(IllegalTransition);
+  });
+
+  it("names the state and the event, so the error is actionable", () => {
+    try {
+      requireNextState("funded", "borrower_withdrew");
+      throw new Error("should have thrown");
+    } catch (err) {
+      const e = err as IllegalTransition;
+      expect(e.from).toBe("funded");
+      expect(e.event).toBe("borrower_withdrew");
+      expect(e.message).toContain("funded");
+    }
+  });
+
+  it("never returns the current state as a way of saying no", () => {
+    // `advanceStage` did exactly this, and it reads as success at the call site
+    // — so a caller could believe it had cancelled a file that is still running.
+    for (const from of states) {
+      for (const event of APPLICATION_EVENTS) {
+        const to = nextState(from, event);
+        if (to !== undefined) expect(to, `${from} --${event}-->`).not.toBe(from);
+      }
+    }
+  });
+});
+
+describe("revocation is heard everywhere it can be", () => {
+  it("suspends any live state where a pull could still happen", () => {
+    // consents.revoked_at is read in seven places and written by nothing today,
+    // so this has never been expressible. A revocation must not be refused by
+    // the state machine — the earlier design had three states with no edge for
+    // it, and because revocation ran in one transaction the throw rolled back
+    // the revocation itself.
+    const mustHear: ApplicationState[] = [
+      "intake_received",
+      "in_processing",
+      "awaiting_borrower",
+      "in_underwriting",
+      "counteroffer_outstanding",
+      "conditionally_approved",
+      "approved",
+    ];
+    for (const state of mustHear) {
+      expect(eventsFrom(state), state).toContain("authorization_revoked");
+    }
+  });
+});

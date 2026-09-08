@@ -717,6 +717,48 @@ bank flow are two changes; shipping the second one inside the first means it
 goes in unreviewed. The classic `rules-of-hooks` and `exhaustive-deps` stay as
 errors. The reasoning is repeated at the rules themselves in `eslint.config.mjs`.
 
+## The TRID receipt is a trigger, and its clock opens tolled
+
+The moment all six of TRID's pieces are present on a draft, it is an
+application, and a three-business-day Loan Estimate clock starts. That receipt
+is a Postgres trigger on the pin table, not a function somebody has to remember
+to call. Relationship-first raises the accidental-receipt risk rather than
+lowering it: a returning or portfolio member already has name, SSN and income
+on file, so six pieces can complete on one careless insert. The highest-stakes
+clock in the product should not depend on discipline.
+
+Three decisions were made in that migration that a reader should be able to
+find without reading SQL:
+
+**The Loan Estimate clock opens tolled.** There is no delivery channel — Resend
+is chosen and not integrated — and the clock can only be satisfied by a
+delivered disclosure. Opening it live would breach every application on day
+three and write a permanent, tamper-evident record of a breach we never had the
+means to avoid. So `regulatory_clocks` rows open with `tolled_from` set and the
+reason `no_delivery_channel_configured`. Tolling suspends the breach-writer,
+not the deadline: TRID has no tolling, so `due_at` never moves. When the
+delivery slice lands it ends the toll by writing `tolled_until` — the reason is
+never cleared — and a clock already past `due_at` is breached AS OF `due_at`,
+not re-dated.
+
+**Business days skip weekends only, in the creditor's zone.** Reg Z's business
+day excludes federal holidays, which needs a calendar table this slice does not
+add, so in a holiday week every deadline is one day optimistic — exactly the
+direction a regulatory clock must never err, and the other reason clocks stay
+tolled. The zone is `America/New_York`, hardcoded in both `add_business_days`
+and `CREDITOR_TIME_ZONE`, and "not later than the third business day" is the
+END of that day in that zone. A test holds SQL and TypeScript to the same
+answer, and an `it.fails` on Thanksgiving week records the holiday gap so the
+calendar slice flips a failing assertion rather than editing a passing one.
+
+**`now()` is the transaction start, and that bit us before it shipped.** When
+the draft and its sixth piece land in one transaction — the returning-member
+case — the receipt's stamp equals the draft's `status_entered_at` default, and
+the prior slice's trigger reads an unchanged stamp as "not stamped" and rolls
+the whole intake back. The receipt now stamps strictly after the state it
+leaves. Found by an adversarial review of the unpushed migration, with plain
+SQL, before it reached staging.
+
 ## Still outstanding
 
 Four vendor decisions plus sandbox credentials, none obtainable from inside

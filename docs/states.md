@@ -306,7 +306,7 @@ year's pull.
 | Authorizations and the purpose token         | **Built** — and the connector guard now takes it                  |
 | Evidence artifacts, retrieval requests       | Designed                                                          |
 | Applications and the transition ledger       | **Built** — 19 states, the machine, and the ledger; no routes yet |
-| Scenarios and pinned evidence                | Designed                                                          |
+| Scenarios, pins, and the TRID receipt        | **Built** — the receipt is a trigger; the LE clock opens tolled   |
 | Rewritten decision engine (three-axis)       | Designed                                                          |
 | Loans and servicing                          | Designed                                                          |
 | Roles and staff tooling                      | Designed                                                          |

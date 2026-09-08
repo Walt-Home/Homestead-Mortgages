@@ -692,6 +692,8 @@ model Fact {
   retractedAt      DateTime? @map("retracted_at")
   retractionReason String?   @map("retraction_reason")
 
+  pins ApplicationEvidenceLink[]
+
   @@index([subjectType, subjectId, predicate, subjectKey, observedAt(sort: Desc)])
   @@index([partyId])
   @@index([assertedByPrincipalId])
@@ -784,6 +786,8 @@ model Authorization {
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  pins ApplicationEvidenceLink[]
+
   @@index([partyId, purpose])
   @@index([expiresAt])
   @@map("authorizations")
@@ -855,6 +859,9 @@ model Application {
 
   parties     ApplicationParty[]
   transitions ApplicationTransition[]
+  scenarios   LoanScenario[]
+  pins        ApplicationEvidenceLink[]
+  clocks      RegulatoryClock[]
 
   /// The queue query this exists to make cheap: everything in one state,
   /// oldest first.
@@ -921,4 +928,179 @@ model ApplicationTransition {
   @@unique([applicationId, seq])
   @@index([applicationId, occurredAt])
   @@map("application_transitions")
+}
+
+// ─── SCENARIOS, PINS, AND CLOCKS ────────────────────────────────────────────
+
+enum ScenarioObjective {
+  PURCHASE
+  RATE_TERM_REFINANCE
+  CASH_OUT_REFINANCE
+  HELOC_DRAW
+  CLOSED_END_SECOND
+}
+
+enum LienPosition {
+  FIRST
+  SECOND
+  SUBORDINATE_HELOC
+}
+
+enum Occupancy {
+  PRIMARY_RESIDENCE
+  SECOND_HOME
+  INVESTMENT
+}
+
+enum ScenarioOrigin {
+  BORROWER
+  COUNTEROFFER
+  REPRICING
+  STAFF
+  AI_SUGGESTED
+}
+
+/// A versioned, immutable set of proposed terms.
+///
+/// A counteroffer is a NEW scenario, not a mutation, and so is a borrower
+/// changing their mind after the file is being worked on. The change is never
+/// lost and never silently applied to something somebody is deciding on. A
+/// trigger refuses UPDATE on anything but the two supersession columns, and a
+/// partial unique index holds exactly one active scenario per application.
+///
+/// Money is bigint minor units and the rate is integer basis points. The loan
+/// file stores Decimal and converts to a double at the projection boundary,
+/// then writes float results into the audit trail; that stops here.
+///
+/// BRIDGE: `propertyAddress` and `valueEstimateCents` sit on the scenario for
+/// now, because there is no Property object yet. They are two of TRID's six
+/// pieces and the receipt trigger reads them from here. When `properties`
+/// lands they move, and the trigger's predicate changes with them.
+model LoanScenario {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  /// 1, 2, 3… per application. The version.
+  seq Int
+
+  objective    ScenarioObjective
+  lienPosition LienPosition      @default(FIRST) @map("lien_position")
+  occupancy    Occupancy
+
+  loanAmountCents   BigInt  @map("loan_amount_cents")
+  downPaymentCents  BigInt  @default(0) @map("down_payment_cents")
+  termMonths        Int     @map("term_months")
+  noteRateBps       Int?    @map("note_rate_bps")
+  /// Bridge fields — see the model comment.
+  propertyAddress   String? @map("property_address")
+  valueEstimateCents BigInt? @map("value_estimate_cents")
+
+  origin ScenarioOrigin @default(BORROWER)
+
+  isActive        Boolean @default(true) @map("is_active")
+  supersededBySeq Int?    @map("superseded_by_seq")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([applicationId, seq])
+  @@index([applicationId, isActive])
+  @@map("loan_scenarios")
+}
+
+/// THE PIN. Exactly which relationship-held fact this credit request
+/// borrowed, as of when, and under which authorization.
+///
+/// This is the mechanism of the whole design. An application holds no
+/// borrower columns; it borrows facts from a party, and the pin is the legal
+/// act — TRID's six pieces must be received IN CONNECTION WITH a request for
+/// credit, not merely held on file. Inserting the sixth predicate IS the
+/// receipt, and a trigger stamps it.
+///
+/// `authorizationId` is NOT NULL. A fact may be RETAINED on a party under a
+/// retention obligation and still may not be BORROWED into a new credit
+/// decision without a live authorization covering that request. The FCRA
+/// retain-versus-borrow rule, as a column.
+///
+/// Both foreign keys CASCADE. A pin is a record about a person's data, and the
+/// privacy page promises that data is removed "for good — there is no archive
+/// and no undo". Restrict would make the first pinned fact the thing that
+/// quietly breaks that promise. Controlling erasure properly is the retention
+/// design's job, and it is deferred, exactly as for `facts`.
+model ApplicationEvidenceLink {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  factId String @map("fact_id") @db.Uuid
+  fact   Fact   @relation(fields: [factId], references: [id], onDelete: Cascade)
+
+  authorizationId String        @map("authorization_id") @db.Uuid
+  authorization   Authorization @relation(fields: [authorizationId], references: [id], onDelete: Cascade)
+
+  /// Denormalized from the fact at pin time so the receipt trigger can count
+  /// predicates without a join, and so the pin still says what it pinned if
+  /// the fact is later superseded.
+  predicate String
+
+  borrowedAt DateTime @default(now()) @map("borrowed_at")
+  /// The fact's `observedAt` at the moment of pinning.
+  asOf       DateTime @map("as_of")
+  /// Set when the application stops relying on it. Never deleted.
+  releasedAt DateTime? @map("released_at")
+
+  @@index([applicationId, predicate])
+  @@index([factId])
+  @@index([authorizationId])
+  @@map("application_evidence_links")
+}
+
+enum ClockKind {
+  TRID_LE_DELIVERY
+  CD_BEFORE_CONSUMMATION
+  RIGHT_OF_RESCISSION_3DAY
+  ECOA_ADVERSE_ACTION_30D
+  REG_B_INCOMPLETE_RESPONSE
+  COUNTEROFFER_RESPONSE
+}
+
+/// A law with a date, as a durable timer.
+///
+/// `breachedAt` is terminal and retained — a breach is never tidied away. But a
+/// clock whose satisfying channel does not exist must not be allowed to
+/// breach on schedule either: the TRID Loan Estimate can only be satisfied by
+/// a delivered disclosure, and there is no mailer in this repo. So a clock
+/// opens TOLLED, with the reason recorded, until a delivery channel is
+/// configured. Opening it live with no way to stop it would manufacture a
+/// tamper-evident record of a breach we never had the means to avoid.
+///
+/// `dueAt` skips weekends only. Federal holidays need a calendar table this
+/// slice does not add, so in a holiday week every deadline here is one day
+/// optimistic — which is exactly the direction a regulatory clock must never
+/// err. Until the calendar exists, clocks stay tolled and this is why.
+model RegulatoryClock {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  kind            ClockKind
+  statuteCitation String    @map("statute_citation")
+
+  startedAt DateTime @map("started_at")
+  dueAt     DateTime @map("due_at")
+
+  tolledFrom    DateTime? @map("tolled_from")
+  tollingReason String?   @map("tolling_reason")
+  /// When the toll ended. `tolledFrom` and the reason are never cleared — a
+  /// toll is a period with two ends, both recorded.
+  tolledUntil   DateTime? @map("tolled_until")
+
+  satisfiedAt DateTime? @map("satisfied_at")
+  breachedAt  DateTime? @map("breached_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([applicationId, kind])
+  @@index([dueAt])
+  @@map("regulatory_clocks")
 }

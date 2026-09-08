@@ -18,8 +18,11 @@ import {
   isTerminal,
   nextState,
   requireNextState,
+  TRANSITION_REASONS,
   type ApplicationState,
 } from "../application-machine.js";
+import { BRANCH_FOR_SCREEN, OBLIGATION_REASON } from "../branches.js";
+import { RECEIPT_REASON_CODE } from "../trid.js";
 
 const states = APPLICATION_STATES as readonly ApplicationState[];
 
@@ -203,5 +206,28 @@ describe("revocation is heard everywhere it can be", () => {
     for (const state of mustHear) {
       expect(eventsFrom(state), state).toContain("authorization_revoked");
     }
+  });
+});
+
+describe("the reasons are a closed set", () => {
+  it("is non-empty, unique, and spells the receipt's reason the way the SQL does", () => {
+    // reason_code is free text in the database, so the only thing keeping a
+    // report's buckets honest is this list and the signature that takes it.
+    expect(TRANSITION_REASONS.length).toBeGreaterThan(0);
+    expect(new Set(TRANSITION_REASONS).size).toBe(TRANSITION_REASONS.length);
+    expect(TRANSITION_REASONS.every((r) => /^[a-z][a-z0-9_]*$/.test(r))).toBe(true);
+    expect(TRANSITION_REASONS).toContain(RECEIPT_REASON_CODE);
+  });
+
+  it("names every reason a branch can be owed for", () => {
+    for (const reason of Object.values(OBLIGATION_REASON)) {
+      expect(TRANSITION_REASONS).toContain(reason);
+    }
+  });
+
+  it("gives every branch a reason, and every screen a branch", () => {
+    expect(Object.keys(OBLIGATION_REASON).sort()).toEqual(
+      [...new Set(Object.values(BRANCH_FOR_SCREEN))].sort(),
+    );
   });
 });

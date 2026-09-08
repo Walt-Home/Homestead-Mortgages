@@ -9,6 +9,7 @@
 
 import { prisma } from "@hm/db";
 import type { FlowStage } from "@hm/db";
+import { recordBorrowerFacts, type BorrowerInput } from "../../services/party.js";
 
 let seq = 0;
 const unique = () => `${Date.now().toString(36)}-${(seq += 1)}`;
@@ -32,5 +33,58 @@ export async function createLoanFile(
       ...(data.stage ? { stage: data.stage } : {}),
     },
     select: { id: true },
+  });
+}
+
+/** Screen 2, as the route does it: facts on the party, and the row, in one transaction. */
+export async function saveBorrower(loanFileId: string, input: BorrowerInput, existingId?: string) {
+  return prisma.$transaction(async (tx) => {
+    const existing = existingId
+      ? await tx.borrower.findUniqueOrThrow({
+          where: { id: existingId },
+          select: { partyId: true },
+        })
+      : null;
+    const partyId = await recordBorrowerFacts(tx, {
+      loanFileId,
+      existingPartyId: existing?.partyId ?? null,
+      input,
+    });
+    const data = {
+      currentHousing: input.currentHousing,
+      monthlyRent: input.monthlyRent ?? null,
+      partyId,
+    };
+    if (existingId) {
+      return tx.borrower.update({
+        where: { id: existingId },
+        data,
+        select: { id: true, partyId: true },
+      });
+    }
+    return tx.borrower.create({
+      data: { ...data, loanFileId, ssnLast4: "0000" },
+      select: { id: true, partyId: true },
+    });
+  });
+}
+
+/** A consent row on a file, which the trigger mirrors to the party's grant. */
+export async function consent(
+  loanFileId: string,
+  borrowerId: string,
+  kind: string,
+  grantedAt = new Date(),
+) {
+  return prisma.consent.create({
+    data: {
+      loanFileId,
+      borrowerId,
+      kind,
+      grantedAt,
+      envelopeId: `env-${kind}`,
+      ipAddress: "127.0.0.1",
+      userAgent: "test",
+    },
   });
 }

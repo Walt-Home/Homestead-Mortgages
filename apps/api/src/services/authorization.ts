@@ -25,6 +25,7 @@ import {
 } from "@hm/shared";
 import { AuthorizationError, PURPOSE_FOR, REQUIREMENT_FOR } from "@hm/connectors";
 import { AppError } from "../middleware/error-handler.js";
+import type { Db } from "./db.js";
 
 /** `FCRA_WRITTEN_INSTRUCTION` -> `fcra_written_instruction`. */
 const lower = <T extends string>(s: string) => s.toLowerCase() as T;
@@ -35,8 +36,16 @@ const lower = <T extends string>(s: string) => s.toLowerCase() as T;
  * Throws `AuthorizationError` (403, carrying the requirement id the client
  * routes on) when the permission is missing, revoked, expired or for
  * something else.
+ *
+ * Reads the grants through the caller's client, so a grant the consent
+ * trigger mirrored a moment ago in the same transaction is visible to the
+ * mint. Still the only minter; still reads `authorizations` and nothing else.
  */
-export async function tokenFor(file: LoanFile, category: DataCategory): Promise<PurposeToken> {
+export async function tokenFor(
+  file: LoanFile,
+  category: DataCategory,
+  db: Db = prisma,
+): Promise<PurposeToken> {
   const subject = file.borrowers[0];
   if (!subject) {
     // Reachable: every connector route runs after screen 2, but a file whose
@@ -50,7 +59,7 @@ export async function tokenFor(file: LoanFile, category: DataCategory): Promise<
     );
   }
 
-  const rows = await prisma.authorization.findMany({
+  const rows = await db.authorization.findMany({
     where: { partyId: subject.partyId },
     select: {
       id: true,

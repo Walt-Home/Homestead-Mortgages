@@ -11,13 +11,21 @@ import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import { AuthorizationError } from "@hm/connectors";
 import { evaluateSatisfaction, getRequirement } from "@hm/requirements";
+import { SHADOW_ENGINE_VERSION } from "@hm/underwriting";
 import { tokenFor } from "../services/authorization.js";
-import { partyForUser, recordBorrowerFacts, type BorrowerInput } from "../services/party.js";
+import {
+  liveFact as liveFactOn,
+  partyForUser,
+  recordBorrowerFacts,
+  servicePrincipal,
+  staffPrincipal,
+  type BorrowerInput,
+} from "../services/party.js";
 import { loadLoanFile } from "../services/repository.js";
 import { applicationRouter } from "../routes/application.js";
 import { connectorRouter } from "../routes/connectors.js";
 import { esignRouter } from "../routes/esign.js";
-import { createLoanFile, createUser } from "./support/factories.js";
+import { consent, createLoanFile, createUser, saveBorrower } from "./support/factories.js";
 import { callAs } from "./support/http.js";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -40,64 +48,7 @@ const dana: BorrowerInput = {
   statedMonthlyIncome: 8500,
 };
 
-/** Screen 2, as the route does it: facts on the party, and the row, in one transaction. */
-export async function saveBorrower(loanFileId: string, input: BorrowerInput, existingId?: string) {
-  return prisma.$transaction(async (tx) => {
-    const existing = existingId
-      ? await tx.borrower.findUniqueOrThrow({
-          where: { id: existingId },
-          select: { partyId: true },
-        })
-      : null;
-    const partyId = await recordBorrowerFacts(tx, {
-      loanFileId,
-      existingPartyId: existing?.partyId ?? null,
-      input,
-    });
-    const data = {
-      currentHousing: input.currentHousing,
-      monthlyRent: input.monthlyRent ?? null,
-      partyId,
-    };
-    if (existingId) {
-      return tx.borrower.update({
-        where: { id: existingId },
-        data,
-        select: { id: true, partyId: true },
-      });
-    }
-    return tx.borrower.create({
-      data: { ...data, loanFileId, ssnLast4: "0000" },
-      select: { id: true, partyId: true },
-    });
-  });
-}
-
-async function liveFact(partyId: string, predicate: string) {
-  return prisma.fact.findFirst({
-    where: { partyId, predicate, supersededById: null, retractedAt: null },
-    orderBy: { observedAt: "desc" },
-  });
-}
-
-async function consent(
-  loanFileId: string,
-  borrowerId: string,
-  kind: string,
-  grantedAt = new Date(),
-) {
-  return prisma.consent.create({
-    data: {
-      loanFileId,
-      borrowerId,
-      kind,
-      grantedAt,
-      envelopeId: `env-${kind}`,
-      ipAddress: "127.0.0.1",
-      userAgent: "test",
-    },
-  });
-}
+const liveFact = (partyId: string, predicate: string) => liveFactOn(prisma, partyId, predicate);
 
 describe("screen 2 writes the person", () => {
   it("creates a party behind the user and the row names it", async () => {
@@ -523,5 +474,86 @@ describe("partyForUser", () => {
     const b = await prisma.$transaction((tx) => partyForUser(tx, user.id));
     expect(a).toBe(b);
     expect(await prisma.party.count()).toBe(1);
+  });
+});
+
+describe("the principals a service acts as", () => {
+  it("makes exactly one row when several first callers arrive at once", async () => {
+    const ids = await Promise.all(
+      Array.from({ length: 6 }, () => servicePrincipal(prisma, "application_flow")),
+    );
+    expect(new Set(ids).size).toBe(1);
+    expect(
+      await prisma.principal.count({ where: { kind: "SERVICE", subject: "application_flow" } }),
+    ).toBe(1);
+  });
+
+  it("does not poison the transaction it was handed", async () => {
+    // The losers of that race used to get a uniqueness error, and a Postgres
+    // transaction that has seen one refuses every statement after it. The
+    // borrower's save is in that transaction, so the loser's request would
+    // have failed on a fresh database for no reason the borrower could see.
+    const runs = await Promise.allSettled(
+      Array.from({ length: 6 }, () =>
+        prisma.$transaction(async (tx) => {
+          const id = await servicePrincipal(tx, "application_flow");
+          await tx.party.create({ data: { kind: "PERSON" }, select: { id: true } });
+          return id;
+        }),
+      ),
+    );
+    const reasons = runs.flatMap((r) => (r.status === "rejected" ? [String(r.reason)] : []));
+    expect(reasons).toEqual([]);
+    expect(await prisma.party.count()).toBe(6);
+  });
+
+  it("stamps the engine version on the row it creates", async () => {
+    await servicePrincipal(prisma, "shadow_aus");
+    const row = await prisma.principal.findUniqueOrThrow({
+      where: { kind_subject: { kind: "SERVICE", subject: "shadow_aus" } },
+      select: { modelId: true, modelVersion: true },
+    });
+    expect(row.modelId).toBe("shadow");
+    expect(row.modelVersion).toBe(SHADOW_ENGINE_VERSION);
+  });
+
+  it("fills in a version that was never set", async () => {
+    await prisma.principal.create({ data: { kind: "SERVICE", subject: "shadow_aus" } });
+    await servicePrincipal(prisma, "shadow_aus");
+    const row = await prisma.principal.findUniqueOrThrow({
+      where: { kind_subject: { kind: "SERVICE", subject: "shadow_aus" } },
+      select: { modelVersion: true },
+    });
+    expect(row.modelVersion).toBe(SHADOW_ENGINE_VERSION);
+  });
+
+  it("leaves a version already stamped alone", async () => {
+    // A ledger row names the engine that decided it. Restamping this row on a
+    // build bump would quietly restate every older decision as the new
+    // version's work, which is the one thing the actor column is for.
+    await prisma.principal.create({
+      data: {
+        kind: "SERVICE",
+        subject: "shadow_aus",
+        modelId: "shadow",
+        modelVersion: "0.0.1-earlier",
+      },
+    });
+    await servicePrincipal(prisma, "shadow_aus");
+    const row = await prisma.principal.findUniqueOrThrow({
+      where: { kind_subject: { kind: "SERVICE", subject: "shadow_aus" } },
+      select: { modelVersion: true },
+    });
+    expect(row.modelVersion).toBe("0.0.1-earlier");
+  });
+
+  it("makes exactly one staff row when several first callers arrive at once", async () => {
+    const ids = await Promise.all(
+      Array.from({ length: 6 }, () => staffPrincipal(prisma, "staff:persona_seed")),
+    );
+    expect(new Set(ids).size).toBe(1);
+    expect(
+      await prisma.principal.count({ where: { kind: "STAFF", subject: "staff:persona_seed" } }),
+    ).toBe(1);
   });
 });

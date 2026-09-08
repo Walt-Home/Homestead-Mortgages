@@ -12,21 +12,32 @@
  * the new, then stop writing the old. Each is its own change.
  */
 
-import type { Prisma } from "@hm/db";
+import type { AuthorizationPurpose, Prisma } from "@hm/db";
+import { SHADOW_ENGINE_VERSION } from "@hm/underwriting";
+import type { Db } from "./db.js";
 
-type Tx = Prisma.TransactionClient;
+type Tx = Db;
 
 /** The party behind a signed-in user, created on first use. */
-export async function partyForUser(tx: Tx, userId: string): Promise<string> {
+export async function partyForUser(
+  tx: Tx,
+  userId: string,
+  opts?: { sourceFirstSeen?: "self_signup" | "persona_seed" },
+): Promise<string> {
   const user = await tx.user.findUniqueOrThrow({
     where: { id: userId },
     select: { partyId: true },
   });
   if (user.partyId) return user.partyId;
 
-  // A person who signed in is not provisional: they came to us.
+  // A person who signed in is not provisional: they came to us. A sample
+  // borrower did not, and says so, so a report can tell the two apart.
   const party = await tx.party.create({
-    data: { kind: "PERSON", claimStatus: "CLAIMED", sourceFirstSeen: "self_signup" },
+    data: {
+      kind: "PERSON",
+      claimStatus: "CLAIMED",
+      sourceFirstSeen: opts?.sourceFirstSeen ?? "self_signup",
+    },
     select: { id: true },
   });
   await tx.user.update({ where: { id: userId }, data: { partyId: party.id } });
@@ -54,6 +65,104 @@ export async function principalForParty(tx: Tx, partyId: string): Promise<string
     select: { id: true },
   });
   return made.id;
+}
+
+/**
+ * The principal a piece of the product acts as, looked up by name.
+ *
+ * `application_flow` writes the orchestration edges — what the borrower owes,
+ * that underwriting began. `shadow_aus` writes the decided edges, so the
+ * ledger names which engine decided, and it carries the engine's version.
+ * Found or created on the `(kind, subject)` unique, never assumed by id: the
+ * test harness truncates principals, and the migration's fixed ids are a
+ * convenience for a fresh database, not a promise.
+ *
+ * Insert-then-read, not `upsert`. Prisma's upsert on a compound unique is a
+ * SELECT followed by an INSERT, so two first callers race and the loser gets a
+ * uniqueness error — inside the transaction a route hands us, that error
+ * aborts the whole transaction and the borrower's save goes with it.
+ * `createMany` with `skipDuplicates` is the ON CONFLICT DO NOTHING the
+ * receipt's own function uses, and it raises nothing.
+ */
+export async function servicePrincipal(
+  db: Db,
+  subject: "application_flow" | "shadow_aus",
+): Promise<string> {
+  const model =
+    subject === "shadow_aus" ? { modelId: "shadow", modelVersion: SHADOW_ENGINE_VERSION } : {};
+  await db.principal.createMany({
+    data: [{ kind: "SERVICE", subject, ...model }],
+    skipDuplicates: true,
+  });
+  // A version already stamped is never overwritten: the ledger's promise is
+  // that a transition names the engine that decided it, and a build bump that
+  // rewrote this row would quietly restate every older decision as the new
+  // one's. Only a row that has no version yet gets one.
+  if (subject === "shadow_aus") {
+    await db.principal.updateMany({
+      where: { kind: "SERVICE", subject, modelVersion: null },
+      data: model,
+    });
+  }
+  // Looked up, not assumed: if the row was already there the insert was a
+  // no-op, and the ledger must name the id that actually exists.
+  const row = await db.principal.findUniqueOrThrow({
+    where: { kind_subject: { kind: "SERVICE", subject } },
+    select: { id: true },
+  });
+  return row.id;
+}
+
+/** A staff principal by name, found or created. No party: the CHECK says so. */
+export async function staffPrincipal(db: Db, subject: string): Promise<string> {
+  await db.principal.createMany({
+    data: [{ kind: "STAFF", subject }],
+    skipDuplicates: true,
+  });
+  const row = await db.principal.findUniqueOrThrow({
+    where: { kind_subject: { kind: "STAFF", subject } },
+    select: { id: true },
+  });
+  return row.id;
+}
+
+/**
+ * The party's current assertion of `predicate`, or null.
+ *
+ * "Live" is one definition: not superseded, not retracted, the default
+ * subject key, newest observation first. Every reader that wants the current
+ * value goes through here so two of them cannot drift apart.
+ */
+export async function liveFact(
+  db: Db,
+  partyId: string,
+  predicate: string,
+): Promise<{ id: string; value: Prisma.JsonValue; observedAt: Date } | null> {
+  return db.fact.findFirst({
+    where: { partyId, predicate, subjectKey: "", supersededById: null, retractedAt: null },
+    orderBy: { observedAt: "desc" },
+    select: { id: true, value: true, observedAt: true },
+  });
+}
+
+/**
+ * The party's live grant for exactly `purpose`, or null.
+ *
+ * By purpose, never "any live grant": persistent monitoring mirrors to an
+ * account-review grant, which covers no credit request and which the pin
+ * guard refuses. Live is unrevoked and unexpired, the same test the minter
+ * applies, so a pin and a pull agree about which grant stands.
+ */
+export async function liveGrant(
+  db: Db,
+  partyId: string,
+  purpose: AuthorizationPurpose,
+): Promise<{ id: string; grantedAt: Date; expiresAt: Date } | null> {
+  return db.authorization.findFirst({
+    where: { partyId, purpose, revokedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { grantedAt: "desc" },
+    select: { id: true, grantedAt: true, expiresAt: true },
+  });
 }
 
 export interface AssertedFact {
@@ -139,7 +248,11 @@ export interface BorrowerInput {
   readonly isMilitary: boolean;
   readonly currentHousing: string;
   readonly monthlyRent?: number | null;
-  readonly statedMonthlyIncome: number;
+  /**
+   * Optional because a revisit of screen 2 need not restate it: the fact
+   * asserted the first time stands. The route decides when it is required.
+   */
+  readonly statedMonthlyIncome?: number;
 }
 
 /**
@@ -184,8 +297,12 @@ export async function recordBorrowerFacts(
     { predicate: "current_housing", value: input.currentHousing },
     { predicate: "preferred_language", value: input.preferredLanguage },
     // Stated, not verified. One of TRID's six pieces, and the reason screen 2
-    // asks for it — see services/application.ts.
-    { predicate: "monthly_income", value: input.statedMonthlyIncome },
+    // asks for it — see services/application.ts. Only a real figure is a
+    // fact: an absent one leaves the earlier assertion standing, and a zero
+    // or negative would supersede a true income with a false one.
+    ...(typeof input.statedMonthlyIncome === "number" && input.statedMonthlyIncome > 0
+      ? [{ predicate: "monthly_income", value: input.statedMonthlyIncome }]
+      : []),
     // The vault handle is a reference, never the number. Only on a first save,
     // or when it is being replaced.
     ...(input.ssnVaultHandle ? [{ predicate: "ssn_token", value: input.ssnVaultHandle }] : []),

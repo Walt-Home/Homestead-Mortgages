@@ -11,12 +11,18 @@
  * The guards are in Postgres and this file does not repeat them. What it does
  * is load the fact so the caller cannot mislabel the pin, and turn the
  * database's refusals into the errors the routes already know how to render.
+ *
+ * Every writer takes a client last. Inside a route's transaction the pin and
+ * the receipt it fires commit with the row that caused them; a pin refused by
+ * the database rolls that whole save back, which is what a refused invariant
+ * should do.
  */
 
 import { prisma } from "@hm/db";
 import type { Prisma } from "@hm/db";
 import { TRID_PARTY_PREDICATES, TRID_SCENARIO_FIELDS } from "@hm/shared";
 import { AppError } from "../middleware/error-handler.js";
+import { ownsTransaction, type Db } from "./db.js";
 
 export interface PinInput {
   readonly applicationId: string;
@@ -31,15 +37,18 @@ export interface PinInput {
  * authorization from a different party, and one that is revoked or expired —
  * each with its own message, surfaced here as a 403 carrying that message.
  */
-export async function pinFact(input: PinInput): Promise<{ id: string; predicate: string }> {
-  const fact = await prisma.fact.findUnique({
+export async function pinFact(
+  input: PinInput,
+  db: Db = prisma,
+): Promise<{ id: string; predicate: string }> {
+  const fact = await db.fact.findUnique({
     where: { id: input.factId },
     select: { predicate: true, observedAt: true },
   });
   if (!fact) throw new AppError(404, "Fact not found", "NOT_FOUND");
 
   try {
-    return await prisma.applicationEvidenceLink.create({
+    return await db.applicationEvidenceLink.create({
       data: {
         applicationId: input.applicationId,
         factId: input.factId,
@@ -58,9 +67,9 @@ export async function pinFact(input: PinInput): Promise<{ id: string; predicate:
 }
 
 /** Stop relying on a pinned fact. Never deletes the pin. */
-export async function releasePin(pinId: string): Promise<void> {
+export async function releasePin(pinId: string, db: Db = prisma): Promise<void> {
   try {
-    await prisma.applicationEvidenceLink.update({
+    await db.applicationEvidenceLink.update({
       where: { id: pinId },
       data: { releasedAt: new Date() },
     });
@@ -91,53 +100,59 @@ export interface ScenarioTerms {
 export async function proposeScenario(
   applicationId: string,
   terms: ScenarioTerms,
+  db: Db = prisma,
 ): Promise<{ id: string; seq: number }> {
-  try {
-    return await prisma.$transaction(async (tx) => {
-      const current = await tx.loanScenario.findFirst({
-        where: { applicationId, isActive: true },
-        select: { id: true, seq: true },
-      });
-      const seq = (current?.seq ?? 0) + 1;
-
-      if (current) {
-        await tx.loanScenario.update({
-          where: { id: current.id },
-          data: { isActive: false, supersededBySeq: seq },
-        });
-      }
-
-      return tx.loanScenario.create({
-        data: {
-          applicationId,
-          seq,
-          objective: terms.objective,
-          occupancy: terms.occupancy,
-          lienPosition: terms.lienPosition ?? "FIRST",
-          loanAmountCents: terms.loanAmountCents,
-          downPaymentCents: terms.downPaymentCents ?? 0n,
-          termMonths: terms.termMonths,
-          noteRateBps: terms.noteRateBps ?? null,
-          propertyAddress: terms.propertyAddress?.trim() || null,
-          valueEstimateCents: terms.valueEstimateCents ?? null,
-          origin: terms.origin ?? "BORROWER",
-        },
-        select: { id: true, seq: true },
-      });
+  const propose = async (tx: Db) => {
+    const current = await tx.loanScenario.findFirst({
+      where: { applicationId, isActive: true },
+      select: { id: true, seq: true },
     });
+    const seq = (current?.seq ?? 0) + 1;
+
+    if (current) {
+      await tx.loanScenario.update({
+        where: { id: current.id },
+        data: { isActive: false, supersededBySeq: seq },
+      });
+    }
+
+    return tx.loanScenario.create({
+      data: {
+        applicationId,
+        seq,
+        objective: terms.objective,
+        occupancy: terms.occupancy,
+        lienPosition: terms.lienPosition ?? "FIRST",
+        loanAmountCents: terms.loanAmountCents,
+        downPaymentCents: terms.downPaymentCents ?? 0n,
+        termMonths: terms.termMonths,
+        noteRateBps: terms.noteRateBps ?? null,
+        propertyAddress: terms.propertyAddress?.trim() || null,
+        valueEstimateCents: terms.valueEstimateCents ?? null,
+        origin: terms.origin ?? "BORROWER",
+      },
+      select: { id: true, seq: true },
+    });
+  };
+
+  try {
+    return ownsTransaction(db) ? await prisma.$transaction(propose) : await propose(db);
   } catch (err) {
     throw asRefusal(err, "scenario");
   }
 }
 
 /** Which of TRID's six pieces an application holds. For a screen, not a guard. */
-export async function sixPieces(applicationId: string): Promise<Record<string, boolean>> {
+export async function sixPieces(
+  applicationId: string,
+  db: Db = prisma,
+): Promise<Record<string, boolean>> {
   const [pins, scenario] = await Promise.all([
-    prisma.applicationEvidenceLink.findMany({
+    db.applicationEvidenceLink.findMany({
       where: { applicationId, releasedAt: null },
       select: { predicate: true },
     }),
-    prisma.loanScenario.findFirst({
+    db.loanScenario.findFirst({
       where: { applicationId, isActive: true },
       select: { propertyAddress: true, valueEstimateCents: true, loanAmountCents: true },
     }),

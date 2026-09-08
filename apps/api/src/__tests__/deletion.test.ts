@@ -17,8 +17,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import type { BorrowerInput } from "../services/party.js";
-import { saveBorrower } from "./bridge.test.js";
-import { createLoanFile, createUser } from "./support/factories.js";
+import { createLoanFile, createUser, saveBorrower } from "./support/factories.js";
 
 const schema = readFileSync(
   resolve(dirname(fileURLToPath(import.meta.url)), "../../../../packages/db/prisma/schema.prisma"),

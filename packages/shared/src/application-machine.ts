@@ -109,6 +109,39 @@ export const APPLICATION_EVENTS = [
 export type ApplicationEvent = (typeof APPLICATION_EVENTS)[number];
 
 /**
+ * Why a move was made, as a closed set.
+ *
+ * `application_transitions.reason_code` is free text in the database, so the
+ * closed set lives here and the transition service's signature enforces it. A
+ * report groups by these; a spelling that is not in the list is a compile
+ * error rather than a bucket of one. The receipt's own reason is first, in
+ * the spelling the SQL writes.
+ */
+export const TRANSITION_REASONS = [
+  "six_pieces_received",
+  "bank_connection_needed",
+  "bank_already_connected",
+  "bank_connected",
+  "payroll_connection_needed",
+  "tax_transcript_needed",
+  "documents_needed",
+  "payroll_connected",
+  "transcripts_received",
+  "documents_received",
+  "application_signed",
+  "sanctions_near_match",
+  "engine_asked",
+  "engine_conditional",
+  "engine_ineligible",
+  "engine_high_cost",
+  "engine_clean",
+  "borrower_requested",
+  "persona_fixture",
+] as const;
+
+export type TransitionReason = (typeof TRANSITION_REASONS)[number];
+
+/**
  * The legal edges.
  *
  * A mapped type over every state, so adding one to `ApplicationState` without

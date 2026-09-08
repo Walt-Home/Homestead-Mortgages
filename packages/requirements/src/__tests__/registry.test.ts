@@ -9,6 +9,12 @@
  */
 
 import { describe, expect, it } from "vitest";
+import {
+  BORROWER_MUST_ACT,
+  BRANCH_FOR_SCREEN,
+  DOCUMENT_SATISFIABLE,
+  PAYROLL_SATISFIABLE,
+} from "@hm/shared";
 import { REQUIREMENTS, DANGLING_REFERENCES } from "../generated.js";
 import { CONDITIONS } from "../conditions.js";
 import { EVALUATORS } from "../satisfaction.js";
@@ -134,5 +140,31 @@ describe("APP-011 — demographic collection", () => {
       }),
     );
     expect(r.status).toBe("satisfied");
+  });
+});
+
+describe("the branch rule names requirements that exist", () => {
+  // `@hm/shared` holds the rule because the web reads it and the web does not
+  // carry the 77 rows. That is also why nothing over there can notice a typo:
+  // an id that no longer matches a row turns a branch off in silence, and the
+  // borrower gets no card for work that is genuinely theirs.
+  const byId = new Map(REQUIREMENTS.map((r) => [r.id, r]));
+
+  it("puts every document-satisfiable id on the documents branch", () => {
+    for (const id of DOCUMENT_SATISFIABLE) {
+      const r = byId.get(id);
+      expect(r, id).toBeDefined();
+      expect(BORROWER_MUST_ACT as readonly string[], id).toContain(r!.source);
+      expect(BRANCH_FOR_SCREEN[r!.screen as keyof typeof BRANCH_FOR_SCREEN], id).toBe("documents");
+    }
+  });
+
+  it("puts every payroll-satisfiable id on the payroll branch", () => {
+    for (const id of PAYROLL_SATISFIABLE) {
+      const r = byId.get(id);
+      expect(r, id).toBeDefined();
+      expect(r!.source, id).toBe("connect_payroll");
+      expect(BRANCH_FOR_SCREEN[r!.screen as keyof typeof BRANCH_FOR_SCREEN], id).toBe("payroll");
+    }
   });
 });

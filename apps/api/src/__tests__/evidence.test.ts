@@ -361,6 +361,26 @@ describe("scenarios", () => {
     expect(active).toHaveLength(1);
   });
 
+  it("proposed inside a caller's transaction, it goes when the transaction goes", async () => {
+    // Screen 1 will create the file, the application and its first scenario
+    // in one transaction. A proposal that opened its own would survive the
+    // caller's rollback as a scenario on an application that does not exist.
+    const { p } = await personWithSixPieces();
+    const app = await application(p.id);
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const v1 = await proposeScenario(app.id, fullTerms, tx);
+        expect(v1.seq).toBe(1);
+        throw new Error("simulated failure after the proposal");
+      }),
+    ).rejects.toThrow(/simulated/);
+    expect(await prisma.loanScenario.count({ where: { applicationId: app.id } })).toBe(0);
+    // And the next proposal starts the sequence, rather than continuing one
+    // that was never committed.
+    const v1 = await proposeScenario(app.id, fullTerms);
+    expect(v1.seq).toBe(1);
+  });
+
   it("cannot reactivate a superseded scenario", async () => {
     const { p } = await personWithSixPieces();
     const app = await application(p.id);

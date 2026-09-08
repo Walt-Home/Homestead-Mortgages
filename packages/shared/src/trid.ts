@@ -29,6 +29,15 @@ export const TRID_SCENARIO_FIELDS = [
 export type TridScenarioField = (typeof TRID_SCENARIO_FIELDS)[number];
 
 /**
+ * The reason the receipt writes on its ledger row.
+ *
+ * The SQL function stamps this literal; a test reads `pg_proc` and asserts the
+ * spelling. Exported so nothing else ever writes a second spelling for the
+ * same event.
+ */
+export const RECEIPT_REASON_CODE = "six_pieces_received" as const;
+
+/**
  * The zone whose calendar counts business days.
  *
  * A configuration in a later slice; one value for now, and the SQL function

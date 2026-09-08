@@ -30,6 +30,8 @@ import type {
 import type { Prisma } from "@hm/db";
 import { AppError } from "../middleware/error-handler.js";
 import { displayNameFrom, factMapsByParty, requireIdentity } from "./borrower-projection.js";
+import type { Db } from "./db.js";
+import { liveFact } from "./party.js";
 
 /** Prisma returns Decimal; the domain uses number. One place to convert. */
 function num(value: Prisma.Decimal | null): number | null {
@@ -59,8 +61,8 @@ const STAGE_TO_DOMAIN = {
   COMPLETE: "complete",
 } as const;
 
-export async function loadLoanFile(id: string): Promise<LoanFile | null> {
-  const row = await prisma.loanFile.findUnique({
+export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFile | null> {
+  const row = await db.loanFile.findUnique({
     where: { id },
     include: {
       borrowers: true,
@@ -87,7 +89,7 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
   // file. There is no column to fall back to; see borrower-projection.ts.
   const partyIds = row.borrowers.map((b) => b.partyId);
   const factRows = partyIds.length
-    ? await prisma.fact.findMany({
+    ? await db.fact.findMany({
         where: {
           partyId: { in: partyIds },
           subjectKey: "",
@@ -172,7 +174,7 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
       }
     : null;
 
-  const conditions = await prisma.loanCondition.findMany({ where: { loanFileId: id } });
+  const conditions = await db.loanCondition.findMany({ where: { loanFileId: id } });
 
   return {
     id: row.id,
@@ -330,8 +332,9 @@ export async function recordEvent(
   actor: string,
   payload: unknown,
   requirementId?: string,
+  db: Db = prisma,
 ): Promise<void> {
-  await prisma.fileEvent.create({
+  await db.fileEvent.create({
     data: {
       loanFileId,
       kind,
@@ -342,7 +345,10 @@ export async function recordEvent(
   });
 }
 
-/** Store verbatim connector output. Append-only — never an update. */
+/**
+ * Store verbatim connector output. Append-only — never an update. Returns the
+ * row's id so a ledger entry can name the retrieval that caused it.
+ */
 export async function recordSnapshot(
   loanFileId: string,
   kind: string,
@@ -350,8 +356,9 @@ export async function recordSnapshot(
   externalId: string,
   payload: unknown,
   retrievedAt: string,
-): Promise<void> {
-  await prisma.connectorSnapshot.create({
+  db: Db = prisma,
+): Promise<{ id: string }> {
+  return db.connectorSnapshot.create({
     data: {
       loanFileId,
       kind,
@@ -360,6 +367,7 @@ export async function recordSnapshot(
       payload: payload as Prisma.InputJsonValue,
       retrievedAt: new Date(retrievedAt),
     },
+    select: { id: true },
   });
 }
 
@@ -416,26 +424,7 @@ export async function listAccessibleFiles(userId: string) {
       propertyCity: true,
       propertyState: true,
       // The name is a fact on the party, not a column on the row.
-      borrowers: {
-        take: 1,
-        select: {
-          party: {
-            select: {
-              facts: {
-                where: {
-                  predicate: "legal_name",
-                  subjectKey: "",
-                  supersededById: null,
-                  retractedAt: null,
-                },
-                orderBy: { observedAt: "desc" },
-                take: 1,
-                select: { value: true },
-              },
-            },
-          },
-        },
-      },
+      borrowers: { take: 1, select: { partyId: true } },
       decisions: {
         orderBy: { computedAt: "desc" },
         take: 1,
@@ -444,10 +433,18 @@ export async function listAccessibleFiles(userId: string) {
     },
   });
   // Same shape as before — `borrowers[0].firstName` — so no caller changes.
-  return rows.map(({ borrowers, ...rest }) => ({
-    ...rest,
-    borrowers: borrowers
-      .map((b) => displayNameFrom(b.party.facts[0]?.value))
-      .filter((n): n is { firstName: string; lastName: string } => n !== null),
-  }));
+  // One definition of "live" for the name, the same one the projection uses.
+  return Promise.all(
+    rows.map(async ({ borrowers, ...rest }) => {
+      const names = await Promise.all(
+        borrowers.map(async (b) =>
+          displayNameFrom((await liveFact(prisma, b.partyId, "legal_name"))?.value),
+        ),
+      );
+      return {
+        ...rest,
+        borrowers: names.filter((n): n is { firstName: string; lastName: string } => n !== null),
+      };
+    }),
+  );
 }

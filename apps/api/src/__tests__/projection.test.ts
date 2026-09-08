@@ -17,8 +17,7 @@ import {
 import { recordBorrowerFacts, type BorrowerInput } from "../services/party.js";
 import { loadLoanFile } from "../services/repository.js";
 import { addressSchema, identitySchema } from "../routes/files.js";
-import { saveBorrower } from "./bridge.test.js";
-import { createLoanFile, createUser } from "./support/factories.js";
+import { createLoanFile, createUser, saveBorrower } from "./support/factories.js";
 
 const dana: BorrowerInput = {
   firstName: "Dana",

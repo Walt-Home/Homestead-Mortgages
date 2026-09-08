@@ -22,6 +22,8 @@
  */
 
 import { prisma, type AuthorizationPurpose } from "@hm/db";
+import type { Db } from "./db.js";
+import { liveGrant } from "./party.js";
 
 /**
  * The grant each consent kind mirrors to — the trigger's CASE, in the same
@@ -50,8 +52,9 @@ export async function signedOn(
   loanFileId: string,
   partyId: string,
   kind: string,
+  db: Db = prisma,
 ): Promise<SignedRecord | null> {
-  const row = await prisma.consent.findFirst({
+  const row = await db.consent.findFirst({
     where: { loanFileId, kind, revokedAt: null },
     orderBy: { grantedAt: "desc" },
     select: { id: true, kind: true, grantedAt: true },
@@ -61,9 +64,6 @@ export async function signedOn(
   const purpose = PURPOSE_FOR_KIND[kind];
   if (!purpose) return row;
 
-  const grant = await prisma.authorization.findFirst({
-    where: { partyId, purpose, revokedAt: null, expiresAt: { gt: new Date() } },
-    select: { id: true },
-  });
+  const grant = await liveGrant(db, partyId, purpose);
   return grant ? row : null;
 }

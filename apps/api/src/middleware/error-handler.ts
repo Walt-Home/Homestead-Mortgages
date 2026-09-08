@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 import { AuthorizationError, PlaidRequestError } from "@hm/connectors";
+import { IllegalTransition } from "@hm/shared";
 import { ProjectionError } from "../services/borrower-projection.js";
 
 export class AppError extends Error {
@@ -65,6 +66,14 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   }
   if (err instanceof AppError) {
     res.status(err.statusCode).json({ error: { message: err.message, code: err.code } });
+    return;
+  }
+  // The machine has no such edge from where the file is. The routes ask
+  // before they move, so they never reach this; a seed or a future caller
+  // that asks for an impossible move gets a readable refusal rather than a
+  // crash, and nothing was written.
+  if (err instanceof IllegalTransition) {
+    res.status(409).json({ error: { message: err.message, code: "ILLEGAL_TRANSITION" } });
     return;
   }
   if (err instanceof ZodError) {

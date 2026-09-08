@@ -298,21 +298,22 @@ year's pull.
 
 ## Built, or not
 
-| Piece                                                           | Status                                                                        |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `FlowStage`, four screens, decision outcomes                    | Built — and being replaced                                                    |
-| Tests against a real Postgres                                   | Built                                                                         |
-| Party, facts, principals                                        | **Built** — schema and constraints; not yet wired to a route                  |
-| Authorizations and the purpose token                            | **Built** — and the connector guard now takes it                              |
-| Evidence artifacts, retrieval requests                          | Designed                                                                      |
-| Applications and the transition ledger                          | **Built** — 19 states, the machine, and the ledger; no routes yet             |
-| Scenarios, pins, and the TRID receipt                           | **Built** — the receipt is a trigger; the LE clock opens tolled               |
-| The bridge: screen 2 → party + facts; consents → authorizations | **Built** — dual-write; the minter reads the real table, falls back to legacy |
-| Rewritten decision engine (three-axis)                          | Designed                                                                      |
-| Loans and servicing                                             | Designed                                                                      |
-| Roles and staff tooling                                         | Designed                                                                      |
-| Monitoring, notifications                                       | Designed, deferred                                                            |
-| Notice generation and delivery                                  | **Not designed in detail. Resend is chosen and not integrated**               |
+| Piece                                                           | Status                                                                                              |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `FlowStage`, four screens, decision outcomes                    | Built — and being replaced                                                                          |
+| Tests against a real Postgres                                   | Built                                                                                               |
+| Party, facts, principals                                        | **Built** — schema and constraints; not yet wired to a route                                        |
+| Authorizations and the purpose token                            | **Built** — and the connector guard now takes it                                                    |
+| Evidence artifacts, retrieval requests                          | Designed                                                                                            |
+| Applications and the transition ledger                          | **Built** — 19 states, the machine, and the ledger; no routes yet                                   |
+| Scenarios, pins, and the TRID receipt                           | **Built** — the receipt is a trigger; the LE clock opens tolled                                     |
+| The bridge: screen 2 → party + facts; consents → authorizations | **Built** — dual-write; the minter reads the real table, falls back to legacy                       |
+| The read-flip: identity fields projected from facts             | **Built** — per field, party first, column as fallback; situational and HMDA fields stay on the row |
+| Rewritten decision engine (three-axis)                          | Designed                                                                                            |
+| Loans and servicing                                             | Designed                                                                                            |
+| Roles and staff tooling                                         | Designed                                                                                            |
+| Monitoring, notifications                                       | Designed, deferred                                                                                  |
+| Notice generation and delivery                                  | **Not designed in detail. Resend is chosen and not integrated**                                     |
 
 That last row governs more than it looks like it does. Several regulatory clocks
 can only be _stopped_ by a delivered notice, so until Resend is wired in, a clock

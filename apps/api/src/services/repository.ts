@@ -29,6 +29,7 @@ import type {
 } from "@hm/shared";
 import type { Prisma } from "@hm/db";
 import { AppError } from "../middleware/error-handler.js";
+import { factMapsByParty, identityFromFacts } from "./borrower-projection.js";
 
 /** Prisma returns Decimal; the domain uses number. One place to convert. */
 function num(value: Prisma.Decimal | null): number | null {
@@ -82,47 +83,72 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
     return snapshot ? (snapshot.payload as T) : null;
   };
 
-  const borrowers: Borrower[] = row.borrowers.map((b) => ({
-    id: b.id,
-    partyId: b.partyId ?? null,
-    firstName: b.firstName,
-    lastName: b.lastName,
-    dateOfBirth: b.dateOfBirth.toISOString().slice(0, 10),
-    ssn: { last4: b.ssnLast4, vaultHandle: b.ssnVaultHandle },
-    email: b.email,
-    phone: b.phone,
-    currentAddress: {
-      line1: b.addressLine1,
-      line2: b.addressLine2 ?? undefined,
-      city: b.addressCity,
-      state: b.addressState,
-      postalCode: b.addressPostalCode,
-    },
-    maritalStatus: b.maritalStatus as Borrower["maritalStatus"],
-    citizenship: b.citizenship as Borrower["citizenship"],
-    // Keyed on the ID, not on the verified timestamp. A verification that has
-    // been STARTED but not finished has an id and no timestamp, and that is
-    // precisely the state the return page needs to read: the borrower has come
-    // back from the hosted flow and we have to look up which session was
-    // theirs. Keying on `identityVerifiedAt` made a pending verification
-    // invisible, so the return page reported no check in progress for every
-    // document Stripe was still reviewing.
-    identityVerification: b.identityVerificationId
-      ? {
-          verificationId: b.identityVerificationId,
-          status: (b.identityVerificationStatus ?? "pending") as "verified" | "pending" | "failed",
-          verifiedAt: b.identityVerifiedAt?.toISOString(),
-        }
-      : null,
-    nonBorrowingSpouseName: b.nonBorrowingSpouseName ?? undefined,
-    nonBorrowingSpouseSignatureRequired: b.nonBorrowingSpouseSignatureRequired,
-    preferredLanguage: b.preferredLanguage,
-    demographics: (b.demographics as Borrower["demographics"]) ?? null,
-    firstTimeHomebuyer: b.firstTimeHomebuyer,
-    isMilitary: b.isMilitary,
-    currentHousing: b.currentHousing as Borrower["currentHousing"],
-    monthlyRent: num(b.monthlyRent) ?? undefined,
-  }));
+  // The person, as the party asserts them. One query for every party on the
+  // file; a borrower with no party (a demo file, or a row written before the
+  // bridge) gets an empty map and reads entirely from its columns.
+  const partyIds = row.borrowers.map((b) => b.partyId).filter((p): p is string => Boolean(p));
+  const factRows = partyIds.length
+    ? await prisma.fact.findMany({
+        where: {
+          partyId: { in: partyIds },
+          subjectKey: "",
+          supersededById: null,
+          retractedAt: null,
+        },
+        select: { partyId: true, predicate: true, value: true, observedAt: true },
+      })
+    : [];
+  const factsByParty = factMapsByParty(factRows);
+
+  const borrowers: Borrower[] = row.borrowers.map((b) => {
+    // Identity reads from the party first and the column second. See
+    // borrower-projection.ts for which fields flip and why the rest do not.
+    const f = identityFromFacts(factsByParty.get(b.partyId ?? "") ?? new Map());
+    return {
+      id: b.id,
+      partyId: b.partyId ?? null,
+      firstName: f.firstName ?? b.firstName,
+      lastName: f.lastName ?? b.lastName,
+      dateOfBirth: f.dateOfBirth ?? b.dateOfBirth.toISOString().slice(0, 10),
+      ssn: { last4: b.ssnLast4, vaultHandle: f.ssnVaultHandle ?? b.ssnVaultHandle },
+      email: f.email ?? b.email,
+      phone: f.phone ?? b.phone,
+      currentAddress: f.currentAddress ?? {
+        line1: b.addressLine1,
+        line2: b.addressLine2 ?? undefined,
+        city: b.addressCity,
+        state: b.addressState,
+        postalCode: b.addressPostalCode,
+      },
+      maritalStatus: f.maritalStatus ?? (b.maritalStatus as Borrower["maritalStatus"]),
+      citizenship: f.citizenship ?? (b.citizenship as Borrower["citizenship"]),
+      // Keyed on the ID, not on the verified timestamp. A verification that has
+      // been STARTED but not finished has an id and no timestamp, and that is
+      // precisely the state the return page needs to read: the borrower has come
+      // back from the hosted flow and we have to look up which session was
+      // theirs. Keying on `identityVerifiedAt` made a pending verification
+      // invisible, so the return page reported no check in progress for every
+      // document Stripe was still reviewing.
+      identityVerification: b.identityVerificationId
+        ? {
+            verificationId: b.identityVerificationId,
+            status: (b.identityVerificationStatus ?? "pending") as
+              "verified" | "pending" | "failed",
+            verifiedAt: b.identityVerifiedAt?.toISOString(),
+          }
+        : null,
+      nonBorrowingSpouseName: b.nonBorrowingSpouseName ?? undefined,
+      nonBorrowingSpouseSignatureRequired: b.nonBorrowingSpouseSignatureRequired,
+      preferredLanguage: f.preferredLanguage ?? b.preferredLanguage,
+      // Per application by law (HMDA), so never from the party.
+      demographics: (b.demographics as Borrower["demographics"]) ?? null,
+      firstTimeHomebuyer: f.firstTimeHomebuyer ?? b.firstTimeHomebuyer,
+      isMilitary: f.isMilitary ?? b.isMilitary,
+      // Situational: what they pay NOW, on THIS file. Stays on the row.
+      currentHousing: b.currentHousing as Borrower["currentHousing"],
+      monthlyRent: num(b.monthlyRent) ?? undefined,
+    };
+  });
 
   const consents: Consent[] = row.consents.map((c) => ({
     kind: c.kind as Consent["kind"],

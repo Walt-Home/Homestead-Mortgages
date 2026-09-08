@@ -84,6 +84,7 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
 
   const borrowers: Borrower[] = row.borrowers.map((b) => ({
     id: b.id,
+    partyId: b.partyId ?? null,
     firstName: b.firstName,
     lastName: b.lastName,
     dateOfBirth: b.dateOfBirth.toISOString().slice(0, 10),

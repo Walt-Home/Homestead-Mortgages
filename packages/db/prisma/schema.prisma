@@ -44,6 +44,12 @@ model User {
   createdAt  DateTime @default(now()) @map("created_at")
   lastSeenAt DateTime @default(now()) @map("last_seen_at")
 
+  /// The durable person behind this sign-in. Null until the first thing is
+  /// written about them; found-or-created by the party service, never by a
+  /// route. This is what a second application reuses instead of re-asking.
+  partyId String? @unique @map("party_id") @db.Uuid
+  party   Party?  @relation("UserParty", fields: [partyId], references: [id], onDelete: SetNull)
+
   loanFiles LoanFile[]
 
   @@map("users")
@@ -227,6 +233,13 @@ model Borrower {
   isMilitary         Boolean  @default(false) @map("is_military")
   currentHousing     String   @default("rent") @map("current_housing")
   monthlyRent        Decimal? @map("monthly_rent") @db.Decimal(10, 2)
+
+  /// THE BRIDGE. This row is a per-file snapshot; the party is the person.
+  /// Screen 2 writes both in one transaction, and a consent on this row is
+  /// mirrored to an authorization on the party by a trigger. Null on rows
+  /// written before the relationship layer and on demo files.
+  partyId String? @map("party_id") @db.Uuid
+  party   Party?  @relation("BorrowerParty", fields: [partyId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -594,6 +607,8 @@ model Party {
   principals     Principal[]
   authorizations Authorization[]
   applications   ApplicationParty[]
+  users          User[]             @relation("UserParty")
+  borrowerRows   Borrower[]         @relation("BorrowerParty")
 
   @@index([claimStatus])
   @@index([mergedIntoPartyId])

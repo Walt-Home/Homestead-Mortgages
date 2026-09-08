@@ -115,7 +115,7 @@ function grantsFrom(file: LoanFile): Grant[] {
 }
 
 /** Which permission each kind of retrieval runs under. */
-const PURPOSE_FOR: Record<DataCategory, AuthorizationPurpose> = {
+export const PURPOSE_FOR: Record<DataCategory, AuthorizationPurpose> = {
   credit_report: "fcra_written_instruction",
   bank_transactions: "fcra_written_instruction",
   payroll_income: "fcra_written_instruction",

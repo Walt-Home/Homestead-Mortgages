@@ -112,7 +112,7 @@ async function seed(personaId: PersonaId): Promise<void> {
 
   let file = (await loadLoanFile(created.id))!;
 
-  const credit = await registry.credit.pullTriMerge(file, tokenFor(file, "credit_report"));
+  const credit = await registry.credit.pullTriMerge(file, await tokenFor(file, "credit_report"));
   await recordSnapshot(
     created.id,
     "credit",
@@ -124,7 +124,7 @@ async function seed(personaId: PersonaId): Promise<void> {
 
   const bankOutcome = await registry.bank.fetchAssetReport(
     file,
-    tokenFor(file, "bank_transactions"),
+    await tokenFor(file, "bank_transactions"),
     { sessionId: "seed" },
     12,
   );
@@ -143,7 +143,7 @@ async function seed(personaId: PersonaId): Promise<void> {
 
   const payroll = await registry.payroll.fetchPayroll(
     file,
-    tokenFor(file, "payroll_income"),
+    await tokenFor(file, "payroll_income"),
     "seed",
   );
   await recordSnapshot(
@@ -180,7 +180,7 @@ async function seed(personaId: PersonaId): Promise<void> {
   });
 
   file = (await loadLoanFile(created.id))!;
-  const irs = await registry.irs.fetchTranscripts(file, tokenFor(file, "tax_transcript"), []);
+  const irs = await registry.irs.fetchTranscripts(file, await tokenFor(file, "tax_transcript"), []);
   await recordSnapshot(created.id, "irs", irs.provider, irs.externalId, irs.data, irs.retrievedAt);
 
   for (const kind of ["credit", "bank", "payroll", "irs"] as const) {

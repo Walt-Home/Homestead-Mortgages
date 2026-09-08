@@ -759,6 +759,40 @@ the whole intake back. The receipt now stamps strictly after the state it
 leaves. Found by an adversarial review of the unpushed migration, with plain
 SQL, before it reached staging.
 
+## The strangler's first move: dual-write
+
+The four screens still run on `loan_files` and `borrowers`. As of 8 September
+2026 they ALSO write the relationship layer, and nothing on the screens reads
+it yet. That is the order on purpose — dual-write, prove the two agree, read
+from the new with a fallback, then stop writing the old — because the live
+flow must never be able to lose a write in between.
+
+Two mechanisms, chosen for where the write sites are:
+
+**Screen 2 writes the party and its facts in the same transaction as the
+borrower row.** One route, so it is a service call, `recordBorrowerFacts`,
+inside the same `$transaction` — a request records the person both ways or
+not at all. Saving screen 2 twice supersedes the earlier assertion of each
+predicate rather than adding a second person. A returning user's second file
+reuses their party, which is the whole point of having one. "Not asked" is the
+absence of a fact, never a null-valued one.
+
+**Consents mirror to authorizations by trigger.** Three routes write a consent
+row and a fourth would be written by somebody who had not read the other
+three, so the mirror is `AFTER INSERT ON consents` and cannot be forgotten.
+It mirrors only when the borrower has a party, and only for kinds that permit
+a retrieval — eConsent and SMS grant no data category, and an authorization
+must grant at least one.
+
+**The mirrored grant expires in 120 days, and that is a real change.** The
+legacy consent never expires. Once a party holds an authorization, `tokenFor`
+treats the real table as authoritative and does not fall back — so a pull on
+a file older than 120 days is refused, and a 4506-C that exists only as a
+legacy row does not license a transcript. The fallback to `consents` remains
+for rows with no party, with the old no-expiry semantics, so a refusal is
+attributable to exactly one table. The bridge minter in the connectors
+package still reads legacy consents with no expiry for the same reason.
+
 ## Still outstanding
 
 Four vendor decisions plus sandbox credentials, none obtainable from inside

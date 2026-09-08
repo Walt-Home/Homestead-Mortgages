@@ -208,7 +208,7 @@ applicationRouter.post(
       const year = new Date().getFullYear();
       const result = await connectors().irs.fetchTranscripts(
         refreshed!,
-        tokenFor(refreshed!, "tax_transcript"),
+        await tokenFor(refreshed!, "tax_transcript"),
         [year - 1, year - 2],
       );
       await recordSnapshot(

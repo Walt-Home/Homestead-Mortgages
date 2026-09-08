@@ -286,7 +286,7 @@ propertyFileRouter.post(
 
     const result = await connectors().screening.screenSanctions(
       file,
-      tokenFor(file, "sanctions_screening"),
+      await tokenFor(file, "sanctions_screening"),
     );
     await recordSnapshot(
       id,
@@ -331,7 +331,7 @@ propertyFileRouter.post(
 
     const result = await connectors().liens.searchLiens(
       file,
-      tokenFor(file, "public_record_liens"),
+      await tokenFor(file, "public_record_liens"),
       apn.data,
     );
     await recordSnapshot(

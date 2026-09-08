@@ -79,7 +79,10 @@ connectorRouter.post(
     const id = z.string().uuid().parse(req.params.id);
     const file = await requireFile(id, req.user!.id);
 
-    const result = await connectors().credit.pullTriMerge(file, tokenFor(file, "credit_report"));
+    const result = await connectors().credit.pullTriMerge(
+      file,
+      await tokenFor(file, "credit_report"),
+    );
     await recordSnapshot(
       id,
       "credit",
@@ -146,7 +149,7 @@ connectorRouter.post(
     // link token on every poll would both bill for sessions nobody opens and
     // hand back a token that invalidates the one Link is using.
     if (!sessionId && !publicToken) {
-      const session = await bank.createLinkSession(file, tokenFor(file, "bank_transactions"));
+      const session = await bank.createLinkSession(file, await tokenFor(file, "bank_transactions"));
       sessionId = session.sessionId;
 
       // A real aggregator needs the borrower to log in inside its own widget
@@ -166,7 +169,7 @@ connectorRouter.post(
 
     const outcome = await bank.fetchAssetReport(
       file,
-      tokenFor(file, "bank_transactions"),
+      await tokenFor(file, "bank_transactions"),
       { sessionId: sessionId ?? id, publicToken },
       12,
     );
@@ -248,7 +251,7 @@ connectorRouter.post(
     const file = await requireFile(id, req.user!.id);
 
     const payroll = connectors().payroll;
-    const payrollToken = tokenFor(file, "payroll_income");
+    const payrollToken = await tokenFor(file, "payroll_income");
     const session = await payroll.createLinkSession(file, payrollToken);
     const result = await payroll.fetchPayroll(file, payrollToken, session.sessionId);
 
@@ -309,10 +312,11 @@ connectorRouter.post(
     const file = await requireFile(id, req.user!.id);
 
     const currentYear = new Date().getFullYear();
-    const result = await connectors().irs.fetchTranscripts(file, tokenFor(file, "tax_transcript"), [
-      currentYear - 1,
-      currentYear - 2,
-    ]);
+    const result = await connectors().irs.fetchTranscripts(
+      file,
+      await tokenFor(file, "tax_transcript"),
+      [currentYear - 1, currentYear - 2],
+    );
 
     await recordSnapshot(
       id,

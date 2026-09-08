@@ -19,6 +19,7 @@ import {
 } from "../services/repository.js";
 import { loanEstimateDueAt, stampApplicationIfComplete } from "../services/application.js";
 import { advanceStage } from "../services/stage.js";
+import { recordBorrowerFacts } from "../services/party.js";
 
 export const fileRouter = Router();
 
@@ -207,7 +208,7 @@ fileRouter.post(
 
     const existingBorrower = await prisma.borrower.findFirst({
       where: { loanFileId: id },
-      select: { id: true },
+      select: { id: true, partyId: true },
     });
 
     if (!existingBorrower && (!input.ssnVaultHandle || !input.ssnLast4)) {
@@ -242,25 +243,45 @@ fileRouter.post(
       monthlyRent: input.monthlyRent ?? null,
     };
 
+    // THE BRIDGE. The borrower row is a per-file snapshot; the party is the
+    // person. Both are written in ONE transaction, so a request records the
+    // person both ways or not at all — the first move of the strangler is
+    // dual-write, and a silent divergence between the two would be worse than
+    // a failed request. Nothing reads the party yet.
+    //
     // Going back to screen 2 and saving again must UPDATE the person, not add a
     // second one. Two borrower rows would double every income and asset test
-    // that iterates them.
-    if (existingBorrower) {
-      await prisma.borrower.update({ where: { id: existingBorrower.id }, data: borrowerData });
-      await recordEvent(id, "screen_revised", "borrower", { screen: "identity" });
-    } else {
-      // The guard above already refused a first save without one; this narrows
-      // the type at the single site that genuinely requires it.
-      await prisma.borrower.create({
-        data: {
-          ...borrowerData,
-          loanFileId: id,
-          ssnVaultHandle: input.ssnVaultHandle!,
-          ssnLast4: input.ssnLast4!,
-        },
+    // that iterates them; two live legal_name facts would do the same to the
+    // relationship, so the earlier one is superseded.
+    await prisma.$transaction(async (tx) => {
+      const partyId = await recordBorrowerFacts(tx, {
+        loanFileId: id,
+        existingPartyId: existingBorrower?.partyId ?? null,
+        input,
       });
-      await recordEvent(id, "screen_completed", "borrower", { screen: "identity" });
-    }
+
+      if (existingBorrower) {
+        await tx.borrower.update({
+          where: { id: existingBorrower.id },
+          data: { ...borrowerData, partyId },
+        });
+      } else {
+        // The guard above already refused a first save without one; this
+        // narrows the type at the single site that genuinely requires it.
+        await tx.borrower.create({
+          data: {
+            ...borrowerData,
+            loanFileId: id,
+            partyId,
+            ssnVaultHandle: input.ssnVaultHandle!,
+            ssnLast4: input.ssnLast4!,
+          },
+        });
+      }
+    });
+    await recordEvent(id, existingBorrower ? "screen_revised" : "screen_completed", "borrower", {
+      screen: "identity",
+    });
 
     await advanceStage(id, "CREDIT");
 

@@ -76,21 +76,33 @@ authRouter.get(
 /**
  * Delete the account and everything attached to it.
  *
- * `users → loan_files` cascades, and every child of a loan file cascades from
- * there, so this genuinely empties the person out of the database rather than
- * flagging them deleted. For a prototype that asks real people for their date
- * of birth and address, "you can take it back" has to actually be true.
+ * `users → loan_files` cascades and every child of a loan file cascades from
+ * there. The PERSON does not: identity is facts on the party, and
+ * users.party_id points the wrong way to cascade. The
+ * users_delete_takes_party trigger removes the party (and so its facts,
+ * principal and authorizations) when the user row goes; the explicit delete
+ * below is belt and braces in the same transaction, so this route is true on
+ * its own and a 0 here means the trigger already did it. For a prototype that
+ * asks real people for their date of birth and SSN, "you can take it back"
+ * has to actually be true.
  */
 authRouter.delete(
   "/me",
   requireAuth,
   asyncRoute(async (req, res) => {
     const userId = req.user!.id;
+    const { partyId } = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { partyId: true },
+    });
     const files = await prisma.loanFile.count({ where: { userId } });
-    await prisma.user.delete({ where: { id: userId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.user.delete({ where: { id: userId } });
+      if (partyId) await tx.party.deleteMany({ where: { id: partyId } });
+    });
     req.session.destroy(() => {
       res.clearCookie("hm.sid");
-      res.json({ deleted: { user: 1, loanFiles: files } });
+      res.json({ deleted: { user: 1, loanFiles: files, party: partyId ? 1 : 0 } });
     });
   }),
 );

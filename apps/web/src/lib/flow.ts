@@ -75,6 +75,15 @@ export const STAGE_TO_SCREEN: Record<FlowStage, ScreenPath> = {
   COMPLETE: "review",
 };
 
+/**
+ * Where a file goes when the person behind it will not project.
+ *
+ * Screen 2 is the only screen that writes identity facts, so it is the only
+ * one that can repair a file whose facts have gone unusable. Every other
+ * screen reads the file and would render nothing.
+ */
+export const REPAIR_SCREEN: ScreenPath = "identity";
+
 /** How far the borrower has actually got, as a step index. */
 export function reachedIndex(stage: FlowStage | undefined): number {
   if (!stage) return 0;

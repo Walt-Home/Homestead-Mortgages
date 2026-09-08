@@ -188,58 +188,40 @@ model Borrower {
   loanFileId String   @map("loan_file_id") @db.Uuid
   loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
 
-  firstName String @map("first_name")
-  lastName  String @map("last_name")
-  email     String
-  phone     String
+  /// The person. Required: a borrower row is a per-application record ABOUT a
+  /// party, and it holds nothing that identifies anyone. Name, date of birth,
+  /// the SSN vault handle, contact details, address, marital status,
+  /// citizenship, language, military service and first-time-buyer status are
+  /// all facts on the party — written by screen 2, read by the projection,
+  /// and never duplicated here. The columns that used to hold them were
+  /// dropped once every existing row had been backfilled into facts.
+  partyId String @map("party_id") @db.Uuid
+  party   Party  @relation("BorrowerParty", fields: [partyId], references: [id], onDelete: Cascade)
 
-  dateOfBirth DateTime @map("date_of_birth") @db.Date
-
-  // SSN NEVER lands here. `ssnVaultHandle` is an opaque reference the identity
-  // vault exchanges for the real value, server-side, at exactly three call
-  // sites: the credit pull, the SSA-89 validation and the 4506-C. `ssnLast4`
-  // is display only. A migration that adds a plaintext SSN column to this
-  // table is the single change most likely to turn a prototype into a breach.
-  ssnLast4       String @map("ssn_last4") @db.VarChar(4)
-  ssnVaultHandle String @map("ssn_vault_handle")
-
-  addressLine1      String  @map("address_line1")
-  addressLine2      String? @map("address_line2")
-  addressCity       String  @map("address_city")
-  addressState      String  @map("address_state") @db.VarChar(2)
-  addressPostalCode String  @map("address_postal_code")
-
-  maritalStatus String @map("marital_status")
-
-  /// US citizen, permanent resident, or non-permanent resident.
-  ///
-  /// Not in Drew's V1 sheet, and it belongs in the flow anyway: residency
-  /// changes product eligibility and the documentation an underwriter needs,
-  /// and asking it at the end is worse than asking it with the rest of
-  /// identity.
-  citizenship String @default("us_citizen")
+  /// Display only. The vault handle — the reference the credit pull, the
+  /// SSA-89 and the 4506-C exchange for the number — is the `ssn_token` fact.
+  /// A migration that adds a plaintext SSN column to this table is the single
+  /// change most likely to turn a prototype into a breach.
+  ssnLast4 String @map("ssn_last4") @db.VarChar(4)
 
   /// Identity verified against a government document, rather than typed.
-  /// Null means never attempted.
-  identityVerifiedAt                  DateTime? @map("identity_verified_at")
-  identityVerificationId              String?   @map("identity_verification_id")
-  identityVerificationStatus          String?   @map("identity_verification_status")
-  nonBorrowingSpouseName              String?   @map("non_borrowing_spouse_name")
-  nonBorrowingSpouseSignatureRequired Boolean   @default(false) @map("non_borrowing_spouse_signature_required")
+  /// Per vendor session, so per application. Null means never attempted.
+  identityVerifiedAt         DateTime? @map("identity_verified_at")
+  identityVerificationId     String?   @map("identity_verification_id")
+  identityVerificationStatus String?   @map("identity_verification_status")
 
-  preferredLanguage  String   @default("en") @map("preferred_language")
-  demographics       Json?
-  firstTimeHomebuyer Boolean? @map("first_time_homebuyer")
-  isMilitary         Boolean  @default(false) @map("is_military")
-  currentHousing     String   @default("rent") @map("current_housing")
-  monthlyRent        Decimal? @map("monthly_rent") @db.Decimal(10, 2)
+  /// Whether the spouse must sign depends on the property's state and this
+  /// loan, not on the person — a community-property question per application.
+  nonBorrowingSpouseName              String? @map("non_borrowing_spouse_name")
+  nonBorrowingSpouseSignatureRequired Boolean @default(false) @map("non_borrowing_spouse_signature_required")
 
-  /// THE BRIDGE. This row is a per-file snapshot; the party is the person.
-  /// Screen 2 writes both in one transaction, and a consent on this row is
-  /// mirrored to an authorization on the party by a trigger. Null on rows
-  /// written before the relationship layer and on demo files.
-  partyId String? @map("party_id") @db.Uuid
-  party   Party?  @relation("BorrowerParty", fields: [partyId], references: [id], onDelete: SetNull)
+  /// URLA Section 7. Collected PER APPLICATION by law (HMDA), so never a fact
+  /// on the party.
+  demographics Json?
+
+  /// What they pay NOW, on THIS file. Situational, not identity.
+  currentHousing String   @default("rent") @map("current_housing")
+  monthlyRent    Decimal? @map("monthly_rent") @db.Decimal(10, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -247,6 +229,7 @@ model Borrower {
   consents Consent[]
 
   @@index([loanFileId])
+  @@index([partyId])
   @@map("borrowers")
 }
 

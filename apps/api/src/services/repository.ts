@@ -29,7 +29,7 @@ import type {
 } from "@hm/shared";
 import type { Prisma } from "@hm/db";
 import { AppError } from "../middleware/error-handler.js";
-import { factMapsByParty, identityFromFacts } from "./borrower-projection.js";
+import { displayNameFrom, factMapsByParty, requireIdentity } from "./borrower-projection.js";
 
 /** Prisma returns Decimal; the domain uses number. One place to convert. */
 function num(value: Prisma.Decimal | null): number | null {
@@ -84,9 +84,8 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
   };
 
   // The person, as the party asserts them. One query for every party on the
-  // file; a borrower with no party (a demo file, or a row written before the
-  // bridge) gets an empty map and reads entirely from its columns.
-  const partyIds = row.borrowers.map((b) => b.partyId).filter((p): p is string => Boolean(p));
+  // file. There is no column to fall back to; see borrower-projection.ts.
+  const partyIds = row.borrowers.map((b) => b.partyId);
   const factRows = partyIds.length
     ? await prisma.fact.findMany({
         where: {
@@ -101,34 +100,22 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
   const factsByParty = factMapsByParty(factRows);
 
   const borrowers: Borrower[] = row.borrowers.map((b) => {
-    // Identity reads from the party first and the column second. See
-    // borrower-projection.ts for which fields flip and why the rest do not.
-    const f = identityFromFacts(factsByParty.get(b.partyId ?? "") ?? new Map());
+    const who = requireIdentity(b.id, factsByParty.get(b.partyId) ?? new Map());
     return {
       id: b.id,
-      partyId: b.partyId ?? null,
-      firstName: f.firstName ?? b.firstName,
-      lastName: f.lastName ?? b.lastName,
-      dateOfBirth: f.dateOfBirth ?? b.dateOfBirth.toISOString().slice(0, 10),
-      ssn: { last4: b.ssnLast4, vaultHandle: f.ssnVaultHandle ?? b.ssnVaultHandle },
-      email: f.email ?? b.email,
-      phone: f.phone ?? b.phone,
-      currentAddress: f.currentAddress ?? {
-        line1: b.addressLine1,
-        line2: b.addressLine2 ?? undefined,
-        city: b.addressCity,
-        state: b.addressState,
-        postalCode: b.addressPostalCode,
-      },
-      maritalStatus: f.maritalStatus ?? (b.maritalStatus as Borrower["maritalStatus"]),
-      citizenship: f.citizenship ?? (b.citizenship as Borrower["citizenship"]),
+      partyId: b.partyId,
+      firstName: who.firstName,
+      lastName: who.lastName,
+      dateOfBirth: who.dateOfBirth,
+      ssn: { last4: b.ssnLast4, vaultHandle: who.ssnVaultHandle },
+      email: who.email,
+      phone: who.phone,
+      currentAddress: who.currentAddress,
+      maritalStatus: who.maritalStatus,
+      citizenship: who.citizenship,
       // Keyed on the ID, not on the verified timestamp. A verification that has
       // been STARTED but not finished has an id and no timestamp, and that is
-      // precisely the state the return page needs to read: the borrower has come
-      // back from the hosted flow and we have to look up which session was
-      // theirs. Keying on `identityVerifiedAt` made a pending verification
-      // invisible, so the return page reported no check in progress for every
-      // document Stripe was still reviewing.
+      // precisely the state the return page needs to read.
       identityVerification: b.identityVerificationId
         ? {
             verificationId: b.identityVerificationId,
@@ -139,11 +126,11 @@ export async function loadLoanFile(id: string): Promise<LoanFile | null> {
         : null,
       nonBorrowingSpouseName: b.nonBorrowingSpouseName ?? undefined,
       nonBorrowingSpouseSignatureRequired: b.nonBorrowingSpouseSignatureRequired,
-      preferredLanguage: f.preferredLanguage ?? b.preferredLanguage,
+      preferredLanguage: who.preferredLanguage,
       // Per application by law (HMDA), so never from the party.
       demographics: (b.demographics as Borrower["demographics"]) ?? null,
-      firstTimeHomebuyer: f.firstTimeHomebuyer ?? b.firstTimeHomebuyer,
-      isMilitary: f.isMilitary ?? b.isMilitary,
+      firstTimeHomebuyer: who.firstTimeHomebuyer,
+      isMilitary: who.isMilitary,
       // Situational: what they pay NOW, on THIS file. Stays on the row.
       currentHousing: b.currentHousing as Borrower["currentHousing"],
       monthlyRent: num(b.monthlyRent) ?? undefined,
@@ -415,7 +402,7 @@ export async function assertFileAccess(
 
 /** Files this user may see: their own, newest first, plus the shared demo set. */
 export async function listAccessibleFiles(userId: string) {
-  return prisma.loanFile.findMany({
+  const rows = await prisma.loanFile.findMany({
     where: { OR: [{ userId }, { isDemo: true }] },
     orderBy: [{ isDemo: "asc" }, { createdAt: "desc" }],
     select: {
@@ -428,7 +415,27 @@ export async function listAccessibleFiles(userId: string) {
       valueOrPrice: true,
       propertyCity: true,
       propertyState: true,
-      borrowers: { select: { firstName: true, lastName: true }, take: 1 },
+      // The name is a fact on the party, not a column on the row.
+      borrowers: {
+        take: 1,
+        select: {
+          party: {
+            select: {
+              facts: {
+                where: {
+                  predicate: "legal_name",
+                  subjectKey: "",
+                  supersededById: null,
+                  retractedAt: null,
+                },
+                orderBy: { observedAt: "desc" },
+                take: 1,
+                select: { value: true },
+              },
+            },
+          },
+        },
+      },
       decisions: {
         orderBy: { computedAt: "desc" },
         take: 1,
@@ -436,4 +443,11 @@ export async function listAccessibleFiles(userId: string) {
       },
     },
   });
+  // Same shape as before — `borrowers[0].firstName` — so no caller changes.
+  return rows.map(({ borrowers, ...rest }) => ({
+    ...rest,
+    borrowers: borrowers
+      .map((b) => displayNameFrom(b.party.facts[0]?.value))
+      .filter((n): n is { firstName: string; lastName: string } => n !== null),
+  }));
 }

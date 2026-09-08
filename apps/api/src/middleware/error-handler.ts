@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 import { AuthorizationError, PlaidRequestError } from "@hm/connectors";
+import { ProjectionError } from "../services/borrower-projection.js";
 
 export class AppError extends Error {
   constructor(
@@ -44,6 +45,20 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
           ? "Your bank needs signing into again."
           : "We could not reach your bank just now.",
         code: relink ? "BANK_RELINK_REQUIRED" : "BANK_CONNECTION_FAILED",
+      },
+    });
+    return;
+  }
+  // An invariant violation in the person, not a crash: the client can tell
+  // the two apart and the log names the borrower and the predicate.
+  if (err instanceof ProjectionError) {
+    console.error(err);
+    res.status(500).json({
+      error: {
+        message: err.message,
+        code: "PROJECTION_ERROR",
+        borrowerId: err.borrowerId,
+        predicate: err.predicate,
       },
     });
     return;

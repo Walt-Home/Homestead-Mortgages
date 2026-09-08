@@ -16,8 +16,14 @@ import { Footer } from "./components/Footer.js";
 import { api, ApiError, type Assessment } from "./lib/api.js";
 import { useAuth } from "./lib/auth.js";
 import { StatesGalleryPage } from "./pages/StatesGalleryPage.js";
-import { useLoanFile } from "./lib/file.js";
-import { STAGE_TO_SCREEN, debugEnabled, screenIndex, type ScreenPath } from "./lib/flow.js";
+import { needsRepair, useLoanFile } from "./lib/file.js";
+import {
+  REPAIR_SCREEN,
+  STAGE_TO_SCREEN,
+  debugEnabled,
+  screenIndex,
+  type ScreenPath,
+} from "./lib/flow.js";
 import { SignInPage } from "./pages/SignInPage.js";
 import { LandingPage } from "./pages/LandingPage.js";
 import { PrivacyPage } from "./pages/PrivacyPage.js";
@@ -131,7 +137,14 @@ export function App() {
   );
 }
 
-/** Sends a bare /f/:id to wherever the file actually got to. */
+/**
+ * Sends a bare /f/:id to wherever the file actually got to.
+ *
+ * A file that failed to load never reaches this: FileShell sends a file that
+ * needs repair to screen 2 before rendering anything under it, and a file
+ * that is not theirs to NotYours. What is left with no stage is a load that
+ * failed for some other reason, and the file list is the honest place for it.
+ */
 function ResumeToStage() {
   const { fileId } = useParams<{ fileId: string }>();
   const { data, isLoading } = useLoanFile(fileId);
@@ -180,6 +193,21 @@ function FileShell() {
 
   if (file.error instanceof ApiError && file.error.status === 404) {
     return <NotYours />;
+  }
+
+  /*
+   * The repair path, from anywhere a file is loaded.
+   *
+   * When a required identity fact is unusable, GET /files/:id throws before
+   * any screen has data. Screen 2 is the one screen that can fix that, and
+   * it used to be reachable only after a connector on screen 3 failed — a
+   * bare /f/:id fell through to the file list, and the file list's own link
+   * went to the stage's screen, which rendered with nothing. Every route
+   * under /f/:id passes through here, so this is where the redirect lives.
+   * Screen 2 itself is exempt, or it could never render to do the repair.
+   */
+  if (needsRepair(file.error) && last !== REPAIR_SCREEN) {
+    return <Navigate to={`/f/${fileId}/${REPAIR_SCREEN}`} replace />;
   }
 
   return (

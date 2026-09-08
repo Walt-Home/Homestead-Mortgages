@@ -71,6 +71,12 @@ export function ConnectorStep(props: ConnectorStepProps) {
         );
       } else if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {
         setError("This is a sample file, so it can't be changed. Start your own to try this.");
+      } else if (err instanceof ApiError && err.code === "PROJECTION_ERROR") {
+        // A required identity fact is missing or blank, so nothing that reads
+        // the file can run — including this screen. Screen 2 is the repair
+        // path: saving it again rewrites the person's facts, and no button
+        // here can. Retrying the connector would only throw the same way.
+        navigate(`/f/${props.fileId}/identity`);
       } else {
         setError(err instanceof Error ? err.message : "Something went wrong.");
       }

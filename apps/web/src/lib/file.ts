@@ -88,8 +88,25 @@ export function useLoanFile(fileId: string | undefined) {
     queryFn: () => api.get<LoanFileResponse>(`/files/${fileId}`),
     enabled: Boolean(fileId),
     // A 404 here means "not yours or not there" and will never become a 200.
-    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
+    // Neither will a projection failure: retrying it only delays the redirect
+    // to the repair screen by the backoff.
+    retry: (count, err) =>
+      !(err instanceof ApiError && err.status === 404) && !needsRepair(err) && count < 2,
   });
+}
+
+/**
+ * Did the file fail to load because the person behind it will not project?
+ *
+ * A required identity fact — name, address, SSN token and so on — is missing
+ * or blank, so every read of the file throws before any screen gets data.
+ * That is not a lost file and not a server outage: saving screen 2 again
+ * rewrites the facts and clears it. The shell routes there on this answer,
+ * because a screen with no file data has nothing to offer and no button on
+ * it can do the rewrite.
+ */
+export function needsRepair(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "PROJECTION_ERROR";
 }
 
 export function hasConsent(file: LoanFileView | undefined, kind: string): boolean {

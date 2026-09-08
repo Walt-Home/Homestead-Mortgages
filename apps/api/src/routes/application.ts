@@ -25,6 +25,7 @@ import {
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
 import { tokenFor } from "../services/authorization.js";
+import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
 
 export const applicationRouter = Router();
@@ -177,7 +178,12 @@ applicationRouter.post(
     const esign = connectors().esign;
     const signed: string[] = [];
     for (const kind of SIGNED_DOCUMENTS) {
-      if (file.consents.some((c) => c.kind === kind && !c.revokedAt)) continue;
+      // Skipped only when this file's row AND the party's grant are both live.
+      // A 4506-C signed on this file more than 120 days ago has a row and no
+      // grant, and skipping it here left the transcript pull below with
+      // nothing to mint from — the signature succeeded and the transcripts
+      // never came. See services/signature.ts.
+      if (await signedOn(id, borrower.partyId, kind)) continue;
       const envelope = await esign.createEnvelope(file, kind, borrower.id);
       const consent = await esign.getCompletedConsent(envelope.envelopeId);
       if (!consent) continue;

@@ -10,6 +10,12 @@ export class ApiError extends Error {
     message: string,
     readonly code?: string,
     readonly requirementId?: string,
+    /**
+     * Only on `PROJECTION_ERROR`: which identity fact the server could not
+     * read. Screen 2 turns it into the field to check; the message itself
+     * names a borrower id and a predicate, and neither belongs on a screen.
+     */
+    readonly predicate?: string,
   ) {
     super(message);
   }
@@ -33,8 +39,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // 204 has no body; parsing it would throw and turn a success into an error.
   const body = response.status === 204 ? {} : await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = (body as { error?: { message?: string; code?: string; requirementId?: string } })
-      .error;
+    const error = (
+      body as {
+        error?: { message?: string; code?: string; requirementId?: string; predicate?: string };
+      }
+    ).error;
     if (response.status === 401 && error?.code === "SIGN_IN_REQUIRED") {
       // Not for /auth/me, which 401s as its normal "nobody is signed in"
       // answer during startup — announcing that would bounce a visitor who
@@ -48,6 +57,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       error?.message ?? `Request failed with ${response.status}`,
       error?.code,
       error?.requirementId,
+      error?.predicate,
     );
   }
   return body as T;

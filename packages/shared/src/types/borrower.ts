@@ -57,14 +57,14 @@ export interface Demographics {
 export interface Borrower {
   readonly id: string;
   /**
-   * The durable person this row is a snapshot of, once one exists.
+   * The durable person this row is a per-application record about.
    *
-   * Null on files written before the relationship layer, and on demo files.
-   * When present, the party — not this row — is what a retrieval is
-   * authorized about, and what a second application reuses. The bridge: this
-   * row stays the source screen 2 reads until the funnel moves to facts.
+   * Required. Every identity field on this object is projected from a fact on
+   * the party; the row itself holds nothing that identifies anyone. A
+   * retrieval is authorized about the party, and a second application reuses
+   * it.
    */
-  readonly partyId?: string | null;
+  readonly partyId: string;
   readonly firstName: string;
   readonly lastName: string;
   readonly dateOfBirth: string;

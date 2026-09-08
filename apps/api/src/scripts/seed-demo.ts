@@ -16,6 +16,7 @@ import { progress } from "@hm/requirements";
 import { underwrite } from "@hm/underwriting";
 import { loadLoanFile, recordEvent, recordSnapshot } from "../services/repository.js";
 import { config } from "../config.js";
+import { recordBorrowerFacts } from "../services/party.js";
 import { tokenFor } from "../services/authorization.js";
 
 const PURPOSE_TO_DB = {
@@ -64,38 +65,58 @@ async function seed(personaId: PersonaId): Promise<void> {
         valueEstimate: true,
         loanAmount: true,
       } as unknown as Prisma.InputJsonValue,
-      borrowers: {
-        create: {
-          firstName,
-          lastName,
-          email: `${personaId}@fixture.invalid`,
-          phone: "555-0100",
-          dateOfBirth: new Date("1988-04-12"),
-          ssnLast4: "4321",
-          // Fixture handle. No SSN exists for these borrowers at all.
-          ssnVaultHandle: `vault:fixture:${personaId}`,
-          addressLine1: "9 Fixture Road",
-          addressCity: "Demo City",
-          addressState: s.state,
-          addressPostalCode: "00000",
-          maritalStatus: "unmarried",
-          preferredLanguage: "en",
-          firstTimeHomebuyer: true,
-          currentHousing: "rent",
-          monthlyRent: 2_000,
-          demographics: {
-            ethnicity: "declined",
-            race: "declined",
-            sex: "declined",
-            visualObservationNoted: false,
-          } as unknown as Prisma.InputJsonValue,
-        },
-      },
     },
-    include: { borrowers: true },
   });
 
-  const borrowerId = created.borrowers[0]!.id;
+  // The person, through the same service the route uses — so a demo file is
+  // a real party with real facts, and everything that reads facts sees it.
+  const borrowerId = await prisma.$transaction(async (tx) => {
+    const partyId = await recordBorrowerFacts(tx, {
+      loanFileId: created.id,
+      existingPartyId: null,
+      input: {
+        firstName,
+        lastName,
+        email: `${personaId}@fixture.invalid`,
+        phone: "555-0100",
+        dateOfBirth: "1988-04-12",
+        // Fixture handle. No SSN exists for these borrowers at all.
+        ssnVaultHandle: `vault:fixture:${personaId}`,
+        currentAddress: {
+          line1: "9 Fixture Road",
+          city: "Demo City",
+          state: s.state,
+          postalCode: "00000",
+        },
+        maritalStatus: "unmarried",
+        citizenship: "us_citizen",
+        preferredLanguage: "en",
+        firstTimeHomebuyer: true,
+        isMilitary: false,
+        currentHousing: "rent",
+        monthlyRent: 2_000,
+        // Stated, not verified — the same figure screen 1 would have collected.
+        statedMonthlyIncome: 8_500,
+      },
+    });
+    const row = await tx.borrower.create({
+      data: {
+        loanFileId: created.id,
+        partyId,
+        ssnLast4: "4321",
+        currentHousing: "rent",
+        monthlyRent: 2_000,
+        demographics: {
+          ethnicity: "declined",
+          race: "declined",
+          sex: "declined",
+          visualObservationNoted: false,
+        } as unknown as Prisma.InputJsonValue,
+      },
+      select: { id: true },
+    });
+    return row.id;
+  });
   const now = new Date();
   for (const kind of ["verification_authorization", "econsent", "form_4506c"] as const) {
     await prisma.consent.create({

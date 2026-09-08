@@ -19,7 +19,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
-import { hasConsent, useLoanFile } from "../lib/file.js";
+import { useLoanFile } from "../lib/file.js";
 import { useAuth } from "../lib/auth.js";
 import { Why } from "../components/Why.js";
 import { clearDraft, readDraft, saveDraft } from "../lib/identity.js";
@@ -81,6 +81,33 @@ function formatSsn(input: string): string {
 /** 5125550142 → 512-555-0142 */
 function formatPhone(input: string): string {
   return group(input.replace(/\D/g, "").slice(0, 10), [3, 3, 4]);
+}
+
+/**
+ * What to check when the save did not take.
+ *
+ * The server refuses to read a person back whose required facts are missing
+ * or blank, and its message names a borrower id and a fact predicate — ours
+ * to read, nobody else's. The borrower gets the field instead, in the words
+ * this screen uses for it: three come off the scanned ID, one off the account
+ * they signed in with, and the rest are typed here.
+ */
+const CHECK_FOR: Record<string, string> = {
+  legal_name: "the name on your ID",
+  date_of_birth: "your date of birth",
+  current_address: "the address on your ID",
+  ssn_token: "your social security number",
+  email: "the email on your account",
+  phone: "your phone number",
+  citizenship: "your citizenship",
+  marital_status: "your marital status",
+};
+
+export function repairMessage(predicate: string | undefined): string {
+  const field = predicate === undefined ? undefined : CHECK_FOR[predicate];
+  return field
+    ? `Something about ${field} did not go through. Please check it and try again.`
+    : "Something in your details did not go through. Please check them and try again.";
 }
 
 export function IdentityPage() {
@@ -259,9 +286,13 @@ export function IdentityPage() {
           : {}),
         // Derived from the county record rather than asked — screen 1 already
         // retrieved whether this borrower held an ownership interest.
-        firstTimeHomebuyer: data?.file.propertyRecord
-          ? !data.file.propertyRecord.priorOwnershipInLastThreeYears
-          : true,
+        // On the repair path the file never loaded, so there is no record
+        // to derive from; null asserts nothing and the earlier fact stands.
+        firstTimeHomebuyer: data?.file
+          ? data.file.propertyRecord
+            ? !data.file.propertyRecord.priorOwnershipInLastThreeYears
+            : true
+          : null,
         // KNOWN GAP, not a derivation.
         //
         // The four-screen flow does not ask whether the borrower rents or
@@ -285,16 +316,23 @@ export function IdentityPage() {
       const file = await api.get<{ file: { borrowers: { id: string }[] } }>(`/files/${fileId}`);
       const borrowerId = file.file.borrowers[0]?.id;
       if (borrowerId) {
-        if (!hasConsent(data?.file, "verification_authorization")) {
-          await api.post(`/files/${fileId}/consents`, {
-            kind: "verification_authorization",
-            borrowerId,
-          });
-        }
-        if (econsent && !hasConsent(data?.file, "econsent")) {
+        // Always posted, never skipped on what the file already shows.
+        //
+        // This used to check the file's consent rows first and post nothing
+        // when one was there. But a row on the file is not the same thing as
+        // a live grant on the person: the grant expires after 120 days and the
+        // file's row never learns that, so the check said "already authorized"
+        // to exactly the borrower who had to sign again. The server holds the
+        // whole rule — a grant that is still live absorbs the duplicate, a
+        // lapsed one is renewed — and the client no longer decides.
+        await api.post(`/files/${fileId}/consents`, {
+          kind: "verification_authorization",
+          borrowerId,
+        });
+        if (econsent) {
           await api.post(`/files/${fileId}/consents`, { kind: "econsent", borrowerId });
         }
-        if (smsConsent && !hasConsent(data?.file, "sms_contact")) {
+        if (smsConsent) {
           await api.post(`/files/${fileId}/consents`, { kind: "sms_contact", borrowerId });
         }
       }
@@ -361,6 +399,11 @@ export function IdentityPage() {
     } catch (err) {
       if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {
         setError("This is a sample file, so it is read-only. Start your own to walk the flow.");
+      } else if (err instanceof ApiError && err.code === "PROJECTION_ERROR") {
+        // The save landed but the person still will not read back — this
+        // screen IS the repair path, so there is nowhere else to send them.
+        // Name the field to look at rather than the server's message.
+        setError(repairMessage(err.predicate));
       } else {
         setError(err instanceof Error ? err.message : "Something did not go through.");
       }

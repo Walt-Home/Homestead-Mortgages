@@ -5,29 +5,40 @@
  * failure severity is "Regulatory violation". This is the test that makes that
  * a property of the system rather than a habit.
  *
- * It used to call every adapter against an unauthorized FILE and assert a
- * refusal. That could not test the thing that was actually wrong: the guard
- * took a file and no subject, so on a two-borrower file one person's signature
- * authorized a pull about the other. Now every person-keyed method takes a
- * `PurposeToken` naming one borrower, and the tests here are about who can
- * get one.
+ * Every person-keyed method takes a `PurposeToken`. This package no longer
+ * reads a loan file's consents to make one — the minter is in the API and
+ * reads the authorizations table — so the tests here mint from GRANTS
+ * directly, through the same pure function the API uses, and are about what
+ * an adapter does with the token it is handed. Who may have a token at all
+ * is tested against the real database in apps/api.
  */
 
 import { describe, expect, it } from "vitest";
-import type { Borrower, Consent, LoanFile, PurposeToken } from "@hm/shared";
+import {
+  mintPurposeToken,
+  type Borrower,
+  type DataCategory,
+  type Grant,
+  type LoanFile,
+  type PurposeToken,
+} from "@hm/shared";
 import {
   ADDRESS_BOOK,
   AddressNotFoundError,
   AuthorizationError,
   fixtureRegistry,
   fixtureEsignConnector,
-  purposeFor,
+  PURPOSE_FOR,
   requireCategory,
 } from "../index.js";
+
+const PARTY = "11111111-1111-1111-1111-111111111111";
+const NOW = new Date("2026-09-08T12:00:00.000Z");
 
 function borrower(id: string): Borrower {
   return {
     id,
+    partyId: PARTY,
     firstName: "Test",
     lastName: id,
     dateOfBirth: "1990-01-01",
@@ -47,18 +58,7 @@ function borrower(id: string): Borrower {
   };
 }
 
-function consent(kind: Consent["kind"], borrowerId: string, revokedAt?: string): Consent {
-  return {
-    kind,
-    borrowerId,
-    grantedAt: "2026-01-01T00:00:00.000Z",
-    ...(revokedAt ? { revokedAt } : {}),
-    ipAddress: "127.0.0.1",
-    userAgent: "test",
-  };
-}
-
-function fileWith(borrowers: Borrower[], consents: Consent[] = []): LoanFile {
+function fileWith(borrowers: Borrower[]): LoanFile {
   return {
     id: "00000000-0000-0000-0000-000000000000",
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -68,7 +68,7 @@ function fileWith(borrowers: Borrower[], consents: Consent[] = []): LoanFile {
     loan: null,
     product: null,
     borrowers,
-    consents,
+    consents: [],
     application: null,
     propertyRecord: null,
     valuation: null,
@@ -94,82 +94,78 @@ function fileWith(borrowers: Borrower[], consents: Consent[] = []): LoanFile {
   };
 }
 
+/** The two origination grants a signed file holds. */
+const GRANTS: Grant[] = [
+  {
+    id: "grant-app-005",
+    partyId: PARTY,
+    purpose: "fcra_written_instruction",
+    dataCategories: [
+      "credit_report",
+      "bank_transactions",
+      "payroll_income",
+      "sanctions_screening",
+      "public_record_liens",
+    ],
+    grantedAt: "2026-09-01T00:00:00.000Z",
+    expiresAt: "2026-12-30T00:00:00.000Z",
+    revokedAt: null,
+  },
+  {
+    id: "grant-4506c",
+    partyId: PARTY,
+    purpose: "irs_4506c",
+    dataCategories: ["tax_transcript"],
+    grantedAt: "2026-09-01T00:00:00.000Z",
+    expiresAt: "2026-12-30T00:00:00.000Z",
+    revokedAt: null,
+  },
+];
+
+/** A token for `category`, minted the way the API mints one. */
+function token(category: DataCategory, grants: Grant[] = GRANTS): PurposeToken {
+  const r = mintPurposeToken({
+    partyId: PARTY,
+    purpose: PURPOSE_FOR[category],
+    dataCategory: category,
+    grants,
+    now: NOW,
+  });
+  if (!r.ok) throw new Error(`test setup: ${r.message}`);
+  return r.token;
+}
+
 const A = borrower("b1");
-const B = borrower("b2");
-
-/** One borrower, who has signed APP-005. The ordinary case. */
-const authorized = () => fileWith([A], [consent("verification_authorization", "b1")]);
-
-describe("who can get a token", () => {
-  it("refuses a borrower who is not on the file at all", () => {
-    expect(() => purposeFor(fileWith([A]), "b2", "credit_report")).toThrow(AuthorizationError);
-  });
-
-  it("refuses a borrower on the file who has not consented", () => {
-    expect(() => purposeFor(fileWith([A]), "b1", "credit_report")).toThrow(AuthorizationError);
-  });
-
-  it("REFUSES to let one borrower's signature authorize a pull about another", () => {
-    // The defect this whole change exists to close. A and B are both on the
-    // file. A signed. The old guard found "an active consent on the file" and
-    // let B's credit be pulled on A's signature.
-    const file = fileWith([A, B], [consent("verification_authorization", "b1")]);
-    expect(purposeFor(file, "b1", "credit_report").partyId).toBe("b1");
-    expect(() => purposeFor(file, "b2", "credit_report")).toThrow(AuthorizationError);
-  });
-
-  it("refuses once the consent is revoked", () => {
-    const file = fileWith(
-      [A],
-      [consent("verification_authorization", "b1", "2026-02-01T00:00:00.000Z")],
-    );
-    expect(() => purposeFor(file, "b1", "credit_report")).toThrow(/revoked/);
-  });
-
-  it("issues a token for the borrower who actually signed", () => {
-    const token = purposeFor(authorized(), "b1", "credit_report");
-    expect(token.partyId).toBe("b1");
-    expect(token.dataCategory).toBe("credit_report");
-    expect(token.purpose).toBe("fcra_written_instruction");
-  });
-
-  it("cites APP-005 on a refusal, which is what the client routes on", () => {
-    try {
-      purposeFor(fileWith([A]), "b1", "bank_transactions");
-      throw new Error("should have thrown");
-    } catch (err) {
-      expect((err as AuthorizationError).requirementId).toBe("APP-005");
-    }
-  });
-});
+const file = () => fileWith([A]);
 
 describe("a token is for one kind of data", () => {
-  it("refuses IRS transcripts on an APP-005 signature alone", () => {
-    // A 4506-C is a different permission. The old `assert4506cExecuted(file)`
-    // checked for any 4506-C on the file by anybody; this refuses before an
-    // adapter is even reached, and names the requirement.
+  it("refuses a token at the adapter when it is for something else", () => {
+    // The token proves a permission; `requireCategory` proves it is the
+    // permission for the data about to be fetched. A caller holding a bank
+    // token must not reach the credit adapter.
+    expect(() => requireCategory(token("bank_transactions"), "credit_report")).toThrow(
+      AuthorizationError,
+    );
+  });
+
+  it("cites the requirement the refused category is gated by", () => {
     try {
-      purposeFor(authorized(), "b1", "tax_transcript");
+      requireCategory(token("credit_report"), "tax_transcript");
       throw new Error("should have thrown");
     } catch (err) {
       expect((err as AuthorizationError).requirementId).toBe("INC-008");
     }
   });
 
-  it("mints for transcripts once the 4506-C is executed", () => {
-    const file = fileWith(
-      [A],
-      [consent("verification_authorization", "b1"), consent("form_4506c", "b1")],
-    );
-    expect(purposeFor(file, "b1", "tax_transcript").purpose).toBe("irs_4506c");
-  });
-
-  it("refuses a token at the adapter when it is for something else", () => {
-    // A caller holding a bank token must not reach the credit adapter. The
-    // token proves a permission; `requireCategory` proves it is the permission
-    // for the data about to be fetched.
-    const bankToken = purposeFor(authorized(), "b1", "bank_transactions");
-    expect(() => requireCategory(bankToken, "credit_report")).toThrow(AuthorizationError);
+  it("cannot be minted for transcripts on an APP-005 grant alone", () => {
+    const r = mintPurposeToken({
+      partyId: PARTY,
+      purpose: PURPOSE_FOR.tax_transcript,
+      dataCategory: "tax_transcript",
+      grants: GRANTS.filter((g) => g.purpose !== "irs_4506c"),
+      now: NOW,
+    });
+    expect(r).toMatchObject({ ok: false, reason: "no_grant" });
   });
 });
 
@@ -180,67 +176,53 @@ describe("the adapters, with and without a token", () => {
     // The check is the parameter. This is enforced by the compiler, and if it
     // ever stops erroring the guard has quietly become a convention again.
     // @ts-expect-error a person-keyed method requires a PurposeToken
-    const call = () => registry.credit.pullTriMerge(authorized());
+    const call = () => registry.credit.pullTriMerge(file());
     expect(call).toBeDefined();
   });
 
   it("refuses a forged token", () => {
     // @ts-expect-error a PurposeToken cannot be constructed outside @hm/shared
     const forged: PurposeToken = {
-      partyId: "b1",
+      partyId: PARTY,
       purpose: "fcra_written_instruction",
       dataCategory: "credit_report",
       authorizationId: "made-up",
-      mintedAt: "2026-01-01T00:00:00.000Z",
+      mintedAt: NOW.toISOString(),
     };
     expect(forged).toBeDefined();
   });
 
-  it("pulls credit for the borrower named on the token", async () => {
-    const file = authorized();
-    const result = await registry.credit.pullTriMerge(
-      file,
-      purposeFor(file, "b1", "credit_report"),
-    );
+  it("pulls credit for the party named on the token", async () => {
+    const result = await registry.credit.pullTriMerge(file(), token("credit_report"));
     expect(result.data.scores).toHaveLength(3);
     expect(result.data.pullType).toBe("soft");
   });
 
   it("refuses a credit pull on a bank token", async () => {
-    const file = authorized();
     await expect(
-      registry.credit.pullTriMerge(file, purposeFor(file, "b1", "bank_transactions")),
+      registry.credit.pullTriMerge(file(), token("bank_transactions")),
     ).rejects.toBeInstanceOf(AuthorizationError);
   });
 
   it("refuses transcripts on a credit token", async () => {
-    const file = fileWith(
-      [A],
-      [consent("verification_authorization", "b1"), consent("form_4506c", "b1")],
-    );
     await expect(
-      registry.irs.fetchTranscripts(file, purposeFor(file, "b1", "credit_report"), [2025]),
+      registry.irs.fetchTranscripts(file(), token("credit_report"), [2025]),
     ).rejects.toBeInstanceOf(AuthorizationError);
   });
 
+  it("fetches transcripts on a 4506-C token", async () => {
+    const result = await registry.irs.fetchTranscripts(file(), token("tax_transcript"), []);
+    expect(result.data.length).toBeGreaterThan(0);
+  });
+
   it("refuses an asset report shorter than the 12 months CRD-017 requires", async () => {
-    const file = authorized();
     await expect(
-      registry.bank.fetchAssetReport(
-        file,
-        purposeFor(file, "b1", "bank_transactions"),
-        { sessionId: "s" },
-        2,
-      ),
+      registry.bank.fetchAssetReport(file(), token("bank_transactions"), { sessionId: "s" }, 2),
     ).rejects.toThrow(/require 12/);
   });
 
-  it("screens sanctions once authorized", async () => {
-    const file = authorized();
-    const screened = await registry.screening.screenSanctions(
-      file,
-      purposeFor(file, "b1", "sanctions_screening"),
-    );
+  it("screens sanctions on the right token", async () => {
+    const screened = await registry.screening.screenSanctions(file(), token("sanctions_screening"));
     expect(screened.data.listsChecked.length).toBeGreaterThan(0);
     expect(typeof screened.data.clear).toBe("boolean");
   });
@@ -248,9 +230,8 @@ describe("the adapters, with and without a token", () => {
   it("refuses a lien search with no APN rather than reporting a clean result", async () => {
     // A search keyed on nothing finds nothing, and "no liens found" is the
     // worst possible way to render that.
-    const file = authorized();
     await expect(
-      registry.liens.searchLiens(file, purposeFor(file, "b1", "public_record_liens"), ""),
+      registry.liens.searchLiens(file(), token("public_record_liens"), ""),
     ).rejects.toThrow(/requires an APN/);
   });
 });
@@ -268,10 +249,8 @@ describe("what is deliberately not guarded", () => {
   const registry = fixtureRegistry({ latencyMs: 0 });
 
   it("does NOT guard e-sign, which is how authorization gets signed", async () => {
-    // Guarding this would make APP-005 unobtainable: you would need the
-    // consent in order to sign the consent.
     const esign = fixtureEsignConnector({ latencyMs: 0 });
-    const envelope = await esign.createEnvelope(fileWith([A]), "verification_authorization", "b1");
+    const envelope = await esign.createEnvelope(file(), "verification_authorization", "b1");
     expect(envelope.envelopeId).toBeTruthy();
   });
 
@@ -279,14 +258,13 @@ describe("what is deliberately not guarded", () => {
     const address = ADDRESS_BOOK[0]!;
     const record = await registry.propertyData.lookupRecord(address);
     expect(record.data.apn).toBeTruthy();
-    // Nothing here keys on a person: it is a building and a county record.
     expect(record.data.ownerOfRecord).toBeTruthy();
     const suggestions = await registry.propertyData.suggestAddresses(address.line1);
     expect(suggestions.length).toBeGreaterThan(0);
   });
 
   it("does NOT guard the ID scan, which is how the authorization gets a name on it", async () => {
-    const session = await registry.identity.createVerificationSession(fileWith([A]), "b1");
+    const session = await registry.identity.createVerificationSession(file(), "b1");
     expect(session.verificationId).toBeTruthy();
     const result = await registry.identity.getVerification(session.verificationId);
     expect(result?.status).toBe("verified");
@@ -295,8 +273,6 @@ describe("what is deliberately not guarded", () => {
   });
 
   it("refuses to invent a record for an address it does not hold", async () => {
-    // Falling back to another persona's record would put fabricated square
-    // footage in front of a borrower and ask them to confirm it.
     const unknown = {
       line1: "1 Nowhere Lane",
       city: "Springfield",

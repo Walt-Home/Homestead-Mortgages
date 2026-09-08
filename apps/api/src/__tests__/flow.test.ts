@@ -11,13 +11,61 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { Consent, LoanFile } from "@hm/shared";
-import { fixtureRegistry, PERSONAS, purposeFor } from "@hm/connectors";
+import {
+  mintPurposeToken,
+  type Consent,
+  type DataCategory,
+  type Grant,
+  type LoanFile,
+  type PurposeToken,
+} from "@hm/shared";
+import { fixtureRegistry, PERSONAS, PURPOSE_FOR } from "@hm/connectors";
 import { assessAll, outstanding, progress } from "@hm/requirements";
 import { underwrite } from "@hm/underwriting";
 
 const REFERENCE = new Date("2026-06-15T12:00:00.000Z");
 const registry = fixtureRegistry({ latencyMs: 0, persona: "clean_w2", referenceDate: REFERENCE });
+
+const PARTY = "11111111-1111-1111-1111-111111111111";
+const GRANTS: Grant[] = [
+  {
+    id: "grant-app-005",
+    partyId: PARTY,
+    purpose: "fcra_written_instruction",
+    dataCategories: [
+      "credit_report",
+      "bank_transactions",
+      "payroll_income",
+      "sanctions_screening",
+      "public_record_liens",
+    ],
+    grantedAt: "2026-01-01T00:00:00.000Z",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    revokedAt: null,
+  },
+  {
+    id: "grant-4506c",
+    partyId: PARTY,
+    purpose: "irs_4506c",
+    dataCategories: ["tax_transcript"],
+    grantedAt: "2026-01-01T00:00:00.000Z",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    revokedAt: null,
+  },
+];
+
+/** A token for `category`, minted through the same pure function the API uses. */
+function token(category: DataCategory): PurposeToken {
+  const r = mintPurposeToken({
+    partyId: PARTY,
+    purpose: PURPOSE_FOR[category],
+    dataCategory: category,
+    grants: GRANTS,
+    now: REFERENCE,
+  });
+  if (!r.ok) throw new Error(`test setup: ${r.message}`);
+  return r.token;
+}
 
 const consent = (kind: Consent["kind"]): Consent => ({
   kind,
@@ -66,6 +114,7 @@ function afterIdentity(): LoanFile {
     borrowers: [
       {
         id: "b1",
+        partyId: "11111111-1111-1111-1111-111111111111",
         firstName: "Dana",
         lastName: "Whitfield",
         dateOfBirth: "1988-04-12",
@@ -130,16 +179,13 @@ describe("the onboarding flow", () => {
     let file = afterIdentity();
     const before = progress(file);
 
-    const credit = await registry.credit.pullTriMerge(
-      file,
-      purposeFor(file, "b1", "credit_report"),
-    );
+    const credit = await registry.credit.pullTriMerge(file, token("credit_report"));
     file = { ...file, credit: credit.data };
     const afterCredit = progress(file);
 
     const bankOutcome = await registry.bank.fetchAssetReport(
       file,
-      purposeFor(file, "b1", "bank_transactions"),
+      token("bank_transactions"),
       { sessionId: "s" },
       12,
     );
@@ -148,11 +194,7 @@ describe("the onboarding flow", () => {
     file = { ...file, assets: bank.data };
     const afterBank = progress(file);
 
-    const payroll = await registry.payroll.fetchPayroll(
-      file,
-      purposeFor(file, "b1", "payroll_income"),
-      "s",
-    );
+    const payroll = await registry.payroll.fetchPayroll(file, token("payroll_income"), "s");
     file = {
       ...file,
       payroll: payroll.data,
@@ -176,16 +218,13 @@ describe("the onboarding flow", () => {
     let file = afterIdentity();
     const counts = [progress(file).satisfied];
 
-    const credit = await registry.credit.pullTriMerge(
-      file,
-      purposeFor(file, "b1", "credit_report"),
-    );
+    const credit = await registry.credit.pullTriMerge(file, token("credit_report"));
     file = { ...file, credit: credit.data };
     counts.push(progress(file).satisfied);
 
     const bankOutcome = await registry.bank.fetchAssetReport(
       file,
-      purposeFor(file, "b1", "bank_transactions"),
+      token("bank_transactions"),
       { sessionId: "s" },
       12,
     );
@@ -194,11 +233,7 @@ describe("the onboarding flow", () => {
     file = { ...file, assets: bank.data };
     counts.push(progress(file).satisfied);
 
-    const payroll = await registry.payroll.fetchPayroll(
-      file,
-      purposeFor(file, "b1", "payroll_income"),
-      "s",
-    );
+    const payroll = await registry.payroll.fetchPayroll(file, token("payroll_income"), "s");
     file = {
       ...file,
       payroll: payroll.data,
@@ -208,11 +243,7 @@ describe("the onboarding flow", () => {
     counts.push(progress(file).satisfied);
 
     file = { ...file, consents: [...file.consents, consent("form_4506c")] };
-    const irs = await registry.irs.fetchTranscripts(
-      file,
-      purposeFor(file, "b1", "tax_transcript"),
-      [],
-    );
+    const irs = await registry.irs.fetchTranscripts(file, token("tax_transcript"), []);
     file = { ...file, transcripts: irs.data };
     counts.push(progress(file).satisfied);
 
@@ -225,25 +256,18 @@ describe("the onboarding flow", () => {
     let file = afterIdentity();
     const before = progress(file).undetermined;
 
-    const credit = await registry.credit.pullTriMerge(
-      file,
-      purposeFor(file, "b1", "credit_report"),
-    );
+    const credit = await registry.credit.pullTriMerge(file, token("credit_report"));
     file = { ...file, credit: credit.data };
     const bankOutcome = await registry.bank.fetchAssetReport(
       file,
-      purposeFor(file, "b1", "bank_transactions"),
+      token("bank_transactions"),
       { sessionId: "s" },
       12,
     );
     if (bankOutcome.status !== "ready") throw new Error("fixture must answer immediately");
     const bank = bankOutcome.result;
     file = { ...file, assets: bank.data };
-    const payroll = await registry.payroll.fetchPayroll(
-      file,
-      purposeFor(file, "b1", "payroll_income"),
-      "s",
-    );
+    const payroll = await registry.payroll.fetchPayroll(file, token("payroll_income"), "s");
     file = {
       ...file,
       payroll: payroll.data,
@@ -283,25 +307,18 @@ describe("the onboarding flow", () => {
 describe("the decision", () => {
   async function fullyConnected(): Promise<LoanFile> {
     let file = afterIdentity();
-    const credit = await registry.credit.pullTriMerge(
-      file,
-      purposeFor(file, "b1", "credit_report"),
-    );
+    const credit = await registry.credit.pullTriMerge(file, token("credit_report"));
     file = { ...file, credit: credit.data };
     const bankOutcome = await registry.bank.fetchAssetReport(
       file,
-      purposeFor(file, "b1", "bank_transactions"),
+      token("bank_transactions"),
       { sessionId: "s" },
       12,
     );
     if (bankOutcome.status !== "ready") throw new Error("fixture must answer immediately");
     const bank = bankOutcome.result;
     file = { ...file, assets: bank.data };
-    const payroll = await registry.payroll.fetchPayroll(
-      file,
-      purposeFor(file, "b1", "payroll_income"),
-      "s",
-    );
+    const payroll = await registry.payroll.fetchPayroll(file, token("payroll_income"), "s");
     file = {
       ...file,
       payroll: payroll.data,
@@ -309,11 +326,7 @@ describe("the decision", () => {
       employment: payroll.data.employments,
       consents: [...file.consents, consent("form_4506c")],
     };
-    const irs = await registry.irs.fetchTranscripts(
-      file,
-      purposeFor(file, "b1", "tax_transcript"),
-      [],
-    );
+    const irs = await registry.irs.fetchTranscripts(file, token("tax_transcript"), []);
     return { ...file, transcripts: irs.data };
   }
 

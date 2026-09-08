@@ -23,12 +23,12 @@ import { recordBorrowerFacts } from "../services/party.js";
 
 export const fileRouter = Router();
 
-const addressSchema = z.object({
-  line1: z.string().min(1),
-  line2: z.string().optional(),
-  city: z.string().min(1),
-  state: z.string().length(2),
-  postalCode: z.string().min(5),
+export const addressSchema = z.object({
+  line1: z.string().trim().min(1),
+  line2: z.string().trim().optional(),
+  city: z.string().trim().min(1),
+  state: z.string().trim().length(2),
+  postalCode: z.string().trim().min(5),
 });
 
 /** Screen 1 — under 60 seconds of typing, per the flow notes. */
@@ -160,11 +160,11 @@ fileRouter.post(
 );
 
 /** Screen 2 — identity. Required before any pull, per APP-005's timing. */
-const identitySchema = z.object({
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  email: z.string().email(),
-  phone: z.string().min(7),
+export const identitySchema = z.object({
+  firstName: z.string().trim().min(1),
+  lastName: z.string().trim().min(1),
+  email: z.string().trim().email(),
+  phone: z.string().trim().min(7),
   dateOfBirth: z.string().date(),
   /**
    * The vault handle, never the SSN. Optional on a REVISIT: going back to fix
@@ -181,7 +181,10 @@ const identitySchema = z.object({
     .default("us_citizen"),
   nonBorrowingSpouseName: z.string().optional(),
   preferredLanguage: z.string().default("en"),
-  firstTimeHomebuyer: z.boolean(),
+  // null means "assert nothing": the repair path has no county record to
+  // derive from, and a guess would supersede a real fact. recordBorrowerFacts
+  // writes no first_time_homebuyer fact for null.
+  firstTimeHomebuyer: z.boolean().nullable(),
   isMilitary: z.boolean().default(false),
   currentHousing: z.enum(["rent", "own", "rent_free"]),
   monthlyRent: z.number().min(0).optional(),
@@ -203,8 +206,9 @@ fileRouter.post(
     const input = identitySchema.parse(req.body);
 
     await assertFileAccess(id, req.user!.id, "write");
-    const existing = await loadLoanFile(id);
-    if (!existing) throw new AppError(404, "Loan file not found", "NOT_FOUND");
+    // No projection before the write: assertFileAccess already answered 404,
+    // and a party whose facts will not project must be repairable by saving
+    // this screen again. The projection runs once, after the write.
 
     const existingBorrower = await prisma.borrower.findFirst({
       where: { loanFileId: id },
@@ -215,44 +219,25 @@ fileRouter.post(
       throw new AppError(400, "An SSN is required the first time.", "SSN_REQUIRED");
     }
 
+    // What stays on the row: the things that are about THIS application
+    // rather than about the person. Everything that identifies somebody is a
+    // fact on the party, written by recordBorrowerFacts below.
     const borrowerData = {
-      firstName: input.firstName,
-      lastName: input.lastName,
-      email: input.email,
-      phone: input.phone,
-      dateOfBirth: new Date(input.dateOfBirth),
-      ...(input.ssnVaultHandle ? { ssnVaultHandle: input.ssnVaultHandle } : {}),
       ...(input.ssnLast4 ? { ssnLast4: input.ssnLast4 } : {}),
-      addressLine1: input.currentAddress.line1,
-      addressLine2: input.currentAddress.line2 ?? null,
-      addressCity: input.currentAddress.city,
-      addressState: input.currentAddress.state.toUpperCase(),
-      addressPostalCode: input.currentAddress.postalCode,
-      maritalStatus: input.maritalStatus,
-      citizenship: input.citizenship,
       nonBorrowingSpouseName: input.nonBorrowingSpouseName ?? null,
       // In a community property state a married borrower's spouse must be
       // identified and may have to sign even when not on the loan.
       nonBorrowingSpouseSignatureRequired:
         input.maritalStatus === "married" && Boolean(input.nonBorrowingSpouseName),
-      preferredLanguage: input.preferredLanguage,
       demographics: input.demographics ?? undefined,
-      firstTimeHomebuyer: input.firstTimeHomebuyer,
-      isMilitary: input.isMilitary,
       currentHousing: input.currentHousing,
       monthlyRent: input.monthlyRent ?? null,
     };
 
-    // THE BRIDGE. The borrower row is a per-file snapshot; the party is the
-    // person. Both are written in ONE transaction, so a request records the
-    // person both ways or not at all — the first move of the strangler is
-    // dual-write, and a silent divergence between the two would be worse than
-    // a failed request. Nothing reads the party yet.
-    //
-    // Going back to screen 2 and saving again must UPDATE the person, not add a
-    // second one. Two borrower rows would double every income and asset test
-    // that iterates them; two live legal_name facts would do the same to the
-    // relationship, so the earlier one is superseded.
+    // The person and the application record are written in ONE transaction,
+    // so a request records both or neither. Going back to screen 2 and saving
+    // again must UPDATE the person, not add a second one: the earlier
+    // assertion of each fact is superseded, and the row is updated in place.
     await prisma.$transaction(async (tx) => {
       const partyId = await recordBorrowerFacts(tx, {
         loanFileId: id,
@@ -273,7 +258,6 @@ fileRouter.post(
             ...borrowerData,
             loanFileId: id,
             partyId,
-            ssnVaultHandle: input.ssnVaultHandle!,
             ssnLast4: input.ssnLast4!,
           },
         });

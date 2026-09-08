@@ -187,6 +187,15 @@ export function BankPage() {
         setRecovery({ label: "Back to your details", to: `/f/${fileId}/identity` });
         return;
       }
+      if (err instanceof ApiError && err.code === "PROJECTION_ERROR") {
+        // A required identity fact is missing or blank, so nothing that reads
+        // the file can run. Screen 2 is the repair path: saving it again
+        // rewrites the person's facts, and the bank link is not at fault, so
+        // the held attempt is kept for when they come back.
+        setError("Something in your details needs another look before we can check this.");
+        setRecovery({ label: "Back to your details", to: `/f/${fileId}/identity` });
+        return;
+      }
       if (err instanceof ApiError && err.code === "BANK_RELINK_REQUIRED") {
         if (fileId) clearAttempt(fileId);
         setError("Your bank needs signing into again.");

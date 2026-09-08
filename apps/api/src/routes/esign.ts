@@ -20,6 +20,7 @@ import { prisma } from "@hm/db";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { assertFileAccess, loadLoanFile, recordEvent } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
+import { signedOn } from "../services/signature.js";
 
 export const esignRouter = Router();
 
@@ -54,10 +55,12 @@ esignRouter.post(
     }
 
     // Already signed is a success, not an error. A person who refreshes the
-    // signing screen should not be told something went wrong.
-    const existing = file.consents.find((c) => c.kind === kind && !c.revokedAt);
-    if (existing) {
-      res.json({ alreadySigned: true, kind, signedAt: existing.grantedAt });
+    // signing screen should not be told something went wrong. But "signed"
+    // is this file's row AND the party's live grant, together — see
+    // services/signature.ts for what each half alone got wrong.
+    const signed = await signedOn(id, borrower.partyId, kind);
+    if (signed) {
+      res.json({ alreadySigned: true, kind, signedAt: signed.grantedAt });
       return;
     }
 
@@ -95,17 +98,19 @@ esignRouter.post(
     // fixture, and a real vendor's would still not be scoped to our files.
     const borrower = await prisma.borrower.findFirst({
       where: { id: consent.borrowerId, loanFileId: id },
-      select: { id: true },
+      select: { id: true, partyId: true },
     });
     if (!borrower) {
       throw new AppError(404, "That signing session was not found.", "ENVELOPE_NOT_FOUND");
     }
 
-    const existing = await prisma.consent.findFirst({
-      where: { loanFileId: id, kind: consent.kind, revokedAt: null },
-    });
-    if (existing) {
-      res.json({ kind: consent.kind, signedAt: existing.grantedAt, alreadySigned: true });
+    // Same rule as starting a signature: a completion that lands on a file
+    // already signed for this kind is absorbed, but a lapsed grant or a second
+    // file is not "already signed" and writes this file's row.
+    const kind = consent.kind as (typeof SIGNABLE)[number];
+    const signed = await signedOn(id, borrower.partyId, kind);
+    if (signed) {
+      res.json({ kind, signedAt: signed.grantedAt, alreadySigned: true });
       return;
     }
 

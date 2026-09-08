@@ -7,10 +7,9 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import type { LoanFile } from "@hm/shared";
+import { mintPurposeToken, type Grant, type LoanFile, type PurposeToken } from "@hm/shared";
 import {
   AuthorizationError,
-  purposeFor,
   detectLargeDeposits,
   detectRecurringDeposits,
   detectRecurringObligations,
@@ -34,8 +33,31 @@ function memoryStore(): VendorTokenStore & { map: Map<string, string> } {
   };
 }
 
-/** Permission for b1 to have their bank data fetched, from a fresh file. */
-const token = () => purposeFor(file(), "b1", "bank_transactions");
+const PARTY = "11111111-1111-1111-1111-111111111111";
+const GRANT: Grant = {
+  id: "grant-app-005",
+  partyId: PARTY,
+  purpose: "fcra_written_instruction",
+  dataCategories: ["credit_report", "bank_transactions"],
+  grantedAt: "2026-09-01T00:00:00.000Z",
+  expiresAt: "2026-12-30T00:00:00.000Z",
+  revokedAt: null,
+};
+
+/** Permission for the party to have their bank data fetched. */
+function token(
+  category: "bank_transactions" | "credit_report" = "bank_transactions",
+): PurposeToken {
+  const r = mintPurposeToken({
+    partyId: PARTY,
+    purpose: "fcra_written_instruction",
+    dataCategory: category,
+    grants: [GRANT],
+    now: new Date("2026-09-08T12:00:00.000Z"),
+  });
+  if (!r.ok) throw new Error(`test setup: ${r.message}`);
+  return r.token;
+}
 
 function file(authorized = true): LoanFile {
   return {
@@ -52,6 +74,7 @@ function file(authorized = true): LoanFile {
     borrowers: [
       {
         id: "b1",
+        partyId: "11111111-1111-1111-1111-111111111111",
         firstName: "Test",
         lastName: "Borrower",
         dateOfBirth: "1990-01-01",
@@ -204,21 +227,28 @@ function connector(fetchImpl: typeof fetch, tokens = memoryStore()) {
 
 describe("plaid adapter — the guard", () => {
   it("cannot get a token before APP-005, so Plaid is never reached", () => {
-    // The refusal moved from inside the adapter to the minting of the token.
-    // That is the point: a method that cannot be called without a token cannot
-    // be called before the permission exists, and no network call is possible.
+    // The refusal lives in the minting of the token. A method that cannot be
+    // called without a token cannot be called before the permission exists,
+    // and no network call is possible.
     const spy = vi.fn();
     connector(spy as unknown as typeof fetch);
-    expect(() => purposeFor(file(false), "b1", "bank_transactions")).toThrow(AuthorizationError);
+    const r = mintPurposeToken({
+      partyId: PARTY,
+      purpose: "fcra_written_instruction",
+      dataCategory: "bank_transactions",
+      grants: [],
+      now: new Date(),
+    });
+    expect(r).toMatchObject({ ok: false, reason: "no_grant" });
     expect(spy).not.toHaveBeenCalled();
   });
 
   it("refuses a bank token that was minted for something else", async () => {
     const spy = vi.fn();
     const { c } = connector(spy as unknown as typeof fetch);
-    await expect(
-      c.createLinkSession(file(), purposeFor(file(), "b1", "credit_report")),
-    ).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(c.createLinkSession(file(), token("credit_report"))).rejects.toBeInstanceOf(
+      AuthorizationError,
+    );
     expect(spy).not.toHaveBeenCalled();
   });
 });

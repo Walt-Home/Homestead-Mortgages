@@ -17,6 +17,7 @@ import {
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
 import { tokenFor } from "../services/authorization.js";
+import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
 
 export const connectorRouter = Router();
@@ -33,7 +34,17 @@ async function requireFile(id: string, userId: string) {
   return file;
 }
 
-/** Record a consent. This is what unlocks every connector below. */
+/**
+ * Record a consent. This is what unlocks every connector below.
+ *
+ * Idempotent under the same rule as a signature: when this file already holds
+ * a live row of the kind and the party's mirrored grant is still live, the
+ * existing row comes back and nothing is written. Otherwise the row is
+ * inserted — which is the renewal when the grant has lapsed, and a harmless
+ * no-op at the trigger when it has not. Screen 2 re-posts its consents on
+ * every save, so without this a borrower saving twice grew a new row each
+ * time for the same signature.
+ */
 const consentSchema = z.object({
   kind: z.enum([
     "verification_authorization",
@@ -53,6 +64,26 @@ connectorRouter.post(
     const input = consentSchema.parse(req.body);
     await requireFile(id, req.user!.id);
 
+    // The borrower must be THIS file's, or the row would name a person the
+    // caller has no file for — and the trigger mirrors the grant onto whoever
+    // the borrower row points at.
+    const borrower = await prisma.borrower.findFirst({
+      where: { id: input.borrowerId, loanFileId: id },
+      select: { partyId: true },
+    });
+    if (!borrower) throw new AppError(404, "That borrower is not on this file.", "NOT_FOUND");
+
+    const existing = await signedOn(id, borrower.partyId, input.kind);
+    if (existing) {
+      res.json({
+        id: existing.id,
+        kind: existing.kind,
+        grantedAt: existing.grantedAt,
+        alreadyRecorded: true,
+      });
+      return;
+    }
+
     const consent = await prisma.consent.create({
       data: {
         loanFileId: id,
@@ -68,7 +99,12 @@ connectorRouter.post(
       },
     });
     await recordEvent(id, "consent_granted", "borrower", { kind: input.kind });
-    res.status(201).json({ id: consent.id, kind: consent.kind, grantedAt: consent.grantedAt });
+    res.status(201).json({
+      id: consent.id,
+      kind: consent.kind,
+      grantedAt: consent.grantedAt,
+      alreadyRecorded: false,
+    });
   }),
 );
 

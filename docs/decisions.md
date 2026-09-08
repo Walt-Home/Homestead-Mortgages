@@ -672,6 +672,15 @@ The tests use a separate `_test` database rather than the development one,
 because the suite truncates every table between tests and a developer running
 `npm test` should not lose the file they were half way through.
 
+The setup step also drops and rebuilds that database whenever a recorded
+migration's checksum no longer matches the file on disk, or a migration is
+recorded as failed, rolled back, or no longer present. `prisma migrate deploy`
+applies only what is pending and never re-reads an applied migration, so an
+edited migration leaves the test database on the old version while reporting
+"No pending migrations to apply" — and an edited unpushed migration is the
+normal case while a slice is under review. The rebuild is what makes the suite
+run against the migration that is actually in the diff.
+
 **It found a live bug on the first run.** `advanceStage` was a read followed by
 a write: two connector callbacks landing together both read the old stage, both
 decided they were moving forward, and the slower write won — leaving the file
@@ -792,6 +801,76 @@ legacy row does not license a transcript. The fallback to `consents` remains
 for rows with no party, with the old no-expiry semantics, so a refusal is
 attributable to exactly one table. The bridge minter in the connectors
 package still reads legacy consents with no expiry for the same reason.
+
+## A borrower row is a record about a person, and identifies nobody
+
+As of 8 September 2026 the `borrowers` table holds nothing that identifies
+anyone. Name, date of birth, the SSN vault handle, contact details, address,
+marital status, citizenship, language, military service and first-time-buyer
+status are facts on the party — written by screen 2, read by the projection —
+and the columns that used to duplicate them are gone. `party_id` is NOT NULL:
+there is no such thing as a borrower row about nobody.
+
+What stays on the row is what is genuinely per application: the SSN last-4
+for display, the ID-verification session, the non-borrowing-spouse question
+(which turns on the property's state), rent and current housing, and the HMDA
+demographics, which the law collects per application.
+
+**The migration backfills before it drops.** There are no users yet, but the
+staging and development databases hold demo files and developer sign-ins, and
+"no users" is not a licence to leave a database broken. Every borrower row
+without a party gets one — reusing the file owner's party where they have one,
+so a developer with several files ends up as one person — plus a principal and
+its facts, built from the columns. Every existing consent gets its mirrored
+authorization, because the trigger that mirrors new ones fires only on
+INSERT. Only then do the columns go. The development database, six migrations
+behind at the time, was the rehearsal: the backfill ran against real seeded
+rows before it reached staging.
+
+**The projection is strict now.** With no column to fall back to, a missing
+or malformed required fact is an invariant violation, and `loadLoanFile`
+throws naming the borrower and the predicate rather than rendering a blank
+name and letting a screen carry on. Three fields keep the defaults the old
+columns had — language, military service, first-time-buyer — because absence
+there is a real answer.
+
+**The minter reads `authorizations` and nothing else.** The bridge that
+converted a loan file's legacy consents into grants came out of the connectors
+package with the columns it read. `tokenFor` in the API is the only minter, a
+refusal is attributable to exactly one table, and the connectors tests mint
+from grants through the same pure function the API uses.
+
+**A signature renews a lapsed grant and leaves a live one alone.** The unique
+index on `authorizations` admits one unrevoked grant per (party, purpose) and
+deliberately ignores expiry — `now()` cannot be indexed on, and a lapsed row
+blocking a duplicate is the safe direction. That made renewal a revoke-then-
+grant, and nothing revoked: a lapsed grant held the slot forever, every later
+signature was an `ON CONFLICT DO NOTHING`, and once `tokenFor` stopped
+falling back to `consents` there was no route that could get the party out.
+So the mirror trigger now retires a grant that has lapsed by the time of the
+new signature (reason `lapsed; renewed by a new consent`, revoked by the
+party's own principal) and mints anew, and the migration replays every legacy
+consent in signature order under the same rule. A signature against a
+STILL-LIVE grant is a no-op: the first live grant stands and the clock does
+not restart. Restarting it would mean the newest envelope silently replaced
+the disclosure the person actually agreed to, and the index exists precisely
+so that "which disclosure" has one answer. A consent inserted already revoked
+mirrors as already revoked, for the same reason a revocation cannot be a bare
+timestamp, and it retires nothing: only a live signature closes a lapsed
+grant. Two edges of that rule are worth knowing. A party with no BORROWER
+principal can never have a lapsed grant retired, because there is nobody to
+attribute the revocation to; nothing in the schema forces the principal to
+exist, and `party.ts` and the backfill always create it, so the case is
+unreachable rather than impossible. And a consent inserted already revoked
+for such a party fails its own INSERT on the `authorizations` revocation
+CHECK, loudly, by design — a revocation nobody made is not a row we keep.
+
+**The migration checks that every backfilled party will project before it
+drops a column**, and a failing row aborts the whole file with the columns
+still in place. Prisma records that as a failed migration: the next deploy
+refuses to apply anything until the row is fixed and
+`prisma migrate resolve --rolled-back 20260908170000_borrowers_are_records_about_parties`
+has been run.
 
 ## Still outstanding
 

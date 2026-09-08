@@ -25,6 +25,7 @@ import {
 } from "../services/repository.js";
 import { AddressNotFoundError } from "@hm/connectors";
 import { connectors } from "../services/connectors.js";
+import { tokenFor } from "../services/authorization.js";
 import { prisma } from "@hm/db";
 import { config } from "../config.js";
 
@@ -283,7 +284,10 @@ propertyFileRouter.post(
     const id = z.string().uuid().parse(req.params.id);
     const file = await requireFile(id, req.user!.id);
 
-    const result = await connectors().screening.screenSanctions(file);
+    const result = await connectors().screening.screenSanctions(
+      file,
+      tokenFor(file, "sanctions_screening"),
+    );
     await recordSnapshot(
       id,
       "sanctions",
@@ -325,7 +329,11 @@ propertyFileRouter.post(
       );
     }
 
-    const result = await connectors().liens.searchLiens(file, apn.data);
+    const result = await connectors().liens.searchLiens(
+      file,
+      tokenFor(file, "public_record_liens"),
+      apn.data,
+    );
     await recordSnapshot(
       id,
       "lien_search",

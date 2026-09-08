@@ -16,6 +16,7 @@ import {
   recordSnapshot,
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
+import { tokenFor } from "../services/authorization.js";
 import { advanceStage } from "../services/stage.js";
 
 export const connectorRouter = Router();
@@ -78,7 +79,7 @@ connectorRouter.post(
     const id = z.string().uuid().parse(req.params.id);
     const file = await requireFile(id, req.user!.id);
 
-    const result = await connectors().credit.pullTriMerge(file);
+    const result = await connectors().credit.pullTriMerge(file, tokenFor(file, "credit_report"));
     await recordSnapshot(
       id,
       "credit",
@@ -145,7 +146,7 @@ connectorRouter.post(
     // link token on every poll would both bill for sessions nobody opens and
     // hand back a token that invalidates the one Link is using.
     if (!sessionId && !publicToken) {
-      const session = await bank.createLinkSession(file);
+      const session = await bank.createLinkSession(file, tokenFor(file, "bank_transactions"));
       sessionId = session.sessionId;
 
       // A real aggregator needs the borrower to log in inside its own widget
@@ -165,6 +166,7 @@ connectorRouter.post(
 
     const outcome = await bank.fetchAssetReport(
       file,
+      tokenFor(file, "bank_transactions"),
       { sessionId: sessionId ?? id, publicToken },
       12,
     );
@@ -246,8 +248,9 @@ connectorRouter.post(
     const file = await requireFile(id, req.user!.id);
 
     const payroll = connectors().payroll;
-    const session = await payroll.createLinkSession(file);
-    const result = await payroll.fetchPayroll(file, session.sessionId);
+    const payrollToken = tokenFor(file, "payroll_income");
+    const session = await payroll.createLinkSession(file, payrollToken);
+    const result = await payroll.fetchPayroll(file, payrollToken, session.sessionId);
 
     await recordSnapshot(
       id,
@@ -306,7 +309,7 @@ connectorRouter.post(
     const file = await requireFile(id, req.user!.id);
 
     const currentYear = new Date().getFullYear();
-    const result = await connectors().irs.fetchTranscripts(file, [
+    const result = await connectors().irs.fetchTranscripts(file, tokenFor(file, "tax_transcript"), [
       currentYear - 1,
       currentYear - 2,
     ]);

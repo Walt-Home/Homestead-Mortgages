@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Consent, LoanFile } from "@hm/shared";
-import { fixtureRegistry, PERSONAS } from "@hm/connectors";
+import { fixtureRegistry, PERSONAS, purposeFor } from "@hm/connectors";
 import { assessAll, outstanding, progress } from "@hm/requirements";
 import { underwrite } from "@hm/underwriting";
 
@@ -130,17 +130,29 @@ describe("the onboarding flow", () => {
     let file = afterIdentity();
     const before = progress(file);
 
-    const credit = await registry.credit.pullTriMerge(file);
+    const credit = await registry.credit.pullTriMerge(
+      file,
+      purposeFor(file, "b1", "credit_report"),
+    );
     file = { ...file, credit: credit.data };
     const afterCredit = progress(file);
 
-    const bankOutcome = await registry.bank.fetchAssetReport(file, { sessionId: "s" }, 12);
+    const bankOutcome = await registry.bank.fetchAssetReport(
+      file,
+      purposeFor(file, "b1", "bank_transactions"),
+      { sessionId: "s" },
+      12,
+    );
     if (bankOutcome.status !== "ready") throw new Error("fixture must answer immediately");
     const bank = bankOutcome.result;
     file = { ...file, assets: bank.data };
     const afterBank = progress(file);
 
-    const payroll = await registry.payroll.fetchPayroll(file, "s");
+    const payroll = await registry.payroll.fetchPayroll(
+      file,
+      purposeFor(file, "b1", "payroll_income"),
+      "s",
+    );
     file = {
       ...file,
       payroll: payroll.data,
@@ -164,17 +176,29 @@ describe("the onboarding flow", () => {
     let file = afterIdentity();
     const counts = [progress(file).satisfied];
 
-    const credit = await registry.credit.pullTriMerge(file);
+    const credit = await registry.credit.pullTriMerge(
+      file,
+      purposeFor(file, "b1", "credit_report"),
+    );
     file = { ...file, credit: credit.data };
     counts.push(progress(file).satisfied);
 
-    const bankOutcome = await registry.bank.fetchAssetReport(file, { sessionId: "s" }, 12);
+    const bankOutcome = await registry.bank.fetchAssetReport(
+      file,
+      purposeFor(file, "b1", "bank_transactions"),
+      { sessionId: "s" },
+      12,
+    );
     if (bankOutcome.status !== "ready") throw new Error("fixture must answer immediately");
     const bank = bankOutcome.result;
     file = { ...file, assets: bank.data };
     counts.push(progress(file).satisfied);
 
-    const payroll = await registry.payroll.fetchPayroll(file, "s");
+    const payroll = await registry.payroll.fetchPayroll(
+      file,
+      purposeFor(file, "b1", "payroll_income"),
+      "s",
+    );
     file = {
       ...file,
       payroll: payroll.data,
@@ -184,7 +208,11 @@ describe("the onboarding flow", () => {
     counts.push(progress(file).satisfied);
 
     file = { ...file, consents: [...file.consents, consent("form_4506c")] };
-    const irs = await registry.irs.fetchTranscripts(file, []);
+    const irs = await registry.irs.fetchTranscripts(
+      file,
+      purposeFor(file, "b1", "tax_transcript"),
+      [],
+    );
     file = { ...file, transcripts: irs.data };
     counts.push(progress(file).satisfied);
 
@@ -197,13 +225,25 @@ describe("the onboarding flow", () => {
     let file = afterIdentity();
     const before = progress(file).undetermined;
 
-    const credit = await registry.credit.pullTriMerge(file);
+    const credit = await registry.credit.pullTriMerge(
+      file,
+      purposeFor(file, "b1", "credit_report"),
+    );
     file = { ...file, credit: credit.data };
-    const bankOutcome = await registry.bank.fetchAssetReport(file, { sessionId: "s" }, 12);
+    const bankOutcome = await registry.bank.fetchAssetReport(
+      file,
+      purposeFor(file, "b1", "bank_transactions"),
+      { sessionId: "s" },
+      12,
+    );
     if (bankOutcome.status !== "ready") throw new Error("fixture must answer immediately");
     const bank = bankOutcome.result;
     file = { ...file, assets: bank.data };
-    const payroll = await registry.payroll.fetchPayroll(file, "s");
+    const payroll = await registry.payroll.fetchPayroll(
+      file,
+      purposeFor(file, "b1", "payroll_income"),
+      "s",
+    );
     file = {
       ...file,
       payroll: payroll.data,
@@ -243,13 +283,25 @@ describe("the onboarding flow", () => {
 describe("the decision", () => {
   async function fullyConnected(): Promise<LoanFile> {
     let file = afterIdentity();
-    const credit = await registry.credit.pullTriMerge(file);
+    const credit = await registry.credit.pullTriMerge(
+      file,
+      purposeFor(file, "b1", "credit_report"),
+    );
     file = { ...file, credit: credit.data };
-    const bankOutcome = await registry.bank.fetchAssetReport(file, { sessionId: "s" }, 12);
+    const bankOutcome = await registry.bank.fetchAssetReport(
+      file,
+      purposeFor(file, "b1", "bank_transactions"),
+      { sessionId: "s" },
+      12,
+    );
     if (bankOutcome.status !== "ready") throw new Error("fixture must answer immediately");
     const bank = bankOutcome.result;
     file = { ...file, assets: bank.data };
-    const payroll = await registry.payroll.fetchPayroll(file, "s");
+    const payroll = await registry.payroll.fetchPayroll(
+      file,
+      purposeFor(file, "b1", "payroll_income"),
+      "s",
+    );
     file = {
       ...file,
       payroll: payroll.data,
@@ -257,7 +309,11 @@ describe("the decision", () => {
       employment: payroll.data.employments,
       consents: [...file.consents, consent("form_4506c")],
     };
-    const irs = await registry.irs.fetchTranscripts(file, []);
+    const irs = await registry.irs.fetchTranscripts(
+      file,
+      purposeFor(file, "b1", "tax_transcript"),
+      [],
+    );
     return { ...file, transcripts: irs.data };
   }
 

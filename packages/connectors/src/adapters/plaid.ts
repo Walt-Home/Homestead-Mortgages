@@ -38,6 +38,7 @@
  */
 
 import type {
+  PurposeToken,
   AlternativeReference,
   AssetReport,
   Deposit,
@@ -46,7 +47,7 @@ import type {
   IncomeSource,
   LoanFile,
 } from "@hm/shared";
-import { assertVerificationAuthorized } from "../guard.js";
+import { requireCategory } from "../guard.js";
 import type {
   AssetReportResult,
   BankConnector,
@@ -190,7 +191,10 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
    * token, create a report, poll for it. `/asset_report/get` answers
    * PRODUCT_NOT_READY while Plaid assembles, exactly as the CRA one does.
    */
-  async function fetchAssetsReport(file: LoanFile, handoff: LinkHandoff): Promise<AssetReportResult> {
+  async function fetchAssetsReport(
+    file: LoanFile,
+    handoff: LinkHandoff,
+  ): Promise<AssetReportResult> {
     let accessToken = await options.tokens.get(file.id, ACCESS_TOKEN);
     if (!accessToken) {
       if (!handoff.publicToken) {
@@ -250,24 +254,22 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
   return {
     capabilities,
 
-    async createLinkSession(file: LoanFile): Promise<LinkSession> {
-      // Rule 4. Before any network call, not after.
-      assertVerificationAuthorized(file);
+    async createLinkSession(file: LoanFile, token: PurposeToken): Promise<LinkSession> {
+      // Rule 4. The permission is now the parameter rather than a line at the
+      // top, so it cannot be moved to the wrong side of the network call.
+      requireCategory(token, "bank_transactions");
 
       if (!cra) {
         // Assets needs no user token and no permissible purpose: it is not a
         // consumer report, which is the entire difference.
-        const link = await call<{ link_token: string; expiration: string }>(
-          "/link/token/create",
-          {
-            user: { client_user_id: file.id },
-            client_name: "Homestead Mortgages",
-            language: "en",
-            country_codes: ["US"],
-            products: ["assets"],
-            ...(options.redirectUri ? { redirect_uri: options.redirectUri } : {}),
-          },
-        );
+        const link = await call<{ link_token: string; expiration: string }>("/link/token/create", {
+          user: { client_user_id: file.id },
+          client_name: "Homestead Mortgages",
+          language: "en",
+          country_codes: ["US"],
+          products: ["assets"],
+          ...(options.redirectUri ? { redirect_uri: options.redirectUri } : {}),
+        });
         return {
           sessionId: file.id,
           linkToken: link.link_token,
@@ -330,10 +332,11 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
 
     async fetchAssetReport(
       file: LoanFile,
+      token: PurposeToken,
       handoff: LinkHandoff,
       monthsRequested: number,
     ): Promise<AssetReportResult> {
-      assertVerificationAuthorized(file);
+      requireCategory(token, "bank_transactions");
 
       if (monthsRequested < 12) {
         // CRD-017's cash-flow assessment and CRD-018's rent history both need
@@ -597,9 +600,7 @@ export function toAssetReport(
   const items = base.report?.items ?? [];
 
   const accounts: DepositAccount[] = items.flatMap((item) =>
-    (item.accounts ?? [])
-      .filter(isAssetAccount)
-      .map((a) => ({
+    (item.accounts ?? []).filter(isAssetAccount).map((a) => ({
       id: a.account_id ?? "",
       institution: item.institution_name ?? "Unknown institution",
       type: accountType(a),
@@ -653,17 +654,16 @@ export function toAssetReport(
     sources.length
       ? sources.filter((s) => s.employer_name).map((s) => ({ employer_name: s.employer_name! }))
       : inferredPayers(opts.deriveIncome ? allTransactions : [])
-  )
-    .map((s) => ({
-      employerName: s.employer_name,
-      // Deposits name a payer, never a job title or a start date. Empty and
-      // null are honest; a guess here would be shown to an underwriter as fact.
-      position: "",
-      startDate: null,
-      status: "active" as const,
-      isMilitary: false,
-      verificationMethod: "bank_inference" as const,
-    }));
+  ).map((s) => ({
+    employerName: s.employer_name,
+    // Deposits name a payer, never a job title or a start date. Empty and
+    // null are honest; a guess here would be shown to an underwriter as fact.
+    position: "",
+    startDate: null,
+    status: "active" as const,
+    isMilitary: false,
+    verificationMethod: "bank_inference" as const,
+  }));
 
   const monthlyIncome = incomeSources.reduce((s, i) => s + i.monthlyAmount, 0);
   const payers = new Set(
@@ -852,7 +852,6 @@ export function detectRecurringObligations(
   return found.sort((a, b) => b.monthsOfHistory - a.monthsOfHistory);
 }
 
-
 /**
  * Income inferred from recurring deposits, for Assets mode.
  *
@@ -937,9 +936,7 @@ function recurringDeposits(transactions: readonly PlaidTransaction[]): Recurring
   return found.sort((a, b) => b.monthlyAmount - a.monthlyAmount);
 }
 
-export function detectRecurringDeposits(
-  transactions: readonly PlaidTransaction[],
-): IncomeSource[] {
+export function detectRecurringDeposits(transactions: readonly PlaidTransaction[]): IncomeSource[] {
   return recurringDeposits(transactions).map((d) => ({
     // Deposits cannot separate base pay from commission or overtime — that is
     // the distinction INC-005 turns on, and it is why this never reads
@@ -953,9 +950,7 @@ export function detectRecurringDeposits(
 }
 
 /** The payers behind those deposits, as employer names. */
-function inferredPayers(
-  transactions: readonly PlaidTransaction[],
-): { employer_name: string }[] {
+function inferredPayers(transactions: readonly PlaidTransaction[]): { employer_name: string }[] {
   return recurringDeposits(transactions).map((d) => ({ employer_name: d.payee }));
 }
 

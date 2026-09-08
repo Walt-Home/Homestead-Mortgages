@@ -12,6 +12,7 @@
  */
 
 import type {
+  PurposeToken,
   Address,
   AddressSuggestion,
   AvmEstimate,
@@ -42,7 +43,7 @@ import type {
   PropertyDataConnector,
   ScreeningConnector,
 } from "../ports/index.js";
-import { assert4506cExecuted, assertVerificationAuthorized } from "../guard.js";
+import { requireCategory } from "../guard.js";
 import { PERSONAS, type PersonaId, DEFAULT_PERSONA } from "../fixtures/personas.js";
 import { ADDRESS_BOOK, PUBLIC_RECORDS } from "../fixtures/public-records.js";
 
@@ -93,8 +94,11 @@ export function fixtureCreditConnector(options: FixtureOptions = {}): CreditConn
       mode: "fixture",
       satisfies: ["CRD-001", "CRD-002", "CRD-003", "CRD-004", "CRD-005", "CRD-016", "APP-018"],
     },
-    async pullTriMerge(file: LoanFile): Promise<ConnectorResult<CreditReport>> {
-      assertVerificationAuthorized(file);
+    async pullTriMerge(
+      file: LoanFile,
+      token: PurposeToken,
+    ): Promise<ConnectorResult<CreditReport>> {
+      requireCategory(token, "credit_report");
       await sleep(latencyMs);
       return result(PERSONAS[persona].credit(ref), "fixture-credit", `credit-${persona}`);
     },
@@ -118,16 +122,17 @@ export function fixtureBankConnector(options: FixtureOptions = {}): BankConnecto
         "INC-001",
       ],
     },
-    async createLinkSession(file: LoanFile): Promise<LinkSession> {
-      assertVerificationAuthorized(file);
+    async createLinkSession(file: LoanFile, token: PurposeToken): Promise<LinkSession> {
+      requireCategory(token, "bank_transactions");
       return session("bank", ref);
     },
     async fetchAssetReport(
       file: LoanFile,
+      token: PurposeToken,
       _handoff: LinkHandoff,
       monthsRequested: number,
     ): Promise<AssetReportResult> {
-      assertVerificationAuthorized(file);
+      requireCategory(token, "bank_transactions");
       // The 12-month window is not a preference. CRD-017's cash flow assessment
       // and CRD-018's rent history both need twelve, and a shorter report
       // satisfies neither — so a caller asking for less is a bug, not a choice.
@@ -153,12 +158,16 @@ export function fixturePayrollConnector(options: FixtureOptions = {}): PayrollCo
       mode: "fixture",
       satisfies: ["INC-002", "INC-005", "INC-006", "INC-022", "INC-023"],
     },
-    async createLinkSession(file: LoanFile): Promise<LinkSession> {
-      assertVerificationAuthorized(file);
+    async createLinkSession(file: LoanFile, token: PurposeToken): Promise<LinkSession> {
+      requireCategory(token, "payroll_income");
       return session("payroll", ref);
     },
-    async fetchPayroll(file: LoanFile, _sessionId: string): Promise<ConnectorResult<PayrollData>> {
-      assertVerificationAuthorized(file);
+    async fetchPayroll(
+      file: LoanFile,
+      token: PurposeToken,
+      _sessionId: string,
+    ): Promise<ConnectorResult<PayrollData>> {
+      requireCategory(token, "payroll_income");
       await sleep(latencyMs);
       return result(PERSONAS[persona].payroll(ref), "fixture-payroll", `payroll-${persona}`);
     },
@@ -175,9 +184,14 @@ export function fixtureIrsConnector(options: FixtureOptions = {}): IrsConnector 
     },
     async fetchTranscripts(
       file: LoanFile,
+      token: PurposeToken,
       taxYears: readonly number[],
     ): Promise<ConnectorResult<readonly TaxTranscript[]>> {
-      assert4506cExecuted(file);
+      // A different permission from the one behind a credit pull. A caller
+      // holding an APP-005 token is refused here, which the old
+      // `assert4506cExecuted(file)` could not do — it checked the file for any
+      // 4506-C, by anyone.
+      requireCategory(token, "tax_transcript");
       await sleep(latencyMs);
       const all = PERSONAS[persona].transcripts(ref);
       const filtered = taxYears.length ? all.filter((t) => taxYears.includes(t.taxYear)) : all;
@@ -341,8 +355,11 @@ export function fixtureScreeningConnector(options: FixtureOptions = {}): Screeni
       mode: "fixture",
       satisfies: ["CRD-010"],
     },
-    async screenSanctions(file: LoanFile): Promise<ConnectorResult<SanctionsScreening>> {
-      assertVerificationAuthorized(file);
+    async screenSanctions(
+      file: LoanFile,
+      token: PurposeToken,
+    ): Promise<ConnectorResult<SanctionsScreening>> {
+      requireCategory(token, "sanctions_screening");
       await sleep(latencyMs);
       return result(PUBLIC_RECORDS[persona].sanctions(ref), "fixture-screening", `ofac-${persona}`);
     },
@@ -364,8 +381,12 @@ export function fixtureLienConnector(options: FixtureOptions = {}): LienConnecto
       mode: "fixture",
       satisfies: ["UW-005", "APP-016"],
     },
-    async searchLiens(file: LoanFile, apn: string): Promise<ConnectorResult<LienSearch>> {
-      assertVerificationAuthorized(file);
+    async searchLiens(
+      file: LoanFile,
+      token: PurposeToken,
+      apn: string,
+    ): Promise<ConnectorResult<LienSearch>> {
+      requireCategory(token, "public_record_liens");
       if (!apn) {
         // The search is keyed on the APN the assessor lookup returned. Calling
         // it without one silently searches nothing and reports a clean result,

@@ -16,6 +16,7 @@ import { progress } from "@hm/requirements";
 import { underwrite } from "@hm/underwriting";
 import { loadLoanFile, recordEvent, recordSnapshot } from "../services/repository.js";
 import { config } from "../config.js";
+import { tokenFor } from "../services/authorization.js";
 
 const PURPOSE_TO_DB = {
   purchase: "PURCHASE",
@@ -111,7 +112,7 @@ async function seed(personaId: PersonaId): Promise<void> {
 
   let file = (await loadLoanFile(created.id))!;
 
-  const credit = await registry.credit.pullTriMerge(file);
+  const credit = await registry.credit.pullTriMerge(file, tokenFor(file, "credit_report"));
   await recordSnapshot(
     created.id,
     "credit",
@@ -121,7 +122,12 @@ async function seed(personaId: PersonaId): Promise<void> {
     credit.retrievedAt,
   );
 
-  const bankOutcome = await registry.bank.fetchAssetReport(file, { sessionId: "seed" }, 12);
+  const bankOutcome = await registry.bank.fetchAssetReport(
+    file,
+    tokenFor(file, "bank_transactions"),
+    { sessionId: "seed" },
+    12,
+  );
   if (bankOutcome.status !== "ready") {
     throw new Error("The fixture bank connector must answer immediately.");
   }
@@ -135,7 +141,11 @@ async function seed(personaId: PersonaId): Promise<void> {
     bank.retrievedAt,
   );
 
-  const payroll = await registry.payroll.fetchPayroll(file, "seed");
+  const payroll = await registry.payroll.fetchPayroll(
+    file,
+    tokenFor(file, "payroll_income"),
+    "seed",
+  );
   await recordSnapshot(
     created.id,
     "payroll",
@@ -170,7 +180,7 @@ async function seed(personaId: PersonaId): Promise<void> {
   });
 
   file = (await loadLoanFile(created.id))!;
-  const irs = await registry.irs.fetchTranscripts(file, []);
+  const irs = await registry.irs.fetchTranscripts(file, tokenFor(file, "tax_transcript"), []);
   await recordSnapshot(created.id, "irs", irs.provider, irs.externalId, irs.data, irs.retrievedAt);
 
   for (const kind of ["credit", "bank", "payroll", "irs"] as const) {

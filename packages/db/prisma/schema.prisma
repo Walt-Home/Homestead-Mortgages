@@ -735,6 +735,11 @@ enum DataCategory {
   TAX_TRANSCRIPT
   IDENTITY_DOCUMENT
   SANCTIONS_SCREENING
+  /// A lien search names an owner, so it is person-keyed even though the query
+  /// goes in by parcel number. The assessor record, the AVM and the flood
+  /// determination for the same parcel are not — those need nobody's
+  /// permission, which is why screen 1 runs before any authorization exists.
+  PUBLIC_RECORD_LIENS
 }
 
 /// A scoped, expiring, revocable grant by one party.

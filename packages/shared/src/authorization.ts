@@ -43,7 +43,9 @@ export type DataCategory =
   | "payroll_income"
   | "tax_transcript"
   | "identity_document"
-  | "sanctions_screening";
+  | "sanctions_screening"
+  /** A lien search names an owner, even though the query goes in by parcel. */
+  | "public_record_liens";
 
 /** A grant as stored. */
 export interface Grant {

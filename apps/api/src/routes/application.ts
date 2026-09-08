@@ -24,6 +24,7 @@ import {
   recordSnapshot,
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
+import { tokenFor } from "../services/authorization.js";
 import { advanceStage } from "../services/stage.js";
 
 export const applicationRouter = Router();
@@ -205,7 +206,11 @@ applicationRouter.post(
     try {
       const refreshed = await loadLoanFile(id);
       const year = new Date().getFullYear();
-      const result = await connectors().irs.fetchTranscripts(refreshed!, [year - 1, year - 2]);
+      const result = await connectors().irs.fetchTranscripts(
+        refreshed!,
+        tokenFor(refreshed!, "tax_transcript"),
+        [year - 1, year - 2],
+      );
       await recordSnapshot(
         id,
         "irs",

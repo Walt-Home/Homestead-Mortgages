@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { LoanFile } from "@hm/shared";
 import {
   AuthorizationError,
+  purposeFor,
   detectLargeDeposits,
   detectRecurringDeposits,
   detectRecurringObligations,
@@ -33,6 +34,9 @@ function memoryStore(): VendorTokenStore & { map: Map<string, string> } {
   };
 }
 
+/** Permission for b1 to have their bank data fetched, from a fresh file. */
+const token = () => purposeFor(file(), "b1", "bank_transactions");
+
 function file(authorized = true): LoanFile {
   return {
     id: "11111111-1111-1111-1111-111111111111",
@@ -42,7 +46,35 @@ function file(authorized = true): LoanFile {
     property: null,
     loan: null,
     product: null,
-    borrowers: [],
+    // The consent below names b1. The guard now refuses a consent from a
+    // borrower who is not on the file, so the fixture has to hold one — the
+    // old fixture was dangling and nothing could tell.
+    borrowers: [
+      {
+        id: "b1",
+        firstName: "Test",
+        lastName: "Borrower",
+        dateOfBirth: "1990-01-01",
+        ssn: { last4: "0000", vaultHandle: "vault:b1" },
+        email: "b1@example.test",
+        phone: "5555550100",
+        currentAddress: {
+          line1: "1 Fixture St",
+          city: "Demo City",
+          state: "CA",
+          postalCode: "94000",
+        },
+        maritalStatus: "unmarried",
+        citizenship: "us_citizen",
+        identityVerification: null,
+        nonBorrowingSpouseSignatureRequired: false,
+        preferredLanguage: "en",
+        demographics: null,
+        firstTimeHomebuyer: null,
+        isMilitary: false,
+        currentHousing: "rent",
+      },
+    ],
     consents: authorized
       ? [
           {
@@ -171,18 +203,21 @@ function connector(fetchImpl: typeof fetch, tokens = memoryStore()) {
 }
 
 describe("plaid adapter — the guard", () => {
-  it("refuses a link session before APP-005, without reaching Plaid", async () => {
+  it("cannot get a token before APP-005, so Plaid is never reached", () => {
+    // The refusal moved from inside the adapter to the minting of the token.
+    // That is the point: a method that cannot be called without a token cannot
+    // be called before the permission exists, and no network call is possible.
     const spy = vi.fn();
-    const { c } = connector(spy as unknown as typeof fetch);
-    await expect(c.createLinkSession(file(false))).rejects.toBeInstanceOf(AuthorizationError);
+    connector(spy as unknown as typeof fetch);
+    expect(() => purposeFor(file(false), "b1", "bank_transactions")).toThrow(AuthorizationError);
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("refuses a report fetch before APP-005, without reaching Plaid", async () => {
+  it("refuses a bank token that was minted for something else", async () => {
     const spy = vi.fn();
     const { c } = connector(spy as unknown as typeof fetch);
     await expect(
-      c.fetchAssetReport(file(false), { sessionId: "s", publicToken: "pub" }, 12),
+      c.createLinkSession(file(), purposeFor(file(), "b1", "credit_report")),
     ).rejects.toBeInstanceOf(AuthorizationError);
     expect(spy).not.toHaveBeenCalled();
   });
@@ -197,7 +232,7 @@ describe("plaid adapter — the link session", () => {
   it("asks for the CRA products, not plain assets", async () => {
     const { impl, calls } = stubFetch(routes);
     const { c } = connector(impl);
-    const session = await c.createLinkSession(file());
+    const session = await c.createLinkSession(file(), token());
 
     expect(session.linkToken).toBe("link-tok");
     // The whole reason for this adapter: without the hand-off the borrower
@@ -223,14 +258,14 @@ describe("plaid adapter — the link session", () => {
     // which reads like a bug here rather than a missing product.
     const { impl } = stubFetch({ ...routes, "/user/create": { user_id: "usr_1" } });
     const { c } = connector(impl);
-    await expect(c.createLinkSession(file())).rejects.toThrow(/request-products/);
+    await expect(c.createLinkSession(file(), token())).rejects.toThrow(/request-products/);
   });
 
   it("reuses the user token rather than orphaning the first report", async () => {
     const { impl, calls } = stubFetch(routes);
     const { c } = connector(impl);
-    await c.createLinkSession(file());
-    await c.createLinkSession(file());
+    await c.createLinkSession(file(), token());
+    await c.createLinkSession(file(), token());
 
     expect(calls.filter((k) => k.path === "/user/create")).toHaveLength(1);
     expect(calls.filter((k) => k.path === "/link/token/create")).toHaveLength(2);
@@ -250,8 +285,13 @@ describe("plaid adapter — the report", () => {
   it("exchanges, creates and reads on the first arrival", async () => {
     const { impl, calls } = stubFetch(routes);
     const { c } = connector(impl);
-    await c.createLinkSession(file());
-    const out = await c.fetchAssetReport(file(), { sessionId: "s", publicToken: "pub" }, 12);
+    await c.createLinkSession(file(), token());
+    const out = await c.fetchAssetReport(
+      file(),
+      token(),
+      { sessionId: "s", publicToken: "pub" },
+      12,
+    );
 
     expect(out.status).toBe("ready");
     if (out.status !== "ready") return;
@@ -270,9 +310,9 @@ describe("plaid adapter — the report", () => {
   it("does not re-exchange on a later poll that has no public token", async () => {
     const { impl, calls } = stubFetch(routes);
     const { c } = connector(impl);
-    await c.createLinkSession(file());
-    await c.fetchAssetReport(file(), { sessionId: "s", publicToken: "pub" }, 12);
-    await c.fetchAssetReport(file(), { sessionId: "s" }, 12);
+    await c.createLinkSession(file(), token());
+    await c.fetchAssetReport(file(), token(), { sessionId: "s", publicToken: "pub" }, 12);
+    await c.fetchAssetReport(file(), token(), { sessionId: "s" }, 12);
 
     expect(calls.filter((k) => k.path === "/item/public_token/exchange")).toHaveLength(1);
     expect(calls.filter((k) => k.path === "/cra/check_report/create")).toHaveLength(1);
@@ -285,8 +325,13 @@ describe("plaid adapter — the report", () => {
       "/cra/check_report/base_report/get": { error_code: "PRODUCT_NOT_READY" },
     });
     const { c } = connector(impl);
-    await c.createLinkSession(file());
-    const out = await c.fetchAssetReport(file(), { sessionId: "s", publicToken: "pub" }, 12);
+    await c.createLinkSession(file(), token());
+    const out = await c.fetchAssetReport(
+      file(),
+      token(),
+      { sessionId: "s", publicToken: "pub" },
+      12,
+    );
 
     expect(out.status).toBe("pending");
     if (out.status !== "pending") return;
@@ -299,8 +344,13 @@ describe("plaid adapter — the report", () => {
       "/cra/check_report/income_insights/get": { error_code: "PRODUCTS_NOT_SUPPORTED" },
     });
     const { c } = connector(impl);
-    await c.createLinkSession(file());
-    const out = await c.fetchAssetReport(file(), { sessionId: "s", publicToken: "pub" }, 12);
+    await c.createLinkSession(file(), token());
+    const out = await c.fetchAssetReport(
+      file(),
+      token(),
+      { sessionId: "s", publicToken: "pub" },
+      12,
+    );
 
     expect(out.status).toBe("ready");
     if (out.status !== "ready") return;
@@ -313,9 +363,9 @@ describe("plaid adapter — the report", () => {
   it("refuses a window shorter than the twelve months CRD-017 and CRD-018 need", async () => {
     const { impl } = stubFetch(routes);
     const { c } = connector(impl);
-    await c.createLinkSession(file());
+    await c.createLinkSession(file(), token());
     await expect(
-      c.fetchAssetReport(file(), { sessionId: "s", publicToken: "pub" }, 2),
+      c.fetchAssetReport(file(), token(), { sessionId: "s", publicToken: "pub" }, 2),
     ).rejects.toThrow(/require 12/);
   });
 
@@ -323,7 +373,7 @@ describe("plaid adapter — the report", () => {
     const { impl } = stubFetch(routes);
     const { c } = connector(impl);
     await expect(
-      c.fetchAssetReport(file(), { sessionId: "s", publicToken: "pub" }, 12),
+      c.fetchAssetReport(file(), token(), { sessionId: "s", publicToken: "pub" }, 12),
     ).rejects.toThrow(/never created/);
   });
 });
@@ -510,7 +560,7 @@ describe("plaid adapter — assets mode", () => {
   it("asks for assets, with no user token and no permissible purpose", async () => {
     const { impl, calls } = stubFetch(ASSETS_ROUTES);
     const c = assetsConnector(impl);
-    await c.createLinkSession(file());
+    await c.createLinkSession(file(), token());
 
     const link = calls.find((k) => k.path === "/link/token/create")!;
     expect(link.body.products).toEqual(["assets"]);
@@ -526,8 +576,13 @@ describe("plaid adapter — assets mode", () => {
     // CRD-017 turns on the status, not the transactions.
     const { impl } = stubFetch(ASSETS_ROUTES);
     const c = assetsConnector(impl);
-    await c.createLinkSession(file());
-    const out = await c.fetchAssetReport(file(), { sessionId: "s", publicToken: "pub" }, 12);
+    await c.createLinkSession(file(), token());
+    const out = await c.fetchAssetReport(
+      file(),
+      token(),
+      { sessionId: "s", publicToken: "pub" },
+      12,
+    );
 
     expect(out.status).toBe("ready");
     if (out.status !== "ready") return;
@@ -544,8 +599,13 @@ describe("plaid adapter — assets mode", () => {
   it("infers income from deposits but never calls it verified", async () => {
     const { impl } = stubFetch(ASSETS_ROUTES);
     const c = assetsConnector(impl);
-    await c.createLinkSession(file());
-    const out = await c.fetchAssetReport(file(), { sessionId: "s", publicToken: "pub" }, 12);
+    await c.createLinkSession(file(), token());
+    const out = await c.fetchAssetReport(
+      file(),
+      token(),
+      { sessionId: "s", publicToken: "pub" },
+      12,
+    );
     if (out.status !== "ready") throw new Error("expected ready");
 
     expect(out.result.data.incomeSources).toHaveLength(1);
@@ -560,8 +620,13 @@ describe("plaid adapter — assets mode", () => {
   it("still reads rent out of the same transactions", async () => {
     const { impl } = stubFetch(ASSETS_ROUTES);
     const c = assetsConnector(impl);
-    await c.createLinkSession(file());
-    const out = await c.fetchAssetReport(file(), { sessionId: "s", publicToken: "pub" }, 12);
+    await c.createLinkSession(file(), token());
+    const out = await c.fetchAssetReport(
+      file(),
+      token(),
+      { sessionId: "s", publicToken: "pub" },
+      12,
+    );
     if (out.status !== "ready") throw new Error("expected ready");
 
     expect(out.result.data.identifiedRentPayments).toBe(12);
@@ -574,8 +639,13 @@ describe("plaid adapter — assets mode", () => {
       "/asset_report/get": { error_code: "PRODUCT_NOT_READY" },
     });
     const c = assetsConnector(impl);
-    await c.createLinkSession(file());
-    const out = await c.fetchAssetReport(file(), { sessionId: "s", publicToken: "pub" }, 12);
+    await c.createLinkSession(file(), token());
+    const out = await c.fetchAssetReport(
+      file(),
+      token(),
+      { sessionId: "s", publicToken: "pub" },
+      12,
+    );
     expect(out.status).toBe("pending");
   });
 });
@@ -728,15 +798,63 @@ describe("liabilities are not assets", () => {
         {
           institution_name: "First Fictional",
           accounts: [
-            { account_id: "d1", type: "depository", subtype: "checking", mask: "0000", balances: { current: 5_000 } },
-            { account_id: "d2", type: "depository", subtype: "savings", mask: "1111", balances: { current: 12_000 } },
-            { account_id: "d3", type: "depository", subtype: "hsa", mask: "9001", balances: { current: 6_009 } },
-            { account_id: "i1", type: "investment", subtype: "401k", mask: "6666", balances: { current: 23_631 } },
+            {
+              account_id: "d1",
+              type: "depository",
+              subtype: "checking",
+              mask: "0000",
+              balances: { current: 5_000 },
+            },
+            {
+              account_id: "d2",
+              type: "depository",
+              subtype: "savings",
+              mask: "1111",
+              balances: { current: 12_000 },
+            },
+            {
+              account_id: "d3",
+              type: "depository",
+              subtype: "hsa",
+              mask: "9001",
+              balances: { current: 6_009 },
+            },
+            {
+              account_id: "i1",
+              type: "investment",
+              subtype: "401k",
+              mask: "6666",
+              balances: { current: 23_631 },
+            },
             // Everything below is money OWED.
-            { account_id: "l1", type: "loan", subtype: "mortgage", mask: "8888", balances: { current: 56_302 } },
-            { account_id: "l2", type: "loan", subtype: "student", mask: "7777", balances: { current: 65_262 } },
-            { account_id: "l3", type: "loan", subtype: "auto", mask: "9003", balances: { current: 23_211 } },
-            { account_id: "c1", type: "credit", subtype: "credit card", mask: "3333", balances: { current: 410 } },
+            {
+              account_id: "l1",
+              type: "loan",
+              subtype: "mortgage",
+              mask: "8888",
+              balances: { current: 56_302 },
+            },
+            {
+              account_id: "l2",
+              type: "loan",
+              subtype: "student",
+              mask: "7777",
+              balances: { current: 65_262 },
+            },
+            {
+              account_id: "l3",
+              type: "loan",
+              subtype: "auto",
+              mask: "9003",
+              balances: { current: 23_211 },
+            },
+            {
+              account_id: "c1",
+              type: "credit",
+              subtype: "credit card",
+              mask: "3333",
+              balances: { current: 410 },
+            },
           ],
         },
       ],
@@ -759,7 +877,11 @@ describe("liabilities are not assets", () => {
     // Retirement is the type AST-008 forces a liquidity question about.
     // Guessing brokerage would let an untouchable balance count in full.
     const report = toAssetReport(
-      { report: { items: [{ accounts: [{ account_id: "x", type: "investment", subtype: "esop" }] }] } },
+      {
+        report: {
+          items: [{ accounts: [{ account_id: "x", type: "investment", subtype: "esop" }] }],
+        },
+      },
       null,
       { vendorAuthorizedForDu: false },
     );
@@ -775,10 +897,15 @@ describe("liabilities are not assets", () => {
           {
             accounts: [
               {
-                account_id: "l1", type: "loan", subtype: "mortgage", mask: "8888",
+                account_id: "l1",
+                type: "loan",
+                subtype: "mortgage",
+                mask: "8888",
                 balances: { current: 56_302 },
                 transactions: monthly("OAKWOOD APARTMENTS", 2_150, 12).map((t) => ({
-                  amount: t.amount, date: t.date, original_description: t.description,
+                  amount: t.amount,
+                  date: t.date,
+                  original_description: t.description,
                 })),
               },
             ],

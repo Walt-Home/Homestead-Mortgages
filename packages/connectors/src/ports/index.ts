@@ -17,6 +17,7 @@
  */
 
 import type {
+  PurposeToken,
   Address,
   AddressSuggestion,
   AssetReport,
@@ -133,16 +134,24 @@ export type AssetReportResult =
 
 export interface CreditConnector {
   readonly capabilities: ConnectorCapabilities;
-  /** Soft pull. Screen 3's entire premise is that this does not ding a score. */
-  pullTriMerge(file: LoanFile): Promise<ConnectorResult<CreditReport>>;
+  /**
+   * Soft pull. Screen 3's entire premise is that this does not ding a score.
+   *
+   * The token names WHOSE credit. It cannot be constructed outside
+   * `@hm/shared`, so this method cannot be called without a permission having
+   * been checked for that specific borrower — which the previous signature,
+   * taking a file and nothing else, could not express.
+   */
+  pullTriMerge(file: LoanFile, token: PurposeToken): Promise<ConnectorResult<CreditReport>>;
 }
 
 export interface BankConnector {
   readonly capabilities: ConnectorCapabilities;
-  createLinkSession(file: LoanFile): Promise<LinkSession>;
+  createLinkSession(file: LoanFile, token: PurposeToken): Promise<LinkSession>;
   /** The 12-month asset report. `monthsRequested` is 12 for every V1 call. */
   fetchAssetReport(
     file: LoanFile,
+    token: PurposeToken,
     handoff: LinkHandoff,
     monthsRequested: number,
   ): Promise<AssetReportResult>;
@@ -150,15 +159,24 @@ export interface BankConnector {
 
 export interface PayrollConnector {
   readonly capabilities: ConnectorCapabilities;
-  createLinkSession(file: LoanFile): Promise<LinkSession>;
-  fetchPayroll(file: LoanFile, sessionId: string): Promise<ConnectorResult<PayrollData>>;
+  createLinkSession(file: LoanFile, token: PurposeToken): Promise<LinkSession>;
+  fetchPayroll(
+    file: LoanFile,
+    token: PurposeToken,
+    sessionId: string,
+  ): Promise<ConnectorResult<PayrollData>>;
 }
 
 export interface IrsConnector {
   readonly capabilities: ConnectorCapabilities;
-  /** Requires an executed 4506-C (INC-008) on top of the APP-005 guard. */
+  /**
+   * Requires an executed 4506-C (INC-008), which is a different permission
+   * from the one behind a credit pull — so the token must carry
+   * `tax_transcript`, and a caller holding an APP-005 token is refused.
+   */
   fetchTranscripts(
     file: LoanFile,
+    token: PurposeToken,
     taxYears: readonly number[],
   ): Promise<ConnectorResult<readonly TaxTranscript[]>>;
 }
@@ -181,8 +199,11 @@ export interface EsignConnector {
  * to: both run on screen 1 while the borrower is still typing, before a loan
  * file exists to pass. They take an `Address` instead.
  *
- * Unguarded, for the same reason the e-sign adapter is unguarded — APP-005 is
- * signed on screen 2, and a guard here would make screen 1 unreachable. What
+ * These take no `PurposeToken` and CANNOT be given one — the split between
+ * address-keyed and person-keyed retrieval is in the signatures rather than in
+ * a comment somebody has to read. Unguarded for the same reason the e-sign
+ * adapter is unguarded: APP-005 is signed on screen 2, and a guard here would
+ * make screen 1 unreachable. What
  * makes that acceptable is the payload: a partial street address the borrower
  * is typing into our own form, and public county records about a building.
  * Neither is borrower data in the sense APP-005 exists to protect. Nothing
@@ -209,7 +230,10 @@ export interface PropertyDataConnector {
  */
 export interface ScreeningConnector {
   readonly capabilities: ConnectorCapabilities;
-  screenSanctions(file: LoanFile): Promise<ConnectorResult<SanctionsScreening>>;
+  screenSanctions(
+    file: LoanFile,
+    token: PurposeToken,
+  ): Promise<ConnectorResult<SanctionsScreening>>;
 }
 
 /**
@@ -221,7 +245,11 @@ export interface ScreeningConnector {
  */
 export interface LienConnector {
   readonly capabilities: ConnectorCapabilities;
-  searchLiens(file: LoanFile, apn: string): Promise<ConnectorResult<LienSearch>>;
+  searchLiens(
+    file: LoanFile,
+    token: PurposeToken,
+    apn: string,
+  ): Promise<ConnectorResult<LienSearch>>;
 }
 
 /**

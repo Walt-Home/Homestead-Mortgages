@@ -12,16 +12,21 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import {
+  APPLICATION_EVENTS,
   APPLICATION_STATES,
   IllegalTransition,
+  nextState,
   RECEIPT_REASON_CODE,
   TRID_PARTY_PREDICATES,
+  type ApplicationEvent,
+  type ApplicationState,
 } from "@hm/shared";
 import { AppError } from "../middleware/error-handler.js";
 import { pinFact, proposeScenario } from "../services/evidence.js";
 import {
   advanceIfLegal,
   BORROWING_ROLES,
+  toDomainState,
   transition,
   TransitionConflict,
 } from "../services/transition.js";
@@ -92,6 +97,29 @@ async function ledgerOf(applicationId: string) {
     where: { applicationId },
     orderBy: { seq: "asc" },
   });
+}
+
+/**
+ * Read the ledger and assert it is a walk the machine could have taken: seqs
+ * gapless from 1, the first row leaving `draft`, every later row leaving where
+ * the one before it landed, and every event a legal edge out of that state.
+ *
+ * Returns the state the last row landed in — where the file must be — and the
+ * rows, so a caller can say how many moves it expects.
+ */
+async function walkLedger(applicationId: string) {
+  const rows = await ledgerOf(applicationId);
+  let at: ApplicationState = "draft";
+  rows.forEach((row, i) => {
+    expect(row.seq, `row ${i} seq`).toBe(i + 1);
+    expect(row.fromState && toDomainState(row.fromState), `row ${i} leaves`).toBe(at);
+    expect(APPLICATION_EVENTS, `row ${i} event`).toContain(row.event);
+    const to = nextState(at, row.event as ApplicationEvent);
+    expect(to, `${row.event} out of ${at}`).toBeDefined();
+    expect(toDomainState(row.toState), `row ${i} lands`).toBe(to);
+    at = to!;
+  });
+  return { rows, at };
 }
 
 describe("the vocabularies agree", () => {
@@ -367,23 +395,51 @@ describe("a repeat is a skip, not an error", () => {
     expect(await ledgerOf(app.id)).toHaveLength(1);
   });
 
-  it("still hears a conflict", async () => {
-    // A skip is for a repeat. Somebody else moving the file between the read
-    // and the write is not a repeat, and the caller must find out.
+  it("leaves a legal chain and a status that matches it, whichever order the database picks", async () => {
+    // Two DIFFERENT events at one draft, fired together. Which one lands first
+    // is not asserted, because three shapes are all correct and none of them
+    // fixes the number of fulfilled promises. They genuinely overlap: both
+    // read draft, one writes and the other is rejected with a conflict. Or
+    // intake lands first: the file sits at intake_received, where ops_canceled
+    // is still a legal edge, so the second call moves it too. Or ops_canceled
+    // lands first: the file sits at canceled, which is terminal, so the second
+    // call finds no edge and skips — and a skip is a FULFILLED promise, not a
+    // rejection. Counting fulfilments counts the scheduler.
+    //
+    // What holds under every interleaving is that the file and its ledger
+    // agree: any rejection is a conflict and nothing else, the rows are a walk
+    // the machine could have taken, and the status is where that walk ended.
+    // The read-then-write conflict itself is proved deterministically further
+    // down, in "two writers racing", where an explicit expectedFrom makes the
+    // loser's 409 a fact rather than a race.
     const who = await principal();
     const app = await application();
-    const results = await Promise.allSettled([
+    const calls = [
       advanceIfLegal({
         applicationId: app.id,
         event: "intake_completed",
         actorPrincipalId: who.id,
       }),
       advanceIfLegal({ applicationId: app.id, event: "ops_canceled", actorPrincipalId: who.id }),
-    ]);
-    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-    const lost = results.find((r) => r.status === "rejected");
-    expect(lost && lost.reason).toBeInstanceOf(TransitionConflict);
-    expect(await ledgerOf(app.id)).toHaveLength(1);
+    ];
+    const results = await Promise.allSettled(calls);
+
+    for (const result of results) {
+      if (result.status === "rejected") expect(result.reason).toBeInstanceOf(TransitionConflict);
+    }
+
+    const { rows, at } = await walkLedger(app.id);
+    // Whichever call read first read draft, where both of these events are
+    // legal, so one of them moved the file: nothing moving at all is not an
+    // ordering this race has. And a caller that lost or skipped still wrote at
+    // most its own one move.
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows.length).toBeLessThanOrEqual(calls.length);
+
+    // No status without a row, and no row without a status.
+    const after = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(toDomainState(after.status)).toBe(at);
+    expect(after.statusSeq).toBe(rows.length);
   });
 });
 
@@ -697,8 +753,15 @@ describe("an ending is final", () => {
     const { partyId, principalId } = await borrower();
     const app = await application(partyId);
     await drive(app.id, principalId, ["borrower_withdrew"]);
+    // The new stamp comes off the row rather than off a clock. Both BEFORE
+    // UPDATE triggers see this statement and the seq one sorts first by name,
+    // so an update it can fault never reaches the terminal check; with
+    // status_entered_at at millisecond precision, `now()` lands on the same
+    // millisecond the withdrawal just wrote often enough to matter. Advancing
+    // the row's own value satisfies the seq trigger outright, which leaves
+    // exactly one refusal this update can draw — the one under test.
     await expect(
-      prisma.$executeRaw`UPDATE applications SET status = 'IN_PROCESSING', status_seq = status_seq + 1, status_entered_at = now() WHERE id = ${app.id}::uuid`,
+      prisma.$executeRaw`UPDATE applications SET status = 'IN_PROCESSING', status_seq = status_seq + 1, status_entered_at = status_entered_at + interval '1 second' WHERE id = ${app.id}::uuid`,
     ).rejects.toThrow(/cannot be reopened/);
   });
 });

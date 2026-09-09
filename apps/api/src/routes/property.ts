@@ -25,6 +25,7 @@ import {
 } from "../services/repository.js";
 import { AddressNotFoundError } from "@hm/connectors";
 import { connectors } from "../services/connectors.js";
+import { screenAndRecord } from "../services/screening.js";
 import { tokenFor } from "../services/authorization.js";
 import { prisma } from "@hm/db";
 import { config } from "../config.js";
@@ -284,28 +285,11 @@ propertyFileRouter.post(
     const id = z.string().uuid().parse(req.params.id);
     const file = await requireFile(id, req.user!.id);
 
-    const result = await connectors().screening.screenSanctions(
-      file,
-      await tokenFor(file, "sanctions_screening"),
-    );
-    await recordSnapshot(
-      id,
-      "sanctions",
-      result.provider,
-      result.externalId,
-      result.data,
-      result.retrievedAt,
-    );
-    await prismaSetSanctions(id, result.data.clear);
-    await recordEvent(
-      id,
-      "screening_completed",
-      result.provider,
-      { clear: result.data.clear },
-      "CRD-010",
-    );
-
-    res.status(201).json({ screening: result.data });
+    // The snapshot, the column, the event and the hold are one act, and they
+    // live in a service rather than here so that anything else that screens a
+    // person writes the same four things.
+    const { screening } = await screenAndRecord(prisma, file, connectors());
+    res.status(201).json({ screening });
   }),
 );
 
@@ -485,12 +469,3 @@ propertyFileRouter.post(
     res.status(201).json({ recorded: true });
   }),
 );
-
-/** Kept out of the handler so the import surface here stays small. */
-async function prismaSetSanctions(loanFileId: string, clear: boolean): Promise<void> {
-  const { prisma } = await import("@hm/db");
-  await prisma.loanFile.update({
-    where: { id: loanFileId },
-    data: { sanctionsScreenClear: clear },
-  });
-}

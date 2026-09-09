@@ -475,9 +475,18 @@ export async function assertFileAccess(
  *
  * A separate check from assertFileAccess because it is a different question:
  * that one asks whose file this is, this one asks what the file has become.
+ *
+ * Takes a client so the check and the delete are one transaction. Something
+ * now moves an application while a borrower is looking at it — the bank, a
+ * branch, a decision — so reading the status in one round trip and deleting in
+ * the next could remove a file that left draft in between. One transaction
+ * narrows that to two statements; it does not close it, because a plain read
+ * at READ COMMITTED locks nothing. Closing it needs a locking read, which is
+ * the first raw SQL in a service and a change to a refusal path, so it is not
+ * made here.
  */
-export async function assertFileMayBeDeleted(loanFileId: string): Promise<void> {
-  const application = await prisma.application.findUnique({
+export async function assertFileMayBeDeleted(loanFileId: string, db: Db = prisma): Promise<void> {
+  const application = await db.application.findUnique({
     where: { loanFileId },
     select: { status: true },
   });

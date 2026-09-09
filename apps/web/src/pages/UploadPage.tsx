@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, type Assessment } from "../lib/api.js";
+import { branchCanSatisfy } from "@hm/shared";
+import { api, ApiError, type Assessment, type OutstandingItem } from "../lib/api.js";
 import { useLoanFile } from "../lib/file.js";
 import { SignDocument } from "../components/SignDocument.js";
 
@@ -16,6 +17,30 @@ import { SignDocument } from "../components/SignDocument.js";
  * for all 77 requirements and a half-done map reads worse than a consistent
  * one. Worth doing before this is shown to anybody real.
  */
+
+/**
+ * What this screen can actually do something about.
+ *
+ * The narrowing is `branchCanSatisfy`, the same predicate `branchesFor` uses
+ * to decide whether to offer the documents card at all and the API uses to
+ * decide whether the file is waiting on a person. Stated once, in
+ * `@hm/shared`, because the three have to agree: listing every item the
+ * borrower owns on this screen offers an upload against a finding no upload
+ * moves — a recent credit inquiry, a bankruptcy the engine seasons from its
+ * own derivation — so somebody attaches a document and nothing changes.
+ */
+export function attachable(
+  outstanding: readonly OutstandingItem[],
+  payrollLinked: boolean,
+): OutstandingItem[] {
+  return outstanding.filter(
+    (o) =>
+      o.actor === "borrower" &&
+      o.applicabilityKnown &&
+      o.screen === "upload_fallback" &&
+      branchCanSatisfy({ requirementId: o.id, source: o.source }, payrollLinked),
+  );
+}
 
 /**
  * Screen 7. Drew's note: "Only what didn't connect. Should feel like an
@@ -45,9 +70,7 @@ export function UploadPage() {
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
   });
 
-  const items = (data?.outstanding ?? []).filter(
-    (o) => o.actor === "borrower" && o.applicabilityKnown && o.screen === "upload_fallback",
-  );
+  const items = attachable(data?.outstanding ?? [], fileData?.file.payroll != null);
 
   const signable = (data?.outstanding ?? []).filter(
     (o) => o.actor === "borrower" && o.applicabilityKnown && o.source === "esign",
@@ -180,6 +203,10 @@ function AttachControl({ fileId, requirementId }: { fileId: string; requirementI
     onSuccess: async (_r, f) => {
       setAttached(f.name);
       setError(null);
+      // Ask the engine again with the document the borrower just attached.
+      // The review screen renders whatever decision it finds, so without this
+      // it shows the one computed before the upload existed.
+      await api.post(`/files/${fileId}/decision`, {}).catch(() => undefined);
       await queryClient.invalidateQueries({ queryKey: ["assessment"] });
       await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
     },

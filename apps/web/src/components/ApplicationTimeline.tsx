@@ -21,7 +21,17 @@ import type { ApplicationStandingView } from "../lib/file.js";
 import { entryFor } from "../lib/states.js";
 import { CLOCK_COPY, actorWords, timelineDate, wordsFor } from "../lib/ledger.js";
 
-export function ApplicationTimeline({ standing }: { standing: ApplicationStandingView | null }) {
+/**
+ * `undefined` is the file not loaded yet and `null` is a file with no
+ * application on record — the same three-state value the standing above this
+ * reads. Collapsing them here would make the two disagree about what an empty
+ * history means in the one expression that renders both.
+ */
+export function ApplicationTimeline({
+  standing,
+}: {
+  standing: ApplicationStandingView | null | undefined;
+}) {
   if (!standing || standing.ledger.length === 0) return null;
 
   const ecoa = standing.clocks.find((c) => c.kind === "ECOA_ADVERSE_ACTION_30D");

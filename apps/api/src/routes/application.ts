@@ -27,6 +27,8 @@ import { connectors } from "../services/connectors.js";
 import { tokenFor } from "../services/authorization.js";
 import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
+import { applicationForFile } from "../services/applications.js";
+import { settleBorrowerAct } from "../services/standing.js";
 
 export const applicationRouter = Router();
 
@@ -203,6 +205,23 @@ applicationRouter.post(
 
     await prisma.loanFile.update({ where: { id }, data: { applicationSignedAt: new Date() } });
     await recordEvent(id, "application_signed", "borrower", { documents: signed });
+
+    // Signing is the borrower supplying the last thing that was theirs to
+    // supply, so the ball leaves their court here. `underwriting_began` is
+    // deliberately NOT written: the decision the review screen asks for next
+    // writes it, and one edge wants one writer.
+    await prisma.$transaction(async (tx) => {
+      const app = await applicationForFile(tx, id);
+      if (app) {
+        await settleBorrowerAct(tx, {
+          applicationId: app.id,
+          loanFileId: id,
+          partyId: borrower.partyId,
+          reasonCode: "application_signed",
+          causedBy: "event:application_signed",
+        });
+      }
+    });
 
     // The transcripts need no screen now that the 4506-C is signed. Failing
     // here must not fail the signature — the application is signed either way,

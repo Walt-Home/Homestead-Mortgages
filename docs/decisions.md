@@ -922,6 +922,67 @@ refuses to apply anything until the row is fixed and
 `prisma migrate resolve --rolled-back 20260908170000_borrowers_are_records_about_parties`
 has been run.
 
+## A pin follows the person, and an ended application still takes the save
+
+A pin is the evidence an application relies on NOW, and every screen that
+supersedes a fact re-points every open application the person is applying on —
+screen 1's income correction, screen 2's name and SSN, and the consent that
+first licenses any of it. It was briefly true of the income and not of the
+name, because screen 1 reconciled the party and screen 2 reconciled only the
+file the request was about; a person with two files who fixed their surname on
+the second left the first application pinned to a name they had taken back.
+There is no reading of a pin under which that is right for one of the six
+pieces and wrong for another, so screen 2 reconciles the party too. An
+application that has ended is left alone wherever this runs: its evidence is
+the record of what it was decided on.
+
+**Open, and for Joe.** An application that has ended still accepts the save
+around its evidence. `POST /files/:id/borrowers` and `POST /files/:id/consents`
+answer 201 at a withdrawn file's URL and write a borrower row, a consent row
+and party facts; only the pins refuse. Nothing is corrupted by it — the pins,
+the ledger and the clocks are what the ending was made of, and none of them
+move — but whether a person may go on editing a file they withdrew is a
+question about the product, not about the code, and it would arrive as a new
+refusal and a new piece of borrower-facing copy. Recorded here rather than
+decided inside a commit scoped to something else.
+
+Reconciling the person also means one save can complete a DIFFERENT file's six
+pieces — the file started at screen 1 and left there needs only a name, an SSN
+and an income — so the receipt fires on an application the request was not
+about. Whatever the reconciliation received is settled too, at the same time,
+by the same function. An application that is received and owes nothing is a
+file showing "We have it" with no obligation on its ledger and no screen
+anywhere asking for its bank, which is the one thing that made the join worth
+building.
+
+## Two write races we are living with, and what they cost
+
+Both are a read followed by a write in a second transaction, both are narrow,
+and both would cost a lock or an index to close. Written down so the next
+person to find a duplicated row knows it is a known window rather than a new
+bug.
+
+**Two consents for one signature.** `signedOn` asks whether a live consent of
+this kind already stands and the caller writes one when it does not
+(`apps/api/src/services/signature.ts`), so two posts arriving together — a
+double-pressed button, a retried save — can each find nothing and each write a
+row. Only one grant follows them: `authorizations_one_live_per_party_purpose`
+is a partial unique index and the mirror trigger inserts `ON CONFLICT DO
+NOTHING`, so the pins, the expiry and the revocation are all unambiguous. What
+is wrong is the consent history, which says the borrower signed the same thing
+twice in the same second. Closing it needs either a unique index over the live
+rows or a locking read, and neither belongs in a commit that adds no migration.
+
+**Two live facts for one predicate.** `assertFacts` retires the prior
+assertion by finding it and pointing it at the successor
+(`apps/api/src/services/party.ts`), so two asserts of one predicate on one
+party can each find the same prior and leave two rows with nothing superseding
+them. `liveFact` breaks the tie by `observedAt`, and a pin names whichever it
+answered, so the effect is that one of the two assertions quietly loses rather
+than the chain breaking. No screen writes one predicate twice at once today —
+screen 1 and screen 2 are sequential, and a person's two files are two requests
+apart — which is why this is recorded rather than fixed.
+
 ## Still outstanding
 
 Four vendor decisions plus sandbox credentials, none obtainable from inside

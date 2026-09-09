@@ -36,7 +36,8 @@ export interface ConnectorStepProps {
   readOnly?: boolean;
   /** Rendered instead of the Connect button when something must happen first. */
   blocked?: { message: string; action?: React.ReactNode } | null;
-  onDone: () => void;
+  /** May be async: a branch re-asks the engine before it navigates away. */
+  onDone: () => void | Promise<void>;
   renderResult: (data: unknown) => React.ReactNode;
 }
 
@@ -131,7 +132,7 @@ export function ConnectorStep(props: ConnectorStepProps) {
           </div>
           {props.renderResult(result)}
           <div className="mt-6 flex items-center gap-3">
-            <button className="super-btn super-btn-primary" onClick={props.onDone}>
+            <button className="super-btn super-btn-primary" onClick={() => void props.onDone()}>
               Continue
             </button>
             <button className="super-btn super-btn-outline" onClick={() => navigate(-1)}>

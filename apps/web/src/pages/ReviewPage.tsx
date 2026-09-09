@@ -84,7 +84,8 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   const primaryResidence = file?.property?.occupancy === "primary_residence";
   const decision = file?.decision as { ratios: Ratios } | null | undefined;
   const ratios = decision?.ratios;
-  const branches = branchesFor(assessment);
+  const payrollLinked = file?.payroll != null;
+  const branches = branchesFor(assessment, payrollLinked);
 
   /**
    * Make sure a decision exists before deciding what to render.
@@ -242,7 +243,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   const header = (
     <>
       <ApplicationStanding standing={data ? (data.applicationState ?? null) : undefined} />
-      <ApplicationTimeline standing={data?.applicationState ?? null} />
+      <ApplicationTimeline standing={data ? (data.applicationState ?? null) : undefined} />
     </>
   );
 
@@ -379,7 +380,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
 
   return (
     <>
-      <Branches assessment={assessment} fileId={fileId} />
+      <Branches assessment={assessment} fileId={fileId} payrollLinked={payrollLinked} />
 
       <div className="super-card">
         {header}

@@ -20,8 +20,12 @@ import { tokenFor } from "../services/authorization.js";
 import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
 import { applicationForFile, ensureApplicationParty } from "../services/applications.js";
-import { pinTridPieces } from "../services/evidence.js";
-import { settleAfterIntake } from "../services/standing.js";
+import {
+  settleBorrowerAct,
+  settleReconciledEvidence,
+  type BorrowerActReason,
+} from "../services/standing.js";
+import type { Db } from "../services/db.js";
 
 export const connectorRouter = Router();
 
@@ -110,10 +114,18 @@ connectorRouter.post(
         const app = await applicationForFile(tx, id);
         if (app) {
           await ensureApplicationParty(tx, app.id, borrower.partyId, "PRIMARY_BORROWER");
-          await pinTridPieces(tx, { applicationId: app.id, partyId: borrower.partyId });
-          await settleAfterIntake(tx, {
-            applicationId: app.id,
-            loanFileId: id,
+          // The PERSON, not this file. The grant this consent mints is what
+          // licenses borrowing their facts anywhere, so it can complete the
+          // six pieces of an application on a file they started last month and
+          // left at screen 1 — which has an address and a value and needed
+          // only a name, an SSN and an income. Pinning only this file's
+          // application left that one at draft with nothing pinned to it,
+          // while all three facts and a live grant existed. The membership is
+          // written first so this file's own application is one of the ones
+          // reconciled, and the settle follows the reconciliation wherever it
+          // went. Screens 1 and 2 do exactly this.
+          await settleReconciledEvidence(tx, {
+            partyId: borrower.partyId,
             causedBy: "consent:verification_authorization",
           });
         }
@@ -253,26 +265,33 @@ connectorRouter.post(
     }
     const result = outcome.result;
 
-    await recordSnapshot(
-      id,
-      "bank",
-      result.provider,
-      result.externalId,
-      result.data,
-      result.retrievedAt,
-    );
-    await upsertLink(id, "bank", result.provider);
-
-    // The bank report carries income and employment, not just assets — the
-    // sheet says so ("Assets + income + employment + cash flow + rent
-    // history") and the real vendors behave that way. Writing them here is
-    // what lets a salaried borrower reach a decision without a payroll step.
+    // The report, what it says about income and employment, and the move it
+    // implies are one act. The borrower connected their bank; either all of
+    // that is true afterwards or none of it is, because a file holding a
+    // twelve-month asset report while its application still says "connect your
+    // bank" is a file whose state contradicts its own evidence.
     //
-    // Replaced wholesale rather than merged: a re-pull is the newer truth
-    // about the same twelve months, and merging would double the income.
-    await prisma.$transaction([
-      prisma.incomeSource.deleteMany({ where: { loanFileId: id } }),
-      prisma.incomeSource.createMany({
+    // Income and employment are replaced wholesale rather than merged: a
+    // re-pull is the newer truth about the same twelve months, and merging
+    // would double the income.
+    await prisma.$transaction(async (tx) => {
+      const snapshot = await recordSnapshot(
+        id,
+        "bank",
+        result.provider,
+        result.externalId,
+        result.data,
+        result.retrievedAt,
+        tx,
+      );
+      await upsertLink(id, "bank", result.provider, tx);
+
+      // The bank report carries income and employment, not just assets — the
+      // sheet says so ("Assets + income + employment + cash flow + rent
+      // history") and the real vendors behave that way. Writing them here is
+      // what lets a salaried borrower reach a decision without a payroll step.
+      await tx.incomeSource.deleteMany({ where: { loanFileId: id } });
+      await tx.incomeSource.createMany({
         data: result.data.incomeSources.map((s) => ({
           loanFileId: id,
           type: s.type,
@@ -282,9 +301,9 @@ connectorRouter.post(
           continuanceEstablished: s.continuanceEstablished,
           evidenceDocumentIds: [...s.evidenceDocumentIds],
         })),
-      }),
-      prisma.employment.deleteMany({ where: { loanFileId: id } }),
-      prisma.employment.createMany({
+      });
+      await tx.employment.deleteMany({ where: { loanFileId: id } });
+      await tx.employment.createMany({
         data: result.data.employments.map((e) => ({
           loanFileId: id,
           employerName: e.employerName,
@@ -296,9 +315,16 @@ connectorRouter.post(
           isMilitary: e.isMilitary,
           verificationMethod: e.verificationMethod,
         })),
-      }),
-    ]);
-    await recordEvent(id, "connector_pull", result.provider, { kind: "bank" }, "AST-001");
+      });
+      await recordEvent(id, "connector_pull", result.provider, { kind: "bank" }, "AST-001", tx);
+
+      await settleBranch(tx, id, file.borrowers[0]?.partyId, "bank_connected", {
+        causedBy: `snapshot:${snapshot.id}`,
+        // A file whose receipt fired late never got an obligation to satisfy.
+        // Connecting the bank is then where work begins.
+        beginsWorkFromIntake: true,
+      });
+    });
     await advanceStage(id, "PAYROLL");
 
     res.status(201).json({
@@ -325,22 +351,23 @@ connectorRouter.post(
     const session = await payroll.createLinkSession(file, payrollToken);
     const result = await payroll.fetchPayroll(file, payrollToken, session.sessionId);
 
-    await recordSnapshot(
-      id,
-      "payroll",
-      result.provider,
-      result.externalId,
-      result.data,
-      result.retrievedAt,
-    );
-    await upsertLink(id, "payroll", result.provider);
-
     // Payroll is the precise source, so it REPLACES what the bank inferred
     // rather than adding to it. Two employment records for one job would
     // double-count income, which is the kind of error that reaches closing.
-    await prisma.$transaction([
-      prisma.employment.deleteMany({ where: { loanFileId: id } }),
-      prisma.employment.createMany({
+    await prisma.$transaction(async (tx) => {
+      const snapshot = await recordSnapshot(
+        id,
+        "payroll",
+        result.provider,
+        result.externalId,
+        result.data,
+        result.retrievedAt,
+        tx,
+      );
+      await upsertLink(id, "payroll", result.provider, tx);
+
+      await tx.employment.deleteMany({ where: { loanFileId: id } });
+      await tx.employment.createMany({
         data: result.data.employments.map((e) => ({
           loanFileId: id,
           employerName: e.employerName,
@@ -352,9 +379,9 @@ connectorRouter.post(
           isMilitary: e.isMilitary,
           verificationMethod: e.verificationMethod,
         })),
-      }),
-      prisma.incomeSource.deleteMany({ where: { loanFileId: id } }),
-      prisma.incomeSource.createMany({
+      });
+      await tx.incomeSource.deleteMany({ where: { loanFileId: id } });
+      await tx.incomeSource.createMany({
         data: result.data.incomeSources.map((s) => ({
           loanFileId: id,
           type: s.type,
@@ -364,10 +391,12 @@ connectorRouter.post(
           continuanceEstablished: s.continuanceEstablished,
           evidenceDocumentIds: [...s.evidenceDocumentIds],
         })),
-      }),
-    ]);
-
-    await recordEvent(id, "connector_pull", result.provider, { kind: "payroll" }, "INC-002");
+      });
+      await recordEvent(id, "connector_pull", result.provider, { kind: "payroll" }, "INC-002", tx);
+      await settleBranch(tx, id, file.borrowers[0]?.partyId, "payroll_connected", {
+        causedBy: `snapshot:${snapshot.id}`,
+      });
+    });
     await advanceStage(id, "IRS_TRANSCRIPT");
 
     res.status(201).json({ payroll: result.data, provider: result.provider });
@@ -388,16 +417,24 @@ connectorRouter.post(
       [currentYear - 1, currentYear - 2],
     );
 
-    await recordSnapshot(
-      id,
-      "irs",
-      result.provider,
-      result.externalId,
-      result.data,
-      result.retrievedAt,
-    );
-    await upsertLink(id, "irs", result.provider);
-    await recordEvent(id, "connector_pull", result.provider, { kind: "irs" }, "INC-003");
+    await prisma.$transaction(async (tx) => {
+      const snapshot = await recordSnapshot(
+        id,
+        "irs",
+        result.provider,
+        result.externalId,
+        result.data,
+        result.retrievedAt,
+        tx,
+      );
+      await upsertLink(id, "irs", result.provider, tx);
+      await recordEvent(id, "connector_pull", result.provider, { kind: "irs" }, "INC-003", tx);
+      // The pull is ours to make, but the borrower's signature is what
+      // licensed it, so the act is recorded as theirs.
+      await settleBranch(tx, id, file.borrowers[0]?.partyId, "transcripts_received", {
+        causedBy: `snapshot:${snapshot.id}`,
+      });
+    });
     await advanceStage(id, "UPLOAD_FALLBACK");
 
     res.status(201).json({ transcripts: result.data, provider: result.provider });
@@ -427,9 +464,42 @@ connectorRouter.post(
   }),
 );
 
-async function upsertLink(loanFileId: string, kind: string, provider: string): Promise<void> {
+/**
+ * The borrower supplied something: settle it against the application.
+ *
+ * Shared by all three pulls in this module because they do the same thing to
+ * the application and differ only in the word the ledger records. A file with
+ * no application — one created before the join existed — is left alone rather
+ * than given one, and a file with no borrower row has nobody to name as the
+ * actor.
+ */
+async function settleBranch(
+  tx: Db,
+  loanFileId: string,
+  partyId: string | undefined,
+  reasonCode: BorrowerActReason,
+  opts: { causedBy: string; beginsWorkFromIntake?: boolean },
+): Promise<void> {
+  if (!partyId) return;
+  const app = await applicationForFile(tx, loanFileId);
+  if (!app) return;
+  await settleBorrowerAct(tx, {
+    applicationId: app.id,
+    loanFileId,
+    partyId,
+    reasonCode,
+    ...opts,
+  });
+}
+
+async function upsertLink(
+  loanFileId: string,
+  kind: string,
+  provider: string,
+  db: Db = prisma,
+): Promise<void> {
   const now = new Date();
-  await prisma.connectorLink.upsert({
+  await db.connectorLink.upsert({
     where: { loanFileId_kind: { loanFileId, kind } },
     create: { loanFileId, kind, provider, linkedAt: now, lastSyncedAt: now },
     update: { lastSyncedAt: now, status: "active" },

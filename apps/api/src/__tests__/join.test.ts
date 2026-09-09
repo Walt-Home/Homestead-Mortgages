@@ -514,6 +514,11 @@ describe("the file list", () => {
 
 /* ── Screen 2: the person, the authorization, and the receipt ─────────────── */
 
+/** A standing's ledger as [event, reason] pairs, which is what is asserted on. */
+const ledgerRows = (
+  standing: { ledger: readonly { event: string; reasonCode: string | null }[] } | null,
+) => (standing?.ledger ?? []).map((r) => [r.event, r.reasonCode]);
+
 /** The application's live pins, in a shape a test can compare. */
 async function livePins(applicationId: string) {
   return prisma.applicationEvidenceLink.findMany({
@@ -675,19 +680,26 @@ describe("screen 2 pins the person", () => {
     expect(await livePins(app!.id)).toHaveLength(3);
     expect((await applicationStanding(prisma, second))?.ledger).toHaveLength(2);
 
-    // And the first file still holds one live pin per piece, its income now
-    // borrowed from the figure this second file stated — a pin is what an
+    // And the first file still holds one live pin per piece, all three now
+    // borrowed from what this second file's screens stated — a pin is what an
     // application relies on NOW, so re-pointing it is upkeep rather than a
-    // change of story. What the first file was received on is on the ledger
-    // and in the released pin, neither of which moved.
+    // change of story. Screen 2 restates the name and the SSN whether or not
+    // they changed, and every save supersedes, so a person applying twice
+    // moves all three. What the first file was received on is on the ledger
+    // and in the released pins, none of which moved.
     const firstAfter = await livePins((await applicationForFile(prisma, first))!.id);
     expect(firstAfter).toHaveLength(3);
-    expect(firstAfter.find((p) => p.predicate === "monthly_income")!.factId).toBe(
-      (await liveFact(prisma, partyId, "monthly_income"))!.id,
-    );
-    expect(firstPins.filter((p) => p.predicate !== "monthly_income")).toEqual(
-      firstAfter.filter((p) => p.predicate !== "monthly_income"),
-    );
+    for (const predicate of ["legal_name", "monthly_income", "ssn_token"]) {
+      expect(firstAfter.find((p) => p.predicate === predicate)!.factId, predicate).toBe(
+        (await liveFact(prisma, partyId, predicate))!.id,
+      );
+    }
+    for (const pin of firstPins) {
+      const released = await prisma.applicationEvidenceLink.findUniqueOrThrow({
+        where: { id: pin.id },
+      });
+      expect(released.releasedAt, pin.predicate).not.toBeNull();
+    }
   });
 
   it("answers with the file, its stage and where the application stands", async () => {
@@ -1342,6 +1354,119 @@ describe("one person, more than one file", () => {
     // The piece is still held, on evidence that is still good.
     expect((await sixPieces(app.id)).monthly_income).toBe(true);
     expect(await livePins(app.id)).toHaveLength(3);
+  });
+
+  it("re-points the first file's name pin when screen 2 of the second corrects it", async () => {
+    // The name belongs to the person exactly as the income does, and screen 2
+    // is where it is corrected. Reconciling only the file the request happens
+    // to be about would leave the pin rule true of one piece and false of
+    // another — and the first application holding evidence of a surname the
+    // borrower has already replaced, which is the thing a pin is defined not
+    // to be.
+    const { user, fileId: first } = await startFile();
+    await saveScreenTwo(user.id, first);
+    const app = (await applicationForFile(prisma, first))!;
+    const before = (await livePins(app.id)).find((p) => p.predicate === "legal_name")!;
+    const partyId = await partyOf(user.id);
+
+    const { fileId: second } = await startFile({}, user);
+    const res = await callAs(user.id, [fileRouter], "POST", `/${second}/borrowers`, {
+      ...SCREEN_TWO,
+      lastName: "Whitfield-Okafor",
+    });
+    expect(res.status).toBe(201);
+
+    const live = (await liveFact(prisma, partyId, "legal_name"))!;
+    expect(live.value).toMatchObject({ last: "Whitfield-Okafor" });
+    const after = (await livePins(app.id)).find((p) => p.predicate === "legal_name")!;
+    expect(after.factId).toBe(live.id);
+    expect(after.id).not.toBe(before.id);
+    // Still one live pin per piece, and the receipt still counts six.
+    expect(await livePins(app.id)).toHaveLength(3);
+    expect((await sixPieces(app.id)).legal_name).toBe(true);
+  });
+
+  it("says what the OTHER file owes when this save is what received it", async () => {
+    // The reconciliation reaches every application the person is applying on,
+    // and pinning their name, SSN and income into one of them can be what
+    // completes its six pieces. So a save about file A receives file B — and
+    // a received application that is never told what it owes next shows "We
+    // have it" with nothing on the ledger, no "Needs you", and no screen
+    // anywhere asking for its bank. The settle follows the reconciliation
+    // wherever it goes.
+    const { user, fileId: first } = await startFile();
+    await saveScreenTwo(user.id, first);
+
+    const { fileId: second } = await startFile({}, user);
+    const app = (await applicationForFile(prisma, second))!;
+    expect(app.status).toBe("draft");
+
+    // Screen 2 of the FIRST file, saved again. Nothing about the second file
+    // is in this request.
+    const res = await callAs(user.id, [fileRouter], "POST", `/${first}/borrowers`, SCREEN_TWO);
+    expect(res.status).toBe(201);
+
+    const standing = (await applicationStanding(prisma, second))!;
+    expect(standing.status).toBe("awaiting_borrower");
+    expect(standing.ledger.map((r) => [r.event, r.reasonCode])).toEqual([
+      ["intake_completed", RECEIPT_REASON_CODE],
+      ["borrower_owes", "bank_connection_needed"],
+    ]);
+    // And the first file, which was received long before this save, is
+    // settled once and not again.
+    expect((await applicationStanding(prisma, first))!.ledger).toHaveLength(2);
+  });
+
+  it("receives and settles the other file from the consent too", async () => {
+    // The consent is the third screen that supersedes what an application
+    // relies on: it mints the grant every pin is borrowed under, so it is
+    // often the moment a person's facts first reach ANY application. Pinning
+    // only the file the request is about left a file started last month at
+    // draft with nothing pinned to it, while all three facts and a live grant
+    // existed — the same fault screens 1 and 2 already refuse to have.
+    const { user, fileId: started } = await startFile();
+    expect((await applicationForFile(prisma, started))!.status).toBe("draft");
+
+    // A second file, taken through screen 2 and its consent. Nothing about
+    // the first file is in either request.
+    const { fileId: second } = await startFile({}, user);
+    await saveScreenTwo(user.id, second);
+
+    const standing = (await applicationStanding(prisma, started))!;
+    expect(standing.status).toBe("awaiting_borrower");
+    expect(ledgerRows(standing)).toEqual([
+      ["intake_completed", RECEIPT_REASON_CODE],
+      ["borrower_owes", "bank_connection_needed"],
+    ]);
+    expect(await livePins((await applicationForFile(prisma, started))!.id)).toHaveLength(3);
+  });
+
+  it("settles it from screen 1 and from an edit to screen 1, not only from screen 2", async () => {
+    // The income is one of the six pieces and screen 1 is where it is stated,
+    // so both writers on that screen can be what receives somebody's other
+    // file. Each site is asserted because each site is a place the settle can
+    // be dropped on its own.
+    const { user, fileId: first } = await startFile();
+    await saveScreenTwo(user.id, first);
+    const owesTheBank = [
+      ["intake_completed", RECEIPT_REASON_CODE],
+      ["borrower_owes", "bank_connection_needed"],
+    ];
+
+    // Started and left at screen 1. A NEW file's screen 1 restates the income,
+    // which is the piece this one was missing.
+    const { fileId: started } = await startFile({}, user);
+    await startFile({ statedMonthlyIncome: 12_100 }, user);
+    expect(ledgerRows(await applicationStanding(prisma, started))).toEqual(owesTheBank);
+
+    // And the edit behind screen 1, on a file that already has everything:
+    // correcting the figure there receives the one started last.
+    const { fileId: edited } = await startFile({}, user);
+    const patched = await callAs(user.id, [fileRouter], "PATCH", `/${first}`, {
+      statedMonthlyIncome: 13_400,
+    });
+    expect(patched.status).toBe(200);
+    expect(ledgerRows(await applicationStanding(prisma, edited))).toEqual(owesTheBank);
   });
 
   it("leaves an application that has ended alone", async () => {

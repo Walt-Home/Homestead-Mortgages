@@ -258,3 +258,47 @@ describe("the reasons are a closed set", () => {
     );
   });
 });
+
+describe("a hold is a hold", () => {
+  /**
+   * Every event the API's orchestration writes on its own, without a person
+   * deciding anything: the receipt's edge, what follows it, the branches, the
+   * screening and the decision. Kept as a literal, the way the reasons are.
+   */
+  const ORCHESTRATION_EVENTS = [
+    "intake_completed",
+    "work_began",
+    "borrower_owes",
+    "borrower_satisfied",
+    "third_party_blocked",
+    "underwriting_began",
+    "decided_conditional",
+    "decided_counteroffer",
+    "decided_approved",
+    "decided_decline",
+  ] as const;
+
+  it("names only events the machine has", () => {
+    for (const event of ORCHESTRATION_EVENTS) {
+      expect(APPLICATION_EVENTS).toContain(event);
+    }
+  });
+
+  it("leaves exactly two of them legal out of a suspended file", () => {
+    // Both are staff edges: somebody may ask a held borrower for something, and
+    // somebody may underwrite a held file. Neither is a page load, so the API
+    // declines both while the hold stands — see `standing.test.ts`. This list
+    // is here so that a new edge out of `suspended` fails a test rather than
+    // quietly giving the orchestration a way to end a sanctions hold.
+    const legal = ORCHESTRATION_EVENTS.filter((e) => nextState("suspended", e) !== undefined);
+    expect([...legal].sort()).toEqual(["borrower_owes", "underwriting_began"]);
+  });
+
+  it("is ended by exactly one event, and a person writes it", () => {
+    const out = eventsFrom("suspended").filter(
+      (e) => nextState("suspended", e) === "in_processing",
+    );
+    expect(out).toEqual(["third_party_returned"]);
+    expect(ORCHESTRATION_EVENTS).not.toContain("third_party_returned");
+  });
+});

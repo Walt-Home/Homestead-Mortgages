@@ -19,7 +19,19 @@
  *    borrower's face, where they are not.
  */
 
+import { BRANCH_FOR_SCREEN, branchCanSatisfy, type BranchPath } from "@hm/shared";
 import type { Assessment } from "./api.js";
+
+/**
+ * Paths that exist but are never steps.
+ *
+ * Re-exported from `@hm/shared` rather than restated here: the API records an
+ * obligation against the same three names, and a second copy of the list is a
+ * second place for a screen to be added to one side and not the other.
+ * `ScreenPath` deliberately excludes them so that anything typed as a step —
+ * the stepper, the progress count — cannot accidentally accept one.
+ */
+export type { BranchPath };
 
 export type FlowStage =
   | "PROPERTY_LOAN"
@@ -42,14 +54,6 @@ export const SCREENS = [
 ] as const;
 
 export type ScreenPath = (typeof SCREENS)[number]["path"];
-
-/**
- * Paths that exist but are never steps.
- *
- * `ScreenPath` deliberately excludes these so that anything typed as a step —
- * the stepper, the progress count — cannot accidentally accept one.
- */
-export type BranchPath = "payroll" | "irs" | "documents";
 
 /**
  * Where a stage resumes to.
@@ -104,28 +108,22 @@ export interface Branch {
   readonly because: string;
 }
 
-/**
- * Sources that represent work only the borrower can personally do.
- *
- * This is the distinction that turns three screens into three rarely-seen
- * branches. `connect_irs` is a pull we make ourselves, and `esign` is covered
- * by the single signature on the review screen — neither is a reason to send
- * somebody somewhere. What is left genuinely needs a person: typing an
- * explanation, attaching a document, or authenticating with their payroll
- * provider.
- *
- * Getting this wrong in the safe-looking direction is what produced the bug
- * this rule exists to fix. INC-008 (the 4506-C) is `esign` and `universal`, so
- * treating any outstanding IRS-screen item as a branch trigger sent *every*
- * borrower — including a clean W-2 file with nothing wrong — down a "tax
- * transcripts" branch to authorise something the review screen was about to
- * ask them to sign anyway.
- */
-const BORROWER_MUST_ACT: readonly string[] = [
-  "borrower_input",
-  "document_upload",
-  "connect_payroll",
-];
+/** Why each branch is on screen, in the borrower's words. Never a requirement id. */
+const BRANCH_COPY: Record<BranchPath, { readonly title: string; readonly because: string }> = {
+  payroll: {
+    title: "Confirm your employer",
+    because: "We could not confirm your employment from your bank activity alone.",
+  },
+  irs: {
+    title: "Your tax transcripts",
+    because:
+      "Some of your income needs a tax return to verify — self-employment and rental income usually do.",
+  },
+  documents: {
+    title: "A few documents",
+    because: "A small number of things could not be retrieved and need to come from you.",
+  },
+};
 
 /**
  * Which branches this file actually needs, decided by the engine.
@@ -144,38 +142,28 @@ const BORROWER_MUST_ACT: readonly string[] = [
  * `applicabilityKnown` matters for the same reason applicability is
  * three-valued everywhere else: "we might still need this" is not a reason to
  * make somebody log into their payroll provider.
+ *
+ * `branchCanSatisfy` is the rest of it, and it lives in `@hm/shared` because
+ * the API asks the identical question when it records what the borrower owes.
+ * A card offered here that the API does not count as an obligation — or the
+ * reverse — is a file sitting at "Needs you" with nothing on screen to clear
+ * it. `payrollLinked` is why the connection screen stops being offered once
+ * the payroll snapshot is on the file: going back returns the same history.
  */
-export function branchesFor(assessment: Assessment | undefined): Branch[] {
+export function branchesFor(assessment: Assessment | undefined, payrollLinked: boolean): Branch[] {
   if (!assessment) return [];
   const live = assessment.outstanding.filter(
-    (o) => o.actor === "borrower" && o.applicabilityKnown && BORROWER_MUST_ACT.includes(o.source),
+    (o) =>
+      o.actor === "borrower" &&
+      o.applicabilityKnown &&
+      branchCanSatisfy({ requirementId: o.id, source: o.source }, payrollLinked),
   );
-  const needs = (screen: string) => live.some((o) => o.screen === screen);
-
-  const branches: Branch[] = [];
-  if (needs("payroll")) {
-    branches.push({
-      path: "payroll",
-      title: "Confirm your employer",
-      because: "We could not confirm your employment from your bank activity alone.",
-    });
-  }
-  if (needs("irs_transcript")) {
-    branches.push({
-      path: "irs",
-      title: "Your tax transcripts",
-      because:
-        "Some of your income needs a tax return to verify — self-employment and rental income usually do.",
-    });
-  }
-  if (needs("upload_fallback")) {
-    branches.push({
-      path: "documents",
-      title: "A few documents",
-      because: "A small number of things could not be retrieved and need to come from you.",
-    });
-  }
-  return branches;
+  // Screen order, off the shared map, so this list and the server's
+  // obligations cannot disagree about which screens are branches at all. The
+  // copy is the only part of a branch this file still owns.
+  return (Object.entries(BRANCH_FOR_SCREEN) as [string, BranchPath][])
+    .filter(([screen]) => live.some((o) => o.screen === screen))
+    .map(([, path]) => ({ path, ...BRANCH_COPY[path] }));
 }
 
 /** Is the debug surface on? `?debug=1`, and nothing else turns it on. */

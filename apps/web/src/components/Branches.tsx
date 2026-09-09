@@ -22,11 +22,14 @@ import type { Assessment } from "../lib/api.js";
 export function Branches({
   assessment,
   fileId,
+  payrollLinked,
 }: {
   assessment: Assessment | undefined;
   fileId: string | undefined;
+  /** A connected employer means the payroll card has nothing left to fetch. */
+  payrollLinked: boolean;
 }) {
-  const branches = branchesFor(assessment);
+  const branches = branchesFor(assessment, payrollLinked);
   if (branches.length === 0 || !fileId) return null;
 
   return (

@@ -210,15 +210,53 @@ export async function pinTridPieces(
  *
  * An application that has ended is left alone, which this does not have to
  * arrange: `pinTridPieces` refuses one whoever asks.
+ *
+ * What comes back is every application this touched and whether the pins it
+ * wrote were the ones that completed the six. A reconciliation can RECEIVE an
+ * application the request was not about — a file the borrower started and left
+ * at screen 1 has an address, a value and no pins, so the first save that
+ * borrows this person's facts into it stamps its receipt — and a received
+ * application that is never told what it owes next shows no "Needs you" and no
+ * line in its timeline asking for a bank. The caller settles what this
+ * reports; see `settleReconciledEvidence`.
  */
-export async function reconcilePartyEvidence(db: Db, partyId: string): Promise<void> {
+export interface ReconciledApplication {
+  readonly applicationId: string;
+  readonly loanFileId: string;
+  /** This call's pins completed the six pieces, and the receipt fired. */
+  readonly received: boolean;
+}
+
+export async function reconcilePartyEvidence(
+  db: Db,
+  partyId: string,
+): Promise<readonly ReconciledApplication[]> {
   const on = await db.applicationParty.findMany({
     where: { partyId, role: "PRIMARY_BORROWER" },
-    select: { applicationId: true },
+    select: {
+      applicationId: true,
+      application: { select: { status: true, loanFileId: true } },
+    },
   });
+
+  const touched: ReconciledApplication[] = [];
   for (const membership of on) {
     await pinTridPieces(db, { applicationId: membership.applicationId, partyId });
+    // Read back rather than inferred from what was pinned: the receipt is a
+    // trigger that counts live pins and the active scenario, so whether the
+    // third pin was the sixth piece is the database's answer and not this
+    // function's.
+    const after = await db.application.findUnique({
+      where: { id: membership.applicationId },
+      select: { status: true },
+    });
+    touched.push({
+      applicationId: membership.applicationId,
+      loanFileId: membership.application.loanFileId,
+      received: membership.application.status === "DRAFT" && after?.status === "INTAKE_RECEIVED",
+    });
   }
+  return touched;
 }
 
 export interface ScenarioTerms {

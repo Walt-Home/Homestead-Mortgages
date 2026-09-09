@@ -23,6 +23,8 @@ import { prisma } from "@hm/db";
 import { getRequirement } from "@hm/requirements";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { assertFileAccess, recordEvent } from "../services/repository.js";
+import { applicationForFile } from "../services/applications.js";
+import { settleBorrowerAct } from "../services/standing.js";
 
 export const documentRouter = Router();
 
@@ -55,26 +57,56 @@ documentRouter.post(
       );
     }
 
-    const document = await prisma.document.create({
-      data: {
-        loanFileId: id,
-        filename: input.filename,
-        contentType: input.contentType,
-        bytes: input.bytes,
-        satisfiesRequirementId: input.satisfiesRequirementId,
-        // Names what actually happened. A path that looks like storage would
-        // be a lie the next person has to discover.
-        storageUri: "fixture://content-not-transmitted",
-      },
-    });
+    // The record and the move it implies are one act: a file holding the
+    // document it was waiting for while its application still says "a few
+    // documents" is the disagreement this transaction removes.
+    const document = await prisma.$transaction(async (tx) => {
+      const row = await tx.document.create({
+        data: {
+          loanFileId: id,
+          filename: input.filename,
+          contentType: input.contentType,
+          bytes: input.bytes,
+          satisfiesRequirementId: input.satisfiesRequirementId,
+          // Names what actually happened. A path that looks like storage would
+          // be a lie the next person has to discover.
+          storageUri: "fixture://content-not-transmitted",
+        },
+      });
 
-    await recordEvent(
-      id,
-      "document_recorded",
-      "borrower",
-      { filename: input.filename, bytes: input.bytes, contentStored: false },
-      input.satisfiesRequirementId,
-    );
+      await recordEvent(
+        id,
+        "document_recorded",
+        "borrower",
+        { filename: input.filename, bytes: input.bytes, contentStored: false },
+        input.satisfiesRequirementId,
+        tx,
+      );
+
+      // The uploader is whoever owns this file's first borrower row; the
+      // upload screen has no borrower id of its own to send. The id breaks the
+      // tie, the same way every other reader of `borrowers[0]` does: two rows
+      // written in one transaction can share a millisecond, and a ledger row
+      // that names the co-borrower as the person who uploaded something is a
+      // record of the wrong person having acted.
+      const borrower = await tx.borrower.findFirst({
+        where: { loanFileId: id },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { partyId: true },
+      });
+      const app = await applicationForFile(tx, id);
+      if (app && borrower) {
+        await settleBorrowerAct(tx, {
+          applicationId: app.id,
+          loanFileId: id,
+          partyId: borrower.partyId,
+          reasonCode: "documents_received",
+          causedBy: `document:${row.id}`,
+        });
+      }
+
+      return row;
+    });
 
     res.status(201).json({ document });
   }),

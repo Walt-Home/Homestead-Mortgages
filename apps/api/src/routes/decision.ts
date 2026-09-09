@@ -10,10 +10,12 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@hm/db";
 import { underwrite } from "@hm/underwriting";
-import type { Prisma } from "@hm/db";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { assertFileAccess, loadLoanFile, recordEvent } from "../services/repository.js";
 import { advanceStage } from "../services/stage.js";
+import { applicationForFile } from "../services/applications.js";
+import { decideApplication, recordDecision } from "../services/decide.js";
+import { applicationStanding } from "../services/standing.js";
 
 export const decisionRouter = Router();
 
@@ -49,53 +51,27 @@ decisionRouter.post(
       estimatedPrepaids: market.estimatedPrepaids,
     });
 
+    // The decision is always appended; whether it MOVES the application is a
+    // separate question the machine answers. Both in one transaction, so a
+    // recorded decision and the state it produced cannot disagree.
     await prisma.$transaction(async (tx) => {
-      await tx.decision.create({
-        data: {
-          loanFileId: id,
-          outcome: decision.outcome,
-          computedAt: new Date(decision.computedAt),
-          ausEngine: decision.aus!.engine,
-          ausEngineVersion: decision.aus!.engineVersion,
-          ausCasefileId: decision.aus!.casefileId,
-          ausRecommendation: decision.aus!.recommendation,
-          ausFindings: decision.aus!.findings as unknown as Prisma.InputJsonValue,
-          ratios: decision.ratios as unknown as Prisma.InputJsonValue,
-          reserves: decision.reserves as unknown as Prisma.InputJsonValue,
-          compliance: decision.compliance as unknown as Prisma.InputJsonValue,
-          pricing: decision.pricing as unknown as Prisma.InputJsonValue,
-          derivations: decision.derivations as unknown as Prisma.InputJsonValue,
-          adverseActionReasons: [...(decision.adverseActionReasons ?? [])],
-        },
+      const { decisionId } = await recordDecision(tx, id, decision);
+      const app = await applicationForFile(tx, id);
+      // A legacy file with no application still gets its decision recorded.
+      if (!app) return;
+      await decideApplication(tx, {
+        applicationId: app.id,
+        loanFileId: id,
+        decision,
+        decisionId,
+        file,
       });
-
-      // Conditions are replaced wholesale on each run. A condition the
-      // borrower already cleared should not reappear, so cleared rows survive.
-      await tx.loanCondition.deleteMany({ where: { loanFileId: id, status: "open" } });
-      const cleared = await tx.loanCondition.findMany({
-        where: { loanFileId: id },
-        select: { requirementId: true },
-      });
-      const clearedIds = new Set(cleared.map((c) => c.requirementId));
-      const fresh = decision.conditions.filter((c) => !clearedIds.has(c.requirementId));
-      if (fresh.length) {
-        await tx.loanCondition.createMany({
-          data: fresh.map((c) => ({
-            loanFileId: id,
-            requirementId: c.requirementId,
-            description: c.description,
-            status: c.status,
-            owner: c.owner,
-            issuedAt: new Date(c.issuedAt),
-            documentIds: [...c.documentIds],
-          })),
-        });
-      }
-
-      // Not inside the transaction and not a direct write: recomputing a
-      // decision on a finished file must not rewind it to the consent step.
     });
 
+    // Outside the transaction, and `advanceStage` rather than a direct write:
+    // recomputing a decision on a finished file must not rewind it to the
+    // consent step, and the stage is the old vocabulary the four screens still
+    // resume on.
     await advanceStage(id, "PERSISTENT_CONSENT");
 
     await recordEvent(
@@ -110,7 +86,7 @@ decisionRouter.post(
       "UW-002",
     );
 
-    res.status(201).json({ decision });
+    res.status(201).json({ decision, applicationState: await applicationStanding(prisma, id) });
   }),
 );
 

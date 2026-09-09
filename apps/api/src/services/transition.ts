@@ -59,11 +59,22 @@ export const BORROWING_ROLES: ApplicationPartyRole[] = [
   "NON_OCCUPANT_CO_BORROWER",
 ];
 
-/** Raised when the file moved between reading it and writing it. */
+/**
+ * Raised when the file moved between reading it and writing it.
+ *
+ * `retryable` says whether the caller still has a usable transaction. A
+ * conditional update that matched nothing wrote nothing and left everything
+ * around it intact, so the same event can simply be asked again from wherever
+ * the file has landed. A collision on `(application_id, seq)` cannot: Postgres
+ * has already aborted the transaction the insert was in, and every statement
+ * after it would fail. Only the first kind may be retried, and confusing the
+ * two would turn one 409 into three.
+ */
 export class TransitionConflict extends AppError {
   constructor(
     readonly applicationId: string,
     readonly actualState: ApplicationState,
+    readonly retryable: boolean = true,
   ) {
     super(
       409,
@@ -213,14 +224,50 @@ export async function transition(
             select: { status: true },
           })
         : null;
-      throw new TransitionConflict(applicationId, now ? toDomainState(now.status) : from);
+      throw new TransitionConflict(applicationId, now ? toDomainState(now.status) : from, false);
     }
     throw err;
   }
 }
 
-export type Advance =
-  TransitionResult | { readonly skipped: "no_edge"; readonly from: ApplicationState };
+/**
+ * A move that was not made, and why.
+ *
+ * `no_edge` is the machine declining: the file is somewhere this event does
+ * not apply from, which covers both "already there" and "never applies here".
+ * `held` is the orchestration declining while the machine would have allowed
+ * it — a sanctions hold, which only a person can lift.
+ */
+export interface Skipped {
+  readonly skipped: "no_edge" | "held";
+  readonly from: ApplicationState;
+}
+
+export type Advance = TransitionResult | Skipped;
+
+/** Whether an advance actually wrote a row. */
+export function moved(advance: Advance | null): advance is TransitionResult {
+  return advance !== null && !("skipped" in advance);
+}
+
+/** How many times a concurrent repeat may be re-aimed before it is a conflict. */
+const RETRIES = 2;
+
+/**
+ * The events that may still be taken out of `suspended`.
+ *
+ * A hold ends when a PERSON ends it. `third_party_returned` is the screening
+ * coming back clean, and the three endings are somebody deciding the request
+ * is over. Everything else the machine offers from `suspended` —
+ * `borrower_owes` and `underwriting_began`, both legal because a member of
+ * staff may take them — is refused here.
+ */
+const SURVIVES_A_HOLD: readonly ApplicationEvent[] = [
+  "third_party_returned",
+  "borrower_withdrew",
+  "ops_canceled",
+  "response_window_lapsed",
+];
 
 /**
  * Move an application if the machine allows it, and say so if it does not.
@@ -229,9 +276,49 @@ export type Advance =
  * revisited, a decision is recomputed, a bank is re-linked — the same event
  * arrives more than once, and the machine has no self-edges, so the second
  * arrival has no edge to take. That is a skip, not an error: nothing is
- * written and the caller learns where the file is. What it still throws is a
- * conflict — somebody else moved the file under this call — and the actor
- * refusal, because those are not repeats.
+ * written and the caller learns where the file is. What it still throws is
+ * the actor refusal, and a conflict where somebody else moved the file
+ * somewhere this event can still be taken from.
+ *
+ * A SUSPENDED file only takes the events in `SURVIVES_A_HOLD`. Every caller
+ * checks the hold on its own read too, and says so in the file's events; this
+ * is the check that cannot be raced past or forgotten, because it happens on
+ * the read the write is conditioned on.
+ *
+ * A repeat that arrives CONCURRENTLY is the same repeat. The review screen and
+ * the bank screen both ask for a decision, so two callers reach the same edge
+ * at once: one writes it and the other finds the row already moved. Reading
+ * that as a 409 would hand a borrower "this application is now in_underwriting,
+ * reload and decide again" for an event whose whole effect had just happened.
+ * So a conflict whose landing state no longer offers the edge is a skip, the
+ * same as if the two calls had arrived a second apart.
+ *
+ * And when the file comes back to the state this caller read, the repeat is
+ * asked again from there rather than refused. That is the ordinary case for
+ * every branch, not an exotic one: a borrower act satisfies the file and the
+ * reconciliation immediately owes them the next thing, so a file somebody is
+ * attaching two documents to at once returns to `awaiting_borrower` — where
+ * `borrower_satisfied` is legal again — before the second writer's update
+ * lands. Answering that with a 409 rolled the whole of the second request
+ * back, and the document it had just recorded went with it. Asking again
+ * writes exactly the rows the two calls would have written a second apart.
+ *
+ * Back to that state and NOWHERE ELSE. Every caller decides on its own read —
+ * a sanctions hold is checked once, at the top, and then the event is handed
+ * over — so aiming the event at whatever state the file happens to have landed
+ * in would take an edge nobody validated. `borrower_owes` and
+ * `underwriting_began` are both legal out of `suspended`, because a member of
+ * staff may take them; an upload racing a screening is not that member of
+ * staff, and re-aiming would have ended a hold on their behalf with no
+ * `third_party_returned` on the ledger.
+ *
+ * Only for the same event, and only from the same state: those two together
+ * are the whole of the distinction. Somebody else doing something ELSE while
+ * this caller was deciding is a lost update, and a lost update is what a 409
+ * is for — a decision made against a state that no longer holds must not be
+ * quietly re-aimed at the new one. So the ledger is asked what moved the file:
+ * a row carrying this caller's own event means their act arrived twice, and
+ * anything else means somebody else acted and they need to hear it.
  */
 export async function advanceIfLegal(
   input: Omit<TransitionInput, "expectedFrom">,
@@ -239,12 +326,49 @@ export async function advanceIfLegal(
 ): Promise<Advance> {
   const current = await db.application.findUnique({
     where: { id: input.applicationId },
-    select: { status: true },
+    select: { status: true, statusSeq: true },
   });
   if (!current) throw new AppError(404, "Application not found", "NOT_FOUND");
+
+  const readAt = current.statusSeq;
   const from = toDomainState(current.status);
+  // The hold is enforced HERE, in the function that reads the state
+  // immediately before writing it, and not only in each caller's own earlier
+  // read. A screening that commits between a caller's check and this one would
+  // otherwise lift the hold on the caller's behalf — `borrower_owes` and
+  // `underwriting_began` are both legal edges out of `suspended` — with no
+  // `third_party_returned` on the ledger and nobody having decided anything.
+  // A caller that forgets to check at all gets the same answer.
+  if (from === "suspended" && !SURVIVES_A_HOLD.includes(input.event)) {
+    return { skipped: "held", from };
+  }
   if (nextState(from, input.event) === undefined) return { skipped: "no_edge", from };
-  return transition({ ...input, expectedFrom: from }, db);
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await transition({ ...input, expectedFrom: from }, db);
+    } catch (err) {
+      if (!(err instanceof TransitionConflict)) throw err;
+      if (nextState(err.actualState, input.event) === undefined) {
+        return { skipped: "no_edge", from: err.actualState };
+      }
+      // The file is somewhere the caller never looked at. The edge exists
+      // there, which is exactly why this must not take it: a hold, an ending
+      // or a decision arrived in the meantime and the caller's own checks ran
+      // against a state that no longer holds.
+      if (err.actualState !== from) throw err;
+      // A collision on the sequence has already aborted the caller's
+      // transaction, so asking again inside it would only produce a second,
+      // less honest error. A zero-row update wrote nothing and left everything
+      // around it intact.
+      if (!err.retryable || attempt >= RETRIES) throw err;
+      const repeat = await db.applicationTransition.findFirst({
+        where: { applicationId: input.applicationId, seq: { gt: readAt }, event: input.event },
+        select: { seq: true },
+      });
+      if (!repeat) throw err;
+    }
+  }
 }
 
 function isUniqueViolation(err: unknown): boolean {

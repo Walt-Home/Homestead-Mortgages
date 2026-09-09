@@ -34,8 +34,12 @@ import {
   scenarioTermsFrom,
   syncScenario,
 } from "../services/applications.js";
-import { pinTridPieces, reconcilePartyEvidence } from "../services/evidence.js";
-import { applicationStanding, rawLedger, settleAfterIntake } from "../services/standing.js";
+import {
+  applicationStanding,
+  rawLedger,
+  settleAfterIntake,
+  settleReconciledEvidence,
+} from "../services/standing.js";
 
 export const fileRouter = Router();
 
@@ -149,9 +153,12 @@ fileRouter.patch(
         // already taken back. Every application this person is applying on,
         // not only this file's: the figure belongs to the person, and the file
         // the request happens to be about is not the only one relying on it.
-        // The pins move first, so the scenario insert below — which is itself
-        // a receipt writer — counts what is true now.
-        await reconcilePartyEvidence(tx, partyId);
+        // Which also means this can RECEIVE one of those other applications —
+        // an income is the sixth piece — so what follows a receipt is settled
+        // wherever the reconciliation fired one. The pins move first, so the
+        // scenario insert below, itself a receipt writer, counts what is true
+        // now.
+        await settleReconciledEvidence(tx, { partyId, causedBy: "screen:property_loan" });
       }
 
       const app = await applicationForFile(tx, id);
@@ -170,10 +177,21 @@ fileRouter.patch(
           causedBy: "screen:property_loan",
         });
       }
+      // Inside, with the save it describes. A revision that committed and then
+      // failed to record left the event stream saying the borrower never
+      // touched the screen, which is the one place a support question about a
+      // changed price would be answered from.
+      await recordEvent(
+        id,
+        "screen_revised",
+        "borrower",
+        { screen: "property_loan" },
+        undefined,
+        tx,
+      );
       return updated;
     });
 
-    await recordEvent(id, "screen_revised", "borrower", { screen: "property_loan" });
     // The REAL stage. This answered a literal "identity" whatever the file had
     // reached, so a borrower who edited a term from the review screen was told
     // by the server that they were on screen 2.
@@ -253,9 +271,11 @@ fileRouter.post(
       // That supersession lands on the PERSON, so it reaches every application
       // they are applying on — including the one on the file they started last
       // month, which borrowed the figure this save just replaced and has no
-      // other reason to be looked at today. Before the draft below exists,
-      // because the new application has nothing pinned to it yet.
-      await reconcilePartyEvidence(tx, partyId);
+      // other reason to be looked at today. If restating the income is what
+      // completes that one's six pieces, it is received here, by a request
+      // about a different file, and it is settled here too. Before the draft
+      // below exists, because the new application has nothing pinned to it yet.
+      await settleReconciledEvidence(tx, { partyId, causedBy: "screen:property_loan" });
 
       const terms = scenarioTermsFrom(created);
       // Screen 1's schema requires the address, the value and the amount, so
@@ -418,15 +438,21 @@ fileRouter.post(
       // its fact here and the pin moves to the successor in the same
       // transaction: the application never holds a pin on a fact the borrower
       // has replaced.
+      //
+      // Every application, not only this one. A corrected surname supersedes
+      // the fact on the PERSON, so a borrower with two files who fixes their
+      // name on the second would otherwise leave the first application pinned
+      // to a name they have taken back — the same thing the income correction
+      // on screen 1 goes out of its way to avoid, and there is no reading of a
+      // pin under which it is true of one piece and false of another. The
+      // membership is written first so this file's own application is one of
+      // the ones reconciled — and the settle that follows covers all of them,
+      // because a save that receives somebody's OTHER file has to say what
+      // that file owes next just as much as this one does.
       const app = await applicationForFile(tx, id);
       if (app) {
         await ensureApplicationParty(tx, app.id, partyId, "PRIMARY_BORROWER");
-        await pinTridPieces(tx, { applicationId: app.id, partyId });
-        await settleAfterIntake(tx, {
-          applicationId: app.id,
-          loanFileId: id,
-          causedBy: "screen:identity",
-        });
+        await settleReconciledEvidence(tx, { partyId, causedBy: "screen:identity" });
       }
     });
     await recordEvent(id, existingBorrower ? "screen_revised" : "screen_completed", "borrower", {
@@ -484,8 +510,13 @@ fileRouter.delete(
     // "write" is what refuses demo files here, which is right: a shared
     // fixture is not any one person's to delete.
     await assertFileAccess(id, req.user!.id, "write");
-    await assertFileMayBeDeleted(id);
-    await prisma.loanFile.delete({ where: { id } });
+    // The refusal and the delete in one transaction: something moves an
+    // application now, so a file that was a draft when it was read must not be
+    // deleted after it stopped being one.
+    await prisma.$transaction(async (tx) => {
+      await assertFileMayBeDeleted(id, tx);
+      await tx.loanFile.delete({ where: { id } });
+    });
     res.status(204).end();
   }),
 );

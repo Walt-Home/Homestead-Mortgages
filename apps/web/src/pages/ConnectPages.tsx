@@ -1,17 +1,36 @@
 import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { ConnectorStep } from "../components/ConnectorStep.js";
 import { SignDocument } from "../components/SignDocument.js";
+import { api } from "../lib/api.js";
 import { useLoanFile, hasConsent } from "../lib/file.js";
 
 function useStep(next: string) {
   const { fileId = "" } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data } = useLoanFile(fileId);
+  const readOnly = data?.file.isDemo === true;
   return {
     fileId,
     file: data?.file,
-    readOnly: data?.file.isDemo === true,
-    onDone: () => navigate(`/f/${fileId}/${next}`),
+    readOnly,
+    // Ask the engine again before going back, with the evidence this branch
+    // just supplied. Without it the review screen renders the decision from
+    // before the branch ran — and the pill beside it still says the file is
+    // waiting on the borrower for something they have just done.
+    onDone: async () => {
+      if (!readOnly) {
+        await api.post(`/files/${fileId}/decision`, {}).catch(() => undefined);
+        // Both, because the review screen builds its branch cards from the
+        // assessment and its pill from the file. Refreshing one of them is how
+        // a card for work that is finished stays on screen beside a state that
+        // says it is not.
+        await queryClient.invalidateQueries({ queryKey: ["assessment"] });
+        await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
+      }
+      navigate(`/f/${fileId}/${next}`);
+    },
   };
 }
 

@@ -326,7 +326,15 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
   const blocking = log.all().filter((d) => d.blockedBy?.length);
   const recommendation = determineRecommendation(findings, blocking.length > 0);
 
-  if (recommendation === "refer" || recommendation === "approve_ineligible") {
+  // `refer_with_caution` is on this list too. UW-011's own condition
+  // (`aus_refer_or_ineligible`) counts it, so leaving it out recorded a
+  // requirement as applicable with no derivation behind it — a number on the
+  // decision screen with nothing to show for it.
+  if (
+    recommendation === "refer" ||
+    recommendation === "refer_with_caution" ||
+    recommendation === "approve_ineligible"
+  ) {
     log.record("UW-011", "Manual underwrite", "required", "AUS returned Refer or Ineligible", {
       recommendation,
       finding_count: findings.length,
@@ -375,10 +383,47 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
     conditions,
     derivations: log.all(),
     adverseActionReasons:
-      outcome === "denied"
-        ? findings.filter((f) => f.category === "eligibility").map((f) => f.message)
+      outcome === "denied" || outcome === "counteroffer"
+        ? adverseActionReasonsFor(findings, compliance)
         : undefined,
   };
+}
+
+/**
+ * The principal reasons, on both of the outcomes that owe them.
+ *
+ * A counteroffer is an adverse action under Reg B — "creditworthy, wrong loan"
+ * still refuses the loan that was asked for — and UW-016's condition is
+ * `denial_or_counteroffer`, so leaving the array empty on a counteroffer made
+ * a requirement that applies impossible to satisfy.
+ *
+ * The HOEPA line matters for the other half: a high-cost denial can carry no
+ * eligibility finding at all, because the loan is fine and the PRICING is what
+ * fails. Without it that borrower's notice would have no reasons in it.
+ */
+function adverseActionReasonsFor(
+  findings: readonly AusFinding[],
+  compliance: Decision["compliance"],
+): string[] {
+  const reasons = findings.filter((f) => f.category === "eligibility").map((f) => f.message);
+  if (compliance.isHighCost === true) {
+    // Which of the two triggers fired, named. "High-cost" alone is a
+    // classification, not a reason, and a notice that gives one is not a
+    // notice — the borrower cannot tell whether it was the rate or the fees.
+    const byRate =
+      compliance.hpmlSpread !== null && compliance.hpmlSpread > GUIDELINES.hoepa.firstLienAprSpread;
+    const byFees =
+      compliance.pointsAndFeesRatio !== null &&
+      compliance.pointsAndFeesRatio > GUIDELINES.hoepa.pointsAndFeesPercent;
+    const trigger =
+      byRate && byFees
+        ? "the rate and the fees are both above the limit"
+        : byFees
+          ? "the fees are above the limit"
+          : "the rate is above the limit";
+    reasons.push(`HOEPA high-cost: ${trigger}`);
+  }
+  return reasons;
 }
 
 function determineRecommendation(
@@ -395,6 +440,29 @@ function determineRecommendation(
   return "approve_eligible";
 }
 
+/**
+ * The word for what just happened, and the order is the whole content.
+ *
+ * A high-cost denial comes first because `isHighCost` is `true` only when the
+ * HOEPA test actually COMPUTED — with the APR, the APOR and the fees all
+ * missing it is null, never true. So a loan we have computed to be high-cost
+ * is a failure we found, and a failure we found outranks an input we could not
+ * reach. `denied` and `referred` cannot coincide by accident.
+ *
+ * `approve_ineligible` comes next for the same reason: an eligibility finding
+ * is computed from real inputs — an LTV over the cap, a failed net tangible
+ * benefit — so "creditworthy, wrong loan" is a real answer even while the
+ * pricing tests are blocked.
+ *
+ * Then `refer`, which is the engine saying it could not compute something it
+ * needed. It used to fall through to `approved_with_conditions` at the bottom
+ * of this function, which is how a borrower whose APR and APOR were never
+ * known ended up reading "Approved with conditions". `referred` is not a
+ * credit decision and nothing downstream may treat it as one.
+ *
+ * What is left at the bottom is now exactly `refer_with_caution` — findings we
+ * did compute, which is what "approved with conditions" has always meant.
+ */
 function determineOutcome(
   recommendation: AusRecommendation,
   conditions: readonly LoanCondition[],
@@ -402,6 +470,7 @@ function determineOutcome(
 ): Decision["outcome"] {
   if (compliance.isHighCost === true) return "denied";
   if (recommendation === "approve_ineligible") return "counteroffer";
+  if (recommendation === "refer") return "referred";
   const open = conditions.filter((c) => c.status !== "cleared" && c.status !== "waived");
   if (recommendation === "approve_eligible" && open.length === 0) return "clear_to_close";
   return "approved_with_conditions";

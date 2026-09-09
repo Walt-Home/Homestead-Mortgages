@@ -358,8 +358,10 @@ them are ours rather than the borrower's: the four disclosure deliveries
 APOR and a fee schedule. **Recording "Loan Estimate delivered" when no Loan
 Estimate was delivered would be a lie in an audit trail**, so the prototype
 leaves them outstanding and labels them as ours. The consequence is that a file
-reaches "approved with conditions" and never "clear to close", which is the
-honest outcome for a product that has not generated a single disclosure.
+reaches `referred` and never a decision word — "we're reviewing this
+ourselves", which is the honest thing to say to somebody whose pricing tests
+could not run, and the reason `referred` is an outcome rather than a shade of
+"approved with conditions".
 
 ## Vendors, one at a time
 
@@ -982,6 +984,92 @@ answered, so the effect is that one of the two assertions quietly loses rather
 than the chain breaking. No screen writes one predicate twice at once today —
 screen 1 and screen 2 are sequential, and a person's two files are two requests
 apart — which is why this is recorded rather than fixed.
+
+## Two things the join left standing, on purpose
+
+**An application that has ended still accepts the writes around its ending.**
+Bank, documents, consents, borrowers and the decision all answer success on a
+withdrawn file. The EVIDENCE is protected — `pinTridPieces` refuses a terminal
+application whoever asks, and reconciliation skips one — so nothing rewrites
+what a file was decided against. What is not refused is the write itself: a
+withdrawn file can still take a borrower row and a consent row. Refusing them
+is a new bar on a route a borrower already uses, and that is a product
+decision about what withdrawal means, not a tidy-up to slip into a commit
+scoped to something else. Recorded here so it is chosen rather than inherited.
+
+**The `irs` branch cannot be reached.** `branchesFor` offers a branch only for
+outstanding work whose `source` is one the borrower must personally supply, and
+no requirement on the tax-transcript screen carries one — the 4506-C is a
+signature we already collect on screen 4, and the pull is ours. The route, the
+page and the vocabulary all exist; nothing routes to them. Either the branch is
+dead vocabulary or `data/v1-build.csv` is missing a row that would make it
+live, and that is a question for the sheet rather than for the code.
+
+## Which ending the review screen renders, and in what order
+
+The endings used to be chosen by the arithmetic: a monthly payment and a
+debt-to-income ratio that computed meant "Your Loan Estimate", whatever the
+engine had concluded. They are chosen by the decided word and the
+application's state now. Four parts of that order were arguable, so they are
+written down rather than left in the code to be re-litigated.
+
+**Work the borrower can still finish outranks a referral.** The natural
+reading puts `referred` first — it is the outcome this commit exists to make
+sayable, and it must never render as an estimate. But a referred file that
+still owes a paystub is already in `awaiting_borrower`, and the pill above the
+ending reads "Needs you". The referred words say "Nothing is needed from you
+right now" and render no branch cards, so putting them first tells a borrower
+to act and then gives them nothing to act on. A referral has decided nothing;
+the branch cards are the only thing on that screen the borrower can do. The
+estimate is still unreachable from `referred` either way, which is the part
+that had to hold.
+
+**A decided word only renders once the machine has taken its edge.**
+`POST /files/:id/decision` records the computation whether or not there is an
+edge for it, on purpose — the row is evidence the engine ran. From
+`awaiting_borrower` neither a decline nor a counteroffer is legal, so the
+ledger writes `decision_not_applied` and the file stays where it is. Reading
+the word off the row alone put "Not that loan — but here's one we can do"
+under a "Needs you" pill for an application nobody had counter-offered, which
+is the same collapse as a refer wearing an approval. The ending checks the
+state the word lands on: `adverse_action_pending` or `denied` for a decline,
+`counteroffer_outstanding` for a counteroffer. A file with no application has
+nothing to check against, so there the outcome is all there is.
+
+**A decline is read before the file is read as "ended".** `denied` is itself a
+terminal state, and terminal states render as their own history and nothing
+else. That would have hidden the recorded reasons on the one state the written
+notice is actually owed from, so the adverse ending is chosen first.
+
+**`approved` is left out of the states that render as the state.** The list of
+states past deciding otherwise reads as "at or after a decision", and
+`approved` is plainly one of those — a `clear_to_close` outcome lands the
+application there. It is excluded anyway, because the control that records the
+borrower's intent to proceed exists on exactly one surface: inside the estimate
+ending. Listing `approved` rendered the best outcome the product can reach as a
+pill and a Done button, and left APP-007 with no control on any screen. The
+departure is one state wide — `clear_to_close`, `closing`, `rescission_pending`
+and `funded` all still read as their state, because there the estimate really
+is behind the file.
+
+## The one line a screen says instead of the state's
+
+`ApplicationStanding` renders the state's own heading beside the pill on every
+screen — only the heading; a state's body is written for the gallery and never
+reaches a file page — with one override, used once: the review screen before
+the signature. That file is `in_underwriting`, because the bank screen posts
+the decision before it navigates to the review screen and the review screen
+posts one itself when it arrives without one. Its heading is "Being decided",
+printed directly above the button asking the borrower to sign the thing that
+would let it be; a file that still owes a branch is `awaiting_borrower`, and
+names the branch rather than the signature. Nothing in the ledger can fix
+either from below, because `esign` is deliberately outside the obligations the
+flow tracks, so no state ever reads "Needs you" for a missing signature. Making
+the signature an obligation was the alternative and it is the larger change: it
+would put a `borrower_owes` row on every file between the bank screen and the
+signature, which is a claim about what the borrower owes us, not a fix to a
+heading. The pill and the date stay the state's; only the heading belongs to
+the view.
 
 ## Still outstanding
 

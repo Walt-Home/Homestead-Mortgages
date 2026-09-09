@@ -15,8 +15,9 @@ import {
   DOCUMENT_SATISFIABLE,
   PAYROLL_SATISFIABLE,
 } from "@hm/shared";
+import type { LoanFile } from "@hm/shared";
 import { REQUIREMENTS, DANGLING_REFERENCES } from "../generated.js";
-import { CONDITIONS } from "../conditions.js";
+import { CONDITIONS, evaluateCondition } from "../conditions.js";
 import { EVALUATORS } from "../satisfaction.js";
 import { EDGES, topologicalOrder } from "../graph.js";
 
@@ -166,5 +167,33 @@ describe("the branch rule names requirements that exist", () => {
       expect(r!.source, id).toBe("connect_payroll");
       expect(BRANCH_FOR_SCREEN[r!.screen as keyof typeof BRANCH_FOR_SCREEN], id).toBe("payroll");
     }
+  });
+});
+
+describe("a referral has not decided anything", () => {
+  /**
+   * Rule 2: `null` is not `false`. `denial_or_counteroffer` gates UW-016 —
+   * whether the borrower is owed written reasons — and a `referred` decision
+   * has concluded nothing about that. Answering `false` would let a file that
+   * is about to be declined report itself as owing no notice, which is the
+   * requirement disappearing at exactly the moment it starts to matter.
+   */
+  const outcomeIs = (outcome: string) =>
+    evaluateCondition("denial_or_counteroffer", {
+      decision: { outcome },
+    } as unknown as LoanFile);
+
+  it("cannot know yet on referred, the same as on pending", () => {
+    expect(outcomeIs("referred")).toBeNull();
+    expect(outcomeIs("pending")).toBeNull();
+  });
+
+  it("still answers for the words that have decided", () => {
+    // The precondition for the case above: this predicate does return
+    // booleans, so `null` is a deliberate third answer rather than the only
+    // one it knows how to give.
+    expect(outcomeIs("denied")).toBe(true);
+    expect(outcomeIs("counteroffer")).toBe(true);
+    expect(outcomeIs("approved_with_conditions")).toBe(false);
   });
 });

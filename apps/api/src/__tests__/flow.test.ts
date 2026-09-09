@@ -218,6 +218,9 @@ describe("the decision", () => {
     expect(decision.aus?.recommendation).toBe("refer");
     // And it must NOT quietly claim a clean bill of health.
     expect(decision.outcome).not.toBe("clear_to_close");
+    // Nor wear a decided word at all. `referred` is the outcome's own way of
+    // saying the recommendation could not be turned into a decision.
+    expect(decision.outcome).toBe("referred");
   });
 
   it("stamps the engine so a shadow decision is never mistaken for an agency one", async () => {

@@ -24,9 +24,10 @@
  * what put it there.
  */
 
-import type { ClockKind, PrincipalKind } from "@hm/db";
+import type { ClockKind, PrincipalKind, ScenarioOrigin } from "@hm/db";
 import { TERMINAL, type ApplicationEvent, type ApplicationState } from "@hm/shared";
 import { advanceIfLegal, moved, toDomainState, type Advance } from "./transition.js";
+import { fromCents } from "./money.js";
 import { reconcilePartyEvidence } from "./evidence.js";
 import { principalForParty, servicePrincipal } from "./party.js";
 import { reconcileObligations } from "./obligations.js";
@@ -55,6 +56,27 @@ export interface StandingClock {
   readonly breachedAt: string | null;
 }
 
+/**
+ * The terms this application is currently being decided against, in dollars.
+ *
+ * The review screen needs it for exactly one ending: a counteroffer is "not
+ * that loan, but here is one we can do", and without the terms of the loan we
+ * CAN do that sentence has nothing in it. `origin` is what separates the two:
+ * a scenario whose origin is not `BORROWER` is one we proposed, and a borrower
+ * reading their own numbers back as our alternative would be the counteroffer
+ * collapsing into the application.
+ *
+ * Cents become dollars here, at the boundary, because `res.json` throws on a
+ * bigint and every view converts in exactly one place.
+ */
+export interface StandingScenario {
+  readonly seq: number;
+  readonly origin: ScenarioOrigin;
+  readonly loanAmount: number;
+  readonly downPayment: number;
+  readonly valueEstimate: number | null;
+}
+
 export interface ApplicationStandingView {
   readonly id: string;
   readonly status: ApplicationState;
@@ -67,6 +89,8 @@ export interface ApplicationStandingView {
     readonly tolled: boolean;
     readonly tollingReason: string | null;
   } | null;
+  /** The one active scenario, or null for an application with none. */
+  readonly scenario: StandingScenario | null;
 }
 
 /** Where this file's application stands, or null when it has none. */
@@ -106,6 +130,16 @@ export async function applicationStanding(
           breachedAt: true,
         },
       },
+      scenarios: {
+        where: { isActive: true },
+        select: {
+          seq: true,
+          origin: true,
+          loanAmountCents: true,
+          downPaymentCents: true,
+          valueEstimateCents: true,
+        },
+      },
     },
   });
   if (!app) return null;
@@ -123,6 +157,9 @@ export async function applicationStanding(
     breachedAt: iso(c.breachedAt),
   }));
   const le = clocks.find((c) => c.kind === "TRID_LE_DELIVERY") ?? null;
+  // A partial unique index holds exactly one active scenario per application,
+  // so there is never a second row to choose between.
+  const active = app.scenarios[0] ?? null;
 
   return {
     id: app.id,
@@ -146,6 +183,16 @@ export async function applicationStanding(
           // set and the second is not.
           tolled: le.tolledFrom !== null && le.tolledUntil === null,
           tollingReason: le.tollingReason,
+        }
+      : null,
+    scenario: active
+      ? {
+          seq: active.seq,
+          origin: active.origin,
+          loanAmount: fromCents(active.loanAmountCents),
+          downPayment: fromCents(active.downPaymentCents),
+          valueEstimate:
+            active.valueEstimateCents === null ? null : fromCents(active.valueEstimateCents),
         }
       : null,
   };

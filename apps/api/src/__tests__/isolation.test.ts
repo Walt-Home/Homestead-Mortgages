@@ -46,3 +46,32 @@ describe("transactions run at the default isolation", () => {
     expect(files.some((f) => f.startsWith("__tests__"))).toBe(false);
   });
 });
+
+describe("the signature and the move it causes are one write", () => {
+  /**
+   * Read out of the source, because a crash between two committed
+   * transactions cannot be staged from inside one.
+   *
+   * `applicationSignedAt` is a latch: no route sets it twice, and nothing
+   * un-sets it. So a signature that commits before the ledger row that follows
+   * it leaves a file signed with its application still owing us the signature
+   * it already has — and no later request can repair that, because every
+   * writer of the move reads the latch and finds it already set.
+   */
+  const route = () => readFileSync(join(src, "routes", "application.ts"), "utf8");
+
+  it("writes the latch inside the transaction that settles the application", () => {
+    const source = route();
+    const start = source.indexOf("await prisma.$transaction(async (tx) => {");
+    expect(start, "the sign route no longer opens a transaction").toBeGreaterThan(-1);
+    const block = source.slice(start, source.indexOf("\n    });", start));
+
+    expect(block).toContain("tx.loanFile.update");
+    expect(block).toContain("applicationSignedAt");
+    expect(block).toContain("settleBorrowerAct");
+    // And nowhere else: a second writer outside the transaction is the bug
+    // back again under another name.
+    expect(source.match(/applicationSignedAt: new Date\(\)/g)).toHaveLength(1);
+    expect(source).not.toContain("prisma.loanFile.update");
+  });
+});

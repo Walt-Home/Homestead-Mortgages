@@ -18,8 +18,24 @@ import { NO_APPLICATION, timelineDate, wordsFor } from "../lib/ledger.js";
 
 export function ApplicationStanding({
   standing,
+  headline: override,
 }: {
   standing: ApplicationStandingView | null | undefined;
+  /**
+   * A line for this screen to say instead of the state's own.
+   *
+   * One screen needs it. The pre-signature review view asks for a signature
+   * that no state names — `esign` is deliberately outside the obligations the
+   * ledger tracks — and the state underneath it is `in_underwriting`, because
+   * the decision is posted before the borrower ever reaches this screen. Its
+   * heading is "Being decided", which denies the signature the button beside
+   * it is asking for; a file that still owes a branch reads
+   * `awaiting_borrower` instead, and names the branch rather than the
+   * signature. Only the heading is rendered here — the state's body never
+   * reaches a screen through this component — so only the heading is what an
+   * override replaces. The pill and the date stay the state's.
+   */
+  headline?: string;
 }) {
   // Undefined is "not read yet", null is "read, and there is none". Collapsing
   // the two painted "No application on record" on every cold load of a file
@@ -32,7 +48,7 @@ export function ApplicationStanding({
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       {entry && <StatusPill tone={entry.tone}>{entry.pill}</StatusPill>}
-      <span className="text-sm text-ink-soft">{headline(standing)}</span>
+      <span className="text-sm text-ink-soft">{override ?? headline(standing)}</span>
       <span className="text-xs text-ink-faint">since {timelineDate(standing.statusEnteredAt)}</span>
     </div>
   );

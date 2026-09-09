@@ -203,14 +203,21 @@ applicationRouter.post(
       signed.push(kind);
     }
 
-    await prisma.loanFile.update({ where: { id }, data: { applicationSignedAt: new Date() } });
-    await recordEvent(id, "application_signed", "borrower", { documents: signed });
-
+    // The signature and the move it causes, in one transaction.
+    //
+    // They used to be three writes in a row, and a crash between the first and
+    // the last left a file signed with its application still waiting on the
+    // borrower for the signature it already has — a state nothing else can
+    // repair, because the signature latch is set and no route sets it twice.
+    //
     // Signing is the borrower supplying the last thing that was theirs to
     // supply, so the ball leaves their court here. `underwriting_began` is
     // deliberately NOT written: the decision the review screen asks for next
     // writes it, and one edge wants one writer.
     await prisma.$transaction(async (tx) => {
+      await tx.loanFile.update({ where: { id }, data: { applicationSignedAt: new Date() } });
+      await recordEvent(id, "application_signed", "borrower", { documents: signed }, undefined, tx);
+
       const app = await applicationForFile(tx, id);
       if (app) {
         await settleBorrowerAct(tx, {

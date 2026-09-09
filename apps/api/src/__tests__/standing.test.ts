@@ -10,9 +10,9 @@
  *
  * Two behaviors get more attention than the rest, because both are ways a
  * borrower is told something false. A decision the engine could not compute
- * must not move the file to an approval word — the recommendation is `refer`
- * and the outcome union has no word for it yet, so nothing moves. And a
- * sanctions hold must not be lifted by a bank login, an upload or a page load:
+ * must not move the file to an approval word — the recommendation is `refer`,
+ * the outcome is `referred`, and `OUTCOME_EVENT` gives it no edge, so nothing
+ * moves. And a sanctions hold must not be lifted by a bank login, an upload or a page load:
  * the machine allows those edges from `suspended` because a person can take
  * them, and no route here is that person.
  *
@@ -545,15 +545,18 @@ describe("the decision", () => {
 
   it("asks the engine, and refuses to call a refer an approval", async () => {
     // No APR, no APOR and no fee schedule, so the compliance tests are blocked
-    // and the recommendation is `refer`. The outcome union has no word for
-    // that yet and the engine reports `approved_with_conditions`; moving the
-    // file on it would tell a borrower they were approved with conditions on
-    // a calculation nobody made.
+    // and the recommendation is `refer`. The outcome is `referred`, which has
+    // no edge out of underwriting — moving the file on it would tell a
+    // borrower something was decided by a calculation nobody made.
     const { user, fileId } = await connected();
     const res = await decide(user.id, fileId);
     expect(res.status).toBe(201);
     expect(res.body.applicationState.status).toBe("in_underwriting");
     expect((await ledgerOf(fileId)).at(-1)).toEqual(["underwriting_began", "engine_asked"]);
+    // The word is on the stored row, not only in the engine's return value.
+    const stored = await prisma.decision.findFirstOrThrow({ where: { loanFileId: fileId } });
+    expect(stored.outcome).toBe("referred");
+    expect(stored.ausRecommendation).toBe("refer");
 
     // Twice more. A repeat has no edge, so nothing is written.
     await decide(user.id, fileId);
@@ -590,6 +593,31 @@ describe("the decision", () => {
     const res = await decide(user.id, fileId, MARKET);
     expect(res.body.applicationState.status).toBe("counteroffer_outstanding");
     expect((await ledgerOf(fileId)).at(-1)).toEqual(["decided_counteroffer", "engine_ineligible"]);
+  });
+
+  it("records a decision it cannot apply, and moves nothing", async () => {
+    // The engine answers on what it has: a 99% LTV purchase is ineligible
+    // whether or not the bank is connected, so the word on the row is
+    // `counteroffer`. The file is still waiting on that bank, though, and
+    // `awaiting_borrower` has no edge to a counteroffer — so nothing moves,
+    // the file's own events say the decision was not applied, and the pill
+    // still reads "Needs you". This is the state the review screen has to
+    // survive: a decided word on a row over an application nobody decided.
+    const { user, fileId } = await throughScreenTwo();
+    await callAs(user.id, [fileRouter], "PATCH", `/${fileId}`, {
+      loanAmount: 411_000,
+      downPayment: 4_000,
+    });
+    const before = await ledgerOf(fileId);
+
+    const res = await decide(user.id, fileId);
+    expect(res.status).toBe(201);
+    expect(res.body.applicationState.status).toBe("awaiting_borrower");
+
+    const stored = await prisma.decision.findFirstOrThrow({ where: { loanFileId: fileId } });
+    expect(stored.outcome).toBe("counteroffer");
+    expect(await ledgerOf(fileId)).toEqual(before);
+    expect(await eventCount(fileId, "decision_not_applied")).toBe(1);
   });
 
   it("declines a high-cost loan, and the database opens the notice clock", async () => {

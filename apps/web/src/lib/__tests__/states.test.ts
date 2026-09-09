@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { APPLICATION_STATES } from "@hm/shared";
+import { APPLICATION_STATES, BRITISH, DAY_FIRST, PROMISES, REQ_ID } from "@hm/shared";
 import { ALL_STATES, STATE_GROUPS } from "../states.js";
 
 describe("every state is written out", () => {
@@ -33,18 +33,10 @@ describe("every state is written out", () => {
 });
 
 describe("no copy promises something the system cannot do", () => {
-  /**
-   * There is no mailer in this repo — no Resend yet, no SMTP, nothing. Copy
-   * that says we will email, write or call is a promise no code can keep, and
-   * on a status page a person can revisit for weeks it is a promise they will
-   * notice us breaking. "We'll put it here" is fine: the page is the delivery.
-   *
-   * Delete this test when a delivery record exists in the schema, and not
-   * before.
-   */
-  const PROMISES =
-    /\b(we'?ll (e-?mail|write|call|post|send)|we will e-?mail|by e-?mail|in the (post|mail)|letter (is )?(on its way|in the (post|mail))|get in touch|be in touch|reach out|contact you|give you a call|we'?ll tell you|we can tell you|tell you when|let you know|talk to (someone|us))\b/i;
-
+  // The regex lives in `@hm/shared`, with the reason it exists. It was written
+  // out here, again in `ledger.test.ts`, and once more for the review screen's
+  // endings — and three copies of one rule is three chances for one of them to
+  // be the lenient one.
   for (const s of ALL_STATES) {
     // The action label is checked too. The first version of this test read only
     // the heading and the body, and three real leaks were sitting in copy it
@@ -74,8 +66,6 @@ describe("no requirement ids reach a borrower", () => {
   // The borrower flow renders no requirement id, anywhere. `meaning` is the
   // gallery's own annotation and may name them; the heading, body and action
   // may not.
-  const REQ_ID = /\b(APP|CRD|INC|AST|UW|CLS)-\d{3}\b/;
-
   for (const s of ALL_STATES) {
     it(`${s.id} speaks in plain language`, () => {
       expect(`${s.heading} ${s.body} ${s.action ?? ""}`).not.toMatch(REQ_ID);
@@ -123,12 +113,6 @@ describe("groups", () => {
 });
 
 describe("American English, in copy a borrower reads", () => {
-  // House style, and it is not cosmetic here: a borrower who connects payroll
-  // and is then asked for "payslips" is being asked by two different products.
-  // `paystub` is what data/v1-build.csv, the requirements package and the live
-  // bank screen all say.
-  const BRITISH = /\b(payslip|cancelled|colour|behaviour|authoris\w*|instalment|whilst)\b/i;
-
   for (const s of ALL_STATES) {
     it(`${s.id} uses American spellings`, () => {
       expect(`${s.heading} ${s.body} ${s.pill} ${s.action ?? ""}`).not.toMatch(BRITISH);
@@ -136,10 +120,6 @@ describe("American English, in copy a borrower reads", () => {
   }
 
   it("writes dates the way a US mortgage does", () => {
-    // "11 September" reads as a typo to an American borrower and as correct to
-    // everyone who wrote it. Month first.
-    const DAY_FIRST =
-      /\b\d{1,2} (January|February|March|April|May|June|July|August|September|October|November|December)\b/;
     for (const s of ALL_STATES) {
       expect(`${s.heading} ${s.body}`, s.id).not.toMatch(DAY_FIRST);
     }

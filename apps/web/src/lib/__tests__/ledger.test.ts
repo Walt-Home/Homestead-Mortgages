@@ -9,7 +9,15 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { APPLICATION_EVENTS, APPLICATION_STATES, TRANSITION_REASONS } from "@hm/shared";
+import {
+  APPLICATION_EVENTS,
+  APPLICATION_STATES,
+  BRITISH,
+  DELIVERY_TIME,
+  PROMISES,
+  REQ_ID,
+  TRANSITION_REASONS,
+} from "@hm/shared";
 import {
   CLOCK_COPY,
   EVENT_WORDS,
@@ -20,21 +28,6 @@ import {
   wordsFor,
 } from "../ledger.js";
 import { entryFor } from "../states.js";
-
-/**
- * The copy rules, in the spellings `states.test.ts` uses.
- *
- * DELIVERY_TIME is new here and is the same class of promise as PROMISES: no
- * mailer exists, and no calendar of federal holidays exists either, so "within
- * three business days" is a date this product cannot commit to any more than
- * it can commit to a channel.
- */
-const PROMISES =
-  /\b(we'?ll (e-?mail|write|call|post|send)|we will e-?mail|by e-?mail|in the (post|mail)|letter (is )?(on its way|in the (post|mail))|get in touch|be in touch|reach out|contact you|give you a call|we'?ll tell you|we can tell you|tell you when|let you know|talk to (someone|us))\b/i;
-const DELIVERY_TIME =
-  /\b(within|by|in) (a few|\d+|one|two|three|five|ten) (business |working )?(days?|hours?|weeks?)\b/i;
-const REQ_ID = /\b(APP|CRD|INC|AST|UW|CLS)-\d{3}\b/;
-const BRITISH = /\b(payslip|cancelled|colour|behaviour|authoris\w*|instalment|whilst)\b/i;
 
 /** Every distinct string a borrower could read out of this module. */
 const COPY = uniq([

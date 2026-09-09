@@ -30,6 +30,8 @@
  * and not there renders as a blank card; a test in the web app catches that.
  */
 
+import type { DecisionOutcome } from "./types/decision.js";
+
 /** Every state an application can be in. Ordered roughly as a file travels. */
 export const APPLICATION_STATES = [
   "draft",
@@ -282,6 +284,34 @@ export const MACHINE = {
   canceled: {},
   expired: {},
 } as const satisfies Edges;
+
+/**
+ * The edge each outcome takes out of underwriting, or null for the two that
+ * take none.
+ *
+ * `pending` has decided nothing. `referred` has decided nothing EITHER, and
+ * that is the whole reason it exists: the engine could not compute an input it
+ * needed, so there is no verdict to record and the file stays where a person
+ * can pick it up. Mapping it to `decided_conditional` would put a file nobody
+ * has looked at into "Approved with conditions" — the collapse the outcome
+ * union was split to prevent.
+ *
+ * `clear_to_close` takes the file to the STATE `approved`, not to the state of
+ * the same name: clear-to-close means the disclosures are delivered and their
+ * waiting period has run, and no delivery record exists in this product.
+ *
+ * It lives beside the machine rather than beside the engine because it is a
+ * statement about edges, and a test asserts every non-null value here is legal
+ * from `in_underwriting`.
+ */
+export const OUTCOME_EVENT: Record<DecisionOutcome, ApplicationEvent | null> = {
+  pending: null,
+  referred: null,
+  approved_with_conditions: "decided_conditional",
+  counteroffer: "decided_counteroffer",
+  denied: "decided_decline",
+  clear_to_close: "decided_approved",
+};
 
 /** Thrown when a caller asks for an edge the machine does not have. */
 export class IllegalTransition extends Error {

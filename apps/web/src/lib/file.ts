@@ -117,6 +117,19 @@ export interface ApplicationStandingView {
     breachedAt: string | null;
   }[];
   loanEstimate: { dueAt: string; tolled: boolean; tollingReason: string | null } | null;
+  /**
+   * The terms the application is currently being decided against, in dollars.
+   * The counteroffer ending renders them, and `origin` is what makes it
+   * honest: `BORROWER` is the loan they asked for, and any other origin is one
+   * we proposed.
+   */
+  scenario: {
+    seq: number;
+    origin: string;
+    loanAmount: number;
+    downPayment: number;
+    valueEstimate: number | null;
+  } | null;
 }
 
 export interface LoanFileResponse {
@@ -150,6 +163,31 @@ export function useLoanFile(fileId: string | undefined) {
  */
 export function needsRepair(error: unknown): boolean {
   return error instanceof ApiError && error.code === "PROJECTION_ERROR";
+}
+
+/**
+ * The screen a file has to be on instead of the one that was asked for.
+ *
+ * Null is "leave it where it is". The only answer this gives is the review
+ * screen, and only for an application that has ended or is held: a withdrawn,
+ * canceled or declined file opened at the bank screen asks the borrower to
+ * connect a bank for a request that is over, and a file suspended on a
+ * sanctions near-match asks the same for one that is stopped. The work would
+ * not land either: `pinTridPieces` refuses an application that has ended, so a
+ * save on one writes a row and moves nothing.
+ *
+ * `screen` is the last path segment, not the step the shell is highlighting —
+ * a branch path renders under the review step and would otherwise look like it
+ * had already landed. The review screen itself is exempt, or the redirect
+ * would have nowhere to go.
+ */
+export function landingScreen(
+  application: { readonly status: string; readonly terminal: boolean } | null | undefined,
+  screen: string,
+): "review" | null {
+  if (!application) return null;
+  const stopped = application.terminal || application.status === "suspended";
+  return stopped && screen !== "review" ? "review" : null;
 }
 
 export function hasConsent(file: LoanFileView | undefined, kind: string): boolean {

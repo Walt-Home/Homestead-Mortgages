@@ -221,7 +221,11 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
 
   denial_or_counteroffer: (f) => {
     const outcome = f.decision?.outcome;
-    if (!outcome || outcome === "pending") return null;
+    // `referred` is "cannot know yet", exactly like `pending`. A referral has
+    // decided nothing, so whether a notice is owed is still an open question —
+    // and answering `false` would let a file that is about to be declined
+    // report itself as having no adverse-action obligation.
+    if (!outcome || outcome === "pending" || outcome === "referred") return null;
     return outcome === "denied" || outcome === "counteroffer";
   },
 };

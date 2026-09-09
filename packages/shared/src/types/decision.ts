@@ -9,8 +9,15 @@
  * matches DU's so a real submission can replace the shadow engine behind the
  * same interface — see `docs/decisions.md`.
  */
-export type AusRecommendation =
-  "approve_eligible" | "approve_ineligible" | "refer" | "refer_with_caution" | "out_of_scope";
+export const AUS_RECOMMENDATIONS = [
+  "approve_eligible",
+  "approve_ineligible",
+  "refer",
+  "refer_with_caution",
+  "out_of_scope",
+] as const;
+
+export type AusRecommendation = (typeof AUS_RECOMMENDATIONS)[number];
 
 export interface AusFinding {
   /** The requirement this finding maps to, where one exists (UW-003). */
@@ -102,8 +109,31 @@ export interface ComplianceTests {
   };
 }
 
-export type DecisionOutcome =
-  "pending" | "approved_with_conditions" | "clear_to_close" | "counteroffer" | "denied";
+/**
+ * What the engine last concluded, as a closed set.
+ *
+ * `referred` is the one that had to be added: the engine could not compute at
+ * least one input it needed (recommendation `refer`) and no computed result
+ * overrides it. It is NOT a credit decision — nobody has looked at this file —
+ * so the application does not leave `in_underwriting` on it and no adverse
+ * action is owed. Before it existed, `determineOutcome` fell through to
+ * `approved_with_conditions`, which told a borrower whose APR and APOR were
+ * never known that they had been approved.
+ *
+ * The database holds the same list as a CHECK constraint
+ * (`20260909130000_decisions_outcome_is_closed`), so a misspelled word is a
+ * failed insert rather than a pill that renders nothing.
+ */
+export const DECISION_OUTCOMES = [
+  "pending",
+  "referred",
+  "approved_with_conditions",
+  "clear_to_close",
+  "counteroffer",
+  "denied",
+] as const;
+
+export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
 
 export interface Decision {
   readonly outcome: DecisionOutcome;

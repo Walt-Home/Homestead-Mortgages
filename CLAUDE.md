@@ -116,7 +116,9 @@ computation that cannot run records `blocked` with what it is waiting for. A
 figure with no explanation is a bug in the engine, not in the copy. The engine
 also returns `refer` rather than `approve_eligible` when any input was blocked
 — "we could not compute this" and "we computed it and you passed" must never
-collapse into the same checkmark.
+collapse into the same checkmark. A `refer` becomes the outcome `referred`,
+which carries no edge out of underwriting and no adverse-action obligation: it
+is not a decision, and nothing downstream may render it as one.
 
 ## The design system is a package, and it has one source of truth
 

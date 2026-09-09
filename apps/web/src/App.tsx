@@ -18,7 +18,12 @@ import { Footer } from "./components/Footer.js";
 import { api, ApiError, type Assessment } from "./lib/api.js";
 import { useAuth } from "./lib/auth.js";
 import { StatesGalleryPage } from "./pages/StatesGalleryPage.js";
-import { needsRepair, useLoanFile, type ApplicationStandingView } from "./lib/file.js";
+import {
+  landingScreen,
+  needsRepair,
+  useLoanFile,
+  type ApplicationStandingView,
+} from "./lib/file.js";
 import {
   REPAIR_SCREEN,
   STAGE_TO_SCREEN,
@@ -146,6 +151,10 @@ export function App() {
  * needs repair to screen 2 before rendering anything under it, and a file
  * that is not theirs to NotYours. What is left with no stage is a load that
  * failed for some other reason, and the file list is the honest place for it.
+ *
+ * A file whose application has ended or is held never reaches this either.
+ * FileShell sends it to the review screen from wherever it was opened, which
+ * includes this route.
  */
 function ResumeToStage() {
   const { fileId } = useParams<{ fileId: string }>();
@@ -224,6 +233,18 @@ function FileShell() {
   if (needsRepair(file.error) && last !== REPAIR_SCREEN) {
     return <Navigate to={`/f/${fileId}/${REPAIR_SCREEN}`} replace />;
   }
+
+  /*
+   * A file that has ended, or is held, is not a file to do work on.
+   *
+   * It lives here rather than on the bare /f/:id route because nothing in the
+   * product links there: the file list links straight at /f/:id/<screen>, so a
+   * check that only guarded the index guarded the one door nobody uses, and a
+   * withdrawn file still opened the bank screen. Every route under /f/:id
+   * passes through here.
+   */
+  const landing = landingScreen(file.data?.applicationState, last);
+  if (landing) return <Navigate to={`/f/${fileId}/${landing}`} replace />;
 
   return (
     <Shell

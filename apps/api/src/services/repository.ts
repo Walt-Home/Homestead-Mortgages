@@ -28,7 +28,7 @@ import type {
   SanctionsScreening,
   LienSearch,
 } from "@hm/shared";
-import { TERMINAL } from "@hm/shared";
+import { DECISION_OUTCOMES, TERMINAL } from "@hm/shared";
 import type { Prisma } from "@hm/db";
 import { AppError } from "../middleware/error-handler.js";
 import { displayNameFrom, factMapsByParty, requireIdentity } from "./borrower-projection.js";
@@ -36,6 +36,37 @@ import type { Db } from "./db.js";
 import { liveFactsByParty } from "./party.js";
 import { sixPieces } from "./evidence.js";
 import { toDomainState } from "./transition.js";
+
+/**
+ * The stored outcome, parsed rather than asserted.
+ *
+ * `decisions.outcome` is a `String` column, and the cast this replaces would
+ * hand any text in it straight to the engine and the screens — so a row
+ * written by an older build, or by hand, could reach the review screen as an
+ * outcome nothing has copy for and render as a blank ending. The database also
+ * holds the list as a CHECK constraint; this is the belt to that brace, and it
+ * throws where the value is read rather than where it is shown.
+ */
+function parseOutcome(stored: string): Decision["outcome"] {
+  const known = readOutcome(stored);
+  if (!known) throw new AppError(500, `Unknown decision outcome ${stored}.`, "DECISION_UNREADABLE");
+  return known;
+}
+
+/**
+ * The same read, for the list, where one bad row must not be the whole answer.
+ *
+ * `parseOutcome` throws, which is right where a single file is being read: the
+ * request is about that file, and half of it is not an answer. The list is a
+ * different question — it spans every file the user may see, including the
+ * demo files everybody may see — so one unreadable word there took down the
+ * front door for every account at once, and a demo row would have taken it
+ * down for all of them permanently. Null is the honest answer for that one
+ * file: no outcome, rather than no list.
+ */
+function readOutcome(stored: string): Decision["outcome"] | null {
+  return DECISION_OUTCOMES.find((o) => o === stored) ?? null;
+}
 
 /** Prisma returns Decimal; the domain uses number. One place to convert. */
 function num(value: Prisma.Decimal | null): number | null {
@@ -208,7 +239,7 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
   const decisionRow = row.decisions[0];
   const decision: Decision | null = decisionRow
     ? {
-        outcome: decisionRow.outcome as Decision["outcome"],
+        outcome: parseOutcome(decisionRow.outcome),
         computedAt: decisionRow.computedAt.toISOString(),
         aus: {
           casefileId: decisionRow.ausCasefileId,
@@ -549,8 +580,15 @@ export async function listAccessibleFiles(userId: string) {
 
   // `borrowers[0].firstName` is the shape callers already read, so no caller
   // changes.
-  return rows.map(({ borrowers, userId: owner, application, ...rest }) => ({
+  return rows.map(({ borrowers, userId: owner, application, decisions, ...rest }) => ({
     ...rest,
+    // Read here too — the list is the other place a stored outcome reaches a
+    // screen — but a word nothing has copy for drops that one decision instead
+    // of failing the request. The file still lists, with no outcome on it.
+    decisions: decisions.flatMap((d) => {
+      const outcome = readOutcome(d.outcome);
+      return outcome ? [{ ...d, outcome }] : [];
+    }),
     mine: owner === userId,
     applicationState: application
       ? {

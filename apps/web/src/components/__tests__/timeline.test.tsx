@@ -18,6 +18,7 @@ import { ApplicationStanding } from "../ApplicationStanding.js";
 import { ApplicationTimeline } from "../ApplicationTimeline.js";
 import type { ApplicationStandingView } from "../../lib/file.js";
 import { NO_APPLICATION } from "../../lib/ledger.js";
+import { SIGN_LEAD } from "../../lib/outcomes.js";
 
 const STANDING: ApplicationStandingView = {
   id: "8f1a3e3e-1f5e-4c1d-9d6a-0b6a2c0c9f11",
@@ -61,6 +62,16 @@ const STANDING: ApplicationStandingView = {
     dueAt: "2026-09-10T03:59:59.999Z",
     tolled: true,
     tollingReason: "no_delivery_channel_configured",
+  },
+  // The terms the file was received on. Neither component renders them — the
+  // counteroffer ending on the review screen is their only reader — and that
+  // is the claim: no figure a borrower did not ask for leaks into the header.
+  scenario: {
+    seq: 1,
+    origin: "BORROWER",
+    loanAmount: 332_000,
+    downPayment: 83_000,
+    valueEstimate: 415_000,
   },
 };
 
@@ -133,6 +144,25 @@ describe("the standing line", () => {
     expect(markup).toContain("Being decided");
   });
 
+  it("lets one screen say the line the state cannot", () => {
+    // The state the override exists for. A file reaching the signature has
+    // already had its decision posted from the bank screen, so it is
+    // `in_underwriting` and its heading is "Being decided" — which denies the
+    // signature the button below it is asking for, and which no state can fix
+    // because e-sign is outside the obligations the flow tracks. The pill and
+    // the date stay the state's; only the heading changes.
+    const markup = renderToStaticMarkup(
+      <ApplicationStanding
+        standing={{ ...STANDING, status: "in_underwriting" }}
+        headline={SIGN_LEAD}
+      />,
+    );
+    expect(markup).toContain(SIGN_LEAD);
+    expect(markup).not.toContain("Being decided");
+    expect(markup).toContain("In review");
+    expect(markup).toContain("since September 4, 2026");
+  });
+
   it("says so, with no pill, when there is no application on record", () => {
     const markup = renderToStaticMarkup(<ApplicationStanding standing={null} />);
     expect(markup).toContain(NO_APPLICATION);
@@ -164,14 +194,22 @@ describe("where the review screen puts them", () => {
     // Everything after the shared header is defined; the spinner above it is
     // not an ending and shows no state.
     const body = src.slice(src.indexOf("const header = ("));
-    const headers = [...body.matchAll(/\{header\}/g)].map((m) => m.index ?? -1);
+    const headers = [...body.matchAll(/\{(?:header|signingHeader)\}/g)].map((m) => m.index ?? -1);
     const headings = [...body.matchAll(/<h1[\s>]/g)].map((m) => m.index ?? -1);
 
-    // The three endings and the pre-signature view.
-    expect(headings).toHaveLength(4);
-    expect(headers).toHaveLength(headings.length);
+    // Numbers rather than ranges, so an ending added without its standing is a
+    // failing test. Seven headings — referred, adverse, counteroffer, estimate,
+    // branches, ours, and the pre-signature view — and one header more than
+    // that, because the ending for a file that has ended IS the header: the
+    // pill, the state's heading and the history, with no heading of its own.
+    expect(headings).toHaveLength(7);
+    expect(headers).toHaveLength(8);
+
+    let previous = -1;
     for (const [i, heading] of headings.entries()) {
-      expect(headers[i], `ending ${i + 1}`).toBeLessThan(heading);
+      const between = headers.filter((h) => h > previous && h < heading);
+      expect(between.length, `ending ${i + 1}`).toBeGreaterThan(0);
+      previous = heading;
     }
   });
 
@@ -187,12 +225,24 @@ describe("where the review screen puts them", () => {
    */
   it("does not tell a borrower there is no application before the file is read", () => {
     const src = readFileSync(new URL("../../pages/ReviewPage.tsx", import.meta.url), "utf8");
-    const start = src.indexOf("const header = (");
-    const header = src.slice(start, src.indexOf(");", start));
-    const line = header.split("\n").find((l) => l.includes("<ApplicationStanding"));
+    // One binding now, read by the standing, the history and the ending rule,
+    // so the three cannot disagree about what an empty history means.
+    const line = src.split("\n").find((l) => l.includes("const standing ="));
     expect(line).toBeDefined();
     // The collapse, and the thing that has to survive it.
     expect(line).not.toMatch(/data\?\.applicationState\s*\?\?\s*null/);
     expect(line).toContain("undefined");
+
+    const start = src.indexOf("const header = (");
+    const header = src.slice(start, src.indexOf(");", start));
+    expect(header).toContain("<ApplicationStanding standing={standing} />");
+
+    // The one view that overrides the state's words still shows the same pill,
+    // the same date and the same history — only the line beside them differs.
+    const signStart = src.indexOf("const signingHeader = (");
+    const signing = src.slice(signStart, src.indexOf(");", signStart));
+    expect(signing).toContain("<ApplicationStanding standing={standing} headline={SIGN_LEAD} />");
+    expect(signing).toContain("<ApplicationTimeline standing={standing} />");
+    expect(header).toContain("<ApplicationTimeline standing={standing} />");
   });
 });

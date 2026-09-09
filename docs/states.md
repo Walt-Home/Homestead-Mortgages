@@ -18,13 +18,13 @@ codebase spends `docs/decisions.md` refusing to tell.
 
 Five fields carry something state-like, and they answer to different masters.
 
-| Field                                    | Where                          | Values                                                                        | Owns                           |
-| ---------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------- | ------------------------------ |
-| `loan_files.stage`                       | Postgres enum `FlowStage`      | 10, ordered                                                                   | Which screen to resume to      |
-| `decisions.outcome`                      | `String`, append-only table    | `pending` `approved_with_conditions` `clear_to_close` `counteroffer` `denied` | What the engine last concluded |
-| `loan_conditions.status`                 | `String`, default `open`       | `open` `submitted` `cleared` `waived`                                         | One outstanding work item      |
-| `connector_links.status`                 | `String`, default `active`     | `active` `needs_reauth` `revoked` `error`                                     | One vendor connection          |
-| `borrowers.identity_verification_status` | `String`, nullable, no default | `pending` `verified` `failed`                                                 | One hosted ID-vendor session   |
+| Field                                    | Where                          | Values                                                                                   | Owns                           |
+| ---------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------ |
+| `loan_files.stage`                       | Postgres enum `FlowStage`      | 10, ordered                                                                              | Which screen to resume to      |
+| `decisions.outcome`                      | `String`, append-only table    | `pending` `referred` `approved_with_conditions` `clear_to_close` `counteroffer` `denied` | What the engine last concluded |
+| `loan_conditions.status`                 | `String`, default `open`       | `open` `submitted` `cleared` `waived`                                                    | One outstanding work item      |
+| `connector_links.status`                 | `String`, default `active`     | `active` `needs_reauth` `revoked` `error`                                                | One vendor connection          |
+| `borrowers.identity_verification_status` | `String`, nullable, no default | `pending` `verified` `failed`                                                            | One hosted ID-vendor session   |
 
 `stage` is a **high-water mark, not a cursor** — where you are is the URL, how
 far you got is the stage, and `advanceStage` refuses to move it backward. Ten
@@ -49,14 +49,18 @@ names a stage and a screen path directly.
   and the requirement that reads it (UW-016) is satisfied by the array being
   non-empty rather than by a notice existing. A `DisclosureRecord` kind
   `adverse_action` exists and nothing in the engine ever checks it.
-- **We could not compute this.** `determineOutcome` falls through to
-  `approved_with_conditions`, so a `refer` (an input we could not compute) and a
-  `refer_with_caution` (findings we did compute) are indistinguishable at the
-  outcome field. A clean pass is distinguishable in principle — `approve_eligible`
-  carries no findings, so it has no open conditions and lands on
-  `clear_to_close` — but the four screens never produce one, because the web
-  posts an empty body to `POST /files/:id/decision` and all four compliance
-  tests block without an APR, an APOR and a fee schedule.
+- **We could not compute this.** The outcome field now distinguishes it.
+  `determineOutcome` answers `referred` for a `refer` — an input the engine
+  could not compute — and leaves `approved_with_conditions` to mean exactly
+  `refer_with_caution`, which is findings we DID compute. `referred` is not a
+  credit decision: `OUTCOME_EVENT` gives it no edge, so the application stays
+  in `in_underwriting` where a person can pick it up, no adverse action is
+  owed, and `denial_or_counteroffer` answers `null` rather than `false`. This
+  is what a real-flow file reaches on staging today, because the web posts an
+  empty body to `POST /files/:id/decision` and all four compliance tests block
+  without an APR, an APOR and a fee schedule. A clean pass is reachable in
+  principle — `approve_eligible` carries no findings, so it has no open
+  conditions and lands on `clear_to_close` — but not without market data.
 - **Anything after funding.** There is no object for a mortgage that exists in
   the world. There is also no way to hold one for a Grander portfolio member: a
   file can only name an owner through `users.id`, and a `users` row exists only

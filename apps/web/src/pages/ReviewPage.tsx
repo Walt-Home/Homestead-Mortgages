@@ -1,5 +1,5 @@
 /**
- * Screen 4 — review and submit, then one of three answers.
+ * Screen 4 — review and submit, then whichever answer the file actually got.
  *
  * Two things: the fair-lending questions, and a signature.
  *
@@ -12,11 +12,12 @@
  * expensive place to put one. They are still shown, in full, above the
  * signature — that part is not optional.
  *
- * **Three endings, and the happy one is the default.** A borrower who reaches
- * here with everything verified gets a Loan Estimate. One who is missing
- * something gets told exactly where to enter it. One whose file needs a person
- * gets told that, plainly, with a timeframe. Nothing silently lands on "we'll
- * be in touch" because a number failed to compute.
+ * **The ending is chosen by the outcome and the state, never by the
+ * arithmetic.** `endings.ts` holds the rule and `outcomes.ts` holds the words;
+ * this file only renders them. A borrower whose file was decided reads the
+ * decision, a borrower whose file ended reads its history, and only a file
+ * that is genuinely approved and still pre-approval gets a Loan Estimate.
+ * Nothing lands on "we'll be in touch" because a number failed to compute.
  *
  * Demographics render only for a primary residence. Regulation B applies to a
  * principal residence, and collecting when it is not required is itself a
@@ -37,7 +38,16 @@ import { ApplicationTimeline } from "../components/ApplicationTimeline.js";
 import { Branches } from "../components/Branches.js";
 import { Working } from "../components/Working.js";
 import { branchesFor } from "../lib/flow.js";
+import { endingFor, proposedTerms } from "../lib/endings.js";
+import {
+  ADVERSE_COPY,
+  COUNTEROFFER_COPY,
+  ENDING_COPY,
+  REFERRED_COPY,
+  SIGN_LEAD,
+} from "../lib/outcomes.js";
 import type { Assessment } from "../lib/api.js";
+import type { DecisionOutcome } from "@hm/shared";
 
 interface Declaration {
   readonly clean: string;
@@ -51,6 +61,16 @@ interface Ratios {
   dtiBack: number | null;
   ltv: number | null;
   totalQualifyingIncome: number | null;
+}
+
+/**
+ * The part of the stored decision this screen reads. `outcome` is the word the
+ * engine reached, and it — not the arithmetic — decides which ending renders.
+ */
+interface DecisionView {
+  outcome: DecisionOutcome;
+  ratios: Ratios;
+  adverseActionReasons?: string[];
 }
 
 const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
@@ -82,10 +102,13 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   const signed = Boolean(file?.applicationSignedAt);
   const intentRecorded = Boolean(file?.intentToProceedAt);
   const primaryResidence = file?.property?.occupancy === "primary_residence";
-  const decision = file?.decision as { ratios: Ratios } | null | undefined;
+  const decision = file?.decision as DecisionView | null | undefined;
   const ratios = decision?.ratios;
   const payrollLinked = file?.payroll != null;
   const branches = branchesFor(assessment, payrollLinked);
+  // Undefined until the file has been read, null once it has been read and
+  // there is none — the same three-state value the header renders.
+  const standing = data ? (data.applicationState ?? null) : undefined;
 
   /**
    * Make sure a decision exists before deciding what to render.
@@ -190,7 +213,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
       await api.post(`/files/${fileId}/decision`, {}).catch(() => undefined);
     } catch {
       // The application is signed either way. What follows is our work, and a
-      // failure in it changes which of the three endings renders, not whether
+      // failure in it changes which ending renders, not whether
       // the borrower is done.
     } finally {
       setFinishing(false);
@@ -242,136 +265,224 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
    */
   const header = (
     <>
-      <ApplicationStanding standing={data ? (data.applicationState ?? null) : undefined} />
-      <ApplicationTimeline standing={data ? (data.applicationState ?? null) : undefined} />
+      <ApplicationStanding standing={standing} />
+      <ApplicationTimeline standing={standing} />
     </>
   );
 
-  /* ── The three endings ────────────────────────────────────────────────── */
+  /*
+   * The same header, with the one line the state cannot say.
+   *
+   * Before the signature the application is `in_underwriting` — the decision
+   * is posted on the bank screen before it navigates here, and this screen
+   * posts one itself if it arrives without one — so the heading beside the
+   * pill reads "Being decided", directly above the button asking for the
+   * signature that would let it be. A file still owing a branch reads
+   * `awaiting_borrower` and names the branch. Nothing in the ledger can fix
+   * either from below: `esign` is deliberately outside the obligations the
+   * flow tracks, so no state ever reads "Needs you" for a missing signature.
+   * The pill and the date are still the state's; only the heading is rendered
+   * here, and only it belongs to this view.
+   */
+  const signingHeader = (
+    <>
+      <ApplicationStanding standing={standing} headline={SIGN_LEAD} />
+      <ApplicationTimeline standing={standing} />
+    </>
+  );
 
-  if (signed) {
-    /*
-     * Which ending, and why in this order.
-     *
-     * A Loan Estimate needs a payment and a ratio that actually computed. If
-     * something is still outstanding that the borrower can finish, that beats
-     * both an estimate built on gaps and a vague promise — so it is checked
-     * before the fallback. "We'll come back to you" is last, and only for a
-     * file where there is genuinely nothing left for them to do.
-     */
-    const canEstimate = ratios?.housingPitia != null && ratios?.dtiBack != null;
+  const done = (
+    <button className="super-btn super-btn-outline mt-7" onClick={() => navigate("/")}>
+      Done
+    </button>
+  );
 
-    if (canEstimate && ratios) {
-      return (
-        <div className="super-card">
-          {header}
-          <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">Your Loan Estimate</h1>
-          <p className="mt-2 text-base text-ink-soft">
-            Sent to your email, and here it is. Read it before you decide anything.
-          </p>
+  /* ── The endings ──────────────────────────────────────────────────────── */
 
-          <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-rule-soft pt-5 sm:grid-cols-4">
-            <Figure label="Monthly payment" value={money(ratios.housingPitia!)} />
-            <Figure label="Debt-to-income" value={`${ratios.dtiBack}%`} />
-            {ratios.ltv != null && <Figure label="Loan-to-value" value={`${ratios.ltv}%`} />}
-            {ratios.totalQualifyingIncome != null && (
-              <Figure label="Verified income" value={`${money(ratios.totalQualifyingIncome)}/mo`} />
-            )}
-          </dl>
+  const ending = endingFor({
+    signed,
+    outcome: decision?.outcome ?? null,
+    state: standing ?? null,
+    ratios: ratios ?? null,
+    branches,
+  });
 
-          <p className="mt-5 text-xs text-ink-faint">
-            Computed by our own underwriting engine, not by a Fannie Mae submission. A real agency
-            submission may reach a different answer.
-          </p>
+  /*
+   * An application that has ended, or has moved past a decision, is its own
+   * ending: the pill, the state's heading and the history, and nothing else.
+   * The header already renders all three, which is why there is no copy here —
+   * a second heading beside the first would be the screen and the state
+   * catalog disagreeing about what happened.
+   */
+  if (ending === "state") {
+    return (
+      <div className="super-card">
+        {header}
+        {done}
+      </div>
+    );
+  }
 
-          <div className="mt-7 border-t border-rule-soft pt-6">
-            {intentRecorded ? (
+  if (ending === "referred") {
+    return (
+      <div className="super-card">
+        {header}
+        <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">
+          {REFERRED_COPY.headline}
+        </h1>
+        <p className="mt-2 text-base text-ink-soft">{REFERRED_COPY.body}</p>
+        {done}
+      </div>
+    );
+  }
+
+  if (ending === "adverse") {
+    const reasons = decision?.adverseActionReasons ?? [];
+    return (
+      <div className="super-card">
+        {header}
+        <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">{ADVERSE_COPY.headline}</h1>
+        <p className="mt-2 text-base text-ink-soft">{ADVERSE_COPY.body}</p>
+        <Reasons reasons={reasons} lead={ADVERSE_COPY.reasonsLead} none={ADVERSE_COPY.noReasons} />
+        {done}
+      </div>
+    );
+  }
+
+  if (ending === "counteroffer") {
+    // Not `standing.scenario`: the active scenario is usually the loan the
+    // borrower asked for, and that one is not an alternative to itself.
+    const scenario = proposedTerms(standing?.scenario);
+    return (
+      <div className="super-card">
+        {header}
+        <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">
+          {COUNTEROFFER_COPY.headline}
+        </h1>
+        <p className="mt-2 text-base text-ink-soft">{COUNTEROFFER_COPY.body}</p>
+        {scenario ? (
+          <>
+            {/* The promise of terms lives with the terms, so a counteroffer
+                with none never announces them and then shows nothing. */}
+            <p className="mt-4 text-base text-ink-soft">{COUNTEROFFER_COPY.termsLead}</p>
+            <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-rule-soft pt-5 sm:grid-cols-3">
+              <Figure label={COUNTEROFFER_COPY.loanAmount} value={money(scenario.loanAmount)} />
+              <Figure label={COUNTEROFFER_COPY.downPayment} value={money(scenario.downPayment)} />
+              {scenario.valueEstimate != null && (
+                <Figure
+                  label={COUNTEROFFER_COPY.propertyValue}
+                  value={money(scenario.valueEstimate)}
+                />
+              )}
+            </dl>
+          </>
+        ) : (
+          <p className="mt-4 text-base text-ink-soft">{COUNTEROFFER_COPY.noTerms}</p>
+        )}
+        <Reasons
+          reasons={decision?.adverseActionReasons ?? []}
+          lead={COUNTEROFFER_COPY.reasonsLead}
+          none={COUNTEROFFER_COPY.noReasons}
+        />
+        {done}
+      </div>
+    );
+  }
+
+  if (ending === "estimate" && ratios) {
+    return (
+      <div className="super-card">
+        {header}
+        <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">Your Loan Estimate</h1>
+        <p className="mt-2 text-base text-ink-soft">{ENDING_COPY.estimateLead}</p>
+
+        <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-rule-soft pt-5 sm:grid-cols-4">
+          <Figure label="Monthly payment" value={money(ratios.housingPitia!)} />
+          <Figure label="Debt-to-income" value={`${ratios.dtiBack}%`} />
+          {ratios.ltv != null && <Figure label="Loan-to-value" value={`${ratios.ltv}%`} />}
+          {ratios.totalQualifyingIncome != null && (
+            <Figure label="Verified income" value={`${money(ratios.totalQualifyingIncome)}/mo`} />
+          )}
+        </dl>
+
+        <p className="mt-5 text-xs text-ink-faint">
+          Computed by our own underwriting engine, not by a Fannie Mae submission. A real agency
+          submission may reach a different answer.
+        </p>
+
+        <div className="mt-7 border-t border-rule-soft pt-6">
+          {intentRecorded ? (
+            <p className="text-base text-ink-soft">{ENDING_COPY.intentRecorded}</p>
+          ) : (
+            <>
               <p className="text-base text-ink-soft">
-                You told us to proceed. Nothing else is needed from you right now — we will be in
-                touch about next steps.
+                Take your time with it. When you are ready, tell us to go ahead.
               </p>
-            ) : (
-              <>
-                <p className="text-base text-ink-soft">
-                  Take your time with it. When you are ready, tell us to go ahead.
-                </p>
-                <button
-                  className="super-btn super-btn-primary mt-4"
-                  onClick={() => void recordIntent()}
-                  disabled={intentSaving || readOnly}
-                >
-                  {intentSaving ? "Saving…" : "Yes, proceed"}
-                </button>
-                <p className="mt-2 text-xs text-ink-faint">
-                  Saying yes is not a commitment to borrow. It lets us keep working.
-                </p>
-              </>
-            )}
-          </div>
-
-          <button className="super-btn super-btn-outline mt-7" onClick={() => navigate("/")}>
-            Done
-          </button>
-        </div>
-      );
-    }
-
-    if (branches.length > 0) {
-      return (
-        <div className="super-card">
-          {header}
-          <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">
-            Almost — we need one more thing
-          </h1>
-          <p className="mt-2 text-base text-ink-soft">
-            Your application is in. We could not finish your Loan Estimate without{" "}
-            {branches.length === 1 ? "this" : "these"}, and it is quick.
-          </p>
-
-          <ul className="mt-6 flex flex-col gap-3 border-t border-rule-soft pt-5">
-            {branches.map((branch) => (
-              <li
-                key={branch.path}
-                className="flex flex-col gap-2 rounded-md border border-rule-soft bg-raised p-4 sm:flex-row sm:items-center sm:justify-between"
+              <button
+                className="super-btn super-btn-primary mt-4"
+                onClick={() => void recordIntent()}
+                disabled={intentSaving || readOnly}
               >
-                <div className="min-w-0">
-                  <p className="text-base font-medium text-ink">{branch.title}</p>
-                  <p className="mt-0.5 text-sm text-ink-soft">{branch.because}</p>
-                </div>
-                <Link
-                  to={`/f/${fileId}/${branch.path}`}
-                  className="super-btn super-btn-primary shrink-0 text-center"
-                >
-                  Add this
-                </Link>
-              </li>
-            ))}
-          </ul>
-
-          <p className="mt-6 text-sm text-ink-muted">
-            Nothing here is urgent — your application is already submitted, and your Loan Estimate
-            will follow within three business days either way.
-          </p>
+                {intentSaving ? "Saving…" : "Yes, proceed"}
+              </button>
+              <p className="mt-2 text-xs text-ink-faint">
+                Saying yes is not a commitment to borrow. It lets us keep working.
+              </p>
+            </>
+          )}
         </div>
-      );
-    }
 
+        {done}
+      </div>
+    );
+  }
+
+  if (ending === "branches") {
+    return (
+      <div className="super-card">
+        {header}
+        <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">
+          Almost — we need one more thing
+        </h1>
+        <p className="mt-2 text-base text-ink-soft">
+          Your application is in. We could not finish your Loan Estimate without{" "}
+          {branches.length === 1 ? "this" : "these"}, and it is quick.
+        </p>
+
+        <ul className="mt-6 flex flex-col gap-3 border-t border-rule-soft pt-5">
+          {branches.map((branch) => (
+            <li
+              key={branch.path}
+              className="flex flex-col gap-2 rounded-md border border-rule-soft bg-raised p-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0">
+                <p className="text-base font-medium text-ink">{branch.title}</p>
+                <p className="mt-0.5 text-sm text-ink-soft">{branch.because}</p>
+              </div>
+              <Link
+                to={`/f/${fileId}/${branch.path}`}
+                className="super-btn super-btn-primary shrink-0 text-center"
+              >
+                Add this
+              </Link>
+            </li>
+          ))}
+        </ul>
+
+        <p className="mt-6 text-sm text-ink-muted">{ENDING_COPY.branchesNote}</p>
+      </div>
+    );
+  }
+
+  if (ending !== null) {
     return (
       <div className="super-card">
         {header}
         <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">
           That is everything we need
         </h1>
-        <p className="mt-2 text-base text-ink-soft">
-          Your application is in, and there is nothing left for you to do. One of our underwriters
-          is looking at a couple of figures that need a person rather than a calculation.
-        </p>
-        <p className="mt-3 text-base text-ink-soft">
-          Your Loan Estimate will reach you by email within three business days.
-        </p>
-        <button className="super-btn super-btn-outline mt-7" onClick={() => navigate("/")}>
-          Done
-        </button>
+        <p className="mt-2 text-base text-ink-soft">{ENDING_COPY.oursLead}</p>
+        {done}
       </div>
     );
   }
@@ -383,7 +494,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
       <Branches assessment={assessment} fileId={fileId} payrollLinked={payrollLinked} />
 
       <div className="super-card">
-        {header}
+        {signingHeader}
         <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">Nearly done</h1>
         <p className="mt-2 text-base text-ink-soft">Here is what we found. Signing confirms it.</p>
 
@@ -474,6 +585,43 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * The reasons the engine recorded, under either ending that owes them.
+ *
+ * Both bodies tell the borrower they are owed the specific reasons — the
+ * decline because a written notice is coming, the counteroffer because turning
+ * it down still earns them — and the engine records reasons on both. One
+ * component, so an ending cannot promise them and then quietly render nothing.
+ */
+function Reasons({
+  reasons,
+  lead,
+  none,
+}: {
+  reasons: readonly string[];
+  lead: string;
+  none: string;
+}) {
+  return (
+    <div className="mt-6 border-t border-rule-soft pt-5">
+      {reasons.length > 0 ? (
+        <>
+          <p className="text-base text-ink-soft">{lead}</p>
+          <ul className="mt-3 flex flex-col gap-2">
+            {reasons.map((reason) => (
+              <li key={reason} className="text-base text-ink-soft">
+                {reason}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="text-base text-ink-soft">{none}</p>
+      )}
+    </div>
   );
 }
 

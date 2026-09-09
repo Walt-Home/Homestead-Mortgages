@@ -9,45 +9,26 @@
  * says so rather than the ledger inventing a move.
  *
  * The one rule this file exists to keep: a decision the engine could not fully
- * compute must never wear a decided word. `refer` means "we could not compute
- * at least one input", and until the outcome union has its own word for that
- * the engine reports it as `approved_with_conditions` — so the guard below
- * reads the RECOMMENDATION, not the outcome, and declines to move anything.
- * Without it a borrower whose APR and APOR were never known would find their
- * application sitting in "Approved with conditions".
+ * compute must never wear a decided word. That rule is no longer enforced
+ * here. `refer` now has its own outcome — `referred` — and `OUTCOME_EVENT` in
+ * `@hm/shared` maps it to no edge at all, so the file stays in underwriting by
+ * the same mechanism that keeps `pending` there. The guard this file used to
+ * carry read the RECOMMENDATION because the outcome could not be trusted; the
+ * outcome can be trusted now, and one rule in one place is the point.
  */
 
 import type { Prisma } from "@hm/db";
-import type {
-  ApplicationEvent,
-  Decision,
-  DecisionOutcome,
-  LoanFile,
-  TransitionReason,
-} from "@hm/shared";
+import { OUTCOME_EVENT } from "@hm/shared";
+import type { Decision, DecisionOutcome, LoanFile, TransitionReason } from "@hm/shared";
 import { advanceIfLegal, moved, toDomainState, type TransitionResult } from "./transition.js";
 import { servicePrincipal } from "./party.js";
 import { reconcileObligations } from "./obligations.js";
 import { recordEvent } from "./repository.js";
 import type { Db } from "./db.js";
 
-/**
- * The edge each decided outcome takes out of underwriting.
- *
- * `clear_to_close` takes the file to the STATE `approved`, not to the state of
- * the same name: clear-to-close means the disclosures are delivered and their
- * waiting period has run, and no delivery record exists in this product.
- */
-const OUTCOME_EVENT: Record<DecisionOutcome, ApplicationEvent | null> = {
-  pending: null,
-  approved_with_conditions: "decided_conditional",
-  counteroffer: "decided_counteroffer",
-  denied: "decided_decline",
-  clear_to_close: "decided_approved",
-};
-
 const REASON_FOR_OUTCOME: Record<DecisionOutcome, TransitionReason | undefined> = {
   pending: undefined,
+  referred: undefined,
   approved_with_conditions: "engine_conditional",
   counteroffer: "engine_ineligible",
   denied: "engine_high_cost",
@@ -166,15 +147,13 @@ export async function decideApplication(
   );
   if (moved(began)) movedRows.push(began);
 
-  // The recommendation, not the outcome. `refer` is the engine saying it could
-  // not compute an input it needed, and `determineOutcome` currently folds
-  // that into `approved_with_conditions` — the exact collapse the product must
-  // never make. Retired when `referred` becomes an outcome of its own.
-  const referred = decision.aus?.recommendation === "refer";
-  const event = referred ? null : OUTCOME_EVENT[decision.outcome];
+  const event = OUTCOME_EVENT[decision.outcome];
 
   let notApplied = false;
   if (event === null) {
+    // `pending` and `referred`. Nothing was decided, so nothing moves — and
+    // the file's own events say the engine ran and reached no verdict, rather
+    // than the ledger implying it was never asked.
     await recordEvent(
       loanFileId,
       "application_unchanged",

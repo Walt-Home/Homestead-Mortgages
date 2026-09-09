@@ -13,6 +13,7 @@ import {
   APPLICATION_STATES,
   IllegalTransition,
   MACHINE,
+  OUTCOME_EVENT,
   TERMINAL,
   eventsFrom,
   isTerminal,
@@ -22,6 +23,7 @@ import {
   type ApplicationState,
 } from "../application-machine.js";
 import { BRANCH_FOR_SCREEN, OBLIGATION_REASON } from "../branches.js";
+import { DECISION_OUTCOMES } from "../types/decision.js";
 import { RECEIPT_REASON_CODE } from "../trid.js";
 
 const states = APPLICATION_STATES as readonly ApplicationState[];
@@ -300,5 +302,31 @@ describe("a hold is a hold", () => {
     );
     expect(out).toEqual(["third_party_returned"]);
     expect(ORCHESTRATION_EVENTS).not.toContain("third_party_returned");
+  });
+});
+
+describe("the edge each decided word takes", () => {
+  /**
+   * `OUTCOME_EVENT` lives beside the machine because it is a claim about
+   * edges, so the claim is checked here rather than where it is called. A
+   * value that is not a legal event out of `in_underwriting` is a decision the
+   * orchestration cannot record; a null that is not deliberate is a decision
+   * it silently drops.
+   */
+  it("gives every decided outcome an event the machine has from in_underwriting", () => {
+    const legal = eventsFrom("in_underwriting");
+    for (const outcome of DECISION_OUTCOMES) {
+      const event = OUTCOME_EVENT[outcome];
+      if (event === null) continue;
+      expect(legal, outcome).toContain(event);
+    }
+  });
+
+  it("leaves exactly the two words that decided nothing without one", () => {
+    // `pending` has decided nothing, and `referred` has decided nothing
+    // either — that is the whole reason the word exists. Mapping either to an
+    // edge would move a file nobody has looked at into a decided state.
+    const silent = DECISION_OUTCOMES.filter((o) => OUTCOME_EVENT[o] === null);
+    expect([...silent].sort()).toEqual(["pending", "referred"]);
   });
 });

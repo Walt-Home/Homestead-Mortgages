@@ -8,6 +8,7 @@
  * racing produce a conflict rather than a lost decision.
  */
 
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import {
@@ -18,7 +19,13 @@ import {
 } from "@hm/shared";
 import { AppError } from "../middleware/error-handler.js";
 import { pinFact, proposeScenario } from "../services/evidence.js";
-import { advanceIfLegal, transition, TransitionConflict } from "../services/transition.js";
+import {
+  advanceIfLegal,
+  BORROWING_ROLES,
+  transition,
+  TransitionConflict,
+} from "../services/transition.js";
+import { createLoanFile } from "./support/factories.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -44,12 +51,12 @@ async function borrower() {
 }
 
 /**
- * An application with a primary borrower on it — the given party's, or a
- * fresh one. An application with nobody on it is not a shape the product
- * makes.
+ * An application on its own file with a primary borrower on it — the given
+ * party's, or a fresh one. An application with nobody on it is not a shape the
+ * product makes, and one with no file is no longer a shape the database makes.
  */
 async function application(partyId?: string) {
-  const app = await prisma.application.create({ data: {}, select: { id: true, status: true } });
+  const app = await bareApplication();
   await prisma.applicationParty.create({
     data: {
       applicationId: app.id,
@@ -58,6 +65,15 @@ async function application(partyId?: string) {
     },
   });
   return app;
+}
+
+/** An application with nobody on it — what the intake guard is there to refuse. */
+async function bareApplication() {
+  const file = await createLoanFile();
+  return prisma.application.create({
+    data: { loanFileId: file.id },
+    select: { id: true, status: true },
+  });
 }
 
 /** Walk a file to a state through legal moves, so tests start where they mean to. */
@@ -416,6 +432,251 @@ describe("withdrawing is the borrower's act", () => {
       actorPrincipalId: principalId,
       reasonCode: "borrower_requested",
     });
+  });
+
+  it("refuses a borrower who is not on this application", async () => {
+    // A person holding a borrower principal on their own file must not be able
+    // to end somebody else's. The refusal has to be the coded one: a caller
+    // who hears an internal error cannot tell a stranger's request from a
+    // broken server, and the borrower on the other end reads a 500.
+    const stranger = await borrower();
+    const app = await application();
+    await expect(
+      transition({
+        applicationId: app.id,
+        event: "borrower_withdrew",
+        actorPrincipalId: stranger.principalId,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: "ACTOR_NOT_PERMITTED" });
+    const after = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(after.status).toBe("DRAFT");
+    expect(await ledgerOf(app.id)).toHaveLength(0);
+  });
+
+  it("refuses that stranger at the database too, with nothing in front of it", async () => {
+    // The service's check is a courtesy — a code a caller can read, a
+    // millisecond earlier. The guarantee is the trigger, and it has to hold
+    // for a writer that never went through the service.
+    const stranger = await borrower();
+    const app = await application();
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`
+          UPDATE applications
+             SET status = 'WITHDRAWN', status_seq = 1,
+                 status_entered_at = now() + interval '1 millisecond'
+           WHERE id = ${app.id}::uuid`;
+        await tx.$executeRaw`
+          INSERT INTO application_transitions
+            (id, application_id, seq, from_state, to_state, event, actor_principal_id, occurred_at, recorded_at)
+          VALUES
+            (gen_random_uuid(), ${app.id}::uuid, 1, 'DRAFT', 'WITHDRAWN', 'borrower_withdrew',
+             ${stranger.principalId}::uuid, now(), now())`;
+      }),
+    ).rejects.toThrow(/must be caused by a borrower on it/);
+    const after = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(after.status).toBe("DRAFT");
+    expect(await ledgerOf(app.id)).toHaveLength(0);
+  });
+
+  it("refuses a borrower who is on this application in someone else's role", async () => {
+    // Being on the application is not the same as being the person whose
+    // credit request it is. A non-borrowing spouse signs to say they know
+    // about the lien; ending the request is not theirs to do, and neither is
+    // it a guarantor's.
+    const spouse = await borrower();
+    const app = await application();
+    await prisma.applicationParty.create({
+      data: { applicationId: app.id, partyId: spouse.partyId, role: "NON_BORROWING_SPOUSE" },
+    });
+    await expect(
+      transition({
+        applicationId: app.id,
+        event: "borrower_withdrew",
+        actorPrincipalId: spouse.principalId,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: "ACTOR_NOT_PERMITTED" });
+    const after = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(after.status).toBe("DRAFT");
+    expect(await ledgerOf(app.id)).toHaveLength(0);
+  });
+
+  it("refuses a member of staff writing the state under another event name", async () => {
+    // The hole the event-name guard left open: nothing checked that a ledger
+    // row's event implies the state it wrote, so ops_canceled could put a file
+    // in withdrawn — the borrower's own ending, with no borrower in it.
+    const who = await principal();
+    const app = await application();
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`
+          UPDATE applications
+             SET status = 'WITHDRAWN', status_seq = 1,
+                 status_entered_at = now() + interval '1 millisecond'
+           WHERE id = ${app.id}::uuid`;
+        await tx.$executeRaw`
+          INSERT INTO application_transitions
+            (id, application_id, seq, from_state, to_state, event, actor_principal_id, occurred_at, recorded_at)
+          VALUES
+            (gen_random_uuid(), ${app.id}::uuid, 1, 'DRAFT', 'WITHDRAWN', 'ops_canceled',
+             ${who.id}::uuid, now(), now())`;
+      }),
+    ).rejects.toThrow(/cannot be withdrawn under event/);
+    const after = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(after.status).toBe("DRAFT");
+    expect(await ledgerOf(app.id)).toHaveLength(0);
+  });
+});
+
+describe("the borrowing roles agree", () => {
+  it("the trigger names exactly the roles the service does", async () => {
+    // Whose ending this is exists twice: as BORROWING_ROLES here and as a
+    // literal IN list inside the trigger. Adding a role to one and not the
+    // other is a person the service lets withdraw and the database refuses,
+    // or worse, the other way around.
+    const src = await prisma.$queryRaw<{ src: string }[]>`
+      SELECT prosrc AS src FROM pg_proc WHERE proname = 'application_transitions_actor_kind'
+    `;
+    for (const role of BORROWING_ROLES) {
+      expect(src[0]?.src, role).toContain(`'${role}'`);
+    }
+    expect(src[0]?.src).not.toContain("NON_BORROWING_SPOUSE");
+    expect(src[0]?.src).not.toContain("GUARANTOR");
+  });
+});
+
+describe("an application is received with somebody on it", () => {
+  it("refuses intake when no party is on the application", async () => {
+    // The guard the application layer's migration said lived in the transition
+    // service, which it never did. Here it does not depend on which writer
+    // moved the row.
+    const who = await principal();
+    const app = await bareApplication();
+    await expect(
+      transition({ applicationId: app.id, event: "intake_completed", actorPrincipalId: who.id }),
+    ).rejects.toThrow(/cannot be received with no primary borrower on it/);
+    const after = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(after.status).toBe("DRAFT");
+    expect(after.statusSeq).toBe(0);
+    expect(await ledgerOf(app.id)).toHaveLength(0);
+  });
+
+  it("refuses intake when the only party is not the person applying", async () => {
+    const who = await principal();
+    const spouse = await borrower();
+    const app = await bareApplication();
+    await prisma.applicationParty.create({
+      data: { applicationId: app.id, partyId: spouse.partyId, role: "NON_BORROWING_SPOUSE" },
+    });
+    await expect(
+      transition({ applicationId: app.id, event: "intake_completed", actorPrincipalId: who.id }),
+    ).rejects.toThrow(/cannot be received with no primary borrower on it/);
+  });
+
+  it("refuses an application born received, not only one moved there", async () => {
+    // Every other guard on this table watches UPDATE, so an INSERT that names
+    // the state outright walks past all of them: the row would exist at
+    // intake_received, with a ledger row the COMMIT check is satisfied by, and
+    // nobody applying. A guard that only holds for the writers that happen to
+    // go through draft is not the invariant it claims to be.
+    const who = await principal();
+    const file = await createLoanFile();
+    const appId = randomUUID();
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`
+          INSERT INTO applications
+            (id, loan_file_id, status, status_seq, status_entered_at, updated_at)
+          VALUES
+            (${appId}::uuid, ${file.id}::uuid, 'INTAKE_RECEIVED', 1, now(), now())`;
+        await tx.$executeRaw`
+          INSERT INTO application_transitions
+            (id, application_id, seq, from_state, to_state, event, actor_principal_id, occurred_at, recorded_at)
+          VALUES
+            (gen_random_uuid(), ${appId}::uuid, 1, 'DRAFT', 'INTAKE_RECEIVED', 'intake_completed',
+             ${who.id}::uuid, now(), now())`;
+      }),
+    ).rejects.toThrow(/cannot be received with no primary borrower on it/);
+    expect(await prisma.application.count({ where: { id: appId } })).toBe(0);
+  });
+
+  it("refuses an application born anywhere but draft", async () => {
+    // The ledger explains every state except the one a row is born in: the
+    // actor-kind guard only reads rows somebody inserts into the ledger, and
+    // the COMMIT check lets status_seq 0 through unexamined. So an INSERT that
+    // names WITHDRAWN outright is the borrower's own ending with no borrower,
+    // no event and nothing to point at, and an INSERT that names APPROVED is a
+    // decision nobody made.
+    for (const status of ["WITHDRAWN", "APPROVED"]) {
+      const file = await createLoanFile();
+      const appId = randomUUID();
+      await expect(
+        prisma.$executeRaw`
+          INSERT INTO applications
+            (id, loan_file_id, status, status_seq, status_entered_at, updated_at)
+          VALUES
+            (${appId}::uuid, ${file.id}::uuid, ${status}::"ApplicationState", 0, now(), now())`,
+      ).rejects.toThrow(new RegExp(`cannot be born ${status}`));
+      expect(await prisma.application.count({ where: { id: appId } })).toBe(0);
+    }
+  });
+
+  it("still lets an ordinary draft be created", async () => {
+    // The other half of the guard: it must refuse the birth it is there for
+    // and nothing else, because every application in the product starts as a
+    // row inserted with no party on it yet.
+    const app = await bareApplication();
+    expect(app.status).toBe("DRAFT");
+  });
+});
+
+describe("a decline opens the clock it is measured by", () => {
+  /** draft → intake_received → in_underwriting → adverse_action_pending. */
+  async function declined() {
+    const who = await principal();
+    const app = await application();
+    await drive(app.id, who.id, ["intake_completed", "underwriting_began", "decided_decline"]);
+    return app;
+  }
+
+  it("opens one 30-day ECOA clock, tolled, from the completed application", async () => {
+    const app = await declined();
+    const intake = await prisma.applicationTransition.findFirstOrThrow({
+      where: { applicationId: app.id, event: "intake_completed" },
+    });
+    const clocks = await prisma.regulatoryClock.findMany({
+      where: { applicationId: app.id, kind: "ECOA_ADVERSE_ACTION_30D" },
+    });
+    expect(clocks).toHaveLength(1);
+    const clock = clocks[0]!;
+    expect(clock.statuteCitation).toBe("12 CFR 1002.9(a)(1)(i)");
+    // Reg B measures from the completed application, not from the decision, so
+    // the clock starts at intake and this errs early rather than late.
+    expect(clock.startedAt.getTime()).toBe(intake.occurredAt.getTime());
+    // Calendar days, and the database runs in UTC.
+    expect(clock.dueAt.getTime()).toBe(clock.startedAt.getTime() + 30 * DAY);
+    // There is no way to deliver the notice, so the clock must not be allowed
+    // to breach on schedule.
+    expect(clock.tolledFrom?.getTime()).toBe(clock.startedAt.getTime());
+    expect(clock.tollingReason).toBe("no_delivery_channel_configured");
+    expect(clock.tolledUntil).toBeNull();
+    expect(clock.satisfiedAt).toBeNull();
+    expect(clock.breachedAt).toBeNull();
+  });
+
+  it("holds one per application at the storage layer", async () => {
+    const app = await declined();
+    await expect(
+      prisma.regulatoryClock.create({
+        data: {
+          applicationId: app.id,
+          kind: "ECOA_ADVERSE_ACTION_30D",
+          statuteCitation: "12 CFR 1002.9(a)(1)(i)",
+          startedAt: new Date(),
+          dueAt: new Date(Date.now() + 30 * DAY),
+        },
+      }),
+    ).rejects.toThrow();
   });
 });
 

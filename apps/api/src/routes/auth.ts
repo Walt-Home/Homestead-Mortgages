@@ -77,14 +77,23 @@ authRouter.get(
  * Delete the account and everything attached to it.
  *
  * `users → loan_files` cascades and every child of a loan file cascades from
- * there. The PERSON does not: identity is facts on the party, and
- * users.party_id points the wrong way to cascade. The
+ * there — including, now, the application the file was born from and its
+ * ledger, scenarios, pins and clocks. The PERSON does not: identity is facts
+ * on the party, and users.party_id points the wrong way to cascade. The
  * users_delete_takes_party trigger removes the party (and so its facts,
- * principal and authorizations) when the user row goes; the explicit delete
- * below is belt and braces in the same transaction, so this route is true on
- * its own and a 0 here means the trigger already did it. For a prototype that
+ * principal and authorizations) when the user row goes; the explicit deletes
+ * below are belt and braces in the same transaction, so this route is true on
+ * its own and a 0 here means a trigger already did it. For a prototype that
  * asks real people for their date of birth and SSN, "you can take it back"
  * has to actually be true.
+ *
+ * The order is stated here rather than inherited: files first, then the user,
+ * then the party. A ledger row names the principal that caused it and that
+ * foreign key is RESTRICT, so the application has to be gone before the party
+ * whose principal it names. The database makes that order too — see
+ * users_delete_takes_files — but this route reads top to bottom, and the
+ * sequence that keeps the promise should be legible in the handler that makes
+ * it and not only in a trigger two packages away.
  */
 authRouter.delete(
   "/me",
@@ -97,6 +106,7 @@ authRouter.delete(
     });
     const files = await prisma.loanFile.count({ where: { userId } });
     await prisma.$transaction(async (tx) => {
+      await tx.loanFile.deleteMany({ where: { userId } });
       await tx.user.delete({ where: { id: userId } });
       if (partyId) await tx.party.deleteMany({ where: { id: partyId } });
     });

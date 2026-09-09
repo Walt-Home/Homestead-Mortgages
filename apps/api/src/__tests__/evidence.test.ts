@@ -11,8 +11,11 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
-import { addBusinessDays, TRID_PARTY_PREDICATES } from "@hm/shared";
+import { addBusinessDays, RECEIPT_REASON_CODE, TRID_PARTY_PREDICATES } from "@hm/shared";
 import { pinFact, proposeScenario, releasePin, sixPieces } from "../services/evidence.js";
+import { createLoanFile } from "./support/factories.js";
+
+type BorrowerRole = "PRIMARY_BORROWER" | "CO_BORROWER";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -28,12 +31,24 @@ async function borrowerPrincipal(partyId: string) {
     select: { id: true },
   });
 }
-async function application(partyId: string) {
-  const app = await prisma.application.create({ data: {}, select: { id: true } });
-  await prisma.applicationParty.create({
-    data: { applicationId: app.id, partyId, role: "PRIMARY_BORROWER" },
+/**
+ * An application on its own file, with one party on it. Every application is
+ * born from a file now, and the column is NOT NULL — so a test that wants an
+ * application has to say which file it belongs to.
+ */
+async function application(partyId: string, role: BorrowerRole = "PRIMARY_BORROWER") {
+  const file = await createLoanFile();
+  const app = await prisma.application.create({
+    data: { loanFileId: file.id },
+    select: { id: true },
   });
+  await prisma.applicationParty.create({ data: { applicationId: app.id, partyId, role } });
   return app;
+}
+
+/** A second person on an application already made. */
+async function addParty(applicationId: string, partyId: string, role: BorrowerRole) {
+  await prisma.applicationParty.create({ data: { applicationId, partyId, role } });
 }
 async function grant(partyId: string, over: Record<string, unknown> = {}) {
   return prisma.authorization.create({
@@ -489,9 +504,10 @@ describe("THE RECEIPT", () => {
     // transaction's now() — which is exactly the stamp the receipt must move
     // strictly past. The first version rolled the whole intake back here.
     const { p, facts, g } = await personWithSixPieces();
+    const file = await createLoanFile();
     const id = randomUUID();
     await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`INSERT INTO "applications" ("id", "updated_at") VALUES (${id}::uuid, now())`;
+      await tx.$executeRaw`INSERT INTO "applications" ("id", "loan_file_id", "updated_at") VALUES (${id}::uuid, ${file.id}::uuid, now())`;
       await tx.applicationParty.create({
         data: { applicationId: id, partyId: p.id, role: "PRIMARY_BORROWER" },
       });
@@ -524,9 +540,10 @@ describe("THE RECEIPT", () => {
     // transaction's now(), so without the correction the receipt was recorded
     // before the draft it moved.
     const { p, facts, g } = await personWithSixPieces();
+    const file = await createLoanFile();
     const id = randomUUID();
     await prisma.$transaction(async (tx) => {
-      await tx.application.create({ data: { id } });
+      await tx.application.create({ data: { id, loanFileId: file.id } });
       await tx.applicationParty.create({
         data: { applicationId: id, partyId: p.id, role: "PRIMARY_BORROWER" },
       });
@@ -659,6 +676,123 @@ describe("THE RECEIPT", () => {
       }),
     ).rejects.toThrow();
   });
+
+  it("counts one person's three pieces, not three people's one each", async () => {
+    // The six pieces are about the consumer applying. Counting distinct
+    // predicates across every party on the application made a co-borrower's
+    // SSN, the primary's name and the primary's income into somebody's
+    // complete application — and started the Loan Estimate clock on it.
+    const primary = await personWithSixPieces();
+    const co = await personWithSixPieces();
+    const app = await application(primary.p.id);
+    await addParty(app.id, co.p.id, "CO_BORROWER");
+    await proposeScenario(app.id, fullTerms);
+
+    await pinFact({
+      applicationId: app.id,
+      factId: primary.facts.legal_name!.id,
+      authorizationId: primary.g.id,
+    });
+    await pinFact({
+      applicationId: app.id,
+      factId: primary.facts.monthly_income!.id,
+      authorizationId: primary.g.id,
+    });
+    await pinFact({
+      applicationId: app.id,
+      factId: co.facts.ssn_token!.id,
+      authorizationId: co.g.id,
+    });
+    const between = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(between.status).toBe("DRAFT");
+    expect(between.statusSeq).toBe(0);
+    expect(await prisma.regulatoryClock.count({ where: { applicationId: app.id } })).toBe(0);
+
+    // The primary's own third piece is what completes it.
+    await pinFact({
+      applicationId: app.id,
+      factId: primary.facts.ssn_token!.id,
+      authorizationId: primary.g.id,
+    });
+    const after = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(after.status).toBe("INTAKE_RECEIVED");
+    expect(after.statusSeq).toBe(1);
+  });
+
+  it("reports the pieces one person holds, so the screen cannot outrun the receipt", async () => {
+    // sixPieces is what a screen renders and the receipt trigger is what the
+    // database believes, and the two have to count the same way. Counting
+    // pins across every party made them disagree on a two-party application:
+    // the six pieces complete on screen, the row still a draft.
+    const primary = await personWithSixPieces();
+    const co = await personWithSixPieces();
+    const app = await application(primary.p.id);
+    await addParty(app.id, co.p.id, "CO_BORROWER");
+    await proposeScenario(app.id, fullTerms);
+
+    for (const [predicate, f] of Object.entries(primary.facts)) {
+      if (predicate === "ssn_token") continue;
+      await pinFact({ applicationId: app.id, factId: f.id, authorizationId: primary.g.id });
+    }
+    await pinFact({
+      applicationId: app.id,
+      factId: co.facts.ssn_token!.id,
+      authorizationId: co.g.id,
+    });
+
+    const pieces = await sixPieces(app.id);
+    expect(pieces).toMatchObject({ legal_name: true, monthly_income: true, ssn_token: false });
+    expect(Object.values(pieces).every(Boolean)).toBe(false);
+    const row = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(row.status).toBe("DRAFT");
+    expect(row.statusSeq).toBe(0);
+  });
+
+  it("stamps the receipt when the promotion is what completes it", async () => {
+    // Being the person applying is one of the six conditions now, so it can be
+    // the last one satisfied — and unlike the pins and the scenario, changing
+    // it is an UPDATE on a third table. Without a hook there, a co-borrower
+    // promoted to primary sits at draft holding a complete application with no
+    // Loan Estimate clock running and nothing left to fire the receipt.
+    const person = await personWithSixPieces();
+    const app = await application(person.p.id, "CO_BORROWER");
+    await proposeScenario(app.id, fullTerms);
+    for (const f of Object.values(person.facts)) {
+      await pinFact({ applicationId: app.id, factId: f.id, authorizationId: person.g.id });
+    }
+    const before = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(before.status).toBe("DRAFT");
+    expect(await prisma.regulatoryClock.count({ where: { applicationId: app.id } })).toBe(0);
+
+    await prisma.applicationParty.update({
+      where: { applicationId_partyId: { applicationId: app.id, partyId: person.p.id } },
+      data: { role: "PRIMARY_BORROWER" },
+    });
+
+    const after = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(after.status).toBe("INTAKE_RECEIVED");
+    expect(after.statusSeq).toBe(1);
+    const clocks = await prisma.regulatoryClock.findMany({ where: { applicationId: app.id } });
+    expect(clocks).toHaveLength(1);
+    expect(clocks[0]?.kind).toBe("TRID_LE_DELIVERY");
+    expect(clocks[0]?.tollingReason).toBe("no_delivery_channel_configured");
+  });
+
+  it("does not receive an application on a co-borrower's three pieces alone", async () => {
+    // A complete co-borrower and a primary who has told us nothing is not an
+    // application from the person whose credit request this is.
+    const primary = await party();
+    const co = await personWithSixPieces();
+    const app = await application(primary.id);
+    await addParty(app.id, co.p.id, "CO_BORROWER");
+    await proposeScenario(app.id, fullTerms);
+    for (const f of Object.values(co.facts)) {
+      await pinFact({ applicationId: app.id, factId: f.id, authorizationId: co.g.id });
+    }
+    const after = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(after.status).toBe("DRAFT");
+    expect(await prisma.applicationTransition.count({ where: { applicationId: app.id } })).toBe(0);
+  });
 });
 
 describe("deleting a party takes its pins with it", () => {
@@ -692,11 +826,24 @@ describe("a clock is set once", () => {
     return prisma.regulatoryClock.findFirstOrThrow({ where: { applicationId: app.id } });
   }
 
+  /**
+   * A moment after the clock started, by the clock's own reckoning.
+   *
+   * `endings_after_start` compares an ending against started_at, which
+   * Postgres stamped; `new Date()` is this process's idea of now, and the two
+   * machines are only about eight milliseconds apart in the right direction.
+   * A test that means "later than it started" should say so rather than bet
+   * on whose clock is ahead.
+   */
+  function after(clock: { startedAt: Date }) {
+    return new Date(clock.startedAt.getTime() + 1000);
+  }
+
   it("never tidies a breach away", async () => {
     const clock = await receivedClock();
     await prisma.regulatoryClock.update({
       where: { id: clock.id },
-      data: { breachedAt: new Date() },
+      data: { breachedAt: after(clock) },
     });
     await expect(
       prisma.regulatoryClock.update({ where: { id: clock.id }, data: { breachedAt: null } }),
@@ -742,7 +889,7 @@ describe("a clock is set once", () => {
     ).rejects.toThrow();
     await prisma.regulatoryClock.update({
       where: { id: clock.id },
-      data: { tolledUntil: new Date() },
+      data: { tolledUntil: after(clock) },
     });
     await expect(
       prisma.regulatoryClock.update({
@@ -764,6 +911,18 @@ describe("the vocabularies agree", () => {
     for (const pred of TRID_PARTY_PREDICATES) {
       expect(src[0]?.src, pred).toContain(`'${pred}'`);
     }
+  });
+
+  it("the trigger counts the role and records the reason @hm/shared names", async () => {
+    // Two more literals the function carries: whose pieces count, and the
+    // reason code the ledger row is grouped by. Both have a constant on the
+    // TypeScript side, and a rename on either side that misses the other is a
+    // receipt that stops firing or a ledger nobody can query.
+    const src = await prisma.$queryRaw<{ src: string }[]>`
+      SELECT prosrc AS src FROM pg_proc WHERE proname = 'trid_receipt_if_complete'
+    `;
+    expect(src[0]?.src).toContain("'PRIMARY_BORROWER'");
+    expect(src[0]?.src).toContain(`'${RECEIPT_REASON_CODE}'`);
   });
 
   it("business days agree between SQL and TypeScript, end of the third day in the creditor's zone", async () => {

@@ -149,15 +149,35 @@ export async function sixPieces(
 ): Promise<Record<string, boolean>> {
   const [pins, scenario] = await Promise.all([
     db.applicationEvidenceLink.findMany({
-      where: { applicationId, releasedAt: null },
-      select: { predicate: true },
+      where: {
+        applicationId,
+        releasedAt: null,
+        fact: { party: { applications: { some: { applicationId, role: "PRIMARY_BORROWER" } } } },
+      },
+      select: { predicate: true, fact: { select: { partyId: true } } },
     }),
     db.loanScenario.findFirst({
       where: { applicationId, isActive: true },
       select: { propertyAddress: true, valueEstimateCents: true, loanAmountCents: true },
     }),
   ]);
-  const have = new Set(pins.map((p) => p.predicate));
+  // One set of predicates per person, and the fullest set is the answer. The
+  // party-side pieces are counted per person because TRID's pieces are about
+  // the consumer who is applying: a co-borrower's SSN beside the primary's
+  // name and income is nobody's three, and the receipt trigger counts it the
+  // same way. Counting across the application instead let this say the six
+  // were held while the database still said draft.
+  const byParty = new Map<string, Set<string>>();
+  for (const pin of pins) {
+    if (pin.fact.partyId == null) continue;
+    const held = byParty.get(pin.fact.partyId) ?? new Set<string>();
+    held.add(pin.predicate);
+    byParty.set(pin.fact.partyId, held);
+  }
+  const pieces = (held: Set<string>) => TRID_PARTY_PREDICATES.filter((p) => held.has(p)).length;
+  let have = new Set<string>();
+  for (const held of byParty.values()) if (pieces(held) > pieces(have)) have = held;
+
   const out: Record<string, boolean> = {};
   // '' is not an address, and a screen must not agree with a false receipt.
   const present = (v: unknown) => v != null && !(typeof v === "string" && v.trim() === "");

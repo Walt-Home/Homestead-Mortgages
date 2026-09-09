@@ -13,6 +13,7 @@ import { config } from "../config.js";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import {
   assertFileAccess,
+  assertFileMayBeDeleted,
   listAccessibleFiles,
   loadLoanFile,
   recordEvent,
@@ -305,6 +306,15 @@ fileRouter.get(
  * that way would be using an audit property as an excuse. Every child relation
  * cascades from `loan_files`, so one delete takes the borrower, the consents,
  * the snapshots, the decisions and the events with it.
+ *
+ * A credit request is where that stops. Once the application has left draft
+ * the file carries a ledger and the regulatory clocks measured from it — on a
+ * declined one, the 30 days an adverse-action notice is owed in — and those
+ * are not the same kind of thing as a saved answer or a re-pullable snapshot:
+ * removing one file would quietly erase the record that a notice was ever
+ * owed. So this route refuses, and points at account deletion, which is a
+ * person asking to be forgotten entirely rather than tidying one row away. A
+ * draft is still just typing, and still deletes.
  */
 fileRouter.delete(
   "/:id",
@@ -313,6 +323,7 @@ fileRouter.delete(
     // "write" is what refuses demo files here, which is right: a shared
     // fixture is not any one person's to delete.
     await assertFileAccess(id, req.user!.id, "write");
+    await assertFileMayBeDeleted(id);
     await prisma.loanFile.delete({ where: { id } });
     res.status(204).end();
   }),

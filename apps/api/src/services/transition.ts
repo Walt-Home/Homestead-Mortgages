@@ -23,7 +23,7 @@
  */
 
 import { prisma } from "@hm/db";
-import type { Prisma } from "@hm/db";
+import type { ApplicationPartyRole, Prisma } from "@hm/db";
 import {
   APPLICATION_STATES,
   nextState,
@@ -38,6 +38,20 @@ import { ownsTransaction, type Db } from "./db.js";
 /** `draft` -> `DRAFT`. A test asserts the two vocabularies agree. */
 const toDb = (s: ApplicationState) => s.toUpperCase() as Uppercase<ApplicationState>;
 const toDomain = (s: string) => s.toLowerCase() as ApplicationState;
+
+/**
+ * The roles whose holder is a person asking for this credit.
+ *
+ * A non-borrowing spouse or a guarantor is on the application without the
+ * request being theirs, so ending it is not theirs either. The same list is a
+ * literal in the trigger that refuses it at the database, which is why this is
+ * exported: a test reads the function's source and holds the two together.
+ */
+export const BORROWING_ROLES: ApplicationPartyRole[] = [
+  "PRIMARY_BORROWER",
+  "CO_BORROWER",
+  "NON_OCCUPANT_CO_BORROWER",
+];
 
 /** Raised when the file moved between reading it and writing it. */
 export class TransitionConflict extends AppError {
@@ -111,15 +125,25 @@ export async function transition(
   // illegal move should cost nothing and roll nothing back.
   const to = requireNextState(from, event);
 
-  // Withdrawing is the borrower's act. The database refuses any other actor;
-  // this is the same refusal a millisecond earlier, with a code a caller can
-  // read, and it costs nothing when it fires.
+  // Withdrawing is the borrower's act, and it is this application's borrower's
+  // act. The database refuses everything below; this is the same refusal a
+  // millisecond earlier, with a code a caller can read, and it costs nothing
+  // when it fires. It asks all three questions the trigger asks, because a
+  // check that stops one refusal short leaves the rest to surface as a raw
+  // database error, which reaches a person as an internal one.
   if (event === "borrower_withdrew") {
     const actor = await db.principal.findUnique({
       where: { id: actorPrincipalId },
-      select: { kind: true },
+      select: { kind: true, partyId: true },
     });
-    if (actor?.kind !== "BORROWER") {
+    const theirs =
+      actor?.kind === "BORROWER" &&
+      actor.partyId !== null &&
+      (await db.applicationParty.findFirst({
+        where: { applicationId, partyId: actor.partyId, role: { in: BORROWING_ROLES } },
+        select: { id: true },
+      })) !== null;
+    if (!theirs) {
       throw new AppError(
         403,
         "Only the borrower can withdraw an application.",

@@ -408,6 +408,35 @@ export async function assertFileAccess(
   if (file.userId !== userId) throw new AppError(404, "Loan file not found", "NOT_FOUND");
 }
 
+/**
+ * Decide whether this file is still the person's to remove one row at a time.
+ *
+ * Every child of a loan file cascades, and that is right for the answers, the
+ * snapshots and the decisions: a person may take back what they typed and what
+ * we pulled on their say-so. It stops being right the moment the file becomes
+ * a credit request that has left draft, because from there the file carries a
+ * ledger and the clocks measured from it — including the 30 days an
+ * adverse-action notice is owed in, which is precisely the record a declined
+ * borrower has a reason to want gone. Deleting the account still removes all
+ * of it; what is refused is removing the request while the account that made
+ * it stays.
+ *
+ * A separate check from assertFileAccess because it is a different question:
+ * that one asks whose file this is, this one asks what the file has become.
+ */
+export async function assertFileMayBeDeleted(loanFileId: string): Promise<void> {
+  const application = await prisma.application.findUnique({
+    where: { loanFileId },
+    select: { status: true },
+  });
+  if (!application || application.status === "DRAFT") return;
+  throw new AppError(
+    409,
+    "This is a credit request on record now, so it can't be removed on its own. Deleting your account removes it along with everything else.",
+    "APPLICATION_ON_RECORD",
+  );
+}
+
 /** Files this user may see: their own, newest first, plus the shared demo set. */
 export async function listAccessibleFiles(userId: string) {
   const rows = await prisma.loanFile.findMany({

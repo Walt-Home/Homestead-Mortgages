@@ -161,6 +161,11 @@ model LoanFile {
   /// verification's outputs by guessing a session id.
   identityPrefillVerificationId String? @map("identity_prefill_verification_id")
 
+  /// The credit request this file became, once one exists. Optional because a
+  /// file exists from the first keystroke on screen 1 and the legacy demo
+  /// files never had one.
+  application Application?
+
   borrowers     Borrower[]
   consents      Consent[]
   links         ConnectorLink[]
@@ -842,6 +847,13 @@ enum ApplicationPartyRole {
 /// ledger row. A bare `prisma.application.update({ data: { status } })` fails.
 model Application {
   id String @id @default(uuid()) @db.Uuid
+
+  /// The file this application was born from. NOT NULL and UNIQUE: one credit
+  /// request per file, and an application cannot outlive the file — which is
+  /// what makes "we remove your data for good" include the application and
+  /// its ledger. Leaves with loan_files when the strangler finishes.
+  loanFileId String   @unique @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
 
   status ApplicationState @default(DRAFT)
   /// Increments on every transition. The ledger row for a move carries the same

@@ -18,7 +18,7 @@
  * 2. **Terminal means terminal.** A state in `TERMINAL` has no outgoing edges,
  *    and the test asserts the table agrees. Reopening is a NEW application, not
  *    a transition — un-setting a dated latch would contradict how
- *    `applicationReceivedAt` already behaves, and every verification would have
+ *    `applicationSignedAt` already behaves, and every verification would have
  *    to be re-run anyway.
  *
  * 3. **Every state is reachable from `draft`.** A state nothing can reach is a

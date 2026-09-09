@@ -129,12 +129,11 @@ model LoanFile {
   noteRate     Decimal? @map("note_rate") @db.Decimal(6, 4)
   overlays     String[] @default([])
 
-  // The TRID application moment (APP-002). A timestamp, not a computed flag —
-  // it starts a three-business-day clock whose miss is a regulatory violation,
-  // and a clock that can be recomputed is a clock that can be restarted.
-  applicationReceivedAt DateTime? @map("application_received_at")
-  applicationSixPieces  Json?     @map("application_six_pieces")
-
+  // The TRID application moment (APP-002) is not a column on this table. It is
+  // the INTAKE_RECEIVED row on the application's ledger, stamped by the receipt
+  // trigger when the sixth piece is pinned, and the clock hangs off that row. A
+  // second copy of the moment beside it could only ever disagree with it, and
+  // for a while it did.
   intentToProceedAt    DateTime? @map("intent_to_proceed_at")
   /// When the borrower signed the application package in step 4.
   applicationSignedAt  DateTime? @map("application_signed_at")

@@ -120,7 +120,7 @@ describe("an ending is an ending", () => {
   });
 
   it("reopens nothing — a new attempt is a new application", () => {
-    // Un-setting a dated latch would contradict how applicationReceivedAt and
+    // Un-setting a dated latch would contradict how applicationSignedAt and
     // intentToProceedAt already behave, and every verification would have to be
     // re-run anyway.
     for (const state of TERMINAL) {

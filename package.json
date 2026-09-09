@@ -22,7 +22,7 @@
     "db:test:setup": "node scripts/setup-test-db.mjs",
     "db:studio": "npm run studio --workspace=@hm/db",
     "clean": "turbo clean && rm -rf node_modules",
-    "seed:demo": "tsx apps/api/src/scripts/seed-demo.ts"
+    "seed:personas": "tsx apps/api/src/scripts/seed-personas.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

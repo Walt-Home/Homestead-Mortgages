@@ -69,7 +69,7 @@ function yearsBefore(ref: Date, years: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-const OFAC_LISTS = ["OFAC SDN", "OFAC Consolidated", "FinCEN 314(a)"] as const;
+export const OFAC_LISTS = ["OFAC SDN", "OFAC Consolidated", "FinCEN 314(a)"] as const;
 
 /* ── clean_w2 · Dana Whitfield, Austin TX ───────────────────────────────── */
 // Nothing to surface. Screen 4 shows five green lines and asks no questions,

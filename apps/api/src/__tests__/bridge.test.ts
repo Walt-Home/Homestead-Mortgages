@@ -103,12 +103,18 @@ describe("screen 2 writes the person", () => {
     expect((await saveBorrower(b.id, dana)).partyId).toBe((await saveBorrower(a.id, dana)).partyId);
   });
 
-  it("gives a demo file its own party, with nobody to sign in as", async () => {
+  it("refuses a file with no owner rather than inventing a person for it", async () => {
+    // The old demo seed wrote files nobody owned, and this minted a fresh
+    // party for each save on one — so the same sample borrower became a new
+    // person every time somebody corrected a typo on their screen 2. Sample
+    // borrowers are real users now, with one party each, and an ownerless file
+    // is a shape nothing creates.
     const file = await createLoanFile({ userId: null, isDemo: true });
-    const row = await saveBorrower(file.id, dana);
-    expect(
-      (await prisma.party.findUniqueOrThrow({ where: { id: row.partyId } })).sourceFirstSeen,
-    ).toBe("demo_seed");
+    await expect(saveBorrower(file.id, dana)).rejects.toMatchObject({
+      statusCode: 409,
+      code: "NO_OWNER",
+    });
+    expect(await prisma.party.count()).toBe(0);
   });
 
   it("records the person and the row together or not at all", async () => {

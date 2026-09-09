@@ -128,9 +128,11 @@ export function endingFor({
  * The terms the counteroffer ending is allowed to print, or null.
  *
  * The application's active scenario is whatever it is currently being decided
- * against, and on every file this product writes that is the loan the borrower
- * typed in on screen 1: `proposeScenario` defaults `origin` to `BORROWER` and
- * no caller has ever passed another value. Rendering it unconditionally put
+ * against, and on a file the borrower walked that is the loan they typed in on
+ * screen 1: `proposeScenario` defaults `origin` to `BORROWER`. The one writer
+ * that passes anything else is the persona seed, which proposes Tom Nguyen's
+ * counteroffer at seq 2 — so this is the path that prints his terms, not a
+ * branch nothing takes. Rendering it unconditionally put
  * "Not that loan — but here's one we can do" directly above the borrower's own
  * loan amount and down payment, which is the counteroffer collapsed back into
  * the application. Anything not `BORROWER` is a set of terms somebody on our

@@ -79,6 +79,23 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   the engine reads.
 - **Screen 4's single signature covers the application AND the 4506-C**, then
   pulls transcripts and recomputes. Disclosed in the signing panel.
+- **The Grander persona is a row on the sign-in page and nothing else.** An
+  imported member is a party and a loan with no application; there is no
+  `loans` table, an application in any state would say they asked us for
+  credit, and an unclaimed party has never signed in, so there is no user to
+  sign a tester in as. The nearest truthful shape is written into
+  `apps/api/src/personas/stories.ts` as a comment for whoever builds loans.
+- **A sample borrower on hold needs a knob to be held.** All three connector
+  fixtures screen clear, so `FixtureOptions.screening: "near_match"` is what
+  makes Omar's snapshot, his `sanctionsScreenClear` column and his ledger row
+  agree. A real screening vendor needs no such thing, and nothing but the
+  persona seed passes it.
+- **Eight sample borrowers share three connector fixtures.** Their facts and
+  addresses are their own, but the fixtures' identity documents name three
+  other people. That document is only read by the ID-scan branch, which is a
+  POST, which a sample borrower cannot make — so nothing shows a document in
+  the wrong name today. Wiring the ID scan to a persona means giving the
+  fixtures eight people.
 
 ## Five rules that are not style preferences
 
@@ -238,7 +255,17 @@ npm run requirements:build   # after editing data/v1-build.csv
 npm run brand:build          # after editing packages/brand/tokens.mjs
 npm run db:migrate           # prisma migrate dev
 npm run db:test:setup        # create <db>_test and apply migrations to it
+npm run build && npm run seed:personas   # the eight sample borrowers
 ```
+
+`seed:personas` refuses to run unless `DEMO_PERSONAS=true` is in its own
+environment — the same flag that mounts the sample sign-in — so it cannot be
+pointed at a production database without also turning on the thing that would
+make its rows reachable. It is idempotent by `users.persona_key`: a persona
+already standing at its target is reported and left alone, one standing
+anywhere else is reported as a DRIFT and the run exits non-zero. `--reset
+<key>` re-walks exactly one; `--purge-legacy-demo` clears what the old
+`seed-demo.ts` left behind.
 
 The API tests talk to a real Postgres and mock nothing: `docker compose up -d
 postgres`, then `npm run db:test:setup`. Every promise about who may read whose

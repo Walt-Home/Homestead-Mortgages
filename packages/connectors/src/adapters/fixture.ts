@@ -45,7 +45,7 @@ import type {
 } from "../ports/index.js";
 import { requireCategory } from "../guard.js";
 import { PERSONAS, type PersonaId, DEFAULT_PERSONA } from "../fixtures/personas.js";
-import { ADDRESS_BOOK, PUBLIC_RECORDS } from "../fixtures/public-records.js";
+import { ADDRESS_BOOK, OFAC_LISTS, PUBLIC_RECORDS } from "../fixtures/public-records.js";
 
 export interface FixtureOptions {
   readonly persona?: PersonaId;
@@ -53,12 +53,21 @@ export interface FixtureOptions {
   readonly latencyMs?: number;
   /** Reference date the persona's relative dates are generated from. */
   readonly referenceDate?: Date;
+  /**
+   * What the watchlists say. Every persona's public record screens clear, so
+   * without this there is no way to see the one state a name on a list
+   * produces: a file held while somebody looks at it. Asked for explicitly,
+   * because a fixture that sometimes matched would make the hold look like
+   * flakiness.
+   */
+  readonly screening?: "clear" | "near_match";
 }
 
 interface Resolved {
   readonly persona: PersonaId;
   readonly latencyMs: number;
   readonly ref: Date;
+  readonly screening: "clear" | "near_match";
 }
 
 function resolve(options: FixtureOptions): Resolved {
@@ -66,6 +75,7 @@ function resolve(options: FixtureOptions): Resolved {
     persona: options.persona ?? DEFAULT_PERSONA,
     latencyMs: options.latencyMs ?? 900,
     ref: options.referenceDate ?? new Date(),
+    screening: options.screening ?? "clear",
   };
 }
 
@@ -346,9 +356,16 @@ export function fixturePropertyDataConnector(options: FixtureOptions = {}): Prop
  * Guarded — this one screens a named person against government watchlists.
  * It replaces the inline `sanctionsScreenClear: true` the credit route used to
  * assert without screening anything.
+ *
+ * `screening: "near_match"` is the only way to see a held file. All three
+ * public-record fixtures come back clear — variable_income's score-41 hit is
+ * deliberately below the threshold — so a sample borrower whose application is
+ * held would otherwise wear a pill its own evidence contradicts. The match is
+ * built against the name on the file rather than a fixed one, because a hold
+ * that named somebody else would be the same contradiction one layer down.
  */
 export function fixtureScreeningConnector(options: FixtureOptions = {}): ScreeningConnector {
-  const { persona, latencyMs, ref } = resolve(options);
+  const { persona, latencyMs, ref, screening } = resolve(options);
   return {
     capabilities: {
       provider: "fixture-screening",
@@ -361,6 +378,23 @@ export function fixtureScreeningConnector(options: FixtureOptions = {}): Screeni
     ): Promise<ConnectorResult<SanctionsScreening>> {
       requireCategory(token, "sanctions_screening");
       await sleep(latencyMs);
+      if (screening === "near_match") {
+        const who = file.borrowers[0];
+        const matchedName = who ? `${who.firstName} ${who.lastName}`.toUpperCase() : "UNKNOWN";
+        return result(
+          {
+            clear: false,
+            // One list and a score under 100: a near match is a name that
+            // looks like the one on the list, which is why a person has to
+            // read it rather than the file simply stopping.
+            matches: [{ listName: "OFAC SDN", matchedName, score: 86 }],
+            listsChecked: [...OFAC_LISTS],
+            screenedAt: ref.toISOString(),
+          },
+          "fixture-screening",
+          `ofac-${persona}-near-match`,
+        );
+      }
       return result(PUBLIC_RECORDS[persona].sanctions(ref), "fixture-screening", `ofac-${persona}`);
     },
   };

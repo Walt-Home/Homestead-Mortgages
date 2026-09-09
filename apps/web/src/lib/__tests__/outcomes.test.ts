@@ -317,6 +317,9 @@ describe("what the counteroffer ending is allowed to print", () => {
   });
 
   it("prints terms somebody on our side proposed", () => {
+    // Not a hypothetical branch: the persona seed proposes a COUNTEROFFER
+    // scenario at seq 2, which retires the borrower's own, and that is the
+    // file a tester opens to see this ending with figures under it.
     for (const origin of ["COUNTEROFFER", "REPRICING", "STAFF", "AI_SUGGESTED"]) {
       const proposed = { ...asked, origin, seq: 2 };
       expect(proposedTerms(proposed), origin).toBe(proposed);
@@ -338,10 +341,11 @@ describe("what the counteroffer ending is allowed to print", () => {
   });
 
   it("announces the terms only where the terms are", () => {
-    // The body renders on every counteroffer, and on every counteroffer this
-    // product can produce the scenario's origin is BORROWER — so a body
-    // carrying "Here are the terms we can do instead." printed it directly
-    // above "The alternative is being worked out".
+    // The body renders on every counteroffer, including the ones whose
+    // alternative has not been proposed yet and whose only scenario is
+    // therefore the borrower's own — so a body carrying "Here are the terms we
+    // can do instead." printed it directly above "The alternative is being
+    // worked out".
     expect(COUNTEROFFER_COPY.body).not.toContain("terms");
     const block = blockFor("counteroffer");
     const terms = block.indexOf("{scenario ? (");

@@ -14,6 +14,7 @@
 
 import type { AuthorizationPurpose, Prisma } from "@hm/db";
 import { SHADOW_ENGINE_VERSION } from "@hm/underwriting";
+import { AppError } from "../middleware/error-handler.js";
 import type { Db } from "./db.js";
 
 type Tx = Db;
@@ -51,15 +52,6 @@ export async function partyForUser(
     select: { id: true },
   });
   await tx.user.update({ where: { id: userId }, data: { partyId: party.id } });
-  return party.id;
-}
-
-/** A party for a borrower row that has no user — a demo file. */
-export async function partyForDemoBorrower(tx: Tx): Promise<string> {
-  const party = await tx.party.create({
-    data: { kind: "PERSON", claimStatus: "CLAIMED", sourceFirstSeen: "demo_seed" },
-    select: { id: true },
-  });
   return party.id;
 }
 
@@ -303,12 +295,15 @@ export interface BorrowerInput {
 /**
  * Record what a borrower said on screen 2, on the party.
  *
- * Finds or creates the party behind the file's owner (or a fresh one for a
- * demo file), gives it a principal, and asserts every collected field as a
- * fact — superseding the earlier assertion of each predicate, so saving screen
- * 2 twice is one person changing their mind rather than two people. Returns
- * the party id for the caller to put on the borrower row in the same
- * transaction.
+ * Finds or creates the party behind the file's owner, gives it a principal,
+ * and asserts every collected field as a fact — superseding the earlier
+ * assertion of each predicate, so saving screen 2 twice is one person changing
+ * their mind rather than two people. Returns the party id for the caller to
+ * put on the borrower row in the same transaction.
+ *
+ * Every file has an owner. The ownerless demo file the old seed made is gone;
+ * a sample borrower is a real user with a real party, which is what lets one
+ * be walked through the same doors as anybody else.
  */
 export async function recordBorrowerFacts(
   tx: Tx,
@@ -319,9 +314,14 @@ export async function recordBorrowerFacts(
     where: { id: loanFileId },
     select: { userId: true },
   });
-  const partyId =
-    existingPartyId ??
-    (owner.userId ? await partyForUser(tx, owner.userId) : await partyForDemoBorrower(tx));
+  // An ownerless file has nobody to be the party of. The column is still
+  // nullable and the old demo seed used to leave files that way; nothing
+  // creates one now, and minting a fresh party for each save would give one
+  // person a new identity every time they corrected a typo.
+  if (!existingPartyId && !owner.userId) {
+    throw new AppError(409, "A file with no owner cannot record a person.", "NO_OWNER");
+  }
+  const partyId = existingPartyId ?? (await partyForUser(tx, owner.userId!));
   const principalId = await principalForParty(tx, partyId);
 
   await assertFacts(tx, partyId, principalId, [

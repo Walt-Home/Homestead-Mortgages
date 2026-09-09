@@ -32,5 +32,12 @@ export default defineConfig({
     // The suite truncates shared tables between tests, so files cannot run
     // concurrently against one database.
     fileParallelism: false,
+    // These tests exercise a real Postgres rather than a mock, and a single
+    // case legitimately spends seconds truncating, seeding and walking a
+    // borrower through the doors. Vitest's five-second default is a ceiling
+    // the honest path reaches, which makes a passing suite a coin flip and,
+    // worse, can cut a test off mid-transaction and leave the schema wrong
+    // for every run after it. Time out on a hang, not on a slow machine.
+    testTimeout: 30_000,
   },
 });

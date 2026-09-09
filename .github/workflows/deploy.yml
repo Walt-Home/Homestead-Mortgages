@@ -181,6 +181,44 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
 
+      # Sample borrowers, seeded through the real services from the image that
+      # was just built — no build on the runner, and the same code the service
+      # runs. Idempotent by users.persona_key: a persona that already stands at
+      # its target is left alone and reported. It refuses to run unless
+      # DEMO_PERSONAS=true, the same flag that mounts the persona sign-in —
+      # never set either on a real production deploy.
+      #
+      # Nine lines: eight walked (or `exists`) plus the Grander row, which is
+      # deferred rather than seeded. The script exits non-zero on a drift — a
+      # persona standing somewhere its story does not describe — and the
+      # sign-in page shows the LIVE state beside each name, so that is a wrong
+      # answer on a public page and the deploy stops here rather than ship it.
+      # Recovery is by hand and on purpose, because a drift means somebody or
+      # something moved a persona and the next run should not erase the
+      # evidence: read the DRIFT line for the key, then run this same image
+      # against the same database with `--reset <key>` and deploy again.
+      #
+      # The status is taken by hand because a step runs under `bash -e`: with
+      # `OUT=$(docker run …)` the shell aborts at the assignment the moment the
+      # container exits non-zero, and the `echo` never runs. That threw away
+      # the whole log on the one failure this step exists to catch — the drift
+      # line naming which persona and where it stood, and any stack trace from
+      # a walk that broke mid-way. Print first, then decide.
+      - name: Seed the sample borrowers
+        run: |
+          set +e
+          OUT=$(docker run --rm --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e DEMO_PERSONAS=true \
+            "$IMAGE" node apps/api/dist/scripts/seed-personas.js --purge-legacy-demo 2>&1)
+          code=$?
+          set -e
+          echo "$OUT"
+          test "$code" -eq 0
+          test "$(grep -c '^persona ' <<< "$OUT")" -eq 9
+        env:
+          DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
+
       # Public, deliberately.
       #
       # The org-wide Domain Restricted Sharing constraint

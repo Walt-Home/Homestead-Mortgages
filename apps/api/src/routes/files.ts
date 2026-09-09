@@ -226,8 +226,10 @@ fileRouter.post(
 
       const created = await tx.loanFile.create({
         data: {
-          // Ownership is set at creation and never changes. A file with no owner
-          // is a demo file, and only the seed script makes those.
+          // Ownership is set at creation and never changes. Every file has an
+          // owner now, a sample borrower's included; the column is still
+          // nullable only because the old demo seed's rows were, and nothing
+          // writes one any more.
           userId: req.user!.id,
           stage: "IDENTITY",
           purpose: PURPOSE_TO_DB[input.purpose],

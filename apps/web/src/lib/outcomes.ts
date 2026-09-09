@@ -60,11 +60,11 @@ export const ADVERSE_COPY = {
  * back into the application.
  *
  * Which is why `termsLead` is its own line rather than a sentence in the body.
- * Every counteroffer this product can produce has a `BORROWER` scenario and
- * therefore no terms to print, so a body promising them printed "Here are the
- * terms we can do instead." directly above "The alternative is being worked
- * out". The body now says only what is true with nothing to show; the promise
- * renders inside the block that keeps it.
+ * A counteroffer whose alternative has not been proposed yet has only the
+ * borrower's own scenario and therefore nothing to print, so a body promising
+ * terms printed "Here are the terms we can do instead." directly above "The
+ * alternative is being worked out". The body says only what is true with
+ * nothing to show; the promise renders inside the block that keeps it.
  *
  * The reasons are the same bargain in the other direction: the body tells the
  * borrower they are owed them, so the ending renders the ones the engine

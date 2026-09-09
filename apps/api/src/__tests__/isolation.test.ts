@@ -47,6 +47,67 @@ describe("transactions run at the default isolation", () => {
   });
 });
 
+describe("the persona seed cannot write a state by hand", () => {
+  /**
+   * The whole claim the sample borrowers make is that they were walked to
+   * their states through the same services the four screens call. One
+   * `tx.application.update` in this file would make that false, and nothing
+   * downstream could tell: a forged status wears the same pill, and a forged
+   * ledger row reads the same in the timeline as one somebody caused.
+   *
+   * A verb list rather than four literal strings. `updateMany`, `upsert`,
+   * `createMany` and raw SQL are all the same forgery under another spelling,
+   * and the four-string version this replaced matched none of them.
+   *
+   * Nested relation writes are the third spelling. A status set through
+   * `loanFile.update({ data: { application: { update: … } } })` never names an
+   * application delegate at all, so the verb list alone would wave it through.
+   */
+  const seed = () => readFileSync(join(src, "scripts", "seed-personas.ts"), "utf8");
+
+  const VERBS = "create|createMany|update|updateMany|upsert|delete|deleteMany";
+  const DELEGATES = new RegExp(
+    `\\.(application|applicationTransition|regulatoryClock|applicationEvidenceLink|loanScenario|applicationParty)\\.(${VERBS})\\b`,
+    "g",
+  );
+  const NESTED = new RegExp(
+    `\\b(application|transitions|scenarios|pins|clocks|parties)\\s*:\\s*\\{\\s*(${VERBS}|connectOrCreate|set)\\b`,
+    "g",
+  );
+  const RAW = /\$(executeRaw|executeRawUnsafe|queryRaw|queryRawUnsafe)\b/g;
+
+  it("touches none of the tables that hold an application's state", () => {
+    expect(seed().match(DELEGATES) ?? []).toEqual([]);
+  });
+
+  it("reaches none of them through a relation either", () => {
+    expect(seed().match(NESTED) ?? []).toEqual([]);
+  });
+
+  it("runs no raw SQL", () => {
+    expect(seed().match(RAW) ?? []).toEqual([]);
+  });
+
+  it("is reading the seed, and the patterns match what they claim to", () => {
+    // A regex that matches nothing passes for the wrong reason, and so does a
+    // path that reads an empty file.
+    const source = seed();
+    expect(source).toContain("export async function seedAll");
+    expect("await tx.application.update({ where: { id } })").toMatch(DELEGATES);
+    expect("await tx.applicationTransition.createMany({})").toMatch(DELEGATES);
+    expect("await tx.regulatoryClock.upsert({})").toMatch(DELEGATES);
+    expect("await tx.$executeRawUnsafe(sql)").toMatch(RAW);
+    expect(
+      'tx.loanFile.update({ data: { application: { update: { status: "FUNDED" } } } })',
+    ).toMatch(NESTED);
+    expect("tx.application.create({ data: { transitions: { createMany: rows } } })").toMatch(
+      NESTED,
+    );
+    // And a read through the same relation is not a write.
+    expect("select: { application: { select: { status: true } } }").not.toMatch(NESTED);
+  });
+});
+
 describe("the signature and the move it causes are one write", () => {
   /**
    * Read out of the source, because a crash between two committed

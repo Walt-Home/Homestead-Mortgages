@@ -1,0 +1,565 @@
+/**
+ * The sample borrowers are real, and the seed cannot fake one.
+ *
+ * Two things are being proved. First, that each persona is where its story
+ * says: against the real Postgres, with the real triggers, having walked the
+ * real services. Second — and this is the half that matters more — that the
+ * seed did not simply write the answer. Every ledger row is checked for an
+ * actor drawn from a closed set, every receipt for the trigger that wrote it,
+ * and a story with a deliberately wrong target is checked to leave NOTHING
+ * behind, because a drift that commits is a wrong answer on a public sign-in
+ * page until somebody notices.
+ *
+ * `isolation.test.ts` carries the other half of that guarantee: it reads this
+ * module's source and fails on any delegate that could forge a state.
+ */
+
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it, vi } from "vitest";
+import { prisma } from "@hm/db";
+import { assessAll } from "@hm/requirements";
+import type { SanctionsScreening } from "@hm/shared";
+
+// Read at call time by the seed, but hoisted anyway: another suite in the same
+// worker sets it to "false", and which of us runs first is not something to
+// leave to run order.
+vi.hoisted(() => {
+  process.env.DEMO_PERSONAS = "true";
+});
+
+import { isSeeded, PERSONA_STORIES, type PersonaKey } from "../personas/stories.js";
+import { purgeLegacyDemo, resetPersona, seedAll } from "../scripts/seed-personas.js";
+import { borrowerObligations } from "../services/obligations.js";
+import { loadLoanFile } from "../services/repository.js";
+import { principalForParty } from "../services/party.js";
+import { toDomainState, transition } from "../services/transition.js";
+
+/** Everything the seed writes, counted, so a second run can be compared. */
+async function census() {
+  return {
+    users: await prisma.user.count(),
+    parties: await prisma.party.count(),
+    facts: await prisma.fact.count(),
+    applications: await prisma.application.count(),
+    transitions: await prisma.applicationTransition.count(),
+    clocks: await prisma.regulatoryClock.count(),
+    pins: await prisma.applicationEvidenceLink.count(),
+    scenarios: await prisma.loanScenario.count(),
+    snapshots: await prisma.connectorSnapshot.count(),
+  };
+}
+
+/** The file the persona picker would open, with its application beside it. */
+async function persona(key: PersonaKey) {
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { personaKey: key },
+    select: {
+      id: true,
+      partyId: true,
+      loanFiles: {
+        orderBy: { createdAt: "asc" },
+        take: 1,
+        select: {
+          id: true,
+          isDemo: true,
+          sanctionsScreenClear: true,
+          application: {
+            select: {
+              id: true,
+              status: true,
+              parties: { select: { partyId: true, role: true } },
+              clocks: { select: { kind: true, tolledFrom: true, tolledUntil: true } },
+              scenarios: { select: { seq: true, origin: true, isActive: true } },
+              transitions: {
+                orderBy: { seq: "asc" },
+                select: {
+                  seq: true,
+                  fromState: true,
+                  toState: true,
+                  event: true,
+                  reasonCode: true,
+                  actorPrincipalId: true,
+                  actor: { select: { kind: true, subject: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  const file = user.loanFiles[0]!;
+  return { user, file, application: file.application! };
+}
+
+const SEEDED = PERSONA_STORIES.filter(isSeeded);
+
+describe("the seed walks every persona to its state", () => {
+  it("puts each one where its story says, and says so", async () => {
+    const reports = await seedAll();
+    expect(reports).toHaveLength(PERSONA_STORIES.length);
+    for (const report of reports) {
+      const story = PERSONA_STORIES.find((s) => s.key === report.key)!;
+      if (!isSeeded(story)) {
+        expect(report.result).toBe("deferred");
+        expect(report.loanFileId).toBeNull();
+        continue;
+      }
+      expect(`${report.key}: ${report.result}`).toBe(`${report.key}: seeded`);
+      expect(`${report.key}: ${report.state}`).toBe(`${report.key}: ${story.target}`);
+    }
+  });
+
+  it("writes nothing the second time, and reports what is already there", async () => {
+    await seedAll();
+    const first = await census();
+    const again = await seedAll();
+    expect(await census()).toEqual(first);
+    for (const report of again) {
+      if (report.key === "grander_import") continue;
+      expect(`${report.key}: ${report.result}`).toBe(`${report.key}: exists`);
+    }
+  });
+
+  it("gives every application a gapless ledger whose receipt is the trigger's", async () => {
+    await seedAll();
+    for (const story of SEEDED) {
+      const { application } = await persona(story.key);
+      const seqs = application.transitions.map((t) => t.seq);
+      expect(`${story.key}: ${seqs.join(",")}`).toBe(
+        `${story.key}: ${seqs.map((_, i) => i + 1).join(",")}`,
+      );
+      // Every row starts where the one before it ended.
+      let previous: string | null = "DRAFT";
+      for (const row of application.transitions) {
+        expect(`${story.key}#${row.seq}`).toBe(
+          row.fromState === previous ? `${story.key}#${row.seq}` : `${story.key}#mismatch`,
+        );
+        previous = row.toState;
+      }
+      expect(toDomainState(application.status)).toBe(story.target);
+
+      const receipt = application.transitions.filter((t) => t.toState === "INTAKE_RECEIVED");
+      expect(receipt).toHaveLength(1);
+      expect(receipt[0]!.event).toBe("intake_completed");
+      expect(receipt[0]!.reasonCode).toBe("six_pieces_received");
+      expect(receipt[0]!.actor.subject).toBe("trid_receipt");
+    }
+  });
+
+  it("names only actors the product itself can be", async () => {
+    await seedAll();
+    for (const story of SEEDED) {
+      const { user, application } = await persona(story.key);
+      // The people and services allowed to have moved a sample borrower's
+      // application: the receipt trigger, the orchestration, the engine, the
+      // one named staff actor, and a borrower on the application itself.
+      const borrowerPrincipals = new Set<string>();
+      for (const party of application.parties) {
+        borrowerPrincipals.add(await principalForParty(prisma, party.partyId));
+      }
+      expect(user.partyId).not.toBeNull();
+      for (const row of application.transitions) {
+        const allowed =
+          (row.actor.kind === "SERVICE" &&
+            ["trid_receipt", "application_flow", "shadow_aus"].includes(row.actor.subject)) ||
+          (row.actor.kind === "STAFF" && row.actor.subject === "staff:persona_seed") ||
+          (row.actor.kind === "BORROWER" && borrowerPrincipals.has(row.actorPrincipalId));
+        expect(
+          `${story.key}#${row.seq} ${row.event} by ${row.actor.kind}:${row.actor.subject}`,
+        ).toBe(
+          allowed
+            ? `${story.key}#${row.seq} ${row.event} by ${row.actor.kind}:${row.actor.subject}`
+            : `${story.key}#${row.seq} an actor this seed may not be`,
+        );
+      }
+    }
+  });
+
+  it("opens exactly one Loan Estimate clock per application, and leaves it tolled", async () => {
+    await seedAll();
+    for (const story of SEEDED) {
+      const { application } = await persona(story.key);
+      const le = application.clocks.filter((c) => c.kind === "TRID_LE_DELIVERY");
+      expect(`${story.key}: ${le.length}`).toBe(`${story.key}: 1`);
+      // Tolled, and never satisfied: there is no way to deliver the document,
+      // and writing a delivery that did not happen is the one thing a
+      // regulatory clock must never say.
+      expect(le[0]!.tolledFrom).not.toBeNull();
+      expect(le[0]!.tolledUntil).toBeNull();
+    }
+  });
+
+  it("leaves nothing on the borrower of a file that has been decided", async () => {
+    // The reason the two decided personas can exist at all. An engine finding
+    // a person cannot act on — a commission history, an old inquiry — is a
+    // condition on their file, not an obligation that would hold it at "needs
+    // you" waiting for a document nobody can produce.
+    await seedAll();
+    for (const story of SEEDED) {
+      if (!story.expectedOutcome) continue;
+      const { file } = await persona(story.key);
+      const loaded = await loadLoanFile(file.id);
+      expect(borrowerObligations(loaded!).map((o) => o.branch)).toEqual([]);
+    }
+  });
+
+  it("writes each persona's own name, not the label on their row", async () => {
+    // The picker's row is a label, and Priya's says "Priya and Dev Raman"
+    // because two people are on that file. Sending a label through screen 2
+    // makes it somebody's `legal_name` — one of the six TRID pieces, sitting
+    // beside her date of birth and the last four of her SSN, saying a person
+    // is called something no person is called.
+    await seedAll();
+    for (const story of SEEDED) {
+      const { file } = await persona(story.key);
+      const loaded = await loadLoanFile(file.id);
+      const me = loaded!.borrowers[0]!;
+      expect(`${story.key}: ${me.firstName}`).not.toContain(" and ");
+      // And the row still has to name whoever opens it, or a tester clicks one
+      // person and reads another person's file.
+      expect([story.key, story.name.first.split(" ")[0], story.name.last]).toEqual([
+        story.key,
+        me.firstName,
+        me.lastName,
+      ]);
+    }
+  });
+
+  it("gives every persona a file the product can read and assess", async () => {
+    await seedAll();
+    for (const story of SEEDED) {
+      const { file } = await persona(story.key);
+      const loaded = await loadLoanFile(file.id);
+      expect(loaded).not.toBeNull();
+      // Would throw ProjectionError if a party's facts could not name a person.
+      expect(assessAll(loaded!).length).toBeGreaterThan(0);
+      expect(file.isDemo).toBe(true);
+    }
+  });
+});
+
+describe("each persona is the state their story describes", () => {
+  it("leaves Maya with no bank and Ben with one and no decision", async () => {
+    await seedAll();
+    const maya = await persona("maya_okafor");
+    expect(
+      await prisma.connectorSnapshot.count({ where: { loanFileId: maya.file.id, kind: "bank" } }),
+    ).toBe(0);
+    expect(await prisma.decision.count({ where: { loanFileId: maya.file.id } })).toBe(0);
+
+    const ben = await persona("ben_castillo");
+    expect(
+      await prisma.connectorSnapshot.count({ where: { loanFileId: ben.file.id, kind: "bank" } }),
+    ).toBe(1);
+    // Nobody has asked the engine, which is what "we're working on it" means.
+    expect(await prisma.decision.count({ where: { loanFileId: ben.file.id } })).toBe(0);
+  });
+
+  it("puts two people on Priya's application, with Priya first", async () => {
+    await seedAll();
+    const { file, application } = await persona("priya_dev_raman");
+    expect(application.parties).toHaveLength(2);
+    expect(application.parties.map((p) => p.role).sort()).toEqual([
+      "CO_BORROWER",
+      "PRIMARY_BORROWER",
+    ]);
+
+    // Everything reads `borrowers[0]` as the person whose request this is, and
+    // the purpose token is minted for that party. Dev first would mint Priya's
+    // credit pull under his authorization.
+    const loaded = await loadLoanFile(file.id);
+    expect(loaded!.borrowers[0]!.firstName).toBe("Priya");
+    const primary = application.parties.find((p) => p.role === "PRIMARY_BORROWER")!;
+    expect(loaded!.borrowers[0]!.partyId).toBe(primary.partyId);
+    expect(loaded!.borrowers[1]!.firstName).toBe("Dev");
+
+    // Her story names two things still to settle, in her words. No screen
+    // renders `loan_conditions`, so the sign-in page is the only place a
+    // tester reads them — and a story that named two while the engine raised
+    // three would be the sign-in page describing a file that is not there.
+    const conditions = await prisma.loanCondition.findMany({
+      where: { loanFileId: file.id },
+      orderBy: { requirementId: "asc" },
+      select: { requirementId: true, owner: true },
+    });
+    expect(conditions.map((c) => c.requirementId)).toEqual(["INC-009", "UW-004"]);
+    expect(conditions.every((c) => c.owner === "borrower")).toBe(true);
+  });
+
+  it("retires Tom's own terms with the ones we can do", async () => {
+    await seedAll();
+    const { application } = await persona("tom_nguyen");
+    const byseq = [...application.scenarios].sort((a, b) => a.seq - b.seq);
+    expect(byseq.map((s) => `${s.seq}:${s.origin}:${s.isActive}`)).toEqual([
+      "1:BORROWER:false",
+      "2:COUNTEROFFER:true",
+    ]);
+  });
+
+  it("opens Aisha's written-reasons clock and records why", async () => {
+    await seedAll();
+    const { file, application } = await persona("aisha_bello");
+    const ecoa = application.clocks.filter((c) => c.kind === "ECOA_ADVERSE_ACTION_30D");
+    expect(ecoa).toHaveLength(1);
+    expect(ecoa[0]!.tolledFrom).not.toBeNull();
+    const decision = await prisma.decision.findFirstOrThrow({
+      where: { loanFileId: file.id },
+      orderBy: { computedAt: "desc" },
+      select: { outcome: true, adverseActionReasons: true },
+    });
+    expect(decision.outcome).toBe("denied");
+    expect(decision.adverseActionReasons.length).toBeGreaterThan(0);
+  });
+
+  it("lets Lena withdraw as herself, and nothing move her afterwards", async () => {
+    await seedAll();
+    const { application } = await persona("lena_fischer");
+    const last = application.transitions.at(-1)!;
+    expect(last.event).toBe("borrower_withdrew");
+    expect(last.actor.kind).toBe("BORROWER");
+    expect(last.reasonCode).toBe("borrower_requested");
+
+    // Terminal is terminal. The machine has no edge out, and the database
+    // refuses a raw one.
+    await expect(
+      transition({
+        applicationId: application.id,
+        event: "ops_canceled",
+        actorPrincipalId: last.actorPrincipalId,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("says on Marcus's own ledger that his last three steps were recorded by hand", async () => {
+    await seedAll();
+    const { application } = await persona("marcus_hale");
+    const tail = application.transitions.slice(-3);
+    expect(tail.map((t) => t.event)).toEqual([
+      "disclosures_complete",
+      "closing_began",
+      "disbursed",
+    ]);
+    for (const row of tail) {
+      expect(row.actor.kind).toBe("STAFF");
+      expect(row.actor.subject).toBe("staff:persona_seed");
+      expect(row.reasonCode).toBe("persona_fixture");
+    }
+  });
+
+  it("holds Omar on evidence that agrees with the pill", async () => {
+    await seedAll();
+    const { file, application } = await persona("omar_haddad");
+    expect(toDomainState(application.status)).toBe("suspended");
+    expect(file.sanctionsScreenClear).toBe(false);
+    const snapshot = await prisma.connectorSnapshot.findFirstOrThrow({
+      where: { loanFileId: file.id, kind: "sanctions" },
+      orderBy: { retrievedAt: "desc" },
+      select: { payload: true },
+    });
+    const screening = snapshot.payload as unknown as SanctionsScreening;
+    expect(screening.clear).toBe(false);
+    expect(screening.matches.length).toBe(1);
+    const hold = application.transitions.at(-1)!;
+    expect(hold.event).toBe("third_party_blocked");
+    expect(hold.reasonCode).toBe("sanctions_near_match");
+  });
+});
+
+describe("what the seed refuses to do", () => {
+  it("will not run where the sample sign-in is not mounted", async () => {
+    const was = process.env.DEMO_PERSONAS;
+    process.env.DEMO_PERSONAS = "false";
+    try {
+      await expect(seedAll()).rejects.toThrow(/DEMO_PERSONAS/);
+      expect(await prisma.user.count()).toBe(0);
+    } finally {
+      process.env.DEMO_PERSONAS = was;
+    }
+  });
+
+  it("commits nothing for a persona that does not land on its target", async () => {
+    const maya = SEEDED.find((s) => s.key === "maya_okafor")!;
+    // The same walk, told to expect somewhere it cannot reach. The assertion
+    // is inside the transaction, so the whole persona rolls back — which is
+    // the difference between a deploy that fails and a deploy that succeeds
+    // with a wrong state on a public page forever after.
+    await expect(seedAll([{ ...maya, target: "funded" }])).rejects.toThrow(/drift/);
+    expect(await prisma.user.count({ where: { personaKey: "maya_okafor" } })).toBe(0);
+    expect(await prisma.application.count()).toBe(0);
+    expect(await prisma.party.count()).toBe(0);
+    expect(await prisma.loanFile.count()).toBe(0);
+  });
+
+  it("reports a drift on a re-run rather than skipping past it", async () => {
+    await seedAll();
+    const { application } = await persona("maya_okafor");
+    // Somebody moved her by hand, the way staff eventually will.
+    await transition({
+      applicationId: application.id,
+      event: "ops_canceled",
+      actorPrincipalId: await principalForParty(
+        prisma,
+        (await persona("maya_okafor")).user.partyId!,
+      ),
+    });
+    const reports = await seedAll();
+    const maya = reports.find((r) => r.key === "maya_okafor")!;
+    expect(maya.result).toBe("drift");
+    expect(maya.state).toBe("canceled");
+    expect(maya.expected).toBe("awaiting_borrower");
+  });
+});
+
+describe("clearing personas out", () => {
+  it("re-creates one persona, and its co-borrower, without touching the others", async () => {
+    await seedAll();
+    const before = await census();
+    const untouched = await prisma.user.findMany({
+      where: { personaKey: { notIn: ["priya_dev_raman"] } },
+      select: { id: true, personaKey: true },
+      orderBy: { personaKey: "asc" },
+    });
+
+    await resetPersona("priya_dev_raman");
+    expect(await prisma.user.findUnique({ where: { personaKey: "priya_dev_raman" } })).toBeNull();
+    // Dev has no user of his own, so nothing else would have taken his party.
+    expect(await prisma.party.count()).toBe(before.parties - 2);
+    expect(
+      await prisma.user.findMany({
+        where: { personaKey: { notIn: ["priya_dev_raman"] } },
+        select: { id: true, personaKey: true },
+        orderBy: { personaKey: "asc" },
+      }),
+    ).toEqual(untouched);
+
+    const again = await seedAll();
+    expect(again.find((r) => r.key === "priya_dev_raman")!.result).toBe("seeded");
+    for (const report of again) {
+      if (report.key === "priya_dev_raman" || report.key === "grander_import") continue;
+      expect(`${report.key}: ${report.result}`).toBe(`${report.key}: exists`);
+    }
+    expect(await census()).toEqual(before);
+  });
+
+  it("removes what the old demo seed left, and nothing else", async () => {
+    await seedAll();
+    const before = await census();
+    // What `seed-demo.ts` used to write: a file nobody owns, and a party it
+    // minted for the borrower row on it.
+    const legacyFile = await prisma.loanFile.create({
+      data: { isDemo: true, stage: "DECISION" },
+      select: { id: true },
+    });
+    const legacyParty = await prisma.party.create({
+      data: { kind: "PERSON", claimStatus: "CLAIMED", sourceFirstSeen: "demo_seed" },
+      select: { id: true },
+    });
+
+    expect(await purgeLegacyDemo()).toEqual({ files: 1, parties: 1 });
+    expect(await prisma.loanFile.findUnique({ where: { id: legacyFile.id } })).toBeNull();
+    expect(await prisma.party.findUnique({ where: { id: legacyParty.id } })).toBeNull();
+    // Every persona is still standing: their files have owners.
+    expect(await census()).toEqual(before);
+    expect(await prisma.party.count({ where: { sourceFirstSeen: "demo_seed" } })).toBe(0);
+  });
+});
+
+/** The seed's own source, for the two claims below that only it can settle. */
+const seedSource = (): string => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(join(here, "..", "scripts", "seed-personas.ts"), "utf8");
+  expect(source, "the seed moved").toContain("export async function seedAll");
+  return source;
+};
+
+describe("the guard on which borrower sorts first", () => {
+  /**
+   * A check placed where it cannot fail is not a check.
+   *
+   * The thing being guarded is that `borrowers[0]` on Priya's file is Priya:
+   * the purpose token is minted for that party, so Dev sorting first would
+   * pull her credit under his authorization. Only a `createdAt` tie can cause
+   * it, and a tie needs both rows — so the guard has to stand AFTER the
+   * co-borrower is inserted. Asked before, one row is on the file, the answer
+   * is the primary by construction, and the guard passes forever.
+   */
+  it("stands after the row that could beat the primary, and before any pull", () => {
+    const source = seedSource();
+    const create = source.indexOf("const dev = await w.tx.borrower.create({");
+    const guard = source.indexOf("the co-borrower sorts first");
+    const onward = source.indexOf(
+      'ensureApplicationParty(w.tx, w.applicationId, party.id, "CO_BORROWER")',
+    );
+    expect(create).toBeGreaterThan(-1);
+    expect(guard).toBeGreaterThan(create);
+    expect(onward).toBeGreaterThan(guard);
+  });
+
+  it("asks the reader itself, rather than a copy of its ordering", () => {
+    // An `orderBy` written out here could drift from the one `loadLoanFile`
+    // uses, and then the guard would be checking a rule nothing else follows.
+    expect(seedSource()).toContain("await loadLoanFile(w.loanFileId, w.tx)");
+  });
+});
+
+describe("a failing run keeps its report", () => {
+  /**
+   * The deploy captures this script's stdout through a subshell and echoes it
+   * back before deciding anything, so on the one run that matters the report
+   * IS the failure message. `process.exit` abandons a pipe that is still
+   * draining, which would throw away the DRIFT line naming the persona.
+   */
+  it("drains stdout before it leaves non-zero", () => {
+    const source = seedSource();
+    expect(source).toContain("async function failAfterFlush()");
+    expect(source).toContain('process.stdout.write("", () => resolve())');
+    expect(source).toContain(
+      'if (reports.some((r) => r.result === "drift")) await failAfterFlush();',
+    );
+    // One exit in the file, and it is the one inside the drain.
+    expect(source.match(/process\.exit\(1\)/g) ?? []).toHaveLength(1);
+  });
+});
+
+describe("the deploy step that runs the seed", () => {
+  /**
+   * The step is the only place the seed ever runs unattended, and its whole
+   * job on a bad day is to say WHICH persona drifted and where it stood.
+   *
+   * A workflow `run:` block is executed under `bash -e`. Assigning a command
+   * substitution — `OUT=$(docker run …)` — takes the container's exit status,
+   * so the shell aborts at the assignment the moment the seed exits non-zero
+   * and the `echo` below it never runs: the deploy fails with an empty log on
+   * exactly the failure the step exists to catch. Read out of the file,
+   * because nothing else here can run a workflow.
+   */
+  const step = (): string => {
+    const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+    const yaml = readFileSync(join(root, ".github", "workflows", "deploy.yml"), "utf8");
+    const start = yaml.indexOf("- name: Seed the sample borrowers");
+    expect(start, "the deploy no longer seeds the sample borrowers").toBeGreaterThan(-1);
+    const end = yaml.indexOf("\n      - name:", start);
+    return yaml.slice(start, end === -1 ? undefined : end);
+  };
+
+  it("prints what the seed said before it decides anything", () => {
+    const body = step();
+    const run = body.indexOf("OUT=$(");
+    expect(body.indexOf("set +e")).toBeGreaterThan(-1);
+    expect(body.indexOf("set +e")).toBeLessThan(run);
+    expect(body.indexOf("code=$?")).toBeGreaterThan(run);
+    expect(body.indexOf('echo "$OUT"')).toBeLessThan(body.indexOf('test "$code" -eq 0'));
+  });
+
+  it("fails when the seed fails, and counts a row for every story", () => {
+    const body = step();
+    // The script exits non-zero on a drift, so its own status carries that.
+    expect(body).toContain('test "$code" -eq 0');
+    expect(body).toContain(`-eq ${PERSONA_STORIES.length}`);
+    expect(body).toContain("node apps/api/dist/scripts/seed-personas.js");
+    expect(body).toContain("DEMO_PERSONAS=true");
+  });
+});

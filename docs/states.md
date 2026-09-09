@@ -312,23 +312,24 @@ year's pull.
 
 ## Built, or not
 
-| Piece                                                           | Status                                                                                                                    |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `FlowStage`, four screens, decision outcomes                    | Built — and being replaced                                                                                                |
-| Tests against a real Postgres                                   | Built                                                                                                                     |
-| Party, facts, principals                                        | **Built** — schema and constraints; not yet wired to a route                                                              |
-| Authorizations and the purpose token                            | **Built** — and the connector guard now takes it                                                                          |
-| Evidence artifacts, retrieval requests                          | Designed                                                                                                                  |
-| Applications and the transition ledger                          | **Built** — wired to the four screens: the bank, the branches, the screening, the signature and the decision each move it |
-| Scenarios, pins, and the TRID receipt                           | **Built** — screen 2 and the signature pin the person; the legacy stamp is retired                                        |
-| The bridge: screen 2 → party + facts; consents → authorizations | **Built** — dual-write; the minter reads the real table, falls back to legacy                                             |
-| The read-flip: identity fields projected from facts             | **Built** — per field, party first, column as fallback; situational and HMDA fields stay on the row                       |
-| Identity columns dropped; `borrowers` is a record about a party | **Built** — `party_id` NOT NULL; every identity field is only a fact; the consent fallback is gone                        |
-| Rewritten decision engine (three-axis)                          | Designed                                                                                                                  |
-| Loans and servicing                                             | Designed                                                                                                                  |
-| Roles and staff tooling                                         | Designed                                                                                                                  |
-| Monitoring, notifications                                       | Designed, deferred                                                                                                        |
-| Notice generation and delivery                                  | **Not designed in detail. Resend is chosen and not integrated**                                                           |
+| Piece                                                           | Status                                                                                                                                       |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FlowStage`, four screens, decision outcomes                    | Built — and being replaced                                                                                                                   |
+| Tests against a real Postgres                                   | Built                                                                                                                                        |
+| Party, facts, principals                                        | **Built** — schema and constraints; not yet wired to a route                                                                                 |
+| Authorizations and the purpose token                            | **Built** — and the connector guard now takes it                                                                                             |
+| Evidence artifacts, retrieval requests                          | Designed                                                                                                                                     |
+| Applications and the transition ledger                          | **Built** — wired to the four screens: the bank, the branches, the screening, the signature and the decision each move it                    |
+| Scenarios, pins, and the TRID receipt                           | **Built** — screen 2 and the signature pin the person; the legacy stamp is retired                                                           |
+| The bridge: screen 2 → party + facts; consents → authorizations | **Built** — dual-write; the minter reads the real table, falls back to legacy                                                                |
+| The read-flip: identity fields projected from facts             | **Built** — per field, party first, column as fallback; situational and HMDA fields stay on the row                                          |
+| Identity columns dropped; `borrowers` is a record about a party | **Built** — `party_id` NOT NULL; every identity field is only a fact; the consent fallback is gone                                           |
+| Sample borrowers in real states                                 | **Built** — eight of them walked to their states through the services the four screens call; the ninth row is deferred. Behind a deploy flag |
+| Rewritten decision engine (three-axis)                          | Designed                                                                                                                                     |
+| Loans and servicing                                             | Designed                                                                                                                                     |
+| Roles and staff tooling                                         | Designed                                                                                                                                     |
+| Monitoring, notifications                                       | Designed, deferred                                                                                                                           |
+| Notice generation and delivery                                  | **Not designed in detail. Resend is chosen and not integrated**                                                                              |
 
 That last row governs more than it looks like it does. Several regulatory clocks
 can only be _stopped_ by a delivered notice, so until Resend is wired in, a clock

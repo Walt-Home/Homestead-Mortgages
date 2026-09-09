@@ -14,8 +14,12 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { prisma } from "@hm/db";
+import { connectorRouter } from "../routes/connectors.js";
 import { assertFileAccess } from "../services/repository.js";
-import { createLoanFile, createUser } from "./support/factories.js";
+import type { BorrowerInput } from "../services/party.js";
+import { createLoanFile, createUser, saveBorrower } from "./support/factories.js";
+import { callAs } from "./support/http.js";
 
 const MISSING = "33333333-3333-3333-3333-333333333333";
 
@@ -89,5 +93,46 @@ describe("file access", () => {
     const { prisma } = await import("@hm/db");
     await prisma.loanFile.delete({ where: { id: file.id } });
     expect(await outcome(file.id, me.id, "read")).toBe("404 NOT_FOUND");
+  });
+});
+
+/** Screen 2's answers, for a person on somebody else's file. */
+const someone: BorrowerInput = {
+  firstName: "Dana",
+  lastName: "Whitfield",
+  email: "dana@example.test",
+  phone: "5555550100",
+  dateOfBirth: "1988-04-12",
+  ssnVaultHandle: "vault:dana:1",
+  currentAddress: { line1: "1 Fixture St", city: "Demo City", state: "CA", postalCode: "94000" },
+  maritalStatus: "unmarried",
+  citizenship: "us_citizen",
+  preferredLanguage: "en",
+  firstTimeHomebuyer: true,
+  isMilitary: false,
+  currentHousing: "rent",
+  statedMonthlyIncome: 8_500,
+};
+
+describe("a consent names a borrower on the file it is posted to", () => {
+  it("refuses one from somebody else's file, as a 404", async () => {
+    // The consent's trigger mirrors a grant onto whatever party the named
+    // borrower points at, and the pins that follow borrow that person's facts
+    // into this application. Without the check, a caller with a file of their
+    // own could authorize verifications against a stranger by guessing an id —
+    // and a 404 rather than a 403 keeps the id from being confirmed.
+    const me = await createUser();
+    const mine = await createLoanFile({ userId: me.id });
+    const stranger = await createUser();
+    const theirs = await createLoanFile({ userId: stranger.id });
+    const theirBorrower = await saveBorrower(theirs.id, someone);
+
+    const res = await callAs(me.id, [connectorRouter], "POST", `/${mine.id}/consents`, {
+      kind: "verification_authorization",
+      borrowerId: theirBorrower.id,
+    });
+    expect(res.status).toBe(404);
+    expect(await prisma.consent.count()).toBe(0);
+    expect(await prisma.authorization.count()).toBe(0);
   });
 });

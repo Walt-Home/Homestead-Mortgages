@@ -20,9 +20,11 @@
 
 import { prisma } from "@hm/db";
 import type { Prisma } from "@hm/db";
-import { TRID_PARTY_PREDICATES, TRID_SCENARIO_FIELDS } from "@hm/shared";
+import { TERMINAL, TRID_PARTY_PREDICATES, TRID_SCENARIO_FIELDS } from "@hm/shared";
 import { AppError } from "../middleware/error-handler.js";
 import { ownsTransaction, type Db } from "./db.js";
+import { liveFact, liveGrant } from "./party.js";
+import { toDomainState } from "./transition.js";
 
 export interface PinInput {
   readonly applicationId: string;
@@ -75,6 +77,147 @@ export async function releasePin(pinId: string, db: Db = prisma): Promise<void> 
     });
   } catch (err) {
     throw asRefusal(err, "pin");
+  }
+}
+
+/** What a reconciliation did. `grantId` null means there was nothing to pin under. */
+export interface PinReconciliation {
+  /** The live FCRA grant everything was pinned under, or null when there is none. */
+  readonly grantId: string | null;
+  /** Predicates newly pinned by this call. */
+  readonly pinned: string[];
+  /** Pin ids released as stale by this call. */
+  readonly released: string[];
+}
+
+/**
+ * Bring an application's borrowed party facts up to date. A reconciler, never
+ * a blind pin.
+ *
+ * Screen 2 is saved more than once, a name is corrected, an income is fixed,
+ * and a signature is renewed after 120 days. Each of those leaves the pins
+ * pointing at something that is no longer true: `assertFacts` supersedes the
+ * old fact but the pin still names it, and the mirror trigger retires a lapsed
+ * grant but the pin still borrows under it. Pinning again without looking
+ * would either collide on the live-pin index or add a second pin for the same
+ * predicate. So every save asks the same question per predicate — is there a
+ * live pin, on the live fact, under a live grant? — and only writes when the
+ * answer is no.
+ *
+ * What licenses the borrowing is the party's live grant, looked up BY PURPOSE
+ * and never as "any live grant". Persistent monitoring mirrors to an
+ * account-review grant, which covers no credit request and which the pin guard
+ * refuses outright — so asking for any grant would turn an opt-in to
+ * monitoring into the authorization an application was borrowed under, and the
+ * refusal would reach the borrower as a 403 on an ordinary save.
+ *
+ * Nothing to borrow under is not an error: it is the ordinary state of a first
+ * save on any file, where screen 2 writes the facts and the consent that
+ * follows it is what pins them.
+ *
+ * An application that has ENDED is left exactly as it is. Its evidence is the
+ * record of what it was decided on, and re-pointing a withdrawn or denied
+ * file's pins would quietly rewrite the basis of somebody's ending. The check
+ * lives HERE rather than in the callers because screen 2, the consent and the
+ * e-sign completion all pin directly: asking each of them to remember would
+ * mean the invariant held on the paths somebody thought of and nowhere else,
+ * and saving screen 2 at a withdrawn file's URL really did move its pins.
+ *
+ * The inserts fire the receipt trigger inside the caller's transaction, so the
+ * third piece of a still-draft application stamps it and opens the Loan
+ * Estimate clock with the save that completed it. After that the receipt
+ * returns at `status <> DRAFT` and a re-pin is evidence upkeep with no state
+ * effect, which is why this can run on every save.
+ */
+export async function pinTridPieces(
+  db: Db,
+  args: { applicationId: string; partyId: string },
+): Promise<PinReconciliation> {
+  const { applicationId, partyId } = args;
+  const application = await db.application.findUnique({
+    where: { id: applicationId },
+    select: { status: true },
+  });
+  if (!application || TERMINAL.includes(toDomainState(application.status)))
+    return { grantId: null, pinned: [], released: [] };
+
+  const grant = await liveGrant(db, partyId, "FCRA_WRITTEN_INSTRUCTION");
+  if (!grant) return { grantId: null, pinned: [], released: [] };
+
+  const now = new Date();
+  const pinned: string[] = [];
+  const released: string[] = [];
+
+  for (const predicate of TRID_PARTY_PREDICATES) {
+    const fact = await liveFact(db, partyId, predicate);
+    // Nothing asserted for this piece. A revisit that did not restate an
+    // income must not release the pin the first save made: absent is absent,
+    // and the earlier evidence stands.
+    if (!fact) continue;
+
+    const live = await db.applicationEvidenceLink.findMany({
+      where: { applicationId, predicate, releasedAt: null, fact: { partyId } },
+      select: {
+        id: true,
+        factId: true,
+        authorization: { select: { revokedAt: true, expiresAt: true } },
+      },
+    });
+    // A pin is current when it names the fact that stands now, under an
+    // authorization that still stands.
+    const isCurrent = (pin: (typeof live)[number]) =>
+      pin.factId === fact.id &&
+      pin.authorization.revokedAt === null &&
+      pin.authorization.expiresAt > now;
+
+    // The sweep runs before the decision to skip, never after it. Deciding
+    // first left the OTHER live pins on this predicate standing whenever one
+    // of them was current — the live-pin index is keyed on
+    // (application_id, fact_id), so pins naming different facts do not collide
+    // and nothing else was ever going to come back for them. It perpetuated
+    // itself, too: the next save took the same short circuit. The receipt
+    // counts live pins, so a stale one is a piece the application says it
+    // holds and has nothing behind.
+    for (const stale of live) {
+      if (isCurrent(stale)) continue;
+      await releasePin(stale.id, db);
+      released.push(stale.id);
+    }
+    if (live.some(isCurrent)) continue;
+
+    await pinFact({ applicationId, factId: fact.id, authorizationId: grant.id }, db);
+    pinned.push(predicate);
+  }
+
+  return { grantId: grant.id, pinned, released };
+}
+
+/**
+ * Reconcile every application this person's evidence is borrowed into.
+ *
+ * One person, two files. Screen 1 of the second states an income and
+ * supersedes the fact the first one's application borrowed — and until this
+ * existed, nothing ever looked at an application other than the one the
+ * request happened to be about, so the first file kept a live pin on a fact
+ * the borrower had replaced, forever. A pin is what an application relies on
+ * NOW, and the receipt counts live pins without asking whether the fact behind
+ * one still stands: the SQL and `sixPieces` would both have gone on reporting
+ * a piece held on evidence that had been taken back.
+ *
+ * Nothing is lost by re-pointing a pin. The superseded fact is still there
+ * with its supersession chain, the released pin is still there with its
+ * `released_at`, and the ledger says when intake happened.
+ *
+ * An application that has ended is left alone, which this does not have to
+ * arrange: `pinTridPieces` refuses one whoever asks.
+ */
+export async function reconcilePartyEvidence(db: Db, partyId: string): Promise<void> {
+  const on = await db.applicationParty.findMany({
+    where: { partyId, role: "PRIMARY_BORROWER" },
+    select: { applicationId: true },
+  });
+  for (const membership of on) {
+    await pinTridPieces(db, { applicationId: membership.applicationId, partyId });
   }
 }
 

@@ -19,7 +19,6 @@ import {
   recordEvent,
   STAGE_TO_DOMAIN,
 } from "../services/repository.js";
-import { loanEstimateDueAt, stampApplicationIfComplete } from "../services/application.js";
 import { advanceStage } from "../services/stage.js";
 import {
   assertFacts,
@@ -31,10 +30,12 @@ import {
 import {
   applicationForFile,
   createDraftApplication,
+  ensureApplicationParty,
   scenarioTermsFrom,
   syncScenario,
 } from "../services/applications.js";
-import { applicationStanding, rawLedger } from "../services/standing.js";
+import { pinTridPieces, reconcilePartyEvidence } from "../services/evidence.js";
+import { applicationStanding, rawLedger, settleAfterIntake } from "../services/standing.js";
 
 export const fileRouter = Router();
 
@@ -65,7 +66,7 @@ const propertyLoanSchema = z.object({
   /**
    * Stated, unverified, and collected here for one reason: it is the sixth
    * piece of the TRID application, and without it the LE clock cannot start
-   * until a connector returns. See services/application.ts.
+   * until a connector returns. See packages/shared/src/trid.ts.
    */
   statedMonthlyIncome: z.number().positive(),
   financedPropertyCount: z.number().int().min(1).default(1),
@@ -143,10 +144,32 @@ fileRouter.patch(
         await assertFacts(tx, partyId, principalId, [
           { predicate: "monthly_income", value: input.statedMonthlyIncome },
         ]);
+        // A corrected income supersedes the fact an application borrowed, and
+        // a pin on a superseded fact is evidence of something the borrower has
+        // already taken back. Every application this person is applying on,
+        // not only this file's: the figure belongs to the person, and the file
+        // the request happens to be about is not the only one relying on it.
+        // The pins move first, so the scenario insert below — which is itself
+        // a receipt writer — counts what is true now.
+        await reconcilePartyEvidence(tx, partyId);
       }
 
       const app = await applicationForFile(tx, id);
-      if (app) await syncScenario(tx, app.id, updated);
+      if (app) {
+        await syncScenario(tx, app.id, updated);
+        // Both writers above can stamp the receipt, so this screen settles what
+        // follows one exactly as screen 2 and the consent do. A borrower who
+        // fixes a blank value here is applying, and an application that was
+        // received and never told anyone what it wanted next would show no
+        // "Needs you" and no line in the timeline asking for the bank. It costs
+        // one SELECT and does nothing unless this save is what received the
+        // file.
+        await settleAfterIntake(tx, {
+          applicationId: app.id,
+          loanFileId: id,
+          causedBy: "screen:property_loan",
+        });
+      }
       return updated;
     });
 
@@ -227,6 +250,12 @@ fileRouter.post(
       await assertFacts(tx, partyId, principalId, [
         { predicate: "monthly_income", value: input.statedMonthlyIncome },
       ]);
+      // That supersession lands on the PERSON, so it reaches every application
+      // they are applying on — including the one on the file they started last
+      // month, which borrowed the figure this save just replaced and has no
+      // other reason to be looked at today. Before the draft below exists,
+      // because the new application has nothing pinned to it yet.
+      await reconcilePartyEvidence(tx, partyId);
 
       const terms = scenarioTermsFrom(created);
       // Screen 1's schema requires the address, the value and the amount, so
@@ -306,13 +335,35 @@ fileRouter.post(
     // and a party whose facts will not project must be repairable by saving
     // this screen again. The projection runs once, after the write.
 
+    // Whose record this screen is about, in the order every other reader of
+    // this file uses. A file can carry more than one borrower row, and left
+    // unordered the planner chose which of them screen 2 superseded, updated
+    // and promoted to PRIMARY_BORROWER — so on a co-borrower file the pins,
+    // the TRID receipt and the Loan Estimate clock could land on the wrong
+    // person from one save to the next.
     const existingBorrower = await prisma.borrower.findFirst({
       where: { loanFileId: id },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: { id: true, partyId: true },
     });
 
     if (!existingBorrower && (!input.ssnVaultHandle || !input.ssnLast4)) {
       throw new AppError(400, "An SSN is required the first time.", "SSN_REQUIRED");
+    }
+
+    // The same rule for the sixth piece. Income is optional on this screen
+    // because screen 1 is where it is stated and a revisit need not restate
+    // it — but a first save with no figure anywhere is a person nothing knows
+    // an income for, and saying it is a dollar would not change that. The
+    // screen carries the field for exactly this case, so asking is a question
+    // the borrower can answer rather than a dead end.
+    if (!existingBorrower && input.statedMonthlyIncome === undefined) {
+      const onFile = req.user!.partyId
+        ? await liveFact(prisma, req.user!.partyId, "monthly_income")
+        : null;
+      if (!onFile) {
+        throw new AppError(400, "Your monthly income is needed the first time.", "INCOME_REQUIRED");
+      }
     }
 
     // What stays on the row: the things that are about THIS application
@@ -334,7 +385,7 @@ fileRouter.post(
     // so a request records both or neither. Going back to screen 2 and saving
     // again must UPDATE the person, not add a second one: the earlier
     // assertion of each fact is superseded, and the row is updated in place.
-    const partyId = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       const partyId = await recordBorrowerFacts(tx, {
         loanFileId: id,
         existingPartyId: existingBorrower?.partyId ?? null,
@@ -358,7 +409,25 @@ fileRouter.post(
           },
         });
       }
-      return partyId;
+
+      // The person is now on the credit request, and the facts they just
+      // stated are borrowed into it under whatever authorization they hold.
+      // On a first-ever save there is none — the consent screen 2 posts next
+      // is what mints it — so the reconciler does nothing here and `/consents`
+      // pins. On a revisit the grant is live, so a corrected name supersedes
+      // its fact here and the pin moves to the successor in the same
+      // transaction: the application never holds a pin on a fact the borrower
+      // has replaced.
+      const app = await applicationForFile(tx, id);
+      if (app) {
+        await ensureApplicationParty(tx, app.id, partyId, "PRIMARY_BORROWER");
+        await pinTridPieces(tx, { applicationId: app.id, partyId });
+        await settleAfterIntake(tx, {
+          applicationId: app.id,
+          loanFileId: id,
+          causedBy: "screen:identity",
+        });
+      }
     });
     await recordEvent(id, existingBorrower ? "screen_revised" : "screen_completed", "borrower", {
       screen: "identity",
@@ -366,28 +435,17 @@ fileRouter.post(
 
     await advanceStage(id, "CREDIT");
 
-    // The sixth piece, from wherever it actually is. Screen 1 asserts the
-    // stated income on the party, so a screen-2 save that does not restate it
-    // is not a file with no income — it is a file whose income was recorded
-    // earlier. Reading the fact is what lets this screen stop inventing a
-    // figure to pass the receipt with.
-    const onRecord = await liveFact(prisma, partyId, "monthly_income");
-    const stated =
-      input.statedMonthlyIncome ?? (typeof onRecord?.value === "number" ? onRecord.value : null);
-
-    const refreshed = await loadLoanFile(id);
-    const stampedAt = refreshed ? await stampApplicationIfComplete(refreshed, stated) : null;
+    // Read the file back once, so a party whose facts will not project fails
+    // here — as a 500 the client routes to the repair screen — rather than on
+    // the next screen's read. Nothing is done with the result: the receipt is
+    // the database's now, and the only thing this screen has left to report is
+    // where the application stands.
+    await loadLoanFile(id);
 
     res.status(201).json({
       id,
       stage: "credit",
-      applicationReceivedAt: stampedAt,
-      loanEstimateDueAt: stampedAt
-        ? loanEstimateDueAt({
-            ...refreshed!,
-            application: { receivedAt: stampedAt, sixPieces: {} as never },
-          })
-        : null,
+      applicationState: await applicationStanding(prisma, id),
     });
   }),
 );
@@ -439,11 +497,7 @@ fileRouter.get(
     await assertFileAccess(id, req.user!.id, "read");
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
-    res.json({
-      file,
-      loanEstimateDueAt: loanEstimateDueAt(file),
-      applicationState: await applicationStanding(prisma, id),
-    });
+    res.json({ file, applicationState: await applicationStanding(prisma, id) });
   }),
 );
 

@@ -56,15 +56,6 @@ async function seed(personaId: PersonaId): Promise<void> {
       amortization: "fixed",
       noteRate: config.defaultProduct.noteRate,
       sanctionsScreenClear: true,
-      applicationReceivedAt: new Date(),
-      applicationSixPieces: {
-        name: true,
-        income: true,
-        ssn: true,
-        propertyAddress: true,
-        valueEstimate: true,
-        loanAmount: true,
-      } as unknown as Prisma.InputJsonValue,
     },
   });
 

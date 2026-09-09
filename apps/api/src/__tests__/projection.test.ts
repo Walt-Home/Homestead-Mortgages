@@ -17,7 +17,9 @@ import {
 import { recordBorrowerFacts, type BorrowerInput } from "../services/party.js";
 import { loadLoanFile } from "../services/repository.js";
 import { addressSchema, identitySchema } from "../routes/files.js";
-import { createLoanFile, createUser, saveBorrower } from "./support/factories.js";
+import { createDraftApplication } from "../services/applications.js";
+import { pinTridPieces } from "../services/evidence.js";
+import { consent, createLoanFile, createUser, saveBorrower } from "./support/factories.js";
 
 const dana: BorrowerInput = {
   firstName: "Dana",
@@ -215,5 +217,160 @@ describe("the pure parts", () => {
     const byParty = factMapsByParty(rows);
     expect(byParty.get("p")?.get("email")).toBe("new@x");
     expect(byParty.size).toBe(1);
+  });
+});
+
+describe("APP-002's input comes from the ledger", () => {
+  /** Screen 1 and screen 2, through the services, up to the receipt. */
+  async function receivedApplication() {
+    const user = await createUser();
+    const file = await createLoanFile({ userId: user.id });
+    const borrower = await saveBorrower(file.id, dana);
+    const applicationId = await prisma.$transaction(async (tx) => {
+      const made = await createDraftApplication(tx, {
+        loanFileId: file.id,
+        partyId: borrower.partyId,
+        terms: {
+          objective: "PURCHASE",
+          occupancy: "PRIMARY_RESIDENCE",
+          loanAmountCents: 33_200_000n,
+          valueEstimateCents: 41_500_000n,
+          termMonths: 360,
+          propertyAddress: "88 Foster Lane, Austin, TX 78745",
+        },
+      });
+      return made.applicationId;
+    });
+    // The consent mirrors to the grant the pins borrow under; the third pin
+    // stamps the receipt.
+    await consent(file.id, borrower.id, "verification_authorization");
+    await pinTridPieces(prisma, { applicationId, partyId: borrower.partyId });
+    return { file, applicationId, borrower };
+  }
+
+  it("reads the receipt from the row the trigger wrote", async () => {
+    // The column this used to read was stamped by a second judgment in the
+    // API, so two things could both claim to know when an application began.
+    // The ledger row is the one that opened the Loan Estimate clock.
+    const { file, applicationId } = await receivedApplication();
+    const received = await prisma.applicationTransition.findFirstOrThrow({
+      where: { applicationId, event: "intake_completed" },
+      select: { occurredAt: true },
+    });
+
+    const projected = (await loadLoanFile(file.id))!.application;
+    expect(projected?.receivedAt).toBe(received.occurredAt.toISOString());
+  });
+
+  it("answers the engine in the engine's six words", async () => {
+    // The pins and the scenario speak predicates and column names; APP-002
+    // reads name, income, ssn, propertyAddress, valueEstimate, loanAmount. The
+    // mapping is the whole of it, and a missed key would read as a piece the
+    // application does not hold.
+    const { file } = await receivedApplication();
+    const pieces = (await loadLoanFile(file.id))!.application!.sixPieces;
+    expect(pieces).toEqual({
+      name: true,
+      income: true,
+      ssn: true,
+      propertyAddress: true,
+      valueEstimate: true,
+      loanAmount: true,
+    });
+  });
+
+  it("is null for a file with no application, and for one still at draft", async () => {
+    // Null means APP-002 is outstanding, which is the truthful reading for a
+    // file created before the join existed — and for a draft, which by
+    // definition has not been received.
+    const user = await createUser();
+    const legacy = await createLoanFile({ userId: user.id });
+    await saveBorrower(legacy.id, dana);
+    expect((await loadLoanFile(legacy.id))!.application).toBeNull();
+
+    const drafted = await createLoanFile({ userId: user.id });
+    const borrower = await saveBorrower(drafted.id, dana);
+    await prisma.$transaction((tx) =>
+      createDraftApplication(tx, {
+        loanFileId: drafted.id,
+        partyId: borrower.partyId,
+        terms: {
+          objective: "PURCHASE",
+          occupancy: "PRIMARY_RESIDENCE",
+          loanAmountCents: 33_200_000n,
+          valueEstimateCents: 41_500_000n,
+          termMonths: 360,
+          propertyAddress: "88 Foster Lane, Austin, TX 78745",
+        },
+      }),
+    );
+    expect((await loadLoanFile(drafted.id))!.application).toBeNull();
+  });
+});
+
+describe("who a file is about", () => {
+  /** A second person on a file, with their own party and their own facts. */
+  async function addBorrower(
+    loanFileId: string,
+    firstName: string,
+    createdAt: Date,
+    id?: string,
+  ): Promise<string> {
+    const party = await prisma.party.create({ data: { kind: "PERSON" }, select: { id: true } });
+    return prisma.$transaction(async (tx) => {
+      await recordBorrowerFacts(tx, {
+        loanFileId,
+        existingPartyId: party.id,
+        input: { ...dana, firstName, ssnVaultHandle: `vault:${firstName.toLowerCase()}:1` },
+      });
+      const row = await tx.borrower.create({
+        data: {
+          ...(id ? { id } : {}),
+          loanFileId,
+          partyId: party.id,
+          ssnLast4: "1111",
+          currentHousing: "rent",
+          createdAt,
+        },
+        select: { id: true },
+      });
+      return row.id;
+    });
+  }
+
+  it("is the borrower recorded first, not the one the heap returns first", async () => {
+    // Every route reads `borrowers[0]` and means the person whose request this
+    // is. Unordered, that is the physical order of the rows, which has nothing
+    // to do with who applied — here the later person was inserted first.
+    const user = await createUser();
+    const file = await createLoanFile({ userId: user.id });
+    await addBorrower(file.id, "Dev", new Date("2026-06-02T10:00:00Z"));
+    await addBorrower(file.id, "Dana", new Date("2026-06-01T10:00:00Z"));
+
+    expect((await loadLoanFile(file.id))!.borrowers.map((b) => b.firstName)).toEqual([
+      "Dana",
+      "Dev",
+    ]);
+  });
+
+  it("breaks a tie on the id, so two rows a millisecond apart are still ordered", async () => {
+    // Two borrowers created in one transaction share `now()`, and at
+    // TIMESTAMP(3) they can share the millisecond outright. Without a second
+    // key that is a coin toss over which person a file is about.
+    //
+    // The ids are fixed rather than generated, and deliberately out of step
+    // with the insertion order: Dev goes in first holding the HIGHER one. A
+    // random pair would leave this agreeing with the heap order about half the
+    // time, which is a test that cannot fail on the bug it is here for.
+    const DEV = "dddddddd-dddd-4ddd-8ddd-ddddddd00002";
+    const DANA = "dddddddd-dddd-4ddd-8ddd-ddddddd00001";
+    const user = await createUser();
+    const file = await createLoanFile({ userId: user.id });
+    const sameInstant = new Date("2026-06-01T10:00:00.000Z");
+    await addBorrower(file.id, "Dev", sameInstant, DEV);
+    await addBorrower(file.id, "Dana", sameInstant, DANA);
+
+    const projected = (await loadLoanFile(file.id))!.borrowers;
+    expect(projected.map((b) => b.id)).toEqual([DANA, DEV]);
   });
 });

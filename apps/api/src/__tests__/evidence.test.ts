@@ -12,7 +12,13 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import { addBusinessDays, RECEIPT_REASON_CODE, TRID_PARTY_PREDICATES } from "@hm/shared";
-import { pinFact, proposeScenario, releasePin, sixPieces } from "../services/evidence.js";
+import {
+  pinFact,
+  pinTridPieces,
+  proposeScenario,
+  releasePin,
+  sixPieces,
+} from "../services/evidence.js";
 import { createLoanFile } from "./support/factories.js";
 
 type BorrowerRole = "PRIMARY_BORROWER" | "CO_BORROWER";
@@ -63,7 +69,13 @@ async function grant(partyId: string, over: Record<string, unknown> = {}) {
     select: { id: true },
   });
 }
-async function fact(partyId: string, principalId: string, predicate: string, value: unknown = "x") {
+async function fact(
+  partyId: string,
+  principalId: string,
+  predicate: string,
+  value: unknown = "x",
+  observedAt = new Date("2026-06-01T00:00:00Z"),
+) {
   return prisma.fact.create({
     data: {
       subjectType: "PARTY",
@@ -74,7 +86,7 @@ async function fact(partyId: string, principalId: string, predicate: string, val
       sourceKind: "SELF_ATTESTED",
       confidence: "ATTESTED",
       assertedByPrincipalId: principalId,
-      observedAt: new Date("2026-06-01T00:00:00Z"),
+      observedAt,
     },
     select: { id: true },
   });
@@ -302,6 +314,55 @@ describe("what a pin may borrow", () => {
       authorizationId: g.id,
     });
     expect(again.id).not.toBe(first.id);
+  });
+});
+
+describe("reconciling what an application borrows", () => {
+  it("releases every stale pin on a predicate, not only when none is current", async () => {
+    // Two live pins on one predicate is a reachable state, not a hypothetical:
+    // the live-pin index is keyed on (application_id, fact_id), so pins naming
+    // different facts do not collide. Skipping the sweep whenever one of them
+    // was current left the other live forever, and took the same short circuit
+    // on every save afterwards. The receipt counts live pins, so the
+    // application went on claiming a piece behind which the borrower had
+    // already replaced the evidence.
+    const { p, who, facts, g } = await personWithSixPieces();
+    const app = await application(p.id);
+    const newer = await fact(
+      p.id,
+      who.id,
+      "monthly_income",
+      9_000,
+      new Date("2026-07-01T00:00:00Z"),
+    );
+    const stale = await pinFact({
+      applicationId: app.id,
+      factId: facts.monthly_income!.id,
+      authorizationId: g.id,
+    });
+    const current = await pinFact({
+      applicationId: app.id,
+      factId: newer.id,
+      authorizationId: g.id,
+    });
+    // Superseded after both pins exist, because the guard refuses to pin a
+    // fact that has already been replaced.
+    await prisma.fact.update({
+      where: { id: facts.monthly_income!.id },
+      data: { supersededById: newer.id },
+    });
+
+    const done = await pinTridPieces(prisma, { applicationId: app.id, partyId: p.id });
+    expect(done.released).toEqual([stale.id]);
+    // Nothing re-pinned for the income: the pin on the fact that stands was
+    // already there, and the sweep is not an excuse to write a third one.
+    expect(done.pinned).toEqual(["legal_name", "ssn_token"]);
+    expect(
+      await prisma.applicationEvidenceLink.findMany({
+        where: { applicationId: app.id, predicate: "monthly_income", releasedAt: null },
+        select: { id: true },
+      }),
+    ).toEqual([{ id: current.id }]);
   });
 });
 
@@ -778,6 +839,43 @@ describe("THE RECEIPT", () => {
     expect(clocks[0]?.tollingReason).toBe("no_delivery_channel_configured");
   });
 
+  it("keeps one person's set even when both of them are the person applying", async () => {
+    // Two PRIMARY_BORROWERs is the case the query's own filter cannot answer:
+    // every pin comes back, so what makes the count right is the fold that
+    // keeps the fullest single party's set. Counting distinct predicates
+    // across the rows that come back would say all three are held, and the
+    // trigger — which groups by party — would still say draft.
+    const first = await personWithSixPieces();
+    const second = await personWithSixPieces();
+    const app = await application(first.p.id);
+    await addParty(app.id, second.p.id, "PRIMARY_BORROWER");
+    await proposeScenario(app.id, fullTerms);
+
+    await pinFact({
+      applicationId: app.id,
+      factId: first.facts.legal_name!.id,
+      authorizationId: first.g.id,
+    });
+    await pinFact({
+      applicationId: app.id,
+      factId: first.facts.monthly_income!.id,
+      authorizationId: first.g.id,
+    });
+    await pinFact({
+      applicationId: app.id,
+      factId: second.facts.ssn_token!.id,
+      authorizationId: second.g.id,
+    });
+
+    expect(await sixPieces(app.id)).toMatchObject({
+      legal_name: true,
+      monthly_income: true,
+      ssn_token: false,
+    });
+    const row = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+    expect(row.status).toBe("DRAFT");
+  });
+
   it("does not receive an application on a co-borrower's three pieces alone", async () => {
     // A complete co-borrower and a primary who has told us nothing is not an
     // application from the person whose credit request this is.
@@ -923,6 +1021,20 @@ describe("the vocabularies agree", () => {
     `;
     expect(src[0]?.src).toContain("'PRIMARY_BORROWER'");
     expect(src[0]?.src).toContain(`'${RECEIPT_REASON_CODE}'`);
+  });
+
+  it("asks for the receipt only on a write that could complete it", async () => {
+    // The narrowing is about cost and lock scope rather than about the answer,
+    // so no pair of applications can tell it apart: a co-borrower's arrival
+    // cannot complete anybody's three pieces either way. What it buys is that
+    // such a write does not take FOR UPDATE on the application, and does not
+    // inherit the function's refusal to run under REPEATABLE READ. The
+    // definition is the observable, so the definition is what is asserted.
+    const trigger = await prisma.$queryRaw<{ def: string }[]>`
+      SELECT pg_get_triggerdef(oid) AS def
+        FROM pg_trigger WHERE tgname = 'application_parties_receipt_write'
+    `;
+    expect(trigger[0]?.def).toMatch(/WHEN .*PRIMARY_BORROWER/);
   });
 
   it("business days agree between SQL and TypeScript, end of the third day in the creditor's zone", async () => {

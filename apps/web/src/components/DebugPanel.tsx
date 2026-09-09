@@ -17,6 +17,7 @@
 
 import { useState } from "react";
 import clsx from "clsx";
+import type { ApplicationReceipt } from "@hm/shared";
 import type { Assessment, OutstandingItem } from "../lib/api.js";
 import type { ApplicationStandingView } from "../lib/file.js";
 
@@ -60,12 +61,14 @@ export function DebugPanel({
   failed,
   file,
   ledger,
+  receipt,
   standing,
 }: {
   assessment: Assessment | undefined;
   failed?: boolean;
   file?: unknown;
   ledger?: RawLedgerRow[];
+  receipt?: ApplicationReceipt | null;
   standing?: ApplicationStandingView | null;
 }) {
   const [tab, setTab] = useState<"outstanding" | "blocked" | "ledger" | "file">("outstanding");
@@ -134,17 +137,27 @@ export function DebugPanel({
       {tab === "ledger" && (
         <ul className="mt-4 flex flex-col gap-1.5">
           {/*
-            The application id and its clocks, raw.
+            The application id, the six pieces, and the clocks, raw.
 
             A tolled clock and the reason it is tolled appear NOWHERE else: the
             borrower's timeline says the Loan Estimate is on hold and stops
             there, which is right for a borrower and useless for working out
-            why. `sixPieces()` is not here yet — nothing pins a piece until
-            screen 2 does.
+            why. The six pieces are the same kind of answer — the receipt is a
+            trigger counting pins, so when a file will not stamp, this is the
+            line that says which piece it is still short of.
           */}
           <li className="text-ink-faint">
             application: {standing ? standing.id : "none on record"}
             {standing ? ` · ${standing.status} · seq ${standing.ledger.length}` : ""}
+          </li>
+          <li className="border-b border-rule-soft pb-1.5 text-ink-faint">
+            six pieces:{" "}
+            {receipt
+              ? Object.entries(receipt.sixPieces)
+                  .map(([piece, held]) => `${piece}=${held}`)
+                  .join(" · ")
+              : "not received"}
+            {receipt && <div>received {receipt.receivedAt}</div>}
           </li>
           {standing?.clocks.map((c) => (
             <li key={c.kind} className="border-b border-rule-soft pb-1.5 text-ink-faint">

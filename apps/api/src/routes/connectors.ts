@@ -19,6 +19,9 @@ import { connectors } from "../services/connectors.js";
 import { tokenFor } from "../services/authorization.js";
 import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
+import { applicationForFile, ensureApplicationParty } from "../services/applications.js";
+import { pinTridPieces } from "../services/evidence.js";
+import { settleAfterIntake } from "../services/standing.js";
 
 export const connectorRouter = Router();
 
@@ -73,31 +76,62 @@ connectorRouter.post(
     });
     if (!borrower) throw new AppError(404, "That borrower is not on this file.", "NOT_FOUND");
 
-    const existing = await signedOn(id, borrower.partyId, input.kind);
-    if (existing) {
+    // The signature, the grant the trigger mirrors from it, the facts that
+    // grant lets the application borrow, and the receipt those pins fire, are
+    // one act. Screen 2 posts this immediately after saving the person, so for
+    // a borrower with nothing on file this is the moment the application
+    // begins. If any part of it cannot be written, none of it is: a consent
+    // row standing alone would say a borrower authorized a verification whose
+    // evidence was never taken.
+    const { consent, alreadyRecorded } = await prisma.$transaction(async (tx) => {
+      const existing = await signedOn(id, borrower.partyId, input.kind, tx);
+      const row =
+        existing ??
+        (await tx.consent.create({
+          data: {
+            loanFileId: id,
+            borrowerId: input.borrowerId,
+            kind: input.kind,
+            grantedAt: new Date(),
+            envelopeId: input.envelopeId ?? null,
+            // The IP and user agent ARE the evidence that a person signed.
+            // They are only trustworthy because `trust proxy` is a hop count
+            // — see config.ts.
+            ipAddress: req.ip ?? "unknown",
+            userAgent: req.get("user-agent") ?? "unknown",
+          },
+          select: { id: true, kind: true, grantedAt: true },
+        }));
+
+      // Only the verification authorization licenses borrowing a person's
+      // facts. eConsent is about how we may deliver documents and monitoring
+      // mirrors to an account-review grant the pin guard refuses outright.
+      if (input.kind === "verification_authorization") {
+        const app = await applicationForFile(tx, id);
+        if (app) {
+          await ensureApplicationParty(tx, app.id, borrower.partyId, "PRIMARY_BORROWER");
+          await pinTridPieces(tx, { applicationId: app.id, partyId: borrower.partyId });
+          await settleAfterIntake(tx, {
+            applicationId: app.id,
+            loanFileId: id,
+            causedBy: "consent:verification_authorization",
+          });
+        }
+      }
+
+      return { consent: row, alreadyRecorded: Boolean(existing) };
+    });
+
+    if (alreadyRecorded) {
       res.json({
-        id: existing.id,
-        kind: existing.kind,
-        grantedAt: existing.grantedAt,
+        id: consent.id,
+        kind: consent.kind,
+        grantedAt: consent.grantedAt,
         alreadyRecorded: true,
       });
       return;
     }
 
-    const consent = await prisma.consent.create({
-      data: {
-        loanFileId: id,
-        borrowerId: input.borrowerId,
-        kind: input.kind,
-        grantedAt: new Date(),
-        envelopeId: input.envelopeId ?? null,
-        // The IP and user agent ARE the evidence that a person signed. They
-        // are only trustworthy because `trust proxy` is a hop count — see
-        // config.ts.
-        ipAddress: req.ip ?? "unknown",
-        userAgent: req.get("user-agent") ?? "unknown",
-      },
-    });
     await recordEvent(id, "consent_granted", "borrower", { kind: input.kind });
     res.status(201).json({
       id: consent.id,

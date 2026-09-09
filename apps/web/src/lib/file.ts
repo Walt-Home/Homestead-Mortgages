@@ -10,6 +10,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import type { ApplicationReceipt } from "@hm/shared";
 import { api, ApiError } from "./api.js";
 
 export type { FlowStage } from "./flow.js";
@@ -73,6 +74,12 @@ export interface LoanFileView {
   documents: { id: string; filename: string; satisfiesRequirementId: string; bytes: number }[];
   links: { kind: string; provider: string; persistentMonitoringEnabled: boolean }[];
   decision: unknown | null;
+  /**
+   * APP-002's input: when the six pieces were received, and which of them the
+   * application holds. Null until the receipt has been stamped, and for a file
+   * made before applications existed. Only the debug surface renders it.
+   */
+  application: ApplicationReceipt | null;
   applicationSignedAt: string | null;
   intentToProceedAt: string | null;
 }
@@ -114,7 +121,6 @@ export interface ApplicationStandingView {
 
 export interface LoanFileResponse {
   file: LoanFileView;
-  loanEstimateDueAt: string | null;
   /** Null for a file made before applications existed. Never a draft. */
   applicationState: ApplicationStandingView | null;
 }

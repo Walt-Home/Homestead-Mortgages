@@ -9,6 +9,7 @@ import {
   useParams,
 } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import type { ApplicationReceipt } from "@hm/shared";
 import { Stepper } from "./components/Stepper.js";
 import { ApplicationStanding } from "./components/ApplicationStanding.js";
 import { DebugPanel, type RawLedgerRow } from "./components/DebugPanel.js";
@@ -234,6 +235,7 @@ function FileShell() {
       assessment={assessment.data}
       assessmentFailed={Boolean(assessment.error)}
       file={file.data?.file}
+      receipt={file.data ? (file.data.file.application ?? null) : undefined}
       // Undefined until the file has been read, null once it has been read and
       // there is none. "No application on record" is a claim about a regulated
       // record, and it cannot be made while the record is still loading.
@@ -332,6 +334,7 @@ function Shell({
   assessment,
   assessmentFailed,
   file,
+  receipt,
   standing,
   ledger,
 }: {
@@ -343,6 +346,7 @@ function Shell({
   assessment?: Assessment;
   assessmentFailed?: boolean;
   file?: unknown;
+  receipt?: ApplicationReceipt | null;
   standing?: ApplicationStandingView | null;
   ledger?: RawLedgerRow[];
 }) {
@@ -381,6 +385,7 @@ function Shell({
             failed={assessmentFailed}
             file={file}
             ledger={ledger}
+            receipt={receipt}
             standing={standing}
           />
         )}

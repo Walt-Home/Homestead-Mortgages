@@ -342,7 +342,7 @@ export async function recordBorrowerFacts(
     { predicate: "current_housing", value: input.currentHousing },
     { predicate: "preferred_language", value: input.preferredLanguage },
     // Stated, not verified. One of TRID's six pieces, and the reason screen 2
-    // asks for it — see services/application.ts. Only a real figure is a
+    // asks for it — see packages/shared/src/trid.ts. Only a real figure is a
     // fact: an absent one leaves the earlier assertion standing, and a zero
     // or negative would supersede a true income with a false one.
     ...(typeof input.statedMonthlyIncome === "number" && input.statedMonthlyIncome > 0

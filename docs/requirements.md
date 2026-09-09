@@ -83,8 +83,8 @@ mid-flow.
 
 The product's answer is a stated, unverified monthly income field on screen 1.
 One number, no verification, and the sixth piece lands at the end of screen 2 —
-predictably, before any connector runs. `services/application.ts` stamps the
-receipt exactly once and never un-stamps it.
+predictably, before any connector runs. A database trigger stamps the receipt
+the moment the sixth piece is pinned, exactly once, and never un-stamps it.
 
 **Screen 7's sourcing contradicts its premise.** Four rows sit on "Upload
 fallback" or "Decision" but name a connector as their source: AST-006 (gift

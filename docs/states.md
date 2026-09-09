@@ -307,7 +307,7 @@ year's pull.
 | Authorizations and the purpose token                            | **Built** — and the connector guard now takes it                                                    |
 | Evidence artifacts, retrieval requests                          | Designed                                                                                            |
 | Applications and the transition ledger                          | **Built** — 19 states, the machine, and the ledger; screen 1 makes the draft, the moves land next   |
-| Scenarios, pins, and the TRID receipt                           | **Built** — the receipt is a trigger; the LE clock opens tolled                                     |
+| Scenarios, pins, and the TRID receipt                           | **Built** — screen 2 and the signature pin the person; the legacy stamp is retired                  |
 | The bridge: screen 2 → party + facts; consents → authorizations | **Built** — dual-write; the minter reads the real table, falls back to legacy                       |
 | The read-flip: identity fields projected from facts             | **Built** — per field, party first, column as fallback; situational and HMDA fields stay on the row |
 | Identity columns dropped; `borrowers` is a record about a party | **Built** — `party_id` NOT NULL; every identity field is only a fact; the consent fallback is gone  |

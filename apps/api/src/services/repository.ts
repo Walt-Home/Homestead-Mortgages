@@ -12,6 +12,7 @@
 
 import { prisma } from "@hm/db";
 import type {
+  ApplicationReceipt,
   AssetReport,
   Borrower,
   Consent,
@@ -33,6 +34,7 @@ import { AppError } from "../middleware/error-handler.js";
 import { displayNameFrom, factMapsByParty, requireIdentity } from "./borrower-projection.js";
 import type { Db } from "./db.js";
 import { liveFactsByParty } from "./party.js";
+import { sixPieces } from "./evidence.js";
 import { toDomainState } from "./transition.js";
 
 /** Prisma returns Decimal; the domain uses number. One place to convert. */
@@ -49,6 +51,51 @@ const PURPOSE_TO_DOMAIN = {
   RATE_TERM_REFINANCE: "rate_term_refinance",
   CASH_OUT_REFINANCE: "cash_out_refinance",
 } as const;
+
+/**
+ * APP-002's input, read from the ledger rather than from a column.
+ *
+ * The receipt is a database trigger on the pins and the scenario, and the row
+ * it writes is the record that an application was received — so that row is
+ * what the engine should be told about. The column this used to read was
+ * stamped by a second, independent judgment in the API, which meant two things
+ * could both claim to know when an application began and disagree; the ledger
+ * is the one that opened the Loan Estimate clock, so it wins.
+ *
+ * Null for a file with no application, which is the truthful reading for a row
+ * created before the join existed: APP-002 is outstanding, not satisfied by
+ * something nobody can point at.
+ */
+async function applicationReceipt(db: Db, loanFileId: string): Promise<ApplicationReceipt | null> {
+  const app = await db.application.findUnique({
+    where: { loanFileId },
+    select: {
+      id: true,
+      transitions: {
+        where: { event: "intake_completed" },
+        orderBy: { seq: "asc" },
+        take: 1,
+        select: { occurredAt: true },
+      },
+    },
+  });
+  const received = app?.transitions[0];
+  if (!app || !received) return null;
+
+  // The engine's six keys, from the vocabulary the pins and the scenario use.
+  const pieces = await sixPieces(app.id, db);
+  return {
+    receivedAt: received.occurredAt.toISOString(),
+    sixPieces: {
+      name: pieces.legal_name ?? false,
+      income: pieces.monthly_income ?? false,
+      ssn: pieces.ssn_token ?? false,
+      propertyAddress: pieces.propertyAddress ?? false,
+      valueEstimate: pieces.valueEstimateCents ?? false,
+      loanAmount: pieces.loanAmountCents ?? false,
+    },
+  };
+}
 
 /** `IDENTITY` -> `identity`. Exported so a route answering with a stage
  * reads the file's real one rather than restating a literal. */
@@ -69,7 +116,12 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
   const row = await db.loanFile.findUnique({
     where: { id },
     include: {
-      borrowers: true,
+      // Ordered, because every route reads `borrowers[0]` and means "the
+      // person whose request this is". Two borrowers created in one
+      // transaction can share a millisecond at TIMESTAMP(3), so the id breaks
+      // the tie — an arbitrary rule, but a stable one, and an unordered
+      // include would make which person a file is about depend on the planner.
+      borrowers: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
       consents: true,
       links: true,
       documents: true,
@@ -179,6 +231,7 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
     : null;
 
   const conditions = await db.loanCondition.findMany({ where: { loanFileId: id } });
+  const application = await applicationReceipt(db, id);
 
   return {
     id: row.id,
@@ -240,12 +293,7 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
     borrowers,
     consents,
 
-    application: row.applicationReceivedAt
-      ? {
-          receivedAt: row.applicationReceivedAt.toISOString(),
-          sixPieces: row.applicationSixPieces as never,
-        }
-      : null,
+    application,
 
     propertyRecord: latest<PropertyRecord>("property_record"),
     valuation: latest<AvmEstimate>("valuation"),
@@ -465,8 +513,14 @@ export async function listAccessibleFiles(userId: string) {
       valueOrPrice: true,
       propertyCity: true,
       propertyState: true,
-      // The name is a fact on the party, not a column on the row.
-      borrowers: { take: 1, select: { partyId: true } },
+      // The name is a fact on the party, not a column on the row. Ordered the
+      // same way the projection orders them, so the list and the file it opens
+      // name the same person.
+      borrowers: {
+        take: 1,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { partyId: true },
+      },
       application: { select: { status: true, statusEnteredAt: true } },
       decisions: {
         orderBy: { computedAt: "desc" },

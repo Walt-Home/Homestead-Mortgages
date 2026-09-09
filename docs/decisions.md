@@ -768,6 +768,56 @@ the whole intake back. The receipt now stamps strictly after the state it
 leaves. Found by an adversarial review of the unpushed migration, with plain
 SQL, before it reached staging.
 
+## One receipt
+
+There were two. The trigger stamped a ledger row when the sixth pinned piece
+landed; `POST /api/files/:id/borrowers` separately read the projected loan
+file, judged the same six for itself, and wrote `loan_files.application_received_at`
+— and APP-002, the requirement that says an application exists, read the
+column. So the state machine and the requirements engine each had their own
+opinion of the moment a credit request began, computed from different inputs
+(pins and the active scenario on one side, a borrower row and an income
+argument on the other), and nothing held them together. They disagreed
+routinely: the column was stamped from a screen-2 save that had not yet
+pinned anything, while the ledger still said draft.
+
+APP-002 now reads the ledger's `intake_completed` row: its `occurred_at` is
+`receivedAt`, and the six flags are the pins and the scenario, mapped onto the
+engine's older words. The row is the one that opened the Loan Estimate clock,
+so it is the one a borrower is entitled to be measured against. A file with no
+application answers null, which reads as APP-002 outstanding — the truthful
+answer for a file made before applications existed, rather than a receipt
+nobody can point at.
+
+What licenses the pins that fire the receipt is the party's live grant for
+exactly one purpose, `FCRA_WRITTEN_INSTRUCTION`. Not "any live grant": an
+opt-in to persistent monitoring mirrors to an account-review grant, which
+covers no credit request and which the pin guard refuses outright, so a
+looser question would have turned a monitoring opt-in into the authorization
+an application was borrowed under and surfaced the refusal as a 403 on an
+ordinary save.
+
+A grant belongs to a person and lasts 120 days, so a borrower who applies
+twice inside that window holds it on their second file before signing
+anything there, and the second file is received on the screen-2 save rather
+than on the consent that follows it a moment later. That is deliberate: TRID
+measures receipt of the six pieces, not the collection of a signature, and
+starting the clock earlier is the safe direction. It is worth revisiting if
+the two posts ever stop arriving together.
+
+The demo files the persona seed writes carry no application, and therefore no
+receipt: they are inserted as rows rather than driven through the routes that
+open a credit request, so APP-002 reads outstanding on them and will until the
+seed goes through those routes — a state chosen here rather than discovered on
+staging.
+
+Two smaller things went with it. The API's second `addBusinessDays` — no time
+zone, local date arithmetic — is gone, so the Loan Estimate's due date has one
+source, the SQL function in the creditor's zone, and the two cannot disagree
+across a daylight-saving boundary. And `borrowers` is now ordered: every route
+reads `borrowers[0]` and means the person whose request this is, which was the
+physical order of the rows.
+
 ## The strangler's first move: dual-write
 
 The four screens still run on `loan_files` and `borrowers`. As of 8 September

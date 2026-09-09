@@ -219,6 +219,33 @@ describe("the reasons are a closed set", () => {
     expect(TRANSITION_REASONS).toContain(RECEIPT_REASON_CODE);
   });
 
+  it("holds every reason a writer outside this package spells out", () => {
+    // The list the API and the seed actually write, kept by hand and in step.
+    // A scan of the source can only see the call sites it can parse; this is
+    // the other half of the guarantee, and it is the half that catches a
+    // reason being renamed here while a writer still spells it the old way.
+    for (const reason of [
+      "six_pieces_received",
+      "bank_connection_needed",
+      "bank_already_connected",
+      "bank_connected",
+      "payroll_connected",
+      "transcripts_received",
+      "documents_received",
+      "application_signed",
+      "sanctions_near_match",
+      "engine_asked",
+      "engine_conditional",
+      "engine_ineligible",
+      "engine_high_cost",
+      "engine_clean",
+      "borrower_requested",
+      "persona_fixture",
+    ]) {
+      expect(TRANSITION_REASONS, reason).toContain(reason);
+    }
+  });
+
   it("names every reason a branch can be owed for", () => {
     for (const reason of Object.values(OBLIGATION_REASON)) {
       expect(TRANSITION_REASONS).toContain(reason);

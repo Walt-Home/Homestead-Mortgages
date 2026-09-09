@@ -21,6 +21,9 @@ import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { assertFileAccess, loadLoanFile, recordEvent } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
 import { signedOn } from "../services/signature.js";
+import { applicationForFile, ensureApplicationParty } from "../services/applications.js";
+import { pinTridPieces } from "../services/evidence.js";
+import { settleAfterIntake } from "../services/standing.js";
 
 export const esignRouter = Router();
 
@@ -114,18 +117,49 @@ esignRouter.post(
       return;
     }
 
-    const created = await prisma.consent.create({
-      data: {
-        loanFileId: id,
-        borrowerId: borrower.id,
-        kind: consent.kind,
-        grantedAt: new Date(),
-        envelopeId,
-        // The IP and user agent ARE the evidence a person signed. They are only
-        // trustworthy because `trust proxy` is a hop count — see config.ts.
-        ipAddress: req.ip ?? "unknown",
-        userAgent: req.get("user-agent") ?? "unknown",
-      },
+    // The renewal path when screen 2 is not revisited: a grant that lapsed
+    // after 120 days is retired and re-minted by the mirror trigger on this
+    // insert, which leaves every pin borrowed under the old one standing
+    // against an authorization nobody holds any more. Reconciling in the same
+    // transaction is what keeps a renewed signature and the evidence it
+    // licenses from disagreeing, and on a file whose six pieces were never
+    // complete it is the signature that finally receives the application.
+    const created = await prisma.$transaction(async (tx) => {
+      const row = await tx.consent.create({
+        data: {
+          loanFileId: id,
+          borrowerId: borrower.id,
+          kind: consent.kind,
+          grantedAt: new Date(),
+          envelopeId,
+          // The IP and user agent ARE the evidence a person signed. They are
+          // only trustworthy because `trust proxy` is a hop count — see
+          // config.ts.
+          ipAddress: req.ip ?? "unknown",
+          userAgent: req.get("user-agent") ?? "unknown",
+        },
+        select: { kind: true, grantedAt: true },
+      });
+
+      if (kind === "verification_authorization") {
+        const app = await applicationForFile(tx, id);
+        if (app) {
+          await ensureApplicationParty(tx, app.id, borrower.partyId, "PRIMARY_BORROWER");
+          await pinTridPieces(tx, { applicationId: app.id, partyId: borrower.partyId });
+          // The same cause as the consent handler's, because it is the same
+          // cause: a verification authorization signed on this file. Where the
+          // signature was collected is the envelope's business, and a second
+          // spelling here would split one edge into two in every report that
+          // groups the ledger by what moved it.
+          await settleAfterIntake(tx, {
+            applicationId: app.id,
+            loanFileId: id,
+            causedBy: "consent:verification_authorization",
+          });
+        }
+      }
+
+      return row;
     });
 
     await recordEvent(

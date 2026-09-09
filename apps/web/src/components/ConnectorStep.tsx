@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
+import { StatusPill } from "./StatusPill.js";
 
 /**
  * Screens 3–6: connect a source, see what came back.
@@ -125,7 +126,9 @@ export function ConnectorStep(props: ConnectorStepProps) {
 
       {connected && (
         <div className="mt-6 border-t border-rule-soft pt-5">
-          <div className="super-pill super-pill-ok mb-4">Connected</div>
+          <div className="mb-4">
+            <StatusPill tone="ok">Connected</StatusPill>
+          </div>
           {props.renderResult(result)}
           <div className="mt-6 flex items-center gap-3">
             <button className="super-btn super-btn-primary" onClick={props.onDone}>

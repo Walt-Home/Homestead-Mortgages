@@ -146,7 +146,8 @@ know" becomes "we checked and you passed".
 Nineteen states. Stored in an ordinary indexed column, moved only by a
 `transition()` function that writes an append-only ledger row in the same
 transaction. Several exist for regulatory reporting rather than for a person —
-a borrower sees six words.
+a borrower sees the gallery's word for each state, and `apps/web/src/lib/states.ts`
+is where those words are.
 
 **Before it is an application**
 
@@ -305,7 +306,7 @@ year's pull.
 | Party, facts, principals                                        | **Built** — schema and constraints; not yet wired to a route                                        |
 | Authorizations and the purpose token                            | **Built** — and the connector guard now takes it                                                    |
 | Evidence artifacts, retrieval requests                          | Designed                                                                                            |
-| Applications and the transition ledger                          | **Built** — 19 states, the machine, and the ledger; no routes yet                                   |
+| Applications and the transition ledger                          | **Built** — 19 states, the machine, and the ledger; screen 1 makes the draft, the moves land next   |
 | Scenarios, pins, and the TRID receipt                           | **Built** — the receipt is a trigger; the LE clock opens tolled                                     |
 | The bridge: screen 2 → party + facts; consents → authorizations | **Built** — dual-write; the minter reads the real table, falls back to legacy                       |
 | The read-flip: identity fields projected from facts             | **Built** — per field, party first, column as fallback; situational and HMDA fields stay on the row |

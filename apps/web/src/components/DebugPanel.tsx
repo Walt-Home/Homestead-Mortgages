@@ -18,6 +18,7 @@
 import { useState } from "react";
 import clsx from "clsx";
 import type { Assessment, OutstandingItem } from "../lib/api.js";
+import type { ApplicationStandingView } from "../lib/file.js";
 
 /** Grouping the nine engine screens under the four borrower ones. */
 const SCREEN_GROUP: Record<string, string> = {
@@ -32,16 +33,42 @@ const SCREEN_GROUP: Record<string, string> = {
   persistent_consent: "(dropped from flow)",
 };
 
+/**
+ * A ledger row with everything on it.
+ *
+ * `causedBy` names a decision run, a snapshot or a list of requirement ids,
+ * and `actorPrincipalId` names an internal actor. This is the only surface any
+ * of that may appear on, which is why the borrower's own timeline reads a
+ * different, narrower shape from a different endpoint.
+ */
+export interface RawLedgerRow {
+  seq: number;
+  from: string | null;
+  to: string;
+  event: string;
+  reasonCode: string | null;
+  causedBy: string | null;
+  actorKind: string;
+  actorSubject: string;
+  actorPrincipalId: string;
+  occurredAt: string;
+  recordedAt: string;
+}
+
 export function DebugPanel({
   assessment,
   failed,
   file,
+  ledger,
+  standing,
 }: {
   assessment: Assessment | undefined;
   failed?: boolean;
   file?: unknown;
+  ledger?: RawLedgerRow[];
+  standing?: ApplicationStandingView | null;
 }) {
-  const [tab, setTab] = useState<"outstanding" | "blocked" | "file">("outstanding");
+  const [tab, setTab] = useState<"outstanding" | "blocked" | "ledger" | "file">("outstanding");
 
   return (
     <aside className="mt-10 rounded-lg border border-dashed border-rule-strong bg-raised p-5 font-mono text-xs">
@@ -51,7 +78,7 @@ export function DebugPanel({
           <span className="font-normal text-ink-faint">· ?debug=1 · not borrower-facing</span>
         </p>
         <div className="flex gap-1">
-          {(["outstanding", "blocked", "file"] as const).map((t) => (
+          {(["outstanding", "blocked", "ledger", "file"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -99,6 +126,58 @@ export function DebugPanel({
             <li key={b.id} className="border-b border-rule-soft pb-1.5">
               <span className="text-accent">{b.id}</span> {b.statement}
               <div className="text-ink-faint">waiting on: {b.rootCauses.join(", ")}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {tab === "ledger" && (
+        <ul className="mt-4 flex flex-col gap-1.5">
+          {/*
+            The application id and its clocks, raw.
+
+            A tolled clock and the reason it is tolled appear NOWHERE else: the
+            borrower's timeline says the Loan Estimate is on hold and stops
+            there, which is right for a borrower and useless for working out
+            why. `sixPieces()` is not here yet — nothing pins a piece until
+            screen 2 does.
+          */}
+          <li className="text-ink-faint">
+            application: {standing ? standing.id : "none on record"}
+            {standing ? ` · ${standing.status} · seq ${standing.ledger.length}` : ""}
+          </li>
+          {standing?.clocks.map((c) => (
+            <li key={c.kind} className="border-b border-rule-soft pb-1.5 text-ink-faint">
+              <span className="text-accent">{c.kind}</span> {c.statuteCitation}
+              <div>
+                started {c.startedAt} · due {c.dueAt}
+              </div>
+              <div>
+                tolled {c.tolledFrom ?? "—"} → {c.tolledUntil ?? "—"} · reason:{" "}
+                {c.tollingReason ?? "—"}
+              </div>
+              <div>
+                satisfied {c.satisfiedAt ?? "—"} · breached {c.breachedAt ?? "—"}
+              </div>
+            </li>
+          ))}
+          {!ledger && <li className="text-ink-faint">loading ledger…</li>}
+          {ledger?.length === 0 && <li className="text-ink-faint">no transitions yet</li>}
+          {ledger?.map((row) => (
+            <li key={row.seq} className="border-b border-rule-soft pb-1.5">
+              <span className="text-accent">
+                {row.seq} {row.from ?? "—"} → {row.to}
+              </span>{" "}
+              <span className="text-ink-soft">{row.event}</span>
+              <div className="text-ink-faint">
+                {row.actorKind} {row.actorSubject} · {row.actorPrincipalId}
+              </div>
+              <div className="text-ink-faint">
+                reason: {row.reasonCode ?? "—"} · caused by: {row.causedBy ?? "—"}
+              </div>
+              <div className="text-ink-faint">
+                occurred {row.occurredAt} · recorded {row.recordedAt}
+              </div>
             </li>
           ))}
         </ul>

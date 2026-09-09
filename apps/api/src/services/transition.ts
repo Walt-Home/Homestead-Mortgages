@@ -35,9 +35,15 @@ import {
 import { AppError } from "../middleware/error-handler.js";
 import { ownsTransaction, type Db } from "./db.js";
 
-/** `draft` -> `DRAFT`. A test asserts the two vocabularies agree. */
-const toDb = (s: ApplicationState) => s.toUpperCase() as Uppercase<ApplicationState>;
-const toDomain = (s: string) => s.toLowerCase() as ApplicationState;
+/**
+ * `draft` -> `DRAFT`, and back. A test asserts the two vocabularies agree.
+ *
+ * Exported because every reader of `applications.status` needs the domain
+ * spelling and a second conversion written somewhere else is a second place
+ * for the two vocabularies to drift.
+ */
+export const toDbState = (s: ApplicationState) => s.toUpperCase() as Uppercase<ApplicationState>;
+export const toDomainState = (s: string) => s.toLowerCase() as ApplicationState;
 
 /**
  * The roles whose holder is a person asking for this credit.
@@ -118,7 +124,7 @@ export async function transition(
   });
   if (!current) throw new AppError(404, "Application not found", "NOT_FOUND");
 
-  const from = toDomain(current.status);
+  const from = toDomainState(current.status);
   if (expectedFrom && expectedFrom !== from) throw new TransitionConflict(applicationId, from);
 
   // Throws if the machine has no edge. Deliberately before any write: an
@@ -165,22 +171,22 @@ export async function transition(
     // between the read above and this update, it matches nothing.
     const { count } = await tx.application.updateMany({
       where: { id: applicationId, status: current.status, statusSeq: current.statusSeq },
-      data: { status: toDb(to), statusSeq: seq, statusEnteredAt: when },
+      data: { status: toDbState(to), statusSeq: seq, statusEnteredAt: when },
     });
     if (count !== 1) {
       const now = await tx.application.findUnique({
         where: { id: applicationId },
         select: { status: true },
       });
-      throw new TransitionConflict(applicationId, now ? toDomain(now.status) : from);
+      throw new TransitionConflict(applicationId, now ? toDomainState(now.status) : from);
     }
 
     await tx.applicationTransition.create({
       data: {
         applicationId,
         seq,
-        fromState: toDb(from),
-        toState: toDb(to),
+        fromState: toDbState(from),
+        toState: toDbState(to),
         event,
         actorPrincipalId,
         reasonCode: reasonCode ?? null,
@@ -207,7 +213,7 @@ export async function transition(
             select: { status: true },
           })
         : null;
-      throw new TransitionConflict(applicationId, now ? toDomain(now.status) : from);
+      throw new TransitionConflict(applicationId, now ? toDomainState(now.status) : from);
     }
     throw err;
   }
@@ -236,7 +242,7 @@ export async function advanceIfLegal(
     select: { status: true },
   });
   if (!current) throw new AppError(404, "Application not found", "NOT_FOUND");
-  const from = toDomain(current.status);
+  const from = toDomainState(current.status);
   if (nextState(from, input.event) === undefined) return { skipped: "no_edge", from };
   return transition({ ...input, expectedFrom: from }, db);
 }
@@ -247,4 +253,4 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 /** The states, in the database's spelling. For a queue query or a report. */
-export const DB_STATES = APPLICATION_STATES.map(toDb);
+export const DB_STATES = APPLICATION_STATES.map(toDbState);

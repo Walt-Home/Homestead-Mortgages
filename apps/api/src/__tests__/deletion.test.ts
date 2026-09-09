@@ -21,7 +21,9 @@ import { pinFact, proposeScenario } from "../services/evidence.js";
 import { liveFact, liveGrant, principalForParty, type BorrowerInput } from "../services/party.js";
 import { assertFileMayBeDeleted } from "../services/repository.js";
 import { transition } from "../services/transition.js";
+import { fileRouter } from "../routes/files.js";
 import { consent, createLoanFile, createUser, saveBorrower } from "./support/factories.js";
+import { callAs } from "./support/http.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -330,6 +332,52 @@ describe("deleting one file is not how a credit request goes away", () => {
     ]);
     expect(await prisma.applicationTransition.count({ where: { applicationId: app.id } })).toBe(3);
     expect(await prisma.loanFile.count({ where: { id: file.id } })).toBe(1);
+  });
+
+  /*
+   * The same three answers, over HTTP.
+   *
+   * `assertFileMayBeDeleted` was only ever called directly, so nothing proved
+   * the ROUTE calls it — or that it calls it after `assertFileAccess`. Dropping
+   * either line left every test above green while a borrower erased a decided
+   * application, or learned from a 409 that somebody else's file id exists.
+   */
+  it("answers a stranger's delete with 404, before it looks at the application", async () => {
+    const { file } = await personWithAnApplication("declined");
+    const stranger = await createUser();
+    const res = await callAs(stranger.id, [fileRouter], "DELETE", `/${file.id}`);
+    // 404, not the 409 the owner gets: a refusal that names the reason would
+    // confirm the id exists to anyone holding a session.
+    expect(res.status).toBe(404);
+    expect(await prisma.loanFile.count({ where: { id: file.id } })).toBe(1);
+  });
+
+  it("deletes a draft through the route", async () => {
+    const me = await createUser();
+    const file = await createLoanFile({ userId: me.id });
+    await prisma.application.create({ data: { loanFileId: file.id } });
+
+    const res = await callAs(me.id, [fileRouter], "DELETE", `/${file.id}`);
+    expect(res.status).toBe(204);
+    expect(await prisma.loanFile.count({ where: { id: file.id } })).toBe(0);
+    expect(await prisma.application.count({ where: { loanFileId: file.id } })).toBe(0);
+  });
+
+  it("refuses a decided one through the route, and everything stays standing", async () => {
+    const { me, file, app } = await personWithAnApplication("declined");
+
+    const res = await callAs<{ error: { code: string } }>(
+      me.id,
+      [fileRouter],
+      "DELETE",
+      `/${file.id}`,
+    );
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("APPLICATION_ON_RECORD");
+    expect(await prisma.loanFile.count({ where: { id: file.id } })).toBe(1);
+    expect(await prisma.application.count({ where: { id: app.id } })).toBe(1);
+    expect(await prisma.applicationTransition.count({ where: { applicationId: app.id } })).toBe(3);
+    expect(await prisma.regulatoryClock.count({ where: { applicationId: app.id } })).toBe(2);
   });
 
   it("refuses a withdrawn one too — an ending is still a record", async () => {

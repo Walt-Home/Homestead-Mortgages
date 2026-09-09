@@ -23,7 +23,7 @@ export interface HttpResult<T = Record<string, unknown>> {
 export async function callAs<T = Record<string, unknown>>(
   userId: string,
   routers: readonly Router[],
-  method: "GET" | "POST" | "DELETE",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
 ): Promise<HttpResult<T>> {
@@ -47,7 +47,11 @@ export async function callAs<T = Record<string, unknown>>(
           headers: { "content-type": "application/json" },
           body: body === undefined ? undefined : JSON.stringify(body),
         });
-        resolve({ status: res.status, body: (await res.json()) as T });
+        // A 204 has no body, and a delete is a request like any other: the
+        // harness that could not read one is a harness that cannot test the
+        // route where refusing and succeeding differ only by status.
+        const text = await res.text();
+        resolve({ status: res.status, body: (text ? JSON.parse(text) : {}) as T });
       } catch (err) {
         reject(err);
       } finally {

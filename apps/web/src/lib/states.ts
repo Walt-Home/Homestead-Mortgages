@@ -120,7 +120,11 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         terminal: false,
         meaning:
           "At least one open obligation names a borrower. The state today's forward-only stage cannot express.",
-        heading: "Two things left for you",
+        // Count-free, because this heading is rendered above real files now
+        // and not only in the gallery: "Two things" over a file with one
+        // thing outstanding is the copy contradicting the timeline under it.
+        // The body stays a worked example; only the heading is on a screen.
+        heading: "Something's left for you",
         body: "Your last two paystubs — about a minute if they're in your email. And a short note about the $4,200 deposit on August 14, so we can count it as yours. We need both by September 2; if we don't have them by then we'll close this application without deciding on it. Everything else is ours to do, and none of it needs you.",
         action: "Start with the deposit note",
       },
@@ -287,7 +291,12 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         meaning:
           "The borrower stopped it. Guarded on actor kind so staff cannot write this state. Withdrawal is not deletion.",
         heading: "Withdrawn at your request",
-        body: "We've stopped every retrieval and switched off any monitoring tied to this application. Withdrawing stops the work; it doesn't erase the file. We keep the record until September 2028 because the law requires it, and you can see exactly what we hold.",
+        // What this used to say — that the record is kept until 2028 because
+        // the law requires it — describes a retention this product does not
+        // implement: deleting the account erases the application and its
+        // ledger with it. Until a retention policy exists, the copy says the
+        // thing that is true.
+        body: "We've stopped every retrieval and switched off any monitoring tied to this application. Withdrawing stops the work; it doesn't erase the file. The record stays for as long as your account does, and you can see exactly what we hold.",
         action: "See what we hold",
       },
       {
@@ -495,3 +504,18 @@ export const STATE_GROUPS: readonly StateGroup[] = [
 
 /** Flattened, for counting and for tests. */
 export const ALL_STATES: readonly StateEntry[] = STATE_GROUPS.flatMap((g) => g.states);
+
+const BY_ID = new Map(ALL_STATES.map((s) => [s.id, s]));
+
+/**
+ * The words for one state.
+ *
+ * The catalog is now read by the product and not only by the gallery: the
+ * pill in the file header, the pill on a list row and each step of a timeline
+ * all come from here, so a state and its words cannot drift apart. Undefined
+ * rather than a placeholder — a caller that has an id the catalog has never
+ * heard of should render nothing rather than an empty pill.
+ */
+export function entryFor(id: string | null | undefined): StateEntry | undefined {
+  return id ? BY_ID.get(id) : undefined;
+}

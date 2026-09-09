@@ -32,6 +32,8 @@ import {
   DemographicQuestions,
   type DemographicAnswers,
 } from "../components/DemographicQuestions.js";
+import { ApplicationStanding } from "../components/ApplicationStanding.js";
+import { ApplicationTimeline } from "../components/ApplicationTimeline.js";
 import { Branches } from "../components/Branches.js";
 import { Working } from "../components/Working.js";
 import { branchesFor } from "../lib/flow.js";
@@ -151,7 +153,13 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
               visualObservationNoted: false,
             }
           : null,
-        statedMonthlyIncome: 1,
+        // No income restated here, and none invented.
+        //
+        // This screen re-sends the borrower it already has so the demographics
+        // can join them; it asks for no figure and knows none. A placeholder
+        // would supersede the income screen 1 recorded about a real person and
+        // then stamp the receipt with the placeholder. Absent, the server
+        // reads the fact already on record.
       });
       await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
       setReadyToSign(true);
@@ -218,6 +226,26 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     );
   }
 
+  /*
+   * Where the file stands, and how it got there — above every ending and above
+   * the pre-signature view.
+   *
+   * The order is the point. The endings on this screen are long, and the shell
+   * header scrolls away, so a borrower reading "Your Loan Estimate" has to be
+   * able to see what state the application is actually in without going back
+   * up. The timeline follows it for the same reason: the ending says where the
+   * file landed, this says how it got there, in the borrower's own words, from
+   * the ledger the database wrote. It is the same rows an examiner reads —
+   * which is the point: there is no second, friendlier record kept alongside
+   * the real one.
+   */
+  const header = (
+    <>
+      <ApplicationStanding standing={data ? (data.applicationState ?? null) : undefined} />
+      <ApplicationTimeline standing={data?.applicationState ?? null} />
+    </>
+  );
+
   /* ── The three endings ────────────────────────────────────────────────── */
 
   if (signed) {
@@ -235,7 +263,8 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     if (canEstimate && ratios) {
       return (
         <div className="super-card">
-          <h1 className="font-display text-2xl text-ink sm:text-3xl">Your Loan Estimate</h1>
+          {header}
+          <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">Your Loan Estimate</h1>
           <p className="mt-2 text-base text-ink-soft">
             Sent to your email, and here it is. Read it before you decide anything.
           </p>
@@ -289,7 +318,8 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     if (branches.length > 0) {
       return (
         <div className="super-card">
-          <h1 className="font-display text-2xl text-ink sm:text-3xl">
+          {header}
+          <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">
             Almost — we need one more thing
           </h1>
           <p className="mt-2 text-base text-ink-soft">
@@ -327,7 +357,10 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
 
     return (
       <div className="super-card">
-        <h1 className="font-display text-2xl text-ink sm:text-3xl">That is everything we need</h1>
+        {header}
+        <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">
+          That is everything we need
+        </h1>
         <p className="mt-2 text-base text-ink-soft">
           Your application is in, and there is nothing left for you to do. One of our underwriters
           is looking at a couple of figures that need a person rather than a calculation.
@@ -349,7 +382,8 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
       <Branches assessment={assessment} fileId={fileId} />
 
       <div className="super-card">
-        <h1 className="font-display text-2xl text-ink sm:text-3xl">Nearly done</h1>
+        {header}
+        <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">Nearly done</h1>
         <p className="mt-2 text-base text-ink-soft">Here is what we found. Signing confirms it.</p>
 
         <div className="mt-7 border-t border-rule-soft pt-5">

@@ -77,9 +77,46 @@ export interface LoanFileView {
   intentToProceedAt: string | null;
 }
 
+/**
+ * Where the credit request stands, as the API answers it.
+ *
+ * Mirrors `apps/api/src/services/standing.ts` minus `causedBy`: that field
+ * carries requirement ids and snapshot ids, and nothing in the borrower flow
+ * renders one. The debug surface fetches those separately.
+ */
+export interface ApplicationStandingView {
+  id: string;
+  status: string;
+  statusEnteredAt: string;
+  terminal: boolean;
+  ledger: {
+    seq: number;
+    from: string | null;
+    to: string;
+    event: string;
+    reasonCode: string | null;
+    actorKind: string;
+    occurredAt: string;
+  }[];
+  clocks: {
+    kind: string;
+    statuteCitation: string;
+    startedAt: string;
+    dueAt: string;
+    tolledFrom: string | null;
+    tollingReason: string | null;
+    tolledUntil: string | null;
+    satisfiedAt: string | null;
+    breachedAt: string | null;
+  }[];
+  loanEstimate: { dueAt: string; tolled: boolean; tollingReason: string | null } | null;
+}
+
 export interface LoanFileResponse {
   file: LoanFileView;
   loanEstimateDueAt: string | null;
+  /** Null for a file made before applications existed. Never a draft. */
+  applicationState: ApplicationStandingView | null;
 }
 
 export function useLoanFile(fileId: string | undefined) {

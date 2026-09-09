@@ -239,13 +239,21 @@ export function PropertyLoanPage() {
       setError("Enter the property address so we know what we are lending against.");
       return;
     }
-    setSubmitting(true);
-    setError(null);
-    setGate(null);
-
     const priceNum = Number(price) || 0;
     const downNum = Number(down) || 0;
     const incomeNum = Number(income) || 0;
+    // The figure is asserted as a fact on the person the moment it is stated,
+    // and screen 4 pins it as one of the six pieces of the application. A
+    // stand-in for a blank field is therefore not a placeholder — it is a
+    // one-dollar income on somebody's credit request. The input takes digits
+    // only, so a typed `0` arrives here as a real answer of nothing.
+    if (incomeNum <= 0) {
+      setError("Tell us roughly what you earn a month — we can't check the loan works without it.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    setGate(null);
 
     try {
       // The gate first. Spending a credit pull on a loan that cannot work is
@@ -275,7 +283,7 @@ export function PropertyLoanPage() {
         valueOrPrice: priceNum,
         loanAmount: Math.max(0, priceNum - downNum),
         downPayment: downNum,
-        statedMonthlyIncome: incomeNum || 1,
+        statedMonthlyIncome: incomeNum,
         ...(purpose === "cash_out_refinance" ? { cashToBorrower: Number(cashOut) || 0 } : {}),
       };
 
@@ -293,10 +301,9 @@ export function PropertyLoanPage() {
         await api.post(`/files/${id}/property-correction`, correction).catch(() => undefined);
       }
       await queryClient.invalidateQueries({ queryKey: ["file", id] });
-      // The server validates stated income but does not persist it, and screen
-      // 2 is the call that stamps the application receipt. Carrying it forward
-      // means the TRID clock starts against the number the borrower actually
-      // gave rather than a placeholder.
+      // The server records the stated income as a fact on the person, so it is
+      // no longer carried here to keep it. It rides along only so screen 2 can
+      // prefill the field the borrower has already answered.
       navigate(`/f/${id}/identity`, { state: { income: incomeNum } });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");

@@ -17,10 +17,24 @@ import {
   listAccessibleFiles,
   loadLoanFile,
   recordEvent,
+  STAGE_TO_DOMAIN,
 } from "../services/repository.js";
 import { loanEstimateDueAt, stampApplicationIfComplete } from "../services/application.js";
 import { advanceStage } from "../services/stage.js";
-import { recordBorrowerFacts } from "../services/party.js";
+import {
+  assertFacts,
+  liveFact,
+  partyForUser,
+  principalForParty,
+  recordBorrowerFacts,
+} from "../services/party.js";
+import {
+  applicationForFile,
+  createDraftApplication,
+  scenarioTermsFrom,
+  syncScenario,
+} from "../services/applications.js";
+import { applicationStanding, rawLedger } from "../services/standing.js";
 
 export const fileRouter = Router();
 
@@ -80,40 +94,71 @@ fileRouter.patch(
     const input = propertyLoanSchema.partial().parse(req.body);
     await assertFileAccess(id, req.user!.id, "write");
 
-    await prisma.loanFile.update({
-      where: { id },
-      data: {
-        ...(input.purpose ? { purpose: PURPOSE_TO_DB[input.purpose] } : {}),
-        ...(input.loanAmount !== undefined ? { loanAmount: input.loanAmount } : {}),
-        ...(input.downPayment !== undefined ? { downPayment: input.downPayment } : {}),
-        ...(input.valueOrPrice !== undefined ? { valueOrPrice: input.valueOrPrice } : {}),
-        ...(input.propertyType ? { propertyType: input.propertyType } : {}),
-        ...(input.occupancy ? { occupancy: input.occupancy } : {}),
-        ...(input.financedPropertyCount !== undefined
-          ? { financedPropertyCount: input.financedPropertyCount }
-          : {}),
-        ...(input.interestedPartyContributions !== undefined
-          ? { interestedPartyContributions: input.interestedPartyContributions }
-          : {}),
-        ...(input.address
-          ? {
-              propertyLine1: input.address.line1,
-              propertyLine2: input.address.line2 ?? null,
-              propertyCity: input.address.city,
-              propertyState: input.address.state.toUpperCase(),
-              propertyPostalCode: input.address.postalCode,
-              // A changed address is an unverified address until it is matched
-              // again. Leaving the old flag set would assert APP-004 about a
-              // property nobody has looked up.
-              addressVerified: false,
-            }
-          : {}),
-        ...(input.cashOutPurpose !== undefined ? { cashOutPurpose: input.cashOutPurpose } : {}),
-        ...(input.cashToBorrower !== undefined ? { cashToBorrower: input.cashToBorrower } : {}),
-      },
+    // The row and the terms it implies move together. A scenario is immutable,
+    // so an edit that changes the address or the amount RETIRES the active
+    // scenario and proposes the next one — and a save that changed neither
+    // must not mint a version, which is what `syncScenario` decides.
+    const row = await prisma.$transaction(async (tx) => {
+      const updated = await tx.loanFile.update({
+        where: { id },
+        data: {
+          ...(input.purpose ? { purpose: PURPOSE_TO_DB[input.purpose] } : {}),
+          ...(input.loanAmount !== undefined ? { loanAmount: input.loanAmount } : {}),
+          ...(input.downPayment !== undefined ? { downPayment: input.downPayment } : {}),
+          ...(input.valueOrPrice !== undefined ? { valueOrPrice: input.valueOrPrice } : {}),
+          ...(input.propertyType ? { propertyType: input.propertyType } : {}),
+          ...(input.occupancy ? { occupancy: input.occupancy } : {}),
+          ...(input.financedPropertyCount !== undefined
+            ? { financedPropertyCount: input.financedPropertyCount }
+            : {}),
+          ...(input.interestedPartyContributions !== undefined
+            ? { interestedPartyContributions: input.interestedPartyContributions }
+            : {}),
+          ...(input.address
+            ? {
+                propertyLine1: input.address.line1,
+                propertyLine2: input.address.line2 ?? null,
+                propertyCity: input.address.city,
+                propertyState: input.address.state.toUpperCase(),
+                propertyPostalCode: input.address.postalCode,
+                // A changed address is an unverified address until it is matched
+                // again. Leaving the old flag set would assert APP-004 about a
+                // property nobody has looked up.
+                addressVerified: false,
+              }
+            : {}),
+          ...(input.cashOutPurpose !== undefined ? { cashOutPurpose: input.cashOutPurpose } : {}),
+          ...(input.cashToBorrower !== undefined ? { cashToBorrower: input.cashToBorrower } : {}),
+        },
+      });
+
+      // A corrected income is still an income the borrower stated, and it is
+      // stated HERE. Parsing it and dropping it is what left the party's fact
+      // holding the figure the borrower had already fixed — and screen 4 pins
+      // that fact as one of the six pieces, so the correction has to land in
+      // the same place the first answer did.
+      if (input.statedMonthlyIncome !== undefined) {
+        const partyId = await partyForUser(tx, req.user!.id);
+        const principalId = await principalForParty(tx, partyId);
+        await assertFacts(tx, partyId, principalId, [
+          { predicate: "monthly_income", value: input.statedMonthlyIncome },
+        ]);
+      }
+
+      const app = await applicationForFile(tx, id);
+      if (app) await syncScenario(tx, app.id, updated);
+      return updated;
     });
+
     await recordEvent(id, "screen_revised", "borrower", { screen: "property_loan" });
-    res.json({ id, stage: "identity" });
+    // The REAL stage. This answered a literal "identity" whatever the file had
+    // reached, so a borrower who edited a term from the review screen was told
+    // by the server that they were on screen 2.
+    res.json({
+      id,
+      stage: STAGE_TO_DOMAIN[row.stage],
+      applicationState: await applicationStanding(prisma, id),
+    });
   }),
 );
 
@@ -121,42 +166,84 @@ fileRouter.post(
   "/",
   asyncRoute(async (req, res) => {
     const input = propertyLoanSchema.parse(req.body);
-    const file = await prisma.loanFile.create({
-      data: {
-        // Ownership is set at creation and never changes. A file with no owner
-        // is a demo file, and only the seed script makes those.
-        userId: req.user!.id,
-        stage: "IDENTITY",
-        purpose: PURPOSE_TO_DB[input.purpose],
-        loanAmount: input.loanAmount,
-        downPayment: input.downPayment,
-        propertyLine1: input.address.line1,
-        propertyLine2: input.address.line2 ?? null,
-        propertyCity: input.address.city,
-        propertyState: input.address.state.toUpperCase(),
-        propertyPostalCode: input.address.postalCode,
-        propertyType: input.propertyType,
-        occupancy: input.occupancy,
-        valueOrPrice: input.valueOrPrice,
-        valuationSource: "borrower_stated",
-        // Stands in for the public-record match APP-004 wants. A real build
-        // resolves this against ATTOM; asserting it here keeps the requirement
-        // honest about what the fixture actually proves.
-        addressVerified: true,
-        financedPropertyCount: input.financedPropertyCount,
-        interestedPartyContributions: input.interestedPartyContributions,
-        cashToBorrower: input.cashToBorrower ?? null,
-        cashOutPurpose: input.cashOutPurpose ?? null,
-        // The borrower does not choose a product in this flow, so we quote
-        // one. See config.defaultProduct for why a rate has to exist at all.
-        productCode: config.defaultProduct.code,
-        termMonths: config.defaultProduct.termMonths,
-        amortization: "fixed",
-        noteRate: config.defaultProduct.noteRate,
-      },
+
+    // The file, the person asking, the income they stated and the credit
+    // request itself, in one transaction: a screen-1 save records all of it or
+    // none of it. A party is not gated on APP-005 — only PULLS are, and the
+    // guard for those lives in `tokenFor` and the connector adapters — so
+    // knowing who is asking before they have authorized anything is exactly
+    // the distinction the authorization model draws.
+    const file = await prisma.$transaction(async (tx) => {
+      // The person FIRST, before the file. Inserting the file takes a shared
+      // lock on the users row through `loan_files.user_id`, and claiming a
+      // party then needs an exclusive one on that same row because
+      // `users.party_id` is unique — so two first-ever saves from one person,
+      // each holding the shared lock and each waiting for the other's, deadlock
+      // and one of them 500s. Taking the exclusive lock first is the whole fix.
+      const partyId = await partyForUser(tx, req.user!.id);
+      const principalId = await principalForParty(tx, partyId);
+
+      const created = await tx.loanFile.create({
+        data: {
+          // Ownership is set at creation and never changes. A file with no owner
+          // is a demo file, and only the seed script makes those.
+          userId: req.user!.id,
+          stage: "IDENTITY",
+          purpose: PURPOSE_TO_DB[input.purpose],
+          loanAmount: input.loanAmount,
+          downPayment: input.downPayment,
+          propertyLine1: input.address.line1,
+          propertyLine2: input.address.line2 ?? null,
+          propertyCity: input.address.city,
+          propertyState: input.address.state.toUpperCase(),
+          propertyPostalCode: input.address.postalCode,
+          propertyType: input.propertyType,
+          occupancy: input.occupancy,
+          valueOrPrice: input.valueOrPrice,
+          valuationSource: "borrower_stated",
+          // Stands in for the public-record match APP-004 wants. A real build
+          // resolves this against ATTOM; asserting it here keeps the requirement
+          // honest about what the fixture actually proves.
+          addressVerified: true,
+          financedPropertyCount: input.financedPropertyCount,
+          interestedPartyContributions: input.interestedPartyContributions,
+          cashToBorrower: input.cashToBorrower ?? null,
+          cashOutPurpose: input.cashOutPurpose ?? null,
+          // The borrower does not choose a product in this flow, so we quote
+          // one. See config.defaultProduct for why a rate has to exist at all.
+          productCode: config.defaultProduct.code,
+          termMonths: config.defaultProduct.termMonths,
+          amortization: "fixed",
+          noteRate: config.defaultProduct.noteRate,
+        },
+      });
+
+      // Stated income is one of TRID's six pieces, and screen 1 is where it is
+      // said. Carrying it in the client's router state until screen 2 is what
+      // produced an income of $1 asserted as a piece of an application; a fact
+      // asserted at the moment it is stated cannot be lost that way. A second
+      // file supersedes the party's earlier figure, which is what one party
+      // per person means and is correct.
+      await assertFacts(tx, partyId, principalId, [
+        { predicate: "monthly_income", value: input.statedMonthlyIncome },
+      ]);
+
+      const terms = scenarioTermsFrom(created);
+      // Screen 1's schema requires the address, the value and the amount, so
+      // terms are always statable here. A null would mean the schema and the
+      // columns had drifted apart, which is a bug rather than a borrower error.
+      if (!terms) throw new Error(`Screen 1 saved a file with no statable terms: ${created.id}`);
+      await createDraftApplication(tx, { loanFileId: created.id, partyId, terms });
+
+      return created;
     });
+
     await recordEvent(file.id, "screen_completed", "borrower", { screen: "property_loan" });
-    res.status(201).json({ id: file.id, stage: "identity" });
+    res.status(201).json({
+      id: file.id,
+      stage: "identity",
+      applicationState: await applicationStanding(prisma, file.id),
+    });
   }),
 );
 
@@ -197,7 +284,15 @@ export const identitySchema = z.object({
       visualObservationNoted: z.boolean().default(false),
     })
     .nullable(),
-  statedMonthlyIncome: z.number().positive(),
+  /**
+   * Optional, because screen 1 is where it is stated and screen 2 may not have
+   * it. A borrower who arrives here without one — a revisit, or a file resumed
+   * after a redirect that took the router state with it — must not have a
+   * number invented for them: an absent income asserts no fact and leaves the
+   * one screen 1 recorded standing, which is what `recordBorrowerFacts` does
+   * with it.
+   */
+  statedMonthlyIncome: z.number().positive().optional(),
 });
 
 fileRouter.post(
@@ -239,7 +334,7 @@ fileRouter.post(
     // so a request records both or neither. Going back to screen 2 and saving
     // again must UPDATE the person, not add a second one: the earlier
     // assertion of each fact is superseded, and the row is updated in place.
-    await prisma.$transaction(async (tx) => {
+    const partyId = await prisma.$transaction(async (tx) => {
       const partyId = await recordBorrowerFacts(tx, {
         loanFileId: id,
         existingPartyId: existingBorrower?.partyId ?? null,
@@ -263,6 +358,7 @@ fileRouter.post(
           },
         });
       }
+      return partyId;
     });
     await recordEvent(id, existingBorrower ? "screen_revised" : "screen_completed", "borrower", {
       screen: "identity",
@@ -270,10 +366,17 @@ fileRouter.post(
 
     await advanceStage(id, "CREDIT");
 
+    // The sixth piece, from wherever it actually is. Screen 1 asserts the
+    // stated income on the party, so a screen-2 save that does not restate it
+    // is not a file with no income — it is a file whose income was recorded
+    // earlier. Reading the fact is what lets this screen stop inventing a
+    // figure to pass the receipt with.
+    const onRecord = await liveFact(prisma, partyId, "monthly_income");
+    const stated =
+      input.statedMonthlyIncome ?? (typeof onRecord?.value === "number" ? onRecord.value : null);
+
     const refreshed = await loadLoanFile(id);
-    const stampedAt = refreshed
-      ? await stampApplicationIfComplete(refreshed, input.statedMonthlyIncome)
-      : null;
+    const stampedAt = refreshed ? await stampApplicationIfComplete(refreshed, stated) : null;
 
     res.status(201).json({
       id,
@@ -336,6 +439,27 @@ fileRouter.get(
     await assertFileAccess(id, req.user!.id, "read");
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
-    res.json({ file, loanEstimateDueAt: loanEstimateDueAt(file) });
+    res.json({
+      file,
+      loanEstimateDueAt: loanEstimateDueAt(file),
+      applicationState: await applicationStanding(prisma, id),
+    });
+  }),
+);
+
+/**
+ * The ledger with its causes, for `?debug=1`.
+ *
+ * Separate from the standing view on purpose. `causedBy` carries requirement
+ * ids and snapshot ids, and the principal ids name internal actors — none of
+ * which may reach a borrower's screen. Read access, because reading how a file
+ * got where it is is reading the file.
+ */
+fileRouter.get(
+  "/:id/ledger",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    await assertFileAccess(id, req.user!.id, "read");
+    res.json({ ledger: await rawLedger(prisma, id) });
   }),
 );

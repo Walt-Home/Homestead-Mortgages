@@ -10,13 +10,14 @@ import {
 } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Stepper } from "./components/Stepper.js";
-import { DebugPanel } from "./components/DebugPanel.js";
+import { ApplicationStanding } from "./components/ApplicationStanding.js";
+import { DebugPanel, type RawLedgerRow } from "./components/DebugPanel.js";
 import { Lockup } from "./components/Wordmark.js";
 import { Footer } from "./components/Footer.js";
 import { api, ApiError, type Assessment } from "./lib/api.js";
 import { useAuth } from "./lib/auth.js";
 import { StatesGalleryPage } from "./pages/StatesGalleryPage.js";
-import { needsRepair, useLoanFile } from "./lib/file.js";
+import { needsRepair, useLoanFile, type ApplicationStandingView } from "./lib/file.js";
 import {
   REPAIR_SCREEN,
   STAGE_TO_SCREEN,
@@ -191,6 +192,19 @@ function FileShell() {
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
   });
 
+  /*
+   * The ledger with its causes — reason codes, requirement ids, principal ids.
+   * Fetched only for `?debug=1`, because that is the only surface any of it may
+   * appear on. The borrower's own timeline reads `applicationState`, which
+   * carries none of it.
+   */
+  const ledger = useQuery({
+    queryKey: ["ledger", fileId],
+    queryFn: () => api.get<{ ledger: RawLedgerRow[] }>(`/files/${fileId}/ledger`),
+    enabled: Boolean(fileId) && debug,
+    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
+  });
+
   if (file.error instanceof ApiError && file.error.status === 404) {
     return <NotYours />;
   }
@@ -220,6 +234,11 @@ function FileShell() {
       assessment={assessment.data}
       assessmentFailed={Boolean(assessment.error)}
       file={file.data?.file}
+      // Undefined until the file has been read, null once it has been read and
+      // there is none. "No application on record" is a claim about a regulated
+      // record, and it cannot be made while the record is still loading.
+      standing={file.data ? (file.data.applicationState ?? null) : undefined}
+      ledger={ledger.data?.ledger}
     />
   );
 }
@@ -313,6 +332,8 @@ function Shell({
   assessment,
   assessmentFailed,
   file,
+  standing,
+  ledger,
 }: {
   screen: ScreenPath;
   fileId?: string;
@@ -322,11 +343,26 @@ function Shell({
   assessment?: Assessment;
   assessmentFailed?: boolean;
   file?: unknown;
+  standing?: ApplicationStandingView | null;
+  ledger?: RawLedgerRow[];
 }) {
   return (
     <div className="flex min-h-screen flex-col bg-ground">
       <Header>
         <Stepper current={screen} fileId={fileId} reached={reached} />
+        {/*
+          Where the file stands, on every screen. It sits under the step nav
+          because the two answer different questions — the nav says which
+          screen you are on, this says what the application is doing — and a
+          borrower who comes back a week later needs the second one first.
+
+          Screen 1 has no file yet, so it has no standing to show.
+        */}
+        {fileId && (
+          <div className="mt-3">
+            <ApplicationStanding standing={standing} />
+          </div>
+        )}
       </Header>
 
       {isDemo && (
@@ -339,7 +375,15 @@ function Shell({
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-5 py-8 sm:px-6 sm:py-10">
         <Outlet />
-        {debug && <DebugPanel assessment={assessment} failed={assessmentFailed} file={file} />}
+        {debug && (
+          <DebugPanel
+            assessment={assessment}
+            failed={assessmentFailed}
+            file={file}
+            ledger={ledger}
+            standing={standing}
+          />
+        )}
       </main>
       <Footer />
     </div>

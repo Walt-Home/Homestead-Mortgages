@@ -30,6 +30,16 @@ export async function partyForUser(
   });
   if (user.partyId) return user.partyId;
 
+  // Nobody yet, so claim the row before reading it again. Two first saves from
+  // one person — a double-submitted screen 1 — both read null here, and
+  // without the lock both would mint a party and one would lose the write:
+  // a second party for a person the model says has exactly one. The loser
+  // waits here and finds the winner's party instead.
+  const [locked] = await tx.$queryRaw<{ party_id: string | null }[]>`
+    SELECT party_id FROM users WHERE id = ${userId}::uuid FOR UPDATE
+  `;
+  if (locked?.party_id) return locked.party_id;
+
   // A person who signed in is not provisional: they came to us. A sample
   // borrower did not, and says so, so a report can tell the two apart.
   const party = await tx.party.create({
@@ -137,12 +147,47 @@ export async function liveFact(
   db: Db,
   partyId: string,
   predicate: string,
-): Promise<{ id: string; value: Prisma.JsonValue; observedAt: Date } | null> {
+): Promise<LiveFact | null> {
   return db.fact.findFirst({
-    where: { partyId, predicate, subjectKey: "", supersededById: null, retractedAt: null },
+    where: { partyId, predicate, ...LIVE },
     orderBy: { observedAt: "desc" },
     select: { id: true, value: true, observedAt: true },
   });
+}
+
+export interface LiveFact {
+  readonly id: string;
+  readonly value: Prisma.JsonValue;
+  readonly observedAt: Date;
+}
+
+/** What "live" means, in one place, so the two readers below cannot drift. */
+const LIVE = { subjectKey: "", supersededById: null, retractedAt: null } as const;
+
+/**
+ * The same answer for many parties at once, keyed by party.
+ *
+ * The file list asks every row for its borrower's name, which was one query
+ * per file. Same definition of live, same ordering; the newest observation per
+ * party wins because the rows arrive newest-first and the first write into the
+ * map is kept.
+ */
+export async function liveFactsByParty(
+  db: Db,
+  partyIds: readonly string[],
+  predicate: string,
+): Promise<Map<string, LiveFact>> {
+  const found = new Map<string, LiveFact>();
+  if (partyIds.length === 0) return found;
+  const rows = await db.fact.findMany({
+    where: { partyId: { in: [...new Set(partyIds)] }, predicate, ...LIVE },
+    orderBy: { observedAt: "desc" },
+    select: { id: true, value: true, observedAt: true, partyId: true },
+  });
+  for (const { partyId, ...fact } of rows) {
+    if (partyId && !found.has(partyId)) found.set(partyId, fact);
+  }
+  return found;
 }
 
 /**

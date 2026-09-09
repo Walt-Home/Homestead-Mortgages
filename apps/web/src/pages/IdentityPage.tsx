@@ -310,7 +310,15 @@ export function IdentityPage() {
         currentHousing: "rent",
         // Screen 4 collects these, and only when occupancy makes it lawful.
         demographics: null,
-        statedMonthlyIncome: statedIncome || 1,
+        // Omitted, not faked, when this screen does not have it.
+        //
+        // The figure is stated on screen 1 and asserted there as a fact about
+        // the person; it reaches here only on router state or a saved draft,
+        // and a redirect through the identity vendor destroys both. Sending a
+        // placeholder wrote an income of one dollar about a real borrower and
+        // let the receipt count it as one of the six pieces. Absent asserts
+        // nothing, and the figure screen 1 recorded stands.
+        ...(statedIncome > 0 ? { statedMonthlyIncome: statedIncome } : {}),
       });
 
       const file = await api.get<{ file: { borrowers: { id: string }[] } }>(`/files/${fileId}`);

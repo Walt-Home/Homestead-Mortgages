@@ -27,11 +27,13 @@ import type {
   SanctionsScreening,
   LienSearch,
 } from "@hm/shared";
+import { TERMINAL } from "@hm/shared";
 import type { Prisma } from "@hm/db";
 import { AppError } from "../middleware/error-handler.js";
 import { displayNameFrom, factMapsByParty, requireIdentity } from "./borrower-projection.js";
 import type { Db } from "./db.js";
-import { liveFact } from "./party.js";
+import { liveFactsByParty } from "./party.js";
+import { toDomainState } from "./transition.js";
 
 /** Prisma returns Decimal; the domain uses number. One place to convert. */
 function num(value: Prisma.Decimal | null): number | null {
@@ -48,7 +50,9 @@ const PURPOSE_TO_DOMAIN = {
   CASH_OUT_REFINANCE: "cash_out_refinance",
 } as const;
 
-const STAGE_TO_DOMAIN = {
+/** `IDENTITY` -> `identity`. Exported so a route answering with a stage
+ * reads the file's real one rather than restating a literal. */
+export const STAGE_TO_DOMAIN = {
   PROPERTY_LOAN: "property_loan",
   IDENTITY: "identity",
   CREDIT: "credit",
@@ -437,7 +441,15 @@ export async function assertFileMayBeDeleted(loanFileId: string): Promise<void> 
   );
 }
 
-/** Files this user may see: their own, newest first, plus the shared demo set. */
+/**
+ * Files this user may see: their own, newest first, plus the shared demo set.
+ *
+ * Each row says where its application stands, or null when it has none — a
+ * file created before applications existed, which the list renders as "no
+ * application on record" rather than inventing a draft for. `mine` is here
+ * because ownership and demo-ness stopped being the same question: a sample
+ * borrower's file is a demo file that belongs to that sample borrower.
+ */
 export async function listAccessibleFiles(userId: string) {
   const rows = await prisma.loanFile.findMany({
     where: { OR: [{ userId }, { isDemo: true }] },
@@ -446,6 +458,7 @@ export async function listAccessibleFiles(userId: string) {
       id: true,
       stage: true,
       isDemo: true,
+      userId: true,
       createdAt: true,
       purpose: true,
       loanAmount: true,
@@ -454,6 +467,7 @@ export async function listAccessibleFiles(userId: string) {
       propertyState: true,
       // The name is a fact on the party, not a column on the row.
       borrowers: { take: 1, select: { partyId: true } },
+      application: { select: { status: true, statusEnteredAt: true } },
       decisions: {
         orderBy: { computedAt: "desc" },
         take: 1,
@@ -461,19 +475,29 @@ export async function listAccessibleFiles(userId: string) {
       },
     },
   });
-  // Same shape as before — `borrowers[0].firstName` — so no caller changes.
-  // One definition of "live" for the name, the same one the projection uses.
-  return Promise.all(
-    rows.map(async ({ borrowers, ...rest }) => {
-      const names = await Promise.all(
-        borrowers.map(async (b) =>
-          displayNameFrom((await liveFact(prisma, b.partyId, "legal_name"))?.value),
-        ),
-      );
-      return {
-        ...rest,
-        borrowers: names.filter((n): n is { firstName: string; lastName: string } => n !== null),
-      };
-    }),
+
+  // One query for every name rather than one per file. Same definition of
+  // "live" as the projection uses, because it is the same function.
+  const names = await liveFactsByParty(
+    prisma,
+    rows.flatMap((r) => r.borrowers.map((b) => b.partyId)),
+    "legal_name",
   );
+
+  // `borrowers[0].firstName` is the shape callers already read, so no caller
+  // changes.
+  return rows.map(({ borrowers, userId: owner, application, ...rest }) => ({
+    ...rest,
+    mine: owner === userId,
+    applicationState: application
+      ? {
+          status: toDomainState(application.status),
+          statusEnteredAt: application.statusEnteredAt.toISOString(),
+          terminal: TERMINAL.includes(toDomainState(application.status)),
+        }
+      : null,
+    borrowers: borrowers
+      .map((b) => displayNameFrom(names.get(b.partyId)?.value))
+      .filter((n): n is { firstName: string; lastName: string } => n !== null),
+  }));
 }

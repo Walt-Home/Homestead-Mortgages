@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
 import { useLoanFile } from "../lib/file.js";
 import { readDraft } from "../lib/identity.js";
+import { StatusPill } from "../components/StatusPill.js";
 
 /**
  * Where the borrower lands after a hosted identity check.
@@ -177,7 +178,9 @@ export function IdentityReturnPage() {
 
       {status === "verified" && (
         <>
-          <div className="super-pill super-pill-ok mb-4">Verified</div>
+          <div className="mb-4">
+            <StatusPill tone="ok">Verified</StatusPill>
+          </div>
           <h1 className="font-display text-2xl text-ink">That&rsquo;s you confirmed</h1>
           <p className="mt-2 text-base text-ink-soft">
             Checking your credit, then on to the next step.

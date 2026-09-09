@@ -14,7 +14,18 @@ export interface AuthUser {
   email: string;
   name: string | null;
   pictureUrl: string | null;
+  /** Set when this session is a sample borrower. Null for a real person. */
+  persona: { key: string; name: string | null } | null;
 }
+
+/**
+ * What a sample borrower is told when the server refuses a write.
+ *
+ * The demo-file refusal already has copy on each screen that carries it, and
+ * this is the session-level twin: it can arrive from any route, including ones
+ * with no file behind them, so the sentence says "account" rather than "file".
+ */
+export const PERSONA_READ_ONLY = "This is a sample account, so it is read-only.";
 
 interface AuthConfig {
   googleClientId: string | null;
@@ -24,6 +35,8 @@ interface AuthConfig {
   identityRequiresRedirect?: boolean;
   /** Whether /states is served. A design surface, off by default. */
   stateGalleryEnabled?: boolean;
+  /** Whether the sign-in page offers the sample borrowers. Staging only. */
+  demoPersonasEnabled?: boolean;
 }
 
 interface AuthState {
@@ -32,6 +45,7 @@ interface AuthState {
   config: AuthConfig | null;
   signInWithGoogle: (credential: string) => Promise<void>;
   signInAsDeveloper: () => Promise<void>;
+  signInAsPersona: (key: string) => Promise<void>;
   signOut: () => Promise<void>;
   error: string | null;
 }
@@ -105,6 +119,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     finish(r.user);
   }, [finish]);
 
+  /**
+   * Sign in as one of the seeded sample borrowers.
+   *
+   * The same three lines as the developer shortcut, because it is the same
+   * kind of thing: a real session for a real row, minted without a Google
+   * credential. The URL is left alone, so a link straight to a persona's file
+   * lands on it rather than on the file list.
+   */
+  const signInAsPersona = useCallback(
+    async (key: string) => {
+      try {
+        const r = await api.post<{ user: AuthUser }>(`/auth/personas/${key}`, {});
+        finish(r.user);
+      } catch (err) {
+        setError(
+          err instanceof ApiError && err.code === "PERSONAS_NOT_SEEDED"
+            ? "The sample borrowers are not on this deployment yet."
+            : "That sign-in didn't work. Try again?",
+        );
+      }
+    },
+    [finish],
+  );
+
   const signOut = useCallback(async () => {
     await api.post("/auth/signout", {});
     setUser(null);
@@ -113,7 +151,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ status, user, config, signInWithGoogle, signInAsDeveloper, signOut, error }}
+      value={{
+        status,
+        user,
+        config,
+        signInWithGoogle,
+        signInAsDeveloper,
+        signInAsPersona,
+        signOut,
+        error,
+      }}
     >
       {children}
     </AuthContext.Provider>

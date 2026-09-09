@@ -39,15 +39,27 @@ export async function callAs<T = Record<string, unknown>>(
   method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
+  /** Where the routers hang. The file routers are the common case. */
+  mount = "/api/files",
 ): Promise<HttpResult<T>> {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
     req.user = user;
+    // A router that sits behind `requireAuth` reads the session and loads the
+    // user itself, so the stub has to be here too — the thing under test is
+    // still what a signed-in person's request does, not how they signed in.
+    (req as unknown as { session: Record<string, unknown> }).session = {
+      userId,
+      // Enough of express-session for the routes that rotate or end one. A
+      // real store would prove nothing here and would need a second database.
+      destroy: (cb: () => void) => cb(),
+      regenerate: (cb: () => void) => cb(),
+    };
     next();
   });
-  for (const router of routers) app.use("/api/files", router);
+  for (const router of routers) app.use(mount, router);
   app.use(errorHandler);
 
   return new Promise((resolve, reject) => {
@@ -59,7 +71,7 @@ export async function callAs<T = Record<string, unknown>>(
           host: "127.0.0.1",
           port,
           method,
-          path: `/api/files${path}`,
+          path: `${mount}${path}`,
           headers: { "content-type": "application/json" },
           agent: false,
         },

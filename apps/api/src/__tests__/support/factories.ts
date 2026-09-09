@@ -14,10 +14,17 @@ import { recordBorrowerFacts, type BorrowerInput } from "../../services/party.js
 let seq = 0;
 const unique = () => `${Date.now().toString(36)}-${(seq += 1)}`;
 
-export async function createUser(): Promise<{ id: string; email: string }> {
+export async function createUser(
+  data: { personaKey?: string; name?: string } = {},
+): Promise<{ id: string; email: string }> {
   const tag = unique();
   const user = await prisma.user.create({
-    data: { googleSub: `sub-${tag}`, email: `person-${tag}@example.test` },
+    data: {
+      googleSub: `sub-${tag}`,
+      email: `person-${tag}@example.test`,
+      ...(data.personaKey ? { personaKey: data.personaKey } : {}),
+      ...(data.name ? { name: data.name } : {}),
+    },
     select: { id: true, email: true },
   });
   return user;

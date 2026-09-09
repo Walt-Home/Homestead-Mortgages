@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
+import { PERSONA_READ_ONLY } from "../lib/auth.js";
 import { StatusPill } from "./StatusPill.js";
 
 /**
@@ -73,6 +74,10 @@ export function ConnectorStep(props: ConnectorStepProps) {
         );
       } else if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {
         setError("This is a sample file, so it can't be changed. Start your own to try this.");
+      } else if (err instanceof ApiError && err.code === "PERSONA_READ_ONLY") {
+        // The session, not the file. It arrives from the same button and means
+        // the same thing to whoever pressed it, so it is answered here too.
+        setError(PERSONA_READ_ONLY);
       } else if (err instanceof ApiError && err.code === "PROJECTION_ERROR") {
         // A required identity fact is missing or blank, so nothing that reads
         // the file can run — including this screen. Screen 2 is the repair

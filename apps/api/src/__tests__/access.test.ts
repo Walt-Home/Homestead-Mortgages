@@ -84,6 +84,30 @@ describe("file access", () => {
     expect(await outcome(demo.id, me.id, "write")).toBe("403 DEMO_FILE_READ_ONLY");
   });
 
+  it("treats a sample borrower's own file as read-only, for them too", async () => {
+    // A persona file is a demo file that belongs to somebody: the persona sees
+    // it under "Yours" and every tester can read it. What nobody may do —
+    // including the persona whose file it is — is change it.
+    const maya = await createUser({ personaKey: "maya_okafor" });
+    const stranger = await createUser();
+    const hers = await createLoanFile({ userId: maya.id, isDemo: true });
+
+    expect(await outcome(hers.id, maya.id, "read")).toBe("allowed");
+    expect(await outcome(hers.id, stranger.id, "read")).toBe("allowed");
+    expect(await outcome(hers.id, maya.id, "write")).toBe("403 DEMO_FILE_READ_ONLY");
+    expect(await outcome(hers.id, stranger.id, "write")).toBe("403 DEMO_FILE_READ_ONLY");
+  });
+
+  it("still hides a real person's file from a sample borrower", async () => {
+    // The persona is an ordinary user as far as this rule is concerned, and
+    // "readable by all" is a property of demo files, not of persona sessions.
+    const maya = await createUser({ personaKey: "maya_okafor" });
+    const them = await createUser();
+    const theirs = await createLoanFile({ userId: them.id });
+    expect(await outcome(theirs.id, maya.id, "read")).toBe("404 NOT_FOUND");
+    expect(await outcome(theirs.id, maya.id, "write")).toBe("404 NOT_FOUND");
+  });
+
   it("refuses a file that was deleted out from under the session", async () => {
     // Only reachable with a real database: the mocked version could not
     // distinguish "never existed" from "existed a moment ago".

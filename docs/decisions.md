@@ -1071,6 +1071,48 @@ signature, which is a claim about what the borrower owes us, not a fix to a
 heading. The pill and the date stay the state's; only the heading belongs to
 the view.
 
+## Sample borrowers are real rows behind a flag
+
+A tester needs to see what a file in each state looks like, and the only
+honest way to show that is to have walked one there. So the sample borrowers
+are not fixtures rendered into a gallery: each one is a `users` row, a
+`loan_files` row and an application whose every state was written by the same
+services the four screens call. Signing in as one mints a real session — a
+real `user_sessions` row and the same `hm.sid` cookie — because a picker that
+faked a session would be showing a tester a product nobody else can run.
+
+That is a session minter that needs no Google credential, so it is behind
+`DEMO_PERSONAS=true` and it MUST NEVER be set on a real production deploy.
+The flag cannot key off `NODE_ENV`: staging runs `NODE_ENV=production`, and
+the deploy environment is the only thing that tells the two apart. With the
+flag off the routes are not mounted at all, and `signInAsPersona` answers 404
+rather than 403 — a refusal that admitted the endpoint exists would make the
+flag visible to anyone who tried it. `/api/health` reports `personas`, and the
+deploy asserts it, because the one thing that must never happen to this flag is
+that nobody notices it is on.
+
+Read-only is enforced three times over, and each layer catches what the others
+cannot:
+
+1. **The file.** Every persona file is `is_demo` with a `user_id`, so
+   `assertFileAccess` refuses every write from everyone — the persona
+   included — and allows every signed-in reader. That is the existing demo
+   rule; what is new is that a demo file now belongs to somebody, so the
+   persona sees it under "Yours" while nobody can change it.
+2. **The session.** `personaReadOnly` refuses every `/api/*` request from a
+   persona session that is not a GET, HEAD or OPTIONS. This is the layer that
+   matters: the file rule can only see a file, and a persona POSTing
+   `/api/files` would get a brand-new file that is NOT a demo file, own it,
+   and be free to edit it. Mounted on the line after `requireAuth`, so a
+   router added later cannot forget it — and a test reads `index.ts` to say
+   so, because a test that re-declares the wiring proves only its own copy.
+3. **`DELETE /api/auth/me`**, which is mounted before that gate because
+   signing out has to stay possible, and so carries the same refusal itself.
+
+The persona `users` row is keyed on `persona_key`, which is what makes the
+seed idempotent and what both refusals read. It is a column on `users` rather
+than a table of personas because the persona IS a user.
+
 ## Still outstanding
 
 Four vendor decisions plus sandbox credentials, none obtainable from inside

@@ -28,6 +28,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
+import { PERSONA_READ_ONLY } from "../lib/auth.js";
 import { useLoanFile } from "../lib/file.js";
 import { Why } from "../components/Why.js";
 import { Working } from "../components/Working.js";
@@ -178,6 +179,12 @@ export function BankPage() {
 
       if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {
         setError("This is a sample file, so it is read-only.");
+        return;
+      }
+      // The same refusal one level up: the session is a sample borrower, so it
+      // would be refused on any file, including one of its own.
+      if (err instanceof ApiError && err.code === "PERSONA_READ_ONLY") {
+        setError(PERSONA_READ_ONLY);
         return;
       }
       if (err instanceof ApiError && err.code === "AUTHORIZATION_REQUIRED") {

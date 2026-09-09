@@ -3,9 +3,11 @@ import { z } from "zod";
 import { prisma } from "@hm/db";
 import { config } from "../config.js";
 import { connectors } from "../services/connectors.js";
-import { asyncRoute } from "../middleware/error-handler.js";
+import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { requireAuth } from "../middleware/require-auth.js";
-import { signInAsLocalDeveloper, signInWithGoogle } from "../services/auth.js";
+import { signInAsLocalDeveloper, signInAsPersona, signInWithGoogle } from "../services/auth.js";
+import { isSeeded, NOT_SEEDED_HERE, PERSONA_STORIES } from "../personas/stories.js";
+import { toDomainState } from "../services/transition.js";
 
 export const authRouter = Router();
 
@@ -22,6 +24,10 @@ authRouter.get("/config", (_req, res) => {
     // production regardless of anything else.
     developerSignInAvailable: config.nodeEnv !== "production" && !config.googleClientId,
     stateGalleryEnabled: config.stateGalleryEnabled,
+    // Whether the sign-in page offers the sample borrowers. Off everywhere the
+    // flag is not set, and the routes behind it are not mounted at all — so a
+    // client that asked anyway gets the same 404 as a path that never existed.
+    demoPersonasEnabled: config.demoPersonasEnabled,
     /*
      * Whether the ID check navigates away to a vendor.
      *
@@ -65,6 +71,94 @@ authRouter.post(
   }),
 );
 
+/**
+ * The sample borrowers, and signing in as one.
+ *
+ * Mounted only when the flag is on, so with it off these paths do not exist —
+ * the API's catch-all answers them exactly as it answers a typo. That is the
+ * gate; `signInAsPersona` checks the same flag again because a route is one
+ * edit away from being mounted somewhere else.
+ *
+ * The listing is open, like `/config` and `/google`: it is what the sign-in
+ * page renders before anybody is signed in. It exposes nothing but the nine
+ * rows this file already describes and the state each one is in.
+ */
+const personaRouter = Router();
+
+personaRouter.get(
+  "/personas",
+  asyncRoute(async (_req, res) => {
+    const users = await prisma.user.findMany({
+      where: { personaKey: { not: null } },
+      select: {
+        personaKey: true,
+        createdAt: true,
+        loanFiles: {
+          orderBy: { createdAt: "asc" },
+          take: 1,
+          select: { application: { select: { status: true } } },
+        },
+      },
+    });
+    const seeded = new Map(users.map((u) => [u.personaKey, u]));
+
+    res.json({
+      personas: PERSONA_STORIES.map((story) => {
+        const row = seeded.get(story.key);
+        const status = row?.loanFiles[0]?.application?.status;
+        /*
+         * Clickable only when there is a row behind it.
+         *
+         * `isSeeded` is a property of the LIST — this build knows where to
+         * walk that persona — and says nothing about this database. Read on
+         * its own it offers all nine rows on a deployment whose seed has not
+         * run, and every one of them signs in to a 503.
+         */
+        const offerable = isSeeded(story) && row !== undefined;
+        return {
+          key: story.key,
+          name: `${story.name.first} ${story.name.last}`,
+          story: story.story,
+          /*
+           * Where the file ACTUALLY stands, not where the story says it should.
+           * A persona that drifted is a persona whose pill should say so —
+           * this page is how a tester would notice, and a listing that showed
+           * the intended state would be the one place the drift was hidden.
+           */
+          state: status ? toDomainState(status) : null,
+          available: offerable,
+          unavailableBecause: offerable
+            ? null
+            : isSeeded(story)
+              ? NOT_SEEDED_HERE
+              : story.unavailableBecause,
+          seededAt: row?.createdAt.toISOString() ?? null,
+        };
+      }),
+    });
+  }),
+);
+
+personaRouter.post(
+  "/personas/:key",
+  asyncRoute(async (req, res) => {
+    // The same shape the database's CHECK takes, so an unknown key is a 503
+    // about seeding rather than a query with something arbitrary in it.
+    const key = z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{1,40}$/)
+      .parse(req.params.key);
+    const user = await signInAsPersona(key);
+    await new Promise<void>((resolve, reject) =>
+      req.session.regenerate((err) => (err ? reject(err) : resolve())),
+    );
+    req.session.userId = user.id;
+    res.status(201).json({ user: publicUser(user) });
+  }),
+);
+
+if (config.demoPersonasEnabled) authRouter.use(personaRouter);
+
 authRouter.get(
   "/me",
   requireAuth,
@@ -99,6 +193,13 @@ authRouter.delete(
   "/me",
   requireAuth,
   asyncRoute(async (req, res) => {
+    // The one write mounted before the read-only gate, so it carries the same
+    // refusal itself. A sample borrower is shared with every tester and is
+    // seeded, not signed up; deleting one would take a state nobody could put
+    // back without a deploy.
+    if (req.user!.personaKey) {
+      throw new AppError(403, "A sample borrower cannot be deleted.", "PERSONA_READ_ONLY");
+    }
     const userId = req.user!.id;
     const { partyId } = await prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -124,12 +225,30 @@ authRouter.post("/signout", (req, res) => {
   });
 });
 
-/** Never return googleSub or hostedDomain to the browser; neither is its business. */
+/**
+ * Never return googleSub or hostedDomain to the browser; neither is its business.
+ *
+ * `personaKey` is required rather than optional on purpose. Three things in
+ * the SPA hang off the `persona` field below — the banner, the hidden start
+ * button and the review screen's read-only state — and an optional parameter
+ * would let a caller with a narrower `select` compile while quietly answering
+ * `persona: null`, which is a real person's answer.
+ */
 function publicUser(user: {
   id: string;
   email: string;
   name: string | null;
   pictureUrl: string | null;
+  personaKey: string | null;
 }) {
-  return { id: user.id, email: user.email, name: user.name, pictureUrl: user.pictureUrl };
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    pictureUrl: user.pictureUrl,
+    // What the banner reads, and what hides the "start an application" button.
+    // The server already knows; asking the client to infer it from the file
+    // list would leave a persona one stale query away from a CTA it cannot use.
+    persona: user.personaKey ? { key: user.personaKey, name: user.name } : null,
+  };
 }

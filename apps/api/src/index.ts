@@ -4,6 +4,7 @@ import helmet from "helmet";
 import { config } from "./config.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { requireAuth } from "./middleware/require-auth.js";
+import { personaReadOnly } from "./middleware/persona-read-only.js";
 import { sessionMiddleware } from "./middleware/session.js";
 import { assertAuthConfigured } from "./services/auth.js";
 import { serveSpa } from "./static.js";
@@ -40,6 +41,12 @@ app.use("/api/auth", authRouter);
 // Everything past this point requires a signed-in user. Mounted as one gate
 // rather than per-router, so a new router cannot be added without it.
 app.use("/api", requireAuth);
+
+// And a sample borrower may only look. On the line after the gate rather than
+// inside it, because the two refusals answer different questions — "who are
+// you" and "may you change this" — and every router below is mounted after
+// both, so a new one cannot be added without either.
+app.use("/api", personaReadOnly);
 
 app.use("/api/requirements", requirementRouter);
 app.use("/api/property", propertyRouter);
@@ -79,6 +86,9 @@ app.listen(config.port, () => {
   console.log(
     `SPA: ${spaServed ? "served from apps/web/dist" : "not built (Vite serves it in dev)"}`,
   );
+  if (config.demoPersonasEnabled) {
+    console.log("DEMO_PERSONAS is on: sample-borrower sign-in is mounted");
+  }
   console.log(
     `Auth: Google sign-in${config.googleClientId ? "" : " (NOT CONFIGURED — developer sign-in only)"}` +
       `${config.allowedDomain ? `, limited to ${config.allowedDomain}` : ""}`,

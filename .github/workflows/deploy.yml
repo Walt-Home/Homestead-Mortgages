@@ -217,6 +217,13 @@ jobs:
       - name: Deploy to Cloud Run
         run: |
           ENV_VARS="NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture,STATE_GALLERY=true"
+          # Sample borrowers on the sign-in page. This mounts a route that
+          # mints a real session with no Google credential, so it MUST NEVER be
+          # set on a real production deploy — staging runs NODE_ENV=production,
+          # which is why nothing in the code can tell the two apart and this
+          # flag is the whole of the decision. /api/health reports it, and the
+          # check below fails the deploy if it is not what was asked for.
+          ENV_VARS="$ENV_VARS,DEMO_PERSONAS=true"
           ENV_VARS="$ENV_VARS,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}"
           ENV_VARS="$ENV_VARS,BANK_PROVIDER=plaid,PLAID_ENV=sandbox,PLAID_PRODUCT=assets"
           ENV_VARS="$ENV_VARS,PLAID_CLIENT_ID=${{ vars.PLAID_CLIENT_ID }}"
@@ -293,6 +300,13 @@ jobs:
           # report "(test)", so this doubles as a live-mode tripwire.
           case "$PROVIDERS" in
             *"stripe-identity (LIVE)"*) echo "::error::LIVE Stripe identity on staging"; exit 1 ;;
+          esac
+          # The sample borrowers are what a tester is sent to look at, and a
+          # deploy that silently dropped the flag would leave the sign-in page
+          # offering nothing but Google with no error anywhere.
+          case "$PROVIDERS" in
+            *'"personas":"enabled"'*) echo "ok: sample borrowers are mounted" ;;
+            *) echo "::error::DEMO_PERSONAS did not reach the service"; exit 1 ;;
           esac
 
       # Reachable is not the same as working. A malformed Cloud SQL socket path

@@ -44,6 +44,11 @@ model User {
   createdAt  DateTime @default(now()) @map("created_at")
   lastSeenAt DateTime @default(now()) @map("last_seen_at")
 
+  /// Set only by the persona seed. A session for such a user is read-only
+  /// everywhere (middleware/persona-read-only.ts) and DELETE /api/auth/me
+  /// refuses it. The seed is idempotent on this key.
+  personaKey String? @unique @map("persona_key")
+
   /// The durable person behind this sign-in. Null until the first thing is
   /// written about them; found-or-created by the party service, never by a
   /// route. This is what a second application reuses instead of re-asking.
@@ -80,8 +85,10 @@ model LoanFile {
   id    String    @id @default(uuid()) @db.Uuid
   stage FlowStage @default(PROPERTY_LOAN)
 
-  /// Who created it. Null only for the shared demo files, which belong to
-  /// nobody on purpose — see `isDemo`.
+  /// Who created it. Null for the legacy demo files; a persona file is a demo
+  /// file that belongs to its persona user, so `assertFileAccess` makes it
+  /// readable by all and writable by none while its persona session sees it
+  /// as theirs.
   userId String? @map("user_id") @db.Uuid
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 

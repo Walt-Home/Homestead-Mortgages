@@ -537,9 +537,13 @@ export async function assertFileMayBeDeleted(loanFileId: string, db: Db = prisma
  * application on record" rather than inventing a draft for. `mine` is here
  * because ownership and demo-ness stopped being the same question: a sample
  * borrower's file is a demo file that belongs to that sample borrower.
+ *
+ * The client is the last parameter, like every other reader here, so a caller
+ * already inside a transaction sees what that transaction has written rather
+ * than reading around it on a second connection.
  */
-export async function listAccessibleFiles(userId: string) {
-  const rows = await prisma.loanFile.findMany({
+export async function listAccessibleFiles(userId: string, db: Db = prisma) {
+  const rows = await db.loanFile.findMany({
     where: { OR: [{ userId }, { isDemo: true }] },
     orderBy: [{ isDemo: "asc" }, { createdAt: "desc" }],
     select: {
@@ -573,7 +577,7 @@ export async function listAccessibleFiles(userId: string) {
   // One query for every name rather than one per file. Same definition of
   // "live" as the projection uses, because it is the same function.
   const names = await liveFactsByParty(
-    prisma,
+    db,
     rows.flatMap((r) => r.borrowers.map((b) => b.partyId)),
     "legal_name",
   );

@@ -19,6 +19,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/auth.js";
+import { PersonaPicker } from "./PersonaPicker.js";
 
 declare global {
   interface Window {
@@ -165,6 +166,13 @@ export function GoogleSignIn({
       )}
       {googleError && <p className="mt-5 max-w-measure-prose text-sm text-danger">{googleError}</p>}
       {error && <p className="mt-5 max-w-measure-prose text-sm text-danger">{error}</p>}
+
+      {/*
+        The sample borrowers, where a deployment has them. Here rather than in
+        either page, because both sign-in surfaces render this component and a
+        picker in one of them would be a picker a deep link never reaches.
+      */}
+      {config?.demoPersonasEnabled && <PersonaPicker />}
 
       {/*
         The popup can also die without firing error_callback at all — an

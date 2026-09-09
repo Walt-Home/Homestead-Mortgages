@@ -1,7 +1,36 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../lib/api.js";
-import { useAuth } from "../lib/auth.js";
+import { api, ApiError } from "../lib/api.js";
+import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
+
+/**
+ * Whether this session has an account of its own to delete.
+ *
+ * A sample borrower does not: the row belongs to the seed, everyone can read
+ * it, and the server refuses `DELETE /auth/me` from such a session. Offering
+ * the button anyway would put the one control on the page that answers 403
+ * under a heading promising it works — the same reason the front door hides
+ * "Start now".
+ *
+ * Exported for the same reason `canStart` is: a rule a screen depends on
+ * should be something a test can hold, not an expression inside the JSX.
+ */
+export function canDelete(user: { persona: unknown } | null | undefined): boolean {
+  return Boolean(user) && !user?.persona;
+}
+
+/**
+ * What a refused deletion is called on this page.
+ *
+ * The session-level refusal gets the shared sentence, the one every screen
+ * that can meet it says; anything else says what the server said. Separate
+ * from the handler so the words are a rule rather than a branch nothing can
+ * reach without a browser.
+ */
+export function deletionRefusal(err: unknown): string {
+  if (err instanceof ApiError && err.code === "PERSONA_READ_ONLY") return PERSONA_READ_ONLY;
+  return err instanceof Error ? err.message : "That did not work.";
+}
 
 /**
  * What we hold, in plain words, with the button that undoes it.
@@ -15,10 +44,24 @@ export function PrivacyPage() {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function deleteEverything() {
     setBusy(true);
-    await api.del("/auth/me");
+    setError(null);
+    try {
+      await api.del("/auth/me");
+    } catch (err) {
+      // This route used to be the one write that could not fail for anybody
+      // signed in, so it was written with nowhere for a refusal to go: the
+      // button stayed disabled reading "Deleting…" for good and the page said
+      // nothing. A sample borrower is now refused, and a session can become
+      // one under a page that is already open, so the refusal has to land
+      // somewhere a person can see it.
+      setError(deletionRefusal(err));
+      setBusy(false);
+      return;
+    }
     await signOut().catch(() => undefined);
     navigate("/");
   }
@@ -61,11 +104,13 @@ export function PrivacyPage() {
         </p>
       </div>
 
-      {/* The banner links here from the sign-in page, so this renders for people
-          who have not signed in and have nothing to delete yet. Showing them a
-          delete button would offer an action that cannot work — and "Signed in
-          as ." with a dangling period, which is how this was caught. */}
-      {user ? (
+      {/* Three ways this card can read, because there are three people it can
+          be showing. The banner links here from the sign-in page, so it renders
+          for somebody who has not signed in and has nothing to delete yet —
+          showing them a delete button would offer an action that cannot work,
+          and "Signed in as ." with a dangling period, which is how that was
+          caught. A sample borrower has nothing of their own here either. */}
+      {user && canDelete(user) ? (
         <div className="super-card mt-8">
           {!confirming ? (
             <>
@@ -108,6 +153,14 @@ export function PrivacyPage() {
               </div>
             </>
           )}
+          {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+        </div>
+      ) : user ? (
+        <div className="super-card mt-8">
+          <h2 className="font-display text-base text-ink">Nothing stored for you here</h2>
+          <p className="mt-1.5 text-sm text-ink-muted">
+            This is a sample borrower, seeded for testing. There is no account of yours to delete.
+          </p>
         </div>
       ) : (
         <div className="super-card mt-8">

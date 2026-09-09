@@ -43,6 +43,10 @@ healthRouter.get("/", async (_req, res) => {
     // question that gets asked at the worst possible moment.
     providers: providerMix(),
     authConfigured: Boolean(config.googleClientId),
+    // Whether this deployment mints sessions for sample borrowers. Reported
+    // rather than merely set, because the one thing that must never happen to
+    // this flag is that nobody notices it is on.
+    personas: config.demoPersonasEnabled ? "enabled" : "disabled",
     timestamp: new Date().toISOString(),
   });
 });

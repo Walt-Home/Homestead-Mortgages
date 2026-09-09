@@ -18,6 +18,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
+import { useAuth } from "../lib/auth.js";
 import { HomeHero } from "../components/HomeHero.js";
 import { StatusPill } from "../components/StatusPill.js";
 import { StreetScene } from "../components/StreetScene.js";
@@ -57,8 +58,24 @@ export function resumable(files: readonly FileRow[]): FileRow | undefined {
   );
 }
 
+/**
+ * Whether this session has an application to start.
+ *
+ * A sample borrower does not. The server refuses `POST /files` from such a
+ * session, so leaving the button up would offer a tester the one action on
+ * the page that answers 403 — their own file is still in the list beneath,
+ * which is what they came to look at.
+ *
+ * Exported for the same reason `resumable` is: a rule the front door depends
+ * on should be something a test can hold, not an expression inside the JSX.
+ */
+export function canStart(user: { persona: unknown } | null | undefined): boolean {
+  return !user?.persona;
+}
+
 export function FilesPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data, isLoading } = useQuery({
     queryKey: ["files"],
     queryFn: () => api.get<{ files: FileRow[] }>("/files"),
@@ -72,9 +89,11 @@ export function FilesPage() {
   return (
     <>
       <HomeHero>
-        <button className="super-cta" onClick={() => navigate("/f/new/property")}>
-          {inProgress ? "Start another" : "Start now"}
-        </button>
+        {canStart(user) && (
+          <button className="super-cta" onClick={() => navigate("/f/new/property")}>
+            {inProgress ? "Start another" : "Start now"}
+          </button>
+        )}
 
         {inProgress && (
           <Link

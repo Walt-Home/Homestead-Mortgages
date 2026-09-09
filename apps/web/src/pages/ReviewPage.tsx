@@ -27,7 +27,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api.js";
+import { api, ApiError } from "../lib/api.js";
+import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
 import { useLoanFile } from "../lib/file.js";
 import {
   DemographicQuestions,
@@ -75,13 +76,32 @@ interface DecisionView {
 
 const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
+/**
+ * The one refusal this screen re-words rather than passing through.
+ *
+ * Every other failure here is already a sentence a person can read. A sample
+ * borrower's is not about what they typed, so it says what it is about.
+ */
+function refusal(err: unknown): string | null {
+  return err instanceof ApiError && err.code === "PERSONA_READ_ONLY" ? PERSONA_READ_ONLY : null;
+}
+
 export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data } = useLoanFile(fileId);
   const file = data?.file;
-  const readOnly = file?.isDemo === true;
+  const { user } = useAuth();
+  /*
+   * Read-only for two different reasons, and either is enough.
+   *
+   * The file is a sample one, shared with everybody — or the session is a
+   * sample borrower, which is refused every write on any file at all. The
+   * buttons on this screen are the last ones in the flow, so a persona that
+   * reached them with them enabled would sign something it cannot sign.
+   */
+  const readOnly = file?.isDemo === true || user?.persona != null;
 
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [demographics, setDemographics] = useState<DemographicAnswers>({
@@ -188,7 +208,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
       await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
       setReadyToSign(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save.");
+      setError(refusal(err) ?? (err instanceof Error ? err.message : "Could not save."));
     } finally {
       setSaving(false);
     }
@@ -229,7 +249,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
       await api.post(`/files/${fileId}/intent-to-proceed`, {});
       await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "That did not save.");
+      setError(refusal(err) ?? (err instanceof Error ? err.message : "That did not save."));
     } finally {
       setIntentSaving(false);
     }

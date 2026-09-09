@@ -211,6 +211,14 @@ with no invoker bindings that 403s everything and reads exactly like a broken
 container. The deploy workflow asserts the binding afterwards and fails if it
 is missing.
 
+**`DEMO_PERSONAS=true` is set on staging and must never be set anywhere real.**
+It mounts `POST /api/auth/personas/:key`, which mints a real session for a
+seeded sample borrower with no Google credential. Staging runs
+`NODE_ENV=production`, so no code can tell the two deployments apart — the flag
+is the whole of the decision. With it off the persona routes are not mounted
+and the service answers them exactly as it answers a typo. `/api/health`
+reports `personas`, and the deploy fails if it is not what was asked for.
+
 ## House style
 
 American English, in code and in prose: color, gray, authorize, behavior,

@@ -35,6 +35,16 @@ export const config = {
    * without a deploy of the client.
    */
   stateGalleryEnabled: process.env.STATE_GALLERY === "true",
+  /**
+   * Sample borrowers on the sign-in page.
+   *
+   * Mounts a session minter that needs no Google credential. Staging runs
+   * NODE_ENV=production, so this cannot key off nodeEnv; it is an explicit
+   * deploy flag and MUST NEVER be set on a real production deploy. There is no
+   * boot check because the deploy environment is what tells the two apart;
+   * /api/health reports it so its presence is visible.
+   */
+  demoPersonasEnabled: process.env.DEMO_PERSONAS === "true",
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   corsOrigins: (process.env.CORS_ORIGIN ?? "http://localhost:5173")
     .split(",")

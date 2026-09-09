@@ -335,7 +335,34 @@ function Header({ children }: { children?: React.ReactNode }) {
         </div>
         {children && <div className="mt-4">{children}</div>}
       </div>
+      <PersonaBanner />
     </header>
+  );
+}
+
+/**
+ * Who is signed in, when that is nobody real.
+ *
+ * In the header rather than on one page, because a sample borrower's session
+ * is the same session everywhere and the sentence stops being true nowhere. A
+ * tester who opened a persona's file from a link should not have to work out
+ * why the buttons refuse them.
+ *
+ * The file screens carry their own "this is a sample file" line as well. They
+ * are different claims — one is about the file, which is shared with everyone,
+ * and this is about the session, which cannot change anything at all.
+ */
+function PersonaBanner() {
+  const { user } = useAuth();
+  if (!user?.persona) return null;
+  return (
+    <div className="border-t border-rule-soft bg-ground">
+      <p className="mx-auto max-w-2xl px-5 py-2 text-xs text-ink-muted sm:px-6">
+        {user.persona.name
+          ? `You are signed in as ${user.persona.name}, a sample borrower. Nothing can be changed.`
+          : "You are signed in as a sample borrower. Nothing can be changed."}
+      </p>
+    </div>
   );
 }
 

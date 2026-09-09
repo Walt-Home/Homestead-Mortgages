@@ -125,6 +125,39 @@ export async function signInAsLocalDeveloper(): Promise<User> {
 }
 
 /**
+ * Sign in as one of the seeded sample borrowers.
+ *
+ * A real session for a real user row — the same cookie, the same
+ * `assertFileAccess`, the same everything — because a picker that faked a
+ * session would be showing a tester a product nobody else can run. What makes
+ * it safe is the other half: `personaReadOnly` refuses every write from such a
+ * session, and every persona file is a demo file besides.
+ *
+ * It never creates a user. The seed is the only writer of a persona row, so a
+ * deployment that has not been seeded says so — a sign-in that quietly
+ * conjured an empty file would look like the seed had run and produced
+ * nothing.
+ *
+ * With the flag off this is a 404 and not a 403: the routes that call it are
+ * not mounted at all, and a refusal that admitted the endpoint exists would
+ * make the flag visible to anyone who tried it.
+ */
+export async function signInAsPersona(key: string): Promise<User> {
+  if (!config.demoPersonasEnabled) {
+    throw new AppError(404, "No such endpoint.", "NOT_FOUND");
+  }
+  const user = await prisma.user.findUnique({ where: { personaKey: key } });
+  if (!user) {
+    throw new AppError(
+      503,
+      "The sample borrowers have not been seeded on this deployment.",
+      "PERSONAS_NOT_SEEDED",
+    );
+  }
+  return user;
+}
+
+/**
  * Fail at boot rather than at first sign-in.
  *
  * A production deploy with no client id would start happily, serve the sign-in

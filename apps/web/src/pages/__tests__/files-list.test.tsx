@@ -15,10 +15,29 @@
  * `resumable` alone can see.
  */
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { resumable, Standing, type FileRow } from "../FilesPage.js";
+import { MemoryRouter } from "react-router-dom";
+import { describe, expect, it, vi } from "vitest";
+import { canStart, FilesPage, resumable, Standing, type FileRow } from "../FilesPage.js";
 import { NO_APPLICATION } from "../../lib/ledger.js";
+
+/** Who the front door thinks is looking. Set per render. */
+const session = vi.hoisted(() => ({ user: null as { persona: unknown } | null }));
+
+vi.mock("../../lib/auth.js", () => ({ useAuth: () => session }));
+
+/** The page as it actually renders, so the guard in the JSX is the thing read. */
+function frontDoor(user: { persona: unknown } | null): string {
+  session.user = user;
+  return renderToStaticMarkup(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <FilesPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
 
 function file(over: Partial<FileRow>): FileRow {
   return {
@@ -82,6 +101,29 @@ describe("the resume link", () => {
     expect(
       resumable([file({ stage: "PROPERTY_LOAN", applicationState: at("expired", true) })]),
     ).toBeUndefined();
+  });
+});
+
+describe("the start button", () => {
+  it("is not offered to a sample borrower", () => {
+    // The server refuses `POST /files` from a persona session, so the button
+    // would be the one control on the page that answers 403.
+    expect(canStart({ persona: { key: "maya_okafor", name: "Maya Okafor" } })).toBe(false);
+  });
+
+  it("is offered to a real person, and to nobody in particular", () => {
+    expect(canStart({ persona: null })).toBe(true);
+    expect(canStart(null)).toBe(true);
+    expect(canStart(undefined)).toBe(true);
+  });
+
+  it("is actually left off the page, not merely disallowed by the rule", () => {
+    // The rule and the page can disagree: drop `canStart(user) &&` from the
+    // JSX and both cases above still pass while the button is right there.
+    expect(frontDoor({ persona: { key: "maya_okafor", name: "Maya Okafor" } })).not.toContain(
+      "super-cta",
+    );
+    expect(frontDoor({ persona: null })).toContain("super-cta");
   });
 });
 

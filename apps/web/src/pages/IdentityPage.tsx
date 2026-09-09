@@ -20,7 +20,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
 import { useLoanFile } from "../lib/file.js";
-import { useAuth } from "../lib/auth.js";
+import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
 import { Why } from "../components/Why.js";
 import { clearDraft, readDraft, saveDraft } from "../lib/identity.js";
 import { Working } from "../components/Working.js";
@@ -407,6 +407,12 @@ export function IdentityPage() {
     } catch (err) {
       if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {
         setError("This is a sample file, so it is read-only. Start your own to walk the flow.");
+      } else if (err instanceof ApiError && err.code === "PERSONA_READ_ONLY") {
+        // The session rather than the file. This screen posts to five routes
+        // and any of them can carry it, so without this the one refusal a
+        // sample borrower is most likely to meet falls through to the
+        // server's own sentence instead of the screen's.
+        setError(PERSONA_READ_ONLY);
       } else if (err instanceof ApiError && err.code === "PROJECTION_ERROR") {
         // The save landed but the person still will not read back — this
         // screen IS the repair path, so there is nowhere else to send them.

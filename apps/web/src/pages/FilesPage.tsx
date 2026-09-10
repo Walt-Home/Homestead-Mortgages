@@ -116,10 +116,16 @@ export function FilesPage() {
 
         {inProgress && (
           <Link
-            className="super-link-quiet text-sm"
+            className="super-link-cta text-base"
             to={`/f/${inProgress.id}/${screenFor(inProgress)}`}
           >
-            Or pick up the one you started
+            {/*
+              "Or" only when there is a button above it to be an alternative
+              to. A sample borrower cannot start a file, so this link is the
+              whole of what the page offers them, and an "Or" there points at
+              nothing.
+            */}
+            {canStart(user) ? "Or pick up" : "Pick up"} the one you started
             {inProgress.propertyCity ? ` in ${inProgress.propertyCity}` : ""}
             {inProgress.propertyState ? `, ${inProgress.propertyState}` : ""}
           </Link>

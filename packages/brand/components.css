@@ -137,6 +137,27 @@
     text-decoration: underline;
     text-underline-offset: 2px;
   }
+  /* A link that IS the thing to do next, standing on its own line rather than
+     sitting inside a sentence.
+
+     Underlined at rest, which `.super-link` is not. A link inside a sentence
+     is found by being the one colored run in a line of text; a link alone
+     under a heading has no sentence to stand out from, and on this ground a
+     color change on its own reads as a caption. It is also sometimes the only
+     action on the page — a sample borrower cannot start a file, so the offer
+     to pick up the one they have is all there is. */
+  .super-link-cta {
+    color: var(--sm-color-accent);
+    font-weight: var(--sm-weight-medium);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    text-decoration-thickness: 1px;
+    transition: text-decoration-thickness var(--sm-duration-fast);
+  }
+  .super-link-cta:hover {
+    text-decoration-thickness: 2px;
+  }
+
   /* A quiet link for the escape hatches: "Back", "Pull again", "Never mind". */
   .super-link-quiet {
     color: var(--sm-color-ink-muted);

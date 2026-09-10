@@ -64,7 +64,20 @@ export type Ending =
  * `suspended` is here because a hold is a hold: the file is stopped on
  * somebody else's answer, and the timeline is the honest landing page for it.
  */
-const PAST_DECIDING = ["clear_to_close", "closing", "rescission_pending", "funded", "suspended"];
+// `adverse_action_pending` belongs here and is easy to miss, because it is
+// deliberately NOT terminal — a decline is not final until the borrower has
+// been told why, so the machine keeps it live until the notice goes. But the
+// DECISION is behind it, which is what this answers, and leaving it out put a
+// four-step progress bar and a promised Loan Estimate on the one screen that
+// says we cannot approve the loan.
+const PAST_DECIDING = [
+  "adverse_action_pending",
+  "clear_to_close",
+  "closing",
+  "rescission_pending",
+  "funded",
+  "suspended",
+];
 
 /**
  * Whether a decision is behind this file rather than ahead of it.

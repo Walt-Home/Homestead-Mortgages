@@ -205,7 +205,15 @@ export function hasStopped(
   application: { readonly status: string; readonly terminal: boolean } | null | undefined,
 ): boolean {
   if (!application) return false;
-  return application.terminal || application.status === "suspended";
+  // A declined file awaiting its notice is stopped for the borrower even
+  // though the machine keeps it live until the notice is delivered: there is
+  // no step left for them to take, so it must not wear a progress bar and must
+  // not be resumable into a step screen.
+  return (
+    application.terminal ||
+    application.status === "suspended" ||
+    application.status === "adverse_action_pending"
+  );
 }
 
 export function hasConsent(file: LoanFileView | undefined, kind: string): boolean {

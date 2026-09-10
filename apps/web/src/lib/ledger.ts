@@ -125,7 +125,15 @@ export const CLOCK_COPY = {
   loanEstimateOnHold:
     "That date is recorded but on hold: we don't yet have a way to deliver it, and it will be here when we do.",
   adverseActionDue: (date: string) => `Written reasons are due by ${date}.`,
-  adverseActionOnHold: "That date is on hold for the same reason.",
+  /**
+   * Carries its own reason rather than pointing at the sentence above it.
+   * It used to read "for the same reason", which was true only while the Loan
+   * Estimate pair rendered directly above — and that pair correctly stopped
+   * rendering on a file where a decision is already behind the borrower, which
+   * is the one file this sentence is for.
+   */
+  adverseActionOnHold:
+    "That date is recorded but on hold: we don't yet have a way to deliver the notice, and it will be here when we do.",
 } as const;
 
 /**

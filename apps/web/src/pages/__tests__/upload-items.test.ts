@@ -12,7 +12,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { attachable } from "../UploadPage.js";
+import { attachable, signatureKind } from "../UploadPage.js";
+import { documentTitle } from "../../components/SignDocument.js";
 import type { OutstandingItem } from "../../lib/api.js";
 
 const item = (over: Partial<OutstandingItem>): OutstandingItem => ({
@@ -60,5 +61,30 @@ describe("the items the upload screen offers", () => {
     expect(listed([item({ id: "INC-002", screen: "payroll", source: "connect_payroll" })])).toEqual(
       [],
     );
+  });
+});
+
+/**
+ * The heading over a signature, which used to be the requirements sheet's.
+ *
+ * The card read "4506-C executed" — the registry's `statement`, in the words
+ * the underwriting sheet uses for a row that is done. It now reads the title
+ * out of the panel the button opens, so the two cannot name different
+ * documents, and `signatureKind` is the single mapping both of them ask.
+ */
+describe("what the upload screen calls a document it wants signed", () => {
+  it("names each of the three the way the signing panel does", () => {
+    expect(documentTitle(signatureKind("INC-008"))).toBe("IRS Form 4506-C");
+    expect(documentTitle(signatureKind("APP-012"))).toBe("Electronic delivery");
+    expect(documentTitle(signatureKind("APP-005"))).toBe("Authorization to verify");
+  });
+
+  /**
+   * `signable` is every outstanding item whose source is `esign`, and the
+   * sheet is free to add a fourth. Whatever it adds falls through to the
+   * verification authorization, so the card is never headed by nothing.
+   */
+  it("has a name for a requirement it has never seen", () => {
+    expect(documentTitle(signatureKind("UW-042"))).toBe("Authorization to verify");
   });
 });

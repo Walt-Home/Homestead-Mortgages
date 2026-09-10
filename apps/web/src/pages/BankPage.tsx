@@ -190,7 +190,7 @@ export function BankPage() {
       if (err instanceof ApiError && err.code === "AUTHORIZATION_REQUIRED") {
         // Deliberately not err.message: the server's text carries the literal
         // requirement id, and no requirement id belongs on a borrower screen.
-        setError("We need your authorisation before we can check this.");
+        setError("We need your authorization before we can check this.");
         setRecovery({ label: "Back to your details", to: `/f/${fileId}/identity` });
         return;
       }
@@ -503,7 +503,7 @@ export function BankPage() {
 
           {typeof rent === "number" && rent >= 12 && (
             <p className="super-notice super-notice-ok mt-6 text-base text-ink-soft">
-              We found {rent} months of rent paid on time. That counts in your favour, and it is the
+              We found {rent} months of rent paid on time. That counts in your favor, and it is the
               kind of thing a credit score alone would miss.
             </p>
           )}
@@ -675,9 +675,9 @@ export function BankPage() {
                       ))}
                     </ul>
                     <p className="mt-3 text-sm text-ok">
-                      Got them — {statements.length} file{statements.length === 1 ? "" : "s"}. We
-                      will read these and come back to you. It takes longer than connecting, so if
-                      the connection starts working, use that instead.
+                      Got them — {statements.length} file{statements.length === 1 ? "" : "s"}. It
+                      takes longer than connecting, so if the connection starts working, use that
+                      instead.
                     </p>
                   </>
                 )}

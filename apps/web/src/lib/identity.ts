@@ -22,7 +22,6 @@ export interface IdentityDraft {
   readonly maritalStatus: string;
   readonly authorized: boolean;
   readonly econsent: boolean;
-  readonly smsConsent: boolean;
   /** Carried on router state from screen 1, and lost to the redirect too. */
   readonly statedIncome: number;
 }

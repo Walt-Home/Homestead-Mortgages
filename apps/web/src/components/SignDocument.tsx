@@ -8,7 +8,7 @@ import { api } from "../lib/api.js";
  * Two steps against the server — start an envelope, then complete it — because
  * that is the shape a real e-sign vendor imposes and collapsing it now would
  * mean pulling it apart later. In between, the borrower sees what they are
- * actually authorising. A one-click "I agree" on a form that releases IRS
+ * actually authorizing. A one-click "I agree" on a form that releases IRS
  * records would be the kind of consent that is technically recorded and
  * practically meaningless.
  */
@@ -17,19 +17,19 @@ const DOCUMENTS: Record<string, { title: string; body: string[]; commit: string 
   form_4506c: {
     title: "IRS Form 4506-C",
     body: [
-      "You are authorising the IRS to release your tax transcripts for the last two years to us.",
-      "Transcripts show what you filed: wages, adjusted gross income, and the forms behind them. They do not authorise us to file anything, change anything, or see anything beyond those years.",
+      "You are authorizing the IRS to release your tax transcripts for the last two years to us.",
+      "Transcripts show what you filed: wages, adjusted gross income, and the forms behind them. They do not authorize us to file anything, change anything, or see anything beyond those years.",
       "You can withdraw this at any time, and deleting your file removes it.",
     ],
     commit: "Sign the 4506-C",
   },
   verification_authorization: {
-    title: "Authorisation to verify",
+    title: "Authorization to verify",
     body: [
-      "You are authorising us to check your credit, employment, income and assets.",
+      "You are authorizing us to check your credit, employment, income and assets.",
       "The credit check is a soft pull and does not affect your score.",
     ],
-    commit: "Sign the authorisation",
+    commit: "Sign the authorization",
   },
   econsent: {
     title: "Electronic delivery",
@@ -40,6 +40,18 @@ const DOCUMENTS: Record<string, { title: string; body: string[]; commit: string 
     commit: "Agree to electronic delivery",
   },
 };
+
+/**
+ * What this panel will call the document once it is open.
+ *
+ * The upload branch has to name a document before anybody has pressed
+ * anything, and the only other name it had for one was the requirements
+ * sheet's — "4506-C executed". Reading the title from here means the card and
+ * the panel it opens cannot drift apart, and neither of them is the sheet.
+ */
+export function documentTitle(kind: string): string | undefined {
+  return DOCUMENTS[kind]?.title;
+}
 
 export function SignDocument({
   fileId,

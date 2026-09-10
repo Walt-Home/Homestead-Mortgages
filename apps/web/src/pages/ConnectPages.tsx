@@ -121,7 +121,7 @@ export function IrsPage() {
           ? null
           : {
               message:
-                "The IRS will only release transcripts to someone you have authorised in writing. Form 4506-C is that authorisation.",
+                "The IRS will only release transcripts to someone you have authorized in writing. Form 4506-C is that authorization.",
               action: (
                 <SignDocument
                   fileId={fileId}

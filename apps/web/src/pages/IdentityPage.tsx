@@ -143,9 +143,6 @@ export function IdentityPage() {
   const [econsent, setEconsent] = useState(
     () => (fileId ? readDraft(fileId)?.econsent : null) ?? true,
   );
-  const [smsConsent, setSmsConsent] = useState(
-    () => (fileId ? readDraft(fileId)?.smsConsent : null) ?? true,
-  );
 
   /** Only used when the vendor's verified outputs carry no date of birth. */
   const [dobInput, setDobInput] = useState("");
@@ -227,7 +224,6 @@ export function IdentityPage() {
           maritalStatus,
           authorized,
           econsent,
-          smsConsent,
           statedIncome,
         });
         window.location.assign(doc.verificationUrl);
@@ -340,9 +336,6 @@ export function IdentityPage() {
         });
         if (econsent) {
           await api.post(`/files/${fileId}/consents`, { kind: "econsent", borrowerId });
-        }
-        if (smsConsent) {
-          await api.post(`/files/${fileId}/consents`, { kind: "sms_contact", borrowerId });
         }
       }
 
@@ -574,9 +567,6 @@ export function IdentityPage() {
           value={phone}
           onChange={(e) => setPhone(formatPhone(e.target.value))}
         />
-        <p className="mt-1.5 text-xs text-ink-muted">
-          We will use {email || "the email on your account"} for everything in writing.
-        </p>
       </div>
 
       {/* 4 — Citizenship */}
@@ -632,23 +622,6 @@ export function IdentityPage() {
             onChange={(e) => setEconsent(e.target.checked)}
           />
           <span>Agree to receive disclosures electronically</span>
-        </label>
-        <label className="flex items-start gap-3 text-base text-ink-soft">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={smsConsent}
-            onChange={(e) => setSmsConsent(e.target.checked)}
-          />
-          {/*
-            The STOP language belongs in the first message, not here. Putting
-            it on the checkbox spends three lines of the last screen before a
-            credit pull explaining how to undo something the borrower has not
-            opted into yet.
-          */}
-          <span>
-            Text me updates about my application <span className="text-ink-muted">(optional)</span>
-          </span>
         </label>
       </div>
 

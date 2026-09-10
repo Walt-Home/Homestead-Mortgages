@@ -4,18 +4,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { branchCanSatisfy } from "@hm/shared";
 import { api, ApiError, type Assessment, type OutstandingItem } from "../lib/api.js";
 import { useLoanFile } from "../lib/file.js";
-import { SignDocument } from "../components/SignDocument.js";
+import { documentTitle, SignDocument } from "../components/SignDocument.js";
 
 /**
- * NOTE, and a known rough edge of the four-screen rebuild.
+ * The registry's own wording does not reach this screen.
  *
- * The items on this branch render `statement` and `appliesBecause` straight
- * from the requirements registry, which is the sheet's own wording — so
- * phrases like "4506-C executed" still reach a borrower here. Everywhere else
- * in the flow the internal vocabulary is gone; this is the one surface where
- * it survives, because the alternative is hand-writing borrower-facing copy
- * for all 77 requirements and a half-done map reads worse than a consistent
- * one. Worth doing before this is shown to anybody real.
+ * It used to. The items rendered `statement` and `appliesBecause` straight off
+ * the requirements registry, which is `data/v1-build.csv` in the sheet's
+ * voice, so a borrower was asked for a document under the heading "4506-C
+ * executed" and told, as the reason, "Universal". This was the one surface
+ * where the internal vocabulary survived the four-screen rebuild.
+ *
+ * What is left is the two things written for a person: a document's own title,
+ * read from the panel that opens when they press sign, and `missing`, which
+ * `satisfaction.ts` writes as the absence itself — "no explanation for the
+ * derogatory account". `borrower-copy.test.ts` fails if either registry field
+ * comes back.
  */
 
 /**
@@ -40,6 +44,20 @@ export function attachable(
       o.screen === "upload_fallback" &&
       branchCanSatisfy({ requirementId: o.id, source: o.source }, payrollLinked),
   );
+}
+
+/**
+ * Which of the three documents an outstanding e-sign item is.
+ *
+ * The mapping was already here, inline in the `kind` prop. It is a function
+ * now because the card above the button has to name the document too, and two
+ * copies of a three-way conditional is one chance for the heading to announce
+ * a form the button does not open.
+ */
+export function signatureKind(requirementId: string): string {
+  if (requirementId === "INC-008") return "form_4506c";
+  if (requirementId === "APP-012") return "econsent";
+  return "verification_authorization";
 }
 
 /**
@@ -114,19 +132,12 @@ export function UploadPage() {
           <p className="text-sm text-ink-muted">These two need your signature.</p>
           {signable.map((item) => (
             <div key={item.id} className="super-notice">
-              <p className="text-base text-ink">{item.statement}</p>
-              <p className="mt-1 text-sm text-ink-muted">{item.missing}</p>
+              <p className="text-base text-ink">{documentTitle(signatureKind(item.id))}</p>
               {!readOnly && (
                 <div className="mt-3">
                   <SignDocument
                     fileId={fileId}
-                    kind={
-                      item.id === "INC-008"
-                        ? "form_4506c"
-                        : item.id === "APP-012"
-                          ? "econsent"
-                          : "verification_authorization"
-                    }
+                    kind={signatureKind(item.id)}
                     label="Review and sign"
                   />
                 </div>
@@ -144,9 +155,7 @@ export function UploadPage() {
           <ul className="mt-4 space-y-4">
             {items.map((item) => (
               <li key={item.id} className="super-notice">
-                <p className="text-base text-ink">{item.statement}</p>
-                <p className="mt-1 text-sm text-ink-muted">{item.missing}</p>
-                <p className="mt-1 text-xs text-ink-faint">Why we need it: {item.appliesBecause}</p>
+                <p className="text-base text-ink">{item.missing}</p>
                 {!readOnly && <AttachControl fileId={fileId} requirementId={item.id} />}
               </li>
             ))}

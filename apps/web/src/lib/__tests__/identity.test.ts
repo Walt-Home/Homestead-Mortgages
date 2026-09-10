@@ -8,7 +8,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { clearDraft, readDraft, saveDraft, type DraftStore, type IdentityDraft } from "../identity.js";
+import {
+  clearDraft,
+  readDraft,
+  saveDraft,
+  type DraftStore,
+  type IdentityDraft,
+} from "../identity.js";
 
 function store(): DraftStore & { map: Map<string, string> } {
   const map = new Map<string, string>();
@@ -26,7 +32,6 @@ const draft: IdentityDraft = {
   maritalStatus: "married",
   authorized: true,
   econsent: true,
-  smsConsent: false,
   statedIncome: 9_500,
 };
 

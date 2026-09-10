@@ -94,7 +94,7 @@ export function GoogleSignIn({
           error_callback: (e) =>
             setGoogleError(
               `Google refused the sign-in (${e.type ?? "unknown"}). The usual cause is that ` +
-                `${window.location.origin} is not an authorised JavaScript origin on the OAuth client.`,
+                `${window.location.origin} is not an authorized JavaScript origin on the OAuth client.`,
             ),
         });
         window.google.accounts.id.renderButton(buttonRef.current, {
@@ -116,7 +116,7 @@ export function GoogleSignIn({
    *
    * `error` from useAuth is an ordinary rejected sign-in — a wrong domain, a
    * declined account — and including it here put "this page must be an
-   * authorised JavaScript origin" in front of a stranger on the public page
+   * authorized JavaScript origin" in front of a stranger on the public page
    * every time somebody mistyped their way out of a login.
    */
   const originProblem = Boolean(scriptFailed || googleError);
@@ -186,7 +186,7 @@ export function GoogleSignIn({
         <p className="mt-10 max-w-measure-prose text-xs text-ink-faint">
           Trouble signing in? This page is served from{" "}
           <code className="text-ink-muted">{window.location.origin}</code>, which must be an
-          authorised JavaScript origin on the OAuth client.
+          authorized JavaScript origin on the OAuth client.
         </p>
       )}
     </div>

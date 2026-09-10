@@ -249,7 +249,7 @@ export function PropertyLoanPage() {
   function useManualAddress() {
     const { line1, city, state, postalCode } = manualFields;
     if (!line1 || !city || state.length !== 2 || postalCode.length < 5) {
-      setError("Fill in street, city, a two-letter state and a postcode.");
+      setError("Fill in street, city, a two-letter state and a ZIP code.");
       return;
     }
     setError(null);
@@ -442,7 +442,7 @@ export function PropertyLoanPage() {
                   />
                   <input
                     className="super-input"
-                    placeholder="Postcode"
+                    placeholder="ZIP code"
                     value={manualFields.postalCode}
                     onChange={(e) => setManualFields((f) => ({ ...f, postalCode: e.target.value }))}
                   />

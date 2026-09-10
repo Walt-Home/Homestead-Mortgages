@@ -9,6 +9,13 @@ person is trying to do, and where it stands. It covers both what is built today
 and the Party / Application / Loan model replacing it, and marks which is which.
 Read it before adding anything that looks like a status.
 
+`docs/du-readiness.md` is where the Desktop Underwriter work stands, item by
+item, against the readiness audit. Read it before building anything a DU
+submission would have to carry — borrowers, assets, liabilities, declarations,
+employers, or anything that computes a ratio. **Update it in the commit that
+changes what it says**, the same way `docs/decisions.md` is kept: a status page
+that lags the code is worse than none, because it gets believed.
+
 ## The shape
 
 npm workspaces + Turbo, following the HMX pattern. Express 5 API, React 19 SPA,

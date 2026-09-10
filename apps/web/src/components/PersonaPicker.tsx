@@ -55,14 +55,11 @@ export function PersonaPicker() {
         {personas.map((p) => (
           <li key={p.key}>
             {p.available ? (
-              <button
-                className="super-btn super-btn-outline w-full text-left"
-                onClick={() => void signInAsPersona(p.key)}
-              >
+              <button className="super-choice" onClick={() => void signInAsPersona(p.key)}>
                 <PersonaLine row={p} />
               </button>
             ) : (
-              <div className="super-notice">
+              <div className="super-choice">
                 <PersonaLine row={p} />
               </div>
             )}
@@ -85,7 +82,7 @@ function PersonaLine({ row }: { row: PersonaRow }) {
   return (
     <span className="flex flex-col gap-1">
       <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="text-sm text-ink">{row.name}</span>
+        <span className="text-base text-ink">{row.name}</span>
         {entry && <StatusPill tone={entry.tone}>{entry.pill}</StatusPill>}
       </span>
       <span className="text-xs text-ink-soft">{row.story}</span>

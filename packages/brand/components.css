@@ -211,6 +211,43 @@
     padding: 24px;
   }
 
+  /* A choice is one row of a list somebody picks from: a card that happens to
+     be pressable, carrying as many lines as it needs.
+
+     It exists because a `.super-btn` cannot do this job and looks broken
+     trying. A button is a pill sized to one line of `nowrap` text and centered
+     inside itself; give it a name, a status and a sentence and the content
+     runs past its own border on both sides, which is what a row of sample
+     borrowers did. `text-left` cannot fix that either — the centering is the
+     flex box, not the text alignment.
+
+     The accent stays off it. Red on this product means "this is the action",
+     and a list where every row is red says nothing at all.
+
+     A `div.super-choice` is the same surface without the press, which is the
+     only difference a reader of an unavailable row should have to see. */
+  .super-choice {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 1px solid var(--sm-color-rule-soft);
+    border-radius: var(--sm-radius-lg);
+    background: var(--sm-color-surface);
+    padding: 14px 16px;
+    font-family: var(--sm-font-text);
+    color: inherit;
+    transition:
+      border-color var(--sm-duration-fast),
+      background-color var(--sm-duration-fast);
+  }
+  button.super-choice {
+    cursor: pointer;
+  }
+  button.super-choice:hover {
+    border-color: var(--sm-color-rule-strong);
+    background: var(--sm-color-raised);
+  }
+
   /* A notice is a tinted box with a status. `info` is the neutral one. */
   .super-notice {
     border: 1px solid var(--sm-color-rule);

@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
-import { useLoanFile } from "../lib/file.js";
+import { useLoanFile, type LoanFileView } from "../lib/file.js";
 import { money } from "../lib/figures.js";
 import { Why } from "../components/Why.js";
 import { Working } from "../components/Working.js";
@@ -125,6 +125,43 @@ export function lookupMissFor(err: unknown): "refused" | "no_record" {
   return err instanceof ApiError && err.status === 403 ? "refused" : "no_record";
 }
 
+/**
+ * What screen 1 puts back on itself when a borrower returns to a file.
+ *
+ * Every field the payload sends, because the payload sends all of them on
+ * every save and a field this does not restore is a field the save overwrites
+ * with whatever the screen started at. Two of them could only be wrong that
+ * way: the property type has no control unless the county lookup missed, so a
+ * condo came back as `single_family` with nothing on screen to say so and the
+ * LTV ceiling and reserve tier moved with it; and the cash-out figure rendered
+ * as an empty box that `Number(cashOut) || 0` then sent as zero.
+ *
+ * A function rather than the body of the effect so the correspondence between
+ * what is sent and what is restored is something a test can hold.
+ */
+export function prefillFrom(file: Pick<LoanFileView, "loan" | "property"> | undefined): {
+  address: Address;
+  query: string;
+  purpose: string;
+  occupancy: string;
+  propertyType: string;
+  price: string;
+  down: string;
+  cashOut: string;
+} | null {
+  if (!file?.property) return null;
+  return {
+    address: file.property.address as Address,
+    query: `${file.property.address.line1}, ${file.property.address.city}`,
+    purpose: file.loan?.purpose ?? "purchase",
+    occupancy: file.property.occupancy,
+    propertyType: file.property.propertyType,
+    price: String(file.property.valueOrPrice || ""),
+    down: String(file.loan?.downPayment ?? ""),
+    cashOut: String(file.loan?.cashToBorrower || ""),
+  };
+}
+
 export function PropertyLoanPage() {
   const { fileId } = useParams<{ fileId: string }>();
   const editing = Boolean(fileId);
@@ -178,14 +215,16 @@ export function PropertyLoanPage() {
   // Prefill when returning to edit. The address is already confirmed, so the
   // card comes back with it rather than making somebody re-search.
   useEffect(() => {
-    const file = data?.file;
-    if (!file?.property) return;
-    setAddress(file.property.address as Address);
-    setQuery(`${file.property.address.line1}, ${file.property.address.city}`);
-    setPurpose(file.loan?.purpose ?? "purchase");
-    setOccupancy(file.property.occupancy);
-    setPrice(String(file.property.valueOrPrice || ""));
-    setDown(String(file.loan?.downPayment ?? ""));
+    const filled = prefillFrom(data?.file);
+    if (!filled) return;
+    setAddress(filled.address);
+    setQuery(filled.query);
+    setPurpose(filled.purpose);
+    setOccupancy(filled.occupancy);
+    setPropertyType(filled.propertyType);
+    setPrice(filled.price);
+    setDown(filled.down);
+    setCashOut(filled.cashOut);
   }, [data?.file]);
 
   /* ── Autocomplete ─────────────────────────────────────────────────────── */
@@ -306,7 +345,8 @@ export function PropertyLoanPage() {
       const payload = {
         purpose,
         address,
-        // Retrieved when we have a record; asked below only when we do not.
+        // Retrieved when we have a record, restored from the file on a
+        // revisit, and asked below only when neither could say.
         propertyType,
         occupancy,
         valueOrPrice: priceNum,

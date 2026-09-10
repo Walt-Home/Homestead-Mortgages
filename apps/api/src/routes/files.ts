@@ -104,6 +104,38 @@ fileRouter.patch(
     // scenario and proposes the next one — and a save that changed neither
     // must not mint a version, which is what `syncScenario` decides.
     const row = await prisma.$transaction(async (tx) => {
+      /*
+       * Read before the write, because whether the address MOVED is what
+       * decides one of the fields being written.
+       *
+       * Screen 1 sends the address on every save, changed or not, so a rule
+       * keyed on the field being present clears the match on a borrower who
+       * came back to fix the price. Nothing sets `addressVerified` true again
+       * outside file creation, so that is APP-004 permanently unsatisfied by
+       * an edit that changed nothing about the property.
+       */
+      const before = input.address
+        ? await tx.loanFile.findUniqueOrThrow({
+            where: { id },
+            select: {
+              propertyLine1: true,
+              propertyLine2: true,
+              propertyCity: true,
+              propertyState: true,
+              propertyPostalCode: true,
+            },
+          })
+        : null;
+      const addressMoved = Boolean(
+        input.address &&
+        before &&
+        (before.propertyLine1 !== input.address.line1 ||
+          before.propertyLine2 !== (input.address.line2 ?? null) ||
+          before.propertyCity !== input.address.city ||
+          before.propertyState !== input.address.state.toUpperCase() ||
+          before.propertyPostalCode !== input.address.postalCode),
+      );
+
       const updated = await tx.loanFile.update({
         where: { id },
         data: {
@@ -128,8 +160,9 @@ fileRouter.patch(
                 propertyPostalCode: input.address.postalCode,
                 // A changed address is an unverified address until it is matched
                 // again. Leaving the old flag set would assert APP-004 about a
-                // property nobody has looked up.
-                addressVerified: false,
+                // property nobody has looked up. An address that did not move
+                // keeps the match it already has.
+                ...(addressMoved ? { addressVerified: false } : {}),
               }
             : {}),
           ...(input.cashOutPurpose !== undefined ? { cashOutPurpose: input.cashOutPurpose } : {}),

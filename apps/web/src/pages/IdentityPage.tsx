@@ -15,11 +15,11 @@
  * when the occupancy makes them lawful to collect.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
-import { useLoanFile } from "../lib/file.js";
+import { useLoanFile, type LoanFileView } from "../lib/file.js";
 import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
 import { Why } from "../components/Why.js";
 import { clearDraft, readDraft, saveDraft } from "../lib/identity.js";
@@ -111,6 +111,54 @@ export function repairMessage(predicate: string | undefined): string {
     : "Something in your details did not go through. Please check them and try again.";
 }
 
+/**
+ * What screen 2 already knows about the person, when they come back to it.
+ *
+ * This screen never read the file. That was survivable while the only way
+ * back onto it was the repair path, which exists precisely because the person
+ * would not read; it stopped being survivable when the stepper's dots became
+ * links, because a borrower going back to correct a phone number met an empty
+ * form that will not submit without scanning a document again and retyping a
+ * Social Security number. The server has never asked for either on a revisit —
+ * `identitySchema` makes the vault handle optional and says why — so the
+ * screen was the only part demanding them.
+ *
+ * The facts come off the file rather than the scan because they are what the
+ * scan already established and what the file already holds.
+ */
+export function revisitFrom(file: Pick<LoanFileView, "borrowers"> | undefined): {
+  identity: Identity;
+  phone: string;
+  citizenship: string;
+  maritalStatus: string;
+} | null {
+  const who = file?.borrowers[0];
+  if (!who) return null;
+  return {
+    identity: {
+      firstName: who.firstName,
+      lastName: who.lastName,
+      dateOfBirth: who.dateOfBirth,
+      address: who.currentAddress,
+    },
+    phone: who.phone,
+    citizenship: who.citizenship ?? "us_citizen",
+    maritalStatus: who.maritalStatus,
+  };
+}
+
+/**
+ * Whether this screen still has to ask for a Social Security number.
+ *
+ * Once one is on record the answer is no, and asking anyway is how people are
+ * trained to type their SSN into whatever asks for it. The submit already
+ * sends no vault handle for a blank field, and the server already accepts a
+ * revisit without one; a `required` attribute was all that stood in the way.
+ */
+export function ssnRequired(file: Pick<LoanFileView, "borrowers"> | undefined): boolean {
+  return !file?.borrowers[0]?.ssn.last4;
+}
+
 export function IdentityPage() {
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
@@ -151,6 +199,30 @@ export function IdentityPage() {
   const [error, setError] = useState<string | null>(null);
 
   const draft = fileId ? readDraft(fileId) : null;
+
+  /*
+   * Seeded once, and only when this is a plain return to the screen.
+   *
+   * Once, because "Not you? Scan again" clears `identity` and a seed that
+   * watched it would put it straight back. Not while a draft is sitting there,
+   * because a draft means the borrower is mid-round-trip through the identity
+   * vendor and the effect below is waiting to write what the vendor actually
+   * read — the file's older facts must not get in front of it.
+   */
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || draft) return;
+    const known = revisitFrom(data?.file);
+    if (!known) return;
+    seeded.current = true;
+    setIdentity(known.identity);
+    setPhone((current) => current || known.phone);
+    setCitizenship(known.citizenship);
+    setMaritalStatus(known.maritalStatus);
+    // `draft` is read once at mount, like the return effect below; re-running
+    // on its identity would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.file]);
 
   /*
    * Screen 1 hands the income over on router state, which a redirect to the
@@ -539,7 +611,7 @@ export function IdentityPage() {
         <input
           id="ssn"
           className="super-input"
-          required
+          required={ssnRequired(data?.file)}
           inputMode="numeric"
           autoComplete="off"
           placeholder="000-00-0000"

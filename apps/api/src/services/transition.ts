@@ -20,10 +20,16 @@
  * argument, and the move commits with the caller's other writes or not at all.
  * A conflict thrown inside that transaction aborts the whole of it — which is
  * correct: a route's write and the transition it implies are one act.
+ *
+ * The procedure itself lives in `aggregate-transition.ts`, because an
+ * application is not the only object in this product whose status is a state
+ * machine. What stays here is everything that is about applications: the two
+ * vocabularies, whose ending this is, which events survive a hold, and the
+ * signatures every caller already uses.
  */
 
 import { prisma } from "@hm/db";
-import type { ApplicationPartyRole, Prisma } from "@hm/db";
+import type { ApplicationPartyRole } from "@hm/db";
 import {
   APPLICATION_STATES,
   nextState,
@@ -33,7 +39,16 @@ import {
   type TransitionReason,
 } from "@hm/shared";
 import { AppError } from "../middleware/error-handler.js";
-import { ownsTransaction, type Db } from "./db.js";
+import {
+  makeMover,
+  TransitionConflict,
+  type AggregateSpec,
+  type MoveResult,
+  type Skipped as MoveSkipped,
+} from "./aggregate-transition.js";
+import { type Db } from "./db.js";
+
+export { TransitionConflict };
 
 /**
  * `draft` -> `DRAFT`, and back. A test asserts the two vocabularies agree.
@@ -60,30 +75,117 @@ export const BORROWING_ROLES: ApplicationPartyRole[] = [
 ];
 
 /**
- * Raised when the file moved between reading it and writing it.
+ * The events that may still be taken out of `suspended`.
  *
- * `retryable` says whether the caller still has a usable transaction. A
- * conditional update that matched nothing wrote nothing and left everything
- * around it intact, so the same event can simply be asked again from wherever
- * the file has landed. A collision on `(application_id, seq)` cannot: Postgres
- * has already aborted the transaction the insert was in, and every statement
- * after it would fail. Only the first kind may be retried, and confusing the
- * two would turn one 409 into three.
+ * A hold ends when a PERSON ends it. `third_party_returned` is the screening
+ * coming back clean, and the three endings are somebody deciding the request
+ * is over. Everything else the machine offers from `suspended` —
+ * `borrower_owes` and `underwriting_began`, both legal because a member of
+ * staff may take them — is refused by the mover.
  */
-export class TransitionConflict extends AppError {
-  constructor(
-    readonly applicationId: string,
-    readonly actualState: ApplicationState,
-    readonly retryable: boolean = true,
-  ) {
-    super(
-      409,
-      `This application is now ${actualState}. Reload and decide again.`,
-      "TRANSITION_CONFLICT",
+const SURVIVES_A_HOLD: readonly ApplicationEvent[] = [
+  "third_party_returned",
+  "borrower_withdrew",
+  "ops_canceled",
+  "response_window_lapsed",
+];
+
+/**
+ * Withdrawing is the borrower's act, and it is this application's borrower's
+ * act. The database refuses everything below; this is the same refusal a
+ * millisecond earlier, with a code a caller can read, and it costs nothing
+ * when it fires. It asks all three questions the trigger asks, because a check
+ * that stops one refusal short leaves the rest to surface as a raw database
+ * error, which reaches a person as an internal one.
+ */
+async function assertWhoseEndingThisIs(
+  db: Db,
+  applicationId: string,
+  event: ApplicationEvent,
+  actorPrincipalId: string,
+): Promise<void> {
+  if (event !== "borrower_withdrew") return;
+
+  const actor = await db.principal.findUnique({
+    where: { id: actorPrincipalId },
+    select: { kind: true, partyId: true },
+  });
+  const theirs =
+    actor?.kind === "BORROWER" &&
+    actor.partyId !== null &&
+    (await db.applicationParty.findFirst({
+      where: { applicationId, partyId: actor.partyId, role: { in: BORROWING_ROLES } },
+      select: { id: true },
+    })) !== null;
+  if (!theirs) {
+    throw new AppError(
+      403,
+      "Only the borrower can withdraw an application.",
+      "ACTOR_NOT_PERMITTED",
     );
-    this.name = "TransitionConflict";
   }
 }
+
+/**
+ * Which tables an application keeps its state and its history in.
+ *
+ * The two vocabularies are converted here and nowhere the mover can see, so
+ * the procedure never learns that one aggregate spells its states in capitals.
+ */
+const APPLICATION_SPEC: AggregateSpec<ApplicationState, ApplicationEvent> = {
+  name: "application",
+
+  read: async (db, id) => {
+    const row = await db.application.findUnique({
+      where: { id },
+      select: { status: true, statusSeq: true, statusEnteredAt: true },
+    });
+    return row === null
+      ? null
+      : {
+          status: toDomainState(row.status),
+          statusSeq: row.statusSeq,
+          statusEnteredAt: row.statusEnteredAt,
+        };
+  },
+
+  write: async (db, a) => {
+    const { count } = await db.application.updateMany({
+      where: { id: a.id, status: toDbState(a.from), statusSeq: a.seq - 1 },
+      data: { status: toDbState(a.to), statusSeq: a.seq, statusEnteredAt: a.when },
+    });
+    return count;
+  },
+
+  ledger: async (db, row) => {
+    await db.applicationTransition.create({
+      data: {
+        applicationId: row.id,
+        seq: row.seq,
+        fromState: toDbState(row.from),
+        toState: toDbState(row.to),
+        event: row.event,
+        actorPrincipalId: row.actorPrincipalId,
+        reasonCode: row.reasonCode,
+        causedBy: row.causedBy,
+        occurredAt: row.when,
+      },
+    });
+  },
+
+  repeatSince: async (db, id, seq, event) =>
+    (await db.applicationTransition.findFirst({
+      where: { applicationId: id, seq: { gt: seq }, event },
+      select: { seq: true },
+    })) !== null,
+
+  nextState,
+  requireNextState,
+  survivesAHold: { state: "suspended", events: SURVIVES_A_HOLD },
+  actorGuard: assertWhoseEndingThisIs,
+};
+
+const application = makeMover<ApplicationState, ApplicationEvent>(APPLICATION_SPEC);
 
 export interface TransitionInput {
   readonly applicationId: string;
@@ -109,11 +211,7 @@ export interface TransitionInput {
   readonly expectedFrom?: ApplicationState;
 }
 
-export interface TransitionResult {
-  readonly from: ApplicationState;
-  readonly to: ApplicationState;
-  readonly seq: number;
-}
+export type TransitionResult = MoveResult<ApplicationState>;
 
 /**
  * Move an application, or refuse and say why.
@@ -126,122 +224,11 @@ export async function transition(
   input: TransitionInput,
   db: Db = prisma,
 ): Promise<TransitionResult> {
-  const { applicationId, event, actorPrincipalId, reasonCode, causedBy, occurredAt, expectedFrom } =
-    input;
-
-  const current = await db.application.findUnique({
-    where: { id: applicationId },
-    select: { status: true, statusSeq: true, statusEnteredAt: true },
-  });
-  if (!current) throw new AppError(404, "Application not found", "NOT_FOUND");
-
-  const from = toDomainState(current.status);
-  if (expectedFrom && expectedFrom !== from) throw new TransitionConflict(applicationId, from);
-
-  // Throws if the machine has no edge. Deliberately before any write: an
-  // illegal move should cost nothing and roll nothing back.
-  const to = requireNextState(from, event);
-
-  // Withdrawing is the borrower's act, and it is this application's borrower's
-  // act. The database refuses everything below; this is the same refusal a
-  // millisecond earlier, with a code a caller can read, and it costs nothing
-  // when it fires. It asks all three questions the trigger asks, because a
-  // check that stops one refusal short leaves the rest to surface as a raw
-  // database error, which reaches a person as an internal one.
-  if (event === "borrower_withdrew") {
-    const actor = await db.principal.findUnique({
-      where: { id: actorPrincipalId },
-      select: { kind: true, partyId: true },
-    });
-    const theirs =
-      actor?.kind === "BORROWER" &&
-      actor.partyId !== null &&
-      (await db.applicationParty.findFirst({
-        where: { applicationId, partyId: actor.partyId, role: { in: BORROWING_ROLES } },
-        select: { id: true },
-      })) !== null;
-    if (!theirs) {
-      throw new AppError(
-        403,
-        "Only the borrower can withdraw an application.",
-        "ACTOR_NOT_PERMITTED",
-      );
-    }
-  }
-
-  const seq = current.statusSeq + 1;
-  // Strictly later than the current stamp, whatever the clock says. The
-  // receipt trigger does the same with GREATEST: a move in the same request
-  // as the receipt can otherwise land on the same millisecond, and a status
-  // change whose stamp did not move is refused by the database.
-  const floor = current.statusEnteredAt.getTime() + 1;
-  const when = new Date(Math.max((occurredAt ?? new Date()).getTime(), floor));
-
-  const move = async (tx: Db): Promise<TransitionResult> => {
-    // The WHERE is the concurrency control. If another writer moved the file
-    // between the read above and this update, it matches nothing.
-    const { count } = await tx.application.updateMany({
-      where: { id: applicationId, status: current.status, statusSeq: current.statusSeq },
-      data: { status: toDbState(to), statusSeq: seq, statusEnteredAt: when },
-    });
-    if (count !== 1) {
-      const now = await tx.application.findUnique({
-        where: { id: applicationId },
-        select: { status: true },
-      });
-      throw new TransitionConflict(applicationId, now ? toDomainState(now.status) : from);
-    }
-
-    await tx.applicationTransition.create({
-      data: {
-        applicationId,
-        seq,
-        fromState: toDbState(from),
-        toState: toDbState(to),
-        event,
-        actorPrincipalId,
-        reasonCode: reasonCode ?? null,
-        causedBy: causedBy ?? null,
-        occurredAt: when,
-      },
-    });
-
-    return { from, to, seq };
-  };
-
-  try {
-    return ownsTransaction(db) ? await prisma.$transaction(move) : await move(db);
-  } catch (err) {
-    // Two racing writers both pass the update and collide on (application_id,
-    // seq). Postgres tells us; the caller should hear it as a conflict rather
-    // than as an internal error. Inside a caller's transaction the collision
-    // has already aborted it, so there is nothing left to read the truth
-    // from, and the state this call read is the best answer available.
-    if (isUniqueViolation(err)) {
-      const now = ownsTransaction(db)
-        ? await prisma.application.findUnique({
-            where: { id: applicationId },
-            select: { status: true },
-          })
-        : null;
-      throw new TransitionConflict(applicationId, now ? toDomainState(now.status) : from, false);
-    }
-    throw err;
-  }
+  const { applicationId, ...rest } = input;
+  return application.transition({ id: applicationId, ...rest }, db);
 }
 
-/**
- * A move that was not made, and why.
- *
- * `no_edge` is the machine declining: the file is somewhere this event does
- * not apply from, which covers both "already there" and "never applies here".
- * `held` is the orchestration declining while the machine would have allowed
- * it — a sanctions hold, which only a person can lift.
- */
-export interface Skipped {
-  readonly skipped: "no_edge" | "held";
-  readonly from: ApplicationState;
-}
+export type Skipped = MoveSkipped<ApplicationState>;
 
 export type Advance = TransitionResult | Skipped;
 
@@ -250,130 +237,31 @@ export function moved(advance: Advance | null): advance is TransitionResult {
   return advance !== null && !("skipped" in advance);
 }
 
-/** How many times a concurrent repeat may be re-aimed before it is a conflict. */
-const RETRIES = 2;
-
-/**
- * The events that may still be taken out of `suspended`.
- *
- * A hold ends when a PERSON ends it. `third_party_returned` is the screening
- * coming back clean, and the three endings are somebody deciding the request
- * is over. Everything else the machine offers from `suspended` —
- * `borrower_owes` and `underwriting_began`, both legal because a member of
- * staff may take them — is refused here.
- */
-const SURVIVES_A_HOLD: readonly ApplicationEvent[] = [
-  "third_party_returned",
-  "borrower_withdrew",
-  "ops_canceled",
-  "response_window_lapsed",
-];
-
 /**
  * Move an application if the machine allows it, and say so if it does not.
  *
  * The routes call this and never `transition()` directly. A screen is
  * revisited, a decision is recomputed, a bank is re-linked — the same event
  * arrives more than once, and the machine has no self-edges, so the second
- * arrival has no edge to take. That is a skip, not an error: nothing is
- * written and the caller learns where the file is. What it still throws is
- * the actor refusal, and a conflict where somebody else moved the file
- * somewhere this event can still be taken from.
+ * arrival has no edge to take. That is a skip, not an error.
  *
  * A SUSPENDED file only takes the events in `SURVIVES_A_HOLD`. Every caller
- * checks the hold on its own read too, and says so in the file's events; this
- * is the check that cannot be raced past or forgotten, because it happens on
- * the read the write is conditioned on.
+ * checks the hold on its own read too, and says so in the file's events; the
+ * mover's own check is the one that cannot be raced past or forgotten.
  *
- * A repeat that arrives CONCURRENTLY is the same repeat. The review screen and
- * the bank screen both ask for a decision, so two callers reach the same edge
- * at once: one writes it and the other finds the row already moved. Reading
- * that as a 409 would hand a borrower "this application is now in_underwriting,
- * reload and decide again" for an event whose whole effect had just happened.
- * So a conflict whose landing state no longer offers the edge is a skip, the
- * same as if the two calls had arrived a second apart.
- *
- * And when the file comes back to the state this caller read, the repeat is
- * asked again from there rather than refused. That is the ordinary case for
- * every branch, not an exotic one: a borrower act satisfies the file and the
- * reconciliation immediately owes them the next thing, so a file somebody is
- * attaching two documents to at once returns to `awaiting_borrower` — where
- * `borrower_satisfied` is legal again — before the second writer's update
- * lands. Answering that with a 409 rolled the whole of the second request
- * back, and the document it had just recorded went with it. Asking again
- * writes exactly the rows the two calls would have written a second apart.
- *
- * Back to that state and NOWHERE ELSE. Every caller decides on its own read —
- * a sanctions hold is checked once, at the top, and then the event is handed
- * over — so aiming the event at whatever state the file happens to have landed
- * in would take an edge nobody validated. `borrower_owes` and
- * `underwriting_began` are both legal out of `suspended`, because a member of
- * staff may take them; an upload racing a screening is not that member of
- * staff, and re-aiming would have ended a hold on their behalf with no
- * `third_party_returned` on the ledger.
- *
- * Only for the same event, and only from the same state: those two together
- * are the whole of the distinction. Somebody else doing something ELSE while
- * this caller was deciding is a lost update, and a lost update is what a 409
- * is for — a decision made against a state that no longer holds must not be
- * quietly re-aimed at the new one. So the ledger is asked what moved the file:
- * a row carrying this caller's own event means their act arrived twice, and
- * anything else means somebody else acted and they need to hear it.
+ * The concurrent-repeat rule matters most on this aggregate, and it is the
+ * ordinary case rather than an exotic one: a borrower act satisfies the file
+ * and the reconciliation immediately owes them the next thing, so a file
+ * somebody is attaching two documents to at once returns to
+ * `awaiting_borrower` — where `borrower_satisfied` is legal again — before the
+ * second writer's update lands.
  */
 export async function advanceIfLegal(
   input: Omit<TransitionInput, "expectedFrom">,
   db: Db = prisma,
 ): Promise<Advance> {
-  const current = await db.application.findUnique({
-    where: { id: input.applicationId },
-    select: { status: true, statusSeq: true },
-  });
-  if (!current) throw new AppError(404, "Application not found", "NOT_FOUND");
-
-  const readAt = current.statusSeq;
-  const from = toDomainState(current.status);
-  // The hold is enforced HERE, in the function that reads the state
-  // immediately before writing it, and not only in each caller's own earlier
-  // read. A screening that commits between a caller's check and this one would
-  // otherwise lift the hold on the caller's behalf — `borrower_owes` and
-  // `underwriting_began` are both legal edges out of `suspended` — with no
-  // `third_party_returned` on the ledger and nobody having decided anything.
-  // A caller that forgets to check at all gets the same answer.
-  if (from === "suspended" && !SURVIVES_A_HOLD.includes(input.event)) {
-    return { skipped: "held", from };
-  }
-  if (nextState(from, input.event) === undefined) return { skipped: "no_edge", from };
-
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await transition({ ...input, expectedFrom: from }, db);
-    } catch (err) {
-      if (!(err instanceof TransitionConflict)) throw err;
-      if (nextState(err.actualState, input.event) === undefined) {
-        return { skipped: "no_edge", from: err.actualState };
-      }
-      // The file is somewhere the caller never looked at. The edge exists
-      // there, which is exactly why this must not take it: a hold, an ending
-      // or a decision arrived in the meantime and the caller's own checks ran
-      // against a state that no longer holds.
-      if (err.actualState !== from) throw err;
-      // A collision on the sequence has already aborted the caller's
-      // transaction, so asking again inside it would only produce a second,
-      // less honest error. A zero-row update wrote nothing and left everything
-      // around it intact.
-      if (!err.retryable || attempt >= RETRIES) throw err;
-      const repeat = await db.applicationTransition.findFirst({
-        where: { applicationId: input.applicationId, seq: { gt: readAt }, event: input.event },
-        select: { seq: true },
-      });
-      if (!repeat) throw err;
-    }
-  }
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  const e = err as Prisma.PrismaClientKnownRequestError;
-  return e?.code === "P2002";
+  const { applicationId, ...rest } = input;
+  return application.advanceIfLegal({ id: applicationId, ...rest }, db);
 }
 
 /** The states, in the database's spelling. For a queue query or a report. */

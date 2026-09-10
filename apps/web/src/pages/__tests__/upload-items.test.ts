@@ -11,8 +11,9 @@
  * theirs to clear.
  */
 
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { attachable, signatureKind } from "../UploadPage.js";
+import { attachable, signatureKind, signatureLead } from "../UploadPage.js";
 import { documentTitle } from "../../components/SignDocument.js";
 import type { OutstandingItem } from "../../lib/api.js";
 
@@ -86,5 +87,34 @@ describe("what the upload screen calls a document it wants signed", () => {
    */
   it("has a name for a requirement it has never seen", () => {
     expect(documentTitle(signatureKind("UW-042"))).toBe("Authorization to verify");
+  });
+});
+
+/**
+ * The line above the signature list, which used to hold the list to a number.
+ *
+ * "These two need your signature." was written over a list whose length
+ * nothing constrains: three documents can appear on this screen, and each is
+ * offered only when the engine says that borrower still owes it. So a file
+ * with one outstanding signature was told it had two, directly above the one.
+ */
+describe("how the upload screen counts what it wants signed", () => {
+  it("counts the list it is rendered over", () => {
+    expect(signatureLead(2)).toBe("These 2 need your signature.");
+    expect(signatureLead(3)).toBe("These 3 need your signature.");
+  });
+
+  it("does not say two over one", () => {
+    expect(signatureLead(1)).toBe("This one needs your signature.");
+  });
+
+  it("is what the screen actually renders", () => {
+    // The helper and the JSX can disagree: the count was a literal in the
+    // markup, and every case above would still pass with it there.
+    const src = readFileSync(new URL("../UploadPage.tsx", import.meta.url), "utf8");
+    expect(src).toContain("{signatureLead(signable.length)}");
+    // Matched with the closing bracket of the tag, so the sentence quoted in
+    // the helper's own comment is not mistaken for the markup coming back.
+    expect(src).not.toMatch(/>These two need your signature/);
   });
 });

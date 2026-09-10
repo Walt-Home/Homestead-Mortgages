@@ -33,6 +33,8 @@ import { useLoanFile } from "../lib/file.js";
 import { Why } from "../components/Why.js";
 import { Working } from "../components/Working.js";
 import { PlaidLink } from "../components/PlaidLink.js";
+import { Figure } from "../components/Figure.js";
+import { money, qualifyingIncome, QUALIFYING_INCOME_LABEL } from "../lib/figures.js";
 import {
   classifyBankResponse,
   clearAttempt,
@@ -61,8 +63,6 @@ interface Decision {
     totalQualifyingIncome: number | null;
   };
 }
-
-const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
 /**
  * Where the borrower is, as far as this screen is concerned.
@@ -485,9 +485,11 @@ export function BankPage() {
               note={`across ${result.accounts.length} account${result.accounts.length === 1 ? "" : "s"}`}
             />
             <Figure
-              label="Monthly income"
+              label={QUALIFYING_INCOME_LABEL}
               value={
-                figures?.totalQualifyingIncome != null ? money(figures.totalQualifyingIncome) : null
+                figures?.totalQualifyingIncome != null
+                  ? qualifyingIncome(figures.totalQualifyingIncome)
+                  : null
               }
             />
             <Figure
@@ -704,24 +706,4 @@ export function BankPage() {
 function middleScore(scores: { score: number }[]): number {
   const sorted = scores.map((s) => s.score).sort((a, b) => a - b);
   return (sorted.length >= 3 ? sorted[1] : sorted[0]) ?? 0;
-}
-
-/**
- * A figure, or an honest dash.
- *
- * `null` means the engine could not compute it — usually because income still
- * needs a branch. Rendering a zero, or omitting the row, would both read as an
- * answer. A dash reads as what it is.
- */
-function Figure({ label, value, note }: { label: string; value: string | null; note?: string }) {
-  return (
-    <div>
-      <dt className="text-sm text-ink-faint">{label}</dt>
-      <dd className="super-figure mt-1 text-2xl text-ink">
-        {value ?? <span className="text-ink-faint">—</span>}
-      </dd>
-      {note && <p className="mt-1 text-xs text-ink-muted">{note}</p>}
-      {!value && !note && <p className="mt-1 text-xs text-ink-muted">still working this out</p>}
-    </div>
-  );
 }

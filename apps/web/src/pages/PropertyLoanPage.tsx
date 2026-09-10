@@ -20,6 +20,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
 import { useLoanFile } from "../lib/file.js";
+import { money } from "../lib/figures.js";
 import { Why } from "../components/Why.js";
 import { Working } from "../components/Working.js";
 
@@ -76,8 +77,6 @@ const TYPE_LABEL: Record<string, string> = {
   manufactured: "Manufactured",
   co_op: "Co-op",
 };
-
-const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
 /**
  * The three addresses the fixture holds records for.

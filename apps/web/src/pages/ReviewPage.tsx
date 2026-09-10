@@ -38,6 +38,8 @@ import { ApplicationStanding } from "../components/ApplicationStanding.js";
 import { ApplicationTimeline } from "../components/ApplicationTimeline.js";
 import { Branches } from "../components/Branches.js";
 import { Working } from "../components/Working.js";
+import { Figure } from "../components/Figure.js";
+import { money, qualifyingIncome, QUALIFYING_INCOME_LABEL } from "../lib/figures.js";
 import { branchesFor } from "../lib/flow.js";
 import { endingFor, proposedTerms } from "../lib/endings.js";
 import {
@@ -73,8 +75,6 @@ interface DecisionView {
   ratios: Ratios;
   adverseActionReasons?: string[];
 }
-
-const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
 /**
  * The one refusal this screen re-words rather than passing through.
@@ -272,7 +272,10 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
 
   /*
    * Where the file stands, and how it got there — above every ending and above
-   * the pre-signature view.
+   * the pre-signature view, and the only copy of it on this route. The shell
+   * renders the standing in its header on every other screen and skips this
+   * one, which is what lets the view below replace a line the state cannot get
+   * right without a second, un-replaced copy contradicting it from above.
    *
    * The order is the point. The endings on this screen are long, and the shell
    * header scrolls away, so a borrower reading "Your Loan Estimate" has to be
@@ -421,7 +424,10 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
           <Figure label="Debt-to-income" value={`${ratios.dtiBack}%`} />
           {ratios.ltv != null && <Figure label="Loan-to-value" value={`${ratios.ltv}%`} />}
           {ratios.totalQualifyingIncome != null && (
-            <Figure label="Verified income" value={`${money(ratios.totalQualifyingIncome)}/mo`} />
+            <Figure
+              label={QUALIFYING_INCOME_LABEL}
+              value={qualifyingIncome(ratios.totalQualifyingIncome)}
+            />
           )}
         </dl>
 
@@ -641,15 +647,6 @@ function Reasons({
       ) : (
         <p className="text-base text-ink-soft">{none}</p>
       )}
-    </div>
-  );
-}
-
-function Figure({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-sm text-ink-faint">{label}</dt>
-      <dd className="super-figure mt-1 text-2xl text-ink">{value}</dd>
     </div>
   );
 }

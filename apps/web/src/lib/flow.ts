@@ -99,6 +99,23 @@ export function screenIndex(path: string): number {
   return SCREENS.findIndex((s) => s.path === path);
 }
 
+/**
+ * Which paths render the standing for themselves, so the shell does not.
+ *
+ * The review screen puts the pill, the line and the history directly above its
+ * own heading, and its pre-signature view replaces that line with the one
+ * thing no state can say — that a signature is what is missing. The shell used
+ * to render the same component 150px higher with the line un-replaced, so a
+ * borrower read "Being decided" above "Sign to send it" and could not tell
+ * whether their application had been sent.
+ *
+ * Keyed on the URL path rather than on `ScreenPath`: the three branches map to
+ * `review` for the step nav, and none of them renders a standing of its own.
+ */
+export function screenOwnsStanding(path: string): boolean {
+  return path === "review";
+}
+
 /* ── Conditional branches ───────────────────────────────────────────────── */
 
 export interface Branch {

@@ -30,6 +30,7 @@ import {
   STAGE_TO_SCREEN,
   debugEnabled,
   screenIndex,
+  screenOwnsStanding,
   type ScreenPath,
 } from "./lib/flow.js";
 import { SignInPage } from "./pages/SignInPage.js";
@@ -262,6 +263,7 @@ function FileShell() {
       // there is none. "No application on record" is a claim about a regulated
       // record, and it cannot be made while the record is still loading.
       standing={file.data ? (file.data.applicationState ?? null) : undefined}
+      standingInHeader={!screenOwnsStanding(last)}
       ledger={ledger.data?.ledger}
     />
   );
@@ -277,9 +279,11 @@ function NotYours() {
           It may belong to a different account, or it may have been deleted. Files are private to
           whoever started them, so a link to one will not open for anybody else.
         </p>
-        <a href="/" className="super-btn super-btn-primary mt-6">
+        {/* A Link, not an <a>, for the reason the header's home link gives:
+            an anchor throws away the SPA and reloads the whole app. */}
+        <Link to="/" className="super-btn super-btn-primary mt-6">
           Back to your files
-        </a>
+        </Link>
       </main>
       <Footer />
     </div>
@@ -385,6 +389,7 @@ function Shell({
   file,
   receipt,
   standing,
+  standingInHeader = true,
   ledger,
 }: {
   screen: ScreenPath;
@@ -397,6 +402,8 @@ function Shell({
   file?: unknown;
   receipt?: ApplicationReceipt | null;
   standing?: ApplicationStandingView | null;
+  /** False on the one screen that renders the standing itself — see `screenOwnsStanding`. */
+  standingInHeader?: boolean;
   ledger?: RawLedgerRow[];
 }) {
   return (
@@ -411,14 +418,18 @@ function Shell({
         */}
         {!hasStopped(standing) && <Stepper current={screen} fileId={fileId} reached={reached} />}
         {/*
-          Where the file stands, on every screen. It sits under the step nav
-          because the two answer different questions — the nav says which
-          screen you are on, this says what the application is doing — and a
-          borrower who comes back a week later needs the second one first.
+          Where the file stands, on every screen that does not say it itself.
+          It sits under the step nav because the two answer different questions
+          — the nav says which screen you are on, this says what the
+          application is doing — and a borrower who comes back a week later
+          needs the second one first.
 
-          Screen 1 has no file yet, so it has no standing to show.
+          Screen 1 has no file yet, so it has no standing to show. The review
+          screen has one and renders it, once, above its own heading, where it
+          can also override the line the state cannot get right; a second copy
+          here said the un-overridden line 150px higher and contradicted it.
         */}
-        {fileId && (
+        {fileId && standingInHeader && (
           <div className="mt-3">
             <ApplicationStanding standing={standing} />
           </div>

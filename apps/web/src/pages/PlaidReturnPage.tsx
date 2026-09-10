@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { PlaidLink } from "../components/PlaidLink.js";
 import { findResumableAttempt, writeAttempt, type BankAttempt } from "../lib/plaid.js";
 
@@ -47,9 +47,11 @@ export function PlaidReturnPage() {
           Your bank sent you back, but too much time passed for us to match it to your application.
           Nothing was lost — open your file and connect again.
         </p>
-        <a href="/" className="super-btn super-btn-primary mt-6">
+        {/* A Link, not an <a>, for the reason the header's home link gives:
+            an anchor throws away the SPA and reloads the whole app. */}
+        <Link to="/" className="super-btn super-btn-primary mt-6">
           Back to your files
-        </a>
+        </Link>
       </div>
     );
   }

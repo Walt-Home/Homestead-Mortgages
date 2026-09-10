@@ -61,6 +61,21 @@ export function signatureKind(requirementId: string): string {
 }
 
 /**
+ * The line above the signature list, counting the list.
+ *
+ * It read "These two need your signature." over a list nothing holds to two:
+ * three documents can appear here and each is offered only when the engine
+ * says that borrower still owes it, so the sentence promised one file two
+ * documents and another three. `states.ts` records the same fix made the other
+ * way round — the `awaiting_borrower` heading dropped its count because a
+ * catalog string rendered above a real file has no list to count. Here the
+ * list is in hand, which is exactly when a count may be said.
+ */
+export function signatureLead(count: number): string {
+  return count === 1 ? "This one needs your signature." : `These ${count} need your signature.`;
+}
+
+/**
  * Screen 7. Drew's note: "Only what didn't connect. Should feel like an
  * exception, not a step."
  *
@@ -129,7 +144,7 @@ export function UploadPage() {
 
       {signable.length > 0 && (
         <div className="mt-6 space-y-4">
-          <p className="text-sm text-ink-muted">These two need your signature.</p>
+          <p className="text-sm text-ink-muted">{signatureLead(signable.length)}</p>
           {signable.map((item) => (
             <div key={item.id} className="super-notice">
               <p className="text-base text-ink">{documentTitle(signatureKind(item.id))}</p>
@@ -163,20 +178,19 @@ export function UploadPage() {
         </>
       )}
 
-      <div className="mt-8 flex items-center gap-3">
-        <button
-          className="super-btn super-btn-primary"
-          onClick={() => navigate(`/f/${fileId}/review`)}
-        >
-          See where I stand
-        </button>
-        <button
-          className="super-btn super-btn-outline"
-          onClick={() => navigate(`/f/${fileId}/review`)}
-        >
-          Back
-        </button>
-      </div>
+      {/*
+        One way back, not two. "See where I stand" and "Back" were the same
+        navigate() at two different visual weights, so the outline button
+        offered a choice that did not exist and made the primary one look like
+        it went somewhere else. The one kept is the one that names where it
+        goes, and with one control there is no row left to lay out.
+      */}
+      <button
+        className="super-btn super-btn-primary mt-8"
+        onClick={() => navigate(`/f/${fileId}/review`)}
+      >
+        See where I stand
+      </button>
 
       {(items.length > 0 || signable.length > 0) && (
         <p className="mt-5 text-xs text-ink-faint">

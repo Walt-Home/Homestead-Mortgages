@@ -8,7 +8,8 @@
  */
 
 import { prisma } from "@hm/db";
-import type { FlowStage } from "@hm/db";
+import type { ApplicationPartyRole, FlowStage, PartyClaimStatus } from "@hm/db";
+import { createImportedLoan } from "../../services/loans.js";
 import { recordBorrowerFacts, type BorrowerInput } from "../../services/party.js";
 
 let seq = 0;
@@ -94,4 +95,46 @@ export async function consent(
       userAgent: "test",
     },
   });
+}
+
+/** A person the product knows about, with or without a sign-in behind them. */
+export async function createParty(
+  data: { claimStatus?: PartyClaimStatus; sourceFirstSeen?: string } = {},
+): Promise<{ id: string }> {
+  return prisma.party.create({
+    data: {
+      kind: "PERSON",
+      ...(data.claimStatus ? { claimStatus: data.claimStatus } : {}),
+      ...(data.sourceFirstSeen ? { sourceFirstSeen: data.sourceFirstSeen } : {}),
+    },
+    select: { id: true },
+  });
+}
+
+/**
+ * A mortgage a servicer told us about, with the given people on it.
+ *
+ * Through the constructor rather than `prisma.loan.create`, so a test that
+ * starts from a loan starts from one the product could have made: born
+ * `imported_unclaimed`, at seq 0, with its parties written in the same act.
+ */
+export async function importedLoan(
+  parties: readonly { partyId: string; role?: ApplicationPartyRole }[],
+  overrides: { servicerId?: string | null } = {},
+): Promise<{ id: string }> {
+  const { loanId } = await createImportedLoan(prisma, {
+    terms: {
+      rateType: "FIXED",
+      noteRateBps: 625,
+      termMonths: 360,
+      originalPrincipalCents: 41_600_000n,
+      originatedOn: new Date("2021-06-01"),
+    },
+    property: { line1: "42 Oak Street", city: "Demo City", state: "CA", postalCode: "94000" },
+    // What a feed that did not say looks like. Nothing may infer one.
+    axes: {},
+    parties: parties.map((p) => ({ partyId: p.partyId, role: p.role ?? "PRIMARY_BORROWER" })),
+    servicerId: overrides.servicerId ?? null,
+  });
+  return { id: loanId };
 }

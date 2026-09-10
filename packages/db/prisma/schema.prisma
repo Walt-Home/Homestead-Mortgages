@@ -601,6 +601,7 @@ model Party {
   principals     Principal[]
   authorizations Authorization[]
   applications   ApplicationParty[]
+  loans          LoanParty[]
   users          User[]             @relation("UserParty")
   borrowerRows   Borrower[]         @relation("BorrowerParty")
 
@@ -635,6 +636,7 @@ model Principal {
   assertedFacts         Fact[]                  @relation("FactAssertedBy")
   revokedAuthorizations Authorization[]         @relation("AuthorizationRevokedBy")
   transitionsCaused     ApplicationTransition[] @relation("TransitionActor")
+  loanMovesCaused       LoanTransition[]        @relation("LoanTransitionActor")
 
   @@unique([kind, subject])
   @@index([partyId])
@@ -878,6 +880,9 @@ model Application {
   scenarios   LoanScenario[]
   pins        ApplicationEvidenceLink[]
   clocks      RegulatoryClock[]
+  /// The mortgage this request became, if it funded. Not a cascade in either
+  /// direction: the loan names the application, and survives it.
+  loan        Loan?
 
   /// The queue query this exists to make cheap: everything in one state,
   /// oldest first.
@@ -1119,4 +1124,230 @@ model RegulatoryClock {
   @@index([applicationId, kind])
   @@index([dueAt])
   @@map("regulatory_clocks")
+}
+
+// ─── THE LOAN ───────────────────────────────────────────────────────────────
+
+enum IntegrationDepth {
+  NONE
+  DEEP_LINK
+  API
+  SUBSERVICED
+}
+
+/// Who services a mortgage, and how deeply we are wired to them.
+///
+/// Integration depth lives here rather than on the loan because it is a
+/// connection detail, not a lifecycle fact: becoming the subservicer for a
+/// book of loans is a configuration change on one row, and as a loan state it
+/// would be a migration plus a word a borrower would have to be shown.
+model Servicer {
+  id               String           @id @default(uuid()) @db.Uuid
+  slug             String           @unique
+  displayName      String           @map("display_name")
+  integrationDepth IntegrationDepth @default(NONE) @map("integration_depth")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  loans Loan[]
+
+  @@map("servicers")
+}
+
+enum LoanState {
+  PENDING_BOARDING
+  BOARDING
+  IMPORTED_UNCLAIMED
+  ACTIVE
+  MONITORING_ONLY
+  IN_SERVICING_TRANSFER
+  PAID_OFF
+  REFINANCED_INTERNALLY
+  TRANSFERRED_OUT
+  CHARGED_OFF
+  MATURED
+}
+
+enum LoanSource {
+  ORIGINATION
+  PARTNER_IMPORT
+}
+
+enum LoanRateType {
+  FIXED
+  ARM
+}
+
+/// The program a mortgage was written under. An axis in its own right, which
+/// is why it is a column and why it is nullable: docs/states.md forbids
+/// inferring it from the objective or the channel, and a feed that did not say
+/// must not be answered with a guess.
+enum LoanProgram {
+  CONVENTIONAL
+  HIGH_BALANCE
+  JUMBO
+  FHA
+  VA
+  USDA
+  NON_QM
+  AGRICULTURAL
+}
+
+/// A mortgage that exists in the world.
+///
+/// It outlives the application that made it, and it may have had no
+/// application at all. Everything that moves month to month — the balance, the
+/// escrow, whether a payment is late — is an observation with a date, never a
+/// column here, and the four axes are nullable because NULL means the feed did
+/// not tell us and nothing may infer one.
+///
+/// `status` is written ONLY by the loan transition service, and the same three
+/// triggers that hold an application to its ledger hold a loan to its own,
+/// plus three more: a loan is born in one of exactly two states, it cannot
+/// claim to have been refinanced by us without naming the loan that did it,
+/// and its ledger may never name a principal that dies with a person.
+///
+/// It declares NO relation to a loan file, deliberately. Every `loanFile
+/// LoanFile` relation in this schema cascades — that is what makes "we remove
+/// your data for good" true of a file's children — and a mortgage somebody is
+/// paying is not a child of the file somebody typed into.
+model Loan {
+  id String @id @default(uuid()) @db.Uuid
+
+  status          LoanState
+  /// Increments on every transition. The ledger row for a move carries the
+  /// same number, and `(loan_id, seq)` is unique — so two writers racing is an
+  /// insert conflict rather than a lost update.
+  statusSeq       Int       @default(0) @map("status_seq")
+  statusEnteredAt DateTime  @default(now()) @map("status_entered_at")
+
+  source LoanSource
+
+  /// Nullable and load-bearing: a portfolio mortgage has no application behind
+  /// it. SET NULL so a deleted application cannot erase the record of a
+  /// mortgage somebody is paying.
+  originatingApplicationId String?      @unique @map("originating_application_id") @db.Uuid
+  originatingApplication   Application? @relation(fields: [originatingApplicationId], references: [id], onDelete: SetNull)
+
+  servicerId String?   @map("servicer_id") @db.Uuid
+  servicer   Servicer? @relation(fields: [servicerId], references: [id], onDelete: Restrict)
+
+  /// The four axes. NULL means the feed did not say. A CHECK requires all four
+  /// on a loan we originated, because we know our own.
+  objective    ScenarioObjective?
+  program      LoanProgram?
+  lienPosition LienPosition?      @map("lien_position")
+  occupancy    Occupancy?
+
+  /// Terms at origination. Money is bigint cents and the rate is integer basis
+  /// points, matching loan_scenarios.
+  rateType               LoanRateType @map("rate_type")
+  noteRateBps            Int          @map("note_rate_bps")
+  termMonths             Int          @map("term_months")
+  originalPrincipalCents BigInt       @map("original_principal_cents")
+  originatedOn           DateTime?    @map("originated_on") @db.Date
+  firstPaymentOn         DateTime?    @map("first_payment_on") @db.Date
+  maturityOn             DateTime?    @map("maturity_on") @db.Date
+
+  /// BRIDGE, in the same words loan_scenarios uses: there is no properties
+  /// table yet. These move when it lands, and the readers move with them.
+  propertyLine1      String? @map("property_line1")
+  propertyLine2      String? @map("property_line2")
+  propertyCity       String? @map("property_city")
+  propertyState      String? @map("property_state") @db.VarChar(2)
+  propertyPostalCode String? @map("property_postal_code")
+  propertyApn        String? @map("property_apn")
+
+  /// The attributable chain the monitoring loop exists to produce: which loan
+  /// of ours retired this one.
+  ///
+  /// SET NULL, and the rule that a refinanced loan names its successor is a
+  /// trigger on the MOVE rather than a CHECK on the row. A referential action
+  /// is an UPDATE, so erasing the successor rewrites this column on a
+  /// predecessor nothing named — and a CHECK would refuse that write from
+  /// inside somebody else's DELETE, on a row too terminal to move out of the
+  /// way first.
+  refinancedByLoanId String? @map("refinanced_by_loan_id") @db.Uuid
+  refinancedBy       Loan?   @relation("LoanRefinance", fields: [refinancedByLoanId], references: [id], onDelete: SetNull)
+  refinanced         Loan[]  @relation("LoanRefinance")
+
+  /// The monitoring seam. Same idiom and same index shape as connector_links',
+  /// so a scheduler claims from one shape and not two. Unread for now.
+  monitoringEnabled Boolean   @default(false) @map("monitoring_enabled")
+  nextReviewDueAt   DateTime? @map("next_review_due_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  parties     LoanParty[]
+  transitions LoanTransition[]
+
+  /// The index names here and on the two models below are pinned to what the
+  /// migration wrote. Prisma names an unmapped index after its columns, and a
+  /// name the model does not state is a name the next `prisma migrate dev`
+  /// renames — folding a rename of somebody else's index into an unrelated
+  /// migration.
+  @@index([status, statusEnteredAt], map: "loans_status_entered")
+  @@index([monitoringEnabled, nextReviewDueAt], map: "loans_review_due")
+  @@index([originatingApplicationId], map: "loans_originating_app")
+  @@map("loans")
+}
+
+/// Which parties are on a mortgage, and in what capacity.
+///
+/// Plural from the start, like ApplicationParty, and for a sharper reason: a
+/// `loans.party_id` with a cascade would mean one co-borrower deleting their
+/// account silently erases the other borrower's mortgage. The LINK is personal
+/// data and cascades from the party; the loan itself goes only when the last
+/// party leaves.
+model LoanParty {
+  id      String @id @default(uuid()) @db.Uuid
+  loanId  String @map("loan_id") @db.Uuid
+  loan    Loan   @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  partyId String @map("party_id") @db.Uuid
+  party   Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  role ApplicationPartyRole
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([loanId, partyId], map: "loan_parties_one_per_loan_party")
+  @@index([partyId], map: "loan_parties_party")
+  @@map("loan_parties")
+}
+
+/// Every move a mortgage made, in order, with its cause. Append-only.
+///
+/// `actorPrincipalId` is RESTRICT, exactly as an application transition's is,
+/// and a trigger refuses any principal that belongs to a party: a loan outlives
+/// its parties by design, so a row naming a borrower's own principal would be
+/// an account that cannot be deleted at all. The person is recorded in
+/// `loan_parties`; the actor is the service, the partner or the member of staff
+/// that made the move.
+model LoanTransition {
+  id     String @id @default(uuid()) @db.Uuid
+  loanId String @map("loan_id") @db.Uuid
+  loan   Loan   @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  /// Matches the loan's `statusSeq` after the move. Gapless from 1.
+  seq Int
+
+  fromState LoanState? @map("from_state")
+  toState   LoanState  @map("to_state")
+  event     String
+
+  actorPrincipalId String    @map("actor_principal_id") @db.Uuid
+  actor            Principal @relation("LoanTransitionActor", fields: [actorPrincipalId], references: [id])
+
+  /// A code from a closed set, not free text — what an ops report groups by.
+  reasonCode String? @map("reason_code")
+  /// What produced it: an import batch, a claim grant, a servicing extract.
+  causedBy   String? @map("caused_by")
+
+  occurredAt DateTime @map("occurred_at")
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  @@unique([loanId, seq], map: "loan_transitions_loan_seq")
+  @@index([loanId, occurredAt], map: "loan_transitions_loan_occurred")
+  @@map("loan_transitions")
 }

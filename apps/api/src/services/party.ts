@@ -75,9 +75,13 @@ export async function principalForParty(tx: Tx, partyId: string): Promise<string
  * `application_flow` writes the orchestration edges — what the borrower owes,
  * that underwriting began. `shadow_aus` writes the decided edges, so the
  * ledger names which engine decided, and it carries the engine's version.
- * Found or created on the `(kind, subject)` unique, never assumed by id: the
- * test harness truncates principals, and the migration's fixed ids are a
- * convenience for a fresh database, not a promise.
+ * `claim_flow` and `retention` are the two the loan ledger needs, and they are
+ * SERVICE principals for a structural reason rather than a stylistic one: a
+ * loan outlives its parties, so a move recorded under a person's own principal
+ * would be an account that cannot be deleted. Found or created on the
+ * `(kind, subject)` unique, never assumed by id: the test harness truncates
+ * principals, and the migration's fixed ids are a convenience for a fresh
+ * database, not a promise.
  *
  * Insert-then-read, not `upsert`. Prisma's upsert on a compound unique is a
  * SELECT followed by an INSERT, so two first callers race and the loser gets a
@@ -88,7 +92,7 @@ export async function principalForParty(tx: Tx, partyId: string): Promise<string
  */
 export async function servicePrincipal(
   db: Db,
-  subject: "application_flow" | "shadow_aus",
+  subject: "application_flow" | "shadow_aus" | "claim_flow" | "retention",
 ): Promise<string> {
   const model =
     subject === "shadow_aus" ? { modelId: "shadow", modelVersion: SHADOW_ENGINE_VERSION } : {};

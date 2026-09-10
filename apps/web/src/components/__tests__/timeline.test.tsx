@@ -124,6 +124,42 @@ describe("the timeline speaks to the borrower", () => {
   it("renders nothing at all for a file with no application", () => {
     expect(renderToStaticMarkup(<ApplicationTimeline standing={null} />)).toBe("");
   });
+
+  it("drops the Loan Estimate date once there is nothing left to decide", () => {
+    // The clock row survives the end of an application — it is a regulated
+    // record and nothing deletes it — so this paragraph rendered on a funded
+    // loan, a withdrawn file and a denial alike: a document promised by a
+    // date, under a pill that had already said the request was over.
+    for (const status of ["funded", "withdrawn", "denied", "canceled", "expired"]) {
+      const markup = renderToStaticMarkup(
+        <ApplicationTimeline standing={{ ...STANDING, status, terminal: true }} />,
+      );
+      expect(markup, status).not.toContain("Loan Estimate");
+      // The history itself is exactly what such a file is here to read.
+      expect(markup, status).toContain("Application received");
+    }
+  });
+
+  it("drops it on a file that is held, and on one past deciding", () => {
+    for (const status of ["suspended", "closing", "rescission_pending"]) {
+      const markup = renderToStaticMarkup(
+        <ApplicationTimeline standing={{ ...STANDING, status, terminal: false }} />,
+      );
+      expect(markup, status).not.toContain("Loan Estimate");
+    }
+  });
+
+  it("still gives it to a file that is still being decided", () => {
+    // Including the one state that sounds like it belongs with the others:
+    // an approved file is owed the estimate, and the deadline for it is the
+    // whole point of the clock.
+    for (const status of ["awaiting_borrower", "in_underwriting", "approved"]) {
+      const markup = renderToStaticMarkup(
+        <ApplicationTimeline standing={{ ...STANDING, status, terminal: false }} />,
+      );
+      expect(markup, status).toContain("Your Loan Estimate is due by September 9, 2026.");
+    }
+  });
 });
 
 describe("the standing line", () => {

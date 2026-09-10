@@ -23,6 +23,7 @@ import {
   EVENT_WORDS,
   REASON_WORDS,
   actorWords,
+  calendarDate,
   hasWordsFor,
   timelineDate,
   wordsFor,
@@ -184,5 +185,26 @@ describe("dates", () => {
     // "11 September" reads as a typo to an American borrower and as correct to
     // everyone who wrote it. Month first.
     expect(timelineDate("2026-09-11T16:00:00.000Z")).toBe("September 11, 2026");
+  });
+
+  it("writes a calendar date in the same words", () => {
+    // A date of birth off an identity document. Screen 2 printed it raw.
+    expect(calendarDate("1985-03-12")).toBe("March 12, 1985");
+  });
+
+  it("does not move a calendar date into a time zone it never had", () => {
+    // There is no instant on a birthday, so there is nothing to convert:
+    // reading it as UTC midnight and rendering it in the creditor's zone
+    // prints the day before, for every date in the first hours of a day.
+    expect(calendarDate("2000-01-01")).toBe("January 1, 2000");
+    expect(calendarDate("1999-12-31")).toBe("December 31, 1999");
+    expect(calendarDate("2026-07-04")).toBe("July 4, 2026");
+  });
+
+  it("hands back anything that is not a calendar date", () => {
+    // Better a vendor's own string than the words "Invalid Date" where a
+    // borrower expects their birthday.
+    expect(calendarDate("")).toBe("");
+    expect(calendarDate("12/03/1985")).toBe("12/03/1985");
   });
 });

@@ -11,7 +11,7 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { landingScreen } from "../file.js";
+import { hasStopped, landingScreen } from "../file.js";
 
 const at = (status: string, terminal: boolean) => ({ status, terminal });
 
@@ -55,6 +55,55 @@ describe("where an ended file lands", () => {
     // it would strand it on the review screen forever.
     expect(landingScreen(null, "bank")).toBeNull();
     expect(landingScreen(undefined, "bank")).toBeNull();
+  });
+});
+
+describe("whether there is any work left on the file", () => {
+  it("says so for every terminal word", () => {
+    for (const status of ["withdrawn", "canceled", "denied", "funded", "expired"]) {
+      expect(hasStopped(at(status, true)), status).toBe(true);
+    }
+  });
+
+  it("says so for a held file, which has not ended", () => {
+    expect(hasStopped(at("suspended", false))).toBe(true);
+  });
+
+  it("says no while the file is still moving", () => {
+    for (const status of ["draft", "intake_received", "awaiting_borrower", "in_underwriting"]) {
+      expect(hasStopped(at(status, false)), status).toBe(false);
+    }
+  });
+
+  it("says no about a file nobody has read yet", () => {
+    // `undefined` is the file still loading and `null` is a file with no
+    // application. Neither is a stopped one, and answering true for either
+    // would strip the step indicator off every cold load.
+    expect(hasStopped(undefined)).toBe(false);
+    expect(hasStopped(null)).toBe(false);
+  });
+});
+
+describe("what the shell puts above the standing", () => {
+  /**
+   * Read out of the source, for the same reason as below.
+   *
+   * The step indicator takes a screen path and a stage, and neither can say
+   * that an application ended — so it painted four segments with one lit in
+   * the accent color directly above a pill reading "Withdrawn", eight pixels
+   * apart, on every file that had stopped. The application standing was
+   * already in scope at the call site.
+   */
+  const src = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
+  const shell = src.slice(src.indexOf("function Shell({"));
+
+  it("leaves the step indicator off a file that has stopped", () => {
+    const stepper = shell.slice(shell.indexOf("<Stepper"));
+    expect(shell).toContain("hasStopped(standing)");
+    // The guard, not a second style for the same line: the indicator is not
+    // rendered at all rather than rendered in another color.
+    expect(shell.indexOf("hasStopped(standing)")).toBeLessThan(shell.indexOf("<Stepper"));
+    expect(stepper.slice(0, stepper.indexOf("/>"))).not.toContain("standing");
   });
 });
 

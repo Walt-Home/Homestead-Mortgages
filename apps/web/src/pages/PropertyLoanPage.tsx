@@ -18,7 +18,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api.js";
+import { api, ApiError } from "../lib/api.js";
 import { useLoanFile } from "../lib/file.js";
 import { Why } from "../components/Why.js";
 import { Working } from "../components/Working.js";
@@ -108,12 +108,38 @@ const SAMPLE_ADDRESSES: { label: string; address: Address }[] = [
   },
 ];
 
+/**
+ * What a failed lookup entitles the screen to say.
+ *
+ * A 403 is the request being turned down: no provider was asked, no county
+ * was read, and the screen knows nothing at all about the property. Every
+ * other failure is the retrieval running and coming back empty, which is a
+ * fact about the address. Treating them alike printed an explanation of
+ * somebody's county for a lookup that never happened — on the first thing a
+ * borrower does here, and on every address for a sample borrower, whose
+ * session is refused every write.
+ *
+ * Exported so the distinction is something a test can hold rather than an
+ * expression inside a catch block.
+ */
+export function lookupMissFor(err: unknown): "refused" | "no_record" {
+  return err instanceof ApiError && err.status === 403 ? "refused" : "no_record";
+}
+
 export function PropertyLoanPage() {
   const { fileId } = useParams<{ fileId: string }>();
   const editing = Boolean(fileId);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data } = useLoanFile(fileId);
+  /**
+   * The same check every other screen makes.
+   *
+   * A sample file is shared with everyone and writable by nobody, so a
+   * Continue button that looks live here PATCHes the file and is refused —
+   * and screen 1 was the only one that let a borrower press it to find out.
+   */
+  const readOnly = data?.file.isDemo === true;
 
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -121,7 +147,8 @@ export function PropertyLoanPage() {
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const [looking, setLooking] = useState(false);
   const [manual, setManual] = useState(false);
-  const [noRecord, setNoRecord] = useState(false);
+  /** Why the retrieval came back with nothing. See `lookupMissFor`. */
+  const [lookupMiss, setLookupMiss] = useState<"refused" | "no_record" | null>(null);
   const [manualFields, setManualFields] = useState({
     line1: "",
     city: "",
@@ -169,7 +196,7 @@ export function PropertyLoanPage() {
     setQuery(value);
     setAddress(null);
     setLookup(null);
-    setNoRecord(false);
+    setLookupMiss(null);
     clearTimeout(debounce.current);
     if (value.trim().length < 3) {
       setSuggestions([]);
@@ -206,14 +233,14 @@ export function PropertyLoanPage() {
     setAddress(chosen);
     setLooking(true);
     setError(null);
-    setNoRecord(false);
+    setLookupMiss(null);
     try {
       const found = await api.post<Lookup>("/property/lookup", chosen);
       setLookup(found);
       setPropertyType(found.record.propertyType);
-    } catch {
+    } catch (err) {
       setLookup(null);
-      setNoRecord(true);
+      setLookupMiss(lookupMissFor(err));
     } finally {
       setLooking(false);
     }
@@ -235,6 +262,9 @@ export function PropertyLoanPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    // The button below is disabled, and a form still submits on Enter in a
+    // browser that has no enabled submit button to consult.
+    if (readOnly) return;
     if (!address) {
       setError("Enter the property address so we know what we are lending against.");
       return;
@@ -448,7 +478,7 @@ export function PropertyLoanPage() {
           onWrongAddress={() => {
             setLookup(null);
             setAddress(null);
-            setNoRecord(false);
+            setLookupMiss(null);
             setCorrection(null);
             setQuery("");
           }}
@@ -456,21 +486,41 @@ export function PropertyLoanPage() {
       )}
 
       {/*
-        We have an address but no public record.
-        Say so plainly, and ask for the one thing the record would have told us
-        that the loan genuinely cannot be underwritten without. Everything else
-        the card would have shown is nice to have; the property type changes
-        the LTV ceiling and the reserve tier.
+        We have an address and no record to show for it, for one of two
+        reasons, and they are not the same sentence.
+
+        A refusal is not a finding. The request was turned down before any
+        provider was asked, so the screen has learned nothing whatsoever about
+        the property — and "we could not find public records for this address"
+        is a claim about the county that nobody made. The other case is the
+        prototype's own limit, and the words for that were already on this
+        screen: three sample addresses hold records, and any other one comes
+        back empty.
+
+        Either way, ask for the one thing the record would have told us that
+        the loan genuinely cannot be underwritten without. Everything else the
+        card would have shown is nice to have; the property type changes the
+        LTV ceiling and the reserve tier.
       */}
-      {noRecord && address && (
+      {lookupMiss && address && (
         <div className="super-notice mt-5">
-          <p className="text-sm font-medium text-ink">
-            We could not find public records for this address
-          </p>
-          <p className="mt-1 text-sm text-ink-soft">
-            That happens with new builds and some counties. It does not stop your application — we
-            will just confirm the details later.
-          </p>
+          {lookupMiss === "refused" ? (
+            <>
+              <p className="text-sm font-medium text-ink">We have not looked this address up</p>
+              <p className="mt-1 text-sm text-ink-soft">
+                The lookup was refused for this session, so nothing here comes from a public record.
+                It does not stop your application.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-ink">We hold no record for this address</p>
+              <p className="mt-1 text-sm text-ink-soft">
+                This prototype can only retrieve records for three sample addresses. It does not
+                stop your application — we will just confirm the details later.
+              </p>
+            </>
+          )}
           <div className="mt-3">
             <label className="super-label" htmlFor="ptype">
               What kind of property is it?
@@ -597,10 +647,18 @@ export function PropertyLoanPage() {
       {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
       <div className="mt-7 flex flex-wrap items-center gap-3">
-        <button className="super-btn super-btn-primary" disabled={submitting || looking}>
+        <button
+          className="super-btn super-btn-primary"
+          disabled={submitting || looking || readOnly}
+        >
           {submitting ? "Checking…" : "Continue"}
         </button>
       </div>
+      {readOnly && (
+        <p className="mt-3 text-sm text-ink-muted">
+          This is a sample file, so nothing here can be changed.
+        </p>
+      )}
     </form>
   );
 }

@@ -19,6 +19,7 @@ import { api, ApiError, type Assessment } from "./lib/api.js";
 import { useAuth } from "./lib/auth.js";
 import { StatesGalleryPage } from "./pages/StatesGalleryPage.js";
 import {
+  hasStopped,
   landingScreen,
   needsRepair,
   useLoanFile,
@@ -401,7 +402,14 @@ function Shell({
   return (
     <div className="flex min-h-screen flex-col bg-ground">
       <Header>
-        <Stepper current={screen} fileId={fileId} reached={reached} />
+        {/*
+          Four segments with one lit is a claim that there are steps left. On a
+          file that has ended or is held there are none, and the line used to
+          paint itself in the accent directly above a pill reading "Withdrawn".
+          The shell has already sent such a file here to read where it stands,
+          so what belongs above that is the standing and nothing else.
+        */}
+        {!hasStopped(standing) && <Stepper current={screen} fileId={fileId} reached={reached} />}
         {/*
           Where the file stands, on every screen. It sits under the step nav
           because the two answer different questions — the nav says which

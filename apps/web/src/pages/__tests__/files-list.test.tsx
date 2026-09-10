@@ -15,11 +15,12 @@
  * `resumable` alone can see.
  */
 
+import { readFileSync } from "node:fs";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
-import { canStart, FilesPage, resumable, Standing, type FileRow } from "../FilesPage.js";
+import { canStart, FilesPage, resumable, screenFor, Standing, type FileRow } from "../FilesPage.js";
 import { NO_APPLICATION } from "../../lib/ledger.js";
 
 /** Who the front door thinks is looking. Set per render. */
@@ -101,6 +102,47 @@ describe("the resume link", () => {
     expect(
       resumable([file({ stage: "PROPERTY_LOAN", applicationState: at("expired", true) })]),
     ).toBeUndefined();
+  });
+});
+
+describe("where a row links", () => {
+  it("sends a live file to the screen its stage reached", () => {
+    expect(
+      screenFor(file({ stage: "BANK", applicationState: at("awaiting_borrower", false) })),
+    ).toBe("bank");
+    expect(screenFor(file({ stage: "IDENTITY", applicationState: null }))).toBe("identity");
+  });
+
+  it("does not link at a page the shell will bounce", () => {
+    // Withdrawn at the bank screen: the stage still says "bank", the shell
+    // redirects to review the moment it opens, and the row was pointing at
+    // the redirect. Three of the eight seeded files behaved this way.
+    expect(screenFor(file({ stage: "BANK", applicationState: at("withdrawn", true) }))).toBe(
+      "review",
+    );
+    for (const status of ["canceled", "denied", "funded", "expired"]) {
+      expect(
+        screenFor(file({ stage: "PROPERTY_LOAN", applicationState: at(status, true) })),
+        status,
+      ).toBe("review");
+    }
+  });
+
+  it("sends a held file there too, though it has not ended", () => {
+    // `suspended` is not terminal, so `resumable` still offers this file —
+    // which makes it the one row where the two expressions disagreed on a
+    // file the front door actually links to.
+    expect(screenFor(file({ stage: "IDENTITY", applicationState: at("suspended", false) }))).toBe(
+      "review",
+    );
+  });
+
+  it("is what the page actually calls, in both places", () => {
+    // The rule and the JSX can disagree: the two links used to compute the
+    // stage map inline, and both cases above would still pass.
+    const src = readFileSync(new URL("../FilesPage.tsx", import.meta.url), "utf8");
+    expect(src).not.toMatch(/to=\{`\/f\/\$\{[^}]+\}\/\$\{STAGE_TO_SCREEN/);
+    expect([...src.matchAll(/screenFor\(/g)]).toHaveLength(3);
   });
 });
 

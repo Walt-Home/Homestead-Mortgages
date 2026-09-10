@@ -23,6 +23,7 @@ import { HomeHero } from "../components/HomeHero.js";
 import { StatusPill } from "../components/StatusPill.js";
 import { StreetScene } from "../components/StreetScene.js";
 import { entryFor } from "../lib/states.js";
+import { landingScreen } from "../lib/file.js";
 import { NO_APPLICATION, timelineDate } from "../lib/ledger.js";
 import { STAGE_TO_SCREEN, type FlowStage } from "../lib/flow.js";
 
@@ -56,6 +57,24 @@ export function resumable(files: readonly FileRow[]): FileRow | undefined {
   return files.find((f) =>
     f.applicationState ? !f.applicationState.terminal : f.stage !== "COMPLETE",
   );
+}
+
+/**
+ * Where a row's link goes.
+ *
+ * The stage is where the borrower got to, and it only ever moves forward — so
+ * on a file whose application has ended or is held it still points at the bank
+ * or identity screen. The shell refuses to open one there and redirects to the
+ * review screen, which made three of the eight seeded rows link at a page that
+ * bounced on arrival. `landingScreen` is the function that does the bouncing;
+ * asking it here means the link and the shell cannot disagree.
+ *
+ * Exported for the same reason `resumable` is: a rule the front door depends
+ * on should be something a test can hold, not an expression inside the JSX.
+ */
+export function screenFor(f: FileRow): string {
+  const stage = STAGE_TO_SCREEN[f.stage as FlowStage] ?? "review";
+  return landingScreen(f.applicationState, stage) ?? stage;
 }
 
 /**
@@ -98,7 +117,7 @@ export function FilesPage() {
         {inProgress && (
           <Link
             className="super-link-quiet text-sm"
-            to={`/f/${inProgress.id}/${STAGE_TO_SCREEN[inProgress.stage as FlowStage] ?? "review"}`}
+            to={`/f/${inProgress.id}/${screenFor(inProgress)}`}
           >
             Or pick up the one you started
             {inProgress.propertyCity ? ` in ${inProgress.propertyCity}` : ""}
@@ -133,10 +152,7 @@ function FileList({ title, files }: { title: string; files: readonly FileRow[] }
       <ul className="mt-2 flex flex-col gap-2">
         {files.map((f) => (
           <li key={f.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <Link
-              className="super-link text-sm"
-              to={`/f/${f.id}/${STAGE_TO_SCREEN[f.stage as FlowStage] ?? "review"}`}
-            >
+            <Link className="super-link text-sm" to={`/f/${f.id}/${screenFor(f)}`}>
               {f.borrowers[0] ? `${f.borrowers[0].firstName} ${f.borrowers[0].lastName}` : "A file"}
               {f.propertyCity ? ` — ${f.propertyCity}, ${f.propertyState}` : ""}
             </Link>

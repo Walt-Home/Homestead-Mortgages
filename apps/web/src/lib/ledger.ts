@@ -145,3 +145,22 @@ export function timelineDate(iso: string): string {
     year: "numeric",
   });
 }
+
+/**
+ * The same month-first words for a date that is not an instant.
+ *
+ * A date of birth off an identity document is `1985-03-12` and nothing more —
+ * there is no time and no place on it, so there is no zone to convert from.
+ * `timelineDate` would read it as UTC midnight and print the eleventh, which
+ * is somebody's birthday moved a day to render it. Anything that is not a
+ * plain calendar date comes back untouched rather than as "Invalid Date".
+ */
+export function calendarDate(ymd: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+  return new Date(`${ymd}T00:00:00Z`).toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}

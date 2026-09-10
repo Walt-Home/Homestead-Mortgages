@@ -67,6 +67,25 @@ export type Ending =
 const PAST_DECIDING = ["clear_to_close", "closing", "rescission_pending", "funded", "suspended"];
 
 /**
+ * Whether a decision is behind this file rather than ahead of it.
+ *
+ * The ending cascade asks this to decide that a file reads as its state, and
+ * the timeline asks it about the Loan Estimate: an estimate is the offer a
+ * borrower is still deciding on, so the date it is due by means something
+ * only while there is still something to decide. On a funded loan, a
+ * withdrawn file and a denial it is a deadline for a document that will never
+ * be owed, printed under a pill that already said so.
+ *
+ * Terminal states are included, and `suspended` arrives through the list
+ * above: a file stopped on somebody else's answer is not counting down.
+ */
+export function pastDeciding(
+  state: { readonly status: string; readonly terminal: boolean } | null | undefined,
+): boolean {
+  return Boolean(state && (state.terminal || PAST_DECIDING.includes(state.status)));
+}
+
+/**
  * The states each decided word lands on when the machine applies it.
  *
  * A decision is RECORDED whether or not there was an edge for it — a file in
@@ -114,7 +133,7 @@ export function endingFor({
   // nothing else, and the reasons we recorded would never reach a screen.
   if (applied("denied")) return "adverse";
   if (applied("counteroffer")) return "counteroffer";
-  if (state && (state.terminal || PAST_DECIDING.includes(state.status))) return "state";
+  if (pastDeciding(state)) return "state";
   if (!signed) return null;
   if (branches.length > 0) return "branches";
   if (outcome === "referred") return "referred";

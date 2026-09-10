@@ -19,6 +19,7 @@
 import { StatusPill } from "./StatusPill.js";
 import type { ApplicationStandingView } from "../lib/file.js";
 import { entryFor } from "../lib/states.js";
+import { pastDeciding } from "../lib/endings.js";
 import { CLOCK_COPY, actorWords, timelineDate, wordsFor } from "../lib/ledger.js";
 
 /**
@@ -56,7 +57,14 @@ export function ApplicationTimeline({
         })}
       </ol>
 
-      {standing.loanEstimate && (
+      {/*
+        The estimate's clock, only while there is still something to decide.
+        The clock row survives the end of an application — it is a regulated
+        record and nothing deletes it — so this block rendered on a funded
+        loan, a withdrawn file and a denial alike, promising each of them a
+        document by a date, under a pill that had already said it was over.
+      */}
+      {standing.loanEstimate && !pastDeciding(standing) && (
         <p className="mt-5 text-sm text-ink-muted">
           {CLOCK_COPY.loanEstimateDue(timelineDate(standing.loanEstimate.dueAt))}{" "}
           {standing.loanEstimate.tolled && CLOCK_COPY.loanEstimateOnHold}

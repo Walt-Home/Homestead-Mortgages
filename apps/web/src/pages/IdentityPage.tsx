@@ -23,6 +23,7 @@ import { useLoanFile } from "../lib/file.js";
 import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
 import { Why } from "../components/Why.js";
 import { clearDraft, readDraft, saveDraft } from "../lib/identity.js";
+import { calendarDate } from "../lib/ledger.js";
 import { Working } from "../components/Working.js";
 
 interface DocumentRead {
@@ -443,7 +444,7 @@ export function IdentityPage() {
               {identity.firstName} {identity.lastName}
             </p>
             <p className="mt-1 text-sm text-ink-soft">
-              {identity.dateOfBirth ? `Born ${identity.dateOfBirth} · ` : ""}
+              {identity.dateOfBirth ? `Born ${calendarDate(identity.dateOfBirth)} · ` : ""}
               {identity.address.line1}, {identity.address.city} {identity.address.state}
             </p>
             {/*

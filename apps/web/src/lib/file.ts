@@ -185,9 +185,27 @@ export function landingScreen(
   application: { readonly status: string; readonly terminal: boolean } | null | undefined,
   screen: string,
 ): "review" | null {
-  if (!application) return null;
-  const stopped = application.terminal || application.status === "suspended";
-  return stopped && screen !== "review" ? "review" : null;
+  return hasStopped(application) && screen !== "review" ? "review" : null;
+}
+
+/**
+ * Whether there is any more work to do on this file.
+ *
+ * An application that has ended, or is held on somebody else's answer, is a
+ * file nothing may be added to — which is why the shell will not open one on
+ * a working screen. The step indicator asks the same question: four segments
+ * with one lit says a borrower is partway through something, and a withdrawn
+ * or funded file painted that line directly above the pill saying otherwise.
+ *
+ * `undefined` is a file that has not been read yet and answers false, the
+ * same as everywhere else: a claim about a regulated record cannot be made
+ * while the record is still loading.
+ */
+export function hasStopped(
+  application: { readonly status: string; readonly terminal: boolean } | null | undefined,
+): boolean {
+  if (!application) return false;
+  return application.terminal || application.status === "suspended";
 }
 
 export function hasConsent(file: LoanFileView | undefined, kind: string): boolean {

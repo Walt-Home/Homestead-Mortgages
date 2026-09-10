@@ -81,6 +81,7 @@ import {
   staffPrincipal,
 } from "../services/party.js";
 import { loadLoanFile, recordEvent, recordSnapshot } from "../services/repository.js";
+import { reconcileIncomeAndEmployment } from "../services/income.js";
 import { screenAndRecord } from "../services/screening.js";
 import {
   settleAfterIntake,
@@ -532,7 +533,13 @@ async function bank(w: Walk): Promise<void> {
     w.tx,
   );
   await linked(w, "bank", result.provider);
-  await replaceIncomeAndEmployment(w, result.data);
+  await reconcileIncomeAndEmployment(w.tx, {
+    loanFileId: w.loanFileId,
+    partyId: w.partyId,
+    snapshotId: snapshot.id,
+    reported: result.data,
+    now: new Date(result.retrievedAt),
+  });
   await recordEvent(
     w.loanFileId,
     "connector_pull",
@@ -560,7 +567,13 @@ async function payroll(w: Walk): Promise<void> {
     w.tx,
   );
   await linked(w, "payroll", result.provider);
-  await replaceIncomeAndEmployment(w, result.data);
+  await reconcileIncomeAndEmployment(w.tx, {
+    loanFileId: w.loanFileId,
+    partyId: w.partyId,
+    snapshotId: snapshot.id,
+    reported: result.data,
+    now: new Date(result.retrievedAt),
+  });
   await recordEvent(
     w.loanFileId,
     "connector_pull",
@@ -570,60 +583,6 @@ async function payroll(w: Walk): Promise<void> {
     w.tx,
   );
   await settle(w, "payroll_connected", `snapshot:${snapshot.id}`);
-}
-
-interface IncomeAndEmployment {
-  readonly incomeSources: readonly {
-    type: string;
-    monthlyAmount: number;
-    historyMonths: number;
-    continuanceEndDate?: string | null;
-    continuanceEstablished: boolean | null;
-    evidenceDocumentIds: readonly string[];
-  }[];
-  readonly employments: readonly {
-    employerName: string;
-    employerEin?: string | null;
-    position: string;
-    startDate?: string | null;
-    endDate?: string | null;
-    status: string;
-    isMilitary: boolean;
-    verificationMethod: string;
-  }[];
-}
-
-/**
- * Replaced wholesale, never merged — the same rule the bank and payroll routes
- * keep. Two employment records for one job would double the income.
- */
-async function replaceIncomeAndEmployment(w: Walk, data: IncomeAndEmployment): Promise<void> {
-  await w.tx.incomeSource.deleteMany({ where: { loanFileId: w.loanFileId } });
-  await w.tx.incomeSource.createMany({
-    data: data.incomeSources.map((s) => ({
-      loanFileId: w.loanFileId,
-      type: s.type,
-      monthlyAmount: s.monthlyAmount,
-      historyMonths: s.historyMonths,
-      continuanceEndDate: s.continuanceEndDate ? new Date(s.continuanceEndDate) : null,
-      continuanceEstablished: s.continuanceEstablished,
-      evidenceDocumentIds: [...s.evidenceDocumentIds],
-    })),
-  });
-  await w.tx.employment.deleteMany({ where: { loanFileId: w.loanFileId } });
-  await w.tx.employment.createMany({
-    data: data.employments.map((e) => ({
-      loanFileId: w.loanFileId,
-      employerName: e.employerName,
-      employerEin: e.employerEin ?? null,
-      position: e.position,
-      startDate: e.startDate ? new Date(e.startDate) : null,
-      endDate: e.endDate ? new Date(e.endDate) : null,
-      status: e.status,
-      isMilitary: e.isMilitary,
-      verificationMethod: e.verificationMethod,
-    })),
-  });
 }
 
 /** The document branch. No bytes are transmitted, here or on the real screen. */

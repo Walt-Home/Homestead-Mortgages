@@ -16,6 +16,7 @@ import {
   recordSnapshot,
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
+import { reconcileIncomeAndEmployment } from "../services/income.js";
 import { tokenFor } from "../services/authorization.js";
 import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
@@ -271,9 +272,14 @@ connectorRouter.post(
     // twelve-month asset report while its application still says "connect your
     // bank" is a file whose state contradicts its own evidence.
     //
-    // Income and employment are replaced wholesale rather than merged: a
-    // re-pull is the newer truth about the same twelve months, and merging
-    // would double the income.
+    // Income and employment are reconciled rather than merged: a re-pull is the
+    // newer truth about the same twelve months, so what this report names is
+    // updated in place and what it stops naming is retired. Merging would
+    // double the income.
+    //
+    // `tokenFor` above refuses a file with no borrower, so by here there is
+    // somebody for this income to be about.
+    const subject = file.borrowers[0]!;
     await prisma.$transaction(async (tx) => {
       const snapshot = await recordSnapshot(
         id,
@@ -290,31 +296,12 @@ connectorRouter.post(
       // sheet says so ("Assets + income + employment + cash flow + rent
       // history") and the real vendors behave that way. Writing them here is
       // what lets a salaried borrower reach a decision without a payroll step.
-      await tx.incomeSource.deleteMany({ where: { loanFileId: id } });
-      await tx.incomeSource.createMany({
-        data: result.data.incomeSources.map((s) => ({
-          loanFileId: id,
-          type: s.type,
-          monthlyAmount: s.monthlyAmount,
-          historyMonths: s.historyMonths,
-          continuanceEndDate: s.continuanceEndDate ? new Date(s.continuanceEndDate) : null,
-          continuanceEstablished: s.continuanceEstablished,
-          evidenceDocumentIds: [...s.evidenceDocumentIds],
-        })),
-      });
-      await tx.employment.deleteMany({ where: { loanFileId: id } });
-      await tx.employment.createMany({
-        data: result.data.employments.map((e) => ({
-          loanFileId: id,
-          employerName: e.employerName,
-          employerEin: e.employerEin ?? null,
-          position: e.position,
-          startDate: e.startDate ? new Date(e.startDate) : null,
-          endDate: e.endDate ? new Date(e.endDate) : null,
-          status: e.status,
-          isMilitary: e.isMilitary,
-          verificationMethod: e.verificationMethod,
-        })),
+      await reconcileIncomeAndEmployment(tx, {
+        loanFileId: id,
+        partyId: subject.partyId,
+        snapshotId: snapshot.id,
+        reported: result.data,
+        now: new Date(result.retrievedAt),
       });
       await recordEvent(id, "connector_pull", result.provider, { kind: "bank" }, "AST-001", tx);
 
@@ -354,6 +341,12 @@ connectorRouter.post(
     // Payroll is the precise source, so it REPLACES what the bank inferred
     // rather than adding to it. Two employment records for one job would
     // double-count income, which is the kind of error that reaches closing.
+    // The employer survives that replacement: payroll carries the EIN the bank
+    // never had, so the row the bank created is promoted rather than twinned.
+    //
+    // `tokenFor` above refuses a file with no borrower, so by here there is
+    // somebody for this income to be about.
+    const subject = file.borrowers[0]!;
     await prisma.$transaction(async (tx) => {
       const snapshot = await recordSnapshot(
         id,
@@ -366,31 +359,12 @@ connectorRouter.post(
       );
       await upsertLink(id, "payroll", result.provider, tx);
 
-      await tx.employment.deleteMany({ where: { loanFileId: id } });
-      await tx.employment.createMany({
-        data: result.data.employments.map((e) => ({
-          loanFileId: id,
-          employerName: e.employerName,
-          employerEin: e.employerEin ?? null,
-          position: e.position,
-          startDate: e.startDate ? new Date(e.startDate) : null,
-          endDate: e.endDate ? new Date(e.endDate) : null,
-          status: e.status,
-          isMilitary: e.isMilitary,
-          verificationMethod: e.verificationMethod,
-        })),
-      });
-      await tx.incomeSource.deleteMany({ where: { loanFileId: id } });
-      await tx.incomeSource.createMany({
-        data: result.data.incomeSources.map((s) => ({
-          loanFileId: id,
-          type: s.type,
-          monthlyAmount: s.monthlyAmount,
-          historyMonths: s.historyMonths,
-          continuanceEndDate: s.continuanceEndDate ? new Date(s.continuanceEndDate) : null,
-          continuanceEstablished: s.continuanceEstablished,
-          evidenceDocumentIds: [...s.evidenceDocumentIds],
-        })),
+      await reconcileIncomeAndEmployment(tx, {
+        loanFileId: id,
+        partyId: subject.partyId,
+        snapshotId: snapshot.id,
+        reported: result.data,
+        now: new Date(result.retrievedAt),
       });
       await recordEvent(id, "connector_pull", result.provider, { kind: "payroll" }, "INC-002", tx);
       await settleBranch(tx, id, file.borrowers[0]?.partyId, "payroll_connected", {

@@ -157,8 +157,21 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       links: true,
       documents: true,
       disclosures: true,
-      incomeSources: true,
-      employments: true,
+      // Only live rows, and the filter is here rather than in the mapper
+      // because every consumer above the projection reads a plain array with
+      // no way to tell a superseded row from a current one — and an
+      // applicability predicate shaped `length === 0 ? null : some(...)` reads
+      // a retired row as a definite yes, which is how the satisfied count went
+      // backwards. Ordered for the same reason `borrowers` is: an unordered
+      // include makes the answer depend on the planner.
+      incomeSources: {
+        where: { retiredAt: null },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      },
+      employments: {
+        where: { retiredAt: null },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      },
       decisions: { orderBy: { computedAt: "desc" }, take: 1 },
       // One extra per kind is enough to build the current view; history stays
       // in the table for the diff the monitoring loop will need.

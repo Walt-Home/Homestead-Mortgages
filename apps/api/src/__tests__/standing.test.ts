@@ -47,6 +47,7 @@ import { tokenFor } from "../services/authorization.js";
 import { connectors } from "../services/connectors.js";
 import type { Db } from "../services/db.js";
 import { decideApplication, recordDecision } from "../services/decide.js";
+import { reconcileIncomeAndEmployment } from "../services/income.js";
 import { borrowerObligations, reconcileObligations } from "../services/obligations.js";
 import { loadLoanFile, recordSnapshot } from "../services/repository.js";
 import { screenAndRecord } from "../services/screening.js";
@@ -209,31 +210,14 @@ async function connectAs(
       data.retrievedAt,
       tx,
     );
-    await tx.incomeSource.deleteMany({ where: { loanFileId: fileId } });
-    await tx.incomeSource.createMany({
-      data: data.data.incomeSources.map((s) => ({
-        loanFileId: fileId,
-        type: s.type,
-        monthlyAmount: s.monthlyAmount,
-        historyMonths: s.historyMonths,
-        continuanceEndDate: s.continuanceEndDate ? new Date(s.continuanceEndDate) : null,
-        continuanceEstablished: s.continuanceEstablished,
-        evidenceDocumentIds: [...s.evidenceDocumentIds],
-      })),
-    });
-    await tx.employment.deleteMany({ where: { loanFileId: fileId } });
-    await tx.employment.createMany({
-      data: data.data.employments.map((e) => ({
-        loanFileId: fileId,
-        employerName: e.employerName,
-        employerEin: e.employerEin ?? null,
-        position: e.position,
-        startDate: e.startDate ? new Date(e.startDate) : null,
-        endDate: e.endDate ? new Date(e.endDate) : null,
-        status: e.status,
-        isMilitary: e.isMilitary,
-        verificationMethod: e.verificationMethod,
-      })),
+    // Through the same writer the route uses, so the harness cannot drift into
+    // producing a shape no shipped path produces.
+    await reconcileIncomeAndEmployment(tx, {
+      loanFileId: fileId,
+      partyId,
+      snapshotId: snapshot.id,
+      reported: data.data,
+      now: new Date(data.retrievedAt),
     });
     const app = await applicationForFile(tx, fileId);
     return settleBorrowerAct(tx, {

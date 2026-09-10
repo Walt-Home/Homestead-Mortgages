@@ -338,11 +338,70 @@ model ConnectorSnapshot {
   raw         Json?
   retrievedAt DateTime @map("retrieved_at")
 
+  employersFirstSeen  Employer[]     @relation("EmployerFirstSeen")
+  incomeFirstSeen     IncomeSource[] @relation("IncomeFirstSeen")
+  incomeLastSeen      IncomeSource[] @relation("IncomeLastSeen")
+  incomeRetiredBy     IncomeSource[] @relation("IncomeRetiredBy")
+  employmentFirstSeen Employment[]   @relation("EmploymentFirstSeen")
+  employmentLastSeen  Employment[]   @relation("EmploymentLastSeen")
+  employmentRetiredBy Employment[]   @relation("EmploymentRetiredBy")
+
   @@index([loanFileId, kind, retrievedAt])
+  /// Joining a row to its snapshot uses the primary key. This answers the other
+  /// question — which numbers came out of vendor report X — which is the one an
+  /// underwriter asks when a vendor issues a correction.
+  @@index([externalId], map: "connector_snapshots_external_id")
   @@map("connector_snapshots")
 }
 
 // ─── DERIVED INCOME AND EMPLOYMENT ──────────────────────────────────────────
+
+/// An employer, as two pulls recognize it across a re-pull.
+///
+/// Keyed to the party rather than to the file: an employer is a thing in the
+/// world, and the same person's second application is about the same job.
+/// Income and employment rows stay per file because continuance is a judgment
+/// about one loan; only the employer they point at is shared.
+model Employer {
+  id      String @id @default(uuid()) @db.Uuid
+  partyId String @map("party_id") @db.Uuid
+  party   Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  /// What two pulls compare to decide they mean the same employer:
+  /// `ein:<digits>` when a vendor gave one, `name:<normalized>` otherwise.
+  identityKey String @map("identity_key")
+  /// Which rule produced the key, so a row derived from a bank memo is
+  /// identifiable as one without re-deriving it. "ein" or "name".
+  derivedFrom String @map("derived_from")
+  /// The `name:` key this employer would have had with no EIN in hand, written
+  /// once and never rewritten. Matching runs in both directions across the
+  /// promotion: payroll moves `identityKey` to the `ein:` form, and the bank
+  /// pull that follows derives only a name, which without this column would
+  /// find nothing and open a second row for one job.
+  nameKey     String @map("name_key")
+
+  ein         String?
+  displayName String  @map("display_name")
+
+  /// The vendor report this employer was first seen in. Null on a row written
+  /// before provenance was kept, and null again if that report is ever erased.
+  firstSeenSnapshotId String?            @map("first_seen_snapshot_id") @db.Uuid
+  firstSeenSnapshot   ConnectorSnapshot? @relation("EmployerFirstSeen", fields: [firstSeenSnapshotId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  incomeSources IncomeSource[]
+  employments   Employment[]
+
+  @@unique([partyId, identityKey], map: "employers_party_identity_key")
+  @@index([partyId], map: "employers_party")
+  /// Not unique. Two EINs filed under one trade name are two employers that
+  /// share a name key, and a unique index would make the pull reporting the
+  /// second one fail rather than record it.
+  @@index([partyId, nameKey], map: "employers_party_name")
+  @@map("employers")
+}
 
 /// Income as finally determined, which is not the same as income a connector
 /// reported. The reconciliation between the two is the underwriting.
@@ -350,6 +409,19 @@ model IncomeSource {
   id         String   @id @default(uuid()) @db.Uuid
   loanFileId String   @map("loan_file_id") @db.Uuid
   loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+  /// Whose income this is. The row is per file, but the person it is about is
+  /// the party — which is what lets a re-pull recognize the same person's
+  /// income, and what keeps a co-borrower's pull off this row.
+  partyId    String   @map("party_id") @db.Uuid
+  party      Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  /// What a re-pull matches on. Derived, because no vendor gives us a stable
+  /// per-item identifier; see services/employer-identity.ts for the rule and
+  /// for the ways it collides. Rows written before matching existed carry a
+  /// `legacy:` key nothing will ever match.
+  identityKey String    @map("identity_key")
+  employerId  String?   @map("employer_id") @db.Uuid
+  employer    Employer? @relation(fields: [employerId], references: [id], onDelete: SetNull)
 
   type                   String
   monthlyAmount          Decimal   @map("monthly_amount") @db.Decimal(12, 2)
@@ -359,7 +431,29 @@ model IncomeSource {
   continuanceEstablished Boolean?  @map("continuance_established")
   evidenceDocumentIds    String[]  @default([]) @map("evidence_document_ids")
 
+  /// When we first saw this income, and which report the numbers on it come
+  /// from now. Both are needed: one would answer half the question.
+  firstSeenSnapshotId String?            @map("first_seen_snapshot_id") @db.Uuid
+  firstSeenSnapshot   ConnectorSnapshot? @relation("IncomeFirstSeen", fields: [firstSeenSnapshotId], references: [id], onDelete: SetNull)
+  lastSeenSnapshotId  String?            @map("last_seen_snapshot_id") @db.Uuid
+  lastSeenSnapshot    ConnectorSnapshot? @relation("IncomeLastSeen", fields: [lastSeenSnapshotId], references: [id], onDelete: SetNull)
+
+  /// Set when a pull stops reporting this income. Superseded rather than
+  /// deleted, because you cannot diff against a row you deleted — and the
+  /// projection reads only live rows.
+  retiredAt           DateTime?          @map("retired_at")
+  retiredBySnapshotId String?            @map("retired_by_snapshot_id") @db.Uuid
+  retiredBySnapshot   ConnectorSnapshot? @relation("IncomeRetiredBy", fields: [retiredBySnapshotId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// Spans retired rows on purpose: an income that goes away and comes back is
+  /// one income, so a later pull revives the row rather than inserting a twin.
+  @@unique([loanFileId, partyId, identityKey], map: "income_sources_file_party_identity_key")
   @@index([loanFileId])
+  @@index([partyId], map: "income_sources_party")
+  @@index([employerId], map: "income_sources_employer")
   @@map("income_sources")
 }
 
@@ -367,6 +461,15 @@ model Employment {
   id         String   @id @default(uuid()) @db.Uuid
   loanFileId String   @map("loan_file_id") @db.Uuid
   loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+  partyId    String   @map("party_id") @db.Uuid
+  party      Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  /// An employment's identity IS its employer, so it needs no key of its own.
+  /// Null on a row written before matching existed, and NULLs are distinct in
+  /// a Postgres unique index, so such a row conflicts with nothing while it
+  /// waits to be retired.
+  employerId String?   @map("employer_id") @db.Uuid
+  employer   Employer? @relation(fields: [employerId], references: [id], onDelete: SetNull)
 
   employerName       String    @map("employer_name")
   employerEin        String?   @map("employer_ein")
@@ -377,7 +480,22 @@ model Employment {
   isMilitary         Boolean   @default(false) @map("is_military")
   verificationMethod String    @map("verification_method")
 
+  firstSeenSnapshotId String?            @map("first_seen_snapshot_id") @db.Uuid
+  firstSeenSnapshot   ConnectorSnapshot? @relation("EmploymentFirstSeen", fields: [firstSeenSnapshotId], references: [id], onDelete: SetNull)
+  lastSeenSnapshotId  String?            @map("last_seen_snapshot_id") @db.Uuid
+  lastSeenSnapshot    ConnectorSnapshot? @relation("EmploymentLastSeen", fields: [lastSeenSnapshotId], references: [id], onDelete: SetNull)
+
+  retiredAt           DateTime?          @map("retired_at")
+  retiredBySnapshotId String?            @map("retired_by_snapshot_id") @db.Uuid
+  retiredBySnapshot   ConnectorSnapshot? @relation("EmploymentRetiredBy", fields: [retiredBySnapshotId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([loanFileId, partyId, employerId], map: "employments_file_party_employer_key")
   @@index([loanFileId])
+  @@index([partyId], map: "employments_party")
+  @@index([employerId], map: "employments_employer")
   @@map("employments")
 }
 
@@ -612,6 +730,9 @@ model Party {
   loans          LoanParty[]
   users          User[]             @relation("UserParty")
   borrowerRows   Borrower[]         @relation("BorrowerParty")
+  employers      Employer[]
+  incomeSources  IncomeSource[]
+  employments    Employment[]
 
   @@index([claimStatus])
   @@index([mergedIntoPartyId])
@@ -678,7 +799,7 @@ model Fact {
   partyId     String?         @map("party_id") @db.Uuid
 
   /// What is being asserted: "legal_name", "date_of_birth", "annual_income".
-  predicate String
+  predicate  String
   /// Discriminates repeated facts of the same predicate — an employer id, an
   /// account id. Empty string for a singleton, never null, so the uniqueness
   /// and ordering indexes do not have to reason about three-valued logic.
@@ -788,14 +909,14 @@ model Authorization {
   /// grant for monitoring is renewable and measured in months.
   expiresAt DateTime @map("expires_at")
 
-  revokedAt             DateTime?  @map("revoked_at")
-  revokedByPrincipalId  String?    @map("revoked_by_principal_id") @db.Uuid
-  revokedBy             Principal? @relation("AuthorizationRevokedBy", fields: [revokedByPrincipalId], references: [id])
-  revocationReason      String?    @map("revocation_reason")
+  revokedAt            DateTime?  @map("revoked_at")
+  revokedByPrincipalId String?    @map("revoked_by_principal_id") @db.Uuid
+  revokedBy            Principal? @relation("AuthorizationRevokedBy", fields: [revokedByPrincipalId], references: [id])
+  revocationReason     String?    @map("revocation_reason")
 
   /// Hash of the exact words shown when it was granted. Content-addressed, so
   /// "what did they actually agree to" survives a copy edit to the template.
-  disclosureTextHash String? @map("disclosure_text_hash")
+  disclosureTextHash  String? @map("disclosure_text_hash")
   /// Set once signing is wired. Null means the grant was recorded without an
   /// executed document behind it, which is a fact worth being able to query.
   signatureEnvelopeId String? @map("signature_envelope_id")
@@ -877,14 +998,14 @@ model Application {
   /// two credit requests sharing one is the same confusion reversed.
   ausCasefileId String @unique @map("aus_casefile_id")
 
-  status ApplicationState @default(DRAFT)
+  status          ApplicationState @default(DRAFT)
   /// Increments on every transition. The ledger row for a move carries the same
   /// number, and `(application_id, seq)` is unique — so two writers racing is an
   /// insert conflict rather than a lost update.
-  statusSeq Int @default(0) @map("status_seq")
+  statusSeq       Int              @default(0) @map("status_seq")
   /// When the file entered its current state. What an ops queue sorts on, and
   /// the reason a stored state beats a derived one: you cannot age a function.
-  statusEnteredAt DateTime @default(now()) @map("status_entered_at")
+  statusEnteredAt DateTime         @default(now()) @map("status_entered_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1023,12 +1144,12 @@ model LoanScenario {
   lienPosition LienPosition      @default(FIRST) @map("lien_position")
   occupancy    Occupancy
 
-  loanAmountCents   BigInt  @map("loan_amount_cents")
-  downPaymentCents  BigInt  @default(0) @map("down_payment_cents")
-  termMonths        Int     @map("term_months")
-  noteRateBps       Int?    @map("note_rate_bps")
+  loanAmountCents    BigInt  @map("loan_amount_cents")
+  downPaymentCents   BigInt  @default(0) @map("down_payment_cents")
+  termMonths         Int     @map("term_months")
+  noteRateBps        Int?    @map("note_rate_bps")
   /// Bridge fields — see the model comment.
-  propertyAddress   String? @map("property_address")
+  propertyAddress    String? @map("property_address")
   valueEstimateCents BigInt? @map("value_estimate_cents")
 
   origin ScenarioOrigin @default(BORROWER)
@@ -1078,9 +1199,9 @@ model ApplicationEvidenceLink {
   /// the fact is later superseded.
   predicate String
 
-  borrowedAt DateTime @default(now()) @map("borrowed_at")
+  borrowedAt DateTime  @default(now()) @map("borrowed_at")
   /// The fact's `observedAt` at the moment of pinning.
-  asOf       DateTime @map("as_of")
+  asOf       DateTime  @map("as_of")
   /// Set when the application stops relying on it. Never deleted.
   releasedAt DateTime? @map("released_at")
 

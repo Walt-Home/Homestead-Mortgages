@@ -33,10 +33,38 @@ interface AuthConfig {
   developerSignInAvailable: boolean;
   /** Whether the ID check navigates away to a vendor. */
   identityRequiresRedirect?: boolean;
-  /** Whether /states is served. A design surface, off by default. */
+  /** Whether /states is served at all. A design surface, off by default. */
   stateGalleryEnabled?: boolean;
   /** Whether the sign-in page offers the sample borrowers. Staging only. */
   demoPersonasEnabled?: boolean;
+}
+
+/**
+ * Whether this session may open the state gallery at /states.
+ *
+ * The flag on its own was not a gate. STATE_GALLERY is set on the deployed
+ * service, so the whole of the protection was sign-in — and sign-in is open to
+ * any Google account. What the gallery renders is 34 worked examples with
+ * invented figures, which to somebody who has a file of their own reads as
+ * figures about it.
+ *
+ * So it takes both flags and the session. DEMO_PERSONAS is the flag this repo
+ * already uses to mean "not the real product": it mounts a session minter that
+ * needs no Google credential and must never be set on a production deploy, so
+ * where it is off the gallery is off with it. On the deployment where it IS on,
+ * the sample borrowers are what the sign-in page hands to anyone who asks, and
+ * a session holding one is the borrower-shaped session there — so it is
+ * refused, the same way every write from it is.
+ *
+ * Refusal is the route not existing. The catch-all answers /states exactly as
+ * it answers a typo, which is what the flag being off has always looked like.
+ */
+export function stateGalleryVisible(
+  config: Pick<AuthConfig, "stateGalleryEnabled" | "demoPersonasEnabled"> | null,
+  user: Pick<AuthUser, "persona"> | null,
+): boolean {
+  if (!config?.stateGalleryEnabled || !config.demoPersonasEnabled) return false;
+  return user !== null && user.persona === null;
 }
 
 interface AuthState {

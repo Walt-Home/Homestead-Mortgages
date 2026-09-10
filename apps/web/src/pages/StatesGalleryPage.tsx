@@ -11,7 +11,12 @@
  * only reliable way to notice that two of them say the same thing, or that the
  * one for a declined borrower is cheerier than the one for an approved one.
  *
- * Gated behind a flag and behind sign-in. See config.stateGalleryEnabled.
+ * Not a borrower surface. The figures on these cards are invented, and a
+ * person who has a file of their own has no way to read 34 of them as anything
+ * but figures about it — so the route exists only for a session that holds no
+ * sample borrower, on a deployment carrying both STATE_GALLERY and
+ * DEMO_PERSONAS. Sign-in alone was never enough of a test: it is open to any
+ * Google account. See `stateGalleryVisible` in lib/auth.tsx.
  */
 
 import { STATE_GROUPS } from "../lib/states.js";

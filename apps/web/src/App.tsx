@@ -16,7 +16,7 @@ import { DebugPanel, type RawLedgerRow } from "./components/DebugPanel.js";
 import { Lockup } from "./components/Wordmark.js";
 import { Footer } from "./components/Footer.js";
 import { api, ApiError, type Assessment } from "./lib/api.js";
-import { useAuth } from "./lib/auth.js";
+import { stateGalleryVisible, useAuth } from "./lib/auth.js";
 import { StatesGalleryPage } from "./pages/StatesGalleryPage.js";
 import {
   hasStopped,
@@ -48,7 +48,7 @@ import { IrsPage, PayrollPage } from "./pages/ConnectPages.js";
 import { UploadPage } from "./pages/UploadPage.js";
 
 export function App() {
-  const { status, config } = useAuth();
+  const { status, config, user } = useAuth();
 
   // Render nothing rather than the sign-in page while the session is still
   // being resolved — a signed-in person should never see a sign-in flash.
@@ -89,13 +89,18 @@ export function App() {
         <Route path="privacy" element={<PrivacyPage />} />
         <Route path="brand" element={<BrandPage />} />
         {/*
-          The state gallery. Only in the signed-in tree, and only when the
-          server says so: it is a design surface rather than a feature, and
-          most of the states it renders have no column behind them yet. With
-          the flag off it falls through to the catch-all, which is the same
-          answer any unknown path gets.
+          The state gallery. A design surface rather than a feature: most of
+          the states it renders have no column behind them yet, and the figures
+          in them are made up. `stateGalleryVisible` is where the whole of the
+          test lives and says why it is not the flag alone — the short of it is
+          that STATE_GALLERY is on where this deploys and sign-in is open to
+          anybody, so the flag left it one typed path from every borrower.
+          Refused, it falls through to the catch-all, which is the same answer
+          any unknown path gets.
         */}
-        {config?.stateGalleryEnabled && <Route path="states" element={<StatesGalleryPage />} />}
+        {stateGalleryVisible(config, user) && (
+          <Route path="states" element={<StatesGalleryPage />} />
+        )}
         {/*
           Where an OAuth bank returns the borrower.
 

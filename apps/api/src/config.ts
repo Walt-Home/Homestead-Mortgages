@@ -30,9 +30,13 @@ export const config = {
    *
    * Off unless asked for. It is a design surface rather than a feature, it
    * shows states most of which have no column behind them yet, and it should
-   * not be something a borrower stumbles into from a stray link. Sign-in is
-   * still required on top of this; the flag is what lets us turn it off
-   * without a deploy of the client.
+   * not be something a borrower stumbles into from a stray link. The flag is
+   * what lets us turn it off without a deploy of the client.
+   *
+   * It is a necessary condition and not a sufficient one: sign-in is open to
+   * any Google account, so the client also requires `demoPersonasEnabled` and
+   * a session that is not a sample borrower before it serves the route. See
+   * `stateGalleryVisible` in apps/web/src/lib/auth.tsx.
    */
   stateGalleryEnabled: process.env.STATE_GALLERY === "true",
   /**

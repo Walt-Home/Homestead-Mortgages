@@ -181,7 +181,7 @@ async function personWithAnApplication(ending: "withdrawn" | "declined" = "withd
   const row = await saveBorrower(file.id, dana);
   await consent(file.id, row.id, "verification_authorization");
   const app = await prisma.application.create({
-    data: { loanFileId: file.id },
+    data: { loanFileId: file.id, ausCasefileId: randomUUID() },
     select: { id: true },
   });
   await prisma.applicationParty.create({
@@ -353,7 +353,7 @@ describe("deleting the account takes the mortgage nobody else is on", () => {
     const file = await createLoanFile({ userId: me.id });
     const row = await saveBorrower(file.id, dana);
     const app = await prisma.application.create({
-      data: { loanFileId: file.id },
+      data: { loanFileId: file.id, ausCasefileId: randomUUID() },
       select: { id: true },
     });
     const { loanId } = await createOriginatedLoan(prisma, {
@@ -657,7 +657,7 @@ describe("deleting one file is not how a credit request goes away", () => {
     const me = await createUser();
     const file = await createLoanFile({ userId: me.id });
     const app = await prisma.application.create({
-      data: { loanFileId: file.id },
+      data: { loanFileId: file.id, ausCasefileId: randomUUID() },
       select: { id: true, status: true },
     });
     expect(app.status).toBe("DRAFT");
@@ -710,7 +710,9 @@ describe("deleting one file is not how a credit request goes away", () => {
   it("deletes a draft through the route", async () => {
     const me = await createUser();
     const file = await createLoanFile({ userId: me.id });
-    await prisma.application.create({ data: { loanFileId: file.id } });
+    await prisma.application.create({
+      data: { loanFileId: file.id, ausCasefileId: randomUUID() },
+    });
 
     const res = await callAs(me.id, [fileRouter], "DELETE", `/${file.id}`);
     expect(res.status).toBe(204);

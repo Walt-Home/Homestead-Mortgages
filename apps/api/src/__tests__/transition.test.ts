@@ -81,7 +81,7 @@ async function application(partyId?: string) {
 async function bareApplication() {
   const file = await createLoanFile();
   return prisma.application.create({
-    data: { loanFileId: file.id },
+    data: { loanFileId: file.id, ausCasefileId: randomUUID() },
     select: { id: true, status: true },
   });
 }

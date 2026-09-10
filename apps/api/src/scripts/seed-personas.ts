@@ -48,7 +48,6 @@
  * fixtures' names.
  */
 
-import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { prisma } from "@hm/db";
 import type { Prisma } from "@hm/db";
@@ -65,6 +64,7 @@ import {
   type SeededPersona,
 } from "../personas/stories.js";
 import {
+  casefileIdForFile,
   createDraftApplication,
   ensureApplicationParty,
   scenarioTermsFrom,
@@ -726,7 +726,7 @@ async function settle(
 async function decide(w: Walk): Promise<void> {
   const file = await currentFile(w);
   const decision = underwrite(file, {
-    casefileId: randomUUID(),
+    casefileId: await casefileIdForFile(w.loanFileId, w.tx),
     now: new Date().toISOString(),
     ...(w.story.market ? { market: w.story.market } : {}),
   });

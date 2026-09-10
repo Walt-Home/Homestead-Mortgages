@@ -7,13 +7,12 @@
 
 import { Router } from "express";
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
 import { prisma } from "@hm/db";
 import { underwrite } from "@hm/underwriting";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { assertFileAccess, loadLoanFile, recordEvent } from "../services/repository.js";
 import { advanceStage } from "../services/stage.js";
-import { applicationForFile } from "../services/applications.js";
+import { applicationForFile, casefileIdForFile } from "../services/applications.js";
 import { decideApplication, recordDecision } from "../services/decide.js";
 import { applicationStanding } from "../services/standing.js";
 
@@ -39,8 +38,11 @@ decisionRouter.post(
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
 
+    // The application's own identifier, not a fresh one: Desktop Underwriter
+    // reads a casefile it has seen before as a resubmission of that case, and
+    // a recomputation of one loan is exactly that.
     const decision = underwrite(file, {
-      casefileId: randomUUID(),
+      casefileId: await casefileIdForFile(id),
       now: new Date().toISOString(),
       market: {
         apor: market.apor,

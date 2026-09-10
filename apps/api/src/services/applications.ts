@@ -14,6 +14,8 @@
  * somebody asks for credit and not when a page happens to be loaded.
  */
 
+import { randomUUID } from "node:crypto";
+import { prisma } from "@hm/db";
 import type { ApplicationPartyRole, LoanPurpose, Prisma } from "@hm/db";
 import type { ApplicationState } from "@hm/shared";
 import { proposeScenario, type ScenarioTerms } from "./evidence.js";
@@ -47,6 +49,22 @@ export async function applicationForFile(
 }
 
 /**
+ * The identifier this loan's every submission carries.
+ *
+ * Read before the engine runs, so a recomputation reaches Desktop Underwriter
+ * as a resubmission of the same case rather than as a case it has never seen.
+ * A file with no application answers with its own id: stable per file, which
+ * is the only property required, and not a value minted per run.
+ */
+export async function casefileIdForFile(loanFileId: string, db: Db = prisma): Promise<string> {
+  const row = await db.application.findUnique({
+    where: { loanFileId },
+    select: { ausCasefileId: true },
+  });
+  return row?.ausCasefileId ?? loanFileId;
+}
+
+/**
  * Screen 1, in the new layer: the request, who is making it, and its terms.
  *
  * Born at DRAFT with sequence 0 — the state a file starts in needs no ledger
@@ -57,13 +75,17 @@ export async function applicationForFile(
  * A uniqueness violation on `loan_file_id` is not a race to absorb: the file
  * was created in this same transaction, so a collision means two applications
  * were asked for on one file and the 500 is the correct answer.
+ *
+ * The casefile is minted here and nowhere else. Filling it in lazily on the
+ * first submission would make that run a second writer of a row this layer
+ * owns, and two concurrent runs would each read null and each mint one.
  */
 export async function createDraftApplication(
   tx: Db,
   args: { loanFileId: string; partyId: string; terms: ScenarioTerms },
 ): Promise<{ applicationId: string; scenarioId: string }> {
   const app = await tx.application.create({
-    data: { loanFileId: args.loanFileId },
+    data: { loanFileId: args.loanFileId, ausCasefileId: randomUUID() },
     select: { id: true },
   });
   await ensureApplicationParty(tx, app.id, args.partyId, "PRIMARY_BORROWER");

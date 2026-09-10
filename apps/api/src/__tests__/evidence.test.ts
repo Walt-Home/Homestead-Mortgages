@@ -51,7 +51,7 @@ async function borrowerPrincipal(partyId: string) {
 async function application(partyId: string, role: BorrowerRole = "PRIMARY_BORROWER") {
   const file = await createLoanFile();
   const app = await prisma.application.create({
-    data: { loanFileId: file.id },
+    data: { loanFileId: file.id, ausCasefileId: randomUUID() },
     select: { id: true },
   });
   await prisma.applicationParty.create({ data: { applicationId: app.id, partyId, role } });
@@ -574,7 +574,7 @@ describe("THE RECEIPT", () => {
     const file = await createLoanFile();
     const id = randomUUID();
     await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`INSERT INTO "applications" ("id", "loan_file_id", "updated_at") VALUES (${id}::uuid, ${file.id}::uuid, now())`;
+      await tx.$executeRaw`INSERT INTO "applications" ("id", "loan_file_id", "aus_casefile_id", "updated_at") VALUES (${id}::uuid, ${file.id}::uuid, ${randomUUID()}, now())`;
       await tx.applicationParty.create({
         data: { applicationId: id, partyId: p.id, role: "PRIMARY_BORROWER" },
       });
@@ -610,7 +610,9 @@ describe("THE RECEIPT", () => {
     const file = await createLoanFile();
     const id = randomUUID();
     await prisma.$transaction(async (tx) => {
-      await tx.application.create({ data: { id, loanFileId: file.id } });
+      await tx.application.create({
+        data: { id, loanFileId: file.id, ausCasefileId: randomUUID() },
+      });
       await tx.applicationParty.create({
         data: { applicationId: id, partyId: p.id, role: "PRIMARY_BORROWER" },
       });

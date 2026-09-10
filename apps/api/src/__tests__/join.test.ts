@@ -20,6 +20,7 @@
  * and the ledger are triggers and constraints, not code.
  */
 
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import { addBusinessDays, RECEIPT_REASON_CODE } from "@hm/shared";
@@ -372,7 +373,7 @@ describe("terms that cannot be stated", () => {
     const user = await createUser();
     const file = await createLoanFile({ userId: user.id });
     const app = await prisma.application.create({
-      data: { loanFileId: file.id },
+      data: { loanFileId: file.id, ausCasefileId: randomUUID() },
       select: { id: true },
     });
     const row = await prisma.loanFile.findUniqueOrThrow({ where: { id: file.id } });

@@ -871,6 +871,12 @@ model Application {
   loanFileId String   @unique @map("loan_file_id") @db.Uuid
   loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
 
+  /// The identifier every resubmission of this loan carries. Desktop
+  /// Underwriter recognizes a resubmission by it, and a fresh one opens a new
+  /// case — so it is minted when the request is born and never again. UNIQUE:
+  /// two credit requests sharing one is the same confusion reversed.
+  ausCasefileId String @unique @map("aus_casefile_id")
+
   status ApplicationState @default(DRAFT)
   /// Increments on every transition. The ledger row for a move carries the same
   /// number, and `(application_id, seq)` is unique — so two writers racing is an

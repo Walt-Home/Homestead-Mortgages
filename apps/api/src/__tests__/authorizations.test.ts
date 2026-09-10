@@ -14,8 +14,15 @@ const DAY = 24 * 60 * 60 * 1000;
 const GRANTED = new Date("2026-09-01T00:00:00Z");
 const EXPIRES = new Date(GRANTED.getTime() + 120 * DAY);
 
+// CLAIMED, because every party below goes on to grant something, and
+// `authorizations_require_a_claimed_party` refuses a grant from somebody who
+// has never contacted us. The default is PROVISIONAL, which is right for a
+// record a partner sent and wrong for the subject of this file.
 async function party() {
-  return prisma.party.create({ data: { kind: "PERSON" }, select: { id: true } });
+  return prisma.party.create({
+    data: { kind: "PERSON", claimStatus: "CLAIMED" },
+    select: { id: true },
+  });
 }
 
 let n = 0;

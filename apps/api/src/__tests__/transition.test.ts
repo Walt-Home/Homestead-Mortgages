@@ -47,7 +47,12 @@ async function principal() {
 
 /** A person, and the principal they act as. */
 async function borrower() {
-  const party = await prisma.party.create({ data: { kind: "PERSON" }, select: { id: true } });
+  // CLAIMED: a borrower here signs, consents and applies, none of which a
+  // provisional party may do.
+  const party = await prisma.party.create({
+    data: { kind: "PERSON", claimStatus: "CLAIMED" },
+    select: { id: true },
+  });
   const who = await prisma.principal.create({
     data: { kind: "BORROWER", subject: `b-${uniq()}`, partyId: party.id },
     select: { id: true },

@@ -3,7 +3,12 @@
   "extends": ["//"],
   "tasks": {
     "test": {
-      "inputs": ["$TURBO_DEFAULT$", "../../docs/states.md", "../../apps/web/src/lib/states.ts"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "../../docs/states.md",
+        "../../apps/web/src/lib/states.ts",
+        "../../packages/db/prisma/migrations/**"
+      ]
     }
   }
 }

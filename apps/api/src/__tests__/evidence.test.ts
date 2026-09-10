@@ -28,8 +28,14 @@ const DAY = 24 * 60 * 60 * 1000;
 let n = 0;
 const uniq = () => `${Date.now().toString(36)}-${(n += 1)}`;
 
+// CLAIMED: these parties attest facts and grant permissions, which is what a
+// party who came to us does. A provisional one may hold no authorization at
+// all, and the trigger that says so would refuse `authorize` below.
 async function party() {
-  return prisma.party.create({ data: { kind: "PERSON" }, select: { id: true } });
+  return prisma.party.create({
+    data: { kind: "PERSON", claimStatus: "CLAIMED" },
+    select: { id: true },
+  });
 }
 async function borrowerPrincipal(partyId: string) {
   return prisma.principal.create({

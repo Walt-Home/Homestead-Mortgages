@@ -5,6 +5,7 @@
     "rootDir": "src",
     "paths": {
       "@hm/shared": ["../../packages/shared/src/index.ts"],
+      "@hm/shared/portfolio": ["../../packages/shared/src/portfolio.ts"],
       "@hm/requirements": ["../../packages/requirements/src/index.ts"],
       "@hm/connectors": ["../../packages/connectors/src/index.ts"],
       "@hm/underwriting": ["../../packages/underwriting/src/index.ts"],

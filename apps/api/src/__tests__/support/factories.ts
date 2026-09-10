@@ -97,7 +97,14 @@ export async function consent(
   });
 }
 
-/** A person the product knows about, with or without a sign-in behind them. */
+/**
+ * A person the product knows about, with or without a sign-in behind them.
+ *
+ * Bare, this takes the column default, which is PROVISIONAL — a record a
+ * partner told us about, not somebody who has agreed to be here. A test that
+ * grants an authorization has to pass `claimStatus: "CLAIMED"`, or
+ * `authorizations_require_a_claimed_party` refuses the insert.
+ */
 export async function createParty(
   data: { claimStatus?: PartyClaimStatus; sourceFirstSeen?: string } = {},
 ): Promise<{ id: string }> {

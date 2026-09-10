@@ -14,10 +14,13 @@ loadEnv({ path: resolve(import.meta.dirname, "../../.env") });
 export default defineConfig({
   resolve: {
     alias: {
+      // The more specific key first: Vite matches string aliases by prefix, so
+      // a bare "@hm/shared" listed above this one would rewrite the subpath to
+      // a path inside index.ts and fail with ENOTDIR.
+      "@hm/shared/portfolio": resolve(packages, "shared/src/portfolio.ts"),
       "@hm/shared": resolve(packages, "shared/src/index.ts"),
       "@hm/requirements": resolve(packages, "requirements/src/index.ts"),
       "@hm/connectors": resolve(packages, "connectors/src/index.ts"),
-      // The more specific key first: Vite matches string aliases by prefix.
       "@hm/underwriting/test-support": resolve(
         packages,
         "underwriting/src/__tests__/support/in-memory-file.ts",

@@ -566,6 +566,14 @@ enum PartyKind {
 /// contacted us. It is deliberately a state rather than a boolean, because the
 /// things you may do with a provisional party are narrower than the things you
 /// may do with a claimed one, and that is a rule worth being able to name.
+///
+/// Two triggers say what "narrower" means, so it is not a matter of every
+/// writer remembering. `authorizations_require_a_claimed_party` refuses a
+/// permission held by somebody who has never contacted us, which is what puts
+/// an imported record out of reach of every connector at once;
+/// `parties_claim_status_moves_forward` refuses an UPDATE that would declare
+/// one claimed, and requires a MERGED party to name a survivor and then keep
+/// the one it named.
 enum PartyClaimStatus {
   PROVISIONAL
   CLAIM_PENDING

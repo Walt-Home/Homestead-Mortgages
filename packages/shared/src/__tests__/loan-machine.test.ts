@@ -319,13 +319,17 @@ describe("the claim's copy ids", () => {
 
 describe("the machine, the model and the copy agree", () => {
   /**
-   * docs/states.md is the model for what a state means. Its loan table is
+   * docs/loan-lifecycle.md is the model for what a state means. Its tables are
    * eleven backticked names, five of them marked terminal.
+   *
+   * It used to be a section of docs/states.md, which carried both lifecycles.
+   * Splitting it broke this test, which is the test doing its job: the doc is
+   * a source this file reads, not prose beside it.
    */
   const modeled = (() => {
-    const doc = repoFile("docs/states.md");
-    const section = doc.slice(doc.indexOf("## Loan lifecycle"));
-    const table = section.slice(0, section.indexOf("\n---"));
+    const doc = repoFile("docs/loan-lifecycle.md");
+    const section = doc.slice(doc.indexOf("## The eleven states"));
+    const table = section.slice(0, section.indexOf("\n## ", 1));
     return table
       .split("\n")
       .filter((line) => /^\|\s*`/.test(line))

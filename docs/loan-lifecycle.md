@@ -20,42 +20,47 @@ somebody is still paying.
 
 ## The eleven states
 
-`LoanState`, at `packages/db/prisma/schema.prisma:1292`.
+Named here the way `LOAN_STATES` spells them
+(`packages/shared/src/loan-machine.ts:48`), which is the spelling the product
+uses. **Postgres spells the same eleven in uppercase** — `LoanState`, at
+`packages/db/prisma/schema.prisma:1292` — so a loan state crosses the boundary
+in two cases, exactly as a `FlowStage` does. Map at the edge; never compare
+across it.
 
 **Ours, not yet placed**
 
 | State                | Means                                                              |
 | -------------------- | ------------------------------------------------------------------ |
-| `PENDING_BOARDING`   | Funded and ours, not yet at a servicer                             |
-| `BOARDING`           | Transfer file sent, not acknowledged                               |
-| `IMPORTED_UNCLAIMED` | A Grander mortgage attached to a party who has never authenticated |
+| `pending_boarding`   | Funded and ours, not yet at a servicer                             |
+| `boarding`           | Transfer file sent, not acknowledged                               |
+| `imported_unclaimed` | A Grander mortgage attached to a party who has never authenticated |
 
 **Live**
 
 | State                   | Means                                                           |
 | ----------------------- | --------------------------------------------------------------- |
-| `ACTIVE`                | Serviced in our system of record                                |
-| `MONITORING_ONLY`       | We watch it and can offer better; we neither own nor service it |
-| `IN_SERVICING_TRANSFER` | Moving to us or away                                            |
+| `active`                | Serviced in our system of record                                |
+| `monitoring_only`       | We watch it and can offer better; we neither own nor service it |
+| `in_servicing_transfer` | Moving to us or away                                            |
 
-**Ended** — all five terminal
+**Ended** — all five are final; nothing leaves them
 
-| State                   | Means                                               |
-| ----------------------- | --------------------------------------------------- |
-| `PAID_OFF`              | Satisfied by any means other than our own refinance |
-| `REFINANCED_INTERNALLY` | Paid off by a loan we originated                    |
-| `TRANSFERRED_OUT`       | Servicing sold; we may keep the relationship        |
-| `CHARGED_OFF`           | Terminal loss; starts the party's seasoning clocks  |
-| `MATURED`               | Term completed                                      |
+| State                                | Means                                               |
+| ------------------------------------ | --------------------------------------------------- |
+| `paid_off` _(terminal)_              | Satisfied by any means other than our own refinance |
+| `refinanced_internally` _(terminal)_ | Paid off by a loan we originated                    |
+| `transferred_out` _(terminal)_       | Servicing sold; we may keep the relationship        |
+| `charged_off` _(terminal)_           | Terminal loss; starts the party's seasoning clocks  |
+| `matured` _(terminal)_               | Term completed                                      |
 
 ## Three distinctions that must not collapse
 
-**`REFINANCED_INTERNALLY` is not `PAID_OFF`.** It is the monitoring loop's
+**`refinanced_internally` is not `paid_off`.** It is the monitoring loop's
 success metric: prior loan → opportunity → application → new loan is the one
-attributable chain the product exists to produce. Folding it into `PAID_OFF`
+attributable chain the product exists to produce. Folding it into `paid_off`
 makes the product unable to measure itself.
 
-**`IMPORTED_UNCLAIMED` is the Grander path's actual object** — a loan and a
+**`imported_unclaimed` is the Grander path's actual object** — a loan and a
 party with no application, because an application in any state would assert
 the person asked us for credit. Nothing person-keyed may be retrieved for one.
 A rate comparison against a published rate sheet is lawful, because our own

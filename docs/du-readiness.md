@@ -3,9 +3,75 @@
 Where the Desktop Underwriter work stands, against the readiness audit of
 2026-09-08. It exists so nobody re-derives the same answer twice.
 
-Re-measured at `d7573f1`. **Update it in the commit that changes what it
+Re-measured at `d1e5add`. **Update it in the commit that changes what it
 says** — a status page that lags the code is worse than none, because it gets
 believed. Line numbers move; treat them as pointers to a name.
+
+## Where this stands
+
+**About a third of the items, and closer to a sixth of the work.**
+
+Twelve items are tracked below: three done, three partial, six not started.
+That arithmetic alone gives 37%, and it flatters us. The six not-started items
+carry the entire submission path and all three entities that gate any
+submission at all, while the finished ones are foundation we needed regardless
+of DU. The substrate is in good shape. The submission has not been started —
+nothing in this system transmits anything to anyone.
+
+Treat the number as a direction, not a measurement, and re-derive it from the
+three lists rather than trusting it after the lists change.
+
+### Completed
+
+- **Identity lives on Party**, with facts carrying provenance and a confidence
+  tier, and an AI or partner principal barred by trigger from asserting a
+  verified one.
+- **Income and employment survive a re-pull** — snapshot lineage rather than
+  delete-and-recreate, so DU can recognize the same income across
+  resubmissions.
+- **Ownership is relational with join tables**, proven twice in the live
+  schema and enforced at the database. This is the pattern assets and
+  liabilities will reuse.
+- **The delivery boundary is decided: we submit.** A decision rather than
+  code, and the one that sizes everything else.
+- **The specification corpus is in hand** — spec v1.9.3, the schema chain, all
+  eighteen shipped samples, MISMO v3.4 — and extracted to text that can be
+  read and diffed.
+
+### In progress
+
+- **The graph schema and serializer are designed**, together, from the corpus
+  rather than from a summary of it. The architecture survived adversarial
+  review; column-level and commit-ordering defects are outstanding, and it has
+  not been built.
+- **The casefile** is stable across resubmissions but the wrong shape: our
+  UUID fits neither DU field, and DU's own identifier has nowhere to land.
+- **Employer is a real entity** — but only a vendor pull ever creates one, so
+  a job a borrower typed has nothing behind it.
+- **The verification report identifier** is stored and now read for income and
+  employment. Assets do not read it, and a snapshot cannot say whose it is.
+
+### Missing
+
+Three of these block **any** submission, not merely some loans:
+
+- **Borrower declarations** — 11 of the 13 required data points, across two
+  containers. Nothing is asked and nothing is stored.
+- **The current residence** — `RESIDENCE` is 1:2, and the value we would send
+  is a database default nobody was asked for.
+- **Assets, liabilities and owned property** — no tables at all; three of
+  their fields sit in DU's core dataset.
+
+The rest limit what we can submit, or sit outside the data model entirely:
+
+- **More than one borrower.** The route cannot append a second, and the
+  requirements engine reads `borrowers[0]` in about twenty places.
+- **The compute boundary** — which figures we assert and which DU derives,
+  still unrecorded and still untyped JSON.
+- **The serializer**, the transport, and the inbound path for a findings
+  report, a recommendation and DU's casefile id.
+- **Institution credentials and the agency agreement.** A contract question
+  with a longer lead time than any of the code.
 
 ## At a glance
 

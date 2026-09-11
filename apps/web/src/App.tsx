@@ -37,7 +37,7 @@ import { SignInPage } from "./pages/SignInPage.js";
 import { LandingPage } from "./pages/LandingPage.js";
 import { PrivacyPage } from "./pages/PrivacyPage.js";
 import { BrandPage } from "./pages/BrandPage.js";
-import { FilesPage } from "./pages/FilesPage.js";
+import { HomePage } from "./pages/HomePage.js";
 import { PropertyLoanPage } from "./pages/PropertyLoanPage.js";
 import { IdentityPage } from "./pages/IdentityPage.js";
 import { IdentityReturnPage } from "./pages/IdentityReturnPage.js";
@@ -85,7 +85,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/" element={<Chrome />}>
-        <Route index element={<FilesPage />} />
+        <Route index element={<HomePage />} />
         <Route path="privacy" element={<PrivacyPage />} />
         <Route path="brand" element={<BrandPage />} />
         {/*

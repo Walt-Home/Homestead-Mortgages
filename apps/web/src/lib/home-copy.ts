@@ -436,6 +436,17 @@ export const CLOSED_FILES = "Closed";
 
 export const SAMPLE_BORROWERS = "Sample borrowers";
 
+/**
+ * The one link on a secondary row, naming its destination and nothing in it.
+ *
+ * A row has no file read behind it, so it can never prove that a screen will
+ * render a payload — which is why the card's three labels that promise one are
+ * gated on a read and a row is given a word that is true of every file in
+ * every state. A sample borrower's row says something else again: the
+ * destination's own name, out of the map below.
+ */
+export const OPEN_ROW = "Open";
+
 export const RECENT_MOVES = "What's been happening";
 
 export const SEE_EVERYTHING = "See everything that has happened";

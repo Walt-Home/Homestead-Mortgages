@@ -1071,6 +1071,21 @@ signature, which is a claim about what the borrower owes us, not a fix to a
 heading. The pill and the date stay the state's; only the heading belongs to
 the view.
 
+**The second one is the signed-in home page, and it covers the whole of
+`in_underwriting`.** That state's heading is "Being decided" and its meaning is
+that a named actor holds the file. Both are false: there is no role on `User`,
+no assignment and no queue, and essentially every real file lands there because
+the four compliance derivations record `blocked`. So the card says
+`REFERRED_COPY.headline` — "We're reviewing this ourselves." — for the state
+rather than for one outcome. Overriding it only where the newest decision row
+reads `referred` was the alternative, and it reprints "Being decided" on the
+sibling branch, which is reachable: a decision whose edge the machine refused,
+or a signature with no decision row at all. The lead is a claim about **who
+holds the file**, and that is unchanged by the word the engine returned, so the
+override covers the state and the body carries the difference. The pill stays
+neutral and stays the state's, because a file being worked on is not a file
+that went wrong.
+
 ## Sample borrowers are real rows behind a flag
 
 A tester needs to see what a file in each state looks like, and the only

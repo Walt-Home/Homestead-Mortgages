@@ -1,12 +1,21 @@
 /**
- * The hero from supermortgage.com, shared by the public landing page and the
- * signed-in front door.
+ * The hero from supermortgage.com, on the public landing page and nowhere else.
  *
- * The headline and sub are Doug's, verbatim. What differs between the two
- * pages is only the action — a stranger signs in, somebody signed in starts an
- * application — so that is the slot and nothing else is duplicated.
+ * The headline and sub are Doug's, verbatim. It used to render for a signed-in
+ * person too, over their own file collapsed into a summary in the smallest
+ * type on the screen — so somebody coming back to find out whether they had
+ * been approved was re-pitched instead. `/` now renders their application, and
+ * the slot below stays a slot because the action is the one thing this
+ * component never owned.
  *
- * `flex-1` because both pages sit inside the app shell's flex column: the hero
+ * **Do not put it back on the signed-in route.** The page that replaced it is
+ * supposed to look bare: a person with nothing left to do should see a page
+ * with nothing on it, not a promise of the greatest mortgage ever offered
+ * under a pill saying their application was declined. `.super-cta` lost its
+ * only consumer in this app with the same change and stays in the brand
+ * package for the marketing surface it was drawn for.
+ *
+ * `flex-1` because this page sits inside the app shell's flex column: the hero
  * absorbs the slack, which drops the street to just above the footer the way
  * the prototype does.
  */

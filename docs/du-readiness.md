@@ -21,7 +21,7 @@ believed. Line numbers move; treat them as pointers to a name.
 | 6   | Assets, liabilities, owned property | Red    | No tables. Balances are vendor JSON with no owner           |
 | 5   | Up to four borrowers                | Red    | The route cannot append a second                            |
 | 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary           |
-| —   | Delivery boundary                   | Red    | Undecided _and_ unbuilt                                     |
+| —   | Delivery boundary                   | Red    | **Decided — we submit.** Nothing built yet                  |
 
 **Invalid and narrow are different failures.** Declarations are the only
 confirmed cardinality-minimum-1 gap: a file missing all fourteen indicators is
@@ -30,23 +30,49 @@ red limits _which loans_ we can submit — single-borrower files only, only
 where the vendor payload carries everything, one subject property. Sequence
 those by which loans we intend to take first, not by Fannie's schema.
 
-## The question this repository cannot answer
+## Decided: we submit
 
-**Does Grander submit to DU on our behalf, and what does their intake accept?**
+**We assemble and submit to DU ourselves.** Not a handoff to Grander's intake.
+Decided 2026-09-11.
 
-Grander is the creditor, Supermortgage administers, and Grander's own system
-already submits. If that holds, we are not building a DU integration — we are
-building a handoff, and the payload is whatever _they_ accept, which may be
-narrower or wider than MISMO 3.4. It decides whether we ever write a
-serializer, whether the compute boundary below is ours to draw, and what shape
-declarations must be captured in.
+This is the larger of the two branches and it settles several things that were
+waiting on it:
 
-Nothing here encodes the relationship: `Servicer` has a slug, a display name,
-and no host, endpoint or credential (`schema.prisma:1266`).
-`LoanSource.PARTNER_IMPORT` points inbound.
+**We own the schema chain.** MISMO v3.4, `DU_ExtensionV3_4.xsd`,
+`ULAD_ExtensionV3_4.xsd` and the DU wrapper are now ours to satisfy — the
+`xlink`/ArcRole graph, every container's cardinality, and the conditionality
+rules that say when a conditional container becomes required. The
+specification corpus stops being reference material and becomes a dependency.
 
-Answer it before writing a serializer. It is the one wrong turn that wastes
-the largest remaining piece of work.
+**The compute boundary is ours to draw, and it matters more.** DU calculates
+qualifying income, housing expense and ratios itself. Every total we send that
+it recalculates is a place the two can silently disagree, and there is no
+vendor contract to arbitrate it. Item 8 moves from housekeeping to a decision
+with a wrong answer.
+
+**The casefile must round-trip.** Item 1 made our casefile id stable across
+resubmissions, and noted as residue that nothing writes DU's own returned
+identifier back. That residue is now a requirement: a resubmission has to
+carry the identifier DU issued, not the one we minted.
+
+**We need an inbound path, not just an outbound one.** A findings report, a
+recommendation and a casefile id come back and have to land somewhere.
+`decisions.engine` already declares `"du"` alongside `"shadow"`, which is
+where the result belongs.
+
+### What is still open, and it is not technical
+
+Grander is the creditor and Supermortgage administers as their agent. A DU
+submission goes in under a seller/servicer number, so:
+
+- **Whose institution credentials do we submit under, and what does the agency
+  agreement permit?** Presumably Grander's, since they are the creditor — but
+  that is a contract question and an operational one, not something the code
+  can decide.
+- Nothing here encodes the relationship: `Servicer` has a slug, a display name
+  and no host, endpoint or credential (`schema.prisma:1266`).
+
+Neither blocks the data model. Both block an actual submission.
 
 ## Green
 
@@ -157,7 +183,10 @@ Deriving them is not a cheaper way to satisfy DECLARATION; it is a worse one.
 Dependency order, not importance. No time estimates — build a schedule from
 this with the people doing the work.
 
-1. **Get the downstream answer.** Everything past step 4 is shaped by it.
+1. **Get the specification corpus into the repo.** Now that we assemble the
+   file ourselves, the ArcRoles tab (82 rows), the Cardinality tab (174 rows)
+   and the eighteen test cases are a dependency rather than reference
+   material. Nothing below step 6 can be got right from a summary of them.
 2. **Stop discarding the declaration follow-ups.** A route that receives what
    `ReviewPage` already collects.
 3. **Ask the fourteen questions and store them**, per application rather than
@@ -170,9 +199,13 @@ this with the people doing the work.
 6. **The second borrower.** An appending route, an ordinal column, and a
    deliberate choice at each `borrowers[0]` site.
 7. **Write down the compute boundary** and type the two JSON columns.
-8. **The serializer and the transport** — only once step 1 is answered.
+8. **The serializer, the transport, and the response.** A MISMO 3.4 file with
+   its `RELATIONSHIP` arcs, a submission under the right institution
+   credentials, and an inbound path that stores the findings, the
+   recommendation and DU's own casefile id against `engine: "du"`.
 
-Steps 2 through 4 are worth doing however step 1 comes back.
+Steps 2 through 5 do not wait on the corpus. Step 1 is now the thing to chase,
+because steps 6 through 8 cannot be done well without it.
 
 ## How to check this
 

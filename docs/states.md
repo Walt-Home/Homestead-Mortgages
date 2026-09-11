@@ -4,13 +4,15 @@ Two questions this product has to answer about every person who touches it:
 **what are they trying to do**, and **where does it stand**. This document is
 the model for both.
 
-It describes two things at once, and says which is which throughout. What is
-**built** is the prototype's flow stage and decision outcome. What is
-**designed** is the model those are being replaced by, decided in a pair of
-design passes on 3 September 2026. Nothing in the "designed" half exists in the
-schema yet. Marking the boundary is the point — a document that described the
-target as though it were running would be the same class of untruth this
-codebase spends `docs/decisions.md` refusing to tell.
+It describes two models at once and says which is which throughout: the
+prototype's flow stage, and the Party / Application / Loan model replacing it.
+Much of the second is now built — the status table at the end is the honest
+account, and it is the part to keep current. Marking the boundary is the point:
+a document that described a target as though it were running would be the same
+class of untruth this codebase spends `docs/decisions.md` refusing to tell.
+
+**The loan side lives in `docs/loan-lifecycle.md`.** This document is the
+application side.
 
 ---
 
@@ -61,11 +63,12 @@ names a stage and a screen path directly.
   without an APR, an APOR and a fee schedule. A clean pass is reachable in
   principle — `approve_eligible` carries no findings, so it has no open
   conditions and lands on `clear_to_close` — but not without market data.
-- **Anything after funding.** There is no object for a mortgage that exists in
-  the world. There is also no way to hold one for a Grander portfolio member: a
-  file can only name an owner through `users.id`, and a `users` row exists only
-  after a Google sign-in. (`loan_files.user_id` is nullable, but a null owner
-  means a demo file, not a file held for somebody.)
+- **Anything after funding.** Not on these five fields. `Loan` now exists as an
+  object and has eleven states of its own (`docs/loan-lifecycle.md`), but
+  nothing a borrower does creates one. And a `loan_file` still cannot be held
+  for a Grander portfolio member: it names its owner through `users.id`, and a
+  `users` row exists only after a Google sign-in. (`loan_files.user_id` is
+  nullable, but a null owner means a demo file, not a file held for somebody.)
 
 The event stream (`file_events`) is append-only and already carries fifteen
 kinds — `screen_completed`, `consent_granted`, `connector_pull`,
@@ -226,36 +229,13 @@ with one blocked obligation of any severity cannot reach `approved`.
 
 ## Loan lifecycle
 
-Eleven states on a separate object. Integration depth — deep link, then API,
-then Supermortgage as the subservicer — is a **connection detail, not a
-lifecycle fact**, so becoming the servicer is a configuration change rather than
-a migration.
+Eleven states on a separate object, built and with no production writer yet.
+It has its own document: **`docs/loan-lifecycle.md`**.
 
-| State                   | Means                                                              |
-| ----------------------- | ------------------------------------------------------------------ |
-| `pending_boarding`      | Funded and ours, not yet at a servicer                             |
-| `boarding`              | Transfer file sent, not acknowledged                               |
-| `imported_unclaimed`    | A Grander mortgage attached to a party who has never authenticated |
-| `active`                | Serviced in our system of record                                   |
-| `monitoring_only`       | We watch it and can offer better; we neither own nor service it    |
-| `in_servicing_transfer` | Moving to us or away                                               |
-| `paid_off` _(terminal)_ | Satisfied by any means other than our own refinance                |
-| `refinanced_internally` | _(terminal)_ Paid off by a loan we originated                      |
-| `transferred_out`       | _(terminal)_ Servicing sold; we may keep the relationship          |
-| `charged_off`           | _(terminal)_ Terminal loss; starts the party's seasoning clocks    |
-| `matured`               | _(terminal)_ Term completed                                        |
-
-`imported_unclaimed` is the Grander path's actual object. Nothing person-keyed
-may be retrieved for one — but a rate comparison against a published rate sheet
-is lawful, because our own servicing data joined to a rate sheet is not a
-consumer report.
-
-`refinanced_internally` is kept distinct from `paid_off` because it is the
-monitoring loop's success metric: prior loan → opportunity → application → new
-loan is the one attributable chain the product exists to produce.
-
-Delinquency is an **attribute of the newest servicing observation**, not a
-state.
+The one thing to carry across from it: `loans.originating_application_id` is
+nullable, and that nullability is load-bearing. A Grander portfolio mortgage
+has no application behind it, so the Loan hangs off Party — and deleting a
+stale application cannot erase the record of a mortgage somebody is paying.
 
 ---
 
@@ -312,24 +292,27 @@ year's pull.
 
 ## Built, or not
 
-| Piece                                                           | Status                                                                                                                                       |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FlowStage`, four screens, decision outcomes                    | Built — and being replaced                                                                                                                   |
-| Tests against a real Postgres                                   | Built                                                                                                                                        |
-| Party, facts, principals                                        | **Built** — schema and constraints; not yet wired to a route                                                                                 |
-| Authorizations and the purpose token                            | **Built** — and the connector guard now takes it                                                                                             |
-| Evidence artifacts, retrieval requests                          | Designed                                                                                                                                     |
-| Applications and the transition ledger                          | **Built** — wired to the four screens: the bank, the branches, the screening, the signature and the decision each move it                    |
-| Scenarios, pins, and the TRID receipt                           | **Built** — screen 2 and the signature pin the person; the legacy stamp is retired                                                           |
-| The bridge: screen 2 → party + facts; consents → authorizations | **Built** — dual-write; the minter reads the real table, falls back to legacy                                                                |
-| The read-flip: identity fields projected from facts             | **Built** — per field, party first, column as fallback; situational and HMDA fields stay on the row                                          |
-| Identity columns dropped; `borrowers` is a record about a party | **Built** — `party_id` NOT NULL; every identity field is only a fact; the consent fallback is gone                                           |
-| Sample borrowers in real states                                 | **Built** — eight of them walked to their states through the services the four screens call; the ninth row is deferred. Behind a deploy flag |
-| Rewritten decision engine (three-axis)                          | Designed                                                                                                                                     |
-| Loans and servicing                                             | Designed                                                                                                                                     |
-| Roles and staff tooling                                         | Designed                                                                                                                                     |
-| Monitoring, notifications                                       | Designed, deferred                                                                                                                           |
-| Notice generation and delivery                                  | **Not designed in detail. Resend is chosen and not integrated**                                                                              |
+| Piece                                  | Status                                                                     |
+| -------------------------------------- | -------------------------------------------------------------------------- |
+| `FlowStage`, four screens, outcomes    | Built — and being replaced                                                 |
+| Tests against a real Postgres          | Built                                                                      |
+| Party, facts, principals               | Built and on the production path — screens 1 and 2 write them              |
+| Identity lives on Party                | Built. `party_id` NOT NULL, identity columns dropped, no fallback left     |
+| Authorizations and the purpose token   | Built — the connector guard takes it; `consents` still writes first        |
+| Applications and the transition ledger | Built — the bank, branches, screening, signature and decision each move it |
+| Scenarios, pins, and the TRID receipt  | Built — screen 2 and the signature pin the person                          |
+| Casefile, income and employer identity | Built — survives a re-pull; see `docs/du-readiness.md`                     |
+| Sample borrowers in real states        | Built — eight, walked through the real services, behind a deploy flag      |
+| Loans and servicing                    | Built at the database. **No production writer** — `docs/loan-lifecycle.md` |
+| Assets, liabilities, declarations      | **Not built.** The DU blockers — `docs/du-readiness.md`                    |
+| Evidence artifacts, retrieval requests | Designed                                                                   |
+| Rewritten decision engine (three-axis) | Designed                                                                   |
+| Roles and staff tooling                | Designed                                                                   |
+| Monitoring, notifications              | Designed, deferred                                                         |
+| Notice generation and delivery         | **Not designed in detail. Resend is chosen and not integrated**            |
+
+The three-phase identity migration — dual-write, read-flip, drop — is finished
+and collapsed into one row above. `docs/decisions.md` keeps the phases.
 
 That last row governs more than it looks like it does. Several regulatory clocks
 can only be _stopped_ by a delivered notice, so until Resend is wired in, a clock
@@ -342,6 +325,9 @@ tamper-evident record of a breach we never had the means to avoid.
 
 ## Where the reasoning lives
 
+- `docs/loan-lifecycle.md` — the loan side of the model, split out of this one.
+- `docs/entities.md` — what every noun in the system is, and who writes it.
+- `docs/du-readiness.md` — what a Desktop Underwriter submission needs.
 - `docs/decisions.md` — vendor choices, privacy posture, what is known wrong and
   shipped anyway, and why the tests need a real database.
 - `docs/requirements.md` — the requirement registry and the three questions it

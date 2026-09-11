@@ -22,10 +22,24 @@ import { describe, expect, it } from "vitest";
 import { BRITISH, DAY_FIRST, DELIVERY_TIME, PROMISES, REQ_ID } from "@hm/shared";
 import * as copy from "../home-copy.js";
 import {
+  ADVERSE_WITHOUT_DATE,
+  DENIED_BODY,
+  ECOA_ON_HOLD,
+  ESTIMATE_ON_HOLD,
+  ESTIMATE_PENDING_BODY,
+  FUNDED_BODY,
+  FUNDED_WITHOUT_HISTORY,
+  READ_THE_REASONS,
   SAMPLE_FILE,
   SAMPLE_FILE_CANNOT_CHANGE,
   SAMPLE_FILE_START_YOUR_OWN,
+  SEE_WHERE_THIS_STANDS,
+  fileLabel,
 } from "../home-copy.js";
+import { ADVERSE_COPY } from "../outcomes.js";
+import { CLOCK_COPY } from "../ledger.js";
+import { applied } from "../endings.js";
+import { entryFor } from "../states.js";
 
 /** The arguments a function export is called with, by the name it is exported under. */
 type Calls = Record<string, readonly (readonly unknown[])[]>;
@@ -38,8 +52,60 @@ type Calls = Record<string, readonly (readonly unknown[])[]>;
  * borrower line, and a file's name is built four different ways depending on
  * what is known about it. A function nobody has written a call for fails.
  * Empty until the module exports one; `fileLabel` is the first.
+ *
+ * All four shapes are written out, and so is each of the three purposes: the
+ * purpose words are the only place the product says what a cash-out refinance
+ * is called, and a shape covered by one purpose leaves the other two unread.
+ * The last call is a purpose the map has never heard of, which is what a new
+ * column value looks like on the day it ships.
  */
-const CALLED: Calls = {};
+const CREATED_AT = "2026-09-07T15:14:00.000Z";
+
+const CALLED: Calls = {
+  fileLabel: [
+    [
+      {
+        purpose: "PURCHASE",
+        propertyCity: "Austin",
+        propertyState: "TX",
+        createdAt: CREATED_AT,
+      },
+    ],
+    [
+      {
+        purpose: "RATE_TERM_REFINANCE",
+        propertyCity: null,
+        propertyState: null,
+        createdAt: CREATED_AT,
+      },
+    ],
+    [
+      {
+        purpose: "CASH_OUT_REFINANCE",
+        propertyCity: "Austin",
+        propertyState: "TX",
+        createdAt: CREATED_AT,
+      },
+    ],
+    [
+      {
+        purpose: null,
+        propertyCity: "Austin",
+        propertyState: "TX",
+        createdAt: CREATED_AT,
+      },
+    ],
+    [{ purpose: null, propertyCity: null, propertyState: null, createdAt: CREATED_AT }],
+    [
+      {
+        purpose: "REVERSE_MORTGAGE",
+        propertyCity: null,
+        propertyState: null,
+        createdAt: CREATED_AT,
+      },
+    ],
+  ],
+};
 
 const plain = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype;
@@ -95,6 +161,21 @@ describe("every string this module exports", () => {
     }
   });
 
+  it("points at the rest of the card only from the line that has a twin", () => {
+    // A sentence saying something is above it or below it is a claim about
+    // layout, and the card can be made to break it: the history block and the
+    // clocks are drawn off the file's own read, so both are absent for the
+    // length of that fetch and absent for good on a file that will not
+    // project. Every line that makes such a claim therefore needs a second
+    // line for the card that is not holding the thing. Two exist and this is
+    // the list of them, so a third written without its twin fails here rather
+    // than on somebody's screen.
+    const locative = COPY.filter((line) => /\b(above|below)\b/.test(line));
+    expect(locative).toEqual([FUNDED_BODY]);
+    expect(ADVERSE_COPY.body).toMatch(/\babove\b/);
+    expect(ADVERSE_WITHOUT_DATE).not.toMatch(/\b(above|below)\b/);
+  });
+
   it("catches the sentences these rules were written for", () => {
     // Regexes that match nothing would pass every case above.
     expect("We'll email you when it is ready.").toMatch(PROMISES);
@@ -107,21 +188,25 @@ describe("every string this module exports", () => {
 
 describe("the walk that decides what those rules are applied to", () => {
   it("reaches a string inside a map, and inside a map inside a map", () => {
-    // The next things in this module are a map of quiet labels and a map of
-    // purpose words. Reading only the top level would apply five rules to the
-    // file's shortest half.
+    // The quiet labels and the purpose words are both maps, and between them
+    // they are a third of what this module says. Reading only the top level
+    // would apply five rules to the file's longest half and none to them.
     expect(wordsOf("labels", { review: "See where this file stands" })).toEqual([
       "See where this file stands",
     ]);
     expect(wordsOf("nested", { a: { b: ["one", "two"] } })).toEqual(["one", "two"]);
+    expect(COPY).toContain(copy.QUIET_LABELS.review);
+    expect(COPY).toContain(copy.PURPOSE_WORDS.CASH_OUT_REFINANCE);
   });
 
   it("refuses an export it cannot open, rather than stepping over it", () => {
     // A filter drops; this throws. The string nobody checked is the one that
-    // was skipped silently, so there is no silent case.
+    // was skipped silently, so there is no silent case. The function probe is
+    // a name CALLED does not carry, which is what the next function export
+    // looks like on the day somebody adds it.
     expect(() => wordsOf("count", 4)).toThrow(/cannot read/);
     expect(() => wordsOf("missing", null)).toThrow(/cannot read/);
-    expect(() => wordsOf("fileLabel", () => "Purchase")).toThrow(/CALLED/);
+    expect(() => wordsOf("nextLabel", () => "Purchase")).toThrow(/CALLED/);
   });
 
   it("takes a function at the words a call of it actually makes", () => {
@@ -199,9 +284,13 @@ export function specifiersOf(source: string): string[] {
  *
  * A string that arrives here through a re-export is already in exactly one
  * place — the module it came from — so that module is not a second copy of it
- * and everything else still is. Empty today. The first line to need it is the
- * on-hold clock sentence, which ships on the adverse-action surface and is
- * re-exported rather than retyped for exactly the reason this rule exists.
+ * and everything else still is. The line it was written for is the on-hold
+ * clock sentence, which ships on the adverse-action surface and is taken from
+ * there rather than retyped for exactly the reason this rule exists.
+ *
+ * It is read off every import, including the ones that bring in a type rather
+ * than a word. That is harmlessly wide: the excuse is worked out per line, so
+ * a module nothing is borrowed FROM is excused for nothing.
  */
 const BORROWED_FROM = new Set(specifiersOf(OWN_SOURCE));
 
@@ -228,6 +317,31 @@ function secondCopies(
   });
 }
 
+/**
+ * The lines the rule below is about: the ones that make a claim.
+ *
+ * A sentence written twice is two authors promising something slightly
+ * different about one situation, and that is the drift this module was made to
+ * end. A control label is two or three words — "Try again", "Open it",
+ * "Connect your bank" — and it recurs because English is short, not because
+ * anybody copied it: the bank screen's own heading is those three words, and a
+ * failed identity check offers its own retry. Forbidding that would make this
+ * a ban on short English rather than a rule about copy, and the label would
+ * have to be worded around the test.
+ *
+ * So the rule reads the sentences, and every line still meets the five copy
+ * rules above whatever shape it is.
+ *
+ * One line falls on the label side that reads like a claim: the heading on a
+ * file with no application, which is a sentence with no period because it is a
+ * heading. It is left there rather than special-cased — a predicate with an
+ * exception in it is one somebody adds a second exception to.
+ */
+const sentence = (line: string) => /[.!?…]$/.test(line);
+
+const SENTENCES = COPY.filter(sentence);
+const LABELS = COPY.filter((line) => !sentence(line));
+
 describe("one home for each of these sentences", () => {
   it("leaves no second copy of one written out in another file", () => {
     // This is the failure the module was made to end, and it had already
@@ -235,7 +349,25 @@ describe("one home for each of these sentences", () => {
     // sentence each, and a third answering it with different words. Extracting
     // the strings does nothing on its own — the next screen to need one types
     // it out — so the rule is that the sentence appears in one file.
-    expect(secondCopies(COPY, FILES, BORROWED_FROM, OWN_SOURCE)).toEqual([]);
+    expect(secondCopies(SENTENCES, FILES, BORROWED_FROM, OWN_SOURCE)).toEqual([]);
+  });
+
+  it("is asking it of most of what this module says", () => {
+    // The split is the one way past the rule, so it is pinned. There are more
+    // labels than sentences and there always will be — a card is one body and
+    // one button — but the sentences are nearly all of the WORDS, which is the
+    // measure that matters: a module whose bodies had quietly become labels
+    // would pass the rule above by having nothing left to check.
+    expect(SENTENCES.join("").length).toBeGreaterThan(3 * LABELS.join("").length);
+    expect(SENTENCES).toContain(SAMPLE_FILE);
+    expect(SENTENCES).toContain(copy.SUSPENDED_BODY);
+    expect(LABELS).toContain(copy.TRY_AGAIN);
+
+    // The two written for branches nothing currently takes are in here like
+    // any other line. A string is checked because of where it lives, not
+    // because somebody has worked out whether a borrower can reach it.
+    expect(SENTENCES).toContain(copy.ADVERSE_WITHOUT_DATE);
+    expect(SENTENCES).toContain(copy.RESCISSION_BODY);
   });
 
   it("is a rule that can see a copy when there is one", () => {
@@ -268,11 +400,199 @@ describe("one home for each of these sentences", () => {
   });
 
   it("reads that excuse off this module's own imports", () => {
-    // Nothing is borrowed yet, which is also how a set built wrong would look.
-    expect([...BORROWED_FROM]).toEqual([]);
+    // One sentence is borrowed and it comes from the clock catalog; one label
+    // is borrowed and it comes from the state catalog. The flow module is here
+    // for a type, which excuses it for nothing, because no line in this module
+    // came from it.
+    expect([...BORROWED_FROM].sort()).toEqual(["lib/flow.ts", "lib/ledger.ts", "lib/states.ts"]);
     expect(
       specifiersOf('export { A } from "./ledger.js";\nimport { B } from "@hm/shared";'),
     ).toEqual(["lib/ledger.ts"]);
+  });
+});
+
+describe("the two clock sentences this page has to say for itself", () => {
+  it("gives the adverse-action date its own reason, and takes it from the clocks", () => {
+    // It used to read "on hold for the same reason", whose referent was the
+    // Loan Estimate pair one line above it — a pair that correctly stops
+    // rendering on a file where a decision is already behind the borrower,
+    // which is the only file this sentence is ever shown on. It carries the
+    // reason now, and this page shows the same sentence the review screen
+    // does rather than a second one.
+    expect(ECOA_ON_HOLD).toBe(CLOCK_COPY.adverseActionOnHold);
+    expect(ECOA_ON_HOLD).toContain("deliver");
+    expect(ECOA_ON_HOLD).not.toContain("the same reason");
+  });
+
+  it("drops the estimate's date once the date is behind the file", () => {
+    // The clock opens already on hold and nothing ever starts it, so a date
+    // that has passed was never a deadline counting down. On a screen read
+    // once a stale date was survivable; on a page somebody checks every week
+    // it is the product repeating a deadline it missed and did not have.
+    expect(ESTIMATE_ON_HOLD).not.toMatch(/\d/);
+    expect(ESTIMATE_ON_HOLD).toContain("deliver");
+  });
+});
+
+describe("the adverse-action body for a file with no clock row", () => {
+  it("says what the shipping sentence says, without forking it", () => {
+    // Pinned by meaning rather than by characters. A prefix pin would make
+    // this a cut of a regulated string, and cutting it anywhere produces
+    // either a sentence with no ending or one that has dropped the half about
+    // the explanation somebody is owed.
+    const owed = "written explanation naming the specific reasons";
+    expect(ADVERSE_WITHOUT_DATE).toContain(owed);
+    expect(ADVERSE_COPY.body).toContain(owed);
+    expect(ADVERSE_WITHOUT_DATE).not.toBe(ADVERSE_COPY.body);
+    expect(ADVERSE_WITHOUT_DATE).not.toContain("above");
+  });
+
+  it("ends on a clause that names what is being waited on", () => {
+    // The approved card ends "it will be here when it is", where the estimate
+    // is the subject of its own sentence and carries the clause. Reusing that
+    // ending here leaves "it is" with nothing to complete it, on the one
+    // string in this module a regulator reads. What is outstanding here is the
+    // writing of the explanation, so the sentence says so.
+    expect(ADVERSE_WITHOUT_DATE).toMatch(/it will be here when it is written\.$/);
+    expect(ADVERSE_WITHOUT_DATE).not.toMatch(/when it is\.$/);
+    expect(ESTIMATE_PENDING_BODY).toMatch(/when it is\.$/);
+  });
+});
+
+describe("the ending whose record is under it, and the same one without", () => {
+  it("says the whole of the ending without pointing at anything", () => {
+    // The card draws the history off the file's own read, so the sentence
+    // naming it is true only once that read is back — and never on a file that
+    // will not project. Trimming the shipping line would cost the one thing an
+    // ending gets on a product with no loan record to show, so the second line
+    // is the one that survives without it, and the money having moved is all
+    // of it.
+    const funded = "Your mortgage is funded.";
+    expect(FUNDED_BODY.startsWith(funded)).toBe(true);
+    expect(FUNDED_WITHOUT_HISTORY).toBe(funded);
+    expect(FUNDED_BODY).not.toBe(FUNDED_WITHOUT_HISTORY);
+  });
+});
+
+describe("the closed file, with its reasons and without them", () => {
+  const decided = { status: "denied", terminal: true };
+  const overwritten = { status: "in_underwriting", terminal: false };
+
+  it("claims the reasons exist only where the control may name them", () => {
+    // The control on this card is already split: it names the reasons when the
+    // machine took the word and names the destination when it did not. The
+    // body was not, so a file whose newest decision row says something else
+    // read "the written reasons are the record of why" over a button that had
+    // been demoted precisely because they are not what the review screen will
+    // print. Both halves split on one gate now, and this is the pin.
+    const claimsThePayload = (line: string) => /reasons are the record/.test(line);
+
+    expect(applied("denied", decided)).toBe(true);
+    expect(applied("denied", overwritten)).toBe(false);
+
+    expect(claimsThePayload(DENIED_BODY)).toBe(true);
+    expect(READ_THE_REASONS).toContain("reasons");
+
+    expect(SEE_WHERE_THIS_STANDS.toLowerCase()).not.toContain("reason");
+  });
+
+  it("shares its regulated opening with the sentence it stands in for", () => {
+    // All but the closing clause of ADVERSE_WITHOUT_DATE is ADVERSE_COPY.body
+    // verbatim; only the ending moves, because the shipping one points at a
+    // date that is not on screen when this one renders. A rule that compares
+    // whole strings cannot see an overlap that is most of two strings, so the
+    // overlap is pinned here — editing the regulated opening without editing
+    // this one would leave two versions of a regulated claim in the product.
+    const opening = (line: string) => line.slice(0, line.lastIndexOf(", and "));
+    expect(opening(ADVERSE_WITHOUT_DATE)).toBe(opening(ADVERSE_COPY.body));
+    expect(opening(ADVERSE_WITHOUT_DATE).length).toBeGreaterThan(60);
+    expect(ADVERSE_COPY.body).toContain("You are owed");
+  });
+});
+
+describe("the labels this page takes rather than writes", () => {
+  it("reads the reasons control off the state catalog", () => {
+    // The catalog carries this label on the state the page reads it for, and
+    // the gallery renders it there. Two files holding one button's words is
+    // how they come to disagree, so it is taken and not retyped — and the
+    // second assertion is what makes that true rather than coincidental.
+    expect(READ_THE_REASONS).toBe(entryFor("adverse_action_pending")?.action);
+    expect(OWN_SOURCE).not.toContain(`"${READ_THE_REASONS}"`);
+  });
+
+  it("gives the fallback control a destination and no payload", () => {
+    // It stands in on three cards and the payloads are different on each:
+    // conditions no surface renders, and reasons the review screen will not
+    // print on either declined file. The one thing that screen always has is
+    // where the file stands, so the label names that and nothing else.
+    for (const payload of ["reason", "term", "estimate", "list", "notice", "document"]) {
+      expect(SEE_WHERE_THIS_STANDS.toLowerCase(), payload).not.toContain(payload);
+    }
+  });
+});
+
+describe("what one file is called", () => {
+  const row = {
+    purpose: null as string | null,
+    propertyCity: null as string | null,
+    propertyState: null as string | null,
+    createdAt: CREATED_AT,
+  };
+
+  it("names the purpose and the place when it has both", () => {
+    expect(
+      fileLabel({ ...row, purpose: "PURCHASE", propertyCity: "Austin", propertyState: "TX" }),
+    ).toBe("Purchase in Austin, TX");
+  });
+
+  it("falls back through the place to the day it was started", () => {
+    expect(fileLabel({ ...row, purpose: "RATE_TERM_REFINANCE" })).toBe(
+      "Refinance, started September 7, 2026",
+    );
+    expect(fileLabel({ ...row, propertyCity: "Austin", propertyState: "TX" })).toBe(
+      "Started September 7, 2026 in Austin, TX",
+    );
+    expect(fileLabel(row)).toBe("Started September 7, 2026");
+  });
+
+  it("still names a file that knows nothing about itself", () => {
+    // The draft this page offers to pick back up is exactly the file with no
+    // purpose and no address, and two of them rendering as one row is what
+    // this function exists for.
+    expect(fileLabel(row).length).toBeGreaterThan(0);
+    expect(fileLabel({ ...row, purpose: "REVERSE_MORTGAGE" })).toBe(fileLabel(row));
+  });
+
+  it("gives two drafts started the same day with no address one name", () => {
+    // The collision this function cannot resolve, asserted rather than
+    // described as though something here already handled it: the fallback is
+    // the day, not the time, and a function handed one row cannot know a
+    // second row is about to render beside it. Whoever renders the group owns
+    // this, and until they do the two rows read alike.
+    const morning = { ...row, createdAt: "2026-09-07T13:00:00.000Z" };
+    const evening = { ...row, createdAt: "2026-09-07T22:00:00.000Z" };
+    expect(fileLabel(morning)).toBe(fileLabel(evening));
+    expect(fileLabel(morning)).not.toMatch(/\d\s*[:.]\s*\d|\bAM\b|\bPM\b/);
+  });
+
+  it("reads the day in the creditor's zone, so two dates on a row agree", () => {
+    // Late evening in New York is already the next day everywhere east of it.
+    // A name read in the reader's own zone would date a file to the day after
+    // the ledger says it was started, on the one row the ledger is beside.
+    //
+    // Read from Tokyo, for the reason the ledger's own zone test is: a machine
+    // already sitting in New York cannot tell a zone that was pinned from one
+    // that was never passed.
+    const here = process.env.TZ;
+    process.env.TZ = "Asia/Tokyo";
+    try {
+      expect(fileLabel({ ...row, createdAt: "2026-09-08T00:14:00.000Z" })).toBe(
+        "Started September 7, 2026",
+      );
+    } finally {
+      if (here === undefined) delete process.env.TZ;
+      else process.env.TZ = here;
+    }
   });
 });
 
@@ -290,6 +610,27 @@ describe("the sample-file sentences this module did not take", () => {
       "pages/BankPage.tsx",
       "pages/PropertyLoanPage.tsx",
     ]);
+  });
+
+  it("is one screen standing the sentence in for a control and two disabling one", () => {
+    // The header calls this roll, and calling it wrong is easy: the split is
+    // two lines apart in each file and the bank screen reads at a glance like
+    // the connector step. It does what screen 1 does. Reading the roll off the
+    // source is what keeps the margin true the next time one of the three is
+    // rewritten, and the margin is the only record of which are outstanding.
+    const text = (name: string) => FILES.find((f) => f.name === name)!.text;
+    const disabledOnReadOnly = /disabled=\{[^}]*\breadOnly\b[^}]*\}/;
+
+    // The gate on the connect control itself, not just a mention of the flag
+    // somewhere in the file — the same component suppresses "Pull again" the
+    // same way, and matching that would let the connect button lose its gate
+    // without this noticing.
+    expect(text("components/ConnectorStep.tsx")).toContain(
+      "!connected && !props.blocked && !props.readOnly",
+    );
+    expect(text("components/ConnectorStep.tsx")).not.toMatch(disabledOnReadOnly);
+    expect(text("pages/BankPage.tsx")).toMatch(disabledOnReadOnly);
+    expect(text("pages/PropertyLoanPage.tsx")).toMatch(disabledOnReadOnly);
   });
 });
 

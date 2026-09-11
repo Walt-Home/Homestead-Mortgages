@@ -164,6 +164,82 @@ export interface ApplicationStandingView {
   } | null;
 }
 
+/**
+ * One file as `GET /api/files` answers it.
+ *
+ * The list's wire shape, which is a different and much smaller thing than the
+ * single file's: no borrower facts, no connector snapshots, no ledger and no
+ * clocks. It lives beside `LoanFileView` because both are what a route sends
+ * rather than what a component wants, and because the rules that read a row —
+ * which screen it resumes to, which of the three groups it ranks in — are not
+ * the property of whichever page happens to render a list this week.
+ */
+export interface FileRow {
+  id: string;
+  /**
+   * The domain spelling, which is now the only one the client sees.
+   *
+   * Typed rather than left as a bare string because this row is what
+   * `STAGE_TO_SCREEN` is indexed with, and a `string` is what let the file
+   * list key the map on the spelling the list route sent while every other
+   * reader looked it up with the spelling the single-file route sent.
+   */
+  stage: FlowStage;
+  isDemo: boolean;
+  /** Whose file it is. A sample borrower's file is a demo file that is theirs. */
+  mine: boolean;
+  createdAt: string;
+  /**
+   * The raw enum, not words. `PURCHASE`, `RATE_TERM_REFINANCE`,
+   * `CASH_OUT_REFINANCE` — the column untranslated, and null until screen 1 is
+   * saved. Turning it into something a borrower reads is this app's job, here
+   * and not on the wire: the API writes no copy, and a route that started
+   * would be a second place borrower words live.
+   */
+  purpose: string | null;
+  /**
+   * Decimal columns, and they arrive as STRINGS: Prisma's `Decimal` serializes
+   * through `toJSON`, so `450000.00` crosses the wire as `"450000"`. Typed
+   * honestly rather than as a number a reader would then do arithmetic on.
+   *
+   * Typed because the route sends them, not because anything wants them: no
+   * list of files puts a dollar figure next to a loan that has not been priced
+   * yet, and there is no formatter here to do it with.
+   */
+  loanAmount: string | null;
+  valueOrPrice: string | null;
+  propertyCity: string | null;
+  propertyState: string | null;
+  borrowers: { firstName: string; lastName: string }[];
+  /**
+   * The newest decision, or an empty array. At most one — the list takes one
+   * row per file — and a word this app has no copy for is dropped server-side
+   * rather than failing the request, so the file lists with no decision on it.
+   */
+  decisions: { outcome: DecisionOutcome; ausRecommendation: string }[];
+  applicationState: { status: string; statusEnteredAt: string; terminal: boolean } | null;
+  /**
+   * Whether the application has been signed.
+   *
+   * No status says so: `esign` is outside the obligations the reconciler
+   * tracks, so a file waiting for a signature and a file waiting for us are
+   * both `in_underwriting`, and they are opposite situations — one of them is
+   * the borrower's move.
+   */
+  signed: boolean;
+  /**
+   * What the file is waiting on the borrower for, as the ledger row rather
+   * than as a sentence.
+   *
+   * These are the three arguments `wordsFor` takes, and they arrive unrendered
+   * so that a screen listing files says what the file's own screens say rather
+   * than reading a sentence the server chose. Null unless the application is
+   * `awaiting_borrower`: the row stays on the ledger forever, and read in any
+   * other state it names something already done.
+   */
+  owes: { event: string; reasonCode: string | null; to: string } | null;
+}
+
 export interface LoanFileResponse {
   file: LoanFileView;
   /** Null for a file made before applications existed. Never a draft. */

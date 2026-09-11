@@ -46,7 +46,7 @@
  * rule changes what a sample borrower sees and is not this commit's to decide.
  */
 
-import { CLOCK_COPY, timelineDate } from "./ledger.js";
+import { CLOCK_COPY, timelineClock, timelineDate } from "./ledger.js";
 import { entryFor } from "./states.js";
 import type { BranchPath, ScreenPath } from "./flow.js";
 
@@ -204,7 +204,8 @@ export const CONDITIONS_BODY =
  * "ours" and a borrower who has not reads that nothing is needed, directly
  * over the one control the product has for saying otherwise. So the card says
  * the part that is true either way and leaves the action area empty for the
- * length of one fetch.
+ * length of one fetch — and for good on a file that will not project, which is
+ * the same absence and is not a better reason to guess.
  */
 export const APPROVED_BODY = "Your application is approved.";
 
@@ -348,6 +349,35 @@ export const NO_APPLICATION_BODY =
   "There is nothing to report on where this one stands, but you can still open it.";
 
 export const OPEN_THIS_FILE = "Open this file";
+
+/* ── A state this page has never heard of ───────────────────────────────── */
+
+/**
+ * The heading on a card the resolver has no words for.
+ *
+ * Nineteen states are written out above, one by one, and a status outside them
+ * is a state somebody added to the machine without writing the card for it.
+ * The resolver has to be total, so the card still renders, and this is the
+ * least a heading can say and still be true.
+ */
+export const UNKNOWN_STANDING_LEAD = "Your application";
+
+/**
+ * The body under it, which must not borrow the one for a file with no
+ * application at all.
+ *
+ * Those are opposite claims. A file with no application has nothing recorded
+ * about where it stands; a file in a state this page has no words for has a
+ * status written down and read successfully. Saying "there is nothing to
+ * report on where this one stands" over the second is the page denying a
+ * regulated record exists because it is the page that is behind, and it is the
+ * error this whole module is arranged to prevent.
+ *
+ * So it says the true thing — the standing is recorded, this surface is the
+ * part that has not caught up — and offers the same way in.
+ */
+export const UNKNOWN_STANDING_BODY =
+  "Where this one stands is recorded, and this page doesn't have the words for it yet. Open the file and you'll see it.";
 
 /* ── The page, when it is not about one file ────────────────────────────── */
 
@@ -535,4 +565,22 @@ export function fileLabel(row: {
   if (purpose) return `${purpose}, started ${day}`;
   if (place) return `Started ${day} in ${place}`;
   return `Started ${day}`;
+}
+
+/**
+ * The same name again, for a file that turned out not to be the only one.
+ *
+ * It is here rather than beside the caller that spots the collision for the
+ * reason the module exists: a string built in a page or a resolver meets none
+ * of the five rules, and a name a borrower reads off a list is a borrower line
+ * whether it was typed out or assembled. The label is passed in rather than
+ * rebuilt, so a file's two names can only ever differ by the clause this adds.
+ *
+ * Same zone as the day it follows, because the two halves are one moment: a
+ * name reading "Started September 7, 2026, 11:14 PM" with the date in the
+ * creditor's zone and the time in the browser's would name a day the file was
+ * not started on.
+ */
+export function labelWithStartTime(label: string, createdAt: string): string {
+  return `${label}, ${timelineClock(createdAt)}`;
 }

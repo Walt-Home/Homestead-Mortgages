@@ -146,10 +146,12 @@ describe("where a row links", () => {
 
   it("is what the page actually calls, in both places", () => {
     // The rule and the JSX can disagree: the two links used to compute the
-    // stage map inline, and both cases above would still pass.
+    // stage map inline, and both cases above would still pass. Two calls and
+    // no declaration — the rule itself moved to the lib, where the resolver
+    // that joins a state to a screen can reach it without importing a page.
     const src = readFileSync(new URL("../FilesPage.tsx", import.meta.url), "utf8");
     expect(src).not.toMatch(/to=\{`\/f\/\$\{[^}]+\}\/\$\{STAGE_TO_SCREEN/);
-    expect([...src.matchAll(/screenFor\(/g)]).toHaveLength(3);
+    expect([...src.matchAll(/screenFor\(/g)]).toHaveLength(2);
   });
 });
 

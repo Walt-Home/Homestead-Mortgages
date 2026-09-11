@@ -35,6 +35,7 @@ import {
   SAMPLE_FILE_START_YOUR_OWN,
   SEE_WHERE_THIS_STANDS,
   fileLabel,
+  labelWithStartTime,
 } from "../home-copy.js";
 import { ADVERSE_COPY } from "../outcomes.js";
 import { CLOCK_COPY } from "../ledger.js";
@@ -51,15 +52,29 @@ type Calls = Record<string, readonly (readonly unknown[])[]>;
  * and the walk makes the calls — a label built at render time is still a
  * borrower line, and a file's name is built four different ways depending on
  * what is known about it. A function nobody has written a call for fails.
- * Empty until the module exports one; `fileLabel` is the first.
+ * Empty until the module exports one; `fileLabel` was the first.
  *
  * All four shapes are written out, and so is each of the three purposes: the
  * purpose words are the only place the product says what a cash-out refinance
  * is called, and a shape covered by one purpose leaves the other two unread.
- * The last call is a purpose the map has never heard of, which is what a new
- * column value looks like on the day it ships.
+ * The last of those calls is a purpose the map has never heard of, which is
+ * what a new column value looks like on the day it ships.
+ *
+ * The second function names the file that turned out not to be the only one of
+ * its kind. It lives on this module rather than beside the resolver that spots
+ * the collision for the reason this walk exists: a name assembled a module
+ * away from here is the one borrower line on the page that would meet none of
+ * the five rules.
  */
 const CREATED_AT = "2026-09-07T15:14:00.000Z";
+
+/** The file with nothing to be named by, which is also the one that collides. */
+const NAMELESS = {
+  purpose: null,
+  propertyCity: null,
+  propertyState: null,
+  createdAt: CREATED_AT,
+};
 
 const CALLED: Calls = {
   fileLabel: [
@@ -95,7 +110,7 @@ const CALLED: Calls = {
         createdAt: CREATED_AT,
       },
     ],
-    [{ purpose: null, propertyCity: null, propertyState: null, createdAt: CREATED_AT }],
+    [NAMELESS],
     [
       {
         purpose: "REVERSE_MORTGAGE",
@@ -105,6 +120,11 @@ const CALLED: Calls = {
       },
     ],
   ],
+  // The name a file gets when it turns out not to be the only one of its kind,
+  // which is the one borrower line on this page that is assembled rather than
+  // written. Built off the shape that collides — no purpose, no place — so the
+  // call here is the collision itself rather than an illustration of one.
+  labelWithStartTime: [[fileLabel(NAMELESS), NAMELESS.createdAt]],
 };
 
 const plain = (value: unknown): value is Record<string, unknown> =>
@@ -567,12 +587,40 @@ describe("what one file is called", () => {
     // The collision this function cannot resolve, asserted rather than
     // described as though something here already handled it: the fallback is
     // the day, not the time, and a function handed one row cannot know a
-    // second row is about to render beside it. Whoever renders the group owns
-    // this, and until they do the two rows read alike.
+    // second row is about to render beside it. Spotting the collision belongs
+    // to whoever renders the group; the words it is broken with are below.
     const morning = { ...row, createdAt: "2026-09-07T13:00:00.000Z" };
     const evening = { ...row, createdAt: "2026-09-07T22:00:00.000Z" };
     expect(fileLabel(morning)).toBe(fileLabel(evening));
     expect(fileLabel(morning)).not.toMatch(/\d\s*[:.]\s*\d|\bAM\b|\bPM\b/);
+  });
+
+  it("breaks that collision with the time, in the same words and the same zone", () => {
+    // The second half of the same job, and it is here rather than beside the
+    // resolver that spots the collision because a name assembled there would
+    // be the one borrower line on that page no rule above ever reads.
+    const morning = { ...row, createdAt: "2026-09-07T13:00:00.000Z" };
+    const evening = { ...row, createdAt: "2026-09-07T22:00:00.000Z" };
+    const named = (file: typeof row) => labelWithStartTime(fileLabel(file), file.createdAt);
+
+    expect(named(morning)).not.toBe(named(evening));
+    expect(named(morning).startsWith(fileLabel(morning))).toBe(true);
+    expect(named(morning)).toMatch(/\d\s?[AP]M$/);
+
+    // Same zone as the day it follows, or the two halves of one name would
+    // disagree about which day the file was started on.
+    const here = process.env.TZ;
+    process.env.TZ = "Asia/Tokyo";
+    try {
+      // Matched rather than compared: the separator before the meridiem is a
+      // plain space on some builds of ICU and a narrow no-break space on
+      // others, and which one this ran on is not what the test is about.
+      const late = { ...row, createdAt: "2026-09-08T00:14:00.000Z" };
+      expect(named(late)).toMatch(/^Started September 7, 2026, 8:14\s?PM$/);
+    } finally {
+      if (here === undefined) delete process.env.TZ;
+      else process.env.TZ = here;
+    }
   });
 
   it("reads the day in the creditor's zone, so two dates on a row agree", () => {

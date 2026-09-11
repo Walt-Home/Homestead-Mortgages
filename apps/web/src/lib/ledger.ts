@@ -173,10 +173,11 @@ export function timelineDate(iso: string): string {
  * a file that is still a draft but can never name or rename one, so the clock
  * is the only thing left to tell two of them apart.
  *
- * Nothing calls it yet, and it sits here rather than beside its first caller
- * for the reason it takes a zone at all: same zone as `timelineDate`, because
- * a row printing the date in the creditor's zone and the time in the browser's
- * would show a time belonging to the day before.
+ * Its caller is the name a list builds when two files would otherwise read
+ * alike. It sits here rather than beside that caller for the reason it takes a
+ * zone at all: same zone as `timelineDate`, because a row printing the date in
+ * the creditor's zone and the time in the browser's would show a time
+ * belonging to the day before.
  */
 export function timelineClock(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-US", {

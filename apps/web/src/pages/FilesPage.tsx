@@ -23,76 +23,19 @@ import { HomeHero } from "../components/HomeHero.js";
 import { StatusPill } from "../components/StatusPill.js";
 import { StreetScene } from "../components/StreetScene.js";
 import { entryFor } from "../lib/states.js";
-import { landingScreen } from "../lib/file.js";
+import type { FileRow } from "../lib/file.js";
 import { NO_APPLICATION, timelineDate } from "../lib/ledger.js";
-import { STAGE_TO_SCREEN, type FlowStage } from "../lib/flow.js";
-import type { DecisionOutcome } from "@hm/shared";
+import { canStart, screenFor } from "../lib/home.js";
 
-export interface FileRow {
-  id: string;
-  /**
-   * The domain spelling, which is now the only one the client sees.
-   *
-   * Typed rather than left as a bare string because this row is what
-   * `STAGE_TO_SCREEN` is indexed with here, and a `string` is what let this
-   * file key the map on the spelling the list route sent while every other
-   * reader looked it up with the spelling the single-file route sent.
-   */
-  stage: FlowStage;
-  isDemo: boolean;
-  /** Whose file it is. A sample borrower's file is a demo file that is theirs. */
-  mine: boolean;
-  createdAt: string;
-  /**
-   * The raw enum, not words. `PURCHASE`, `RATE_TERM_REFINANCE`,
-   * `CASH_OUT_REFINANCE` — the column untranslated, and null until screen 1 is
-   * saved. Turning it into something a borrower reads is this app's job, here
-   * and not on the wire: the API writes no copy, and a route that started
-   * would be a second place borrower words live.
-   */
-  purpose: string | null;
-  /**
-   * Decimal columns, and they arrive as STRINGS: Prisma's `Decimal` serializes
-   * through `toJSON`, so `450000.00` crosses the wire as `"450000"`. Typed
-   * honestly rather than as a number a reader would then do arithmetic on.
-   *
-   * Typed because the route sends them, not because anything wants them: no
-   * list of files puts a dollar figure next to a loan that has not been priced
-   * yet, and there is no formatter here to do it with.
-   */
-  loanAmount: string | null;
-  valueOrPrice: string | null;
-  propertyCity: string | null;
-  propertyState: string | null;
-  borrowers: { firstName: string; lastName: string }[];
-  /**
-   * The newest decision, or an empty array. At most one — the list takes one
-   * row per file — and a word this app has no copy for is dropped server-side
-   * rather than failing the request, so the file lists with no decision on it.
-   */
-  decisions: { outcome: DecisionOutcome; ausRecommendation: string }[];
-  applicationState: { status: string; statusEnteredAt: string; terminal: boolean } | null;
-  /**
-   * Whether the application has been signed.
-   *
-   * No status says so: `esign` is outside the obligations the reconciler
-   * tracks, so a file waiting for a signature and a file waiting for us are
-   * both `in_underwriting`, and they are opposite situations — one of them is
-   * the borrower's move.
-   */
-  signed: boolean;
-  /**
-   * What the file is waiting on the borrower for, as the ledger row rather
-   * than as a sentence.
-   *
-   * These are the three arguments `wordsFor` takes, and they arrive unrendered
-   * so that a screen listing files says what the file's own screens say rather
-   * than reading a sentence the server chose. Null unless the application is
-   * `awaiting_borrower`: the row stays on the ledger forever, and read in any
-   * other state it names something already done.
-   */
-  owes: { event: string; reasonCode: string | null; to: string } | null;
-}
+/**
+ * The row shape and the two rules this page used to declare.
+ *
+ * They moved to the lib when the resolver that joins a state to a screen
+ * needed them, and they are re-exported here because a rule the front door
+ * depends on should still be something a test of the front door can hold.
+ */
+export type { FileRow };
+export { canStart, screenFor };
 
 /**
  * The file to offer to pick up, if there is one.
@@ -111,39 +54,6 @@ export function resumable(files: readonly FileRow[]): FileRow | undefined {
   return files.find((f) =>
     f.applicationState ? !f.applicationState.terminal : f.stage !== "complete",
   );
-}
-
-/**
- * Where a row's link goes.
- *
- * The stage is where the borrower got to, and it only ever moves forward — so
- * on a file whose application has ended or is held it still points at the bank
- * or identity screen. The shell refuses to open one there and redirects to the
- * review screen, which made three of the eight seeded rows link at a page that
- * bounced on arrival. `landingScreen` is the function that does the bouncing;
- * asking it here means the link and the shell cannot disagree.
- *
- * Exported for the same reason `resumable` is: a rule the front door depends
- * on should be something a test can hold, not an expression inside the JSX.
- */
-export function screenFor(f: FileRow): string {
-  const stage = STAGE_TO_SCREEN[f.stage];
-  return landingScreen(f.applicationState, stage) ?? stage;
-}
-
-/**
- * Whether this session has an application to start.
- *
- * A sample borrower does not. The server refuses `POST /files` from such a
- * session, so leaving the button up would offer a tester the one action on
- * the page that answers 403 — their own file is still in the list beneath,
- * which is what they came to look at.
- *
- * Exported for the same reason `resumable` is: a rule the front door depends
- * on should be something a test can hold, not an expression inside the JSX.
- */
-export function canStart(user: { persona: unknown } | null | undefined): boolean {
-  return !user?.persona;
 }
 
 export function FilesPage() {

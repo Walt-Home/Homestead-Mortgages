@@ -287,7 +287,7 @@ function NotYours() {
         {/* A Link, not an <a>, for the reason the header's home link gives:
             an anchor throws away the SPA and reloads the whole app. */}
         <Link to="/" className="super-btn super-btn-primary mt-6">
-          Back to your files
+          Back to your applications
         </Link>
       </main>
       <Footer />

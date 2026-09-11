@@ -373,7 +373,11 @@ export function PropertyLoanPage() {
       // The server records the stated income as a fact on the person, so it is
       // no longer carried here to keep it. It rides along only so screen 2 can
       // prefill the field the borrower has already answered.
-      navigate(`/f/${id}/identity`, { state: { income: incomeNum } });
+      // `replace`, because this screen created the file. Left on the stack, one
+      // press of Back returns to a form whose submit makes ANOTHER file, and the
+      // borrower ends up with two applications for one house without ever
+      // choosing to start a second.
+      navigate(`/f/${id}/identity`, { state: { income: incomeNum }, replace: !editing });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
       setSubmitting(false);

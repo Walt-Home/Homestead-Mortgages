@@ -296,9 +296,14 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     </>
   );
 
+  // Named for where it goes, not for the reader being finished. "Done" on the
+  // screen that says we cannot approve the loan is the product congratulating
+  // somebody on an ending they did not choose, and it landed on the marketing
+  // page — which is the one page a person who has just been declined has no
+  // reason to see.
   const done = (
     <button className="super-btn super-btn-outline mt-7" onClick={() => navigate("/")}>
-      Done
+      Back to your applications
     </button>
   );
 

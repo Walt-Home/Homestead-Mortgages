@@ -11,24 +11,34 @@ believed. Line numbers move; treat them as pointers to a name.
 
 | #   | Item                                | Status | One line                                                    |
 | --- | ----------------------------------- | ------ | ----------------------------------------------------------- |
-| 1   | One casefile per loan               | Green  | Minted at application birth, stable across resubmissions    |
+| 1   | One casefile per loan               | Yellow | Stable across resubmissions, but the wrong shape for DU     |
 | 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate             |
 | —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person |
 | —   | Ownership shape                     | Green  | Relational + join tables, proven twice, unapplied to assets |
 | 7   | Employer as an entity               | Yellow | Real entity — but only a vendor pull ever creates one       |
 | 4   | Verification report identifier      | Yellow | Stored all along; income reads it, assets do not            |
-| 3   | Borrower declarations               | Red    | **The only hard stop.** Zero of fourteen asked              |
-| 6   | Assets, liabilities, owned property | Red    | No tables. Balances are vendor JSON with no owner           |
+| 3   | Borrower declarations               | Red    | **Blocks any submission.** 11 of 13 required still to build |
+| —   | Current residence                   | Red    | **Blocks any submission.** `"rent"` is fabricated, and sent |
+| 6   | Assets, liabilities, owned property | Red    | **Blocks any submission.** No tables; three fields are core |
 | 5   | Up to four borrowers                | Red    | The route cannot append a second                            |
 | 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary           |
 | —   | Delivery boundary                   | Red    | **Decided — we submit.** Nothing built yet                  |
 
-**Invalid and narrow are different failures.** Declarations are the only
-confirmed cardinality-minimum-1 gap: a file missing all fourteen indicators is
-malformed, and no amount of good data elsewhere rescues it. Everything else in
-red limits _which loans_ we can submit — single-borrower files only, only
-where the vendor payload carries everything, one subject property. Sequence
-those by which loans we intend to take first, not by Fannie's schema.
+**Three of the reds block any submission at all, not just some loans.**
+Declarations are one. So is the current residence: `RESIDENCE` is 1:2 and
+`BorrowerResidencyBasisType` is the fabricated `"rent"` this repo already
+documents as a stub — a made-up value inside a federal submission. And DU's
+63-point Optimized Dataset includes `AssetType`, `LiabilityType` and
+`OwnedPropertyDispositionStatusType`, so assets and liabilities gate
+everything rather than narrowing which loans qualify.
+
+**An earlier draft of this document said assets and liabilities only limited
+which loans we could submit. That was wrong**, and it was wrong in the
+direction that would have let them be scheduled late.
+
+What genuinely only narrows the range is the borrower count — one per file
+means single-borrower loans — and the absence of a property entity beyond the
+subject.
 
 ## Decided: we submit
 
@@ -76,13 +86,6 @@ Neither blocks the data model. Both block an actual submission.
 
 ## Green
 
-**One casefile per loan.** `applications.aus_casefile_id`, NOT NULL and
-UNIQUE, minted once at application birth (`schema.prisma:999`); the decision
-route reads it rather than minting per underwrite
-(`apps/api/src/routes/decision.ts:44`). `decisions.aus_casefile_id` is still
-written per decision — append-only evidence of what each submission went out
-under, not a duplicate. Nothing writes DU's own returned identifier back.
-
 **Income and employment survive a re-pull.** Rows carry
 `first_seen_snapshot_id` / `last_seen_snapshot_id` / `retired_by_snapshot_id`
 (`schema.prisma:436`, `:483`). The same work fixed a live bug: the delete had
@@ -105,6 +108,20 @@ join assets to yet.
 
 ## Yellow
 
+**One casefile per loan.** `applications.aus_casefile_id` is NOT NULL and
+UNIQUE, minted once at application birth (`schema.prisma:999`), and the
+decision route reads it rather than minting per underwrite
+(`apps/api/src/routes/decision.ts:44`). `decisions.aus_casefile_id` is still
+written per decision — append-only evidence of what each submission went out
+under, not a duplicate.
+
+**It is the wrong shape for DU, which is why this is not green.** The value is
+a 36-character UUID, and it fits neither field DU has for it: `LenderLoan` is
+a String 15, and `AutomatedUnderwritingCaseIdentifier` is a String 30 that
+**DU mints, not us**. Two columns are needed — ours and theirs — with a
+write-once trigger on DU's, because a resubmission has to carry the identifier
+DU issued.
+
 **Employer as an entity.** `Employer` is real, with a party FK and an identity
 key that survives the EIN promotion (`schema.prisma:365`); `income_sources`
 and `employments` both carry `employer_id`, so two income items from one
@@ -122,7 +139,16 @@ no `party_id`, so on a two-person file nothing records whose report it is, and
 
 **Borrower declarations.** `DECLARATION_DETAIL` is 1:1. No table, no column,
 no request field, no route; zero of the fourteen Section 5 questions asked.
-Citizenship and intent to occupy exist and both predate the audit.
+Citizenship and intent to occupy exist and both predate the audit. Measured
+against the map rather than the summary: 13 of the 21 declaration data points
+are required, across two containers, and 11 are still to build.
+
+**The current residence.** `RESIDENCE` is 1:2 and
+`BorrowerResidencyBasisType` is required. `borrowers.current_housing` is
+`String @default("rent")` — NOT NULL with a database default — and the four
+screens never ask. Today that is a known stub; on a submission it is a
+fabricated answer about the borrower's own housing, and it has to be fixed in
+the same work as the declarations rather than after them.
 
 **Assets, liabilities, owned property.** Nothing. Balances exist only as
 vendor JSON in `connector_snapshots.payload`, with no owner and no obligor —
@@ -220,3 +246,19 @@ it links one asset to two borrowers, one liability to two obligors, an asset
 to the liability secured by it, and income items to employers as first-class
 entities. A DU submission is a **graph of `RELATIONSHIP` arcs**, not a nested
 document, and that is the fact the data model has to satisfy.
+
+**Two counts in the original audit are off, and this document repeated them.**
+The ArcRoles tab holds **23** arcs, not 82 — 82 was the sheet's row count,
+including a three-row header and trailing blanks. Eleven of the 23 appear
+across all eighteen shipped samples. The Cardinality tab holds **171**
+container XPaths, not 174. Neither changes a conclusion; both change what a
+reader thinks they have to cover.
+
+**And validating the XML proves much less than it looks like it does.** The
+XSD enforces almost nothing about the relationship graph: a dangling
+`xlink:to`, a duplicate label, an invented arcrole, duplicate sequence
+numbers, five borrowers where DU allows four — and deleting the entire
+`RELATIONSHIPS` container — all validate. Schema validity is necessary and
+nowhere near sufficient, and DU's own rejection is the only other feedback
+loop. That is the argument for putting these invariants in our database, where
+a second writer who never read the design still cannot break them.

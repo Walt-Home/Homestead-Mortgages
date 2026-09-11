@@ -29,7 +29,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
 import { PERSONA_READ_ONLY } from "../lib/auth.js";
-import { useLoanFile } from "../lib/file.js";
+import { useLoanFile, type DecisionRatios, type DecisionView } from "../lib/file.js";
 import { Why } from "../components/Why.js";
 import { Working } from "../components/Working.js";
 import { PlaidLink } from "../components/PlaidLink.js";
@@ -53,15 +53,6 @@ interface AssetReport {
 interface CreditReport {
   scores: { bureau: string; score: number }[];
   tradelines: unknown[];
-}
-
-interface Decision {
-  ratios: {
-    dtiBack: number | null;
-    ltv: number | null;
-    housingPitia: number | null;
-    totalQualifyingIncome: number | null;
-  };
 }
 
 /**
@@ -102,10 +93,10 @@ export function BankPage() {
 
   const existing = data?.file.assets as AssetReport | null | undefined;
   const credit = data?.file.credit as CreditReport | null | undefined;
-  const persisted = (data?.file.decision as Decision | null | undefined)?.ratios ?? null;
+  const persisted = data?.file.decision?.ratios ?? null;
 
   const [report, setReport] = useState<AssetReport | null>(null);
-  const [standing, setStanding] = useState<Decision["ratios"] | null>(null);
+  const [standing, setStanding] = useState<DecisionRatios | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [error, setError] = useState<string | null>(null);
   const [recovery, setRecovery] = useState<{ label: string; to: string } | null>(null);
@@ -156,7 +147,7 @@ export function BankPage() {
       // not landed appends a decision — decisions are append-only — recording a
       // `refer` the borrower did not earn and that cannot be taken back.
       const decision = await api
-        .post<{ decision: Decision }>(`/files/${fileId}/decision`, {})
+        .post<{ decision: DecisionView }>(`/files/${fileId}/decision`, {})
         .catch(() => null);
       if (decision) setStanding(decision.decision.ratios);
 

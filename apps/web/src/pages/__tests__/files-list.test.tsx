@@ -47,9 +47,14 @@ function file(over: Partial<FileRow>): FileRow {
     isDemo: false,
     mine: true,
     createdAt: "2026-09-01T00:00:00.000Z",
+    purpose: "PURCHASE",
+    // Strings, because Prisma's Decimal crosses the wire through `toJSON`.
+    loanAmount: "450000",
+    valueOrPrice: "500000",
     propertyCity: "Austin",
     propertyState: "TX",
     borrowers: [],
+    decisions: [],
     applicationState: null,
     ...over,
   };

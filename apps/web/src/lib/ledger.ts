@@ -99,6 +99,26 @@ export function hasWordsFor(event: string, reasonCode: string | null): boolean {
 }
 
 /**
+ * The obligation a file is waiting on the borrower for, or null.
+ *
+ * The NEWEST `borrower_owes` row, and the distinction is not academic: the
+ * ledger is append-only, so a file that has owed two different things in its
+ * life carries both rows forever and the first one is what it used to owe.
+ *
+ * It says nothing about whether that obligation is still outstanding — the
+ * application's state is what says so, and a row read outside
+ * `awaiting_borrower` names something already cleared. Every caller gates on
+ * the state first.
+ *
+ * Generic over the row so the only thing it requires is the event name: the
+ * shape that comes off `GET /files/:id` carries a sequence, an actor and a
+ * timestamp the caller still wants back.
+ */
+export function owedFrom<T extends { readonly event: string }>(ledger: readonly T[]): T | null {
+  return [...ledger].reverse().find((row) => row.event === "borrower_owes") ?? null;
+}
+
+/**
  * Who caused it, in three words the product can stand behind.
  *
  * A borrower principal is the person reading the page. A service principal is
@@ -151,6 +171,27 @@ export function timelineDate(iso: string): string {
     month: "long",
     day: "numeric",
     year: "numeric",
+  });
+}
+
+/**
+ * The time of day, for the one case where the date is not enough.
+ *
+ * Two files started on the same day, neither far enough in to have a purpose
+ * or an address, are two rows reading the same words — and a person can delete
+ * a file that is still a draft but can never name or rename one, so the clock
+ * is the only thing left to tell two of them apart.
+ *
+ * Nothing calls it yet, and it sits here rather than beside its first caller
+ * for the reason it takes a zone at all: same zone as `timelineDate`, because
+ * a row printing the date in the creditor's zone and the time in the browser's
+ * would show a time belonging to the day before.
+ */
+export function timelineClock(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", {
+    timeZone: CREDITOR_TIME_ZONE,
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 

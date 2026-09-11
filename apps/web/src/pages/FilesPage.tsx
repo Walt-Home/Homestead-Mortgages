@@ -26,6 +26,7 @@ import { entryFor } from "../lib/states.js";
 import { landingScreen } from "../lib/file.js";
 import { NO_APPLICATION, timelineDate } from "../lib/ledger.js";
 import { STAGE_TO_SCREEN, type FlowStage } from "../lib/flow.js";
+import type { DecisionOutcome } from "@hm/shared";
 
 export interface FileRow {
   id: string;
@@ -42,9 +43,34 @@ export interface FileRow {
   /** Whose file it is. A sample borrower's file is a demo file that is theirs. */
   mine: boolean;
   createdAt: string;
+  /**
+   * The raw enum, not words. `PURCHASE`, `RATE_TERM_REFINANCE`,
+   * `CASH_OUT_REFINANCE` — the column untranslated, and null until screen 1 is
+   * saved. Turning it into something a borrower reads is this app's job, here
+   * and not on the wire: the API writes no copy, and a route that started
+   * would be a second place borrower words live.
+   */
+  purpose: string | null;
+  /**
+   * Decimal columns, and they arrive as STRINGS: Prisma's `Decimal` serializes
+   * through `toJSON`, so `450000.00` crosses the wire as `"450000"`. Typed
+   * honestly rather than as a number a reader would then do arithmetic on.
+   *
+   * Typed because the route sends them, not because anything wants them: no
+   * list of files puts a dollar figure next to a loan that has not been priced
+   * yet, and there is no formatter here to do it with.
+   */
+  loanAmount: string | null;
+  valueOrPrice: string | null;
   propertyCity: string | null;
   propertyState: string | null;
   borrowers: { firstName: string; lastName: string }[];
+  /**
+   * The newest decision, or an empty array. At most one — the list takes one
+   * row per file — and a word this app has no copy for is dropped server-side
+   * rather than failing the request, so the file lists with no decision on it.
+   */
+  decisions: { outcome: DecisionOutcome; ausRecommendation: string }[];
   applicationState: { status: string; statusEnteredAt: string; terminal: boolean } | null;
 }
 

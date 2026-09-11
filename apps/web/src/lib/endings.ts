@@ -107,14 +107,39 @@ export function pastDeciding(
  * evidence that anything was decided. Reading the word alone put "Not that
  * loan — but here's one we can do" under a pill reading "Needs you", for an
  * application that had never been counter-offered.
- *
- * A file with no application at all has nothing to check against, so there the
- * outcome is all there is.
  */
 const APPLIED_ON: Partial<Record<DecisionOutcome, readonly string[]>> = {
   denied: ["adverse_action_pending", "denied"],
   counteroffer: ["counteroffer_outstanding"],
 };
+
+/**
+ * Whether the machine actually took this decided word.
+ *
+ * Exported, though the cascade below is the only caller today: this is the one
+ * implementation of "was this word actually taken", and anything deciding
+ * whether a control may name what the borrower will find when they follow it
+ * has to ask it rather than work it out again. A second copy of the gate would
+ * be two answers to one question, and the one that disagreed would be the one
+ * offering to show somebody reasons that were never applied to their file.
+ *
+ * `APPLIED_ON` lists only the two words a surface reads differently depending
+ * on the answer, so an outcome that is not in it comes back false against an
+ * application. That is the safe direction — it drops a label back to the
+ * state's own words — and it is the wrong place to extend with a guess: the
+ * states the approvals land on are not written down here, and inventing them
+ * to make this total would put the guess behind a function that reads as
+ * authoritative.
+ *
+ * A file with no application at all has nothing to check against, so there the
+ * outcome is all there is.
+ */
+export function applied(
+  outcome: DecisionOutcome,
+  state: { readonly status: string; readonly terminal: boolean } | null | undefined,
+): boolean {
+  return !state || (APPLIED_ON[outcome] ?? []).includes(state.status);
+}
 
 export interface EndingInput {
   /** `loan_files.application_signed_at` is set. */
@@ -138,14 +163,13 @@ export function endingFor({
   ratios = null,
   branches,
 }: EndingInput): Ending | null {
-  const applied = (word: DecisionOutcome) =>
-    outcome === word && (!state || (APPLIED_ON[word] ?? []).includes(state.status));
+  const took = (word: DecisionOutcome) => outcome === word && applied(word, state);
 
   // Ahead of the state check, because `denied` is itself a terminal state:
   // reading it as "an application that has ended" would render the pill and
   // nothing else, and the reasons we recorded would never reach a screen.
-  if (applied("denied")) return "adverse";
-  if (applied("counteroffer")) return "counteroffer";
+  if (took("denied")) return "adverse";
+  if (took("counteroffer")) return "counteroffer";
   if (pastDeciding(state)) return "state";
   if (!signed) return null;
   if (branches.length > 0) return "branches";

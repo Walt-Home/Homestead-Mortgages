@@ -133,6 +133,36 @@ describe("one label for the income the decision turns on", () => {
   });
 });
 
+describe("one shape for a recorded decision", () => {
+  it("is declared in one place", () => {
+    const declared = FILES.filter((f) => /\b(?:interface|type) Decision\w*\s*[={<]/.test(f.text));
+    expect(declared.map((f) => f.name)).toEqual(["lib/file.ts"]);
+  });
+
+  it("leaves no screen asserting its own shape over the file's decision", () => {
+    // Two screens read `file.decision`, one casting it to a shape carrying the
+    // outcome and one to a shape holding only the ratios, so the two did not
+    // agree on whether a decision has an outcome at all — and the cast is
+    // exactly what stopped that disagreement being loud.
+    const offenders = FILES.filter((f) => /\.decision as\b/.test(f.text));
+    expect(offenders.map((f) => f.name)).toEqual([]);
+  });
+
+  it("leaves no second hand-written list of the four figures", () => {
+    // The ratios-only half of that disagreement was a private block naming
+    // these four by hand, and the rule above cannot see it — a shape called
+    // anything but `Decision…` passes. `DecisionRatios` picks the four off
+    // `Ratios` instead, so a second list is a second answer to what a ratios
+    // block is. Two figures are an input to something (`EndingInput.ratios`
+    // asks for exactly two); all four together are the block itself.
+    const FIGURES = ["housingPitia", "dtiBack", "ltv", "totalQualifyingIncome"];
+    const declared = FILES.filter((f) =>
+      FIGURES.every((figure) => new RegExp(`${figure}\\s*:\\s*number`).test(f.text)),
+    );
+    expect(declared.map((f) => f.name)).toEqual([]);
+  });
+});
+
 describe("one control per destination", () => {
   it("offers one way off the documents branch", () => {
     const upload = read(join("pages", "UploadPage.tsx"));

@@ -14,7 +14,7 @@
 import { StatusPill } from "./StatusPill.js";
 import type { ApplicationStandingView } from "../lib/file.js";
 import { entryFor } from "../lib/states.js";
-import { NO_APPLICATION, timelineDate, wordsFor } from "../lib/ledger.js";
+import { NO_APPLICATION, owedFrom, timelineDate, wordsFor } from "../lib/ledger.js";
 
 export function ApplicationStanding({
   standing,
@@ -62,10 +62,14 @@ export function ApplicationStanding({
  * gallery, and the newest `borrower_owes` row says which specific thing is
  * outstanding. Everywhere else the state's heading is exactly right, because
  * there is nothing more specific to say.
+ *
+ * Which row that is comes from `owedFrom` rather than from an expression here.
+ * The rule — newest, and only while the state still says it is owed — is one
+ * rule, and the screens that ask it have to get the same row.
  */
 function headline(standing: ApplicationStandingView): string {
   if (standing.status === "awaiting_borrower") {
-    const owed = [...standing.ledger].reverse().find((row) => row.event === "borrower_owes");
+    const owed = owedFrom(standing.ledger);
     if (owed) return wordsFor(owed.event, owed.reasonCode, owed.to);
   }
   return entryFor(standing.status)?.heading ?? "";

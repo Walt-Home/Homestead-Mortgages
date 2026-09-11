@@ -25,6 +25,8 @@ import {
   actorWords,
   calendarDate,
   hasWordsFor,
+  owedFrom,
+  timelineClock,
   timelineDate,
   wordsFor,
 } from "../ledger.js";
@@ -180,6 +182,59 @@ describe("nothing internal reaches a borrower", () => {
   });
 });
 
+describe("what a file is waiting on the borrower for", () => {
+  /**
+   * A file that owed a bank connection, was given one, and now owes payroll.
+   *
+   * Built fresh per test rather than shared: one of these tests is about
+   * `owedFrom` not rewriting the array it was handed, and a shared fixture a
+   * previous test had already reversed is one this one cannot see reversed.
+   */
+  const ledger = () => [
+    { seq: 1, event: "intake_completed", reasonCode: "six_pieces_received", to: "intake_received" },
+    {
+      seq: 2,
+      event: "borrower_owes",
+      reasonCode: "bank_connection_needed",
+      to: "awaiting_borrower",
+    },
+    { seq: 3, event: "borrower_satisfied", reasonCode: "bank_connected", to: "in_processing" },
+    {
+      seq: 4,
+      event: "borrower_owes",
+      reasonCode: "payroll_connection_needed",
+      to: "awaiting_borrower",
+    },
+  ];
+
+  it("reads the newest obligation, not the first one", () => {
+    // The ledger is append-only, so a file that has owed two things carries
+    // both rows forever. Picking the first one names the thing the borrower
+    // already did, under a pill saying they still have work.
+    expect(owedFrom(ledger())?.reasonCode).toBe("payroll_connection_needed");
+  });
+
+  it("finds nothing on a file that has never owed anything", () => {
+    expect(owedFrom(ledger().filter((r) => r.event !== "borrower_owes"))).toBeNull();
+    expect(owedFrom([])).toBeNull();
+  });
+
+  it("leaves the ledger it was handed alone", () => {
+    // The array belongs to the caller's query cache, and reversing it in place
+    // would flip somebody's history on screen as a side effect of reading it.
+    const rows = ledger();
+    owedFrom(rows);
+    expect(rows.map((r) => r.seq)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("hands back the whole row, so the words can be worked out from it", () => {
+    const owed = owedFrom(ledger())!;
+    expect(wordsFor(owed.event, owed.reasonCode, owed.to)).toBe(
+      "Something needed from you: confirm your employer",
+    );
+  });
+});
+
 describe("dates", () => {
   it("writes them the way a US mortgage does", () => {
     // "11 September" reads as a typo to an American borrower and as correct to
@@ -199,6 +254,25 @@ describe("dates", () => {
     expect(calendarDate("2000-01-01")).toBe("January 1, 2000");
     expect(calendarDate("1999-12-31")).toBe("December 31, 1999");
     expect(calendarDate("2026-07-04")).toBe("July 4, 2026");
+  });
+
+  it("tells two same-day files apart by the clock, in the creditor's zone", () => {
+    // 00:14Z on the eighth is 8:14 PM on the seventh in New York. A time read
+    // in the reader's own zone beside a date read in the creditor's is a row
+    // claiming a time that belongs to the next day.
+    //
+    // Read from Tokyo, because a machine already sitting in New York cannot
+    // tell a zone that was pinned from one that was never passed — and that
+    // is the whole of what this asserts.
+    const here = process.env.TZ;
+    process.env.TZ = "Asia/Tokyo";
+    try {
+      expect(timelineClock("2026-09-08T00:14:00.000Z")).toMatch(/^8:14\sPM$/);
+      expect(timelineDate("2026-09-08T00:14:00.000Z")).toBe("September 7, 2026");
+    } finally {
+      if (here === undefined) delete process.env.TZ;
+      else process.env.TZ = here;
+    }
   });
 
   it("hands back anything that is not a calendar date", () => {

@@ -10,11 +10,43 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import type { ApplicationReceipt } from "@hm/shared";
+import type { ApplicationReceipt, DecisionOutcome, Ratios } from "@hm/shared";
 import { api, ApiError } from "./api.js";
 
 export type { FlowStage } from "./flow.js";
 import type { FlowStage } from "./flow.js";
+
+/**
+ * The four figures a screen reads off a recorded decision, each null when the
+ * engine could not compute it.
+ *
+ * A `Pick` rather than four fields written out again. The engine records eight
+ * ratios and the API sends all eight; four is what the screens read, not what
+ * a decision holds. The `Pick` keeps these four bound to `Ratios`, so a figure
+ * whose type changes in `@hm/shared` changes here with it, and four fields
+ * written out by hand would be this app's second answer to what a ratios block
+ * is. A fifth figure is one more name in the list.
+ */
+export type DecisionRatios = Pick<
+  Ratios,
+  "housingPitia" | "dtiBack" | "ltv" | "totalQualifyingIncome"
+>;
+
+/**
+ * The part of the stored decision a screen reads. `outcome` is the word the
+ * engine reached, and it — not the arithmetic — decides which ending renders.
+ *
+ * It lives beside the file rather than on the screen that reads it because
+ * `LoanFileView.decision` is typed as it: the review screen and the bank
+ * screen each used to cast the same `unknown` to a private shape of its own,
+ * one of them carrying the outcome and one of them holding only the ratios, so
+ * the two screens did not agree on whether a decision has an outcome at all.
+ */
+export interface DecisionView {
+  outcome: DecisionOutcome;
+  ratios: DecisionRatios;
+  adverseActionReasons?: string[];
+}
 
 export interface LoanFileView {
   id: string;
@@ -73,7 +105,7 @@ export interface LoanFileView {
   transcripts: unknown[];
   documents: { id: string; filename: string; satisfiesRequirementId: string; bytes: number }[];
   links: { kind: string; provider: string; persistentMonitoringEnabled: boolean }[];
-  decision: unknown | null;
+  decision: DecisionView | null;
   /**
    * APP-002's input: when the six pieces were received, and which of them the
    * application holds. Null until the receipt has been stamped, and for a file

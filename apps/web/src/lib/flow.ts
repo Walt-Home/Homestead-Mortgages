@@ -131,8 +131,17 @@ export interface Branch {
   readonly because: string;
 }
 
-/** Why each branch is on screen, in the borrower's words. Never a requirement id. */
-const BRANCH_COPY: Record<BranchPath, { readonly title: string; readonly because: string }> = {
+/**
+ * Why each branch is on screen, in the borrower's words. Never a requirement id.
+ *
+ * Exported, though `branchesFor` below is the only reader in this file: these
+ * are the only sentences the product has for what a payroll, transcript or
+ * document branch is FOR, and the branch cards are not the only place that has
+ * to say it — a file waiting on one has to be told the same thing away from
+ * the screen that clears it. A second copy of these three sentences is how the
+ * two surfaces come to describe the same outstanding work differently.
+ */
+export const BRANCH_COPY: Record<BranchPath, Omit<Branch, "path">> = {
   payroll: {
     title: "Confirm your employer",
     because: "We could not confirm your employment from your bank activity alone.",

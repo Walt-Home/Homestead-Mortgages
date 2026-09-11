@@ -50,30 +50,12 @@ import {
   SIGN_LEAD,
 } from "../lib/outcomes.js";
 import type { Assessment } from "../lib/api.js";
-import type { DecisionOutcome } from "@hm/shared";
 
 interface Declaration {
   readonly clean: string;
   readonly source: string;
   readonly flagged: boolean;
   readonly question: string;
-}
-
-interface Ratios {
-  housingPitia: number | null;
-  dtiBack: number | null;
-  ltv: number | null;
-  totalQualifyingIncome: number | null;
-}
-
-/**
- * The part of the stored decision this screen reads. `outcome` is the word the
- * engine reached, and it — not the arithmetic — decides which ending renders.
- */
-interface DecisionView {
-  outcome: DecisionOutcome;
-  ratios: Ratios;
-  adverseActionReasons?: string[];
 }
 
 /**
@@ -122,7 +104,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   const signed = Boolean(file?.applicationSignedAt);
   const intentRecorded = Boolean(file?.intentToProceedAt);
   const primaryResidence = file?.property?.occupancy === "primary_residence";
-  const decision = file?.decision as DecisionView | null | undefined;
+  const decision = file?.decision;
   const ratios = decision?.ratios;
   const payrollLinked = file?.payroll != null;
   const branches = branchesFor(assessment, payrollLinked);

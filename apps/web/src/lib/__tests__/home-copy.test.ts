@@ -76,7 +76,19 @@ const NAMELESS = {
   createdAt: CREATED_AT,
 };
 
+const SHARED = {
+  borrowers: [{ firstName: "Maya", lastName: "Okafor" }],
+  purpose: "PURCHASE",
+  propertyCity: "Austin",
+  propertyState: "TX",
+  createdAt: CREATED_AT,
+};
+
 const CALLED: Calls = {
+  // A shared file with a borrower on it, and one without — the second is the
+  // fallback to the ordinary name, which is the branch a demo file with no
+  // borrower row would take.
+  sharedFileLabel: [[SHARED], [{ ...SHARED, borrowers: [] }], [{ ...SHARED, propertyCity: null }]],
   fileLabel: [
     [
       {

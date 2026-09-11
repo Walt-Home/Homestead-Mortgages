@@ -1031,10 +1031,10 @@ describe("telling two files apart", () => {
 
   it("tells an own file from a sample row, though they render in two sections", () => {
     // Two namespaces were two chances to call one thing by another thing's
-    // name. The eight sample borrowers share one seed date and the file a card
-    // offers to pick back up has neither a purpose nor a place, so the pair
-    // that collides across the sections is the pair a person is most likely to
-    // have: their own abandoned draft, and somebody else's.
+    // name. Somebody else's file is named by whose it is, which is what keeps
+    // the pair a person is most likely to have — their own abandoned draft and
+    // one of the shared ones — from reading alike. The clock cannot do it: the
+    // eight shared rows land in a single seeding run, so they share a minute.
     const { labels } = rankFiles([
       draft("mine", "2026-09-07T15:14:00.000Z"),
       row({
@@ -1048,8 +1048,10 @@ describe("telling two files apart", () => {
       }),
     ]);
     expect(labels.mine).not.toBe(labels.demo);
-    expect(labels.mine).toMatch(/\d\s?[AP]M$/);
-    expect(labels.demo).toMatch(/\d\s?[AP]M$/);
+    expect(labels.demo).toContain("Maya Okafor");
+    // And the shared one does not need the clock to be distinct, which is the
+    // whole reason it is named by its person.
+    expect(labels.demo).not.toMatch(/\d\s?[AP]M$/);
   });
 
   it("names every file the page renders, and names no two of them the same", () => {

@@ -72,6 +72,7 @@ import {
   ESTIMATE_READY_BODY,
   EXPIRED_BODY,
   fileLabel,
+  sharedFileLabel,
   FUNDED_BODY,
   FUNDED_WITHOUT_HISTORY,
   INCOMPLETE_BODY,
@@ -333,7 +334,12 @@ export function rankFiles(files: readonly FileRow[]): RankedFiles {
  * which.
  */
 function labelsWithin(rows: readonly FileRow[]): Record<string, string> {
-  const plain = new Map(rows.map((row) => [row.id, fileLabel(row)]));
+  // Somebody else's file is named by whose it is. The clock tiebreaker below
+  // cannot help there: the shared files arrive in one seeding run, so they
+  // share a minute as well as a city.
+  const plain = new Map(
+    rows.map((row) => [row.id, row.mine ? fileLabel(row) : sharedFileLabel(row)]),
+  );
   const seen = new Map<string, number>();
   for (const label of plain.values()) seen.set(label, (seen.get(label) ?? 0) + 1);
 

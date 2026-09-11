@@ -579,6 +579,35 @@ export function fileLabel(row: {
 }
 
 /**
+ * What to call a file that is somebody else's.
+ *
+ * The shared sample borrowers are eight different people seeded in one run,
+ * most of them buying in the same city — so purpose and place name four of them
+ * identically, and the start time that separates two files of ONE person
+ * separates nothing here, because one run stamps them all in the same minute.
+ *
+ * Whose file it is is the distinguishing fact, and on a list of other people's
+ * files it is the one a reader is looking for anyway. The place stays, because
+ * it is what tells two of one person's files apart on the same list.
+ *
+ * Only for a file that is not the reader's own: on their own list every row
+ * would carry their own name, which distinguishes nothing.
+ */
+export function sharedFileLabel(row: {
+  readonly borrowers: readonly { readonly firstName: string; readonly lastName: string }[];
+  readonly purpose: string | null;
+  readonly propertyCity: string | null;
+  readonly propertyState: string | null;
+  readonly createdAt: string;
+}): string {
+  const who = row.borrowers[0];
+  if (!who) return fileLabel(row);
+  const place =
+    row.propertyCity && row.propertyState ? ` — ${row.propertyCity}, ${row.propertyState}` : "";
+  return `${who.firstName} ${who.lastName}${place}`;
+}
+
+/**
  * The same name again, for a file that turned out not to be the only one.
  *
  * It is here rather than beside the caller that spots the collision for the

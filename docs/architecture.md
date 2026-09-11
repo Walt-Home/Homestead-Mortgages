@@ -231,9 +231,15 @@ sheet screens (9)  property_loan · identity · credit · bank · payroll ·
                    persistent_consent (0 requirements)
 
 FlowStage (10)     the 9 above + COMPLETE
-                   ⚠ declared FIVE times by hand — shared, Prisma, web, and both
-                     STAGE_ORDER and STAGE_TO_DOMAIN in the API. Nothing
-                     generates any of them from any other
+                   ⚠ the ten names are still typed out five times by hand —
+                     Prisma's enum and STAGE_ORDER in UPPERCASE, FLOW_STAGES in
+                     shared and STAGE_TO_SCREEN in the web app in lowercase,
+                     and STAGE_TO_DOMAIN in both. Nothing generates any of them
+                     from any other. What there is only ONE of now is the
+                     union: it is derived from FLOW_STAGES and the web app
+                     re-exports it. The web app used to declare a second one,
+                     spelled in UPPERCASE, and no compiler could see the
+                     difference because a stage crosses the wire as a string
 
 borrower screens   1 Property → 2 About you → 3 Your bank → 4 Review
         (4)        + payroll / irs / documents as BRANCHES, never steps

@@ -19,7 +19,7 @@
  *    borrower's face, where they are not.
  */
 
-import { BRANCH_FOR_SCREEN, branchCanSatisfy, type BranchPath } from "@hm/shared";
+import { BRANCH_FOR_SCREEN, branchCanSatisfy, type BranchPath, type FlowStage } from "@hm/shared";
 import type { Assessment } from "./api.js";
 
 /**
@@ -33,17 +33,23 @@ import type { Assessment } from "./api.js";
  */
 export type { BranchPath };
 
-export type FlowStage =
-  | "PROPERTY_LOAN"
-  | "IDENTITY"
-  | "CREDIT"
-  | "BANK"
-  | "PAYROLL"
-  | "IRS_TRANSCRIPT"
-  | "UPLOAD_FALLBACK"
-  | "DECISION"
-  | "PERSISTENT_CONSENT"
-  | "COMPLETE";
+/**
+ * The stage, in the one spelling that crosses the wire.
+ *
+ * This module used to declare its own uppercase union of the same ten names,
+ * which the compiler could not catch because nothing crosses a wire with a
+ * type on it. `GET /files/:id` answers the lowercase domain names, and this
+ * map had no key for any of them, so the two readers fed from that route both
+ * came back empty: the bare `/f/:id` route navigated to `/f/:id/undefined`,
+ * and `reachedIndex` returned −1 for every stage a file could actually carry.
+ * `GET /files` sent the other spelling, which is what this map was keyed on,
+ * so the file list's own lookups hit and its `?? "review"` fallback was never
+ * once exercised — one seam, and only one side of it looked broken.
+ *
+ * The domain spelling is the one `@hm/shared` defines and `LoanFile.stage`
+ * carries, so the fix is to stop having a second one.
+ */
+export type { FlowStage };
 
 /** The four steps, and nothing else. */
 export const SCREENS = [
@@ -65,18 +71,18 @@ export type ScreenPath = (typeof SCREENS)[number]["path"];
  * conditional branch turns back into a step.
  */
 export const STAGE_TO_SCREEN: Record<FlowStage, ScreenPath> = {
-  PROPERTY_LOAN: "property",
-  IDENTITY: "identity",
+  property_loan: "property",
+  identity: "identity",
   // Borrower details are saved but the credit pull has not run — screen 2 is
   // not finished, so this is not a step forward for the borrower.
-  CREDIT: "identity",
-  BANK: "bank",
-  PAYROLL: "review",
-  IRS_TRANSCRIPT: "review",
-  UPLOAD_FALLBACK: "review",
-  DECISION: "review",
-  PERSISTENT_CONSENT: "review",
-  COMPLETE: "review",
+  credit: "identity",
+  bank: "bank",
+  payroll: "review",
+  irs_transcript: "review",
+  upload_fallback: "review",
+  decision: "review",
+  persistent_consent: "review",
+  complete: "review",
 };
 
 /**

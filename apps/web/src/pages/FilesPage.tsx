@@ -29,7 +29,15 @@ import { STAGE_TO_SCREEN, type FlowStage } from "../lib/flow.js";
 
 export interface FileRow {
   id: string;
-  stage: string;
+  /**
+   * The domain spelling, which is now the only one the client sees.
+   *
+   * Typed rather than left as a bare string because this row is what
+   * `STAGE_TO_SCREEN` is indexed with here, and a `string` is what let this
+   * file key the map on the spelling the list route sent while every other
+   * reader looked it up with the spelling the single-file route sent.
+   */
+  stage: FlowStage;
   isDemo: boolean;
   /** Whose file it is. A sample borrower's file is a demo file that is theirs. */
   mine: boolean;
@@ -55,7 +63,7 @@ export interface FileRow {
  */
 export function resumable(files: readonly FileRow[]): FileRow | undefined {
   return files.find((f) =>
-    f.applicationState ? !f.applicationState.terminal : f.stage !== "COMPLETE",
+    f.applicationState ? !f.applicationState.terminal : f.stage !== "complete",
   );
 }
 
@@ -73,7 +81,7 @@ export function resumable(files: readonly FileRow[]): FileRow | undefined {
  * on should be something a test can hold, not an expression inside the JSX.
  */
 export function screenFor(f: FileRow): string {
-  const stage = STAGE_TO_SCREEN[f.stage as FlowStage] ?? "review";
+  const stage = STAGE_TO_SCREEN[f.stage];
   return landingScreen(f.applicationState, stage) ?? stage;
 }
 

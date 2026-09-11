@@ -27,18 +27,29 @@ import type {
   SanctionsScreening,
 } from "./property-record.js";
 
-/** Which of the nine screens the borrower has completed. */
-export type FlowStage =
-  | "property_loan"
-  | "identity"
-  | "credit"
-  | "bank"
-  | "payroll"
-  | "irs_transcript"
-  | "upload_fallback"
-  | "decision"
-  | "persistent_consent"
-  | "complete";
+/**
+ * How far through the nine sheet screens the borrower has got, plus
+ * `complete` for a file that has walked all of them.
+ *
+ * A runtime list, with the union derived from it, because the web app used to
+ * keep a second spelling of these ten names and nothing could tell. A type
+ * alone crosses no wire; a list a test can iterate is what makes a map keyed
+ * on these names prove it has an entry for each of them.
+ */
+export const FLOW_STAGES = [
+  "property_loan",
+  "identity",
+  "credit",
+  "bank",
+  "payroll",
+  "irs_transcript",
+  "upload_fallback",
+  "decision",
+  "persistent_consent",
+  "complete",
+] as const;
+
+export type FlowStage = (typeof FLOW_STAGES)[number];
 
 /**
  * The moment TRID says an application exists: six pieces received (APP-002).

@@ -1,12 +1,12 @@
 /**
  * Which file the front door offers to pick up, and what each row says.
  *
- * `stage` only ever moves forward and stops at COMPLETE, so it cannot say that
+ * `stage` only ever moves forward and stops at `complete`, so it cannot say that
  * an application ended: a withdrawn file sitting at the bank screen reads as
  * unfinished, and the front door used to offer "pick up the one you started"
  * over an application the borrower had stopped. The application state is what
  * knows that, and where there is one it is the whole answer — including for a
- * file whose stage says COMPLETE while the application is still live. The
+ * file whose stage says `complete` while the application is still live. The
  * stage is the fallback, for a file made before applications existed.
  *
  * The row itself is rendered rather than reasoned about. It writes the same
@@ -43,7 +43,7 @@ function frontDoor(user: { persona: unknown } | null): string {
 function file(over: Partial<FileRow>): FileRow {
   return {
     id: "f1",
-    stage: "BANK",
+    stage: "bank",
     isDemo: false,
     mine: true,
     createdAt: "2026-09-01T00:00:00.000Z",
@@ -69,7 +69,7 @@ describe("the resume link", () => {
 
   it("never offers one whose application ended", () => {
     // Withdrawn, at the bank screen. The stage alone would offer it.
-    const ended = file({ stage: "BANK", applicationState: at("withdrawn", true) });
+    const ended = file({ stage: "bank", applicationState: at("withdrawn", true) });
     expect(resumable([ended])).toBeUndefined();
   });
 
@@ -81,15 +81,15 @@ describe("the resume link", () => {
 
   it("falls back to the stage for a file with no application", () => {
     expect(resumable([file({ applicationState: null })])?.id).toBe("f1");
-    expect(resumable([file({ stage: "COMPLETE", applicationState: null })])).toBeUndefined();
+    expect(resumable([file({ stage: "complete", applicationState: null })])).toBeUndefined();
   });
 
   it("still offers one whose flow is done but whose application is live", () => {
     // Walking to the end of the four screens is not the end of the request.
     // A submitted file sits in `in_underwriting` and is waiting on US, and the
-    // stage — which stops at COMPLETE and never moves again — is the wrong
+    // stage — which stops at `complete` and never moves again — is the wrong
     // thing to ask once there is an application that knows better.
-    const row = file({ stage: "COMPLETE", applicationState: at("in_underwriting", false) });
+    const row = file({ stage: "complete", applicationState: at("in_underwriting", false) });
     expect(resumable([row])).toBe(row);
   });
 
@@ -97,10 +97,10 @@ describe("the resume link", () => {
     // The other direction of the same rule: the application is the answer, so
     // a terminal one is never offered even where the stage reads unfinished.
     expect(
-      resumable([file({ stage: "COMPLETE", applicationState: at("funded", true) })]),
+      resumable([file({ stage: "complete", applicationState: at("funded", true) })]),
     ).toBeUndefined();
     expect(
-      resumable([file({ stage: "PROPERTY_LOAN", applicationState: at("expired", true) })]),
+      resumable([file({ stage: "property_loan", applicationState: at("expired", true) })]),
     ).toBeUndefined();
   });
 });
@@ -108,21 +108,21 @@ describe("the resume link", () => {
 describe("where a row links", () => {
   it("sends a live file to the screen its stage reached", () => {
     expect(
-      screenFor(file({ stage: "BANK", applicationState: at("awaiting_borrower", false) })),
+      screenFor(file({ stage: "bank", applicationState: at("awaiting_borrower", false) })),
     ).toBe("bank");
-    expect(screenFor(file({ stage: "IDENTITY", applicationState: null }))).toBe("identity");
+    expect(screenFor(file({ stage: "identity", applicationState: null }))).toBe("identity");
   });
 
   it("does not link at a page the shell will bounce", () => {
     // Withdrawn at the bank screen: the stage still says "bank", the shell
     // redirects to review the moment it opens, and the row was pointing at
     // the redirect. Three of the eight seeded files behaved this way.
-    expect(screenFor(file({ stage: "BANK", applicationState: at("withdrawn", true) }))).toBe(
+    expect(screenFor(file({ stage: "bank", applicationState: at("withdrawn", true) }))).toBe(
       "review",
     );
     for (const status of ["canceled", "denied", "funded", "expired"]) {
       expect(
-        screenFor(file({ stage: "PROPERTY_LOAN", applicationState: at(status, true) })),
+        screenFor(file({ stage: "property_loan", applicationState: at(status, true) })),
         status,
       ).toBe("review");
     }
@@ -132,7 +132,7 @@ describe("where a row links", () => {
     // `suspended` is not terminal, so `resumable` still offers this file —
     // which makes it the one row where the two expressions disagreed on a
     // file the front door actually links to.
-    expect(screenFor(file({ stage: "IDENTITY", applicationState: at("suspended", false) }))).toBe(
+    expect(screenFor(file({ stage: "identity", applicationState: at("suspended", false) }))).toBe(
       "review",
     );
   });

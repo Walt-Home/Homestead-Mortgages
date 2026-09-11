@@ -38,6 +38,7 @@ import {
   recordBorrowerFacts,
 } from "../services/party.js";
 import { listAccessibleFiles, loadLoanFile, recordSnapshot } from "../services/repository.js";
+import { advanceStage } from "../services/stage.js";
 import { consent, createLoanFile, createUser } from "./support/factories.js";
 import { callAs } from "./support/http.js";
 
@@ -246,6 +247,38 @@ describe("editing screen 1", () => {
     });
     expect(res.status).toBe(200);
     expect(await prisma.loanScenario.count()).toBe(0);
+  });
+
+  it("keeps the address match when the address did not move", async () => {
+    // Screen 1 sends the address on every save, changed or not, so clearing
+    // the flag on the field being PRESENT unsatisfies APP-004 for a borrower
+    // who came back to fix the price. Nothing sets it true again outside file
+    // creation, so that loss is permanent.
+    const { user, fileId } = await startFile();
+    const res = await callAs(user.id, [fileRouter], "PATCH", `/${fileId}`, {
+      address: SCREEN_ONE.address,
+      valueOrPrice: 420_000,
+    });
+    expect(res.status).toBe(200);
+    const row = await prisma.loanFile.findUniqueOrThrow({
+      where: { id: fileId },
+      select: { addressVerified: true },
+    });
+    expect(row.addressVerified).toBe(true);
+  });
+
+  it("drops the address match when the address moves", async () => {
+    // The other direction of the same rule, and the one the flag exists for:
+    // a property nobody has looked up must not carry a match.
+    const { user, fileId } = await startFile();
+    await callAs(user.id, [fileRouter], "PATCH", `/${fileId}`, {
+      address: { ...SCREEN_ONE.address, line1: "90 Foster Lane" },
+    });
+    const row = await prisma.loanFile.findUniqueOrThrow({
+      where: { id: fileId },
+      select: { addressVerified: true },
+    });
+    expect(row.addressVerified).toBe(false);
   });
 
   it("supersedes the party's income when the borrower corrects it", async () => {
@@ -510,6 +543,37 @@ describe("the file list", () => {
 
     const rows = await listAccessibleFiles(user.id);
     expect(rows.find((r) => r.id === fileId)?.applicationState?.terminal).toBe(true);
+  });
+
+  it("names the stage the same way the file itself does", async () => {
+    // Two routes describing one file in two vocabularies. `GET /files`
+    // answered the Prisma enum (`BANK`) while `GET /files/:id` answered the
+    // domain name (`bank`), and no type could catch it because a stage crosses
+    // the wire as a string. The web app keyed its resume map on the spelling
+    // the list sent, so the list's own lookups hit while everything fed from
+    // the single-file route missed — which is why one route answering `BANK`
+    // and the other `bank` for the same file is what this pins.
+    const { user, fileId } = await startFile();
+    await advanceStage(fileId, "BANK");
+
+    const list = await callAs<{ files: { id: string; stage: string }[] }>(
+      user.id,
+      [fileRouter],
+      "GET",
+      "/",
+    );
+    const one = await callAs<{ file: { stage: string } }>(
+      user.id,
+      [fileRouter],
+      "GET",
+      `/${fileId}`,
+    );
+
+    expect(list.status).toBe(200);
+    expect(one.status).toBe(200);
+    const listed = list.body.files.find((f) => f.id === fileId);
+    expect(listed?.stage).toBe(one.body.file.stage);
+    expect(one.body.file.stage).toBe("bank");
   });
 });
 

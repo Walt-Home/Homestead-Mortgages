@@ -597,8 +597,13 @@ export async function listAccessibleFiles(userId: string, db: Db = prisma) {
 
   // `borrowers[0].firstName` is the shape callers already read, so no caller
   // changes.
-  return rows.map(({ borrowers, userId: owner, application, decisions, ...rest }) => ({
+  return rows.map(({ borrowers, userId: owner, application, decisions, stage, ...rest }) => ({
     ...rest,
+    // The domain spelling, which the single-file route has always answered and
+    // this one skipped. Two routes describing the same file in two vocabularies
+    // is a difference no type can catch, because neither one crosses the wire
+    // with a type on it.
+    stage: STAGE_TO_DOMAIN[stage],
     // Read here too — the list is the other place a stored outcome reaches a
     // screen — but a word nothing has copy for drops that one decision instead
     // of failing the request. The file still lists, with no outcome on it.

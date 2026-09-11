@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
 import { PERSONA_READ_ONLY } from "../lib/auth.js";
+import { SAMPLE_FILE_CANNOT_CHANGE } from "../lib/home-copy.js";
 import { StatusPill } from "./StatusPill.js";
 
 /**
@@ -73,7 +74,7 @@ export function ConnectorStep(props: ConnectorStepProps) {
             : "We need your signed authorization before we can verify anything.",
         );
       } else if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {
-        setError("This is a sample file, so it can't be changed. Start your own to try this.");
+        setError(SAMPLE_FILE_CANNOT_CHANGE);
       } else if (err instanceof ApiError && err.code === "PERSONA_READ_ONLY") {
         // The session, not the file. It arrives from the same button and means
         // the same thing to whoever pressed it, so it is answered here too.

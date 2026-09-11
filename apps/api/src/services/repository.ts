@@ -542,6 +542,48 @@ export async function assertFileMayBeDeleted(loanFileId: string, db: Db = prisma
   );
 }
 
+/** What a file is waiting on the borrower for, in the words the ledger uses. */
+export interface ListedObligation {
+  readonly event: string;
+  readonly reasonCode: string | null;
+  readonly to: string;
+}
+
+/**
+ * The newest obligation on each of these applications.
+ *
+ * One query for every file rather than one per file, the same way the
+ * borrowers' names are read. Ordered oldest to newest so the last row written
+ * into the map is the newest one: the ledger is append-only, so a file that
+ * has owed two different things carries both rows forever, and the older one
+ * names something the borrower already did.
+ *
+ * Only the three fields a sentence is built from. `seq`, the actor and the
+ * timestamp are on the ledger the single-file route serves, and a list of
+ * files needs none of them.
+ */
+async function obligationsByApplication(
+  db: Db,
+  applicationIds: readonly string[],
+): Promise<Map<string, ListedObligation>> {
+  const owed = new Map<string, ListedObligation>();
+  if (applicationIds.length === 0) return owed;
+
+  const rows = await db.applicationTransition.findMany({
+    where: { applicationId: { in: [...applicationIds] }, event: "borrower_owes" },
+    orderBy: { seq: "asc" },
+    select: { applicationId: true, event: true, reasonCode: true, toState: true },
+  });
+  for (const row of rows) {
+    owed.set(row.applicationId, {
+      event: row.event,
+      reasonCode: row.reasonCode,
+      to: toDomainState(row.toState),
+    });
+  }
+  return owed;
+}
+
 /**
  * Files this user may see: their own, newest first, plus the shared demo set.
  *
@@ -550,6 +592,19 @@ export async function assertFileMayBeDeleted(loanFileId: string, db: Db = prisma
  * application on record" rather than inventing a draft for. `mine` is here
  * because ownership and demo-ness stopped being the same question: a sample
  * borrower's file is a demo file that belongs to that sample borrower.
+ *
+ * Two things a row could not say before, both of them about whose move it is.
+ * `signed` is the difference between a file waiting for a signature and one
+ * waiting for us, and no status draws it: the obligations the reconciler
+ * writes cover the bank and the three branches and never the signature, so a
+ * status says nothing about whether one has been given. `owes` is the
+ * obligation itself, as the row rather than as a sentence, because the words
+ * for it are written in the client beside every other borrower word.
+ *
+ * `owes` is read only in `awaiting_borrower`, and the gate is here rather than
+ * in the caller: a reason code is a recorded past fact, so a row read in any
+ * other state names an obligation already cleared, and a rule left to the
+ * caller is one the next caller has to know about.
  *
  * The client is the last parameter, like every other reader here, so a caller
  * already inside a transaction sees what that transaction has written rather
@@ -565,6 +620,7 @@ export async function listAccessibleFiles(userId: string, db: Db = prisma) {
       isDemo: true,
       userId: true,
       createdAt: true,
+      applicationSignedAt: true,
       purpose: true,
       loanAmount: true,
       valueOrPrice: true,
@@ -578,7 +634,7 @@ export async function listAccessibleFiles(userId: string, db: Db = prisma) {
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { partyId: true },
       },
-      application: { select: { status: true, statusEnteredAt: true } },
+      application: { select: { id: true, status: true, statusEnteredAt: true } },
       decisions: {
         orderBy: { computedAt: "desc" },
         take: 1,
@@ -595,32 +651,56 @@ export async function listAccessibleFiles(userId: string, db: Db = prisma) {
     "legal_name",
   );
 
+  const owed = await obligationsByApplication(
+    db,
+    rows.flatMap((r) =>
+      r.application && toDomainState(r.application.status) === "awaiting_borrower"
+        ? [r.application.id]
+        : [],
+    ),
+  );
+
   // `borrowers[0].firstName` is the shape callers already read, so no caller
   // changes.
-  return rows.map(({ borrowers, userId: owner, application, decisions, stage, ...rest }) => ({
-    ...rest,
-    // The domain spelling, which the single-file route has always answered and
-    // this one skipped. Two routes describing the same file in two vocabularies
-    // is a difference no type can catch, because neither one crosses the wire
-    // with a type on it.
-    stage: STAGE_TO_DOMAIN[stage],
-    // Read here too — the list is the other place a stored outcome reaches a
-    // screen — but a word nothing has copy for drops that one decision instead
-    // of failing the request. The file still lists, with no outcome on it.
-    decisions: decisions.flatMap((d) => {
-      const outcome = readOutcome(d.outcome);
-      return outcome ? [{ ...d, outcome }] : [];
+  return rows.map(
+    ({
+      borrowers,
+      userId: owner,
+      application,
+      decisions,
+      stage,
+      applicationSignedAt,
+      ...rest
+    }) => ({
+      ...rest,
+      // The domain spelling, which the single-file route has always answered and
+      // this one skipped. Two routes describing the same file in two vocabularies
+      // is a difference no type can catch, because neither one crosses the wire
+      // with a type on it.
+      stage: STAGE_TO_DOMAIN[stage],
+      // A latch, so the boolean loses nothing the date carried: no route sets it
+      // twice and nothing clears it.
+      signed: applicationSignedAt !== null,
+      // Null on every state but `awaiting_borrower`, which is the gate above.
+      owes: application ? (owed.get(application.id) ?? null) : null,
+      // Read here too — the list is the other place a stored outcome reaches a
+      // screen — but a word nothing has copy for drops that one decision instead
+      // of failing the request. The file still lists, with no outcome on it.
+      decisions: decisions.flatMap((d) => {
+        const outcome = readOutcome(d.outcome);
+        return outcome ? [{ ...d, outcome }] : [];
+      }),
+      mine: owner === userId,
+      applicationState: application
+        ? {
+            status: toDomainState(application.status),
+            statusEnteredAt: application.statusEnteredAt.toISOString(),
+            terminal: TERMINAL.includes(toDomainState(application.status)),
+          }
+        : null,
+      borrowers: borrowers
+        .map((b) => displayNameFrom(names.get(b.partyId)?.value))
+        .filter((n): n is { firstName: string; lastName: string } => n !== null),
     }),
-    mine: owner === userId,
-    applicationState: application
-      ? {
-          status: toDomainState(application.status),
-          statusEnteredAt: application.statusEnteredAt.toISOString(),
-          terminal: TERMINAL.includes(toDomainState(application.status)),
-        }
-      : null,
-    borrowers: borrowers
-      .map((b) => displayNameFrom(names.get(b.partyId)?.value))
-      .filter((n): n is { firstName: string; lastName: string } => n !== null),
-  }));
+  );
 }

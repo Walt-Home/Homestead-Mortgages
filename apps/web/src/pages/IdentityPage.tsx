@@ -24,6 +24,7 @@ import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
 import { Why } from "../components/Why.js";
 import { clearDraft, readDraft, saveDraft } from "../lib/identity.js";
 import { calendarDate } from "../lib/ledger.js";
+import { SAMPLE_FILE_START_YOUR_OWN } from "../lib/home-copy.js";
 import { Working } from "../components/Working.js";
 
 interface DocumentRead {
@@ -472,7 +473,7 @@ export function IdentityPage() {
       navigate(`/f/${fileId}/bank`);
     } catch (err) {
       if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {
-        setError("This is a sample file, so it is read-only. Start your own to walk the flow.");
+        setError(SAMPLE_FILE_START_YOUR_OWN);
       } else if (err instanceof ApiError && err.code === "PERSONA_READ_ONLY") {
         // The session rather than the file. This screen posts to five routes
         // and any of them can carry it, so without this the one refusal a

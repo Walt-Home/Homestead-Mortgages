@@ -101,22 +101,13 @@ export function hasWordsFor(event: string, reasonCode: string | null): boolean {
 /**
  * The obligation a file is waiting on the borrower for, or null.
  *
- * The NEWEST `borrower_owes` row, and the distinction is not academic: the
- * ledger is append-only, so a file that has owed two different things in its
- * life carries both rows forever and the first one is what it used to owe.
- *
- * It says nothing about whether that obligation is still outstanding — the
- * application's state is what says so, and a row read outside
- * `awaiting_borrower` names something already cleared. Every caller gates on
- * the state first.
- *
- * Generic over the row so the only thing it requires is the event name: the
- * shape that comes off `GET /files/:id` carries a sequence, an actor and a
- * timestamp the caller still wants back.
+ * Re-exported rather than written here. The file list picks the same row in
+ * SQL, a second expression of one rule, and the test holding the two together
+ * runs in `apps/api`, which cannot import this file — so the function moved to
+ * `@hm/shared`, beside the event it looks for. The screens go on reading it
+ * out of the module that holds every other word they put on a timeline.
  */
-export function owedFrom<T extends { readonly event: string }>(ledger: readonly T[]): T | null {
-  return [...ledger].reverse().find((row) => row.event === "borrower_owes") ?? null;
-}
+export { owedFrom } from "@hm/shared";
 
 /**
  * Who caused it, in three words the product can stand behind.

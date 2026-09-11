@@ -56,6 +56,8 @@ function file(over: Partial<FileRow>): FileRow {
     borrowers: [],
     decisions: [],
     applicationState: null,
+    signed: false,
+    owes: null,
     ...over,
   };
 }

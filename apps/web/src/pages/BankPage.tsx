@@ -29,6 +29,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
 import { PERSONA_READ_ONLY } from "../lib/auth.js";
+import { SAMPLE_FILE } from "../lib/home-copy.js";
 import { useLoanFile, type DecisionRatios, type DecisionView } from "../lib/file.js";
 import { Why } from "../components/Why.js";
 import { Working } from "../components/Working.js";
@@ -169,7 +170,7 @@ export function BankPage() {
       sessionId.current = null;
 
       if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {
-        setError("This is a sample file, so it is read-only.");
+        setError(SAMPLE_FILE);
         return;
       }
       // The same refusal one level up: the session is a sample borrower, so it

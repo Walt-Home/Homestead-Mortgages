@@ -72,6 +72,26 @@ export interface FileRow {
    */
   decisions: { outcome: DecisionOutcome; ausRecommendation: string }[];
   applicationState: { status: string; statusEnteredAt: string; terminal: boolean } | null;
+  /**
+   * Whether the application has been signed.
+   *
+   * No status says so: `esign` is outside the obligations the reconciler
+   * tracks, so a file waiting for a signature and a file waiting for us are
+   * both `in_underwriting`, and they are opposite situations — one of them is
+   * the borrower's move.
+   */
+  signed: boolean;
+  /**
+   * What the file is waiting on the borrower for, as the ledger row rather
+   * than as a sentence.
+   *
+   * These are the three arguments `wordsFor` takes, and they arrive unrendered
+   * so that a screen listing files says what the file's own screens say rather
+   * than reading a sentence the server chose. Null unless the application is
+   * `awaiting_borrower`: the row stays on the ledger forever, and read in any
+   * other state it names something already done.
+   */
+  owes: { event: string; reasonCode: string | null; to: string } | null;
 }
 
 /**

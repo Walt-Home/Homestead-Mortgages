@@ -350,3 +350,35 @@ export function isTerminal(state: ApplicationState): boolean {
 export function eventsFrom(state: ApplicationState): ApplicationEvent[] {
   return Object.keys(MACHINE[state]) as ApplicationEvent[];
 }
+
+/**
+ * The obligation a ledger is waiting on the borrower for, or null.
+ *
+ * The NEWEST `borrower_owes` row, and the distinction is not academic: the
+ * ledger is append-only, so a file that has owed two different things in its
+ * life carries both rows forever and the first one is what it used to owe.
+ *
+ * It says nothing about whether that obligation is still outstanding — the
+ * application's state is what says so, and a row read outside
+ * `awaiting_borrower` names something already cleared. Every caller gates on
+ * the state first.
+ *
+ * It lives here, beside the event it looks for, because the rule has two
+ * expressions and they have to be held together. The file list picks the same
+ * row in SQL — one query across every file a person can open, which is not a
+ * thing this function can do — and a borrower's screens pick it out of the
+ * ledger a single file serves, which is this. Two expressions of one rule
+ * drift, so a test in `apps/api` imports this one and asserts the query picked
+ * what it picks; that test cannot import `apps/web`, and that is the whole of
+ * why the function is here rather than there.
+ *
+ * Generic over the row so the only thing it requires is the event name: the
+ * shape that comes off `GET /files/:id` carries a sequence, an actor and a
+ * timestamp the caller still wants back.
+ */
+export function owedFrom<T extends { readonly event: string }>(ledger: readonly T[]): T | null {
+  // Spelled through the machine's own vocabulary, so renaming the event is a
+  // compile error here rather than a selection that quietly finds nothing.
+  const owes: ApplicationEvent = "borrower_owes";
+  return [...ledger].reverse().find((row) => row.event === owes) ?? null;
+}

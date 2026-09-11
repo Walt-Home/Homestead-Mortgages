@@ -21,9 +21,12 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join as joinPath } from "node:path";
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
-import { addBusinessDays, RECEIPT_REASON_CODE } from "@hm/shared";
+import { addBusinessDays, owedFrom, RECEIPT_REASON_CODE } from "@hm/shared";
+import type { ApplicationEvent, TransitionReason } from "@hm/shared";
 import { fileRouter } from "../routes/files.js";
 import { connectorRouter } from "../routes/connectors.js";
 import { esignRouter } from "../routes/esign.js";
@@ -574,6 +577,156 @@ describe("the file list", () => {
     const listed = list.body.files.find((f) => f.id === fileId);
     expect(listed?.stage).toBe(one.body.file.stage);
     expect(one.body.file.stage).toBe("bank");
+  });
+
+  /**
+   * A file that has owed two different things and owes the second.
+   *
+   * Driven through the machine rather than through the screens: what is under
+   * test is which of two ledger rows the list picks, and the rows are the
+   * cheapest thing to write directly. The settlement that writes them in
+   * anger is held by the standing tests.
+   */
+  async function owingTwice(user: { id: string }, fileId: string) {
+    const app = await applicationForFile(prisma, fileId);
+    const actorPrincipalId = await principalForParty(prisma, await partyOf(user.id));
+    const move = (event: ApplicationEvent, reasonCode: TransitionReason) =>
+      transition({ applicationId: app!.id, event, actorPrincipalId, reasonCode });
+
+    await move("intake_completed", RECEIPT_REASON_CODE);
+    await move("borrower_owes", "bank_connection_needed");
+    await move("borrower_satisfied", "bank_connected");
+    await move("borrower_owes", "documents_needed");
+    return { applicationId: app!.id, actorPrincipalId };
+  }
+
+  it("says whether the application has been signed", async () => {
+    // No status says so. `esign` is outside the obligations the reconciler
+    // tracks, so a file waiting for a signature and a file waiting for us are
+    // both `in_underwriting`, and they are opposite situations. The column is
+    // a latch with exactly one writer; what this holds is that the list reads
+    // it, because without it the list cannot tell those two apart.
+    const { user, fileId } = await startFile();
+    const before = await listAccessibleFiles(user.id);
+    expect(before.find((r) => r.id === fileId)?.signed).toBe(false);
+
+    await prisma.loanFile.update({
+      where: { id: fileId },
+      data: { applicationSignedAt: new Date() },
+    });
+
+    const after = await listAccessibleFiles(user.id);
+    expect(after.find((r) => r.id === fileId)?.signed).toBe(true);
+  });
+
+  it("says what the file is waiting on the borrower for, newest first", async () => {
+    // The ledger is append-only, so a file that has owed two things carries
+    // both rows forever. The first one names what the borrower already did,
+    // under a pill saying they still have work to do.
+    const { user, fileId } = await startFile();
+    await owingTwice(user, fileId);
+
+    const rows = await listAccessibleFiles(user.id);
+    expect(rows.find((r) => r.id === fileId)?.owes).toEqual({
+      event: "borrower_owes",
+      reasonCode: "documents_needed",
+      to: "awaiting_borrower",
+    });
+  });
+
+  it("picks the row `owedFrom` picks off the same file's ledger", async () => {
+    // The list selects the obligation here and a borrower's screens select it
+    // from the ledger `GET /files/:id` serves, by calling `owedFrom`. This
+    // calls the same function, because comparing the list against a third
+    // expression written out in a test would leave the two that ship free to
+    // disagree — a list answering the oldest row would name one obligation on
+    // the front door and another on the file, and nothing would say so.
+    const { user, fileId } = await startFile();
+    await owingTwice(user, fileId);
+
+    const standing = await applicationStanding(prisma, fileId);
+    const fromLedger = owedFrom(standing!.ledger);
+    const rows = await listAccessibleFiles(user.id);
+
+    expect(fromLedger).not.toBeNull();
+    expect(rows.find((r) => r.id === fileId)?.owes).toEqual({
+      event: fromLedger!.event,
+      reasonCode: fromLedger!.reasonCode,
+      to: fromLedger!.to,
+    });
+  });
+
+  it("picks it in SQL, which is what makes the test above a comparison", () => {
+    // The test above is worth running only while there are two expressions of
+    // the rule. Point the list at `owedFrom` and it compares a function with
+    // itself and passes on any selection at all — including one that reads
+    // every ledger row of every file into memory to find one row, which is the
+    // other reason this stays a query.
+    const src = new URL("..", import.meta.url).pathname;
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((entry) => {
+        const path = joinPath(dir, entry);
+        if (statSync(path).isDirectory()) return entry === "__tests__" ? [] : walk(path);
+        return path.endsWith(".ts") ? [path] : [];
+      });
+
+    const callers = walk(src).filter((path) => /\bowedFrom\b/.test(readFileSync(path, "utf8")));
+    expect(callers).toEqual([]);
+    // The walk reaches the file the selection is actually in.
+    expect(walk(src).some((path) => path.endsWith("services/repository.ts"))).toBe(true);
+  });
+
+  it("names no obligation on a file that is not waiting on the borrower", async () => {
+    // A reason code is a recorded past fact, and the rows stay on the ledger
+    // after the borrower answers them. Read in any other state it names
+    // something already done, so the gate is the state and it is server-side.
+    //
+    // Six edges leave `awaiting_borrower`, and they fall into two kinds: the
+    // borrower answering, and something else stopping the file while they
+    // still owe it. One of each is checked. The second kind is what a
+    // client-side gate would get wrong, because the obligation really is
+    // outstanding and the state is still not one that may say so.
+    const { user, fileId } = await startFile();
+    const { applicationId, actorPrincipalId } = await owingTwice(user, fileId);
+
+    const { user: other, fileId: blockedFile } = await startFile();
+    const blocked = await owingTwice(other, blockedFile);
+    await transition({
+      applicationId: blocked.applicationId,
+      event: "third_party_blocked",
+      actorPrincipalId: blocked.actorPrincipalId,
+      reasonCode: "sanctions_near_match",
+    });
+
+    await transition({
+      applicationId,
+      event: "borrower_satisfied",
+      actorPrincipalId,
+      reasonCode: "documents_received",
+    });
+
+    const answered = (await listAccessibleFiles(user.id)).find((r) => r.id === fileId);
+    expect(answered?.applicationState?.status).toBe("in_processing");
+    expect(answered?.owes).toBeNull();
+
+    const stopped = (await listAccessibleFiles(other.id)).find((r) => r.id === blockedFile);
+    expect(stopped?.applicationState?.status).toBe("suspended");
+    expect(stopped?.owes).toBeNull();
+  });
+
+  it("still lists a file with no application, and a demo file, owing nothing", async () => {
+    // Neither has an application to read an obligation off. A list that threw
+    // or skipped the row would take the front door down for every account at
+    // once, because the demo files are on everybody's list.
+    const { user } = await startFile();
+    const legacy = await createLoanFile({ userId: user.id });
+    const demo = await createLoanFile({ isDemo: true });
+
+    const byId = Object.fromEntries((await listAccessibleFiles(user.id)).map((r) => [r.id, r]));
+    for (const id of [legacy.id, demo.id]) {
+      expect(byId[id]!.owes).toBeNull();
+      expect(byId[id]!.signed).toBe(false);
+    }
   });
 });
 

@@ -998,6 +998,14 @@ model Application {
   /// two credit requests sharing one is the same confusion reversed.
   ausCasefileId String @unique @map("aus_casefile_id")
 
+  /// The identifier DESKTOP UNDERWRITER minted, which is a different thing.
+  /// `AutomatedUnderwritingCaseIdentifier` is a String 30 and DU chooses it, so
+  /// it is null until a submission has been answered — and write-once after,
+  /// because a resubmission carries the case DU named and a new case is a new
+  /// application. `ausCasefileId` above is ours and is never sent as this one:
+  /// a 36-character UUID fits neither this field nor `LenderLoan`, a String 15.
+  duCasefileId String? @unique @map("du_casefile_id") @db.VarChar(30)
+
   status          ApplicationState @default(DRAFT)
   /// Increments on every transition. The ledger row for a move carries the same
   /// number, and `(application_id, seq)` is unique — so two writers racing is an

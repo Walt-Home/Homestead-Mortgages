@@ -153,3 +153,75 @@ describe("a casefile survives a resubmission", () => {
     expect(await casefileIdForFile(fileId)).not.toBe(handed);
   });
 });
+
+describe("the casefile DU mints is not the one we mint", () => {
+  /** What DU would return on a response, shaped the way DU shapes it. */
+  const DU_CASE = "1234567890";
+
+  it("starts empty, because DU has not answered yet", async () => {
+    const { fileId } = await startedFile();
+    const app = await prisma.application.findUniqueOrThrow({
+      where: { loanFileId: fileId },
+      select: { duCasefileId: true, ausCasefileId: true },
+    });
+    expect(app.duCasefileId).toBeNull();
+    // And ours, which is what tells two submissions apart before any answer,
+    // is still there and still does not fit the field DU would put it in.
+    expect(app.ausCasefileId.length).toBeGreaterThan(30);
+  });
+
+  it("takes DU's identifier once and then refuses a different one", async () => {
+    const { fileId } = await startedFile();
+    await prisma.application.update({
+      where: { loanFileId: fileId },
+      data: { duCasefileId: DU_CASE },
+    });
+
+    // A second case at Fannie while our own records still say one.
+    await expect(
+      prisma.application.update({
+        where: { loanFileId: fileId },
+        data: { duCasefileId: "9999999999" },
+      }),
+    ).rejects.toThrow(/already carries DU casefile/);
+
+    // And clearing it, which loses the only handle we have on the first.
+    await expect(
+      prisma.application.update({ where: { loanFileId: fileId }, data: { duCasefileId: null } }),
+    ).rejects.toThrow(/already carries DU casefile/);
+  });
+
+  it("lets a retry store the value it already stored", async () => {
+    // The refusal is keyed on the value DIFFERING, not on the column being
+    // written — a resubmission that reads the response and writes back what is
+    // already there is an ordinary retry, and making that an error would turn
+    // a duplicate delivery into a failure.
+    const { fileId } = await startedFile();
+    for (let i = 0; i < 3; i++) {
+      await prisma.application.update({
+        where: { loanFileId: fileId },
+        data: { duCasefileId: DU_CASE },
+      });
+    }
+    const app = await prisma.application.findUniqueOrThrow({
+      where: { loanFileId: fileId },
+      select: { duCasefileId: true },
+    });
+    expect(app.duCasefileId).toBe(DU_CASE);
+  });
+
+  it("will not let two applications claim one DU case", async () => {
+    const a = await startedFile();
+    const b = await startedFile();
+    await prisma.application.update({
+      where: { loanFileId: a.fileId },
+      data: { duCasefileId: DU_CASE },
+    });
+    await expect(
+      prisma.application.update({
+        where: { loanFileId: b.fileId },
+        data: { duCasefileId: DU_CASE },
+      }),
+    ).rejects.toThrow();
+  });
+});

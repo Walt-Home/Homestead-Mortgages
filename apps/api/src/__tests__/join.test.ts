@@ -1310,7 +1310,15 @@ describe("screen 2 pins the person", () => {
     const first = await callAs(user.id, [fileRouter], "POST", `/${fileId}/borrowers`, SCREEN_TWO);
     expect(first.status).toBe(201);
     const borrower = await borrowerOf(fileId);
-    await recordSnapshot(fileId, "bank", "fixture", "ext-1", {}, new Date().toISOString());
+    await recordSnapshot(
+      fileId,
+      "bank",
+      "fixture",
+      "ext-1",
+      {},
+      new Date().toISOString(),
+      borrower.partyId,
+    );
 
     const granted = await callAs(user.id, [connectorRouter], "POST", `/${fileId}/consents`, {
       kind: "verification_authorization",

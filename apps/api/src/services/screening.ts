@@ -16,7 +16,7 @@ import { prisma } from "@hm/db";
 import type { ConnectorRegistry } from "@hm/connectors";
 import type { LoanFile, SanctionsScreening } from "@hm/shared";
 import { applicationForFile } from "./applications.js";
-import { tokenFor } from "./authorization.js";
+import { subjectPartyId, tokenFor } from "./authorization.js";
 import { ownsTransaction, type Db } from "./db.js";
 import { servicePrincipal } from "./party.js";
 import { recordEvent, recordSnapshot } from "./repository.js";
@@ -55,6 +55,7 @@ export async function screenAndRecord(
       result.externalId,
       result.data,
       result.retrievedAt,
+      subjectPartyId(file),
       tx,
     );
     await tx.loanFile.update({

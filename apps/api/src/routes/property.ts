@@ -239,6 +239,9 @@ propertyFileRouter.post(
       record.externalId,
       record.data,
       record.retrievedAt,
+      // Keyed on the address, not on a person. Screen 1 runs before there is
+      // a borrower to attribute it to, which is why it is unguarded at all.
+      null,
     );
     await recordSnapshot(
       id,
@@ -247,6 +250,9 @@ propertyFileRouter.post(
       valuation.externalId,
       valuation.data,
       valuation.retrievedAt,
+      // Keyed on the address, not on a person. Screen 1 runs before there is
+      // a borrower to attribute it to, which is why it is unguarded at all.
+      null,
     );
     await recordSnapshot(
       id,
@@ -255,6 +261,9 @@ propertyFileRouter.post(
       flood.externalId,
       flood.data,
       flood.retrievedAt,
+      // Keyed on the address, not on a person. Screen 1 runs before there is
+      // a borrower to attribute it to, which is why it is unguarded at all.
+      null,
     );
     await recordEvent(
       id,
@@ -325,6 +334,9 @@ propertyFileRouter.post(
       result.externalId,
       result.data,
       result.retrievedAt,
+      // Keyed on the address, not on a person. Screen 1 runs before there is
+      // a borrower to attribute it to, which is why it is unguarded at all.
+      null,
     );
     await recordEvent(id, "connector_pull", result.provider, { kind: "lien_search" }, "UW-005");
 

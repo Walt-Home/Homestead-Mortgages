@@ -41,6 +41,27 @@ const lower = <T extends string>(s: string) => s.toLowerCase() as T;
  * trigger mirrored a moment ago in the same transaction is visible to the
  * mint. Still the only minter; still reads `authorizations` and nothing else.
  */
+/**
+ * The party a person-keyed retrieval on this file is about.
+ *
+ * Exported so the evidence a pull records can be attributed to the same person
+ * the pull was authorized for. Both answers come from here, so there is still
+ * exactly one place that picks a subject out of a file — which is what the note
+ * above promises, and it would stop being true the moment a route reached for
+ * `file.borrowers[0]` on its own.
+ */
+export function subjectPartyId(file: LoanFile): string {
+  const subject = file.borrowers[0];
+  if (!subject) {
+    throw new AppError(
+      409,
+      "This file has no borrower yet, so there is nobody to authorize a retrieval about.",
+      "NO_SUBJECT",
+    );
+  }
+  return subject.partyId;
+}
+
 export async function tokenFor(
   file: LoanFile,
   category: DataCategory,

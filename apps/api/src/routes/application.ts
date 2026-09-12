@@ -24,7 +24,7 @@ import {
   recordSnapshot,
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
-import { tokenFor } from "../services/authorization.js";
+import { subjectPartyId, tokenFor } from "../services/authorization.js";
 import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
 import { applicationForFile } from "../services/applications.js";
@@ -250,6 +250,7 @@ applicationRouter.post(
         result.externalId,
         result.data,
         result.retrievedAt,
+        subjectPartyId(refreshed!),
       );
       transcripts = result.data;
       await recordEvent(id, "connector_pull", result.provider, { kind: "irs" }, "INC-003");

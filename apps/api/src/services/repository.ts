@@ -452,11 +452,21 @@ export async function recordSnapshot(
   externalId: string,
   payload: unknown,
   retrievedAt: string,
+  /**
+   * Whose report this is, or null for a kind keyed on an address.
+   *
+   * Required rather than optional, and that is the point: a new person-keyed
+   * pull that forgets it should not compile. The database refuses the row
+   * either way, but a type error arrives while somebody is writing the route
+   * rather than the first time a borrower runs it.
+   */
+  partyId: string | null,
   db: Db = prisma,
 ): Promise<{ id: string }> {
   return db.connectorSnapshot.create({
     data: {
       loanFileId,
+      partyId,
       kind,
       provider,
       externalId,

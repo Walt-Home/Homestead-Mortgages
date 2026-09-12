@@ -265,7 +265,7 @@ describe("the employer, across the step that improves it", () => {
     // No fixture reports this; a real payroll aggregator covering a borrower
     // with two related employers would.
     const { fileId, partyId } = await throughScreenTwo();
-    const snapshot = await snapshotFor(fileId, "report-1");
+    const snapshot = await snapshotFor(fileId, partyId, "report-1");
     const record = (ein?: string): EmploymentRecord => ({
       employerName: "Acme, Inc.",
       employerEin: ein,
@@ -325,13 +325,13 @@ const REPORTED = (types: readonly string[]): ReportedIncome => ({
   })),
 });
 
-const snapshotFor = (fileId: string, externalId: string) =>
-  recordSnapshot(fileId, "bank", "fixture", externalId, {}, new Date().toISOString());
+const snapshotFor = (fileId: string, partyId: string, externalId: string) =>
+  recordSnapshot(fileId, "bank", "fixture", externalId, {}, new Date().toISOString(), partyId);
 
 describe("a source the next report stops naming", () => {
   it("is retired, names the report that retired it, and leaves the projection", async () => {
     const { fileId, partyId } = await throughScreenTwo();
-    const first = await snapshotFor(fileId, "report-1");
+    const first = await snapshotFor(fileId, partyId, "report-1");
     await prisma.$transaction((tx) =>
       reconcileIncomeAndEmployment(tx, {
         loanFileId: fileId,
@@ -343,7 +343,7 @@ describe("a source the next report stops naming", () => {
     );
     expect((await loadLoanFile(fileId))!.incomeSources).toHaveLength(2);
 
-    const second = await snapshotFor(fileId, "report-2");
+    const second = await snapshotFor(fileId, partyId, "report-2");
     await prisma.$transaction((tx) =>
       reconcileIncomeAndEmployment(tx, {
         loanFileId: fileId,
@@ -370,7 +370,7 @@ describe("a source the next report stops naming", () => {
   it("is revived on the same row when a later report names it again", async () => {
     const { fileId, partyId } = await throughScreenTwo();
     const reconcile = async (types: readonly string[], externalId: string) => {
-      const snapshot = await snapshotFor(fileId, externalId);
+      const snapshot = await snapshotFor(fileId, partyId, externalId);
       await prisma.$transaction((tx) =>
         reconcileIncomeAndEmployment(tx, {
           loanFileId: fileId,
@@ -414,7 +414,7 @@ describe("whose income it is", () => {
     // pinning before one can.
     const second = await prisma.party.create({ data: {}, select: { id: true } });
 
-    const first = await snapshotFor(fileId, "report-1");
+    const first = await snapshotFor(fileId, partyId, "report-1");
     await prisma.$transaction((tx) =>
       reconcileIncomeAndEmployment(tx, {
         loanFileId: fileId,
@@ -425,7 +425,7 @@ describe("whose income it is", () => {
       }),
     );
 
-    const theirs = await snapshotFor(fileId, "report-2");
+    const theirs = await snapshotFor(fileId, partyId, "report-2");
     await prisma.$transaction((tx) =>
       reconcileIncomeAndEmployment(tx, {
         loanFileId: fileId,

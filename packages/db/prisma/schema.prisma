@@ -330,6 +330,13 @@ model ConnectorSnapshot {
   loanFileId String   @map("loan_file_id") @db.Uuid
   loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
 
+  /// Whose report this is. Required for the person-keyed kinds — credit, bank,
+  /// payroll, irs, sanctions — and forbidden for the address-keyed ones, which
+  /// run on screen 1 before a borrower exists. The database enforces both, and
+  /// refuses a kind it has never heard of rather than defaulting it to nobody.
+  partyId String? @map("party_id") @db.Uuid
+  party   Party?  @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
   kind        String
   provider    String
   externalId  String   @map("external_id")
@@ -347,6 +354,8 @@ model ConnectorSnapshot {
   employmentRetiredBy Employment[]   @relation("EmploymentRetiredBy")
 
   @@index([loanFileId, kind, retrievedAt])
+  /// The person-to-reports direction, which is what a submission assembles from.
+  @@index([partyId], map: "connector_snapshots_party")
   /// Joining a row to its snapshot uses the primary key. This answers the other
   /// question — which numbers came out of vendor report X — which is the one an
   /// underwriter asks when a vendor issues a correction.
@@ -723,16 +732,17 @@ model Party {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  facts          Fact[]
-  principals     Principal[]
-  authorizations Authorization[]
-  applications   ApplicationParty[]
-  loans          LoanParty[]
-  users          User[]             @relation("UserParty")
-  borrowerRows   Borrower[]         @relation("BorrowerParty")
-  employers      Employer[]
-  incomeSources  IncomeSource[]
-  employments    Employment[]
+  facts              Fact[]
+  principals         Principal[]
+  authorizations     Authorization[]
+  applications       ApplicationParty[]
+  loans              LoanParty[]
+  users              User[]              @relation("UserParty")
+  borrowerRows       Borrower[]          @relation("BorrowerParty")
+  employers          Employer[]
+  incomeSources      IncomeSource[]
+  employments        Employment[]
+  connectorSnapshots ConnectorSnapshot[]
 
   @@index([claimStatus])
   @@index([mergedIntoPartyId])

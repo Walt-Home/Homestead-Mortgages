@@ -17,7 +17,7 @@ import {
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
 import { reconcileIncomeAndEmployment } from "../services/income.js";
-import { tokenFor } from "../services/authorization.js";
+import { subjectPartyId, tokenFor } from "../services/authorization.js";
 import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
 import { applicationForFile, ensureApplicationParty } from "../services/applications.js";
@@ -173,6 +173,7 @@ connectorRouter.post(
       result.externalId,
       result.data,
       result.retrievedAt,
+      subjectPartyId(file),
     );
     await upsertLink(id, "credit", result.provider);
     // APP-018 names the credit pull as its source: a refinance's existing
@@ -288,6 +289,7 @@ connectorRouter.post(
         result.externalId,
         result.data,
         result.retrievedAt,
+        subjectPartyId(file),
         tx,
       );
       await upsertLink(id, "bank", result.provider, tx);
@@ -355,6 +357,7 @@ connectorRouter.post(
         result.externalId,
         result.data,
         result.retrievedAt,
+        subjectPartyId(file),
         tx,
       );
       await upsertLink(id, "payroll", result.provider, tx);
@@ -399,6 +402,7 @@ connectorRouter.post(
         result.externalId,
         result.data,
         result.retrievedAt,
+        subjectPartyId(file),
         tx,
       );
       await upsertLink(id, "irs", result.provider, tx);

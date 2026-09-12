@@ -182,6 +182,7 @@ async function connectAs(
       credit.externalId,
       credit.data,
       credit.retrievedAt,
+      partyId,
     );
     return null;
   }
@@ -208,6 +209,7 @@ async function connectAs(
       data.externalId,
       data.data,
       data.retrievedAt,
+      partyId,
       tx,
     );
     // Through the same writer the route uses, so the harness cannot drift into

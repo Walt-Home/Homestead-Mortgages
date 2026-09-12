@@ -401,6 +401,7 @@ async function credit(w: Walk): Promise<void> {
     result.externalId,
     result.data,
     result.retrievedAt,
+    w.partyId,
     w.tx,
   );
   await linked(w, "credit", result.provider);
@@ -448,6 +449,8 @@ async function liens(w: Walk): Promise<void> {
     result.externalId,
     result.data,
     result.retrievedAt,
+    // Keyed on the address, like the rest of screen 1's lookups.
+    null,
     w.tx,
   );
   await recordEvent(
@@ -481,6 +484,7 @@ async function propertyData(w: Walk): Promise<void> {
       pull.externalId,
       pull.data,
       pull.retrievedAt,
+      null,
       w.tx,
     );
   }
@@ -530,6 +534,7 @@ async function bank(w: Walk): Promise<void> {
     result.externalId,
     result.data,
     result.retrievedAt,
+    w.partyId,
     w.tx,
   );
   await linked(w, "bank", result.provider);
@@ -564,6 +569,7 @@ async function payroll(w: Walk): Promise<void> {
     result.externalId,
     result.data,
     result.retrievedAt,
+    w.partyId,
     w.tx,
   );
   await linked(w, "payroll", result.provider);
@@ -630,6 +636,7 @@ async function signApplication(w: Walk): Promise<void> {
     result.externalId,
     result.data,
     result.retrievedAt,
+    w.partyId,
     w.tx,
   );
   await linked(w, "irs", result.provider);

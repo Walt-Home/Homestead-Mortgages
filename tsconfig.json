@@ -6,6 +6,7 @@
     { "path": "packages/requirements" },
     { "path": "packages/underwriting" },
     { "path": "packages/connectors" },
+    { "path": "packages/du" },
     { "path": "apps/api" },
     { "path": "apps/web" }
   ]

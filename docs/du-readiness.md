@@ -275,10 +275,13 @@ Deriving them is not a cheaper way to satisfy DECLARATION; it is a worse one.
 Dependency order, not importance. No time estimates — build a schedule from
 this with the people doing the work.
 
-1. **Get the specification corpus into the repo.** Now that we assemble the
-   file ourselves, the ArcRoles tab (82 rows), the Cardinality tab (174 rows)
-   and the eighteen test cases are a dependency rather than reference
-   material. Nothing below step 6 can be got right from a summary of them.
+1. **Get the specification corpus where the build can read it.** Now that we
+   assemble the file ourselves, the ArcRoles tab (23 arcs), the Cardinality tab
+   (171 container XPaths) and the eighteen test cases are a dependency rather
+   than reference material. Nothing below step 6 can be got right from a
+   summary of them. The corpus is licensed and stays out of this repository:
+   `scripts/build-du.mjs` reads it from `DU_SPEC_DIR` and commits the
+   TypeScript it derives.
 2. **Stop discarding the declaration follow-ups.** A route that receives what
    `ReviewPage` already collects.
 3. **Ask the fourteen questions and store them**, per application rather than
@@ -316,9 +319,16 @@ document, and that is the fact the data model has to satisfy.
 **Two counts in the original audit are off, and this document repeated them.**
 The ArcRoles tab holds **23** arcs, not 82 — 82 was the sheet's row count,
 including a three-row header and trailing blanks. Eleven of the 23 appear
-across all eighteen shipped samples. The Cardinality tab holds **171**
-container XPaths, not 174. Neither changes a conclusion; both change what a
-reader thinks they have to cover.
+across all eighteen shipped samples. The Cardinality tab holds **171** distinct
+container XPaths, not 174: 172 data rows, of which
+`…/LOANS/LOAN/CLOSING_INFORMATION` appears twice with the same cardinality.
+Neither changes a conclusion; both change what a reader thinks they have to
+cover.
+
+The container count is no longer a claim in prose. `scripts/build-du.mjs`
+derives it from the tab, the generated table is committed, and
+`packages/du/src/__tests__/generated.test.ts` fails if it moves — which is the
+only kind of number this document should carry.
 
 **And validating the XML proves much less than it looks like it does.** The
 XSD enforces almost nothing about the relationship graph: a dangling

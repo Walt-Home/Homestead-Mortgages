@@ -1,0 +1,291 @@
+/**
+ * What the generator actually derived from the DU Spec, asserted against the
+ * committed tables.
+ *
+ * These run everywhere, including on a machine with no DU_SPEC_DIR, because the
+ * generated files are the committed artifact. That is the point of committing
+ * them: the facts below are checkable without the licensed source, and
+ * `npm run du:verify` is what ties them back to it.
+ */
+
+import { describe, expect, it } from "vitest";
+import {
+  CHILD_ORDER,
+  DU_CARDINALITY,
+  DU_CONDITIONALITY,
+  DU_CONDITION_STATEMENTS,
+  DU_ENUMERATIONS,
+  DU_FORMATS,
+  LOCAL_ENUMERATIONS,
+  TYPE_FOR_PATH,
+} from "../index.js";
+
+/**
+ * Alphabetical, with EXTENSION last — the shortcut this table exists to refuse.
+ * Case-insensitive, because that is the reading under which it looks most
+ * plausible and gets the most types right.
+ */
+function alphabeticalWithExtensionLast(children: readonly string[]): string[] {
+  const rest = children.filter((c) => c !== "EXTENSION");
+  rest.sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : 1));
+  return children.includes("EXTENSION") ? [...rest, "EXTENSION"] : rest;
+}
+
+describe("child order", () => {
+  /**
+   * The nine types on the DU emission path whose sequence is not alphabetical.
+   * Each is written out here in full rather than spot-checked, because "the
+   * order is right" is the only thing standing between a well-formed document
+   * and one Fannie Mae rejects for a reason no local check can see.
+   */
+  const expected: Record<string, string[]> = {
+    DEAL: [
+      "REFERENCE",
+      "ABOUT_VERSIONS",
+      "ASSETS",
+      "COLLATERALS",
+      "COMMUNICATION_EVENTS",
+      "DEAL_DETAIL",
+      "EXPENSES",
+      "LIABILITIES",
+      "LITIGATIONS",
+      "LOANS",
+      "PARTIES",
+      "RELATIONSHIPS",
+      "SERVICES",
+      "SUPPORTING_RECORD_SETS",
+      "EXTENSION",
+    ],
+    PARTY: [
+      "REFERENCE",
+      "INDIVIDUAL",
+      "LEGAL_ENTITY",
+      "ADDRESSES",
+      "LANGUAGES",
+      "ROLES",
+      "TAXPAYER_IDENTIFIERS",
+      "EXTENSION",
+    ],
+    // Thirty role containers before LICENSES, and BORROWER — the one a DU
+    // file always carries — is fifth, not alphabetical among them.
+    ROLE: [
+      "APPRAISER",
+      "APPRAISER_SUPERVISOR",
+      "ATTORNEY",
+      "ATTORNEY_IN_FACT",
+      "BORROWER",
+      "CLOSING_AGENT",
+      "DEFENDANT",
+      "FULFILLMENT_PARTY",
+      "HOUSING_COUNSELING_AGENCY",
+      "LENDER",
+      "LIEN_HOLDER",
+      "LOAN_ORIGINATOR",
+      "LOSS_PAYEE",
+      "NOTARY",
+      "PAYEE",
+      "PLAINTIFF",
+      "PROPERTY_OWNER",
+      "PROPERTY_SELLER",
+      "REAL_ESTATE_AGENT",
+      "REGULATORY_AGENCY",
+      "REQUESTING_PARTY",
+      "RESPONDING_PARTY",
+      "RETURN_TO",
+      "REVIEW_APPRAISER",
+      "SERVICE_PROVIDER",
+      "SERVICER",
+      "SERVICING_TRANSFEROR",
+      "SUBMITTING_PARTY",
+      "TRUST",
+      "TRUSTEE",
+      "LICENSES",
+      "PARTY_ROLE_IDENTIFIERS",
+      "ROLE_DETAIL",
+      "EXTENSION",
+    ],
+    EMPLOYER: [
+      "INDIVIDUAL",
+      "LEGAL_ENTITY",
+      "ADDRESS",
+      "CREDIT_COMMENTS",
+      "EMPLOYMENT",
+      "EMPLOYMENT_DOCUMENTATIONS",
+      "VERIFICATION",
+      "EXTENSION",
+    ],
+    COLLATERAL: ["PLEDGED_ASSET", "SUBJECT_PROPERTY", "COLLATERAL_DETAIL", "EXTENSION"],
+    CONTACT_POINT: [
+      "CONTACT_POINT_EMAIL",
+      "CONTACT_POINT_SOCIAL_MEDIA",
+      "CONTACT_POINT_TELEPHONE",
+      "OTHER_CONTACT_POINT",
+      "CONTACT_POINT_DETAIL",
+      "EXTENSION",
+    ],
+    LICENSE: ["APPRAISER_LICENSE", "PROPERTY_LICENSE", "LICENSE_DETAIL", "EXTENSION"],
+    // All data points, and the schema puts the FHA_VA prefix after the FHA
+    // one — which a case-insensitive sort does not.
+    GOVERNMENT_BORROWER: [
+      "CAIVRSIdentifier",
+      "FHABorrowerCertificationLeadPaintIndicator",
+      "FHABorrowerCertificationOriginalMortgageAmount",
+      "FHABorrowerCertificationOwnFourOrMoreDwellingsIndicator",
+      "FHABorrowerCertificationOwnOtherPropertyIndicator",
+      "FHABorrowerCertificationPropertySoldCityName",
+      "FHABorrowerCertificationPropertySoldPostalCode",
+      "FHABorrowerCertificationPropertySoldStateName",
+      "FHABorrowerCertificationPropertySoldStreetAddressLineText",
+      "FHABorrowerCertificationPropertyToBeSoldIndicator",
+      "FHABorrowerCertificationRentalIndicator",
+      "FHABorrowerCertificationSalesPriceAmount",
+      "FHA_VABorrowerCertificationSalesPriceExceedsAppraisedValueType",
+      "VABorrowerCertificationOccupancyType",
+      "VABorrowerSurvivingSpouseIndicator",
+      "VACoBorrowerNonTaxableIncomeAmount",
+      "VACoBorrowerTaxableIncomeAmount",
+      "VAFederalTaxAmount",
+      "VALocalTaxAmount",
+      "VAPrimaryBorrowerNonTaxableIncomeAmount",
+      "VAPrimaryBorrowerTaxableIncomeAmount",
+      "VASocialSecurityTaxAmount",
+      "VAStateTaxAmount",
+      "VeteranStatusIndicator",
+      "EXTENSION",
+    ],
+    DOCUMENT_SPECIFIC_DATA_SET: [
+      "ASSIGNMENT",
+      "GFE",
+      "HUD1",
+      "INTEGRATED_DISCLOSURE",
+      "NOTE",
+      "NOTICE_OF_RIGHT_TO_CANCEL",
+      "SECURITY_INSTRUMENT",
+      "TIL_DISCLOSURE",
+      "URLA",
+      "DOCUMENT_CLASSES",
+      "EXECUTION",
+      "RECORDING_ENDORSEMENTS",
+      "EXTENSION",
+    ],
+  };
+
+  it("covers all nine of them", () => {
+    // The count is part of the claim above it. A tenth type found to be
+    // non-alphabetical, or one quietly dropped from the list, is the same
+    // silence either way.
+    expect(Object.keys(expected)).toHaveLength(9);
+  });
+
+  it.each(Object.entries(expected))("%s is in schema order", (type, children) => {
+    expect(CHILD_ORDER[type]).toEqual(children);
+  });
+
+  it.each(Object.keys(expected))("%s is not what sorting would give", (type) => {
+    const children = CHILD_ORDER[type];
+    expect(children).toBeDefined();
+    expect(alphabeticalWithExtensionLast(children!)).not.toEqual(children);
+  });
+
+  it("resolves every container XPath the spec names to a type it knows", () => {
+    for (const [xpath, type] of Object.entries(TYPE_FOR_PATH)) {
+      expect(xpath.startsWith("MESSAGE"), xpath).toBe(true);
+      expect(CHILD_ORDER[type] ?? [], `${xpath} -> ${type}`).toBeDefined();
+    }
+  });
+});
+
+describe("enumerations", () => {
+  it("derives DuAssetType to 22 members", () => {
+    // Twenty-three rows in the tab, one of them a repeated "Other".
+    expect(DU_ENUMERATIONS.DuAssetType).toHaveLength(22);
+    expect(DU_ENUMERATIONS.DuAssetType).toContain("CheckingAccount");
+    // Schema-legal and DU-illegal: in the XSD's AssetType, not in DU's subset.
+    expect(DU_ENUMERATIONS.DuAssetType).not.toContain("RealEstateOwned");
+    expect(DU_ENUMERATIONS.DuAssetType).not.toContain("Automobile");
+  });
+
+  it("carries both answers to both declaration questions", () => {
+    // Read verbatim the tab gives IntentToOccupyType only "No".
+    expect(DU_ENUMERATIONS.DuYesNo).toEqual(["No", "Yes"]);
+  });
+
+  it("keeps the two property-usage enums apart", () => {
+    // 3a.5 carries Other and the current-usage list does not, so merging these
+    // two back together would widen one of them.
+    expect(DU_ENUMERATIONS.DuIntendedPropertyUsage).toContain("Other");
+    expect(DU_ENUMERATIONS.DuPropertyUsage).not.toContain("Other");
+  });
+
+  it("treats AssetTypeOtherDescription as the enumeration it is", () => {
+    expect(DU_ENUMERATIONS.DuAssetTypeOtherDescription).toEqual([
+      "OtherLiquidAsset",
+      "OtherNonLiquidAsset",
+    ]);
+  });
+
+  it("declares the one enum that is ours and gives it no members", () => {
+    expect(LOCAL_ENUMERATIONS).toEqual(["DuAssetKind"]);
+    expect(DU_ENUMERATIONS.DuAssetKind).toBeUndefined();
+  });
+
+  it("derives a non-empty member list for every enum that is not ours", () => {
+    for (const [name, values] of Object.entries(DU_ENUMERATIONS)) {
+      expect(name).toMatch(/^Du[A-Z]/);
+      expect(values.length, name).toBeGreaterThan(0);
+      expect(new Set(values).size, name).toBe(values.length);
+      for (const value of values) expect(value, name).not.toMatch(/\*/);
+    }
+  });
+});
+
+describe("formats", () => {
+  it("keeps a data point's width per destination", () => {
+    const subject =
+      "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/COLLATERALS/COLLATERAL/SUBJECT_PROPERTY/ADDRESS" +
+      "#AddressLineText#4a.3.1";
+    const owned =
+      "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/ASSETS/ASSET/OWNED_PROPERTY/PROPERTY/ADDRESS" +
+      "#AddressLineText#3a.2.1";
+    expect(DU_FORMATS[subject]).toEqual({ kind: "string", maxLength: 50 });
+    expect(DU_FORMATS[owned]).toEqual({ kind: "string", maxLength: 35 });
+  });
+
+  it("carries the full nine digits for the taxpayer identifier", () => {
+    // Numeric 9, no dashes. The serializer is where the vault gets
+    // dereferenced, and this is the width it has to render into.
+    const key =
+      "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/PARTIES/PARTY/TAXPAYER_IDENTIFIERS/" +
+      "TAXPAYER_IDENTIFIER#TaxpayerIdentifierValue#1a.3";
+    expect(DU_FORMATS[key]).toEqual({ kind: "numeric", digits: 9 });
+  });
+});
+
+describe("cardinality", () => {
+  it("covers the container XPaths the Cardinality tab names", () => {
+    expect(Object.keys(DU_CARDINALITY)).toHaveLength(171);
+  });
+
+  it("reads MIN:MAX per product", () => {
+    expect(DU_CARDINALITY["MESSAGE/DEAL_SETS/DEAL_SET"]?.du).toEqual({ min: 1, max: 1 });
+  });
+});
+
+describe("conditionality", () => {
+  it("parses every statement the map carries", () => {
+    const referenced = new Set(
+      DU_CONDITIONALITY.filter((e) => e.condition !== null).map((e) => e.condition!),
+    );
+    for (const statement of referenced) {
+      expect(DU_CONDITION_STATEMENTS[statement], statement).toBeDefined();
+    }
+    expect(Object.keys(DU_CONDITION_STATEMENTS)).toHaveLength(referenced.size);
+  });
+
+  it("gives a condition to conditional rows and to no others", () => {
+    for (const entry of DU_CONDITIONALITY) {
+      if (entry.requirement === "conditional") expect(entry.condition, entry.name).not.toBeNull();
+      else expect(entry.condition, entry.name).toBeNull();
+    }
+  });
+});

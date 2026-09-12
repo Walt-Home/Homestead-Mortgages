@@ -34,6 +34,9 @@ export default tseslint.config(
       "packages/requirements/src/generated.ts",
       // Generated from packages/brand/tokens.mjs, same reasoning.
       "packages/brand/tokens.css",
+      // Generated from Fannie Mae's DU specification by scripts/build-du.mjs,
+      // same reasoning. `npm run du:verify` is what guards these.
+      "packages/du/src/generated/**",
     ],
   },
 

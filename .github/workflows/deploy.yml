@@ -69,8 +69,16 @@ jobs:
       - name: Design tokens match their source
         run: npm run brand:verify
 
+      # The DU tables are generated from Fannie Mae's specification, which is
+      # licensed and is deliberately not in this repository. With no
+      # DU_SPEC_DIR here, this runs the half of the check that needs no spec:
+      # every Du* enum in schema.prisma against the members the generator
+      # derived. It says which half it skipped.
+      - name: DU tables match the spec
+        run: npm run du:verify
+
       - name: TypeScript
-        run: npx tsc -b packages/shared packages/requirements packages/connectors packages/underwriting packages/db apps/api apps/web
+        run: npx tsc -b packages/shared packages/requirements packages/connectors packages/underwriting packages/du packages/db apps/api apps/web
 
       # There was no eslint config in this repo until now — the dependencies
       # were installed and every workspace's `lint` script called eslint, but

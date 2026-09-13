@@ -75,26 +75,28 @@ The rest limit what we can submit, or sit outside the data model entirely:
 
 ## At a glance
 
-| #   | Item                                | Status | One line                                                    |
-| --- | ----------------------------------- | ------ | ----------------------------------------------------------- |
-| 1   | One casefile per loan               | Yellow | Stable across resubmissions, but the wrong shape for DU     |
-| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate             |
-| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person |
-| —   | Ownership shape                     | Green  | Relational + join tables, proven twice, unapplied to assets |
-| 7   | Employer as an entity               | Yellow | Real entity — but only a vendor pull ever creates one       |
-| 4   | Verification report identifier      | Yellow | Stored all along; income reads it, assets do not            |
-| 3   | Borrower declarations               | Red    | **Blocks any submission.** 11 of 13 required still to build |
-| —   | Current residence                   | Red    | **Blocks any submission.** `"rent"` is fabricated, and sent |
-| 6   | Assets, liabilities, owned property | Red    | **Blocks any submission.** No tables; three fields are core |
-| 5   | Up to four borrowers                | Red    | The route cannot append a second                            |
-| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary           |
-| —   | Delivery boundary                   | Red    | **Decided — we submit.** Nothing built yet                  |
+| #   | Item                                | Status | One line                                                        |
+| --- | ----------------------------------- | ------ | --------------------------------------------------------------- |
+| 1   | One casefile per loan               | Yellow | Stable across resubmissions, but the wrong shape for DU         |
+| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                 |
+| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person     |
+| —   | Ownership shape                     | Green  | Relational + join tables, proven twice, unapplied to assets     |
+| 7   | Employer as an entity               | Yellow | Real entity — but only a vendor pull ever creates one           |
+| 4   | Verification report identifier      | Yellow | Stored all along; income reads it, assets do not                |
+| 3   | Borrower declarations               | Red    | **Blocks any submission.** 11 of 13 required still to build     |
+| —   | Current residence                   | Red    | **Blocks any submission.** Nobody is asked, and nothing submits |
+| 6   | Assets, liabilities, owned property | Red    | **Blocks any submission.** No tables; three fields are core     |
+| 5   | Up to four borrowers                | Red    | The route cannot append a second                                |
+| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary               |
+| —   | Delivery boundary                   | Red    | **Decided — we submit.** Nothing built yet                      |
 
 **Three of the reds block any submission at all, not just some loans.**
-Declarations are one. So is the current residence: `RESIDENCE` is 1:2 and
-`BorrowerResidencyBasisType` is the fabricated `"rent"` this repo already
-documents as a stub — a made-up value inside a federal submission. And DU's
-63-point Optimized Dataset includes `AssetType`, `LiabilityType` and
+Declarations are one. So is the current residence: `RESIDENCE` is 1:2,
+`BorrowerResidencyBasisType` is required, and no screen asks for it. It used to
+be the fabricated `"rent"` this repo documented as a stub; that value has
+stopped being manufactured, which leaves a required element with nothing behind
+it rather than a made-up one inside a federal submission. And DU's 63-point
+Optimized Dataset includes `AssetType`, `LiabilityType` and
 `OwnedPropertyDispositionStatusType`, so assets and liabilities gate
 everything rather than narrowing which loans qualify.
 
@@ -210,11 +212,12 @@ against the map rather than the summary: 13 of the 21 declaration data points
 are required, across two containers, and 11 are still to build.
 
 **The current residence.** `RESIDENCE` is 1:2 and
-`BorrowerResidencyBasisType` is required. `borrowers.current_housing` is
-`String @default("rent")` — NOT NULL with a database default — and the four
-screens never ask. Today that is a known stub; on a submission it is a
-fabricated answer about the borrower's own housing, and it has to be fixed in
-the same work as the declarations rather than after them.
+`BorrowerResidencyBasisType` is required. `du_residences` now holds the answer
+and `borrowers.current_housing` is a nullable derived copy of it — it was
+`String @default("rent")`, NOT NULL with a database default, against four
+screens that never asked, which on a submission is a fabricated answer about the
+borrower's own housing. The fabrication has stopped; the question is still not
+asked, so a new file carries no basis at all until a screen collects one.
 
 **Assets, liabilities, owned property.** Nothing. Balances exist only as
 vendor JSON in `connector_snapshots.payload`, with no owner and no obligor —

@@ -1,0 +1,247 @@
+/**
+ * Where Section 5 and the residence answers come in.
+ *
+ * No screen posts here yet — the question is asked in the commit after this
+ * one. The route exists now because the column it makes true had to stop being
+ * fabricated now: `borrowers.current_housing` was NOT NULL with a default of
+ * `'rent'` and no screen ever asked, so the alternative to shipping somewhere
+ * for the real answer to go was a nullable column and nothing able to fill it.
+ *
+ * Every field Desktop Underwriter requires is required HERE, not merely
+ * non-null in the table. A partial submit is a 400 with the field named, rather
+ * than a row half-written and completed with `false` on a document the borrower
+ * signs.
+ *
+ * And every rule the two tables enforce is stated here as well as there. The
+ * database stays the backstop — it is where an invariant that matters belongs —
+ * but a body only the database refuses reaches the caller as a 500 with nothing
+ * named, which is the same refusal with the field filed off. Each check below
+ * names the constraint it mirrors, so a constraint that moves has somewhere
+ * obvious to move to.
+ *
+ * Money crosses this edge in dollars. The columns are bigint cents, `res.json`
+ * throws on a bigint, and the conversion lives in the service's view — which is
+ * what the response is built from and not a second shape assembled here.
+ */
+
+import { Router } from "express";
+import { z } from "zod";
+import { asyncRoute } from "../middleware/error-handler.js";
+import { assertFileAccess } from "../services/repository.js";
+import { loadDeclaration, recordDeclaration } from "../services/declarations.js";
+
+export const declarationRouter = Router();
+
+const yesNo = z.enum(["Yes", "No"]);
+
+/**
+ * Nine integer digits and two decimals is the widest amount the wire takes, and
+ * both money columns carry it as a CHECK. Rejecting it here is the difference
+ * between a named field and a 500.
+ */
+const AMOUNT_9_2_MAX = 999_999_999.99;
+const dollars = z.number().min(0).max(AMOUNT_9_2_MAX);
+
+/**
+ * The twelve answers DU requires, and the five it does not.
+ *
+ * The optional ones are optional for a stated reason apiece: `partyToLawsuit`
+ * is required only on a government file, `fhaSecondaryResidence` only on an FHA
+ * one, `specialBorrowerSellerRelationship` only on a purchase, and the two
+ * prior-property fields only once the borrower says they have owned before.
+ * Anything not on that list is required, because the wire has no way to say
+ * "unanswered" — every element is nillable, and a nil answer to "have you
+ * declared bankruptcy" is not an answer.
+ */
+const declarationSchema = z.object({
+  intentToOccupy: yesNo,
+  homeownerPastThreeYears: yesNo.nullish(),
+  priorPropertyUsage: z.enum(["Investment", "PrimaryResidence", "SecondHome"]).nullish(),
+  priorPropertyTitle: z.enum(["Sole", "JointWithSpouse", "JointWithOtherThanSpouse"]).nullish(),
+  fhaSecondaryResidence: z.boolean().nullish(),
+  specialBorrowerSellerRelationship: z.boolean().nullish(),
+  undisclosedBorrowedFunds: z.boolean(),
+  /** Dollars. The column is cents. */
+  undisclosedBorrowedFundsAmount: dollars.nullish(),
+  undisclosedMortgageApplication: z.boolean(),
+  undisclosedCreditApplication: z.boolean(),
+  propertyProposedCleanEnergyLien: z.boolean(),
+  undisclosedComakerOfNote: z.boolean(),
+  outstandingJudgments: z.boolean(),
+  presentlyDelinquent: z.boolean(),
+  partyToLawsuit: z.boolean().nullish(),
+  priorPropertyDeedInLieuConveyed: z.boolean(),
+  priorPropertyShortSaleCompleted: z.boolean(),
+  priorPropertyForeclosureCompleted: z.boolean(),
+  bankruptcy: z.boolean(),
+  bankruptcyChapters: z
+    .array(z.enum(["ChapterSeven", "ChapterEleven", "ChapterTwelve", "ChapterThirteen"]))
+    .optional(),
+  /**
+   * The borrower's own words, by question letter. Stored, never emitted: the DU
+   * emission path has no element for an explanation, and a serializer that went
+   * looking for one would be inventing a place to put it.
+   */
+  explanations: z.record(z.string(), z.string()).nullish(),
+});
+
+const residenceCore = {
+  basis: z.enum(["Own", "Rent", "LivingRentFree"]),
+  /** Numeric 3 on the wire. A thousand months is a rejected file, not a long tenancy. */
+  durationMonths: z.number().int().min(0).max(999),
+  /** Dollars. The column is cents. */
+  monthlyRent: dollars.nullish(),
+};
+
+/**
+ * The CURRENT residence carries no address of its own
+ * (`du_residences_current_borrows_the_pinned_address`): it reads the pinned
+ * `current_address` fact, so there is one storage and two renderings.
+ *
+ * The six columns are declared here as nulls rather than left out, because a
+ * key zod does not know about is a key zod strips. An address posted on a
+ * current residence would vanish silently instead of being refused, and
+ * whoever sent it would never learn it belonged on the prior row.
+ */
+const currentResidence = z.object({
+  residencyType: z.literal("Current"),
+  ...residenceCore,
+  addressLineText: z.null().optional(),
+  addressUnit: z.null().optional(),
+  cityName: z.null().optional(),
+  stateCode: z.null().optional(),
+  postalCode: z.null().optional(),
+  countryCode: z.null().optional(),
+});
+
+/**
+ * A PRIOR residence carries its own, because there is no `prior_address`
+ * predicate to read one from (`du_residences_prior_carries_its_own_address`).
+ * Four of the six are required there and so are required here; the unit and the
+ * country are not.
+ */
+const priorResidence = z.object({
+  residencyType: z.literal("Prior"),
+  ...residenceCore,
+  addressLineText: z.string().min(1).max(50),
+  addressUnit: z.string().max(11).nullish(),
+  cityName: z.string().min(1).max(35),
+  stateCode: z.string().length(2),
+  postalCode: z.string().regex(/^([0-9]{5}|[0-9]{9})$/),
+  countryCode: z.string().length(2).nullish(),
+});
+
+const residenceSchema = z.discriminatedUnion("residencyType", [currentResidence, priorResidence]);
+
+const bodySchema = z
+  .object({
+    declaration: declarationSchema,
+    residences: z.array(residenceSchema).min(1),
+  })
+  .superRefine((body, ctx) => {
+    const d = body.declaration;
+    const say = (path: (string | number)[], message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
+
+    // `du_declarations_homeowner_follows_intent`, both directions. A follow-up
+    // answered when its trigger question says it was never asked is as wrong as
+    // a missing one, and the CHECK is a biconditional for that reason.
+    if ((d.intentToOccupy === "Yes") !== (d.homeownerPastThreeYears != null)) {
+      say(
+        ["declaration", "homeownerPastThreeYears"],
+        d.intentToOccupy === "Yes"
+          ? "A borrower who will occupy has to answer the homeowner question."
+          : "The homeowner question is only put to a borrower who will occupy.",
+      );
+    }
+
+    // `du_declarations_prior_usage_follows_homeowner`.
+    const usageAsked = d.intentToOccupy === "Yes" && d.homeownerPastThreeYears === "Yes";
+    if (usageAsked !== (d.priorPropertyUsage != null)) {
+      say(
+        ["declaration", "priorPropertyUsage"],
+        usageAsked
+          ? "A borrower who owned a home in the past three years has to say how it was used."
+          : "The prior-property usage is only put to a borrower who owned a home.",
+      );
+    }
+
+    // `du_declarations_borrowed_amount_follows_indicator`.
+    if (d.undisclosedBorrowedFunds !== (d.undisclosedBorrowedFundsAmount != null)) {
+      say(
+        ["declaration", "undisclosedBorrowedFundsAmount"],
+        d.undisclosedBorrowedFunds
+          ? "Borrowed funds were declared, so the amount has to come with them."
+          : "No borrowed funds were declared, so there is no amount to state.",
+      );
+    }
+
+    // The deferred trigger `du_bankruptcy_chapters_match_the_indicator_*`, which
+    // fires at COMMIT and is the one refusal a route cannot see coming.
+    const chapters = d.bankruptcyChapters ?? [];
+    if (d.bankruptcy !== chapters.length > 0) {
+      say(
+        ["declaration", "bankruptcyChapters"],
+        d.bankruptcy
+          ? "A declared bankruptcy has to name which chapter, or chapters."
+          : "No bankruptcy was declared, so there is no chapter to name.",
+      );
+    }
+    // A set, not a list of filings: URLA asks which type(s), and the unique pair
+    // on `du_bankruptcy_filings` admits each chapter once.
+    if (new Set(chapters).size !== chapters.length) {
+      say(["declaration", "bankruptcyChapters"], "The same chapter is named twice.");
+    }
+
+    // `du_residences_rent_amount_needs_a_rent_basis`, one direction only: an
+    // amount needs a Rent basis, and a Rent basis needs no amount — a tenancy
+    // eight years ago whose rent nobody remembers is a legal file.
+    body.residences.forEach((r, i) => {
+      if (r.monthlyRent != null && r.basis !== "Rent") {
+        say(["residences", i, "monthlyRent"], "A rent amount belongs to a rented residence.");
+      }
+    });
+
+    // Exactly one CURRENT, at most one prior.
+    //
+    // `borrowers.current_housing` is derived from the current row, so a set
+    // without one leaves the derived copy stating a basis whose source does not
+    // exist — and `.min(1)` never said "at least the current one", only "at
+    // least one of something". The unique pair on the table refuses the second
+    // of either; a constraint trigger refuses the missing current one at COMMIT.
+    const current = body.residences.filter((r) => r.residencyType === "Current").length;
+    if (current !== 1) {
+      say(
+        ["residences"],
+        current === 0
+          ? "Say where the borrower lives now, not only where they lived before."
+          : "A borrower lives in one place now.",
+      );
+    }
+    if (body.residences.filter((r) => r.residencyType === "Prior").length > 1) {
+      say(["residences"], "DU carries one prior residence, not several.");
+    }
+  });
+
+declarationRouter.post(
+  "/:id/declaration",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    const input = bodySchema.parse(req.body);
+    await assertFileAccess(id, req.user!.id, "write");
+
+    const view = await recordDeclaration(id, input);
+    res.status(201).json({ declaration: view });
+  }),
+);
+
+declarationRouter.get(
+  "/:id/declaration",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    await assertFileAccess(id, req.user!.id, "read");
+
+    const view = await loadDeclaration(id);
+    res.json({ declaration: view });
+  }),
+);

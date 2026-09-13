@@ -266,6 +266,24 @@ describe("cardinality", () => {
     expect(Object.keys(DU_CARDINALITY)).toHaveLength(171);
   });
 
+  /**
+   * The borrower's own words have nowhere to go on the wire, and that is a
+   * fact about DU rather than a decision this repo made. MISMO carries a
+   * DECLARATION_EXPLANATIONS container -- CHILD_ORDER has it -- and DU's
+   * cardinality table does not, so nothing on the emission path can hold an
+   * explanation. `du_declarations.explanations` is stored for the 1003, the
+   * underwriter and the file's own record, and a serializer that found the
+   * container in the child order and filled it would be inventing a
+   * destination rather than finding one.
+   */
+  it("has nowhere to put a declaration explanation", () => {
+    expect(CHILD_ORDER["DECLARATION"]).toContain("DECLARATION_EXPLANATIONS");
+
+    const paths = Object.keys(DU_CARDINALITY);
+    expect(paths.some((p) => p.endsWith("/BORROWER/DECLARATION"))).toBe(true);
+    expect(paths.filter((p) => /EXPLANATION/i.test(p))).toEqual([]);
+  });
+
   it("reads MIN:MAX per product", () => {
     expect(DU_CARDINALITY["MESSAGE/DEAL_SETS/DEAL_SET"]?.du).toEqual({ min: 1, max: 1 });
   });

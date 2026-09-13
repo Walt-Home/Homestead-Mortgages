@@ -292,7 +292,11 @@ export interface BorrowerInput {
   readonly preferredLanguage: string;
   readonly firstTimeHomebuyer?: boolean | null;
   readonly isMilitary: boolean;
-  readonly currentHousing: string;
+  /**
+   * Absent is "not asked". The four screens do not collect it, and the fact
+   * this used to assert on every save was the string `"rent"`.
+   */
+  readonly currentHousing?: string | null;
   readonly monthlyRent?: number | null;
   /**
    * Optional because a revisit of screen 2 need not restate it: the fact
@@ -348,7 +352,11 @@ export async function recordBorrowerFacts(
     ...(input.firstTimeHomebuyer != null
       ? [{ predicate: "first_time_homebuyer", value: input.firstTimeHomebuyer }]
       : []),
-    { predicate: "current_housing", value: input.currentHousing },
+    // Same three-state rule as first_time_homebuyer above: an unasked question
+    // asserts no fact at all, rather than a fact whose value is a guess.
+    ...(input.currentHousing != null
+      ? [{ predicate: "current_housing", value: input.currentHousing }]
+      : []),
     { predicate: "preferred_language", value: input.preferredLanguage },
     // Stated, not verified. One of TRID's six pieces, and the reason screen 2
     // asks for it — see packages/shared/src/trid.ts. Only a real figure is a

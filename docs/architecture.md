@@ -671,9 +671,13 @@ tamper-evident record of a breach we never had the means to avoid.
 - **Manual bank-statement upload collects filenames and sends nothing.** Document
   upload records metadata with `storageUri: "fixture://content-not-transmitted"`.
   Where the bytes go is a real decision.
-- **`currentHousing` is asserted, not asked.** The four screens never collect
-  rent-vs-own; screen 2 sends `"rent"`. The honest fix — a nullable field —
-  touches the engine.
+- **`currentHousing` is nullable, and the four screens still do not ask.** It
+  was `String @default("rent")` NOT NULL and screen 2 sent the literal `"rent"`;
+  the column, the route and the screen all stopped manufacturing it together.
+  `du_residences` is where the real answer goes and `POST /files/:id/declaration`
+  is what writes it — no screen posts there yet, so a new file reads back NULL,
+  and `renter_limited_mortgage_history` answers "cannot know yet" rather than
+  calling an unasked borrower a renter.
 - **Property corrections are recorded, not applied.** A disagreement with the
   county record writes a `FileEvent` and changes nothing the engine reads.
 - **The monitoring loop does not exist.** `persistentMonitoringEnabled` and

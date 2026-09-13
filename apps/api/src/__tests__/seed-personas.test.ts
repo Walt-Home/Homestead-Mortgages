@@ -239,6 +239,21 @@ describe("the seed walks every persona to its state", () => {
       expect(file.isDemo).toBe(true);
     }
   });
+
+  it("states no housing basis, because nobody asked a sample borrower either", async () => {
+    // The seed used to derive one from the loan purpose — a purchase meant a
+    // renter — and write it to the column, to `monthly_rent` and to a
+    // `current_housing` fact. That is the fabrication the column, the route and
+    // screen 2 stopped manufacturing, wearing a seed script. It also left the
+    // derived column asserting a basis with no `du_residences` row behind it,
+    // which is the one thing that column is not allowed to do.
+    await seedAll();
+
+    const stated = await prisma.borrower.count({ where: { currentHousing: { not: null } } });
+    expect(stated).toBe(0);
+    expect(await prisma.borrower.count({ where: { monthlyRent: { not: null } } })).toBe(0);
+    expect(await prisma.fact.count({ where: { predicate: "current_housing" } })).toBe(0);
+  });
 });
 
 describe("each persona is the state their story describes", () => {

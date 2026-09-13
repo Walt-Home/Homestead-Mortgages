@@ -231,7 +231,20 @@ model Borrower {
   demographics Json?
 
   /// What they pay NOW, on THIS file. Situational, not identity.
-  currentHousing String   @default("rent") @map("current_housing")
+  ///
+  /// DERIVED, and nullable, and both halves are the same change. `du_residences`
+  /// is the source of truth for the housing basis and the rent; these two are
+  /// the copies the requirements engine and the projection read. The column was
+  /// `String @default("rent")` NOT NULL, which meant every borrower row carried a
+  /// statement about their own housing that nobody had been asked for, bound for
+  /// a federal submission — and a writer that merely stopped naming the column
+  /// would still have got `'rent'` from Postgres, so the default and the NOT NULL
+  /// had to go in the same commit that stopped writing it.
+  ///
+  /// NULL means nobody has been asked yet. It is not "rent", and the engine is
+  /// told the difference: `renter_limited_mortgage_history` answers null on a
+  /// null basis rather than assuming a renter.
+  currentHousing String?  @map("current_housing")
   monthlyRent    Decimal? @map("monthly_rent") @db.Decimal(10, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1570,10 +1583,12 @@ enum DuResidencyType {
 
 /// What the borrower's housing arrangement is.
 ///
-/// `borrowers.current_housing` is asserted as "rent" by screen 2 and never
-/// asked, and that value is what would reach `BorrowerResidencyBasisType` on a
-/// federally submitted application. A fabricated answer is a worse failure than
-/// a missing one, so the real answer lands here.
+/// `borrowers.current_housing` WAS asserted as "rent" by screen 2 and never
+/// asked, and that value is what would have reached
+/// `BorrowerResidencyBasisType` on a federally submitted application. A
+/// fabricated answer is a worse failure than a missing one, so the column is
+/// nullable now, screen 2 posts no basis at all, and this enum is the
+/// vocabulary the borrower's real answer lands in when a screen finally asks.
 enum DuResidencyBasis {
   Own
   Rent
@@ -1740,13 +1755,14 @@ model DuBankruptcyFiling {
 /// the current one is under twenty-four months. So this is a
 /// minimum-cardinality gap of the same kind as the missing declaration.
 ///
-/// It is worse than absent. `borrowers.current_housing` is asserted as "rent"
+/// It is worse than absent. `borrowers.current_housing` was asserted as "rent"
 /// by screen 2 and never asked, and `borrowers.monthly_rent` and the
 /// `current_housing` / `monthly_rent` Fact predicates are two more stores of
 /// the same two facts. Three stores for one number is drift waiting to happen,
-/// so this table becomes the single source of truth for housing basis and rent
-/// in the same change that asks the question — not in this one, which only
-/// makes somewhere for the answer to go.
+/// so this table is the single source of truth for the housing basis and the
+/// rent, and those two columns are the derived copies that follow the Current
+/// row here. What is still not done is ASKING: no screen posts a basis, so a
+/// new file carries none at all.
 ///
 /// The CURRENT residence's address is NOT stored here: it is the pinned
 /// `current_address` fact on the party, read at emission, so there is one
@@ -1756,6 +1772,13 @@ model DuBankruptcyFiling {
 /// be a new predicate, a new writer and a new pinning rule in the service of
 /// one element on one application. A CHECK binds the address columns to
 /// `residency_type` in both directions.
+///
+/// A borrower with any residence row has a Current one. A DEFERRABLE constraint
+/// trigger says so at COMMIT, because `recordDeclaration` replaces the whole set
+/// and there is an instant mid-transaction when the borrower has none — and
+/// without it a set carrying only a Prior residence would leave
+/// `borrowers.current_housing` stating a basis whose source row no longer
+/// exists, which is the drift this table was added to end.
 model DuResidence {
   id                 String           @id @default(uuid()) @db.Uuid
   applicationPartyId String           @map("application_party_id") @db.Uuid

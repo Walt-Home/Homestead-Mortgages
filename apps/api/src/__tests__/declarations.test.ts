@@ -461,7 +461,13 @@ describe("a residence", () => {
     // DU's condition is "basis is Rent AND the amount exists". A prior
     // residence rented eight years ago whose rent nobody remembers is a legal
     // file, and a biconditional here would make it an unwritable row.
+    //
+    // The current residence comes first because a borrower who has any
+    // residence row has a current one — the derived `borrowers.current_housing`
+    // has nothing to follow otherwise — so a prior tenancy on its own is not a
+    // legal set whatever its rent says.
     const { edgeId } = await borrowerOnAnApplication();
+    await prisma.duResidence.create({ data: residenceFor(edgeId) });
     const row = await prisma.duResidence.create({
       data: residenceFor(edgeId, {
         residencyType: "Prior",

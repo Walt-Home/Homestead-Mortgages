@@ -358,7 +358,17 @@ export const identitySchema = z.object({
   // writes no first_time_homebuyer fact for null.
   firstTimeHomebuyer: z.boolean().nullable(),
   isMilitary: z.boolean().default(false),
-  currentHousing: z.enum(["rent", "own", "rent_free"]),
+  /**
+   * Optional, and absent means "not asked" rather than "rent".
+   *
+   * This was a required enum, and screen 2 satisfied it by posting the literal
+   * `"rent"` from a screen with no such question on it. `du_residences` is
+   * where the real answer goes and the residence route is what asks; what is
+   * left here is the echo a revisit sends back, so a value is written and an
+   * absence leaves whatever the borrower actually stated standing. Blanking on
+   * every save of screen 2 would undo the answer the residence screen took.
+   */
+  currentHousing: z.enum(["rent", "own", "rent_free"]).nullish(),
   monthlyRent: z.number().min(0).optional(),
   demographics: z
     .object({
@@ -432,8 +442,12 @@ fileRouter.post(
       nonBorrowingSpouseSignatureRequired:
         input.maritalStatus === "married" && Boolean(input.nonBorrowingSpouseName),
       demographics: input.demographics ?? undefined,
-      currentHousing: input.currentHousing,
-      monthlyRent: input.monthlyRent ?? null,
+      // The basis and the rent move together, and only when the basis is
+      // stated. An absent basis is the absence of an answer, and writing it
+      // would blank the one `du_residences` is the source of truth for.
+      ...(input.currentHousing != null
+        ? { currentHousing: input.currentHousing, monthlyRent: input.monthlyRent ?? null }
+        : {}),
     };
 
     // The person and the application record are written in ONE transaction,

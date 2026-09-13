@@ -363,21 +363,13 @@ export function IdentityPage() {
             ? !data.file.propertyRecord.priorOwnershipInLastThreeYears
             : true
           : null,
-        // KNOWN GAP, not a derivation.
+        // No housing basis, because this screen does not ask for one.
         //
-        // The four-screen flow does not ask whether the borrower rents or
-        // owns, and no retrieval establishes it either. The server schema
-        // requires the field, so this sends "rent" — which is an assertion
-        // nobody made, and the one place in the rebuilt flow where that is
-        // still true.
-        //
-        // The honest fix is one of: ask it as an eighth item on this screen,
-        // derive it from `assets.identifiedRentPayments` after the bank
-        // connection (present for a renter, absent for an owner — but absent
-        // is also what a cash-paying renter looks like), or make the field
-        // nullable so "we did not ask" is representable. The third is right
-        // and touches the requirements engine, which this rebuild does not.
-        currentHousing: "rent",
+        // It used to send the literal "rent" — an assertion nobody made, on a
+        // screen with no such question — because the server required the
+        // field. The field is nullable now, `du_residences` is where the real
+        // answer goes, and an unasked question is sent as nothing at all.
+
         // Screen 4 collects these, and only when occupancy makes it lawful.
         demographics: null,
         // Omitted, not faked, when this screen does not have it.

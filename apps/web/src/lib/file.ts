@@ -63,7 +63,8 @@ export interface LoanFileView {
     currentAddress: { line1: string; city: string; state: string; postalCode: string };
     maritalStatus: string;
     citizenship: string | null;
-    currentHousing: string;
+    /** Null until somebody is asked. The four screens still do not ask. */
+    currentHousing: string | null;
     monthlyRent?: number;
     firstTimeHomebuyer: boolean | null;
     /** Present once a verification has been started, whatever its outcome. */

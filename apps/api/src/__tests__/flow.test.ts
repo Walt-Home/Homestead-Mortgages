@@ -19,6 +19,9 @@ import { REFERENCE, afterIdentity, consent, token } from "./support/in-memory-fi
 
 const registry = fixtureRegistry({ latencyMs: 0, persona: "clean_w2", referenceDate: REFERENCE });
 
+/** "Rent payment history identified", the one requirement a housing basis gates. */
+const RENTER_REQUIREMENT = "CRD-018";
+
 describe("the onboarding flow", () => {
   it("retires requirements as each connector lands", async () => {
     let file = afterIdentity();
@@ -136,6 +139,86 @@ describe("the onboarding flow", () => {
     expect(satisfied).not.toContain("AST-001");
     expect(satisfied).not.toContain("INC-002");
     expect(satisfied).not.toContain("UW-001");
+  });
+
+  /**
+   * A housing basis nobody stated is not a renter.
+   *
+   * `borrowers.current_housing` was NOT NULL with a default of "rent", so
+   * `renter_limited_mortgage_history` — which tests only `=== "own"` — answered
+   * "yes, a renter" about every borrower in the product, on a question no
+   * screen asked. The column is nullable now, and the condition has to answer
+   * the third value rather than fall through to the renter branch.
+   */
+  function withNoStatedHousing(file: LoanFile): LoanFile {
+    return {
+      ...file,
+      borrowers: file.borrowers.map((b) => ({
+        ...b,
+        currentHousing: null,
+        monthlyRent: undefined,
+      })),
+    };
+  }
+
+  /**
+   * With the credit report in hand, so the condition has everything BUT the
+   * basis. Before the pull it answers null for want of a tradeline history and
+   * the housing basis decides nothing, which would make the pair below agree
+   * for the wrong reason.
+   */
+  async function afterCredit(): Promise<LoanFile> {
+    const file = afterIdentity();
+    const credit = await registry.credit.pullTriMerge(file, token("credit_report"));
+    return { ...file, credit: credit.data };
+  }
+
+  it("cannot say whether an unasked borrower rents", async () => {
+    const file = await afterCredit();
+    const stated = assessAll(file).find((a) => a.requirement.id === RENTER_REQUIREMENT);
+    const unasked = assessAll(withNoStatedHousing(file)).find(
+      (a) => a.requirement.id === RENTER_REQUIREMENT,
+    );
+
+    expect(stated!.applies).not.toBeNull();
+    expect(unasked!.applies).toBeNull();
+  });
+
+  it("counts an unasked borrower as undetermined rather than decided", async () => {
+    // Rule 2, in the one number a borrower reads: applicability is three-valued
+    // and `progress()` counts only what definitely applies. An unknown basis
+    // moves the requirement into "we might still ask", which is the honest
+    // place for it, rather than leaving it answered from a default.
+    const file = await afterCredit();
+    const stated = progress(file);
+    const unasked = progress(withNoStatedHousing(file));
+
+    expect(unasked.undetermined).toBe(stated.undetermined + 1);
+  });
+
+  it("still never lets satisfied progress go backwards with no basis stated", async () => {
+    // The regression the counts test guards, walked again on a file whose
+    // housing basis is unknown for the whole walk. A third value that made the
+    // count move backwards would be the 23 → 21 failure in a new costume.
+    let file = withNoStatedHousing(afterIdentity());
+    const counts = [progress(file).satisfied];
+
+    const credit = await registry.credit.pullTriMerge(file, token("credit_report"));
+    file = { ...file, credit: credit.data };
+    counts.push(progress(file).satisfied);
+
+    const payroll = await registry.payroll.fetchPayroll(file, token("payroll_income"), "s");
+    file = {
+      ...file,
+      payroll: payroll.data,
+      incomeSources: payroll.data.incomeSources,
+      employment: payroll.data.employments,
+    };
+    counts.push(progress(file).satisfied);
+
+    for (let i = 1; i < counts.length; i++) {
+      expect(counts[i]).toBeGreaterThanOrEqual(counts[i - 1]!);
+    }
   });
 
   it("orders outstanding work by regulatory exposure first", () => {

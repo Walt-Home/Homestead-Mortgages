@@ -97,10 +97,18 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
   /**
    * A renter with no mortgage rating in the last 12 months. Owning already
    * settles it as false; renting plus a mortgage tradeline does too.
+   *
+   * A null basis is "we have not asked", and it answers null. The test used to
+   * be `=== "own"` alone, which made everybody else a renter — and while the
+   * column carried a NOT NULL default of `"rent"` that was every borrower in
+   * the product. Treating unknown as renting is the two-valued mistake rule 2
+   * exists to stop: it lets the engine answer a question about somebody's
+   * housing that nobody has put to them.
    */
   renter_limited_mortgage_history: (f) => {
     const borrower = f.borrowers[0];
     if (!borrower) return null;
+    if (borrower.currentHousing === null) return null;
     if (borrower.currentHousing === "own") return false;
     if (!f.credit) return null;
     const hasMortgageHistory = f.credit.tradelines.some(

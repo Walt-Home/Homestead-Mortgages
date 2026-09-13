@@ -78,9 +78,13 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
 - **Manual bank-statement upload collects filenames and sends nothing.**
   `apps/web/src/pages/BankPage.tsx`. Deliberate — where the bytes go is a real
   decision, and `routes/documents.ts` never transmits them today.
-- **`currentHousing` is asserted, not asked.** The four screens do not collect
-  rent-vs-own and no retrieval establishes it, so screen 2 sends `"rent"`. The
-  honest fix is making the field nullable, which touches the engine.
+- **`currentHousing` is nullable, and the four screens still do not ask.** It
+  was `String @default("rent")` NOT NULL and screen 2 sent the literal
+  `"rent"`; the column, the route enum and the screen stopped manufacturing it
+  together. `du_residences` holds the real answer and
+  `POST /files/:id/declaration` is what writes it — no screen posts there yet,
+  so a new file reads back NULL and `renter_limited_mortgage_history` answers
+  "cannot know yet" rather than calling an unasked borrower a renter.
 - **Property corrections are recorded, not applied.** A borrower disagreeing
   with the county record writes a `FileEvent` for review and changes nothing
   the engine reads.

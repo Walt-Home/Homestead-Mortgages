@@ -329,8 +329,11 @@ async function screenTwo(
       preferredLanguage: "en",
       firstTimeHomebuyer: story.terms.purpose === "purchase",
       isMilitary: false,
-      currentHousing: story.terms.purpose === "purchase" ? "rent" : "own",
-      ...(story.terms.purpose === "purchase" ? { monthlyRent: 2_100 } : {}),
+      // No housing basis and no rent. This used to derive one from the loan
+      // purpose — a purchase meant a renter — which is a guess about where
+      // somebody lives dressed as a seeded fact, and it left the derived column
+      // asserting a basis with no `du_residences` row behind it. A sample
+      // borrower stands where a real one stands: nobody has asked them yet.
     },
   });
 
@@ -339,8 +342,6 @@ async function screenTwo(
       loanFileId: args.loanFileId,
       partyId,
       ssnLast4: who.ssnLast4,
-      currentHousing: story.terms.purpose === "purchase" ? "rent" : "own",
-      monthlyRent: story.terms.purpose === "purchase" ? 2_100 : null,
       demographics: DECLINED,
     },
     select: { id: true },
@@ -945,7 +946,6 @@ async function addCoBorrower(w: Walk): Promise<void> {
     { predicate: "citizenship", value: "us_citizen" },
     { predicate: "preferred_language", value: "en" },
     { predicate: "is_military", value: false },
-    { predicate: "current_housing", value: "rent" },
     { predicate: "ssn_token", value: `vault:persona:${w.story.key}:dev` },
   ]);
 
@@ -954,8 +954,6 @@ async function addCoBorrower(w: Walk): Promise<void> {
       loanFileId: w.loanFileId,
       partyId: party.id,
       ssnLast4: DEV.ssnLast4,
-      currentHousing: "rent",
-      monthlyRent: 2_100,
       demographics: DECLINED,
       createdAt: new Date(priya.createdAt.getTime() + 1_000),
     },

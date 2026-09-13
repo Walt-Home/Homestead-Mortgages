@@ -84,7 +84,15 @@ export interface Borrower {
   /** No ownership interest in a primary residence in the prior 3 years. */
   readonly firstTimeHomebuyer: boolean | null;
   readonly isMilitary: boolean;
-  readonly currentHousing: "rent" | "own" | "rent_free";
+  /**
+   * Null is "nobody has been asked", and it is not "rent".
+   *
+   * The column behind this carried a NOT NULL default of `"rent"` while no
+   * screen collected it, so every file stated a housing basis its borrower
+   * had never given. Every reader of this field has to be able to say "we do
+   * not know", which is why the null is in the type rather than in a comment.
+   */
+  readonly currentHousing: "rent" | "own" | "rent_free" | null;
   readonly monthlyRent?: number;
 }
 

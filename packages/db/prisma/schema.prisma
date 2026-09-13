@@ -773,6 +773,7 @@ model Principal {
   createdAt       DateTime  @default(now()) @map("created_at")
 
   assertedFacts         Fact[]                  @relation("FactAssertedBy")
+  assertedDeclarations  DuDeclaration[]         @relation("DeclarationAssertedBy")
   revokedAuthorizations Authorization[]         @relation("AuthorizationRevokedBy")
   transitionsCaused     ApplicationTransition[] @relation("TransitionActor")
   loanMovesCaused       LoanTransition[]        @relation("LoanTransitionActor")
@@ -1058,6 +1059,9 @@ model ApplicationParty {
   role ApplicationPartyRole
 
   createdAt DateTime @default(now()) @map("created_at")
+
+  declaration DuDeclaration?
+  residences  DuResidence[]
 
   @@unique([applicationId, partyId])
   @@index([partyId])
@@ -1503,4 +1507,291 @@ model LoanTransition {
   @@unique([loanId, seq], map: "loan_transitions_loan_seq")
   @@index([loanId, occurredAt], map: "loan_transitions_loan_occurred")
   @@map("loan_transitions")
+}
+
+// ─── DESKTOP UNDERWRITER ────────────────────────────────────────────────────
+//
+// What a submission to Desktop Underwriter needs and this repo has never
+// stored. Additive, and nothing writes any of it yet: no route reaches these
+// tables and no screen collects them, so a borrower cannot answer these
+// questions today. The tables land first because the alternative to storage is
+// a serializer inventing the answers, which is what the four screens do now.
+//
+// Every `Du*` enum below is hand-typed, and `npm run du:verify` is what keeps
+// it honest: it diffs each block against the members the DU Specification
+// carries and fails on a member in either direction, in either file. A new
+// enum needs its row in `DU_DATA_POINT_FOR_ENUM` in `scripts/build-du.mjs` in
+// the same change, or there is nothing to diff it against — and the check says
+// so rather than passing.
+
+/// An enumerated type and not a boolean, because the wire carries the word.
+///
+/// MISMO's type is {No, Unknown, Yes}; DU refuses `Unknown`, so the DU subset
+/// is these two and nothing here can hold a third answer. "We have not asked
+/// yet" is the COLUMN being null, and only on the columns where DU's
+/// conditionality permits absence.
+enum DuYesNo {
+  Yes
+  No
+}
+
+/// How a property is used, for the DU data points whose set is three values.
+///
+/// Deliberately NOT the existing `Occupancy` enum, which already means
+/// `PropertyUsageType` on the SUBJECT property. These are the same three words
+/// meaning a different thing about a different property, and one enum shared
+/// across DU data points is how a serializer produces a file that validates and
+/// states something nobody said.
+enum DuPropertyUsage {
+  Investment
+  PrimaryResidence
+  SecondHome
+}
+
+enum DuPriorPropertyTitle {
+  Sole
+  JointWithSpouse
+  JointWithOtherThanSpouse
+}
+
+/// DU supports four of MISMO's seven. ChapterFifteen, Other and Unknown are
+/// schema-legal and DU-illegal, which schema validation will not catch.
+enum DuBankruptcyChapter {
+  ChapterSeven
+  ChapterEleven
+  ChapterTwelve
+  ChapterThirteen
+}
+
+enum DuResidencyType {
+  Current
+  Prior
+}
+
+/// What the borrower's housing arrangement is.
+///
+/// `borrowers.current_housing` is asserted as "rent" by screen 2 and never
+/// asked, and that value is what would reach `BorrowerResidencyBasisType` on a
+/// federally submitted application. A fabricated answer is a worse failure than
+/// a missing one, so the real answer lands here.
+enum DuResidencyBasis {
+  Own
+  Rent
+  LivingRentFree
+}
+
+/// URLA Section 5, as of THIS credit request.
+///
+/// Keyed on the `application_parties` edge and not on the party, because a
+/// declaration is not a standing truth about a person: "have you declared
+/// bankruptcy in the past seven years" has a different answer on a different
+/// date, and the answer a submission relied on must stay recoverable after the
+/// borrower answers again. That is the same split a Fact draws against a row
+/// scoped to one application.
+///
+/// TWELVE of the answers below are NOT NULL, and that is the whole point. The
+/// wire format has no way to say "unanswered" — every element is nillable, so a
+/// nil bankruptcy indicator is legal and meaningless, and an omitted one is an
+/// incomplete file rather than an honest one. A nullable column would let a
+/// half-answered declaration reach the serializer and be quietly completed with
+/// `false`. A NOT NULL column makes the row unwritable until the borrower has
+/// answered, which is where the refusal belongs.
+///
+/// NOTHING may derive these from connector output. Screen 4 reads them off a
+/// credit pull today, so an unrun pull asserts "no bankruptcy" from an absence
+/// of evidence, on a document the borrower signs. A clean credit report is
+/// absence of evidence, not a "no". A trigger refuses an AI_AGENT, PARTNER or
+/// SERVICE principal outright — the shape of `facts_ai_may_not_verify`, one
+/// layer up — and refuses a borrower answering for somebody else.
+model DuDeclaration {
+  id                 String           @id @default(uuid()) @db.Uuid
+  /// The edge, not the party. Cascades with it.
+  applicationPartyId String           @unique @map("application_party_id") @db.Uuid
+  applicationParty   ApplicationParty @relation(fields: [applicationPartyId], references: [id], onDelete: Cascade)
+
+  /// Who said it, and when they said it. An assertion we sign for.
+  ///
+  /// A required Principal relation with no `onDelete` is ON DELETE RESTRICT,
+  /// the same shape as `facts_asserted_by_principal_id_fkey`. Postgres fires
+  /// the `principals` cascade before the `application_parties` cascade and
+  /// checks RESTRICT immediately, so a plain `DELETE FROM parties` would raise
+  /// on this edge even for a borrower's own self-attested row. The migration
+  /// sweeps declarations off both `principals` and `parties` BEFORE DELETE,
+  /// where the foreign key actually bites, so every call site that deletes a
+  /// party still works and not only the account-deletion route. Both sweeps
+  /// key on this column, which is why it is indexed.
+  assertedByPrincipalId String    @map("asserted_by_principal_id") @db.Uuid
+  assertedBy            Principal @relation("DeclarationAssertedBy", fields: [assertedByPrincipalId], references: [id])
+  assertedAt            DateTime  @default(now()) @map("asserted_at")
+
+  // ── 5a. About this property and your money for this loan ──────────────
+
+  /// A. Required by DU. Per borrower, and NOT the same field as the subject
+  /// property's occupancy: one borrower may intend to occupy and the other not,
+  /// on the same property.
+  intentToOccupy DuYesNo @map("intent_to_occupy")
+
+  /// 5a.1.1. Required when A = Yes and forbidden otherwise, both directions
+  /// enforced by a CHECK. Nullable in the column type because half the rows
+  /// must not carry it, not because an occupying borrower may leave it
+  /// unanswered. They may not.
+  homeownerPastThreeYears DuYesNo? @map("homeowner_past_three_years")
+
+  /// 5a.1.2. Conditional on A = Yes AND 5a.1.1 = Yes.
+  priorPropertyUsage DuPropertyUsage? @map("prior_property_usage")
+
+  /// 5a.1.3. Optional everywhere, and emitted by most sample files whenever
+  /// 5a.1.1 is Yes. It carries NO conditionality statement of its own, so it
+  /// gets no CHECK: a constraint DU does not state is a constraint that refuses
+  /// rows DU accepts.
+  priorPropertyTitle DuPriorPropertyTitle? @map("prior_property_title")
+
+  /// The other 5a.1.2 data point: optional for DU and conditionally required on
+  /// an FHA file whose borrower intends to occupy and has owned before. One of
+  /// two fields in this set whose conditionality moves with the product type,
+  /// which is why it is nullable and why the preflight, not a CHECK, is what
+  /// requires it.
+  fhaSecondaryResidence Boolean? @map("fha_secondary_residence")
+
+  /// B. Conditional on the LOAN's purpose being Purchase — a borrower-scoped
+  /// field whose condition is a loan-level one, so no CHECK on this table can
+  /// see it.
+  specialBorrowerSellerRelationship Boolean? @map("special_borrower_seller_relationship")
+
+  /// C. Required by DU.
+  undisclosedBorrowedFunds Boolean @map("undisclosed_borrowed_funds")
+
+  /// 5a.3.1. Conditional on C, in both directions. Cents; the set's only money.
+  undisclosedBorrowedFundsCents BigInt? @map("undisclosed_borrowed_funds_cents")
+
+  /// D.1 and D.2. Two required booleans behind one lettered question — the
+  /// place a naive A-through-M enumeration loses a field.
+  undisclosedMortgageApplication Boolean @map("undisclosed_mortgage_application")
+  undisclosedCreditApplication   Boolean @map("undisclosed_credit_application")
+
+  /// E. Required by DU, and distinct from the collateral field that records a
+  /// clean energy lien already on the property. Proposed is a declaration;
+  /// existing is not.
+  propertyProposedCleanEnergyLien Boolean @map("property_proposed_clean_energy_lien")
+
+  // ── 5b. About your finances ───────────────────────────────────────────
+
+  /// F through M, all required by DU except I.
+  undisclosedComakerOfNote Boolean @map("undisclosed_comaker_of_note")
+  outstandingJudgments     Boolean @map("outstanding_judgments")
+  presentlyDelinquent      Boolean @map("presently_delinquent")
+
+  /// I. Optional for DU, required on an FHA or VA file, and emitted by every
+  /// sample file including the conventional ones. Nullable so it can be
+  /// genuinely unasked, and the preflight requires it on a government file.
+  partyToLawsuit Boolean? @map("party_to_lawsuit")
+
+  /// J, K and L. One question in the legacy dataset and three independent
+  /// required booleans now; a single "adverse property event" flag cannot
+  /// produce them.
+  priorPropertyDeedInLieuConveyed   Boolean @map("prior_property_deed_in_lieu_conveyed")
+  priorPropertyShortSaleCompleted   Boolean @map("prior_property_short_sale_completed")
+  priorPropertyForeclosureCompleted Boolean @map("prior_property_foreclosure_completed")
+
+  /// M. Required by DU, and the gate on the chapters below.
+  bankruptcy Boolean @map("bankruptcy")
+
+  /// The borrower's own words. DU consumes no explanation element at all, yet
+  /// two of these questions carry the instruction that a yes must be explained.
+  /// This text is for the 1003, the underwriter and the file's own record, and
+  /// the serializer must never go looking for somewhere to put it. It is what
+  /// the review screen collects and discards today.
+  explanations Json? @map("explanations")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  chapters DuBankruptcyFiling[]
+
+  @@index([assertedByPrincipalId])
+  @@map("du_declarations")
+}
+
+/// Which chapters, when M is true.
+///
+/// A SET, not a value and not a list of filings: URLA asks for "the type(s)",
+/// the container repeats up to four times, and there are exactly four legal
+/// chapters. DU maps one element of the bankruptcy detail and no other — no
+/// date, no case number, no amount — so there is nothing else to carry.
+///
+/// No sample file in the corpus exercises this branch; all of them answer the
+/// bankruptcy indicator false. It is built from the specification with no
+/// reference instance to diff against, which makes it the likeliest place for a
+/// first rejection. The unique pair below is also what caps it at four.
+model DuBankruptcyFiling {
+  id            String              @id @default(uuid()) @db.Uuid
+  declarationId String              @map("declaration_id") @db.Uuid
+  declaration   DuDeclaration       @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  chapter       DuBankruptcyChapter
+
+  @@unique([declarationId, chapter])
+  @@map("du_bankruptcy_filings")
+}
+
+/// Where the borrower lives, and where they lived before, as of this request.
+///
+/// The container repeats up to twice — one current, one former — the residency
+/// type is required by DU, and a prior residence is conditionally required when
+/// the current one is under twenty-four months. So this is a
+/// minimum-cardinality gap of the same kind as the missing declaration.
+///
+/// It is worse than absent. `borrowers.current_housing` is asserted as "rent"
+/// by screen 2 and never asked, and `borrowers.monthly_rent` and the
+/// `current_housing` / `monthly_rent` Fact predicates are two more stores of
+/// the same two facts. Three stores for one number is drift waiting to happen,
+/// so this table becomes the single source of truth for housing basis and rent
+/// in the same change that asks the question — not in this one, which only
+/// makes somewhere for the answer to go.
+///
+/// The CURRENT residence's address is NOT stored here: it is the pinned
+/// `current_address` fact on the party, read at emission, so there is one
+/// storage and two renderings. The PRIOR residence's address IS stored here,
+/// because there is no `prior_address` predicate in this codebase to read it
+/// from and inventing a durable Party fact for "where you used to live" would
+/// be a new predicate, a new writer and a new pinning rule in the service of
+/// one element on one application. A CHECK binds the address columns to
+/// `residency_type` in both directions.
+model DuResidence {
+  id                 String           @id @default(uuid()) @db.Uuid
+  applicationPartyId String           @map("application_party_id") @db.Uuid
+  applicationParty   ApplicationParty @relation(fields: [applicationPartyId], references: [id], onDelete: Cascade)
+
+  residencyType DuResidencyType  @map("residency_type")
+  basis         DuResidencyBasis
+
+  /// How long they have lived there. Numeric 3 on the wire, so 1000 months is
+  /// not a longer tenancy, it is a rejected file. A CHECK carries both bounds.
+  durationMonths Int @map("duration_months")
+
+  /// The rent, in cents. It does not live on the residence element on the wire
+  /// but on a landlord container the emitter has to create when this column is
+  /// non-null and omit when it is not — named here because a column whose
+  /// container the emitter has to invent is a container the emitter will
+  /// forget.
+  ///
+  /// Its CHECK is ONE-directional: an amount requires a Rent basis, and a Rent
+  /// basis does not require an amount. DU's condition is "basis is Rent AND the
+  /// amount exists", and a prior residence rented eight years ago whose rent
+  /// nobody remembers is a legal file.
+  monthlyRentCents BigInt? @map("monthly_rent_cents")
+
+  /// PRIOR residences only; null on a Current row, which reads its address from
+  /// the pinned fact. Each column has a wire length, and a CHECK carries it
+  /// rather than trusting the writer.
+  addressLineText String? @map("address_line_text")
+  addressUnit     String? @map("address_unit")
+  cityName        String? @map("city_name")
+  stateCode       String? @map("state_code")
+  postalCode      String? @map("postal_code")
+  countryCode     String? @map("country_code")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([applicationPartyId, residencyType])
+  @@map("du_residences")
 }

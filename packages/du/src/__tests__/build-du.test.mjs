@@ -14,6 +14,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -562,6 +563,38 @@ enum DuExpenseType {
 });
 
 describe("DU_DATA_POINT_FOR_ENUM", () => {
+  it("declares every form field a Du* column in schema.prisma names", () => {
+    // The way this table goes quietly wrong: a column carries one DU data
+    // point, its enum is mapped to a DIFFERENT one whose members happen to
+    // agree today, and the diff passes without ever checking the column's own
+    // field. The doc comment above each column names the form field, so that
+    // is what this reads.
+    const schema = readFileSync(resolve(ROOT, "packages/db/prisma/schema.prisma"), "utf8");
+    const declared = (name) =>
+      new Set((DU_DATA_POINT_FOR_ENUM[name]?.dataPoints ?? []).flatMap((d) => d.formFields));
+
+    let pending = [];
+    let checked = 0;
+    for (const raw of schema.split("\n")) {
+      const line = raw.trim();
+      const comment = /^\/\/\/\s+(\d[a-z]?(?:\.\d+)+)\.\s/.exec(line);
+      if (comment) {
+        pending.push(comment[1]);
+        continue;
+      }
+      const field = /^[a-z]\w*\s+(Du[A-Za-z]+)\??\s/.exec(line);
+      if (field && pending.length > 0) {
+        const formFields = [...declared(field[1])];
+        for (const formField of pending) {
+          expect(formFields, `${field[1]} at ${formField}`).toContain(formField);
+          checked += 1;
+        }
+      }
+      if (!line.startsWith("///")) pending = [];
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
   it("gives every enum either a data point or a declaration that it is ours", () => {
     for (const [name, spec] of Object.entries(DU_DATA_POINT_FOR_ENUM)) {
       expect(name).toMatch(/^Du[A-Z]/);

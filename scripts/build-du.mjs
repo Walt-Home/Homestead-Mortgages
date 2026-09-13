@@ -627,7 +627,16 @@ export const DU_DATA_POINT_FOR_ENUM = {
   DuOwnedPropertyDisposition: {
     dataPoints: [{ name: "OwnedPropertyDispositionStatusType", formFields: ["3a.4"] }],
   },
-  DuPropertyUsage: { dataPoints: [{ name: "PropertyCurrentUsageType", formFields: [] }] },
+  DuPropertyUsage: {
+    // Two data points, one member set, and the generator asserts they agree.
+    // 5a.1.2 is the one a column carries today — how a borrower used the home
+    // they owned before — so declaring only the current-usage point would leave
+    // that column's members unchecked and the diff green for the wrong reason.
+    dataPoints: [
+      { name: "PropertyCurrentUsageType", formFields: [] },
+      { name: "PriorPropertyUsageType", formFields: ["5a.1.2"] },
+    ],
+  },
   DuIntendedPropertyUsage: {
     // Not the same enum as DuPropertyUsage and not mergeable with it: 3a.5
     // carries Other and the current-usage list does not.

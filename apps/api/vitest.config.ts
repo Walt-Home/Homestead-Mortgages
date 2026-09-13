@@ -33,8 +33,11 @@ export default defineConfig({
     setupFiles: ["./src/__tests__/support/setup.ts"],
     env: { DATABASE_URL: testDatabaseUrl() },
     // The suite truncates shared tables between tests, so files cannot run
-    // concurrently against one database.
+    // concurrently against one database. That covers files within one run;
+    // `support/exclusive.ts` is what covers two runs, which this setting says
+    // nothing about and which fails far louder.
     fileParallelism: false,
+    globalSetup: ["./src/__tests__/support/exclusive.ts"],
     // These tests exercise a real Postgres rather than a mock, and a single
     // case legitimately spends seconds truncating, seeding and walking a
     // borrower through the doors. Vitest's five-second default is a ceiling

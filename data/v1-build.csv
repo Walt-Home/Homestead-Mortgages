@@ -5,12 +5,13 @@ Screen,Rows,What happens,,,,,,,
 1 Property & loan,5,"Address, purchase or refi, price/value, down payment. Under 60s of typing.",,,,,,,
 2 Identity,7,"Name, DOB, SSN, contact, authorizations. Required before any pull.",,,,,,,
 3 Credit,10,Soft pull. Instant. First visible win — they see something happen.,,,,,,,
-4 Bank,10,12-month asset report. Assets + income + employment + cash flow + rent history. The one that matters.,,,,,,,
-5 Payroll,4,Consumer-permissioned. Precision on employment and variable income.,,,,,,,
-6 IRS transcript,3,"4506-C e-sign, filed W-2 income. Reconciliation source.",,,,,,,
-7 Upload fallback,7,"Only what didn't connect. Should feel like an exception, not a step.",,,,,,,
-8 Decision,31,"Compute and answer. Show the reasoning, not just a verdict.",,,,,,,
-9 Persistent consent,0,Opt-in to keep connections live. This ask enables everything downstream.,,,,,,,
+4 Declarations,6,"Section 5 and where you live. The answers only the borrower can give.",,,,,,,
+5 Bank,10,12-month asset report. Assets + income + employment + cash flow + rent history. The one that matters.,,,,,,,
+6 Payroll,4,Consumer-permissioned. Precision on employment and variable income.,,,,,,,
+7 IRS transcript,3,"4506-C e-sign, filed W-2 income. Reconciliation source.",,,,,,,
+8 Upload fallback,7,"Only what didn't connect. Should feel like an exception, not a step.",,,,,,,
+9 Decision,31,"Compute and answer. Show the reasoning, not just a verdict.",,,,,,,
+10 Persistent consent,0,Opt-in to keep connections live. This ask enables everything downstream.,,,,,,,
 ,,,,,,,,,
 ,,,,,,,,,
 req_id,Screen,Source,Requirement,Fields to capture,Evidence accepted,Applies when,Day 1 Certainty,Failure severity,Timing constraint
@@ -39,62 +40,69 @@ CRD-007,3 Credit,Connect: credit (soft pull),Foreclosure / short sale / DIL seas
 CRD-014,3 Credit,Connect: credit (soft pull),Disputed tradeline resolved,Dispute removed or underwriter documented treatment,Updated report; dispute resolution letter,Dispute flag on report,No,Rework / delay,Before UW-002
 CRD-016,3 Credit,Connect: credit (soft pull),Revolving credit utilization assessed,revolving_balance / revolving_limit; trended payment behaviour over 24 months,Tri-merge report with trended data,Universal,No,Rework / delay,After CRD-001
 ,,,,,,,,,
-AST-001,4 Bank,Connect: bank (12-mo asset report),Deposit accounts documented,"account_type, institution, balance, two_month_history per account",Bank statements; VOD; asset verification report,Universal,Yes - assets,Repurchase / unsaleable,Before UW-001
-AST-005,4 Bank,Connect: bank (12-mo asset report),Large deposit sourced,each deposit > 50% of monthly_income has source_type and evidence,Transfer records; sale documents; explanation letter,Deposit exceeds 50% of monthly income,No,Repurchase / unsaleable,Before UW-015
-AST-007,4 Bank,Connect: bank (12-mo asset report),Earnest money deposit sourced,"EMD came from an acceptable, verified source",Cancelled check; bank statement; escrow receipt,Purchase only,No,Rework / delay,Before UW-015
-AST-008,4 Bank,Connect: bank (12-mo asset report),Retirement account liquidity verified,"vested_balance, outstanding_plan_loans, withdrawal_eligibility",Statement; plan terms; loan balance,Retirement assets used,Yes - assets,Rework / delay,Before UW-017
-CRD-013,4 Bank,Connect: bank (12-mo asset report),Non-traditional credit established,"alternative_reference_count >= 3, each with 12 month history","12 months of rent, utility, insurance payment records",Thin or no credit file,No,Rework / delay,Before UW-002
-CRD-017,4 Bank,Connect: bank (12-mo asset report),Cash flow assessment performed,cash_flow_assessment_result from 12 months of bank data,12-month asset verification report from an authorized DU vendor,12-month asset verification report available,No,Rework / delay,Before UW-001
-CRD-018,4 Bank,Connect: bank (12-mo asset report),Rent payment history identified,monthly_rent >= 300; 12 months of on-time rent payments identified,12-month asset verification report; or credit report tradeline,Renter with limited or no mortgage history,No,Rework / delay,Before UW-001
-INC-001,4 Bank,Connect: bank (12-mo asset report),Employment verified,"employer_name, position, start_date, employment_status = active",Written VOE; or paystub + W-2 combination,Wage earner,Yes - employment,Repurchase / unsaleable,Before UW-001
-INC-019,4 Bank,Connect: bank (12-mo asset report),"Retirement, pension or SSA income documented","monthly_amount, source_type, continuance_end_date",Award letter; 1099; bank statements,Retirement income used,No,Rework / delay,Before UW-004
-INC-020,4 Bank,Connect: bank (12-mo asset report),Investment or dividend income documented,Two-year history and continuance established,Tax returns; brokerage statements,Investment income used,No,Rework / delay,Before UW-004
+APP-022,4 Declarations,Borrower input,Section 5a declarations answered by the borrower,"intent_to_occupy, homeowner_past_three_years, undisclosed_borrowed_funds and amount, undisclosed_mortgage_application, undisclosed_credit_application, property_proposed_clean_energy_lien",URLA Section 5a,Universal,No,Repurchase / unsaleable,At application
+APP-023,4 Declarations,Borrower input,Section 5b financial declarations answered by the borrower,"undisclosed_comaker_of_note, outstanding_judgments, presently_delinquent, prior_property_deed_in_lieu_conveyed, prior_property_short_sale_completed, prior_property_foreclosure_completed, bankruptcy",URLA Section 5b,Universal,No,Repurchase / unsaleable,At application
+APP-024,4 Declarations,Borrower input,Bankruptcy chapters identified,bankruptcy_chapters: one or more of Chapter 7; 11; 12; 13,URLA Section 5b; discharge or dismissal papers,Borrower declared a bankruptcy,No,Repurchase / unsaleable,At application
+APP-025,4 Declarations,Borrower input,Prior property usage declared,"prior_property_usage; prior_property_title where the borrower states it",URLA Section 5a,Borrower owned a home in the past 3 years,No,Rework / delay,At application
+APP-026,4 Declarations,Borrower input,Current residence stated,"residency_basis, duration_months, monthly_rent when the basis is rent",URLA Section 1a,Universal,No,Repurchase / unsaleable,At application
+APP-027,4 Declarations,Borrower input,Prior residence stated,"prior address, city, state, postal_code, residency_basis, duration_months",URLA Section 1a,Current residence under 24 months,No,Rework / delay,At application
 ,,,,,,,,,
-INC-002,5 Payroll,Connect: payroll (consumer-permissioned),Paystubs covering 30 days obtained,"gross_pay, pay_period_end_date, ytd_gross covering 30 days",Paystubs,Wage earner,Yes - income,Rework / delay,Before UW-001
-INC-005,5 Payroll,Connect: payroll (consumer-permissioned),Variable income averaged,"monthly average of overtime, bonus, commission over 12 or 24 months",Paystub YTD; W-2s; VOE breakout,"OT, bonus or commission present",Yes - income,Repurchase / unsaleable,Before UW-004
-INC-006,5 Payroll,Connect: payroll (consumer-permissioned),Employment gap explained,"gap_start_date, gap_end_date, gap_days, reason_code",Letter of explanation; supporting documents,Gap over 30 days in 2 years,No,Regulatory violation,Before UW-015
-INC-022,5 Payroll,Connect: payroll (consumer-permissioned),Military entitlements documented,Base pay and entitlements identified separately,Leave and Earnings Statement,Military borrower,Yes - income,Rework / delay,Before UW-004
+AST-001,5 Bank,Connect: bank (12-mo asset report),Deposit accounts documented,"account_type, institution, balance, two_month_history per account",Bank statements; VOD; asset verification report,Universal,Yes - assets,Repurchase / unsaleable,Before UW-001
+AST-005,5 Bank,Connect: bank (12-mo asset report),Large deposit sourced,each deposit > 50% of monthly_income has source_type and evidence,Transfer records; sale documents; explanation letter,Deposit exceeds 50% of monthly income,No,Repurchase / unsaleable,Before UW-015
+AST-007,5 Bank,Connect: bank (12-mo asset report),Earnest money deposit sourced,"EMD came from an acceptable, verified source",Cancelled check; bank statement; escrow receipt,Purchase only,No,Rework / delay,Before UW-015
+AST-008,5 Bank,Connect: bank (12-mo asset report),Retirement account liquidity verified,"vested_balance, outstanding_plan_loans, withdrawal_eligibility",Statement; plan terms; loan balance,Retirement assets used,Yes - assets,Rework / delay,Before UW-017
+CRD-013,5 Bank,Connect: bank (12-mo asset report),Non-traditional credit established,"alternative_reference_count >= 3, each with 12 month history","12 months of rent, utility, insurance payment records",Thin or no credit file,No,Rework / delay,Before UW-002
+CRD-017,5 Bank,Connect: bank (12-mo asset report),Cash flow assessment performed,cash_flow_assessment_result from 12 months of bank data,12-month asset verification report from an authorized DU vendor,12-month asset verification report available,No,Rework / delay,Before UW-001
+CRD-018,5 Bank,Connect: bank (12-mo asset report),Rent payment history identified,monthly_rent >= 300; 12 months of on-time rent payments identified,12-month asset verification report; or credit report tradeline,Renter with limited or no mortgage history,No,Rework / delay,Before UW-001
+INC-001,5 Bank,Connect: bank (12-mo asset report),Employment verified,"employer_name, position, start_date, employment_status = active",Written VOE; or paystub + W-2 combination,Wage earner,Yes - employment,Repurchase / unsaleable,Before UW-001
+INC-019,5 Bank,Connect: bank (12-mo asset report),"Retirement, pension or SSA income documented","monthly_amount, source_type, continuance_end_date",Award letter; 1099; bank statements,Retirement income used,No,Rework / delay,Before UW-004
+INC-020,5 Bank,Connect: bank (12-mo asset report),Investment or dividend income documented,Two-year history and continuance established,Tax returns; brokerage statements,Investment income used,No,Rework / delay,Before UW-004
 ,,,,,,,,,
-INC-003,6 IRS transcript,Connect: IRS transcript (4506-C),W-2s for two years obtained,"w2_wages for each of prior two years, employer_ein",W-2 forms,Wage earner,Yes - income,Rework / delay,Before UW-001
-INC-008,6 IRS transcript,E-sign,4506-C executed,Borrower authorized IRS transcript release,Signed 4506-C,Universal,No,Rework / delay,Before INC-009
-INC-009,6 IRS transcript,Connect: IRS transcript (4506-C),Tax transcripts obtained and reconciled,transcript_agi and transcript_wages match documented income within tolerance,IRS tax return transcript,Self-employed; variable; rental,No,Repurchase / unsaleable,Before UW-017
+INC-002,6 Payroll,Connect: payroll (consumer-permissioned),Paystubs covering 30 days obtained,"gross_pay, pay_period_end_date, ytd_gross covering 30 days",Paystubs,Wage earner,Yes - income,Rework / delay,Before UW-001
+INC-005,6 Payroll,Connect: payroll (consumer-permissioned),Variable income averaged,"monthly average of overtime, bonus, commission over 12 or 24 months",Paystub YTD; W-2s; VOE breakout,"OT, bonus or commission present",Yes - income,Repurchase / unsaleable,Before UW-004
+INC-006,6 Payroll,Connect: payroll (consumer-permissioned),Employment gap explained,"gap_start_date, gap_end_date, gap_days, reason_code",Letter of explanation; supporting documents,Gap over 30 days in 2 years,No,Regulatory violation,Before UW-015
+INC-022,6 Payroll,Connect: payroll (consumer-permissioned),Military entitlements documented,Base pay and entitlements identified separately,Leave and Earnings Statement,Military borrower,Yes - income,Rework / delay,Before UW-004
 ,,,,,,,,,
-AST-006,7 Upload fallback,Connect: bank (12-mo asset report),Gift funds documented,"gift_amount, donor_relationship, transfer_date, donor_ability_evidence",Gift letter; donor statement; transfer evidence,Gift used,No,Repurchase / unsaleable,Before CLS-013
-CRD-006,7 Upload fallback,Document upload (fallback),Bankruptcy seasoning satisfied,months_since_discharge >= product minimum; chapter_type,Discharge order; credit report date,Prior bankruptcy,No,Rework / delay,Before UW-017
-CRD-008,7 Upload fallback,Borrower input,Derogatory account explanation obtained,Borrower explanation on record and assessed,Letter of explanation; supporting documents,Recent derogatory present,No,Regulatory violation,Before UW-015
-CRD-009,7 Upload fallback,Borrower input,Recent inquiry explanation obtained,inquiry_count_90d; each resolved to new_debt yes/no,Letter of explanation; creditor confirmation,Inquiries in last 90 days,No,Repurchase / unsaleable,Before UW-017
-CRD-011,7 Upload fallback,Third-party order,SSN validated with SSA,SSN belongs to the borrower,SSA-89 result,SSN mismatch or fraud alert,No,Repurchase / unsaleable,Before UW-017
-INC-021,7 Upload fallback,Connect: bank (12-mo asset report),Alimony or child support documented,"monthly_award, receipt_months_documented, continuance_end_date",Court order; 6-12 months receipt evidence,Support income used,No,Rework / delay,Before UW-004
-INC-023,7 Upload fallback,Connect: payroll (consumer-permissioned),Equity compensation income documented,"vested_value_prior_24mo, future_vest_schedule, share_price_basis",Vesting schedule; paystub; brokerage statement,RSU or stock comp used,No,Rework / delay,Before UW-004
+INC-003,7 IRS transcript,Connect: IRS transcript (4506-C),W-2s for two years obtained,"w2_wages for each of prior two years, employer_ein",W-2 forms,Wage earner,Yes - income,Rework / delay,Before UW-001
+INC-008,7 IRS transcript,E-sign,4506-C executed,Borrower authorized IRS transcript release,Signed 4506-C,Universal,No,Rework / delay,Before INC-009
+INC-009,7 IRS transcript,Connect: IRS transcript (4506-C),Tax transcripts obtained and reconciled,transcript_agi and transcript_wages match documented income within tolerance,IRS tax return transcript,Self-employed; variable; rental,No,Repurchase / unsaleable,Before UW-017
 ,,,,,,,,,
-APP-006,8 Decision,Derived internally,Loan Estimate delivered,LE delivered or placed in mail within 3 business days of application,LE with delivery timestamp,Universal,No,Regulatory violation,3 business days from APP-002
-APP-007,8 Decision,Borrower input,Intent to Proceed documented,Borrower affirmatively indicated intent after receiving LE,"Dated, recorded intent to proceed",Universal,No,Regulatory violation,After LE receipt
-APP-008,8 Decision,Derived internally,Written List of Service Providers delivered,Borrower given list of providers for shoppable services,WLSP with delivery timestamp,Universal,No,Rework / delay,With LE
-APP-009,8 Decision,Third-party order,Homeownership counseling list delivered,Borrower given list of HUD-approved counselors within 10 miles,Counseling list with timestamp,Universal,No,Regulatory violation,3 business days from application
-APP-010,8 Decision,Derived internally,Your Home Loan Toolkit delivered,Booklet delivered to borrower,Toolkit with delivery timestamp,Purchase only,No,Regulatory violation,3 business days from application
-APP-019,8 Decision,Derived internally,Net tangible benefit test satisfied,"payment_delta, rate_delta, recoup_months vs state threshold",NTB worksheet; comparison of old vs new terms,Refi; state or investor requires,No,Repurchase / unsaleable,Before closing
-AST-002,8 Decision,Derived internally,Funds to close calculated,funds_to_close = price_or_payoff + fees + prepaids - credits - loan_amount,Funds to close worksheet,Universal,No,Rework / delay,Before UW-002
-AST-003,8 Decision,Derived internally,Reserve requirement determined,"required_reserve_months from AUS, occupancy, property_count",AUS findings; product matrix,Universal,No,Rework / delay,After UW-002
-AST-004,8 Decision,Connect: bank (12-mo asset report),Reserves satisfied,actual_reserve_months = eligible_post_close_assets / monthly_PITIA,Asset statements; eligibility worksheet,Reserves required,Yes - assets,Rework / delay,Before UW-017
-AST-016,8 Decision,Derived internally,Interested party contribution limit tested,ipc_total / sales_price vs allowable_pct for LTV and occupancy,Contract; CD credits,Seller or lender credits present,No,Rework / delay,Before CLS-002
-INC-004,8 Decision,Derived internally,Base income calculated,"monthly_base_income from pay_rate, pay_frequency, scheduled_hours",Paystub; VOE; offer letter,Wage earner,No,Repurchase / unsaleable,Before UW-004
-INC-026,8 Decision,Derived internally,Total qualifying income finalized,total_qualifying_monthly_income = sum of all approved components,Income worksheet,Universal,No,Regulatory violation,Before UW-004
-INC-027,8 Decision,Derived internally,Income continuance determination made,continuance_flag per source; each >= 36 months or documented exception,Continuance worksheet; supporting docs,Universal,No,Repurchase / unsaleable,Before UW-006
-UW-001,8 Decision,Derived internally,AUS submitted,Complete case submitted to DU or Loan Product Advisor,AUS submission record,Universal,No,Regulatory violation,"After credit, income and asset intake"
-UW-002,8 Decision,Derived internally,AUS recommendation obtained,"aus_recommendation, aus_casefile_id, submission_date",AUS findings report,Universal,No,Rework / delay,After UW-001
-UW-003,8 Decision,Derived internally,AUS findings mapped to condition list,Every AUS verification message converted to a trackable condition,Findings report; condition list,Universal,No,Repurchase / unsaleable,After UW-002
-UW-004,8 Decision,Derived internally,DTI calculated,dti_front = housing_PITIA / income; dti_back = total_debt / income,DTI worksheet,Universal,No,Repurchase / unsaleable,Before UW-006
-UW-005,8 Decision,Derived internally,"LTV, CLTV and HCLTV calculated","ltv, cltv, hcltv from loan_amount, junior_liens, value",Ratio worksheet,Universal,No,Rework / delay,Before UW-010
-UW-006,8 Decision,Derived internally,ATR / QM determination made,atr_determination = documented; qm_status; qm_type,ATR/QM worksheet; supporting docs,Universal,No,Regulatory violation,Before UW-017
-UW-007,8 Decision,Derived internally,QM points and fees test performed,points_and_fees_amount / loan_amount vs threshold,Points and fees worksheet,Universal,No,Financial loss,Before CLS-002
-UW-008,8 Decision,Derived internally,HPML threshold tested,apr - apor spread vs hpml threshold for lien_position,HPML test result,Universal,No,Regulatory violation,Before CLS-002
-UW-009,8 Decision,Derived internally,HOEPA high-cost threshold tested,"Loan confirmed not high-cost, or ineligible",HOEPA test result,Universal,No,Rework / delay,Before CLS-002
-UW-010,8 Decision,Derived internally,Pricing adjustments applied,"llpa_total_bps from fico, ltv, occupancy, property_type, purpose",Pricing worksheet; lock confirmation,Universal,No,Financial loss,Before CLS-001
-UW-011,8 Decision,Derived internally,Manual underwrite performed,Loan underwritten to manual guidelines with documented rationale,Manual underwriting worksheet; approval memo,AUS Refer or ineligible,No,Rework / delay,Before UW-017
-UW-012,8 Decision,Derived internally,Product eligibility matrix confirmed,each product parameter within limits; eligibility_status,Eligibility checklist,Universal,No,Repurchase / unsaleable,Before UW-017
-UW-013,8 Decision,Derived internally,Investor overlays applied,Lender and investor overlays checked in addition to agency guides,Overlay checklist,Overlays exist for the product,No,Repurchase / unsaleable,Before UW-017
-UW-014,8 Decision,Derived internally,Condition list issued,Conditions communicated to borrower and processing,Condition list with timestamp,Universal,No,Regulatory violation,After UW-002
-UW-015,8 Decision,Derived internally,Conditions cleared and documented,open_condition_count = 0,Cleared condition records with attachments,Universal,No,Repurchase / unsaleable,Before UW-017
-UW-016,8 Decision,Derived internally,Adverse action or counteroffer issued,Borrower notified with specific principal reasons,Adverse action notice with timestamp,Denial or counteroffer,No,Regulatory violation,Within 30 days of complete application
-UW-017,8 Decision,Derived internally,Clear to Close issued,All conditions cleared; loan authorized to proceed to closing,CTC record,Universal,No,Rework / delay,After UW-015
-UW-018,8 Decision,Derived internally,Fraud and red flag review completed,alert_count by severity; adjudication_status per alert,Fraud report; red flag checklist,Universal,No,Repurchase / unsaleable,Before UW-017
+AST-006,8 Upload fallback,Connect: bank (12-mo asset report),Gift funds documented,"gift_amount, donor_relationship, transfer_date, donor_ability_evidence",Gift letter; donor statement; transfer evidence,Gift used,No,Repurchase / unsaleable,Before CLS-013
+CRD-006,8 Upload fallback,Document upload (fallback),Bankruptcy seasoning satisfied,months_since_discharge >= product minimum; chapter_type,Discharge order; credit report date,Prior bankruptcy,No,Rework / delay,Before UW-017
+CRD-008,8 Upload fallback,Borrower input,Derogatory account explanation obtained,Borrower explanation on record and assessed,Letter of explanation; supporting documents,Recent derogatory present,No,Regulatory violation,Before UW-015
+CRD-009,8 Upload fallback,Borrower input,Recent inquiry explanation obtained,inquiry_count_90d; each resolved to new_debt yes/no,Letter of explanation; creditor confirmation,Inquiries in last 90 days,No,Repurchase / unsaleable,Before UW-017
+CRD-011,8 Upload fallback,Third-party order,SSN validated with SSA,SSN belongs to the borrower,SSA-89 result,SSN mismatch or fraud alert,No,Repurchase / unsaleable,Before UW-017
+INC-021,8 Upload fallback,Connect: bank (12-mo asset report),Alimony or child support documented,"monthly_award, receipt_months_documented, continuance_end_date",Court order; 6-12 months receipt evidence,Support income used,No,Rework / delay,Before UW-004
+INC-023,8 Upload fallback,Connect: payroll (consumer-permissioned),Equity compensation income documented,"vested_value_prior_24mo, future_vest_schedule, share_price_basis",Vesting schedule; paystub; brokerage statement,RSU or stock comp used,No,Rework / delay,Before UW-004
+,,,,,,,,,
+APP-006,9 Decision,Derived internally,Loan Estimate delivered,LE delivered or placed in mail within 3 business days of application,LE with delivery timestamp,Universal,No,Regulatory violation,3 business days from APP-002
+APP-007,9 Decision,Borrower input,Intent to Proceed documented,Borrower affirmatively indicated intent after receiving LE,"Dated, recorded intent to proceed",Universal,No,Regulatory violation,After LE receipt
+APP-008,9 Decision,Derived internally,Written List of Service Providers delivered,Borrower given list of providers for shoppable services,WLSP with delivery timestamp,Universal,No,Rework / delay,With LE
+APP-009,9 Decision,Third-party order,Homeownership counseling list delivered,Borrower given list of HUD-approved counselors within 10 miles,Counseling list with timestamp,Universal,No,Regulatory violation,3 business days from application
+APP-010,9 Decision,Derived internally,Your Home Loan Toolkit delivered,Booklet delivered to borrower,Toolkit with delivery timestamp,Purchase only,No,Regulatory violation,3 business days from application
+APP-019,9 Decision,Derived internally,Net tangible benefit test satisfied,"payment_delta, rate_delta, recoup_months vs state threshold",NTB worksheet; comparison of old vs new terms,Refi; state or investor requires,No,Repurchase / unsaleable,Before closing
+AST-002,9 Decision,Derived internally,Funds to close calculated,funds_to_close = price_or_payoff + fees + prepaids - credits - loan_amount,Funds to close worksheet,Universal,No,Rework / delay,Before UW-002
+AST-003,9 Decision,Derived internally,Reserve requirement determined,"required_reserve_months from AUS, occupancy, property_count",AUS findings; product matrix,Universal,No,Rework / delay,After UW-002
+AST-004,9 Decision,Connect: bank (12-mo asset report),Reserves satisfied,actual_reserve_months = eligible_post_close_assets / monthly_PITIA,Asset statements; eligibility worksheet,Reserves required,Yes - assets,Rework / delay,Before UW-017
+AST-016,9 Decision,Derived internally,Interested party contribution limit tested,ipc_total / sales_price vs allowable_pct for LTV and occupancy,Contract; CD credits,Seller or lender credits present,No,Rework / delay,Before CLS-002
+INC-004,9 Decision,Derived internally,Base income calculated,"monthly_base_income from pay_rate, pay_frequency, scheduled_hours",Paystub; VOE; offer letter,Wage earner,No,Repurchase / unsaleable,Before UW-004
+INC-026,9 Decision,Derived internally,Total qualifying income finalized,total_qualifying_monthly_income = sum of all approved components,Income worksheet,Universal,No,Regulatory violation,Before UW-004
+INC-027,9 Decision,Derived internally,Income continuance determination made,continuance_flag per source; each >= 36 months or documented exception,Continuance worksheet; supporting docs,Universal,No,Repurchase / unsaleable,Before UW-006
+UW-001,9 Decision,Derived internally,AUS submitted,Complete case submitted to DU or Loan Product Advisor,AUS submission record,Universal,No,Regulatory violation,"After credit, income and asset intake"
+UW-002,9 Decision,Derived internally,AUS recommendation obtained,"aus_recommendation, aus_casefile_id, submission_date",AUS findings report,Universal,No,Rework / delay,After UW-001
+UW-003,9 Decision,Derived internally,AUS findings mapped to condition list,Every AUS verification message converted to a trackable condition,Findings report; condition list,Universal,No,Repurchase / unsaleable,After UW-002
+UW-004,9 Decision,Derived internally,DTI calculated,dti_front = housing_PITIA / income; dti_back = total_debt / income,DTI worksheet,Universal,No,Repurchase / unsaleable,Before UW-006
+UW-005,9 Decision,Derived internally,"LTV, CLTV and HCLTV calculated","ltv, cltv, hcltv from loan_amount, junior_liens, value",Ratio worksheet,Universal,No,Rework / delay,Before UW-010
+UW-006,9 Decision,Derived internally,ATR / QM determination made,atr_determination = documented; qm_status; qm_type,ATR/QM worksheet; supporting docs,Universal,No,Regulatory violation,Before UW-017
+UW-007,9 Decision,Derived internally,QM points and fees test performed,points_and_fees_amount / loan_amount vs threshold,Points and fees worksheet,Universal,No,Financial loss,Before CLS-002
+UW-008,9 Decision,Derived internally,HPML threshold tested,apr - apor spread vs hpml threshold for lien_position,HPML test result,Universal,No,Regulatory violation,Before CLS-002
+UW-009,9 Decision,Derived internally,HOEPA high-cost threshold tested,"Loan confirmed not high-cost, or ineligible",HOEPA test result,Universal,No,Rework / delay,Before CLS-002
+UW-010,9 Decision,Derived internally,Pricing adjustments applied,"llpa_total_bps from fico, ltv, occupancy, property_type, purpose",Pricing worksheet; lock confirmation,Universal,No,Financial loss,Before CLS-001
+UW-011,9 Decision,Derived internally,Manual underwrite performed,Loan underwritten to manual guidelines with documented rationale,Manual underwriting worksheet; approval memo,AUS Refer or ineligible,No,Rework / delay,Before UW-017
+UW-012,9 Decision,Derived internally,Product eligibility matrix confirmed,each product parameter within limits; eligibility_status,Eligibility checklist,Universal,No,Repurchase / unsaleable,Before UW-017
+UW-013,9 Decision,Derived internally,Investor overlays applied,Lender and investor overlays checked in addition to agency guides,Overlay checklist,Overlays exist for the product,No,Repurchase / unsaleable,Before UW-017
+UW-014,9 Decision,Derived internally,Condition list issued,Conditions communicated to borrower and processing,Condition list with timestamp,Universal,No,Regulatory violation,After UW-002
+UW-015,9 Decision,Derived internally,Conditions cleared and documented,open_condition_count = 0,Cleared condition records with attachments,Universal,No,Repurchase / unsaleable,Before UW-017
+UW-016,9 Decision,Derived internally,Adverse action or counteroffer issued,Borrower notified with specific principal reasons,Adverse action notice with timestamp,Denial or counteroffer,No,Regulatory violation,Within 30 days of complete application
+UW-017,9 Decision,Derived internally,Clear to Close issued,All conditions cleared; loan authorized to proceed to closing,CTC record,Universal,No,Rework / delay,After UW-015
+UW-018,9 Decision,Derived internally,Fraud and red flag review completed,alert_count by severity; adjudication_status per alert,Fraud report; red flag checklist,Universal,No,Repurchase / unsaleable,Before UW-017

@@ -1,8 +1,9 @@
 /**
- * The four screens, and the machinery for keeping ten server stages behind them.
+ * The five screens, and the machinery for keeping eleven server stages behind
+ * them.
  *
- * The engine still tracks ten stages and 77 requirements. The borrower sees
- * four steps. This module is the whole of that translation, and it is the only
+ * The engine still tracks eleven stages and 83 requirements. The borrower sees
+ * five steps. This module is the whole of that translation, and it is the only
  * place in the web app that knows both vocabularies.
  *
  * Two rules it exists to enforce:
@@ -11,7 +12,7 @@
  *    entered only when the engine says something specific failed to resolve
  *    from the bank connection. A borrower who does not trigger one must never
  *    learn it exists — so they are absent from `SCREENS`, absent from the nav,
- *    and absent from the "step N of 4" count.
+ *    and absent from the "step N of 5" count.
  *
  * 2. **Nothing here renders a requirement id.** The engine's `screen` and
  *    `actor` fields decide which branch is needed; the ids, counts, severities
@@ -36,7 +37,7 @@ export type { BranchPath };
 /**
  * The stage, in the one spelling that crosses the wire.
  *
- * This module used to declare its own uppercase union of the same ten names,
+ * This module used to declare its own uppercase union of the same eleven names,
  * which the compiler could not catch because nothing crosses a wire with a
  * type on it. `GET /files/:id` answers the lowercase domain names, and this
  * map had no key for any of them, so the two readers fed from that route both
@@ -51,10 +52,20 @@ export type { BranchPath };
  */
 export type { FlowStage };
 
-/** The four steps, and nothing else. */
+/**
+ * The five steps, and nothing else.
+ *
+ * Declarations is a STEP and not a branch, and the difference is not a matter
+ * of taste: `branchesFor` below renders work the engine reports as
+ * outstanding, and the engine can only report work that has a requirement. The
+ * questions therefore have rows in `data/v1-build.csv` and a screen of their
+ * own — which is also the only way a borrower who stops halfway through them
+ * comes back to them rather than to the top of the screen before.
+ */
 export const SCREENS = [
   { path: "property", label: "Property" },
   { path: "identity", label: "About you" },
+  { path: "declarations", label: "A few questions" },
   { path: "bank", label: "Your bank" },
   { path: "review", label: "Review" },
 ] as const;
@@ -76,6 +87,7 @@ export const STAGE_TO_SCREEN: Record<FlowStage, ScreenPath> = {
   // Borrower details are saved but the credit pull has not run — screen 2 is
   // not finished, so this is not a step forward for the borrower.
   credit: "identity",
+  declarations: "declarations",
   bank: "bank",
   payroll: "review",
   irs_transcript: "review",

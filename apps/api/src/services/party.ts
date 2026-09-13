@@ -1,13 +1,13 @@
 /**
  * Who a person is, across files.
  *
- * The four screens still write a `borrowers` row per file. That row is a
+ * The borrower screens still write a `borrowers` row per file. That row is a
  * snapshot; the party is the person. This module finds-or-creates the party
  * behind a sign-in, gives it a principal to assert things as, and writes what
  * screen 2 collects as FACTS on the party — in the same transaction as the
  * legacy row, so a request either records the person both ways or not at all.
  *
- * Nothing in the four screens reads any of this yet. That is the strangler's
+ * Nothing in the borrower screens reads any of this yet. That is the strangler's
  * first move: dual-write, prove the new rows agree with the old, then read from
  * the new, then stop writing the old. Each is its own change.
  *
@@ -293,8 +293,9 @@ export interface BorrowerInput {
   readonly firstTimeHomebuyer?: boolean | null;
   readonly isMilitary: boolean;
   /**
-   * Absent is "not asked". The four screens do not collect it, and the fact
-   * this used to assert on every save was the string `"rent"`.
+   * Absent is "not asked". Screen 2 does not collect it — screen 3 does, into
+   * `du_residences`, and this column is the copy derived from that row. The
+   * fact this used to assert on every save was the string `"rent"`.
    */
   readonly currentHousing?: string | null;
   readonly monthlyRent?: number | null;

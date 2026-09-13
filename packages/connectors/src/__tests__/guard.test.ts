@@ -70,6 +70,8 @@ function fileWith(borrowers: Borrower[]): LoanFile {
     borrowers,
     consents: [],
     application: null,
+    declaration: null,
+    residences: [],
     propertyRecord: null,
     valuation: null,
     flood: null,

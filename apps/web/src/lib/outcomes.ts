@@ -104,3 +104,39 @@ export const ENDING_COPY = {
  * cannot learn about it; the view that asks for it says so itself.
  */
 export const SIGN_LEAD = "Sign to send it";
+
+/**
+ * What the signature actually attests to, now that the answers are asked.
+ *
+ * This screen used to show five declarations it had BUILT — "No bankruptcy in
+ * the last 7 years" off the credit report's public records, "No undisclosed
+ * borrowed funds" off the asset report, "No prior ownership interest in the
+ * last 3 years" off the county record — under the words "Here is what we
+ * found. Signing confirms it." Two things were wrong with that, and only one
+ * of them was the copy. A declaration is the borrower's statement, so we had
+ * asked somebody to sign ours; and an unrun pull left every line reading clean,
+ * so the absence of a search became a finding in their favor above a signature.
+ *
+ * The questions are asked on screen 3 now, and this block reads back what was
+ * stored. So the words say what is true of it: these are your answers, and
+ * signing says they are true. There is still no separate confirmation
+ * checkbox, and the reason is unchanged and now actually holds — the
+ * attestation rides on the signature, the way it does on paper, and a checkbox
+ * in front of it adds a place to stop rather than any legal weight.
+ */
+export const SIGNING_COPY = {
+  heading: "What you told us",
+  lead: "These are your own answers, in your words. Signing says they are true and complete.",
+  /** Where the borrower goes to change one, rather than being told to ask us. */
+  change: "Change an answer",
+  /** The one thing this block cannot say when there is nothing stored to say it about. */
+  unanswered: "There are a few questions still to answer before you sign.",
+  /** And the way to answer them, because the sentence above is not a control. */
+  answerThem: "Answer them now",
+  panelTitle: "Your application",
+  panelBody:
+    "This is the application itself — the property, the loan, your details and the answers above. It also includes IRS Form 4506-C, which lets us request your tax records directly rather than asking you to find them.",
+  panelTerms:
+    "Signing submits it, and says the answers above are true and complete. It does not commit you to borrowing anything, and it is not an agreement to any particular rate or terms.",
+  signButton: "Sign and submit",
+} as const;

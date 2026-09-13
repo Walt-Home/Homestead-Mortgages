@@ -387,13 +387,17 @@ export const UNKNOWN_STANDING_BODY =
  * The page becomes the start rather than shrinking into an empty version of
  * itself, and it does not re-pitch: they have already signed in. The body is
  * the delivery contract said up front, and it is one of the few places the
- * promise is provably true — stopping and coming back is exactly what the four
+ * promise is provably true — stopping and coming back is exactly what the five
  * screens support.
+ *
+ * It counts the steps out loud, so it goes stale the moment one is added. The
+ * copy test holds it to `SCREENS.length`, because this sentence and the
+ * stepper's "Step 1 of 5" are read within an inch of each other.
  */
 export const START_LEAD = "Let's start your application.";
 
 export const START_BODY =
-  "Four steps — the property, you, your bank, and a review. You can stop anywhere and pick it back up here.";
+  "Five steps — the property, you, a few questions, your bank, and a review. You can stop anywhere and pick it back up here.";
 
 export const START_NOW = "Start now";
 
@@ -520,6 +524,7 @@ export const QUIET_LABELS: Record<ScreenPath | BranchPath, string> = {
   documents: "See this borrower's documents screen",
   property: "See this borrower's property screen",
   identity: "See this borrower's details screen",
+  declarations: "See this borrower's answers",
 };
 
 /** The review screen's quiet label where the control it replaced named the reasons. */

@@ -4,8 +4,8 @@ Onboard a homebuyer, retrieve almost everything underwriting needs from
 connected accounts rather than uploads, and give them a decision that explains
 itself.
 
-Built against Drew's V1 flow sheet (`data/v1-build.csv`) — 77 requirements
-across nine screens, with the dependency graph and applicability conditions
+Built against Drew's V1 flow sheet (`data/v1-build.csv`) — 83 requirements
+across ten screens, with the dependency graph and applicability conditions
 made executable rather than left as prose.
 
 ## Quick start
@@ -25,7 +25,7 @@ API on `:8080`, web on `:5173`.
 
 | Package                 | What it is                                                                                                                                                       |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/requirements` | The 77 requirements as a typed registry, with a condition predicate and a satisfaction evaluator for each, plus the dependency graph hiding in the timing column |
+| `packages/requirements` | The 83 requirements as a typed registry, with a condition predicate and a satisfaction evaluator for each, plus the dependency graph hiding in the timing column |
 | `packages/underwriting` | The shadow AUS — ratios, reserves, compliance tests and pricing, every number carrying its own derivation                                                        |
 | `packages/connectors`   | Ports for credit, bank, payroll, IRS and e-sign, with fixture adapters and the authorization guard                                                               |
 | `packages/shared`       | Domain types. `LoanFile` is the object everything reads                                                                                                          |
@@ -33,13 +33,16 @@ API on `:8080`, web on `:5173`.
 | `apps/api`              | Express 5                                                                                                                                                        |
 | `apps/web`              | React 19 + Vite. Palette and type stacks ported from Homestead                                                                                                   |
 
-## The borrower sees four screens
+## The borrower sees five screens
 
-Property → About you → Your bank → Review. The engine still evaluates all 77
-requirements across its own nine screens; it simply stopped rendering to the
-borrower. Payroll, IRS transcripts and document upload are conditional
-branches that most files never see. `?debug=1` on any file URL shows the
-engine view. See `CLAUDE.md` for the rules and the list of known stubs.
+Property → About you → A few questions → Your bank → Review. The engine
+evaluates all 83 requirements across its own ten screens; it simply stopped
+rendering most of them to the borrower. "A few questions" is the URLA
+Section 5 declarations and where the borrower lives — a step rather than a
+branch, because the engine can only report work that has a requirement.
+Payroll, IRS transcripts and document upload are the conditional branches,
+and most files never see them. `?debug=1` on any file URL shows the engine
+view. See `CLAUDE.md` for the rules and the list of known stubs.
 
 ## The three things worth knowing before changing anything
 

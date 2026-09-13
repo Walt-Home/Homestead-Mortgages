@@ -1,5 +1,5 @@
 /**
- * Screen 3 — the bank connection.
+ * Screen 4 — the bank connection.
  *
  * The borrower does exactly one thing: press a button. Everything after that
  * is their bank's own login, and then us.

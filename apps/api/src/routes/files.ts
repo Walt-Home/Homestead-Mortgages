@@ -172,9 +172,9 @@ fileRouter.patch(
 
       // A corrected income is still an income the borrower stated, and it is
       // stated HERE. Parsing it and dropping it is what left the party's fact
-      // holding the figure the borrower had already fixed — and screen 4 pins
-      // that fact as one of the six pieces, so the correction has to land in
-      // the same place the first answer did.
+      // holding the figure the borrower had already fixed — and the receipt
+      // pins that fact as one of the six pieces, so the correction has to land
+      // in the same place the first answer did.
       if (input.statedMonthlyIncome !== undefined) {
         const partyId = await partyForUser(tx, req.user!.id);
         const principalId = await principalForParty(tx, partyId);

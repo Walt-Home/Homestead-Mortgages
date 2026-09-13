@@ -1,16 +1,24 @@
 /**
- * Screen 4 — review and submit, then whichever answer the file actually got.
+ * Screen 5 — review and submit, then whichever answer the file actually got.
  *
  * Two things: the fair-lending questions, and a signature.
  *
- * **Why there is no longer a "this is correct" checkbox.** The five derived
- * declarations are URLA Section 5 — a required borrower attestation, which is
- * why they cannot simply be asserted by us from the credit file. But the
- * attestation rides on the *signature*, the way it does on paper. A separate
- * checkbox in front of the signature added no legal weight and added a place
- * to stop, which on the last screen of a five-minute flow is the most
- * expensive place to put one. They are still shown, in full, above the
- * signature — that part is not optional.
+ * **Why there is no separate "this is correct" checkbox.** URLA Section 5 is a
+ * required borrower attestation, and the attestation rides on the *signature*,
+ * the way it does on paper. A separate checkbox in front of the signature adds
+ * no legal weight and adds a place to stop, which on the last screen of a
+ * five-minute flow is the most expensive place to put one. The answers are
+ * still shown, in full, above the signature — that part is not optional, and
+ * the rationale only holds because they are the borrower's OWN answers now.
+ * This screen used to build five of them out of a credit report, a lien
+ * search, an asset report and a county record, which meant a checkbox or a
+ * signature attesting to our inference; screen 3 asks the questions, and this
+ * block reads back what was stored.
+ *
+ * Which is also why this screen refuses the signature until screen 3 has been
+ * answered. With nothing stored, the panel's words attest to a statement the
+ * borrower never made — the same defect as the derived declarations, with the
+ * inference removed and nothing put in its place.
  *
  * **The ending is chosen by the outcome and the state, never by the
  * arithmetic.** `endings.ts` holds the rule and `outcomes.ts` holds the words;
@@ -47,16 +55,11 @@ import {
   COUNTEROFFER_COPY,
   ENDING_COPY,
   REFERRED_COPY,
+  SIGNING_COPY,
   SIGN_LEAD,
 } from "../lib/outcomes.js";
+import { answerLines, type AnswerLine } from "../lib/declarations.js";
 import type { Assessment } from "../lib/api.js";
-
-interface Declaration {
-  readonly clean: string;
-  readonly source: string;
-  readonly flagged: boolean;
-  readonly question: string;
-}
 
 /**
  * The one refusal this screen re-words rather than passing through.
@@ -85,7 +88,6 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
    */
   const readOnly = file?.isDemo === true || user?.persona != null;
 
-  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [demographics, setDemographics] = useState<DemographicAnswers>({
     ethnicity: [],
     race: [],
@@ -104,6 +106,15 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   const signed = Boolean(file?.applicationSignedAt);
   const intentRecorded = Boolean(file?.intentToProceedAt);
   const primaryResidence = file?.property?.occupancy === "primary_residence";
+  // What the borrower answered on screen 3, read back. Null is unasked, which
+  // is why the block below says so rather than rendering an empty list.
+  const declaration = file?.declaration ?? null;
+  const residences = file?.residences ?? [];
+  // What the signature says is true. One POST writes the declaration and the
+  // residences together, so a file has both or neither — and the gate is the
+  // declaration rather than the line count below, because a residence on its
+  // own would make that count non-zero while Section 5 went unanswered.
+  const declared = declaration != null;
   const decision = file?.decision;
   const ratios = decision?.ratios;
   const payrollLinked = file?.payroll != null;
@@ -135,9 +146,6 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     };
   }, [fileId, file, decision, readOnly, queryClient]);
 
-  const declarations = buildDeclarations(file);
-  const flagged = declarations.filter((d) => d.flagged);
-
   /**
    * Answered, or explicitly declined. An untouched form is neither: saving
    * empty arrays records "not requested", which is a false statement about a
@@ -152,6 +160,11 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
       demographics.sex !== "");
 
   async function saveAndContinue() {
+    // Not merely the button's disabled attribute. This is the one function
+    // that opens the signing panel, and the panel's words say the answers
+    // above are true and complete — so an unanswered file must not be able to
+    // reach it by any route, including a stale render.
+    if (!declared) return;
     if (!fileId || !file?.borrowers[0]) return;
     setSaving(true);
     setError(null);
@@ -509,48 +522,12 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
       <div className="super-card">
         {signingHeader}
         <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">Nearly done</h1>
-        <p className="mt-2 text-base text-ink-soft">Here is what we found. Signing confirms it.</p>
+        <p className="mt-2 text-base text-ink-soft">{SIGNING_COPY.lead}</p>
 
-        <div className="mt-7 border-t border-rule-soft pt-5">
-          <ul className="flex flex-col gap-2">
-            {declarations
-              .filter((d) => !d.flagged)
-              .map((d) => (
-                <li key={d.clean} className="flex items-start justify-between gap-4 text-base">
-                  <span className="flex items-start gap-2.5 text-ink-soft">
-                    <span aria-hidden="true" className="mt-0.5 text-ok">
-                      ✓
-                    </span>
-                    {d.clean}
-                  </span>
-                  <span className="shrink-0 text-xs text-ink-faint">{d.source}</span>
-                </li>
-              ))}
-          </ul>
-        </div>
-
-        {flagged.length > 0 && (
-          <div className="super-notice mt-6">
-            <p className="text-sm font-medium text-ink">
-              {flagged.length === 1
-                ? "One thing we need to ask about"
-                : "A couple of things to ask about"}
-            </p>
-            {flagged.map((d) => (
-              <div key={d.clean} className="mt-3">
-                <label className="super-label" htmlFor={`q-${d.clean}`}>
-                  {d.question}
-                </label>
-                <input
-                  id={`q-${d.clean}`}
-                  className="super-input"
-                  value={answers[d.clean] ?? ""}
-                  onChange={(e) => setAnswers((a) => ({ ...a, [d.clean]: e.target.value }))}
-                />
-              </div>
-            ))}
-          </div>
-        )}
+        <YourAnswers
+          lines={answerLines(declaration, residences)}
+          to={`/f/${fileId}/declarations`}
+        />
 
         {primaryResidence && (
           <DemographicQuestions value={demographics} onChange={setDemographics} />
@@ -561,22 +538,15 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
         <div className="mt-7 border-t border-rule-soft pt-6">
           {readyToSign ? (
             <div className="super-notice">
-              <p className="font-display text-base text-ink">Your application</p>
-              <p className="mt-2 text-base text-ink-soft">
-                This is the application itself — the property, the loan, your details and the
-                declarations above. It also includes IRS Form 4506-C, which lets us request your tax
-                records directly rather than asking you to find them.
-              </p>
-              <p className="mt-2 text-base text-ink-soft">
-                Signing submits it. It does not commit you to borrowing anything, and it is not an
-                agreement to any particular rate or terms.
-              </p>
+              <p className="font-display text-base text-ink">{SIGNING_COPY.panelTitle}</p>
+              <p className="mt-2 text-base text-ink-soft">{SIGNING_COPY.panelBody}</p>
+              <p className="mt-2 text-base text-ink-soft">{SIGNING_COPY.panelTerms}</p>
               <button
                 className="super-btn super-btn-primary mt-4"
                 onClick={() => void finishSubmission()}
                 disabled={readOnly}
               >
-                Sign and submit
+                {SIGNING_COPY.signButton}
               </button>
             </div>
           ) : (
@@ -584,14 +554,24 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
               <button
                 className="super-btn super-btn-primary"
                 onClick={() => void saveAndContinue()}
-                disabled={!demographicsAnswered || saving || readOnly}
+                disabled={!declared || !demographicsAnswered || saving || readOnly}
               >
                 {saving ? "Saving…" : "Continue to sign"}
               </button>
-              {!demographicsAnswered && (
-                <p className="mt-2 text-xs text-ink-faint">
-                  Answer the three questions above, or decline them, to continue.
-                </p>
+              {/*
+                The declarations first, because that is the one a borrower
+                cannot fix on this screen — the way out is the link in the
+                block above, which is why the sentence sits under a disabled
+                button rather than replacing it.
+              */}
+              {!declared ? (
+                <p className="mt-2 text-xs text-ink-faint">{SIGNING_COPY.unanswered}</p>
+              ) : (
+                !demographicsAnswered && (
+                  <p className="mt-2 text-xs text-ink-faint">
+                    Answer the three questions above, or decline them, to continue.
+                  </p>
+                )
               )}
             </>
           )}
@@ -639,63 +619,47 @@ function Reasons({
 }
 
 /**
- * The five declarations, built from data rather than asked.
+ * The borrower's own answers, read back above the signature.
  *
- * Each defaults to its clean form and flips to a question only when the
- * underlying retrieval actually found something. A source that has not run yet
- * leaves the declaration clean — we are stating what we found, and finding
- * nothing because we did not look is not a finding against the borrower.
+ * Every line is something a person typed on screen 3. Nothing on this path
+ * reads a connector: the list this replaced was built from a credit report, a
+ * lien search, an asset report and a county record, so a file whose pulls had
+ * not run showed five clean declarations above a signature — absence of
+ * evidence rendered as the borrower's statement.
  */
-function buildDeclarations(file: unknown): Declaration[] {
-  const f = file as
-    | {
-        credit?: { publicRecords?: { type: string }[] } | null;
-        lienSearch?: {
-          delinquentFederalDebt: boolean;
-          foreclosureOrShortSaleInHistory: boolean;
-        } | null;
-        assets?: { borrowedFunds?: unknown[] } | null;
-        propertyRecord?: { priorOwnershipInLastThreeYears: boolean } | null;
-      }
-    | undefined;
-
-  const publicRecords = f?.credit?.publicRecords ?? [];
-  const hasBankruptcy = publicRecords.some((r) => r.type?.includes("bankruptcy"));
-  const hasForeclosure =
-    publicRecords.some((r) => r.type?.includes("foreclosure")) ||
-    Boolean(f?.lienSearch?.foreclosureOrShortSaleInHistory);
-
-  return [
-    {
-      clean: "No bankruptcy in the last 7 years",
-      source: "credit",
-      flagged: hasBankruptcy,
-      question: "We found a bankruptcy on your record. When was it discharged?",
-    },
-    {
-      clean: "No foreclosure or short sale",
-      source: "credit, property records",
-      flagged: hasForeclosure,
-      question: "We found a foreclosure or short sale. What happened, and when?",
-    },
-    {
-      clean: "No delinquent federal debt",
-      source: "lien search",
-      flagged: Boolean(f?.lienSearch?.delinquentFederalDebt),
-      question:
-        "The lien search found a federal debt in your name. Is it on a repayment plan, and with whom?",
-    },
-    {
-      clean: "No undisclosed borrowed funds",
-      source: "bank activity",
-      flagged: Boolean(f?.assets?.borrowedFunds?.length),
-      question: "Some of your deposit looks borrowed. Where did it come from?",
-    },
-    {
-      clean: "No prior ownership interest in the last 3 years",
-      source: "property records",
-      flagged: Boolean(f?.propertyRecord?.priorOwnershipInLastThreeYears),
-      question: "Property records show you have owned a home recently. Do you still own it?",
-    },
-  ];
+function YourAnswers({ lines, to }: { lines: readonly AnswerLine[]; to: string }) {
+  if (lines.length === 0) {
+    // The sentence needs somewhere to go. It names work the borrower has to
+    // do on another screen, and without the link the only thing on this one
+    // that reacts to it is a button that is now refusing to be pressed.
+    return (
+      <div className="mt-7">
+        <p className="text-base text-ink-soft">{SIGNING_COPY.unanswered}</p>
+        <Link to={to} className="super-link-quiet mt-2 inline-block text-sm">
+          {SIGNING_COPY.answerThem}
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-7 border-t border-rule-soft pt-5">
+      <p className="font-display text-base text-ink">{SIGNING_COPY.heading}</p>
+      <dl className="mt-4 flex flex-col gap-3">
+        {lines.map((line) => (
+          <div key={line.prompt} className="flex flex-col gap-0.5">
+            <dt className="text-sm text-ink-muted">{line.prompt}</dt>
+            <dd className="text-base text-ink-soft">
+              {line.answer}
+              {line.explanation && (
+                <span className="mt-0.5 block text-sm text-ink-muted">{line.explanation}</span>
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <Link to={to} className="super-link-quiet mt-4 inline-block text-sm">
+        {SIGNING_COPY.change}
+      </Link>
+    </div>
+  );
 }

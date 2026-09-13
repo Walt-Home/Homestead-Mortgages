@@ -76,7 +76,7 @@ export function signatureLead(count: number): string {
 }
 
 /**
- * Screen 7. Drew's note: "Only what didn't connect. Should feel like an
+ * Sheet screen 8. Drew's note: "Only what didn't connect. Should feel like an
  * exception, not a step."
  *
  * Two things this must get right. It renders nothing when nothing is

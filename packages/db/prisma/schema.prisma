@@ -66,6 +66,13 @@ enum FlowStage {
   PROPERTY_LOAN
   IDENTITY
   CREDIT
+  /// Section 5 and where the borrower lives — asked between the credit pull
+  /// and the bank connection, which is where the screen sits. A stage of its
+  /// own rather than a second meaning for IDENTITY, because the stage is what
+  /// "resume where you left off" reads: without one, a borrower who stops
+  /// halfway through the questions comes back to the top of the screen before
+  /// them and cannot be resumed to the one they were on.
+  DECLARATIONS
   BANK
   PAYROLL
   IRS_TRANSCRIPT
@@ -638,7 +645,7 @@ model FileEvent {
 //
 // The first slice of the model in `docs/states.md`. It lands ALONGSIDE the
 // loan-file tables above rather than replacing them: nothing here is wired into
-// a route yet, and the four screens keep running on `loan_files` until the
+// a route yet, and the borrower screens keep running on `loan_files` until the
 // application layer exists to move them.
 //
 // The rule that makes this worth having is that a Party outlives every
@@ -1525,10 +1532,11 @@ model LoanTransition {
 // ─── DESKTOP UNDERWRITER ────────────────────────────────────────────────────
 //
 // What a submission to Desktop Underwriter needs and this repo has never
-// stored. Additive, and nothing writes any of it yet: no route reaches these
-// tables and no screen collects them, so a borrower cannot answer these
-// questions today. The tables land first because the alternative to storage is
-// a serializer inventing the answers, which is what the four screens do now.
+// stored. Additive, and mostly still unwritten: `du_declarations` and
+// `du_residences` have a route and a screen behind them, and nothing else here
+// does. The tables land first because the alternative to storage is a
+// serializer inventing the answers, which is what the rest of this section
+// still leaves it no choice but to do.
 //
 // Every `Du*` enum below is hand-typed, and `npm run du:verify` is what keeps
 // it honest: it diffs each block against the members the DU Specification

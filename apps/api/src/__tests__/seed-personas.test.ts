@@ -240,21 +240,80 @@ describe("the seed walks every persona to its state", () => {
     }
   });
 
-  it("states no housing basis, because nobody asked a sample borrower either", async () => {
+  it("states a housing basis only where a sample borrower answered for one", async () => {
     // The seed used to derive one from the loan purpose — a purchase meant a
     // renter — and write it to the column, to `monthly_rent` and to a
     // `current_housing` fact. That is the fabrication the column, the route and
     // screen 2 stopped manufacturing, wearing a seed script. It also left the
     // derived column asserting a basis with no `du_residences` row behind it,
     // which is the one thing that column is not allowed to do.
+    //
+    // Each of the eight answers the declarations screen now, so each of them
+    // HAS a basis — and this is the assertion that says the column is still
+    // derived rather than manufactured: every stated basis has the row the
+    // borrower's own answer created behind it, and Dev, who answers nothing,
+    // states nothing.
     await seedAll();
 
-    const stated = await prisma.borrower.count({ where: { currentHousing: { not: null } } });
-    expect(stated).toBe(0);
-    expect(await prisma.borrower.count({ where: { monthlyRent: { not: null } } })).toBe(0);
+    const stated = await prisma.borrower.findMany({
+      where: { currentHousing: { not: null } },
+      select: { partyId: true, currentHousing: true, loanFileId: true },
+    });
+    expect(stated).toHaveLength(SEEDED.length);
+
+    for (const borrower of stated) {
+      const residence = await prisma.duResidence.findFirst({
+        where: {
+          residencyType: "Current",
+          applicationParty: {
+            partyId: borrower.partyId,
+            application: { loanFileId: borrower.loanFileId },
+          },
+        },
+        select: { basis: true },
+      });
+      expect(residence, borrower.partyId).not.toBeNull();
+      expect(HOUSING_FOR_BASIS[residence!.basis]).toBe(borrower.currentHousing);
+    }
+
+    // A co-borrower nobody asked. The declaration hangs off one edge, and
+    // commit 10 is where a second person answers for themselves.
+    const dev = await prisma.borrower.count({ where: { currentHousing: null } });
+    expect(dev).toBe(1);
+
+    // The fact predicate stays empty: the column is derived from the table,
+    // and a third store of the same answer is what this rule refuses.
     expect(await prisma.fact.count({ where: { predicate: "current_housing" } })).toBe(0);
   });
+
+  it("answers every declaration question for every sample borrower", async () => {
+    // Six borrower-input rows landed in the registry with the declarations
+    // screen. A persona who had not answered would carry all six as
+    // outstanding work forever — eight sample files reading "needs you" for a
+    // screen behind them, none of them showing the state they were built to
+    // show. There are no real applications to migrate; these eight are what
+    // the team demonstrates with.
+    await seedAll();
+    for (const story of SEEDED) {
+      const { file } = await persona(story.key);
+      const loaded = await loadLoanFile(file.id);
+      expect(loaded!.declaration, story.key).not.toBeNull();
+      const outstanding = assessAll(loaded!)
+        .filter((a) => a.applies === true && a.satisfaction.status !== "satisfied")
+        .map((a) => a.requirement.id);
+      expect(outstanding, story.key).not.toContain("APP-022");
+      expect(outstanding, story.key).not.toContain("APP-023");
+      expect(outstanding, story.key).not.toContain("APP-026");
+    }
+  });
 });
+
+/** The two vocabularies the derived column has to agree across. */
+const HOUSING_FOR_BASIS: Record<string, string> = {
+  Own: "own",
+  Rent: "rent",
+  LivingRentFree: "rent_free",
+};
 
 describe("each persona is the state their story describes", () => {
   it("leaves Maya with no bank and Ben with one and no decision", async () => {

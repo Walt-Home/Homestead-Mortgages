@@ -9,6 +9,7 @@
 
 import type { LoanTerms, ProductSelection, SubjectProperty } from "./loan.js";
 import type { Borrower, Consent } from "./borrower.js";
+import type { BorrowerDeclaration, BorrowerResidence } from "./declaration.js";
 import type {
   AssetReport,
   CreditReport,
@@ -28,11 +29,11 @@ import type {
 } from "./property-record.js";
 
 /**
- * How far through the nine sheet screens the borrower has got, plus
+ * How far through the ten sheet screens the borrower has got, plus
  * `complete` for a file that has walked all of them.
  *
  * A runtime list, with the union derived from it, because the web app used to
- * keep a second spelling of these ten names and nothing could tell. A type
+ * keep a second spelling of these names and nothing could tell. A type
  * alone crosses no wire; a list a test can iterate is what makes a map keyed
  * on these names prove it has an entry for each of them.
  */
@@ -40,6 +41,7 @@ export const FLOW_STAGES = [
   "property_loan",
   "identity",
   "credit",
+  "declarations",
   "bank",
   "payroll",
   "irs_transcript",
@@ -99,6 +101,21 @@ export interface LoanFile {
   readonly consents: readonly Consent[];
 
   readonly application: ApplicationReceipt | null;
+
+  /**
+   * Section 5 and the residence history, as the primary borrower answered
+   * them. Null until they have been asked — which is a different fact from
+   * "they answered no to everything", and nothing may render them the same.
+   *
+   * Read by the engine and by the screen that shows the answers back before
+   * the signature. There is no derivation anywhere near either: the five
+   * declarations screen 4 used to build out of a credit report, a lien search
+   * and an asset report are gone, because absence of evidence is not a "no"
+   * on a document somebody signs.
+   */
+  readonly declaration: BorrowerDeclaration | null;
+  /** Empty until the same answers are given; one current row, at most one prior. */
+  readonly residences: readonly BorrowerResidence[];
 
   /**
    * Public record about the property, retrieved on screen 1 rather than asked.

@@ -15,7 +15,13 @@ import { fixtureRegistry, PERSONAS } from "@hm/connectors";
 import type { LoanFile } from "@hm/shared";
 import { assessAll, outstanding, progress } from "@hm/requirements";
 import { underwrite } from "@hm/underwriting";
-import { REFERENCE, afterIdentity, consent, token } from "./support/in-memory-file.js";
+import {
+  REFERENCE,
+  afterDeclarations,
+  afterIdentity,
+  consent,
+  token,
+} from "./support/in-memory-file.js";
 
 const registry = fixtureRegistry({ latencyMs: 0, persona: "clean_w2", referenceDate: REFERENCE });
 
@@ -66,6 +72,9 @@ describe("the onboarding flow", () => {
     let file = afterIdentity();
     const counts = [progress(file).satisfied];
 
+    file = afterDeclarations(file);
+    counts.push(progress(file).satisfied);
+
     const credit = await registry.credit.pullTriMerge(file, token("credit_report"));
     file = { ...file, credit: credit.data };
     counts.push(progress(file).satisfied);
@@ -97,6 +106,50 @@ describe("the onboarding flow", () => {
 
     for (let i = 1; i < counts.length; i++) {
       expect(counts[i]).toBeGreaterThanOrEqual(counts[i - 1]!);
+    }
+  });
+
+  it("never lets the new questions move a mid-flight file backwards", async () => {
+    // Six always-applicable borrower-input rows landed in the registry with
+    // the declarations screen, and `progress()` counts only what definitely
+    // applies — so a file that was nearly done is exactly where a new row
+    // shows up as lost ground. The walk below is a borrower who connected
+    // everything first and answered the questions afterwards, which is the
+    // order a resumed file takes them in.
+    let file = afterIdentity();
+    const credit = await registry.credit.pullTriMerge(file, token("credit_report"));
+    file = { ...file, credit: credit.data };
+    const bankOutcome = await registry.bank.fetchAssetReport(
+      file,
+      token("bank_transactions"),
+      { sessionId: "s" },
+      12,
+    );
+    if (bankOutcome.status !== "ready") throw new Error("fixture must answer immediately");
+    file = { ...file, assets: bankOutcome.result.data };
+
+    const answered = afterDeclarations(file);
+    const before = progress(file);
+    const after = progress(answered);
+
+    expect(after.satisfied).toBeGreaterThan(before.satisfied);
+    // And the three conditional ones resolve rather than linger: a borrower
+    // who has answered is no longer somebody we might still ask.
+    expect(after.undetermined).toBeLessThan(before.undetermined);
+    expect(after.outstanding).toBeLessThan(before.outstanding);
+
+    // Named, not counted. The counts above rise for any answer at all — one
+    // residence row moves both of them — so the assertion that the screen did
+    // its job has to say which requirements it retired.
+    const satisfied = assessAll(answered)
+      .filter((a) => a.satisfaction.status === "satisfied")
+      .map((a) => a.requirement.id);
+    expect(satisfied).toEqual(expect.arrayContaining(["APP-022", "APP-023", "APP-026"]));
+    const stillOwed = assessAll(answered)
+      .filter((a) => a.applies === true && a.satisfaction.status !== "satisfied")
+      .map((a) => a.requirement.id);
+    for (const id of ["APP-022", "APP-023", "APP-024", "APP-025", "APP-026", "APP-027"]) {
+      expect(stillOwed, id).not.toContain(id);
     }
   });
 

@@ -50,7 +50,7 @@
 
 import { fileURLToPath } from "node:url";
 import { prisma } from "@hm/db";
-import type { Prisma } from "@hm/db";
+import type { DuResidencyBasis, Prisma } from "@hm/db";
 import { fixtureRegistry, PUBLIC_RECORDS, type ConnectorRegistry } from "@hm/connectors";
 import type { Address, ApplicationState, LoanFile } from "@hm/shared";
 import { underwrite } from "@hm/underwriting";
@@ -72,6 +72,7 @@ import {
 import { tokenFor } from "../services/authorization.js";
 import type { Db } from "../services/db.js";
 import { decideApplication, recordDecision } from "../services/decide.js";
+import { recordDeclaration } from "../services/declarations.js";
 import { pinTridPieces, proposeScenario } from "../services/evidence.js";
 import {
   assertFacts,
@@ -256,7 +257,7 @@ async function screenOne(
       // ownership, so this is the layer that makes a sample read-only even to
       // whoever is signed in as it.
       isDemo: true,
-      // The resume cursor, not a state. The four screens still navigate on it.
+      // The resume cursor, not a state. The borrower screens still navigate on it.
       stage: story.resumeStage,
       purpose: PURPOSE_TO_DB[t.purpose],
       loanAmount: t.loanAmount,
@@ -386,6 +387,114 @@ async function grantConsent(
     },
   });
   await recordEvent(loanFileId, "consent_granted", "borrower", { kind }, undefined, tx);
+}
+
+/**
+ * Screen 3 — Section 5 and where each of them lives.
+ *
+ * Every persona answers, and that is not tidiness. Six new borrower-input
+ * requirements went into the sheet with this screen, and a sample borrower who
+ * had never been asked would carry all six as outstanding work for the rest of
+ * their life — eight files that stopped showing the eight states they were
+ * built to show, all of them reading "needs you" for a screen that is behind
+ * them. There are no real applications in flight to migrate; these eight are
+ * what the team demonstrates with, so these eight are what the answers are for.
+ *
+ * The answers are theirs and they differ, because a persona whose whole job is
+ * to look like a person should not answer a seventeen-question form the same
+ * way as everybody else. Ben is refinancing, so he owns his home and has for
+ * eight years, and his file is the one that carries the prior-property
+ * follow-ups. Priya has been in her apartment fourteen months, so hers is the
+ * one that carries a previous address. Nobody declares a bankruptcy: the
+ * chapter branch has no reference instance anywhere in the corpus, and a
+ * seeded sample is not the place to invent the first one.
+ */
+const DECLARED: Record<
+  SeededKey,
+  { basis: DuResidencyBasis; months: number; rent?: number; owned?: boolean; prior?: Address }
+> = {
+  maya_okafor: { basis: "Rent", months: 29, rent: 1_850 },
+  ben_castillo: { basis: "Own", months: 96, owned: true },
+  priya_dev_raman: {
+    basis: "Rent",
+    months: 14,
+    rent: 3_400,
+    prior: { line1: "77 Curtner Ave", city: "San Jose", state: "CA", postalCode: "95125" },
+  },
+  tom_nguyen: { basis: "Rent", months: 33, rent: 1_600 },
+  aisha_bello: { basis: "Rent", months: 26, rent: 1_450 },
+  lena_fischer: { basis: "Rent", months: 48, rent: 1_725 },
+  marcus_hale: { basis: "Rent", months: 40, rent: 2_050 },
+  omar_haddad: { basis: "LivingRentFree", months: 60 },
+};
+
+async function declarations(w: Walk): Promise<void> {
+  const said = DECLARED[w.story.key];
+  const purchase = w.story.terms.purpose === "purchase";
+
+  await recordDeclaration(
+    w.loanFileId,
+    {
+      declaration: {
+        intentToOccupy: "Yes",
+        homeownerPastThreeYears: said.owned ? "Yes" : "No",
+        // Both follow-ups exist exactly when their trigger says they were put,
+        // which is the direction the CHECK constraints read in as well.
+        priorPropertyUsage: said.owned ? "PrimaryResidence" : null,
+        priorPropertyTitle: said.owned ? "Sole" : null,
+        // Asked on an FHA file, which none of these is.
+        fhaSecondaryResidence: null,
+        specialBorrowerSellerRelationship: purchase ? false : null,
+        undisclosedBorrowedFunds: false,
+        undisclosedMortgageApplication: false,
+        undisclosedCreditApplication: false,
+        propertyProposedCleanEnergyLien: false,
+        undisclosedComakerOfNote: false,
+        outstandingJudgments: false,
+        presentlyDelinquent: false,
+        partyToLawsuit: false,
+        priorPropertyDeedInLieuConveyed: false,
+        priorPropertyShortSaleCompleted: false,
+        priorPropertyForeclosureCompleted: false,
+        bankruptcy: false,
+      },
+      residences: [
+        {
+          residencyType: "Current",
+          basis: said.basis,
+          durationMonths: said.months,
+          monthlyRent: said.rent ?? null,
+        },
+        ...(said.prior
+          ? [
+              {
+                residencyType: "Prior" as const,
+                basis: "Rent" as const,
+                durationMonths: 36,
+                monthlyRent: 2_600,
+                addressLineText: said.prior.line1,
+                cityName: said.prior.city,
+                stateCode: said.prior.state,
+                postalCode: said.prior.postalCode,
+              },
+            ]
+          : []),
+      ],
+    },
+    w.tx,
+  );
+  // No stage to advance. A persona's file is created at its resume stage and
+  // every walk runs inside one transaction, so the high-water mark is already
+  // where the story says it is — and `advanceStage` reads its own connection,
+  // which cannot see a row this transaction has not committed.
+  await recordEvent(
+    w.loanFileId,
+    "screen_completed",
+    "borrower",
+    { screen: "declarations" },
+    "APP-022",
+    w.tx,
+  );
 }
 
 /** The soft credit pull, and the review the credit route records beside it. */
@@ -617,8 +726,8 @@ async function uploadDocument(w: Walk, requirementId: string, filename: string):
 }
 
 /**
- * Screen 4's signature: one act covering the application and the 4506-C, then
- * the transcripts it licenses.
+ * The review screen's signature: one act covering the application and the
+ * 4506-C, then the transcripts it licenses.
  */
 async function signApplication(w: Walk): Promise<void> {
   await grantConsent(w.tx, w.loanFileId, w.borrowerId, "form_4506c");
@@ -686,7 +795,7 @@ async function settle(
  * Ask the engine, record what it said, and let it move the application.
  *
  * `story.market` is the APR, the average prime offer rate and the fee total
- * the four screens never collect. Supplying them here is what lets a sample
+ * the borrower screens never collect. Supplying them here is what lets a sample
  * show a decided state at all: a real-flow file leaves those blocked, the
  * engine refuses to guess, and every one of them ends `referred`.
  */
@@ -734,6 +843,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await credit(w);
     await screening(w);
     await liens(w);
+    await declarations(w);
   },
 
   /**
@@ -774,6 +884,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     );
     await screening(w);
     await liens(w);
+    await declarations(w);
     await bank(w);
   },
 
@@ -784,6 +895,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await credit(w);
     await screening(w);
     await liens(w);
+    await declarations(w);
     // Her bank report cannot verify commission income, so the payroll branch
     // is owed; her credit report carries a late payment, so a letter is owed
     // after it. Both are walked, in the order the reconciler asks for them.
@@ -800,6 +912,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await credit(w);
     await screening(w);
     await liens(w);
+    await declarations(w);
     await bank(w);
     await signApplication(w);
     await decide(w);
@@ -832,6 +945,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await credit(w);
     await screening(w);
     await liens(w);
+    await declarations(w);
     await bank(w);
     await signApplication(w);
     await decide(w);
@@ -843,6 +957,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await credit(w);
     await screening(w);
     await liens(w);
+    await declarations(w);
     // Her own principal, because the database refuses any other: withdrawal is
     // the borrower's act and a trigger checks that the actor is a borrower ON
     // this application. The seed's staff principal would be refused here,
@@ -865,6 +980,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await credit(w);
     await screening(w);
     await liens(w);
+    await declarations(w);
     await bank(w);
     await signApplication(w);
     await decide(w);
@@ -900,6 +1016,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     // pill, the snapshot and the ledger all say the same thing.
     await screening(w);
     await liens(w);
+    await declarations(w);
   },
 };
 

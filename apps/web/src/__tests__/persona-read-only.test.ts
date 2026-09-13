@@ -53,6 +53,7 @@ describe("a screen that can meet a read-only refusal", () => {
     expect(meetsTheRefusal.map((f) => f.name).sort()).toEqual([
       "components/ConnectorStep.tsx",
       "pages/BankPage.tsx",
+      "pages/DeclarationsPage.tsx",
       "pages/IdentityPage.tsx",
       "pages/PrivacyPage.tsx",
       "pages/ReviewPage.tsx",

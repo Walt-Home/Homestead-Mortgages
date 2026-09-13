@@ -1,11 +1,11 @@
 /**
  * Where Section 5 and the residence answers come in.
  *
- * No screen posts here yet — the question is asked in the commit after this
- * one. The route exists now because the column it makes true had to stop being
- * fabricated now: `borrowers.current_housing` was NOT NULL with a default of
- * `'rent'` and no screen ever asked, so the alternative to shipping somewhere
- * for the real answer to go was a nullable column and nothing able to fill it.
+ * Screen 3 posts here. The route shipped a commit ahead of it because the
+ * column it makes true had to stop being fabricated then:
+ * `borrowers.current_housing` was NOT NULL with a default of `'rent'` and no
+ * screen ever asked, so the alternative to shipping somewhere for the real
+ * answer to go was a nullable column and nothing able to fill it.
  *
  * Every field Desktop Underwriter requires is required HERE, not merely
  * non-null in the table. A partial submit is a 400 with the field named, rather
@@ -29,6 +29,7 @@ import { z } from "zod";
 import { asyncRoute } from "../middleware/error-handler.js";
 import { assertFileAccess } from "../services/repository.js";
 import { loadDeclaration, recordDeclaration } from "../services/declarations.js";
+import { advanceStage } from "../services/stage.js";
 
 export const declarationRouter = Router();
 
@@ -231,6 +232,9 @@ declarationRouter.post(
     await assertFileAccess(id, req.user!.id, "write");
 
     const view = await recordDeclaration(id, input);
+    // The high-water mark, not a cursor: a borrower who comes back to correct
+    // one answer after connecting their bank is not moved back to this screen.
+    await advanceStage(id, "DECLARATIONS");
     res.status(201).json({ declaration: view });
   }),
 );

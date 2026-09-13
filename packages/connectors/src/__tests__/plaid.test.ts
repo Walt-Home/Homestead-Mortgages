@@ -110,6 +110,8 @@ function file(authorized = true): LoanFile {
         ]
       : [],
     application: null,
+    declaration: null,
+    residences: [],
     propertyRecord: null,
     valuation: null,
     flood: null,

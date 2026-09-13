@@ -128,9 +128,10 @@ export interface BankAttempt {
   /**
    * What Link handed back, when it did so on the OAuth return page.
    *
-   * Screen 3 is the only component that talks to the bank route, so the
-   * return page leaves the token here rather than POSTing it itself. Absent
-   * on the non-OAuth path, where onSuccess fires with screen 3 still mounted.
+   * The bank screen is the only component that talks to the bank route, so
+   * the return page leaves the token here rather than POSTing it itself.
+   * Absent on the non-OAuth path, where onSuccess fires with it still
+   * mounted.
    */
   readonly publicToken?: string;
   /** Epoch ms. The polling budget is measured against this, not a ref. */

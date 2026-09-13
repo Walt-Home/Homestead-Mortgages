@@ -8,8 +8,8 @@
  * knowledge they have that we do not.
  *
  * The gate at the end is the other reason this screen exists. A rough
- * affordability check on stated income costs nothing; finding out on screen 3
- * that the loan never worked costs a credit pull and a bank connection. The
+ * affordability check on stated income costs nothing; finding out at the bank
+ * screen that the loan never worked costs a credit pull and a bank connection. The
  * check only ever stops a file it can stop *safely* — see the server route,
  * which explains why a housing payment over the DTI ceiling cannot be rescued
  * by data we have not pulled.
@@ -311,7 +311,7 @@ export function PropertyLoanPage() {
     const downNum = Number(down) || 0;
     const incomeNum = Number(income) || 0;
     // The figure is asserted as a fact on the person the moment it is stated,
-    // and screen 4 pins it as one of the six pieces of the application. A
+    // and it is pinned as one of the six pieces of the application. A
     // stand-in for a blank field is therefore not a placeholder — it is a
     // one-dollar income on somebody's credit request. The input takes digits
     // only, so a typed `0` arrives here as a real answer of nothing.

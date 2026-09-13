@@ -93,12 +93,12 @@ export function PayrollPage() {
 }
 
 /**
- * Screen 6 — the reconciliation source.
+ * Sheet screen 7 — the reconciliation source.
  *
  * The IRS pull needs a signed 4506-C (INC-008), and for a long time nothing in
  * the product could sign one — so this screen was a terminal dead end and
- * screens 7, 8 and 9 were unreachable behind it. The signing step is now part
- * of the screen rather than a prerequisite nobody could satisfy.
+ * every sheet screen after it was unreachable behind it. The signing step is
+ * now part of the screen rather than a prerequisite nobody could satisfy.
  */
 export function IrsPage() {
   const { fileId, file, readOnly, onDone } = useStep("review");

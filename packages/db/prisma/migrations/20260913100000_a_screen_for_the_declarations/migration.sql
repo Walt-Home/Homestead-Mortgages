@@ -1,0 +1,13 @@
+-- A fifth screen, and therefore a fifth stage.
+--
+-- ONE statement, and deliberately nothing else in this migration. Postgres
+-- refuses to use a new enum label in the same transaction that added it, so a
+-- migration that added DECLARATIONS and then so much as read a row against it
+-- would fail on the second statement. Anything that needs the label belongs in
+-- a later migration; everything that needs the ORDER reads STAGE_ORDER, which
+-- is where "forward" is defined.
+--
+-- BEFORE 'BANK' positions it where the screen sits — after the credit pull,
+-- ahead of the bank connection — so the catalog's order matches the enum in
+-- schema.prisma and `prisma migrate diff` has nothing left to discover.
+ALTER TYPE "FlowStage" ADD VALUE 'DECLARATIONS' BEFORE 'BANK';

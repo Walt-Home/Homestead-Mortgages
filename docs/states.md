@@ -22,15 +22,15 @@ Five fields carry something state-like, and they answer to different masters.
 
 | Field                                    | Where                          | Values                                                                                   | Owns                           |
 | ---------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------ |
-| `loan_files.stage`                       | Postgres enum `FlowStage`      | 10, ordered                                                                              | Which screen to resume to      |
+| `loan_files.stage`                       | Postgres enum `FlowStage`      | 11, ordered                                                                              | Which screen to resume to      |
 | `decisions.outcome`                      | `String`, append-only table    | `pending` `referred` `approved_with_conditions` `clear_to_close` `counteroffer` `denied` | What the engine last concluded |
 | `loan_conditions.status`                 | `String`, default `open`       | `open` `submitted` `cleared` `waived`                                                    | One outstanding work item      |
 | `connector_links.status`                 | `String`, default `active`     | `active` `needs_reauth` `revoked` `error`                                                | One vendor connection          |
 | `borrowers.identity_verification_status` | `String`, nullable, no default | `pending` `verified` `failed`                                                            | One hosted ID-vendor session   |
 
 `stage` is a **high-water mark, not a cursor** — where you are is the URL, how
-far you got is the stage, and `advanceStage` refuses to move it backward. Ten
-stages sit behind four borrower screens; `apps/web/src/lib/flow.ts` holds the
+far you got is the stage, and `advanceStage` refuses to move it backward. Eleven
+stages sit behind five borrower screens; `apps/web/src/lib/flow.ts` holds the
 whole translation — `SCREENS`, `STAGE_TO_SCREEN`, `branchesFor` — and is the
 only place that maps between them. `FilesPage.tsx` is the one other file that
 names a stage and a screen path directly.
@@ -294,7 +294,7 @@ year's pull.
 
 | Piece                                  | Status                                                                     |
 | -------------------------------------- | -------------------------------------------------------------------------- |
-| `FlowStage`, four screens, outcomes    | Built — and being replaced                                                 |
+| `FlowStage`, five screens, outcomes    | Built — and being replaced                                                 |
 | Tests against a real Postgres          | Built                                                                      |
 | Party, facts, principals               | Built and on the production path — screens 1 and 2 write them              |
 | Identity lives on Party                | Built. `party_id` NOT NULL, identity columns dropped, no fallback left     |

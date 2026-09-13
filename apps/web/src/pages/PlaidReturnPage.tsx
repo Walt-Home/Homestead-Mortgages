@@ -3,14 +3,14 @@
  *
  * Some institutions do not authenticate inside Link. They navigate the whole
  * document away to their own site and send it back here, which means every
- * piece of React state from screen 3 is gone. Plaid requires the resumed Link
+ * piece of React state from screen 4 is gone. Plaid requires the resumed Link
  * to use the SAME link token, and forbids query parameters on the redirect
  * URI — so there is no file id in the URL and both have to come from the
  * stored attempt record.
  *
  * This page is a courier, not a second implementation. It reopens Link, and
  * the moment it has a public token it writes it to the record and hands the
- * borrower back to screen 3. Exactly one component owns the conversation with
+ * borrower back to screen 4. Exactly one component owns the conversation with
  * `POST /files/:id/bank`, because that endpoint writes to append-only tables
  * and two writers is two snapshots for one pull.
  */

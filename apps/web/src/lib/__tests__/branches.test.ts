@@ -111,6 +111,11 @@ describe("which branches a borrower is offered", () => {
  * other's function — `@hm/requirements` is not a web dependency and `apps/web`
  * is not an API one — so the agreement is held by a table both sides are
  * pinned to. A rule widened on either side moves one of the two lists.
+ *
+ * The three `declarations` items are outstanding on every fixture — none of
+ * them has answered screen 3 — and they must produce no card at all: the
+ * questions are a step the flow walks a borrower through, not work a document
+ * upload could clear.
  */
 const WIRE: readonly {
   readonly who: string;
@@ -123,6 +128,9 @@ const WIRE: readonly {
     payrollLinked: false,
     borrowerItems: [
       "APP-007|decision|borrower_input",
+      "APP-022|declarations|borrower_input",
+      "APP-023|declarations|borrower_input",
+      "APP-026|declarations|borrower_input",
       "CRD-002|credit|connect_credit",
       "CRD-016|credit|connect_credit",
       "INC-003|irs_transcript|connect_irs",
@@ -135,6 +143,9 @@ const WIRE: readonly {
     payrollLinked: false,
     borrowerItems: [
       "APP-007|decision|borrower_input",
+      "APP-022|declarations|borrower_input",
+      "APP-023|declarations|borrower_input",
+      "APP-026|declarations|borrower_input",
       "AST-005|bank|connect_bank",
       "AST-007|bank|connect_bank",
       "CRD-002|credit|connect_credit",
@@ -149,6 +160,9 @@ const WIRE: readonly {
     payrollLinked: false,
     borrowerItems: [
       "APP-007|decision|borrower_input",
+      "APP-022|declarations|borrower_input",
+      "APP-023|declarations|borrower_input",
+      "APP-026|declarations|borrower_input",
       "AST-006|upload_fallback|connect_bank",
       "CRD-002|credit|connect_credit",
       "CRD-008|upload_fallback|borrower_input",
@@ -166,6 +180,9 @@ const WIRE: readonly {
     payrollLinked: true,
     borrowerItems: [
       "APP-007|decision|borrower_input",
+      "APP-022|declarations|borrower_input",
+      "APP-023|declarations|borrower_input",
+      "APP-026|declarations|borrower_input",
       "AST-006|upload_fallback|connect_bank",
       "CRD-002|credit|connect_credit",
       "CRD-008|upload_fallback|borrower_input",

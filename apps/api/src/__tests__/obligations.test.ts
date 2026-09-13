@@ -40,6 +40,15 @@ const branches = (file: LoanFile) => borrowerObligations(file).map((o) => o.bran
  *
  * `ID|screen|source`, borrower-owned and known to apply — the assessment's
  * `actor: "borrower"` with `applicabilityKnown: true`.
+ *
+ * The three `declarations` rows are on every fixture because none of these
+ * files has answered screen 3, and they are the point of the second assertion:
+ * work a borrower genuinely owns, on a screen that is a STEP, must never
+ * become a branch card. `branchCanSatisfy` is what keeps them off the list —
+ * a `borrower_input` item is a branch only when a document upload could clear
+ * it — and widening that rule would put a "few documents" card in front of
+ * somebody whose outstanding work is a question the flow already walks them
+ * through.
  */
 const WIRE: readonly {
   readonly persona: PersonaId;
@@ -52,6 +61,9 @@ const WIRE: readonly {
     through: "bank",
     borrowerItems: [
       "APP-007|decision|borrower_input",
+      "APP-022|declarations|borrower_input",
+      "APP-023|declarations|borrower_input",
+      "APP-026|declarations|borrower_input",
       "CRD-002|credit|connect_credit",
       "CRD-016|credit|connect_credit",
       "INC-003|irs_transcript|connect_irs",
@@ -64,6 +76,9 @@ const WIRE: readonly {
     through: "bank",
     borrowerItems: [
       "APP-007|decision|borrower_input",
+      "APP-022|declarations|borrower_input",
+      "APP-023|declarations|borrower_input",
+      "APP-026|declarations|borrower_input",
       "AST-005|bank|connect_bank",
       "AST-007|bank|connect_bank",
       "CRD-002|credit|connect_credit",
@@ -78,6 +93,9 @@ const WIRE: readonly {
     through: "bank",
     borrowerItems: [
       "APP-007|decision|borrower_input",
+      "APP-022|declarations|borrower_input",
+      "APP-023|declarations|borrower_input",
+      "APP-026|declarations|borrower_input",
       "AST-006|upload_fallback|connect_bank",
       "CRD-002|credit|connect_credit",
       "CRD-008|upload_fallback|borrower_input",
@@ -95,6 +113,9 @@ const WIRE: readonly {
     through: "payroll",
     borrowerItems: [
       "APP-007|decision|borrower_input",
+      "APP-022|declarations|borrower_input",
+      "APP-023|declarations|borrower_input",
+      "APP-026|declarations|borrower_input",
       "AST-006|upload_fallback|connect_bank",
       "CRD-002|credit|connect_credit",
       "CRD-008|upload_fallback|borrower_input",

@@ -224,8 +224,8 @@ propertyFileRouter.post(
       ]);
     } catch (err) {
       // A file on an address we hold no record for is a legitimate file. It
-      // just carries no property snapshots, and screen 4's prior-ownership
-      // declaration stays clean rather than being asserted from nothing.
+      // just carries no property snapshots, and the first-time-homebuyer flag
+      // stays undetermined rather than being asserted from nothing.
       if (err instanceof AddressNotFoundError) {
         throw new AppError(404, err.message, "ADDRESS_NOT_FOUND");
       }

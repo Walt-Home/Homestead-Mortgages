@@ -53,6 +53,8 @@ function file(overrides: Partial<LoanFile> = {}): LoanFile {
     borrowers: [],
     consents: [],
     application: null,
+    declaration: null,
+    residences: [],
     credit: null,
     assets: null,
     payroll: null,

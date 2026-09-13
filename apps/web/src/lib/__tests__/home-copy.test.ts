@@ -34,9 +34,11 @@ import {
   SAMPLE_FILE_CANNOT_CHANGE,
   SAMPLE_FILE_START_YOUR_OWN,
   SEE_WHERE_THIS_STANDS,
+  START_BODY,
   fileLabel,
   labelWithStartTime,
 } from "../home-copy.js";
+import { SCREENS } from "../flow.js";
 import { ADVERSE_COPY } from "../outcomes.js";
 import { CLOCK_COPY } from "../ledger.js";
 import { applied } from "../endings.js";
@@ -254,6 +256,40 @@ describe("the walk that decides what those rules are applied to", () => {
       ],
     };
     expect(wordsOf("fileLabel", fileLabel, calls)).toEqual(["Purchase in Austin, TX", "Refinance"]);
+  });
+});
+
+describe("the sentence that counts the steps", () => {
+  /** The step words, in the order the sentence lists them. */
+  const listed = (body: string): readonly string[] =>
+    body
+      .slice(body.indexOf("—") + 1, body.indexOf("."))
+      .split(/,\s*(?:and\s+)?/)
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+
+  it("names as many steps as there are screens", () => {
+    // It said "Four steps — the property, you, your bank, and a review" for a
+    // week after the declarations screen landed, three inches above a stepper
+    // reading "Step 1 of 5". Nothing could see it, because the only assertion
+    // on this string was that the home page contained it.
+    expect(START_BODY.startsWith("Five steps")).toBe(true);
+    expect(listed(START_BODY)).toHaveLength(SCREENS.length);
+  });
+
+  it("names them in the order the borrower walks them", () => {
+    // A count that matches while the words describe a different flow is the
+    // half of this that a number alone cannot hold.
+    expect(listed(START_BODY)).toEqual([
+      "the property",
+      "you",
+      "a few questions",
+      "your bank",
+      "a review",
+    ]);
+    // And the middle one is the screen's own label, so the sentence and the
+    // stepper cannot call the same step two things.
+    expect(START_BODY).toContain(SCREENS[2].label.toLowerCase());
   });
 });
 

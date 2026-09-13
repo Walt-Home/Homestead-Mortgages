@@ -217,7 +217,7 @@ connectorRouter.post(
   }),
 );
 
-/** Screen 4 — the 12-month asset report. The one that matters. */
+/** The bank screen — the 12-month asset report. The one that matters. */
 connectorRouter.post(
   "/:id/bank",
   asyncRoute(async (req, res) => {

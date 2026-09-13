@@ -80,6 +80,8 @@ const file: LoanFile = {
   borrowers: [OMAR],
   consents: [],
   application: null,
+  declaration: null,
+  residences: [],
   propertyRecord: null,
   valuation: null,
   flood: null,

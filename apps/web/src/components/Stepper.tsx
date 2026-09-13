@@ -1,5 +1,5 @@
 /**
- * Four steps, and a count.
+ * Five steps, and a count.
  *
  * The previous stepper rendered nine pills that wrapped to three rows on a
  * phone and named internal stages at the borrower. This one is a progress
@@ -7,9 +7,9 @@
  * something you have finished.
  *
  * Conditional branches are deliberately absent. A borrower sent to confirm
- * their employer is still on step 3 of 4 — the branch is work inside a step,
- * not a step of its own, and showing it here would turn "four screens" into
- * "four screens, or six, depending".
+ * their employer is still on step 4 of 5 — the branch is work inside a step,
+ * not a step of its own, and showing it here would turn "five screens" into
+ * "five screens, or seven, depending".
  */
 
 import { Link } from "react-router-dom";

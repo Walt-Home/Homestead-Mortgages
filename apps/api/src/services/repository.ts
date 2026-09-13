@@ -34,6 +34,7 @@ import { AppError } from "../middleware/error-handler.js";
 import { displayNameFrom, factMapsByParty, requireIdentity } from "./borrower-projection.js";
 import type { Db } from "./db.js";
 import { liveFactsByParty } from "./party.js";
+import { declarationOnFile } from "./declarations.js";
 import { sixPieces } from "./evidence.js";
 import { toDomainState } from "./transition.js";
 
@@ -134,6 +135,7 @@ export const STAGE_TO_DOMAIN = {
   PROPERTY_LOAN: "property_loan",
   IDENTITY: "identity",
   CREDIT: "credit",
+  DECLARATIONS: "declarations",
   BANK: "bank",
   PAYROLL: "payroll",
   IRS_TRANSCRIPT: "irs_transcript",
@@ -200,6 +202,12 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       })
     : [];
   const factsByParty = factMapsByParty(factRows);
+
+  // Section 5 and the residence history, off the application-party edge rather
+  // than off the borrower row: the answers belong to THIS credit request, and
+  // a later request asks them again. Null the whole way down until somebody
+  // has been asked, which is not the same fact as an answer of no.
+  const answers = await declarationOnFile(id, db);
 
   const borrowers: Borrower[] = row.borrowers.map((b) => {
     const who = requireIdentity(b.id, factsByParty.get(b.partyId) ?? new Map());
@@ -338,6 +346,9 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
     consents,
 
     application,
+
+    declaration: answers?.declaration ?? null,
+    residences: answers?.residences ?? [],
 
     propertyRecord: latest<PropertyRecord>("property_record"),
     valuation: latest<AvmEstimate>("valuation"),

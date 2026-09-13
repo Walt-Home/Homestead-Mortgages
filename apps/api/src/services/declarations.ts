@@ -4,11 +4,11 @@
  *
  * This is the only writer of `du_declarations`, `du_bankruptcy_filings` and
  * `du_residences` in the product, and the only reason it has to be the only one
- * is that the alternative is a derivation. Screen 4 reads "no bankruptcy" off a
- * credit pull today; a clean credit report is absence of evidence, not a "no",
- * and there is no `ConnectorSnapshot` anywhere in this file for that reason.
- * The database refuses a machine principal outright, and a test refuses a second
- * writer.
+ * is that the alternative is a derivation. The review screen used to read "no
+ * bankruptcy" off a credit pull; a clean credit report is absence of evidence,
+ * not a "no", and there is no `ConnectorSnapshot` anywhere in this file for
+ * that reason. The database refuses a machine principal outright, and a test
+ * refuses a second writer.
  *
  * It is also what makes `borrowers.current_housing` true. That column carried a
  * NOT NULL default of `'rent'` and no screen ever asked, so every application
@@ -24,6 +24,7 @@
 
 import { prisma, type Prisma } from "@hm/db";
 import type { DuBankruptcyChapter, DuResidencyBasis, DuResidencyType, DuYesNo } from "@hm/db";
+import type { BorrowerDeclaration, BorrowerResidence } from "@hm/shared";
 import { AppError } from "../middleware/error-handler.js";
 import { fromCents, toCents } from "./money.js";
 import { principalForParty } from "./party.js";
@@ -80,15 +81,20 @@ export interface DeclarationInput {
   readonly explanations?: Readonly<Record<string, string>> | null;
 }
 
+/**
+ * What was said, in the shape `LoanFile` carries.
+ *
+ * The view is `@hm/shared`'s rather than an `Omit` over the input above,
+ * because the route's response and the file projection are the same answer to
+ * the same question and a second shape is a second thing to keep true. The
+ * input stays its own type: it is what a caller may leave out, which is not
+ * what a reader gets back.
+ */
 export interface DeclarationView {
   readonly applicationPartyId: string;
   readonly assertedAt: string;
-  readonly declaration: Omit<DeclarationInput, "undisclosedBorrowedFundsAmount"> & {
-    readonly undisclosedBorrowedFundsAmount: number | null;
-  };
-  readonly residences: readonly (Omit<ResidenceInput, "monthlyRent"> & {
-    readonly monthlyRent: number | null;
-  })[];
+  readonly declaration: BorrowerDeclaration;
+  readonly residences: readonly BorrowerResidence[];
 }
 
 /**
@@ -224,10 +230,10 @@ export async function recordDeclaration(
     });
   }
 
-  // The derived copy follows the answer, unconditionally. Screen 4 re-sends the
-  // basis it read on its way to joining the demographics, so this is not the
-  // only writer of the column — it is the only one that has asked, and it is
-  // what the column is derived FROM.
+  // The derived copy follows the answer, unconditionally. The review screen
+  // re-sends the basis it read on its way to joining the demographics, so this
+  // is not the only writer of the column — it is the only one that has asked,
+  // and it is what the column is derived FROM.
   //
   // There is always a Current residence to derive it from: the body refuses a
   // set without one and a DEFERRABLE constraint trigger refuses it again at
@@ -245,12 +251,54 @@ export async function recordDeclaration(
   return (await loadDeclaration(loanFileId, db))!;
 }
 
+/**
+ * The same edge, for a reader that has to answer about a file without one.
+ *
+ * `borrowerEdge` refuses — correctly, for a writer: a file with no application
+ * has nobody to answer as, and saying so beats minting a credit request
+ * nobody asked for. The projection is the other case. Every screen reads the
+ * file, most of them before an application exists, and "nobody has been asked
+ * yet" is the honest answer there rather than a 409 that would take the whole
+ * file down with it.
+ */
+async function borrowerEdgeIfAny(db: Db, loanFileId: string): Promise<string | null> {
+  try {
+    return (await borrowerEdge(db, loanFileId)).edgeId;
+  } catch (err) {
+    if (err instanceof AppError && err.statusCode === 409) return null;
+    throw err;
+  }
+}
+
+/**
+ * What the primary borrower answered, for the loan file projection.
+ *
+ * The engine and the screen that reads the answers back both go through
+ * `LoanFile`, so this is where the tables reach them. Null means unasked — not
+ * "answered no", which is the distinction the questions turn on: a borrower
+ * who has said nothing has not said no.
+ */
+export async function declarationOnFile(
+  loanFileId: string,
+  db: Db = prisma,
+): Promise<Pick<DeclarationView, "declaration" | "residences"> | null> {
+  const edgeId = await borrowerEdgeIfAny(db, loanFileId);
+  if (!edgeId) return null;
+  const view = await answersOn(db, edgeId);
+  return view && { declaration: view.declaration, residences: view.residences };
+}
+
 /** What was said, in dollars, with no bigint left for `res.json` to throw on. */
 export async function loadDeclaration(
   loanFileId: string,
   db: Db = prisma,
 ): Promise<DeclarationView | null> {
   const { edgeId } = await borrowerEdge(db, loanFileId);
+  return answersOn(db, edgeId);
+}
+
+/** The two tables, read off one edge and converted at the same boundary. */
+async function answersOn(db: Db, edgeId: string): Promise<DeclarationView | null> {
   const row = await db.duDeclaration.findUnique({
     where: { applicationPartyId: edgeId },
     include: { chapters: { select: { chapter: true }, orderBy: { chapter: "asc" } } },

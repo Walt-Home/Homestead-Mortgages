@@ -122,7 +122,11 @@ export function IdentityReturnPage() {
 
           await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
           await queryClient.invalidateQueries({ queryKey: ["assessment"] });
-          if (!cancelled) navigate(`/f/${fileId}/bank`);
+          // Where screen 2 itself goes. This path IS screen 2's submit,
+          // resumed after a redirect, so it owes the borrower the same next
+          // step — and the next step is the declarations, which nothing but a
+          // forward navigation reaches.
+          if (!cancelled) navigate(`/f/${fileId}/declarations`);
           return;
         }
         if (r.status === "failed") {
@@ -203,18 +207,19 @@ export function IdentityReturnPage() {
           <div className="mt-6 flex gap-3">
             {/*
               Where "carry on" goes depends on how they got here, and sending
-              everyone to the bank screen was wrong.
+              everyone forward was wrong.
 
               After Continue, the form and the consents are already saved, so
-              the rest of the flow works while the check finishes. From the ID
-              button nothing is saved at all — no borrower, no APP-005 — so
-              the bank screen answers 403 and the borrower is told they need
-              an authorisation they were never offered. Back to screen 2,
-              where the form they were filling in is waiting.
+              the rest of the flow works while the check finishes, and forward
+              is screen 3. From the ID button nothing is saved at all — no
+              borrower, no APP-005 — so a later screen answers 403 and the
+              borrower is told they need an authorization they were never
+              offered. Back to screen 2, where the form they were filling in
+              is waiting.
             */}
             <button
               className="super-btn super-btn-primary"
-              onClick={() => navigate(`/f/${fileId}/${fromPrefill ? "identity" : "bank"}`)}
+              onClick={() => navigate(`/f/${fileId}/${fromPrefill ? "identity" : "declarations"}`)}
             >
               {fromPrefill ? "Back to your details" : "Carry on"}
             </button>

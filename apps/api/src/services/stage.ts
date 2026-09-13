@@ -19,6 +19,7 @@ export const STAGE_ORDER: readonly FlowStage[] = [
   "PROPERTY_LOAN",
   "IDENTITY",
   "CREDIT",
+  "DECLARATIONS",
   "BANK",
   "PAYROLL",
   "IRS_TRANSCRIPT",

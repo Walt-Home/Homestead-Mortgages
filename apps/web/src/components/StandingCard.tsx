@@ -99,8 +99,8 @@ export function StandingCard({
             </span>
           )}
           {/*
-            A sentence, never the step indicator. Four segments with one lit
-            says "you are on this step right now", which is false on a page
+            A sentence, never the step indicator. A row of segments with one
+            lit says "you are on this step right now", which is false on a page
             nobody is stepping through — and a progress bar on a dashboard acts
             on nothing. It is a POSITION: the stage only moves forward and
             cannot say anything was finished.

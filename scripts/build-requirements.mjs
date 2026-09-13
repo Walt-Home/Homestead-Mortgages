@@ -67,16 +67,22 @@ function parseCsv(text) {
 }
 
 // ── Exhaustive mappings ────────────────────────────────────────────────────
+// Declarations is the fourth, and the six screens after it moved up a number
+// when it landed. The sheet numbers the screens in flow order and the ordinal
+// is what sorts outstanding work, so a new screen wedged in at the end with a
+// tenth ordinal would list Section 5 after the decision — which is neither
+// where it is asked nor where it has to be answered.
 const SCREENS = {
   "1 Property & loan": { id: "property_loan", ordinal: 1 },
   "2 Identity": { id: "identity", ordinal: 2 },
   "3 Credit": { id: "credit", ordinal: 3 },
-  "4 Bank": { id: "bank", ordinal: 4 },
-  "5 Payroll": { id: "payroll", ordinal: 5 },
-  "6 IRS transcript": { id: "irs_transcript", ordinal: 6 },
-  "7 Upload fallback": { id: "upload_fallback", ordinal: 7 },
-  "8 Decision": { id: "decision", ordinal: 8 },
-  "9 Persistent consent": { id: "persistent_consent", ordinal: 9 },
+  "4 Declarations": { id: "declarations", ordinal: 4 },
+  "5 Bank": { id: "bank", ordinal: 5 },
+  "6 Payroll": { id: "payroll", ordinal: 6 },
+  "7 IRS transcript": { id: "irs_transcript", ordinal: 7 },
+  "8 Upload fallback": { id: "upload_fallback", ordinal: 8 },
+  "9 Decision": { id: "decision", ordinal: 9 },
+  "10 Persistent consent": { id: "persistent_consent", ordinal: 10 },
 };
 
 const SOURCES = {
@@ -148,6 +154,9 @@ const CONDITIONS = {
   "AUS Refer or ineligible": "aus_refer_or_ineligible",
   "Overlays exist for the product": "overlays_exist",
   "Denial or counteroffer": "denial_or_counteroffer",
+  "Borrower owned a home in the past 3 years": "declared_homeowner_past_three_years",
+  "Borrower declared a bankruptcy": "declared_bankruptcy",
+  "Current residence under 24 months": "current_residence_under_two_years",
 };
 
 /**

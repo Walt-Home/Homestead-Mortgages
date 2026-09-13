@@ -23,7 +23,7 @@ Prisma against Postgres, Terraform for the GCP pieces this repo owns.
 
 ```
 data/v1-build.csv          source of truth for WHAT must be satisfied
-packages/requirements      the 77 requirements, executable
+packages/requirements      the 83 requirements, executable
 packages/underwriting      the shadow AUS
 packages/connectors        five ports, fixture adapters, the authorization guard
 packages/shared            domain types; LoanFile is the object everything reads
@@ -34,27 +34,32 @@ apps/web                   React + Vite
 infra                      Terraform
 ```
 
-## The borrower flow is FOUR screens; the engine still has nine
+## The borrower flow is FIVE screens; the engine has ten
 
-The UI was rebuilt from nine screens to four. **Nothing about the requirements
-engine, the stage machine or the data model changed** — the engine still tracks
-ten `FlowStage` values and evaluates all 77 requirements. It just stopped
-rendering itself at the borrower.
+The UI was rebuilt from nine screens to four, and a fifth was added when
+somebody finally had to be asked URLA Section 5 and where they live. The engine
+tracks eleven `FlowStage` values and evaluates 83 requirements.
 
 ```
-1 Property   →  2 About you  →  3 Your bank  →  4 Review
-   property_loan   identity+credit   bank          decision
+1 Property   →  2 About you  →  3 A few questions  →  4 Your bank  →  5 Review
+   property_loan   identity+credit   declarations        bank          decision
 ```
+
+Screen 3 is a STEP and not a branch, and that is forced rather than chosen:
+`branchesFor()` renders work the engine reports as outstanding, and the engine
+cannot report work that has no requirement. So the questions are six rows in
+`data/v1-build.csv` with `source = borrower_input`, they have a `FlowStage` of
+their own, and a borrower who stops halfway resumes on them.
 
 `apps/web/src/lib/flow.ts` is the only place that knows both vocabularies. It
-holds `SCREENS` (four), `STAGE_TO_SCREEN` (ten → four) and `branchesFor()`.
+holds `SCREENS` (five), `STAGE_TO_SCREEN` (eleven → five) and `branchesFor()`.
 
 **Payroll, IRS and document upload are branches, not steps.** They render only
 when the engine reports outstanding work whose `source` is one the borrower
 must personally supply — `borrower_input`, `document_upload`, `connect_payroll`.
 `connect_irs` and `esign` are deliberately excluded: those are ours to do, and
 treating them as triggers sent every clean W-2 borrower down a tax-transcript
-branch to authorise something screen 4 was about to ask them to sign anyway.
+branch to authorize something screen 5 was about to ask them to sign anyway.
 
 **The requirement rail is gone.** Everything it showed — counts, requirement
 ids, severities, blocked roots — now lives behind `?debug=1` on any file URL.
@@ -78,18 +83,23 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
 - **Manual bank-statement upload collects filenames and sends nothing.**
   `apps/web/src/pages/BankPage.tsx`. Deliberate — where the bytes go is a real
   decision, and `routes/documents.ts` never transmits them today.
-- **`currentHousing` is nullable, and the four screens still do not ask.** It
-  was `String @default("rent")` NOT NULL and screen 2 sent the literal
-  `"rent"`; the column, the route enum and the screen stopped manufacturing it
-  together. `du_residences` holds the real answer and
-  `POST /files/:id/declaration` is what writes it — no screen posts there yet,
-  so a new file reads back NULL and `renter_limited_mortgage_history` answers
-  "cannot know yet" rather than calling an unasked borrower a renter.
+- **`currentHousing` is nullable, and screen 3 is what fills it.** It was
+  `String @default("rent")` NOT NULL and screen 2 sent the literal `"rent"`;
+  the column, the route enum and the screen stopped manufacturing it together.
+  `du_residences` holds the real answer, `POST /files/:id/declaration` writes
+  both, and the column is a derived copy of the row. Until somebody answers it
+  reads back NULL and `renter_limited_mortgage_history` answers "cannot know
+  yet" rather than calling an unasked borrower a renter.
 - **Property corrections are recorded, not applied.** A borrower disagreeing
   with the county record writes a `FileEvent` for review and changes nothing
   the engine reads.
-- **Screen 4's single signature covers the application AND the 4506-C**, then
-  pulls transcripts and recomputes. Disclosed in the signing panel.
+- **Screen 5's single signature covers the application AND the 4506-C**, then
+  pulls transcripts and recomputes. Disclosed in the signing panel. It also
+  attests to the Section 5 answers, which is why that screen shows them back:
+  it used to DERIVE five declarations from a credit report, a lien search, an
+  asset report and a county record, so an unrun pull read as the borrower
+  declaring themselves clean. `buildDeclarations` is gone and a test keeps it
+  gone.
 - **The Grander persona is a row on the sign-in page and nothing else.** An
   imported member is a party and a loan with no application; there is no
   `loans` table, an application in any state would say they asked us for
@@ -138,7 +148,7 @@ calls every adapter against an unauthorized file and fails if any returns data.
 The e-sign adapter is deliberately unguarded — it is how the authorization gets
 signed, and guarding it would make APP-005 unobtainable.
 
-**5. Every number on screen 8 comes from a recorded derivation.** Nothing
+**5. Every number on the decision comes from a recorded derivation.** Nothing
 reaches the `Decision` object except through `DerivationLog.record`, and a
 computation that cannot run records `blocked` with what it is waiting for. A
 figure with no explanation is a bug in the engine, not in the copy. The engine

@@ -1,5 +1,5 @@
 /**
- * The join between the nineteen states and the four screens.
+ * The join between the nineteen states and the five screens.
  *
  * The resolver is the piece the product did not have, and the reason it is
  * worth testing on its own is that almost every failure it prevents is a
@@ -714,14 +714,14 @@ describe("what is outstanding, named rather than implied", () => {
 });
 
 describe("where in the flow, and only while there is a flow to be in", () => {
-  it("is offered on the four screens a borrower is still walking", () => {
+  it("is offered on the screens a borrower is still walking", () => {
     const stepped = EVERY_STATE.filter(({ card }) => card.showStep).map(({ status }) => status);
     expect(stepped.sort()).toEqual(["awaiting_borrower", "draft", "in_underwriting"]);
     expect(standing({ row: row({ applicationState: null }) }).showStep).toBe(true);
   });
 
   it("is gone the moment the file is signed, decided, stopped or held", () => {
-    // A step count over "We can't approve this" is the four-dot progress bar
+    // A step count over "We can't approve this" is the progress bar
     // arriving on the page built to take it off the other screens.
     expect(standing({ row: at("in_underwriting", { signed: true }) }).showStep).toBe(false);
     for (const status of ["suspended", "approved", "denied", "funded", "withdrawn"]) {
@@ -862,7 +862,7 @@ describe("the two headings this page writes instead of the catalog's", () => {
     expect(card.control).toEqual({ label: READ_AND_SIGN, to: "/f/f1/review", weight: "primary" });
     expect(card.pending).toBe(false);
     expect(card.noControl).toBeNull();
-    // The position line stays off. The four screens are behind a decided file
+    // The position line stays off. The steps are behind a decided file
     // and a step count over one is the progress bar this page took off the
     // other screens arriving back on it.
     expect(card.showStep).toBe(false);

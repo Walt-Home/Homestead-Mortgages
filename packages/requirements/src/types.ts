@@ -6,11 +6,12 @@
  * the product reads them.
  */
 
-/** The nine screens of the onboarding flow, in order. */
+/** The ten screens of the onboarding flow, in order. */
 export type ScreenId =
   | "property_loan"
   | "identity"
   | "credit"
+  | "declarations"
   | "bank"
   | "payroll"
   | "irs_transcript"
@@ -22,9 +23,9 @@ export type ScreenId =
  * Where the evidence for a requirement comes from.
  *
  * This is the field that decides whether a requirement costs the borrower
- * typing, a connector handshake, a signature, or nothing at all. Screen 8's
+ * typing, a connector handshake, a signature, or nothing at all. Screen 9's
  * 31 requirements are almost entirely `derived` — they are the payoff for
- * everything collected on screens 1–7.
+ * everything collected on screens 1–8.
  */
 export type RequirementSource =
   | "borrower_input"
@@ -84,7 +85,10 @@ export type ConditionKey =
   | "ipc_present"
   | "aus_refer_or_ineligible"
   | "overlays_exist"
-  | "denial_or_counteroffer";
+  | "denial_or_counteroffer"
+  | "declared_homeowner_past_three_years"
+  | "declared_bankruptcy"
+  | "current_residence_under_two_years";
 
 /** Named moments the flow can be timed against, independent of any requirement. */
 export type TimingEvent =

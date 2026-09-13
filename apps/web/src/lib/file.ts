@@ -10,7 +10,13 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import type { ApplicationReceipt, DecisionOutcome, Ratios } from "@hm/shared";
+import type {
+  ApplicationReceipt,
+  BorrowerDeclaration,
+  BorrowerResidence,
+  DecisionOutcome,
+  Ratios,
+} from "@hm/shared";
 import { api, ApiError } from "./api.js";
 
 export type { FlowStage } from "./flow.js";
@@ -63,7 +69,7 @@ export interface LoanFileView {
     currentAddress: { line1: string; city: string; state: string; postalCode: string };
     maritalStatus: string;
     citizenship: string | null;
-    /** Null until somebody is asked. The four screens still do not ask. */
+    /** Null until screen 3 asks; derived there from the residence answer. */
     currentHousing: string | null;
     monthlyRent?: number;
     firstTimeHomebuyer: boolean | null;
@@ -74,6 +80,13 @@ export interface LoanFileView {
       verifiedAt?: string;
     } | null;
   }[];
+  /**
+   * Section 5 and the residence history, as the primary borrower answered
+   * them on screen 3. Null until they have been asked — which the review
+   * screen says out loud rather than rendering as a set of clean answers.
+   */
+  declaration: BorrowerDeclaration | null;
+  residences: BorrowerResidence[];
   consents: { kind: string; grantedAt: string; revokedAt?: string }[];
   loan: {
     purpose: string;
@@ -302,9 +315,10 @@ export function landingScreen(
  *
  * An application that has ended, or is held on somebody else's answer, is a
  * file nothing may be added to — which is why the shell will not open one on
- * a working screen. The step indicator asks the same question: four segments
- * with one lit says a borrower is partway through something, and a withdrawn
- * or funded file painted that line directly above the pill saying otherwise.
+ * a working screen. The step indicator asks the same question: a row of
+ * segments with one lit says a borrower is partway through something, and a
+ * withdrawn or funded file painted that line directly above the pill saying
+ * otherwise.
  *
  * `undefined` is a file that has not been read yet and answers false, the
  * same as everywhere else: a claim about a regulated record cannot be made

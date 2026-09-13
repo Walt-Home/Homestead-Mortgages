@@ -141,6 +141,11 @@ export function afterIdentity(): LoanFile {
       },
     ],
     consents: [consent("verification_authorization"), consent("econsent")],
+    // Screen 3 has not been reached. Unasked, which the engine reads as three
+    // unanswered conditions rather than as a borrower who said no to
+    // everything.
+    declaration: null,
+    residences: [],
     application: {
       receivedAt: REFERENCE.toISOString(),
       sixPieces: {
@@ -171,7 +176,58 @@ export function afterIdentity(): LoanFile {
   };
 }
 
-/** The registry the four-screen flow would have talked to, for one persona. */
+/**
+ * Screen 3 — Section 5 and where they live, as this borrower answered them.
+ *
+ * A renter of six years with nothing to declare, which is the shape most
+ * files take and the one that makes the counts move in the only direction
+ * they are allowed to. There is no connector anywhere near it: these are
+ * answers, and the whole point of the screen is that nothing can infer them.
+ */
+export function afterDeclarations(file: LoanFile): LoanFile {
+  return {
+    ...file,
+    declaration: {
+      intentToOccupy: "Yes",
+      homeownerPastThreeYears: "No",
+      priorPropertyUsage: null,
+      priorPropertyTitle: null,
+      fhaSecondaryResidence: null,
+      specialBorrowerSellerRelationship: false,
+      undisclosedBorrowedFunds: false,
+      undisclosedBorrowedFundsAmount: null,
+      undisclosedMortgageApplication: false,
+      undisclosedCreditApplication: false,
+      propertyProposedCleanEnergyLien: false,
+      undisclosedComakerOfNote: false,
+      outstandingJudgments: false,
+      presentlyDelinquent: false,
+      partyToLawsuit: false,
+      priorPropertyDeedInLieuConveyed: false,
+      priorPropertyShortSaleCompleted: false,
+      priorPropertyForeclosureCompleted: false,
+      bankruptcy: false,
+      bankruptcyChapters: [],
+      explanations: null,
+    },
+    residences: [
+      {
+        residencyType: "Current",
+        basis: "Rent",
+        durationMonths: 72,
+        monthlyRent: 2_150,
+        addressLineText: null,
+        addressUnit: null,
+        cityName: null,
+        stateCode: null,
+        postalCode: null,
+        countryCode: null,
+      },
+    ],
+  };
+}
+
+/** The registry the borrower flow would have talked to, for one persona. */
 export const registryFor = (persona: PersonaId) =>
   fixtureRegistry({ latencyMs: 0, persona, referenceDate: REFERENCE });
 

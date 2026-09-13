@@ -19,7 +19,7 @@ backed by its own Cloud SQL Postgres, with Google sign-in for identity.
 Three things distinguish it from a CRUD app and shape every section below:
 
 - **The requirements engine is the product's spine.** Drew's V1 flow sheet
-  (`data/v1-build.csv`, 77 rows) is compiled into an executable registry. What a
+  (`data/v1-build.csv`, 83 rows) is compiled into an executable registry. What a
   borrower is asked, which branch they see, and what blocks a decision all fall
   out of evaluating that registry against one `LoanFile`.
 - **Authorization is structural, not procedural.** The rule that nothing may be
@@ -113,7 +113,7 @@ where the two differ meaningfully.
 | **Monorepo**                                            | npm workspaces + Turbo 2                                             | `apps/*` and `packages/*`; `build` and `test` both `dependsOn: ["^build"]`                                                                                    |
 | **Language**                                            | TypeScript 5.9 (declared `^5.4.0`), ESM, Node16 resolution           | `strict` + `noUncheckedIndexedAccess`, composite project references                                                                                           |
 | **API**                                                 | Express 5.2                                                          | One process; serves `/api` and, in the image, the built SPA                                                                                                   |
-| **SPA**                                                 | React 19.2 + Vite 8 + react-router 7                                 | Four borrower screens, three branches, a public front door                                                                                                    |
+| **SPA**                                                 | React 19.2 + Vite 8 + react-router 7                                 | Five borrower screens, three branches, a public front door                                                                                                    |
 | **Server state**                                        | TanStack Query 5                                                     | `staleTime: 0`, `retry: false` — a stale panel showing satisfied work as outstanding is what makes the flow feel broken                                       |
 | **Styling**                                             | Tailwind 3.4 driven by the `@hm/brand` preset                        | The preset **replaces** Tailwind's palette and scales rather than extending them                                                                              |
 | **Database**                                            | PostgreSQL 16 (Cloud SQL)                                            | 18 models, 10 enums; relational for what we query, JSONB for what a vendor said                                                                               |
@@ -209,7 +209,7 @@ and Google Places.
 | Package                 | What it is                                                                                                                                                                                                                                 |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `packages/shared`       | The vocabulary. `LoanFile` is the object everything reads — nullable sections all the way down, because a file is legitimately half-empty for most of its life                                                                             |
-| `packages/requirements` | The 77 requirements, executable: 35 applicability predicates, 77 satisfaction evaluators, a dependency graph                                                                                                                               |
+| `packages/requirements` | The 83 requirements, executable: 38 applicability predicates, 83 satisfaction evaluators, a dependency graph                                                                                                                               |
 | `packages/underwriting` | The shadow AUS — ratios, reserves, compliance, pricing, each figure carrying its derivation                                                                                                                                                |
 | `packages/connectors`   | Nine ports, fixture adapters for all nine, three partial real ones, and the authorization guard                                                                                                                                            |
 | `packages/db`           | Prisma schema and migrations. Several guarantees are triggers and CHECK constraints, not application code                                                                                                                                  |
@@ -226,12 +226,12 @@ This is the single most confusing thing about the codebase, so it is drawn
 rather than described.
 
 ```
-sheet screens (9)  property_loan · identity · credit · bank · payroll ·
-                   irs_transcript · upload_fallback · decision ·
+sheet screens (10) property_loan · identity · credit · declarations · bank ·
+                   payroll · irs_transcript · upload_fallback · decision ·
                    persistent_consent (0 requirements)
 
-FlowStage (10)     the 9 above + COMPLETE
-                   ⚠ the ten names are still typed out five times by hand —
+FlowStage (11)     the 10 above + COMPLETE
+                   ⚠ the eleven names are still typed out five times by hand —
                      Prisma's enum and STAGE_ORDER in UPPERCASE, FLOW_STAGES in
                      shared and STAGE_TO_SCREEN in the web app in lowercase,
                      and STAGE_TO_DOMAIN in both. Nothing generates any of them
@@ -239,20 +239,26 @@ FlowStage (10)     the 9 above + COMPLETE
                      union: it is derived from FLOW_STAGES and the web app
                      re-exports it. The web app used to declare a second one,
                      spelled in UPPERCASE, and no compiler could see the
-                     difference because a stage crosses the wire as a string
+                     difference because a stage crosses the wire as a string.
+                     `stage.test.ts` reads `pg_enum` and fails when STAGE_ORDER
+                     disagrees with the database, which is what caught the
+                     eleventh name being added in four places instead of five
 
-borrower screens   1 Property → 2 About you → 3 Your bank → 4 Review
-        (4)        + payroll / irs / documents as BRANCHES, never steps
+borrower screens   1 Property → 2 About you → 3 A few questions →
+        (5)        4 Your bank → 5 Review
+                   + payroll / irs / documents as BRANCHES, never steps
 ```
 
-The UI was rebuilt from nine screens to four. **Nothing about the engine, the
-stage machine or the data model changed** — it still tracks ten `FlowStage`
-values and evaluates all 77 requirements. It stopped rendering itself at the
-borrower.
+The UI was rebuilt from nine screens to four, and a fifth was added when
+somebody finally had to be asked URLA Section 5 and where they live. That one
+is a step rather than a branch because `branchesFor()` renders work the engine
+reports as outstanding, and the engine cannot report work that has no
+requirement: the questions are six rows in the sheet, so the engine tracks
+eleven `FlowStage` values and evaluates 83 requirements.
 
 `apps/web/src/lib/flow.ts` is where the translation is supposed to live:
 `SCREENS`, `STAGE_TO_SCREEN` and `branchesFor()`. ⚠ It is not the only copy —
-`components/DebugPanel.tsx` carries its own nine-screen → four-screen map, and
+`components/DebugPanel.tsx` carries its own engine-screen → borrower-screen map, and
 `pages/UploadPage.tsx` filters on raw engine vocabulary.
 
 **Branches are computed, not routed to.** `branchesFor()` filters the outstanding
@@ -260,14 +266,14 @@ list on three conditions at once: the actor is the borrower, applicability is
 _known_, and the source is one of `borrower_input`, `document_upload`,
 `connect_payroll`. `connect_irs` and `esign` are deliberately excluded — treating
 them as triggers sent every clean W-2 borrower down a tax-transcript branch to
-authorize something screen 4 was about to ask them to sign anyway.
+authorize something screen 5 was about to ask them to sign anyway.
 
-**The engine screens do not map evenly onto the borrower's four.** Counted from
+**The engine screens do not map evenly onto the borrower's five.** Counted from
 the registry: `decision` 31, `credit` 10, `bank` 10, `identity` 7,
-`upload_fallback` 7, `property_loan` 5, `payroll` 4, `irs_transcript` 3,
-`persistent_consent` 0. Forty percent of the registry sits behind `decision`,
-which the borrower meets as screen 4 — the screen that asks them for almost
-nothing. The screens they never see at all are `credit`, folded into "About
+`upload_fallback` 7, `declarations` 6, `property_loan` 5, `payroll` 4,
+`irs_transcript` 3, `persistent_consent` 0. Nearly forty percent of the
+registry sits behind `decision`, which the borrower meets as screen 5 — the
+screen that asks them for almost nothing. The screens they never see at all are `credit`, folded into "About
 you", and `persistent_consent`, which has no requirements behind it.
 
 `stage` is a **high-water mark, not a cursor** — where you are is the URL, how
@@ -302,7 +308,7 @@ The engine keeps three questions apart:
         ▼                            ▼                            ▼
   conditions.ts               satisfaction.ts                 graph.ts
   Does it apply?              Is the evidence in?             Workable yet?
-  35 predicates               77 evaluators                   edges from the
+  38 predicates               83 evaluators                   edges from the
   true / false / NULL         satisfied / unsatisfied         timing column
                               / blocked
         └────────────────────────────┼────────────────────────────┘
@@ -431,7 +437,7 @@ date-stamp every result **is never read** — no `Decision` carries it, so a
 decision made against stale numbers is not identifiable after the fact. Several
 of those thresholds change every January.
 
-⚠ APR and APOR are never computed, only accepted, so with the four screens as
+⚠ APR and APOR are never computed, only accepted, so with the five screens as
 built **every compliance test that needs APR, APOR or a fee total blocks** — QM
 status, points and fees, HPML and HOEPA — **and no file reaches
 `clear_to_close`**. (The ATR determination still records a value, and net
@@ -641,7 +647,7 @@ table, verified against the schema:
 
 | Piece                                          | Status                                                                             |
 | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `FlowStage`, four screens, decision outcomes   | **Built** — and being replaced                                                     |
+| `FlowStage`, five screens, decision outcomes   | **Built** — and being replaced                                                     |
 | Tests against a real Postgres                  | **Built**                                                                          |
 | Party, facts, principals                       | **Built** — schema, triggers and CHECK constraints; **not wired to a route**       |
 | Authorizations and the purpose token           | **Built** — schema, constraints and minting; **the guard has not been swapped**    |
@@ -671,13 +677,13 @@ tamper-evident record of a breach we never had the means to avoid.
 - **Manual bank-statement upload collects filenames and sends nothing.** Document
   upload records metadata with `storageUri: "fixture://content-not-transmitted"`.
   Where the bytes go is a real decision.
-- **`currentHousing` is nullable, and the four screens still do not ask.** It
-  was `String @default("rent")` NOT NULL and screen 2 sent the literal `"rent"`;
+- **`currentHousing` is nullable, and screen 3 is what fills it.** It was
+  `String @default("rent")` NOT NULL and screen 2 sent the literal `"rent"`;
   the column, the route and the screen all stopped manufacturing it together.
-  `du_residences` is where the real answer goes and `POST /files/:id/declaration`
-  is what writes it — no screen posts there yet, so a new file reads back NULL,
-  and `renter_limited_mortgage_history` answers "cannot know yet" rather than
-  calling an unasked borrower a renter.
+  `du_residences` holds the real answer, `POST /files/:id/declaration` writes
+  both, and the column is a derived copy of that row. Until somebody answers it
+  reads back NULL, and `renter_limited_mortgage_history` answers "cannot know
+  yet" rather than calling an unasked borrower a renter.
 - **Property corrections are recorded, not applied.** A disagreement with the
   county record writes a `FileEvent` and changes nothing the engine reads.
 - **The monitoring loop does not exist.** `persistentMonitoringEnabled` and

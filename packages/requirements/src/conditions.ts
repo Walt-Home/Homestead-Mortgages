@@ -18,7 +18,7 @@
  */
 
 import type { LoanFile } from "@hm/shared";
-import { COMMUNITY_PROPERTY_STATES } from "@hm/shared";
+import { COMMUNITY_PROPERTY_STATES, RESIDENCE_HISTORY_MONTHS } from "@hm/shared";
 import type { ConditionKey } from "./types.js";
 
 /** true / false / not-yet-knowable. */
@@ -235,6 +235,31 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
     // report itself as having no adverse-action obligation.
     if (!outcome || outcome === "pending" || outcome === "referred") return null;
     return outcome === "denied" || outcome === "counteroffer";
+  },
+
+  /*
+   * The three conditions that read the borrower's own declaration.
+   *
+   * Every one of them is null until the declaration exists, and that is the
+   * whole reason they are conditions rather than checks inside an evaluator.
+   * "We have not asked you yet" and "you told us no" are different facts about
+   * a person, and the follow-up questions are the place where collapsing them
+   * would say a borrower is finished with questions nobody has put to them.
+   *
+   * They read the declaration and nothing else. A credit report showing no
+   * bankruptcy does not answer M, a property record showing no prior deed does
+   * not answer the homeowner question, and a file with neither answers
+   * neither — which is why none of these predicates so much as looks at a
+   * snapshot.
+   */
+  declared_homeowner_past_three_years: (f) =>
+    f.declaration ? f.declaration.homeownerPastThreeYears === "Yes" : null,
+
+  declared_bankruptcy: (f) => (f.declaration ? f.declaration.bankruptcy : null),
+
+  current_residence_under_two_years: (f) => {
+    const current = f.residences.find((r) => r.residencyType === "Current");
+    return current ? current.durationMonths < RESIDENCE_HISTORY_MONTHS : null;
   },
 };
 

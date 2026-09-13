@@ -1,5 +1,5 @@
 /**
- * The nineteen states, joined to the four screens.
+ * The nineteen states, joined to the five screens.
  *
  * The product knows where a file stands and it knows which screens exist, and
  * until now nothing joined the two: the file list keyed a link off the stage,
@@ -164,6 +164,7 @@ export interface HomeContext {
 export const DESTINATIONS: readonly (ScreenPath | BranchPath)[] = [
   "property",
   "identity",
+  "declarations",
   "bank",
   "review",
   "payroll",
@@ -717,7 +718,7 @@ function approvedCard(
       noControl: null,
       pending: false,
       // No position line, unlike the unsigned file still being decided. The
-      // four screens are behind this one — the decision is recorded — and a
+      // five screens are behind this one — the decision is recorded — and a
       // step count over a decided file is the progress bar this page took off
       // the other screens arriving back on it.
       showStep: false,

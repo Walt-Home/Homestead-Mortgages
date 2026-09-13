@@ -247,7 +247,107 @@ export const EVALUATORS: Record<string, Evaluator> = {
 
   "CRD-016": derived("CRD-016", "revolving utilization"),
 
-  /* ── Screen 4 · Bank ─────────────────────────────────────────────────── */
+  /* ── The declarations screen ─────────────────────────────────────────── */
+
+  /*
+   * Six evaluators, and not one of them reads a connector.
+   *
+   * Section 5 is the borrower's own statement. The review screen used to
+   * build five of these answers out of a credit report, a lien search, an
+   * asset report and a county record — which means an unrun pull asserted "no bankruptcy" from
+   * having looked nowhere, above a signature. So `f.declaration` is the only
+   * input here, and `null` means unasked rather than answered no.
+   *
+   * The route refuses a partial submit, so a stored declaration carries all of
+   * 5a or none of it. These still name their own fields rather than reporting
+   * "the declaration exists": the refusal can only be trusted while it is
+   * where it is, and a second writer would be found by this rather than by a
+   * borrower signing a blank answer.
+   */
+
+  "APP-022": (f) => {
+    const d = f.declaration;
+    if (!d) return no("the Section 5a declarations have not been asked");
+    const missing = [
+      d.intentToOccupy ? null : "intent to occupy",
+      d.intentToOccupy === "Yes" && d.homeownerPastThreeYears == null
+        ? "whether they owned a home in the past three years"
+        : null,
+      d.undisclosedBorrowedFunds && d.undisclosedBorrowedFundsAmount == null
+        ? "the amount of the borrowed funds"
+        : null,
+    ].filter((x): x is string => x !== null);
+    return missing.length
+      ? no(missing.join(", "))
+      : ok(`section 5a answered, occupancy ${d.intentToOccupy.toLowerCase()}`);
+  },
+
+  "APP-023": (f) => {
+    const d = f.declaration;
+    if (!d) return no("the Section 5b declarations have not been asked");
+    // Every one of the seven is a NOT NULL boolean, so a stored row has them
+    // all. What this says is that they were ANSWERED, which is the fact the
+    // 1003 needs — and the count is how it reports it without turning any
+    // borrower's yes into something the evidence column never asked for.
+    const yes = [
+      d.undisclosedComakerOfNote,
+      d.outstandingJudgments,
+      d.presentlyDelinquent,
+      d.priorPropertyDeedInLieuConveyed,
+      d.priorPropertyShortSaleCompleted,
+      d.priorPropertyForeclosureCompleted,
+      d.bankruptcy,
+    ].filter(Boolean).length;
+    return ok(yes === 0 ? "section 5b answered, all no" : `section 5b answered, ${yes} yes`);
+  },
+
+  "APP-024": (f) => {
+    const d = f.declaration;
+    if (!d) return no("no bankruptcy has been declared or denied");
+    return check(
+      d.bankruptcyChapters.length > 0,
+      d.bankruptcyChapters.join(", "),
+      "a bankruptcy was declared with no chapter named",
+    );
+  },
+
+  "APP-025": (f) => {
+    const d = f.declaration;
+    if (!d) return no("the prior-property questions have not been asked");
+    // Title is optional in DU and unbound by any conditionality, so it is
+    // reported when it is there and never demanded.
+    return check(
+      d.priorPropertyUsage != null,
+      d.priorPropertyTitle
+        ? `${d.priorPropertyUsage}, held ${d.priorPropertyTitle}`
+        : `${d.priorPropertyUsage}`,
+      "how the prior property was used has not been stated",
+    );
+  },
+
+  "APP-026": (f) => {
+    const current = f.residences.find((r) => r.residencyType === "Current");
+    if (!current) return no("where the borrower lives now has not been stated");
+    // The one-directional rule the table carries: an amount needs a Rent
+    // basis, and a Rent basis does not need an amount.
+    return ok(`${current.basis}, ${current.durationMonths} month(s)`);
+  },
+
+  "APP-027": (f) => {
+    const prior = f.residences.find((r) => r.residencyType === "Prior");
+    if (!prior) return no("the previous address has not been stated");
+    const missing = [
+      prior.addressLineText ? null : "street",
+      prior.cityName ? null : "city",
+      prior.stateCode ? null : "state",
+      prior.postalCode ? null : "postal code",
+    ].filter((x): x is string => x !== null);
+    return missing.length
+      ? no(`the previous address is missing its ${missing.join(", ")}`)
+      : ok(`${prior.addressLineText}, ${prior.cityName} ${prior.stateCode}`);
+  },
+
+  /* ── Screen 5 · Bank ─────────────────────────────────────────────────── */
 
   "AST-001": (f) => {
     if (!f.assets) return no("bank not connected");
@@ -368,7 +468,7 @@ export const EVALUATORS: Record<string, Evaluator> = {
     );
   },
 
-  /* ── Screen 5 · Payroll ──────────────────────────────────────────────── */
+  /* ── Screen 6 · Payroll ──────────────────────────────────────────────── */
 
   "INC-002": (f) => {
     // Paystubs are the classic evidence, but not the only one the sheet
@@ -419,7 +519,7 @@ export const EVALUATORS: Record<string, Evaluator> = {
       "military entitlements not broken out from base pay",
     ),
 
-  /* ── Screen 6 · IRS transcript ───────────────────────────────────────── */
+  /* ── Screen 7 · IRS transcript ───────────────────────────────────────── */
 
   "INC-003": (f) => {
     const years = new Set(f.transcripts.map((t) => t.taxYear));
@@ -434,7 +534,7 @@ export const EVALUATORS: Record<string, Evaluator> = {
 
   "INC-009": derived("INC-009", "transcript reconciliation"),
 
-  /* ── Screen 7 · Upload fallback ──────────────────────────────────────── */
+  /* ── Screen 8 · Upload fallback ──────────────────────────────────────── */
 
   "AST-006": (f) => {
     if (!f.assets) return wait("the bank connection");
@@ -496,7 +596,7 @@ export const EVALUATORS: Record<string, Evaluator> = {
     );
   },
 
-  /* ── Screen 8 · Decision ─────────────────────────────────────────────── */
+  /* ── Screen 9 · Decision ─────────────────────────────────────────────── */
 
   "APP-006": (f) =>
     check(hasDisclosure(f, "loan_estimate"), "LE delivered", "Loan Estimate not delivered"),

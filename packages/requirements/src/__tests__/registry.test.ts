@@ -23,7 +23,11 @@ import { EDGES, topologicalOrder } from "../graph.js";
 
 describe("registry", () => {
   it("carries every row of the V1 sheet", () => {
-    expect(REQUIREMENTS.length).toBe(77);
+    // 77 on the sheet Drew wrote, and six more for the declarations screen —
+    // Section 5a, Section 5b, the bankruptcy chapters, the prior property, and
+    // the two residences. They are rows rather than a check inside a route
+    // because the engine cannot report work that has no requirement.
+    expect(REQUIREMENTS.length).toBe(83);
   });
 
   it("has a condition predicate for every requirement", () => {
@@ -146,7 +150,7 @@ describe("APP-011 — demographic collection", () => {
 
 describe("the branch rule names requirements that exist", () => {
   // `@hm/shared` holds the rule because the web reads it and the web does not
-  // carry the 77 rows. That is also why nothing over there can notice a typo:
+  // carry the 83 rows. That is also why nothing over there can notice a typo:
   // an id that no longer matches a row turns a branch off in silence, and the
   // borrower gets no card for work that is genuinely theirs.
   const byId = new Map(REQUIREMENTS.map((r) => [r.id, r]));

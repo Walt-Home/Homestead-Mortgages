@@ -41,6 +41,7 @@ import { HomePage } from "./pages/HomePage.js";
 import { PropertyLoanPage } from "./pages/PropertyLoanPage.js";
 import { IdentityPage } from "./pages/IdentityPage.js";
 import { IdentityReturnPage } from "./pages/IdentityReturnPage.js";
+import { DeclarationsPage } from "./pages/DeclarationsPage.js";
 import { PlaidReturnPage } from "./pages/PlaidReturnPage.js";
 import { BankPage } from "./pages/BankPage.js";
 import { ReviewPage } from "./pages/ReviewPage.js";
@@ -121,11 +122,12 @@ export function App() {
 
       <Route path="/f/:fileId" element={<FileShell />}>
         <Route index element={<ResumeToStage />} />
-        {/* The four screens. */}
+        {/* The five screens. */}
         <Route path="property" element={<PropertyLoanPage />} />
         <Route path="identity" element={<IdentityPage />} />
         {/* Where a hosted identity vendor returns the borrower. */}
         <Route path="identity/return" element={<IdentityReturnPage />} />
+        <Route path="declarations" element={<DeclarationsPage />} />
         <Route path="bank" element={<BankPage />} />
         <Route path="review" element={<ReviewShim />} />
         {/*
@@ -231,8 +233,8 @@ function FileShell() {
    *
    * When a required identity fact is unusable, GET /files/:id throws before
    * any screen has data. Screen 2 is the one screen that can fix that, and
-   * it used to be reachable only after a connector on screen 3 failed — a
-   * bare /f/:id fell through to the file list, and the file list's own link
+   * it used to be reachable only after a connector on the bank screen failed
+   * — a bare /f/:id fell through to the file list, and the file list's own link
    * went to the stage's screen, which rendered with nothing. Every route
    * under /f/:id passes through here, so this is where the redirect lives.
    * Screen 2 itself is exempt, or it could never render to do the repair.
@@ -415,7 +417,7 @@ function Shell({
     <div className="flex min-h-screen flex-col bg-ground">
       <Header>
         {/*
-          Four segments with one lit is a claim that there are steps left. On a
+          A row of segments with one lit is a claim that there are steps left. On a
           file that has ended or is held there are none, and the line used to
           paint itself in the accent directly above a pill reading "Withdrawn".
           The shell has already sent such a file here to read where it stands,

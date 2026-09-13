@@ -21,16 +21,17 @@ import type { ApplicationReceipt } from "@hm/shared";
 import type { Assessment, OutstandingItem } from "../lib/api.js";
 import type { ApplicationStandingView } from "../lib/file.js";
 
-/** Grouping the nine engine screens under the four borrower ones. */
+/** Grouping the ten engine screens under the five borrower ones. */
 const SCREEN_GROUP: Record<string, string> = {
   property_loan: "1 · Property",
   identity: "2 · About you",
   credit: "2 · About you",
-  bank: "3 · Your bank",
+  declarations: "3 · A few questions",
+  bank: "4 · Your bank",
   payroll: "branch · payroll",
   irs_transcript: "branch · IRS",
   upload_fallback: "branch · documents",
-  decision: "4 · Review",
+  decision: "5 · Review",
   persistent_consent: "(dropped from flow)",
 };
 

@@ -4,3 +4,9 @@
 # would stop being true of the files beside it.
 *.xsd -text
 *.xml -text
+
+# The workbook is a zip. `binary` is `-text -diff` together, and both halves
+# matter: a checkout that translated line endings inside the compressed stream
+# would hand the generator an archive it cannot open, and a diff that tried to
+# render 745K of deflate would bury every other line of the commit it lands in.
+*.xlsx binary

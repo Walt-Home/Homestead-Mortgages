@@ -2,10 +2,10 @@
  * What the generator actually derived from the DU Spec, asserted against the
  * committed tables.
  *
- * These run everywhere, including on a machine with no DU_SPEC_DIR, because the
- * generated files are the committed artifact. That is the point of committing
- * them: the facts below are checkable without the licensed source, and
- * `npm run du:verify` is what ties them back to it.
+ * These read the committed tables and nothing else, which is the point of
+ * committing them: the facts below are checkable without opening a spreadsheet,
+ * and `npm run du:verify` is what ties them back to the workbook vendored in
+ * `packages/du-schema/workbook`.
  */
 
 import { describe, expect, it } from "vitest";

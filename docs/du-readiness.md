@@ -92,21 +92,21 @@ which have a longer lead time than anything above.
 
 ## At a glance
 
-| #   | Item                                | Status | One line                                                            |
-| --- | ----------------------------------- | ------ | ------------------------------------------------------------------- |
-| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                  |
-| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked              |
-| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                   |
-| —   | The generators and `du:verify`      | Green  | Order and arcs from the corpus, enums from DU's tab, drift fails CI |
-| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once and waiting for a response             |
-| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                     |
-| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person         |
-| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                     |
-| 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none          |
-| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                  |
-| 5   | Up to four borrowers                | Yellow | Ordinal and its rules landed; no route, no screen, 35 sites         |
-| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                   |
-| —   | The submission                      | Red    | Serializer, preflight, transport, response. Nothing yet             |
+| #   | Item                                | Status | One line                                                                 |
+| --- | ----------------------------------- | ------ | ------------------------------------------------------------------------ |
+| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                       |
+| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked                   |
+| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                        |
+| —   | The generators and `du:verify`      | Green  | The whole corpus is vendored; all six tables rebuilt in CI, none skipped |
+| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once and waiting for a response                  |
+| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                          |
+| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person              |
+| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                          |
+| 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none               |
+| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                       |
+| 5   | Up to four borrowers                | Yellow | Ordinal and its rules landed; no route, no screen, 35 sites              |
+| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                        |
+| —   | The submission                      | Red    | Serializer, preflight, transport, response. Nothing yet                  |
 
 **The three that blocked any submission are closed.** Declarations, the current
 residence, and assets with liabilities and owned property were each a hard stop
@@ -125,23 +125,27 @@ Decided 2026-09-11.
 That decision is what makes the schema chain ours to satisfy, the compute
 boundary ours to draw, and the casefile a thing that has to round-trip. It is
 also why the specification corpus is a dependency rather than reference
-material, and the corpus now splits in two:
+material. **The whole of it is vendored**, in `packages/du-schema`, with a
+README naming where every file came from:
 
-- **The schema chain is vendored**, in `packages/du-schema` — nine XSDs, the
-  transitive closure of the DU wrapper's imports, plus Fannie's eighteen test
-  cases and a README naming where every file came from. It is a frozen 2016
-  MISMO publication and a dated Fannie release, it is what makes an emitted
-  document either legal or not, and having it in the tree is what lets
-  `du:verify` re-derive every child sequence in `generated/order.ts` on a
-  machine with nothing else, and re-count from the eighteen samples which arcs
-  in `generated/arcroles.ts` a shipped DU document actually carries. Its own
-  suite validates all eighteen samples against the chain on every `npm test`.
-- **The workbook is not**, and the reason is not size — it is 728K, against
-  10.4M for the chain. It is that the workbook is a document that moves, reissued
-  several times a year, and git keeps every copy. `scripts/build-du.mjs` reads it
-  from `DU_SPEC_DIR`, commits only the TypeScript it derives, and names what it
-  could not check when the variable is unset. Vendoring it too would cost about
-  707K and would close that gap in CI; nobody has decided to.
+- **The schema chain**, in `xsd/` — nine XSDs, the transitive closure of the DU
+  wrapper's imports — plus Fannie's eighteen test cases in `samples/`. It is a
+  frozen 2016 MISMO publication and a dated Fannie release, and it is what makes
+  an emitted document either legal or not. Having it in the tree is what lets
+  `du:verify` re-derive every child sequence in `generated/order.ts`, and
+  re-count from the eighteen samples which arcs in `generated/arcroles.ts` a
+  shipped DU document actually carries. Its own suite validates all eighteen
+  samples against the chain on every `npm test`.
+- **The workbook**, in `workbook/` — `DU_Specification v1.9.3.xlsx`, 745,422
+  bytes, 707,679 of history. It was held out for a while on the argument that it
+  is a document that moves, reissued several times a year, against a chain that
+  is frozen; what that cost was four of the six generated tables — enums,
+  lengths, cardinality, conditionality — plus the arcroles' endpoints, which no
+  automated check ever read, because the only machine that gates a merge did not
+  have the file. **Reversed 2026-09-14.** `du:verify` now rebuilds all six
+  tables everywhere and skips nothing, there is no `DU_SPEC_DIR` and no corpus
+  to obtain, and the byte-for-byte proof that the vendored copy is the one the
+  committed tables came from is that regenerating from it changed nothing.
 
 Schema validity is a lint and not a gate, and `packages/du-schema/README.md` is
 where that is spelled out: a dangling `xlink:to`, a duplicate label, an invented
@@ -158,16 +162,16 @@ submission goes in under a seller/servicer number, so:
 - **Whose institution credentials do we submit under, and what does the agency
   agreement permit?** Presumably Grander's, since they are the creditor — but
   that is a contract question, not one the code can decide.
-- **The schema chain is vendored under a decision, not under a signed
-  license.** The instruction is to build as though the EULA and the DU
-  integration agreement are in place, on the understanding that no real
-  borrower and no real loan goes through this system until they are. MISMO's
-  five files carry a copyright notice and point at the MISMO End User License
-  Agreement; Fannie's four and the eighteen samples carry no notice and sit
-  under the DU integration agreement; `xml.xsd` is the W3C's. Whose each file
-  is, is recorded in `packages/du-schema/README.md`, and a test fails if a
-  re-vendor brings in one nobody assigned. Somebody with authority to accept
-  the EULA still has to read it.
+- **The corpus is vendored under a decision, not under a signed license.** The
+  instruction is to build as though the EULA and the DU integration agreement
+  are in place, on the understanding that no real borrower and no real loan
+  goes through this system until they are. MISMO's five files carry a copyright
+  notice and point at the MISMO End User License Agreement; Fannie's four, the
+  eighteen samples and the specification workbook carry no notice and sit under
+  the DU integration agreement; `xml.xsd` is the W3C's. Whose each file is, is
+  recorded in `packages/du-schema/README.md`, and a test fails if a re-vendor
+  brings in one nobody assigned. Somebody with authority to accept the EULA
+  still has to read it.
 - A smaller one of the same kind: the conditionality table is keyed by **85
   condition statements verbatim**. They are short functional predicates, they
   are what makes a parse failure legible, and they are Fannie's words. Swapping
@@ -302,13 +306,14 @@ Every claim about our code is a file:line at the commit named above; every
 claim about DU is a named tab or test case in the specification corpus. Open
 five at random and confirm they say what this says they say.
 
-The corpus: DU Specification v1.9.3 (DU Map, Enumerations, Cardinality,
-ArcRoles), the Fannie schema chain, the MISMO v3.4 reference model, and the
-eighteen-case test suite of June 2026. **`DI-C09` is the one to read first** —
-it links one asset to two borrowers, one liability to two obligors, an asset to
-the liability secured by it, and income items to employers as first-class
-entities. A DU submission is a **graph of `RELATIONSHIP` arcs**, not a nested
-document, and that is the fact the data model had to satisfy.
+The corpus, all of it now in `packages/du-schema`: DU Specification v1.9.3 (DU
+Map, Enumerations, Cardinality, ArcRoles), the Fannie schema chain, the MISMO
+v3.4 reference model, and the eighteen-case test suite of June 2026. **`DI-C09`
+is the one to read first** — it links one asset to two borrowers, one liability
+to two obligors, an asset to the liability secured by it, and income items to
+employers as first-class entities. A DU submission is a **graph of
+`RELATIONSHIP` arcs**, not a nested document, and that is the fact the data
+model had to satisfy.
 
 **Two counts in the original audit are off, this document repeated them, and
 the first correction was wrong too.** The ArcRoles tab holds **11** arcs, not

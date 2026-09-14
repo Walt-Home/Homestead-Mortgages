@@ -21,7 +21,14 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DU_WRAPPER_XSD, SAMPLES_DIR, XSD_DIR, samplePaths, xmllintErrors } from "../index.js";
+import {
+  DU_WRAPPER_XSD,
+  SAMPLES_DIR,
+  WORKBOOK_DIR,
+  XSD_DIR,
+  samplePaths,
+  xmllintErrors,
+} from "../index.js";
 
 let scratch: string;
 
@@ -101,16 +108,30 @@ describe("the vendored chain", () => {
 });
 
 describe("the provenance record", () => {
-  // The chain is third-party copyrighted work, and git keeps a file forever
-  // once it lands. README.md is the only thing in the tree that says whose
-  // these are, so a re-vendor that brings in a file under a holder nobody
-  // recorded has to fail here rather than pass quietly.
+  // Every vendored file is third-party copyrighted work — the chain, the
+  // samples and the workbook alike — and git keeps a file forever once it
+  // lands. README.md is the only thing in the tree that says whose these are,
+  // so a re-vendor that brings in a file under a holder nobody recorded has to
+  // fail here rather than pass quietly.
 
   it("assigns every vendored XSD to a rights holder", () => {
     const section = rightsSection();
     for (const name of readdirSync(XSD_DIR)) {
       expect(section, `${name} is in xsd/ and named by no holder`).toContain(name);
     }
+  });
+
+  it("assigns the workbook to a rights holder, by its filename", () => {
+    // The workbook is the one vendored file that carries a version and the one
+    // that gets replaced rather than kept, so the README names the file and not
+    // just the directory. A re-vendor that dropped 1.9.4 in beside this and
+    // said nothing has to fail here, because the rights record is the only
+    // thing in the tree that knows a new Fannie document arrived.
+    const section = rightsSection();
+    for (const name of readdirSync(WORKBOOK_DIR)) {
+      expect(section, `${name} is in workbook/ and named by no holder`).toContain(name);
+    }
+    expect(section).toContain("Fannie Mae");
   });
 
   it("names MISMO for every file that asserts MISMO's copyright", () => {

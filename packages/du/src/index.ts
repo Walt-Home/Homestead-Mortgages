@@ -7,13 +7,12 @@
  * somebody's editor. `npm run du:verify` regenerates in memory and fails on
  * drift, so the committed copies cannot silently diverge from the spec.
  *
- * The MISMO schema chain the generator reads is vendored, in
- * `packages/du-schema/xsd` — which is what lets `du:verify` re-derive every
- * child sequence in `generated/order.ts` on a machine that has nothing else,
- * and re-count from the eighteen vendored samples which arcs in
- * `generated/arcroles.ts` a shipped DU document actually carries. Fannie Mae's
- * workbook is not: the generator reads it from DU_SPEC_DIR and names what it
- * could not check when that is unset.
+ * Everything the generator reads is vendored, in `packages/du-schema` — the
+ * MISMO schema chain, Fannie's eighteen shipped samples, and Fannie's
+ * specification workbook. So `du:verify` rebuilds all six tables and fails on
+ * any difference on a machine that has this repository and nothing else: there
+ * is no environment to set, no corpus to obtain, and no half of the check that
+ * skips.
  *
  * Nothing here is wired to a route or a screen. The generated tables are what
  * the serializer will emit against, and the serializer comes later; the writers

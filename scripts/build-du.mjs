@@ -10,45 +10,50 @@
  * rather than landing as a silent default. A DU file that is silently wrong is
  * a file Fannie Mae rejects days later, with no local symptom at all.
  *
- * The inputs arrive from two places now, and the split is the reason `--verify`
- * has the shape it does.
+ * Every input is VENDORED, in `packages/du-schema/`, with a README naming where
+ * each file came from: the nine-file XSD chain in `xsd/`, Fannie's eighteen
+ * shipped test cases in `samples/`, and Fannie's specification workbook in
+ * `workbook/`. So this script runs, and `--verify` checks all six generated
+ * tables, on any machine that has this repository and nothing else.
  *
- * The XSD chain is VENDORED, in `packages/du-schema/xsd/`. Nine files, the
- * transitive closure of the DU wrapper's imports, with a README naming where
- * each one came from. It is a frozen 2016 MISMO publication plus a dated Fannie
- * release, and it is what makes an emitted document either legal or not — so
- * everything derived from it, which is element order, is checkable on any
- * machine that has this repository and nothing else.
+ * The workbook was held out of the tree for a while, on the argument that it is
+ * a document that moves and git keeps every copy forever. What that bought was
+ * a CI run which could not check four of the six tables — and a table nothing
+ * checks is a table that drifts. One 745K file every year or so is the cheaper
+ * side of that trade, so it is in here now.
  *
- * The workbook is NOT, and is read from a directory named by DU_SPEC_DIR. Not
- * for its size — it is 728K — but because it is a moving document, reissued
- * several times a year, and git keeps every copy forever. What IS committed
- * from it is the TypeScript below — enum member names, lengths, cardinality,
- * conditionality — which is our derived work product, exactly as
- * `packages/requirements/src/generated.ts` is derived from Drew's sheet.
+ * What is committed BESIDE it is still the TypeScript below — enum member
+ * names, lengths, cardinality, conditionality — which is our derived work
+ * product, exactly as `packages/requirements/src/generated.ts` is derived from
+ * Drew's sheet. The tables are what type-checks; the workbook is what they are
+ * answerable to.
  *
- * So `--verify` does four jobs and says which ones it did:
+ * `--verify` does six jobs. Five of them read nothing but files in this
+ * repository, so they run anywhere it is checked out:
  *
- *   - the Prisma enum diff always runs. It reads two committed files —
- *     `packages/db/prisma/schema.prisma` and the generated `enums.ts` — and
- *     needs no spec directory at all.
- *   - the schema-order diff always runs too, against the vendored chain. It
- *     re-derives every child sequence in `order.ts` from the XSDs and fails if
- *     one moved, which catches both a hand-edited table and a re-vendored XSD.
- *   - the arcrole corpus diff always runs, against the vendored samples. It
- *     re-counts which arcs the eighteen shipped test cases carry and fails if
- *     `arcroles.ts` says otherwise, or names an arcrole a sample uses and the
- *     table does not describe.
- *   - the workbook diff runs only when DU_SPEC_DIR is set, and is what catches
- *     the generated files' workbook-derived halves drifting from the spec they
- *     claim to come from. Unset it to skip that last one; a DU_SPEC_DIR that
- *     does not hold the workbook fails rather than skipping.
+ *   - the Prisma enum diff reads two committed files —
+ *     `packages/db/prisma/schema.prisma` and the generated `enums.ts`.
+ *   - the schema-order diff re-derives every child sequence in `order.ts` from
+ *     the XSDs and fails if one moved, which catches both a hand-edited table
+ *     and a re-vendored XSD.
+ *   - the arcrole corpus diff re-counts which arcs the eighteen shipped test
+ *     cases carry and fails if `arcroles.ts` says otherwise, or names an
+ *     arcrole a sample uses and the table does not describe.
+ *   - the asset-shape diff reads the per-kind CHECKs a migration wrote, which
+ *     nothing else here would notice being widened.
+ *   - the rebuild regenerates all six tables and fails on any difference,
+ *     which is what catches the workbook-derived halves — enums, lengths,
+ *     cardinality, conditionality and the arcroles' endpoints — drifting from
+ *     the spec they claim to come from.
+ *
+ * The sixth is the REO nesting, and it asks a database rather than a file,
+ * because a foreign key and a generated column are not in any file here.
  *
  *   node scripts/build-du.mjs            # write packages/du/src/generated/
  *   node scripts/build-du.mjs --verify   # fail if it would change
  */
 
-import { readFileSync, readdirSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
 import { inflateRawSync } from "node:zlib";
@@ -89,17 +94,6 @@ const TABS = {
 };
 
 /**
- * Where the workbook lives under DU_SPEC_DIR.
- *
- * One entry, and it stays a map because the shape of the error — "it must
- * contain:", then a list — is what makes a missing file actionable, and a
- * second licensed input that never gets vendored would join it here.
- */
-const SPEC_FILES = {
-  workbook: `DU Specs/DU_Specification v${SPEC_VERSION}.xlsx`,
-};
-
-/**
  * The four schema files the order table is derived from, vendored.
  *
  * They are named rather than globbed because the ORDER matters — see
@@ -132,56 +126,18 @@ const XSD_FILES = {
 };
 
 /**
- * The workbook is not here — and `unset` says which of the two reasons it is,
- * because they are not the same event.
+ * Fannie Mae's workbook, vendored beside the chain and the samples.
  *
- * Leaving DU_SPEC_DIR unset is how a machine without the licensed workbook says
- * so, and `--verify` skips the workbook third on it. Setting the variable is
- * the expression of intent to check, so a set-but-wrong path is a failure: a
- * typo'd or moved corpus that reported itself as "no workbook on this machine"
- * would hand back a green build that verified less than it looked like.
+ * The version is in the filename because it is in Fannie's, and because a
+ * reissue has to arrive as a second file somebody deliberately switched to
+ * rather than as an overwrite of this one. `SPEC_VERSION` names which file is
+ * read, so moving that constant and vendoring the new workbook are one edit.
  */
-export class SpecUnavailableError extends Error {
-  constructor(message, { unset }) {
-    super(message);
-    this.unset = unset;
-  }
-}
-
-export function resolveSpecFiles(env = process.env) {
-  const dir = env.DU_SPEC_DIR;
-  if (!dir) {
-    throw new SpecUnavailableError(
-      "DU_SPEC_DIR is not set.\n" +
-        "  Fannie Mae's workbook is licensed, is reissued several times a year, and is\n" +
-        "  deliberately not in this repository — unlike the XSD chain, which is vendored\n" +
-        "  in packages/du-schema/xsd. Point DU_SPEC_DIR at the directory holding it, for\n" +
-        "  example:\n" +
-        "    DU_SPEC_DIR='/path/to/DU Integration' npm run du:build\n" +
-        "  It must contain:\n" +
-        Object.values(SPEC_FILES)
-          .map((f) => `    ${f}\n`)
-          .join(""),
-      { unset: true },
-    );
-  }
-  const paths = {};
-  const missing = [];
-  for (const [key, rel] of Object.entries(SPEC_FILES)) {
-    const full = join(dir, rel);
-    if (!existsSync(full)) missing.push(rel);
-    paths[key] = full;
-  }
-  if (missing.length) {
-    throw new SpecUnavailableError(
-      `DU_SPEC_DIR is set to ${JSON.stringify(dir)} but these files are missing:\n` +
-        missing.map((f) => `    ${f}\n`).join("") +
-        "  Check the directory, or unset DU_SPEC_DIR to skip the workbook check.",
-      { unset: false },
-    );
-  }
-  return paths;
-}
+const WORKBOOK = resolve(
+  ROOT,
+  "packages/du-schema/workbook",
+  `DU_Specification v${SPEC_VERSION}.xlsx`,
+);
 
 // ── Reading .xlsx ──────────────────────────────────────────────────────────
 // Hand-rolled, for the reason build-requirements.mjs hand-rolls its CSV parser:
@@ -1758,7 +1714,10 @@ export function prismaEnums(schemaText) {
  * here — and the shape is asserted, so a hand-edit that changes it stops the
  * check rather than being read as an empty enum. Parsing the committed file
  * rather than the workbook is deliberate: the Prisma diff is a check between
- * two committed files, and it has to run on a machine that has no DU_SPEC_DIR.
+ * two committed files, and what it is looking for is schema.prisma drifting
+ * from the members that were committed. Reading the workbook here would hide
+ * exactly that — an enum edited out of `enums.ts` would be silently supplied
+ * again from the spec, and the diff would agree with a file nobody has.
  */
 export function parseGeneratedEnums(source) {
   const body = /export const DU_ENUMERATIONS[^=]*=\s*\{([\s\S]*?)\n\} as const;/.exec(source);
@@ -1808,10 +1767,11 @@ export function parseGeneratedOrder(source) {
  * Re-derive the order table from the vendored XSDs and diff it against the
  * committed one.
  *
- * This is the half of the regeneration check that the vendored chain makes
- * runnable everywhere, and it is worth having separately from the full rebuild:
- * CI has no DU_SPEC_DIR, so without it every child sequence in `order.ts` would
- * be unchecked on the only machine that gates a merge.
+ * The full rebuild below covers the same ground, and this runs first anyway
+ * because of what it says when it fails: it names the XPath whose children
+ * moved and prints both sequences, where the rebuild reports the same event as
+ * `order.ts is out of date`. A re-vendored XSD and a hand-edited table are the
+ * two ways that happens, and they want different fixes.
  *
  * The XPaths come from the committed `TYPE_FOR_PATH` rather than from the
  * workbook, which is what lets it run at all — and it is also the limit of what
@@ -1876,15 +1836,15 @@ export function parseGeneratedArcRoles(source) {
  * Diff the committed arc table's corpus column against the vendored samples.
  *
  * This is the arc table's half of what `runSchemaOrderCheck` does for element
- * order: the endpoints come from the licensed workbook and are only checkable
- * where it is, but which arcs a shipped DU document actually carries is a fact
- * about eighteen files in this repository, so it is checkable everywhere and
- * checked on the machine that gates a merge.
+ * order, and it is here for the same reason: which arcs a shipped DU document
+ * actually carries is a fact about eighteen files in this repository, and a
+ * failure that names the arc and the count is worth more than one that names
+ * the file.
  *
  * What it does NOT see is everything the workbook is the authority on: an arc
- * the tab added, and every endpoint on every arc. Those are the workbook diff's
- * to catch, and with DU_SPEC_DIR unset the only thing standing over them is
- * `generated.test.ts`, which writes both disputed ends out in full.
+ * the tab added, and every endpoint on every arc. Those belong to the workbook
+ * diff below, which now runs on every machine because the workbook is vendored
+ * too — and `generated.test.ts` writes both disputed ends out in full besides.
  */
 function runArcRoleCorpusCheck() {
   const committed = parseGeneratedArcRoles(readFileSync(resolve(OUT_DIR, "arcroles.ts"), "utf8"));
@@ -2056,8 +2016,8 @@ export function readArcRoleSections(rows, columnDescription) {
   };
 }
 
-function readSpec(paths) {
-  const book = readWorkbook(paths.workbook);
+function readSpec() {
+  const book = readWorkbook(WORKBOOK);
 
   const cover = book
     .sheet(TABS.frontCover)
@@ -2330,9 +2290,8 @@ function buildArcRoles(sections) {
 // ── Emitting ───────────────────────────────────────────────────────────────
 
 const banner = (what) => `// GENERATED by scripts/build-du.mjs from the DU Spec ${SPEC_VERSION}
-// workbook, which is licensed and is not in this repository — see DU_SPEC_DIR
-// in that script — and the MISMO v3.4 B324 schema chain, which is vendored in
-// packages/du-schema/xsd.
+// workbook and the MISMO v3.4 B324 schema chain, both vendored in
+// packages/du-schema.
 // Do not edit. Run \`npm run du:build\`; \`npm run du:verify\` fails on drift.
 //
 // ${what}`;
@@ -2559,8 +2518,8 @@ export const DU_CONDITION_STATEMENTS: Readonly<Record<string, DuCondition>> = ${
   return files;
 }
 
-export function buildFromSpec(paths) {
-  const spec = readSpec(paths);
+export function buildFromSpec() {
+  const spec = readSpec();
   checkTabDisagreements(spec.map, spec.enumerations);
 
   const xpaths = new Set();
@@ -2601,9 +2560,10 @@ function runPrismaCheck() {
 /**
  * The per-kind CHECKs still admit exactly the values their URLA section carries.
  *
- * Two committed files, like the Prisma diff above and for the same reason: this
- * has to run in CI on a machine with no DU_SPEC_DIR, because the failure it
- * catches is a widened CHECK and a widened CHECK has no local symptom at all.
+ * Two committed files, like the Prisma diff above and for the same reason: the
+ * workbook is no authority on what a migration wrote, so nothing the rebuild
+ * does would catch this. The failure it catches is a widened CHECK, and a
+ * widened CHECK has no local symptom at all.
  *
  * It reads the value list and nothing else. Everything the same CHECK says
  * about nulls, amounts and the columns each kind forbids is invisible here and
@@ -2734,27 +2694,7 @@ async function main() {
     if (!runArcRoleCorpusCheck()) ok = false;
     if (!runAssetShapeCheck()) ok = false;
     if (!(await runDatabaseObjectCheck())) ok = false;
-    let files;
-    try {
-      files = buildFromSpec(resolveSpecFiles());
-    } catch (error) {
-      if (!(error instanceof SpecUnavailableError)) throw error;
-      // An unset DU_SPEC_DIR is the documented way to say the licensed workbook
-      // is not on this machine, and skipping is the whole point of it. A set
-      // one is somebody asking for the check, so a path that does not hold the
-      // workbook fails rather than reporting itself as an absent one.
-      if (!error.unset) throw error;
-      // Named files, not "the regeneration check": order.ts was checked against
-      // the vendored chain a few lines up, and arcroles.ts had its corpus
-      // column checked against the vendored samples. A message that says a
-      // check was skipped when most of one ran is how somebody comes to
-      // re-point DU_SPEC_DIR at a corpus they did not need.
-      console.log(
-        "- skipped the workbook check (enums, lengths, cardinality, conditionality, and the " +
-          "arcroles' endpoints): DU_SPEC_DIR is not set",
-      );
-      process.exit(ok ? 0 : 1);
-    }
+    const files = buildFromSpec();
     for (const [name, contents] of Object.entries(files)) {
       const path = resolve(OUT_DIR, name);
       let current = null;
@@ -2773,7 +2713,7 @@ async function main() {
     return;
   }
 
-  const files = buildFromSpec(resolveSpecFiles());
+  const files = buildFromSpec();
   mkdirSync(OUT_DIR, { recursive: true });
   for (const [name, contents] of Object.entries(files)) {
     writeFileSync(resolve(OUT_DIR, name), contents);

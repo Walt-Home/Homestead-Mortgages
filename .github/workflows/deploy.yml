@@ -85,16 +85,21 @@ jobs:
       - name: Test database
         run: npm run db:test:setup
 
-      # The DU tables are generated from Fannie Mae's workbook, which is
-      # licensed, is reissued several times a year, and is deliberately not in
-      # this repository. With no DU_SPEC_DIR here, this runs everything that
-      # does not need it: every Du* enum in schema.prisma against the members
-      # the generator derived, every child sequence in order.ts against the
-      # MISMO chain vendored in packages/du-schema/xsd, every arc in
-      # arcroles.ts against the arcs the eighteen vendored samples actually
-      # carry, and the two database objects holding the REO nesting that Prisma
-      # cannot model and so cannot miss. It names what it could not check: the
-      # four workbook-derived tables and the arcroles' endpoints.
+      # Everything the DU tables are generated from is vendored in
+      # packages/du-schema — the MISMO chain, Fannie's eighteen samples, and
+      # Fannie's specification workbook — so this rebuilds all six generated
+      # tables here and fails on any difference. No table is skipped and nothing
+      # has to be fetched, and that now includes the workbook-derived halves:
+      # enums, lengths, cardinality, conditionality and the arcroles' endpoints.
+      #
+      # Five narrower checks run before the rebuild, so that what fails is named
+      # rather than being reported as a stale file: every Du* enum in
+      # schema.prisma against the members the generator derived, every child
+      # sequence in order.ts against the vendored MISMO chain, every arc in
+      # arcroles.ts against the arcs the eighteen samples actually carry, the
+      # per-kind asset CHECKs a migration wrote against the sections enums.ts
+      # records, and the two database objects holding the REO nesting that
+      # Prisma cannot model and so cannot miss.
       #
       # After the test database, not before: the REO nesting half asks the
       # database the migrations built, and a check that skips because there is

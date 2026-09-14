@@ -15,9 +15,8 @@ flowchart TB
   subgraph V["packages/du-schema — vendored, in the tree"]
     XSD["xsd/<br/>9 files, the chain"]
     SAMPLES["samples/<br/>18 shipped submissions"]
+    BOOK["workbook/<br/>DU_Specification v1.9.3.xlsx"]
   end
-
-  BOOK["DU_Specification v1.9.3.xlsx<br/>read from DU_SPEC_DIR"]
 
   BUILD["scripts/build-du.mjs<br/>refuses to guess"]
 
@@ -88,9 +87,8 @@ npm run du:verify    # what CI runs; fails on drift
 ## What CI actually checks
 
 `npm run check` runs `du:verify`, which is the only thing standing between a
-hand-edit and a submission built on it. **What it can check depends on what the
-machine has**, and it says which rather than implying it checked everything. On a
-checkout with no `DU_SPEC_DIR` — which is CI today:
+hand-edit and a submission built on it. On a clean checkout, with no environment
+variable set and nothing fetched:
 
 ```
 ✓ 16 Du* enum(s) in schema.prisma match the DU Spec
@@ -98,11 +96,15 @@ checkout with no `DU_SPEC_DIR` — which is CI today:
 ✓ 9 of 11 arcroles in arcroles.ts are exercised by the vendored samples, and no sample carries another
 ✓ 3 per-kind asset CHECK(s) admit exactly their section's 22 AssetType values
 ✓ du_owned_properties.asset_kind and du_owned_properties_attach_to_an_reo_asset still hold the REO nesting
-- skipped the workbook check (enums, lengths, cardinality, conditionality, and the arcroles' endpoints): DU_SPEC_DIR is not set
+✓ 6 generated files match the DU Spec 1.9.3
 ```
 
-With the workbook reachable, that last line becomes `✓ 6 generated files match
-the DU Spec 1.9.3` and the four workbook-derived tables are checked too.
+**No table is skipped.** One check in that list can be: the REO nesting is the
+only one that asks a database rather than reading a file, so it skips where
+there is no database to ask, and says so. A test holds that distinction rather
+than forbidding the word "skipped" outright — the difference between a check
+that could not run and a table that quietly stopped being checked is the whole
+value of the line.
 
 Two of the checks above are worth calling out because they check something other
 than themselves.
@@ -126,13 +128,15 @@ is worse than no check at all.
 less than it looks, and the gap is the reason this product's invariants live in
 the database.
 
-## Where the inputs live
+## The inputs are vendored
 
-The schema chain and the eighteen samples are in the tree, which is what lets
-the checks above run on any checkout and in CI rather than only on a machine
-that happens to have the corpus. **The workbook is not, yet.** It is read from
-`DU_SPEC_DIR`, and the cost of that is named in the skip line: the four
-workbook-derived tables are the ones CI cannot currently catch a hand-edit to.
+Everything the build reads is in the tree: the chain, the eighteen samples and
+the workbook. There is no environment variable to set and no folder to be
+handed, which is what makes every check above run on any checkout rather than
+only on a machine that happens to have the corpus. `DU_SPEC_DIR` is gone rather
+than demoted to an override — the workbook's path is a constant derived from the
+spec version, and a test asserts the variable's name appears nowhere in the
+verify output.
 
 The chain is nine XSDs, resolved by walking `schemaLocation` outward from
 `DU_Wrapper_3.4.0_B324.xsd` — not by collecting every file with that extension,

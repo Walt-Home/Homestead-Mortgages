@@ -1,20 +1,22 @@
 /**
  * The generator's promises, tested against rows this file makes up.
  *
- * Every fixture below is synthetic on purpose. Fannie Mae's workbook and
- * MISMO's reference model are not in this repository and must not be, so a test
- * that reads them would only run on a machine that happens to have them — which
- * is no test at all. What these assert is the machinery: that an unrecognized
- * phrase stops the build, that a blank cell nobody named stops the build, that
- * a child the schema does not declare stops the build. The facts derived FROM
- * the spec are asserted in generated.test.ts, against the committed tables.
+ * Every fixture below is synthetic on purpose. The workbook and the reference
+ * model are vendored now, so a test could read them — but a mapping asserted
+ * against the rows the spec happens to carry proves only that the spec is
+ * itself, and says nothing about the row it does not carry yet. What these
+ * assert is the machinery: that an unrecognized phrase stops the build, that a
+ * blank cell nobody named stops the build, that a child the schema does not
+ * declare stops the build. The facts derived FROM the spec are asserted in
+ * generated.test.ts, against the committed tables; that the committed tables
+ * are what the vendored workbook produces is asserted below, by rebuilding.
  *
  * The tests live here rather than beside the script because this is where
  * `npm test` reaches them.
  */
 
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -43,12 +45,14 @@ import {
   parseGeneratedAssetTypeSections,
   parseGeneratedOrder,
   prismaEnums,
-  resolveSpecFiles,
+  buildFromSpec,
 } from "../../../../scripts/build-du.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const SCRIPT = resolve(ROOT, "scripts/build-du.mjs");
 const PRISMA_SCHEMA = "packages/db/prisma/schema.prisma";
+const GENERATED_DIR = resolve(ROOT, "packages/du/src/generated");
+const WORKBOOK_DIR = resolve(ROOT, "packages/du-schema/workbook");
 const ASSET_MIGRATION =
   "packages/db/prisma/migrations/20260913110000_an_asset_has_an_owner/migration.sql";
 
@@ -90,69 +94,79 @@ function runScript(args, env) {
   });
 }
 
-describe("the spec directory", () => {
-  it("says what to do when DU_SPEC_DIR is unset", () => {
-    expect(() => resolveSpecFiles({})).toThrow(/DU_SPEC_DIR is not set/);
-    expect(() => resolveSpecFiles({})).toThrow(/DU_SPEC_DIR='\/path\/to\/DU Integration'/);
+describe("the vendored workbook", () => {
+  it("is the version the generator says every mapping was read against", () => {
+    // The filename, the front cover and SPEC_VERSION are three separate
+    // assertions of the same number, and the generator refuses to run unless
+    // they agree — which is how a reissue stops the build instead of parsing
+    // as though nothing moved. This pins the first of the three, because it is
+    // the one a re-vendor sets by choosing a filename.
+    expect(readdirSync(WORKBOOK_DIR)).toEqual(["DU_Specification v1.9.3.xlsx"]);
   });
 
-  it("names the files it cannot find", () => {
-    expect(() => resolveSpecFiles({ DU_SPEC_DIR: "/nonexistent" })).toThrow(
-      /DU_Specification v1\.9\.3\.xlsx/,
-    );
-  });
-
-  it("asks for the workbook and not for the vendored XSDs", () => {
-    // The variable named five files once. Four of them are now in
-    // packages/du-schema/xsd, and a message still demanding them would send
-    // somebody hunting for a corpus to satisfy a check that no longer reads it.
-    const message = (() => {
-      try {
-        resolveSpecFiles({});
-        return "";
-      } catch (error) {
-        return error.message;
-      }
-    })();
-    expect(message).toMatch(/DU_Specification v1\.9\.3\.xlsx/);
-    expect(message).not.toMatch(/\.xsd/);
-  });
-
-  it("separates an unset variable from one pointing somewhere wrong", () => {
-    // Two different events wearing one error class. Unset is a machine without
-    // the licensed workbook; set-but-wrong is somebody who asked for the check
-    // and typo'd the path, and reporting that as an absent workbook is how a
-    // green build comes to have verified less than it looked like.
-    expect(() => resolveSpecFiles({})).toThrow(expect.objectContaining({ unset: true }));
-    expect(() => resolveSpecFiles({ DU_SPEC_DIR: "/nonexistent" })).toThrow(
-      expect.objectContaining({ unset: false }),
-    );
+  it("is what the committed tables were generated from, byte for byte", () => {
+    // The proof that vendoring copied THIS workbook and not a revision that
+    // merely parses. A different release would still produce six well-formed
+    // tables; it would produce six different ones, and a spec change that
+    // arrived inside a commit about where a file lives is a spec change nobody
+    // reviewed. Rebuilding in memory and comparing to the committed bytes is
+    // the same thing `--verify` does, asserted here so that it fails as a
+    // named test rather than only as a script's exit code.
+    const files = buildFromSpec();
+    expect(Object.keys(files)).toHaveLength(6);
+    for (const [name, contents] of Object.entries(files)) {
+      const committed = readFileSync(resolve(GENERATED_DIR, name), "utf8");
+      expect(contents, `${name} is not what the vendored workbook produces`).toBe(committed);
+    }
   });
 });
 
-describe("--verify without the workbook", () => {
-  it("still checks the vendored chain and the vendored samples, and says what it skipped", () => {
-    // The vendored corpus is what makes this more than a skip: element order
-    // comes back out of the XSDs and the arcs' corpus column out of the
-    // eighteen samples, both on a machine with no workbook at all. So the
-    // message names what did NOT get checked rather than calling the whole
-    // regeneration check skipped.
+describe("--verify with nothing but this repository", () => {
+  it("checks all six tables, and defers nothing it could have read", () => {
+    // Run with no environment at all, which is the point: every input the six
+    // tables come from is vendored, so there is nothing to set and nothing to
+    // fetch. A skip line naming a FILE, or the name of the variable that used
+    // to gate one, means an input went back outside the tree and four tables
+    // quietly stopped being checked — which is the failure this arrangement
+    // exists to prevent, and it has no other symptom.
+    //
+    // The REO nesting is the one check that reads a database rather than a
+    // file, and it skips wherever there is no database to ask — here, and on
+    // any run that does not hand the script a URL. Forbidding the word outright
+    // would fail on that line instead, which says nothing about the tables.
     const result = runScript(["--verify"], {});
     expect(result.stdout).toMatch(/child sequences in order\.ts match the vendored MISMO chain/);
     expect(result.stdout).toMatch(/arcroles in arcroles\.ts are exercised by the vendored samples/);
-    expect(result.stdout).toMatch(
-      /skipped the workbook check \(enums, lengths, cardinality, conditionality, and the arcroles' endpoints\): DU_SPEC_DIR is not set/,
-    );
+    expect(result.stdout).toMatch(/6 generated files match the DU Spec 1\.9\.3/);
+    const skipped = result.stdout.split("\n").filter((line) => line.includes("skipped"));
+    expect(skipped.filter((line) => !line.includes("the REO nesting check"))).toEqual([]);
+    expect(`${result.stdout}${result.stderr}`).not.toMatch(/DU_SPEC_DIR/);
     expect(result.status).toBe(0);
+  });
+
+  it("reaches the vendored corpus without importing a workspace package", () => {
+    // `@hm/du-schema` exports the same three directories this script resolves
+    // for itself, and the duplication is the arrangement rather than an
+    // oversight: that package's entry point is its compiled `dist/`, so
+    // importing it here would make regenerating the tables wait on a
+    // TypeScript build, and a fresh checkout is exactly where somebody
+    // regenerates them. The failure would arrive as a module that could not be
+    // resolved, which reads like a broken install and not like an ordering
+    // anybody chose. Nothing else would notice: every machine that has already
+    // run `npm run build` has the `dist/` that hides it.
+    const source = readFileSync(SCRIPT, "utf8");
+    const imported = [...source.matchAll(/^import .* from "([^"]+)";$/gm)].map((hit) => hit[1]);
+    expect(imported.length).toBeGreaterThan(0);
+    expect(imported.filter((name) => name.startsWith("@hm/"))).toEqual([]);
   });
 
   it("is described by the comment the deploy workflow runs it under", () => {
     // That comment presents itself as the exhaustive list of what this step
-    // checks without the workbook, and it is what gets believed — the step's
-    // own output scrolls past in a CI log nobody reads twice. So the list is
-    // derived from the run rather than trusted beside it: every committed file
-    // the always-run checks name has to appear in the comment, and so does the
-    // tail of the skip line.
+    // checks, and it is what gets believed — the step's own output scrolls past
+    // in a CI log nobody reads twice. So the list is derived from the run
+    // rather than trusted beside it: every committed file the run names has to
+    // appear in the comment, and so do the workbook-derived tables it no
+    // longer has any reason to leave out.
     const workflow = readFileSync(resolve(ROOT, ".github/workflows/deploy.yml"), "utf8");
     const lines = workflow.split("\n");
     const step = lines.findIndex((line) => line.includes("name: DU tables match the spec"));
@@ -177,14 +191,30 @@ describe("--verify without the workbook", () => {
     expect(comment).toContain("the arcroles' endpoints");
   });
 
-  it("fails, and lists the files, when DU_SPEC_DIR points somewhere wrong", () => {
-    const result = runScript(["--verify"], { DU_SPEC_DIR: "/nonexistent" });
-    expect(result.status).toBe(1);
-    expect(result.stderr).toMatch(/DU_SPEC_DIR is set to "\/nonexistent"/);
-    // The whole message, not its first line: the list of what is missing is
-    // the only part that says what to do about it.
-    expect(result.stderr).toMatch(/DU_Specification v1\.9\.3\.xlsx/);
-    expect(result.stderr).toMatch(/unset DU_SPEC_DIR to skip/);
+  // Two tables the workbook is the sole authority on: nothing else in
+  // `--verify` parses either file, so a failure here can only have come from
+  // the rebuild. Mutating them is the difference between a check that runs and
+  // a check that works, and it is worth spelling out because "it passed" and
+  // "it had nothing to compare against" looked identical from outside for as
+  // long as the workbook was somewhere else.
+  it.each([
+    ["cardinality.ts", '"min": 1,', '"min": 2,'],
+    ["lengths.ts", '"maxLength": 30', '"maxLength": 31'],
+  ])("fails on a hand-edited %s", (name, from, to) => {
+    const path = resolve(GENERATED_DIR, name);
+    const original = readFileSync(path, "utf8");
+    // One digit, at the first place it occurs. Small enough that no reader
+    // would spot it, which is the kind of edit this has to catch — a
+    // conspicuous one is caught by whoever makes it.
+    expect(original, `${name} no longer contains ${from}`).toContain(from);
+    try {
+      writeFileSync(path, original.replace(from, to));
+      const result = runScript(["--verify"], {});
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(`packages/du/src/generated/${name} is out of date`);
+    } finally {
+      writeFileSync(path, original);
+    }
   });
 });
 
@@ -1072,9 +1102,10 @@ describe("the AssetType partition, and the CHECKs that carry it", () => {
     ).toEqual(["DuAssetType.Bullion is admitted by no kind's CHECK, so no row can carry it."]);
   });
 
-  it("agrees with the migration on the committed spec, with no spec directory", () => {
-    // The check CI runs. Both sides are committed files, which is what makes a
-    // widened CHECK catchable on a machine that has no DU_SPEC_DIR — and a
+  it("agrees with the migration on the committed spec", () => {
+    // The check CI runs. Both sides are committed files, and neither is
+    // anything the rebuild reads — the workbook is no authority on what a
+    // migration wrote, so nothing else here would catch a widened CHECK, and a
     // widened CHECK has no other local symptom.
     const generated = readFileSync(resolve(ROOT, "packages/du/src/generated/enums.ts"), "utf8");
     const sections = parseGeneratedAssetTypeSections(generated);

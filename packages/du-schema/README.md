@@ -1,10 +1,11 @@
-# `@hm/du-schema` — the vendored DU schema chain and Fannie's eighteen samples
+# `@hm/du-schema` — the vendored DU specification: chain, samples, workbook
 
-Nothing in `xsd/` or `samples/` is ours. They are copied in byte for byte and
-**must never be edited** — not to fix a typo, not to reformat, not to normalize
-a line ending. `.gitattributes` marks both directories `-text` so a checkout
-cannot normalize them either. The only correct edit is to re-vendor from a newer
-release, and then the table below changes with them.
+Nothing in `xsd/`, `samples/` or `workbook/` is ours. They are copied in byte
+for byte and **must never be edited** — not to fix a typo, not to reformat, not
+to normalize a line ending. `.gitattributes` marks the XSDs and the samples
+`-text`, and the workbook `binary`, so a checkout cannot normalize them either.
+The only correct edit is to re-vendor from a newer release, and then the table
+below changes with them.
 
 The package exists because a DU submission has to validate against a chain that
 does not assemble itself, and because two of the reasons it does not assemble
@@ -12,8 +13,10 @@ cost several hours each to find.
 
 ## What is here, and where it came from
 
-The corpus lives outside this repository, at the path `DU_SPEC_DIR` names.
-Everything below is relative to it.
+Every file the generator and the validator read is in this directory. The
+source paths below are relative to Fannie Mae's distributed corpus, and they are
+recorded so a re-vendor knows where to go back to — not because anything here
+needs that corpus to be on the machine. Nothing in this repository reads it.
 
 ### Whose these are
 
@@ -27,10 +30,14 @@ the files:
   and pointing at the MISMO End User License Agreement. Read the notice in the
   file rather than a restatement of it here — a restatement goes stale and the
   file it describes cannot.
-- **Fannie Mae's three, and every sample.** `DU_Wrapper_3.4.0_B324.xsd`, `DU_ExtensionV3_4.xsd`,
-  `ULAD_ExtensionV3_4.xsd` and all eighteen documents in `samples/` carry no
-  notice at all. They are Fannie Mae's, and the terms that cover them are the
-  DU integration agreement's rather than anything written in the files.
+- **Fannie Mae's three, every sample, and the workbook.**
+  `DU_Wrapper_3.4.0_B324.xsd`, `DU_ExtensionV3_4.xsd`,
+  `ULAD_ExtensionV3_4.xsd`, all eighteen documents in `samples/` and
+  `DU_Specification v1.9.3.xlsx` in `workbook/` carry no notice at all. They are
+  Fannie Mae's, and the terms that cover them are the DU integration
+  agreement's rather than anything written in the files. The workbook is the
+  one file here that moves — its version is in its filename because Fannie puts
+  it there, and a reissue lands as a second file rather than over this one.
 - **The W3C's one.** `xml.xsd` is the W3C's schema for the XML namespace,
   redistributed inside MISMO's publication and vendored from there. It carries
   no notice either; it is the W3C's, under the W3C Software and Document
@@ -100,6 +107,33 @@ nine conventional, one HomeStyle, four FHA, four VA — and every one of them
 carries `<AboutVersionIdentifier>DU Spec 1.9.x</AboutVersionIdentifier>` while
 the workbook this repo generates against is 1.9.3. They are examples of the
 shape, not of the current release.
+
+### `workbook/` — one file
+
+`DU Specs/DU_Specification v1.9.3.xlsx`, 745,422 bytes. Fannie Mae's
+specification itself: the front cover asserts `Document Version 1.9.3`, and six
+of its tabs are what `scripts/build-du.mjs` reads — Front Cover, Column
+Description, `DU Map v1.9.3`, DU Enumerations, Cardinality and ArcRoles.
+
+Four of the six tables in `packages/du/src/generated/` come from it outright —
+enums, lengths, cardinality, conditionality — and the arcroles' endpoints come
+from it too, with only their corpus column coming from `samples/`. That is the
+reason it is here: while it was not, `npm run du:verify` could re-derive element
+order and re-count the arcs and could check none of the rest, so four generated
+tables were held to nothing on the machine that gates a merge.
+
+**The version is in the filename, and `SPEC_VERSION` in the generator names
+which file is read.** A reissue is vendored beside this one and that constant
+moves in the same edit — never over this file, because the two of them together
+are the only record of which release the committed tables came from.
+
+Neither half of that edit is optional, and neither can be done quietly. Drop
+1.9.4 in and leave the constant, and it is simply not read. Move the constant
+without vendoring the file, and the build cannot find one. Do both, and the
+front cover's own `Document Version` is checked against the constant, and every
+mapping in the generator is still exhaustive against the release it was read
+against — so a format, a conditionality phrase or an enumeration that 1.9.4
+added stops the build and somebody re-reads the tabs.
 
 ## The assembly traps
 
@@ -207,21 +241,21 @@ do it are native bindings to that same library or megabytes of their own — and
 is not on `PATH` the function throws; it never reports success for a check that
 did not run.
 
-## `scripts/build-du.mjs` reads `xsd/` from here
+## `scripts/build-du.mjs` reads all of this from here
 
-Four of the nine files — the wrapper, the two extensions and the flattened MISMO
-model — are what `packages/du/src/generated/order.ts` is derived from. Because
-they are vendored, `npm run du:verify` re-derives every child sequence from them
-on any machine, with no `DU_SPEC_DIR` and no corpus. The workbook half of that
-check still needs the corpus and still says so when it skips.
+Four of the nine XSDs — the wrapper, the two extensions and the flattened MISMO
+model — are what `packages/du/src/generated/order.ts` is derived from; the
+eighteen samples are where the arcs' corpus column is counted; the workbook is
+where everything else comes from. All three are in the tree, so `npm run
+du:verify` rebuilds **all six** generated tables and fails on any difference, on
+any machine with this repository checked out and nothing else. There is no
+environment variable to set and no corpus to obtain, and nothing is skipped.
 
-The workbook itself is **not** vendored, and the reason is not size — measured,
-it is 728K, against 10.4M for the chain in this directory. It is that the
-workbook is a document that moves: Fannie reissues it several times a year, and
-git keeps every copy forever. The schema chain is the opposite — a frozen 2016
-MISMO publication plus a dated Fannie release, and the thing that decides
-whether an emitted document is legal.
-
-That is a judgment rather than a rule, and the numbers are here so it can be
-revisited. Vendoring the workbook would cost about 707K and would let
-`du:verify` check the other four generated tables in CI as well.
+The workbook was held out for a while, on the argument that it is a document
+that moves — Fannie reissues it several times a year and git keeps every copy —
+against a chain that is frozen. The cost of that was four generated tables no
+automated check ever read. Measured, the workbook adds 745,422 bytes to a
+checkout and 707,679 to the history, once, against 10.4M already here for the
+chain; a reissue every year or so costs that again. Four unchecked tables cost
+more, because a table nothing checks is a table that has already drifted by the
+time anybody looks.

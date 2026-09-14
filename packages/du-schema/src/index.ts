@@ -1,12 +1,15 @@
 /**
- * The vendored DU schema chain, the eighteen shipped samples, and the one
- * thing you can do with them.
+ * The vendored DU specification — the schema chain, the eighteen shipped
+ * samples, the workbook — and the one thing you can do with them.
  *
- * Nothing here is derived or generated. `xsd/` and `samples/` are somebody
- * else's bytes, copied in and never edited — README.md says which bytes, from
- * where, and what the assembly traps are. This module is only the paths and a
- * validator, so that a test in this package and a test in `packages/du` reach
- * the chain the same way.
+ * Nothing here is derived or generated. `xsd/`, `samples/` and `workbook/` are
+ * somebody else's bytes, copied in and never edited — README.md says which
+ * bytes, from where, and what the assembly traps are. This module is only the
+ * paths and a validator, and its consumers are this package's own tests.
+ * `scripts/build-du.mjs` resolves the same three directories for itself and
+ * imports nothing from here on purpose: this package's entry point is its
+ * compiled `dist/`, and a generator that waited on a TypeScript build could
+ * not be the first thing run on a fresh checkout.
  *
  * Read README.md before trusting a green result. The XSD enforces element
  * order, enumerated values and boolean casing, and essentially nothing about
@@ -24,9 +27,9 @@ import { fileURLToPath } from "node:url";
  * The package root, from either `src/` or the built `dist/`.
  *
  * Both are exactly one directory below it, which is what makes one expression
- * correct in a vitest run and in a compiled consumer. `xsd/` and `samples/` are
- * not compiled into `dist/`, so a path relative to the module would find them
- * in one case and not the other.
+ * correct in a vitest run and in a compiled consumer. None of the vendored
+ * directories is compiled into `dist/`, so a path relative to the module would
+ * find them in one case and not the other.
  */
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -44,6 +47,16 @@ export const DU_WRAPPER_XSD = join(XSD_DIR, "DU_Wrapper_3.4.0_B324.xsd");
 
 /** Fannie Mae's own test-case suite, verbatim, filenames and all. */
 export const SAMPLES_DIR = join(PACKAGE_ROOT, "samples");
+
+/**
+ * Fannie Mae's specification workbook, which four of the six generated tables
+ * come from outright.
+ *
+ * A directory rather than a filename, because the version is part of the
+ * filename and a reissue arrives beside this one rather than over it.
+ * `SPEC_VERSION` in `scripts/build-du.mjs` is what says which file is read.
+ */
+export const WORKBOOK_DIR = join(PACKAGE_ROOT, "workbook");
 
 /** Every sample, absolute, in filename order. */
 export function samplePaths(): string[] {

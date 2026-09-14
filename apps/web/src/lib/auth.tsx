@@ -8,6 +8,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api, ApiError, SESSION_EXPIRED } from "./api.js";
+import type { ConnectorModes } from "./disclosures.js";
 
 export interface AuthUser {
   id: string;
@@ -31,8 +32,15 @@ interface AuthConfig {
   googleClientId: string | null;
   allowedDomain: string | null;
   developerSignInAvailable: boolean;
-  /** Whether the ID check navigates away to a vendor. */
-  identityRequiresRedirect?: boolean;
+  /**
+   * Which adapter is behind each connector on this deployment.
+   *
+   * It replaced `identityRequiresRedirect`, a boolean that answered two
+   * questions with one bit: whether screen 2's button leaves the site, and
+   * whether the check it starts is a test-mode one. `lib/disclosures.ts` is
+   * where these values become words.
+   */
+  connectorModes?: ConnectorModes;
   /** Whether /states is served at all. A design surface, off by default. */
   stateGalleryEnabled?: boolean;
   /** Whether the sign-in page offers the sample borrowers. Staging only. */

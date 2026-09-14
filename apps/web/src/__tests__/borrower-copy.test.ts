@@ -17,6 +17,26 @@
  * file, and rendering every screen in every state to find it would test the
  * router instead of the words.
  *
+ * The connector rule joined them later and is the reason this header now names
+ * a second kind of failure. `VENDOR_CLAIM` is not a leak that can be fixed by
+ * rewording: "A soft pull. This does not affect your score." is correct copy
+ * on a deployment with a credit reseller behind it and a fabrication on one
+ * answering out of the fixtures, so the rule is that a screen may not carry
+ * such a sentence AT ALL. It belongs in `lib/disclosures.ts`, where it is a
+ * function of `capabilities.mode`, and `disclosures.test.ts` holds the shape
+ * of every one of them. A screen that writes one inline has put a claim
+ * somewhere the deployment cannot reach it.
+ *
+ * That rule is why this reads `.ts` as well as `.tsx`. It first did not, and
+ * the exemption was written up as "disclosures.ts is a `.ts` file, which is
+ * the point" — but the file extension is not a permission, and half the copy
+ * in this app is `.ts`: the outcomes, the endings, the ledger's words, the
+ * home page, the state catalog. A vendor claim written into any of them passed
+ * every rule here. `disclosures.ts` is now the one named exemption, because it
+ * is the module whose whole job is to carry those sentences, and
+ * `disclosures.test.ts` is stricter about them than this file could be — it
+ * can call each one at all three modes.
+ *
  * Two things it deliberately does not do:
  *
  * - It does not read comments. The margins of this codebase argue in British
@@ -31,12 +51,29 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BRITISH, DAY_FIRST, DELIVERY_TIME, PROMISES, REQ_ID } from "@hm/shared";
+import { BRITISH, DAY_FIRST, DELIVERY_TIME, PROMISES, REQ_ID, VENDOR_CLAIM } from "@hm/shared";
 
 const SRC = new URL("..", import.meta.url).pathname;
 
-/** Surfaces that are ours, not the borrower's. Both say so in their header. */
-const NOT_BORROWER_FACING = new Set(["components/DebugPanel.tsx", "pages/BrandPage.tsx"]);
+/**
+ * Surfaces that are ours, not the borrower's, plus two modules whose own suite
+ * is the stricter reader.
+ *
+ * The debug panel and the brand page say what they are in their own headers.
+ * `lib/disclosures.ts` is the module whose whole job is to hold the sentences
+ * `VENDOR_CLAIM` matches, and `disclosures.test.ts` calls every export at all
+ * three modes rather than reading it as text. `lib/states.ts` is the design
+ * gallery's catalogue — it says in its own header that its figures are
+ * illustrative — and `states.test.ts` holds it to four of the five rules,
+ * deliberately not to `DELIVERY_TIME`: the thirty-day clock in its
+ * adverse-action copy is a statutory one, not something this repo schedules.
+ */
+const NOT_BORROWER_FACING = new Set([
+  "components/DebugPanel.tsx",
+  "pages/BrandPage.tsx",
+  "lib/disclosures.ts",
+  "lib/states.ts",
+]);
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -44,7 +81,7 @@ function sourceFiles(dir: string): string[] {
     if (statSync(path).isDirectory()) {
       return entry === "__tests__" ? [] : sourceFiles(path);
     }
-    return path.endsWith(".tsx") ? [path] : [];
+    return path.endsWith(".tsx") || path.endsWith(".ts") ? [path] : [];
   });
 }
 
@@ -171,16 +208,39 @@ export function phrases(source: string): Phrase[] {
 }
 
 const FILES = sourceFiles(SRC)
-  .map((path) => ({
-    name: path.slice(SRC.length),
-    phrases: phrases(readFileSync(path, "utf8")),
-  }))
+  .map((path) => {
+    const text = readFileSync(path, "utf8");
+    return { name: path.slice(SRC.length), lines: text.split("\n"), phrases: phrases(text) };
+  })
   .filter((f) => !NOT_BORROWER_FACING.has(f.name));
 
-const offenders = (rule: RegExp, keep: (p: Phrase) => boolean = () => true) =>
+type SourceFile = (typeof FILES)[number];
+
+/**
+ * An import specifier or a class name, not a sentence.
+ *
+ * `"../lib/plaid.js"` names a vendor and `"plaid/return"` is half a route.
+ * Only the connector rule needs this: the other four match words no path
+ * contains, and a filter they do not need is a filter that could hide one of
+ * their leaks.
+ */
+const isPath = (p: Phrase) => !/\s/.test(p.text.trim()) && /[/.]/.test(p.text);
+
+/**
+ * `new Error("plaid failed")` is a rejection a catch block reads, not a
+ * sentence. It names a vendor because that is what did not load, and the
+ * borrower is shown whatever the catch chooses to say instead.
+ *
+ * Only the connector rule takes this exemption. A thrown message is still held
+ * to the other four — "authorisation failed" in a log is the same house-style
+ * failure it is on a screen.
+ */
+const isThrown = (p: Phrase, f: SourceFile) => /new Error\(/.test(f.lines[p.line - 1] ?? "");
+
+const offenders = (rule: RegExp, keep: (p: Phrase, f: SourceFile) => boolean = () => true) =>
   FILES.flatMap((f) =>
     f.phrases
-      .filter((p) => keep(p) && rule.test(p.text))
+      .filter((p) => keep(p, f) && rule.test(p.text))
       .map((p) => `${f.name}:${p.line} ${JSON.stringify(p.text.trim().slice(0, 90))}`),
   );
 
@@ -199,6 +259,41 @@ describe("the screens keep the rules the catalog keeps", () => {
 
   it("writes the month before the day", () => {
     expect(offenders(DAY_FIRST)).toEqual([]);
+  });
+
+  /**
+   * The connector rule, and the only one of the five whose fix is a move
+   * rather than a rewrite. Every sentence it matches is true of some
+   * deployment, so none of them can be settled where it is written: the
+   * screens and the copy catalogs read `lib/disclosures.ts`, which is the one
+   * name in `NOT_BORROWER_FACING` that is not a surface but an exemption.
+   */
+  it("makes no claim a screen cannot know is true", () => {
+    expect(offenders(VENDOR_CLAIM, (p, f) => !isPath(p) && !isThrown(p, f))).toEqual([]);
+  });
+
+  /**
+   * The exemption is one file and not a file extension. A `.ts` copy catalog
+   * with a vendor sentence in it is the failure this was widened for, so the
+   * widening is asserted rather than assumed — a `sourceFiles()` that quietly
+   * went back to `.tsx` would leave every rule above passing over half the
+   * copy in the app.
+   */
+  it("reads the copy catalogs, which are not components", () => {
+    const names = FILES.map((f) => f.name);
+    for (const catalog of [
+      "lib/outcomes.ts",
+      "lib/home-copy.ts",
+      "lib/ledger.ts",
+      "lib/declarations.ts",
+      "lib/endings.ts",
+      "lib/figures.ts",
+    ]) {
+      expect(names, catalog).toContain(catalog);
+    }
+    for (const exempt of ["lib/disclosures.ts", "lib/states.ts"]) {
+      expect(names, exempt).not.toContain(exempt);
+    }
   });
 
   /**
@@ -258,6 +353,14 @@ describe("the rules catch what they were written for", () => {
     );
   });
 
+  it("catches a vendor claim a screen wrote out for itself", () => {
+    const jsx = `<p>Your bank is open in a secure window.</p>`;
+    expect(of(jsx).some((t) => VENDOR_CLAIM.test(t))).toBe(true);
+    expect(
+      of(`import { readAttempt } from "../lib/plaid.js";`).filter((t) => !/\s/.test(t)),
+    ).toEqual(["../lib/plaid.js"]);
+  });
+
   it("catches the leaks this suite was written for", () => {
     expect("Authorisation to verify").toMatch(BRITISH);
     expect("That counts in your favour").toMatch(BRITISH);
@@ -265,6 +368,20 @@ describe("the rules catch what they were written for", () => {
     expect("We will read these and come back to you.").toMatch(PROMISES);
     expect("Text me updates about my application").toMatch(PROMISES);
     expect("We will use you@example.com for everything in writing.").toMatch(PROMISES);
+    // The property screen's two: a correction nobody reads, and an address
+    // nothing revisits. Both named a person, neither named a channel, and the
+    // first draft of the rule saw only the one that said "someone".
+    expect("Tell us what is off. We will check it — you do not need to wait.").toMatch(PROMISES);
+    expect("It does not stop your application — we will just confirm the details later.").toMatch(
+      PROMISES,
+    );
+    // The bank promise the income label was corrected for, said on two screens.
+    expect("We read your transactions once, to verify what you have and what you earn.").toMatch(
+      VENDOR_CLAIM,
+    );
+    expect("A rough number is enough — we verify the real one from your bank later.").toMatch(
+      VENDOR_CLAIM,
+    );
   });
 
   it("does not read a comment, so the margins may argue in British", () => {

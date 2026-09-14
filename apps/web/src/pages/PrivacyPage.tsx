@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../lib/api.js";
 import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
+import { SSN_COPY } from "../lib/disclosures.js";
 
 /**
  * Whether this session has an account of its own to delete.
@@ -75,12 +76,16 @@ export function PrivacyPage() {
           This is a prototype we are testing. It is not a lender, nothing it shows you is an offer,
           and no part of it touches your real credit, bank or payroll.
         </p>
+        {/*
+          The same two sentences screen 2 puts under the SSN field, from the
+          same constant. This page was already right about the number and that
+          screen was not — "the rest goes straight to the credit bureaus" — and
+          two surfaces on one deployment disagreeing about the most sensitive
+          field in the product is what makes one source the fix rather than two
+          strings that happen to agree.
+        */}
         <p>
-          <strong className="font-semibold">
-            Your Social Security number never leaves your browser.
-          </strong>{" "}
-          The form asks for it because the real product would, but only the last four digits are
-          ever sent to us. The rest is discarded the moment you move to the next screen.
+          <strong className="font-semibold">{SSN_COPY.lead}</strong> {SSN_COPY.body}
         </p>
         <p>What we do store, because the flow needs it:</p>
       </div>

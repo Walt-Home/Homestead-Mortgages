@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "@hm/db";
 import { config } from "../config.js";
-import { connectors } from "../services/connectors.js";
+import { providerModes } from "../services/connectors.js";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { requireAuth } from "../middleware/require-auth.js";
 import { signInAsLocalDeveloper, signInAsPersona, signInWithGoogle } from "../services/auth.js";
@@ -29,16 +29,23 @@ authRouter.get("/config", (_req, res) => {
     // client that asked anyway gets the same 404 as a path that never existed.
     demoPersonasEnabled: config.demoPersonasEnabled,
     /*
-     * Whether the ID check navigates away to a vendor.
+     * What is actually behind each connector on this deployment.
      *
-     * Screen 2's button has to name where it is about to send somebody: a
-     * control reading "Scan your ID and take a selfie" that instead lands them
-     * on a Stripe domain asking for a government ID looks precisely like the
-     * thing people are warned about. The client cannot infer this — a fixture
-     * and a hosted vendor answer the same endpoint differently — so the server
-     * says it, next to the other "what should the client render" flags.
+     * Every borrower-facing sentence that says an outside party did something
+     * is true of one of these values and false of another, and the client
+     * cannot infer which — a fixture and a hosted vendor answer the same
+     * endpoint identically as far as the browser can see. So the server says
+     * it, and `lib/disclosures.ts` is where a screen turns it into words.
+     *
+     * This replaced a single `identityRequiresRedirect` boolean. That flag
+     * carried two facts in one bit: screen 2 used it to decide whether the
+     * button leaves the site, which "not a fixture" answers correctly, and
+     * also to gate a banner reading "Stripe's test mode", which it does not —
+     * a live key would have left that banner asserting test mode over a real
+     * document check. Three values separate the two questions; one bit could
+     * not.
      */
-    identityRequiresRedirect: connectors().identity.capabilities.mode !== "fixture",
+    connectorModes: providerModes(),
   });
 });
 

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
+import { useAuth } from "../lib/auth.js";
+import { creditCheckCopy, modeOf, type ConnectorMode } from "../lib/disclosures.js";
 
 /**
  * Signing a document.
@@ -13,10 +15,20 @@ import { api } from "../lib/api.js";
  * practically meaningless.
  */
 
-const DOCUMENTS: Record<string, { title: string; body: string[]; commit: string }> = {
+/**
+ * `body` is a function of the connector modes because one of these documents
+ * says what the credit check WILL be, and what it will be depends on what is
+ * behind `POST /files/:id/credit`. The authorization used to state flatly that
+ * the check is a soft pull, on a repository with no credit adapter in it — the
+ * same sentence, and the same defect, as the animation on screen 2.
+ */
+const DOCUMENTS: Record<
+  string,
+  { title: string; body: (credit: ConnectorMode) => string[]; commit: string }
+> = {
   form_4506c: {
     title: "IRS Form 4506-C",
-    body: [
+    body: () => [
       "You are authorizing the IRS to release your tax transcripts for the last two years to us.",
       "Transcripts show what you filed: wages, adjusted gross income, and the forms behind them. They do not authorize us to file anything, change anything, or see anything beyond those years.",
       "You can withdraw this at any time, and deleting your file removes it.",
@@ -25,15 +37,15 @@ const DOCUMENTS: Record<string, { title: string; body: string[]; commit: string 
   },
   verification_authorization: {
     title: "Authorization to verify",
-    body: [
+    body: (credit) => [
       "You are authorizing us to check your credit, employment, income and assets.",
-      "The credit check is a soft pull and does not affect your score.",
+      creditCheckCopy(credit).authorization,
     ],
     commit: "Sign the authorization",
   },
   econsent: {
     title: "Electronic delivery",
-    body: [
+    body: () => [
       "You are agreeing to receive disclosures electronically rather than on paper.",
       "You can ask for paper at any time.",
     ],
@@ -65,6 +77,7 @@ export function SignDocument({
   onSigned?: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { config: authConfig } = useAuth();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +120,7 @@ export function SignDocument({
     <div className="super-card">
       <h3 className="font-display text-base text-ink">{doc.title}</h3>
       <div className="mt-3 space-y-2.5">
-        {doc.body.map((p, i) => (
+        {doc.body(modeOf(authConfig?.connectorModes, "credit")).map((p, i) => (
           <p key={i} className="text-sm text-ink-soft">
             {p}
           </p>

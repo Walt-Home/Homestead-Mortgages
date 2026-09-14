@@ -137,6 +137,21 @@ export type IncomeSourceType =
   | "equity_compensation"
   | "military_entitlement";
 
+/**
+ * Which connector report a stored income row was last written by.
+ *
+ * Both retrievals write these rows through the same reconciliation, and the
+ * payroll one REPLACES what the bank inferred — so "where did this number come
+ * from" is not answerable from the bank report alone.
+ *
+ * Not a field of `IncomeSource`. An income source is what a report SAID, and
+ * `income-identity.test.ts` holds the projection of one to exactly that: the
+ * rows `loadLoanFile` returns are compared against the adapter's own, so a
+ * column added there would make the two differ. Where it sits instead, and
+ * what reads it, is on `LoanFile.qualifyingIncomeReportedBy`.
+ */
+export type IncomeReportSource = "bank" | "payroll";
+
 export interface IncomeSource {
   readonly type: IncomeSourceType;
   readonly monthlyAmount: number;

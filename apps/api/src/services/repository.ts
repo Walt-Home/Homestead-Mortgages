@@ -19,6 +19,7 @@ import type {
   CreditReport,
   Decision,
   DisclosureRecord,
+  IncomeReportSource,
   LoanFile,
   PayrollData,
   TaxTranscript,
@@ -185,6 +186,16 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
   const latest = <T>(kind: string): T | null => {
     const snapshot = row.snapshots.find((s) => s.kind === kind);
     return snapshot ? (snapshot.payload as T) : null;
+  };
+
+  // Which retrieval wrote a row, by the snapshot it names. Only the two kinds
+  // that carry income are answers; anything else is a row written by something
+  // that has no business being called the source of an income figure, and null
+  // is the honest reading of it.
+  const snapshotKind = new Map(row.snapshots.map((s) => [s.id, s.kind]));
+  const reportSource = (snapshotId: string | null): IncomeReportSource | null => {
+    const kind = snapshotId ? snapshotKind.get(snapshotId) : undefined;
+    return kind === "bank" || kind === "payroll" ? kind : null;
   };
 
   // The person, as the party asserts them. One query for every party on the
@@ -369,6 +380,14 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       continuanceEstablished: s.continuanceEstablished,
       evidenceDocumentIds: s.evidenceDocumentIds,
     })),
+
+    // Only the rows the engine sums. `totalQualifyingIncome` counts income
+    // whose continuance is established and nothing else, so those are the rows
+    // the label on that figure is about — and their provenance is not the bank
+    // report's, once a payroll pull has replaced them.
+    qualifyingIncomeReportedBy: row.incomeSources
+      .filter((s) => s.continuanceEstablished === true)
+      .map((s) => reportSource(s.lastSeenSnapshotId)),
 
     employment: row.employments.map((e) => ({
       employerName: e.employerName,

@@ -3,7 +3,7 @@ import { prisma } from "@hm/db";
 import { REQUIREMENTS } from "@hm/requirements";
 import { SHADOW_ENGINE_VERSION } from "@hm/underwriting";
 import { config } from "../config.js";
-import { providerMix } from "../services/connectors.js";
+import { providerMix, providerModes } from "../services/connectors.js";
 
 export const healthRouter = Router();
 
@@ -42,6 +42,10 @@ healthRouter.get("/", async (_req, res) => {
     // Which adapter each connector is actually using. "Is this real yet?" is a
     // question that gets asked at the worst possible moment.
     providers: providerMix(),
+    // The same reading the borrower's screens disclose from, out of the same
+    // function /auth/config serves. An operator checking here and a borrower
+    // reading a screen are then looking at one fact rather than two.
+    connectorModes: providerModes(),
     authConfigured: Boolean(config.googleClientId),
     // Whether this deployment mints sessions for sample borrowers. Reported
     // rather than merely set, because the one thing that must never happen to

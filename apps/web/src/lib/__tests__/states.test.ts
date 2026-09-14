@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { APPLICATION_STATES, BRITISH, DAY_FIRST, PROMISES, REQ_ID } from "@hm/shared";
+import { APPLICATION_STATES, BRITISH, DAY_FIRST, PROMISES, REQ_ID, VENDOR_CLAIM } from "@hm/shared";
 import { ALL_STATES, STATE_GROUPS } from "../states.js";
 
 describe("every state is written out", () => {
@@ -59,6 +59,31 @@ describe("no copy promises something the system cannot do", () => {
     ]) {
       expect(leak).toMatch(PROMISES);
     }
+  });
+});
+
+/**
+ * The connector rule, which `borrower-copy.test.ts` cannot apply here.
+ *
+ * That suite reads every screen and every copy module in the app, and this one
+ * is the named exemption: its `DELIVERY_TIME` clock is a statutory thirty days
+ * rather than a promise, so the blanket scan would fail on copy that is
+ * correct. Exempting the file from one rule exempted it from all five, and
+ * this is the one of the five that had a live leak in it — a state body
+ * saying we are verifying the borrower's income, on a deployment that may have
+ * no income product behind the bank at all.
+ */
+describe("no copy claims something only a vendor could have done", () => {
+  for (const s of ALL_STATES) {
+    it(`${s.id} claims nothing this deployment cannot know`, () => {
+      expect(`${s.heading} ${s.body} ${s.action ?? ""}`).not.toMatch(VENDOR_CLAIM);
+    });
+  }
+
+  it("catches the one that was in here", () => {
+    expect("We're verifying your income against the bank activity you connected.").toMatch(
+      VENDOR_CLAIM,
+    );
   });
 });
 

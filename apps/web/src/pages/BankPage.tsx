@@ -28,14 +28,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
-import { PERSONA_READ_ONLY } from "../lib/auth.js";
+import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
 import { SAMPLE_FILE } from "../lib/home-copy.js";
 import { useLoanFile, type DecisionRatios, type DecisionView } from "../lib/file.js";
 import { Why } from "../components/Why.js";
 import { Working } from "../components/Working.js";
 import { PlaidLink } from "../components/PlaidLink.js";
 import { Figure } from "../components/Figure.js";
-import { money, qualifyingIncome, QUALIFYING_INCOME_LABEL } from "../lib/figures.js";
+import {
+  assetsLabel,
+  incomeBasis,
+  INCOME_WORKED_OUT_FROM_BANK,
+  money,
+  qualifyingIncome,
+  qualifyingIncomeLabel,
+} from "../lib/figures.js";
+import { bankHandoffCopy, creditCheckCopy, modeOf, rentHistorySource } from "../lib/disclosures.js";
 import {
   classifyBankResponse,
   clearAttempt,
@@ -49,6 +57,12 @@ interface AssetReport {
   accounts: { accountId: string; type: string; institution: string; currentBalance: number }[];
   /** Consecutive on-time rent payments the report could identify (CRD-018). */
   identifiedRentPayments?: number;
+  /**
+   * What the report established about the income in it, which is what the
+   * income figure below may be called. Plaid runs in Assets mode, where this
+   * is never the verified answer.
+   */
+  incomeConfidence?: "verified" | "estimated" | "insufficient";
 }
 
 interface CreditReport {
@@ -69,7 +83,15 @@ type Phase =
   | { kind: "assembling" }
   | { kind: "slow" };
 
-/** Shared so the fixture's four-step wait is not quietly shortened. */
+/**
+ * Shared so the fixture's four-step wait is not quietly shortened.
+ *
+ * These are narration of what this screen is doing while it waits, not claims
+ * about what a bank produced, which is why they are literals and the figures
+ * they end at are not. A fixture deployment really is opening a connection and
+ * really is about to render twelve months of activity; what it may not say is
+ * whose.
+ */
 const STEP = {
   opening: { label: "Opening a secure connection", ms: 1200 },
   reading: { label: "Reading twelve months of activity", ms: 2000 },
@@ -90,6 +112,7 @@ export function BankPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data } = useLoanFile(fileId);
+  const { config: authConfig } = useAuth();
   const readOnly = data?.file.isDemo === true;
 
   const existing = data?.file.assets as AssetReport | null | undefined;
@@ -438,6 +461,11 @@ export function BankPage() {
     setManualOpen(true);
   }, []);
 
+  // Everything this screen says about the accounts — the window it opens, the
+  // rent it counts, what it calls the two figures — is a claim about one
+  // adapter, so it reads that adapter once.
+  const bankMode = modeOf(authConfig?.connectorModes, "bank");
+
   /**
    * The credit result, demoted to one line.
    *
@@ -445,16 +473,22 @@ export function BankPage() {
    * tradeline count, and a Continue button. All the borrower needed from it
    * was "it worked, and it did not hurt your score" — so that is what is left,
    * sitting above whatever they are actually here to do.
+   *
+   * Which of those two things it can say comes off the credit connector's
+   * mode. On a deployment with no reseller behind it, "it did not hurt your
+   * score" is true for a reason the borrower would want to know: nothing was
+   * asked of a bureau at all.
    */
+  const creditCopy = creditCheckCopy(modeOf(authConfig?.connectorModes, "credit"));
   const creditBar = credit?.scores?.length ? (
     <div className="super-notice super-notice-ok mb-5 flex flex-wrap items-center gap-x-3 gap-y-1">
       <span aria-hidden="true" className="text-ok">
         ✓
       </span>
       <span className="text-sm text-ink">
-        Credit checked · <span className="super-figure">{middleScore(credit.scores)}</span>
+        {creditCopy.pill} · <span className="super-figure">{middleScore(credit.scores)}</span>
       </span>
-      <span className="text-sm text-ink-muted">Soft pull, so your score is untouched.</span>
+      <span className="text-sm text-ink-muted">{creditCopy.pillNote}</span>
     </div>
   ) : null;
 
@@ -472,12 +506,18 @@ export function BankPage() {
 
           <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-rule-soft pt-5 sm:grid-cols-3">
             <Figure
-              label={`Verified assets`}
+              label={assetsLabel(bankMode)}
               value={money(total)}
               note={`across ${result.accounts.length} account${result.accounts.length === 1 ? "" : "s"}`}
             />
             <Figure
-              label={QUALIFYING_INCOME_LABEL}
+              label={qualifyingIncomeLabel(
+                incomeBasis({
+                  reportedBy: data?.file.qualifyingIncomeReportedBy,
+                  assets: result,
+                  modes: authConfig?.connectorModes,
+                }),
+              )}
               value={
                 figures?.totalQualifyingIncome != null
                   ? qualifyingIncome(figures.totalQualifyingIncome)
@@ -497,8 +537,8 @@ export function BankPage() {
 
           {typeof rent === "number" && rent >= 12 && (
             <p className="super-notice super-notice-ok mt-6 text-base text-ink-soft">
-              We found {rent} months of rent paid on time. That counts in your favor, and it is the
-              kind of thing a credit score alone would miss.
+              {rentHistorySource(bankMode)} {rent} months of rent paid on time. That counts in your
+              favor, and it is the kind of thing a credit score alone would miss.
             </p>
           )}
 
@@ -537,9 +577,7 @@ export function BankPage() {
 
         {phase.kind === "linking" && (
           <>
-            <p className="super-notice mt-6 text-base text-ink-soft">
-              Your bank is open in a secure window. Sign in there and we&rsquo;ll take it from here.
-            </p>
+            <p className="super-notice mt-6 text-base text-ink-soft">{bankHandoffCopy(bankMode)}</p>
             <PlaidLink
               key={phase.linkToken}
               token={phase.linkToken}
@@ -599,9 +637,9 @@ export function BankPage() {
               {held ? "Open your bank login" : "Connect your bank"}
             </button>
             <Why>
-              We read your transactions once, to verify what you have and what you earn. We cannot
-              move money, and we do not keep your bank password — you sign in with your bank, not
-              with us.
+              We read your transactions once — enough to {INCOME_WORKED_OUT_FROM_BANK} and to see
+              what you have. We cannot move money, and we do not keep your bank password — you sign
+              in with your bank, not with us.
             </Why>
           </>
         )}

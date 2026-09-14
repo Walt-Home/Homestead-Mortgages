@@ -5,6 +5,8 @@ import { api } from "../lib/api.js";
 import { useLoanFile } from "../lib/file.js";
 import { readDraft } from "../lib/identity.js";
 import { StatusPill } from "../components/StatusPill.js";
+import { useAuth } from "../lib/auth.js";
+import { creditNextStep, modeOf } from "../lib/disclosures.js";
 
 /**
  * Where the borrower lands after a hosted identity check.
@@ -36,6 +38,7 @@ export function IdentityReturnPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data } = useLoanFile(fileId);
+  const { config: authConfig } = useAuth();
 
   const [status, setStatus] = useState<"checking" | "verified" | "pending" | "failed">("checking");
   const [reason, setReason] = useState<string | null>(null);
@@ -186,8 +189,14 @@ export function IdentityReturnPage() {
             <StatusPill tone="ok">Verified</StatusPill>
           </div>
           <h1 className="font-display text-2xl text-ink">That&rsquo;s you confirmed</h1>
+          {/*
+            Named by the credit connector rather than written down here. The
+            step this promises is the same one screen 2's animation labels, and
+            on a deployment answering out of the fixtures neither of them is a
+            bureau.
+          */}
           <p className="mt-2 text-base text-ink-soft">
-            Checking your credit, then on to the next step.
+            {creditNextStep(modeOf(authConfig?.connectorModes, "credit"))}
           </p>
         </>
       )}

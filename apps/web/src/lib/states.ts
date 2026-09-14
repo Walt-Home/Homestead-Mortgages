@@ -110,7 +110,7 @@ export const STATE_GROUPS: readonly StateGroup[] = [
         terminal: false,
         meaning: "Open obligations, none of them the borrower's. Nothing is blocked on them.",
         heading: "We're working on it",
-        body: "Nothing is needed from you right now. We're verifying your income against the bank activity you connected, and confirming the property record with the county.",
+        body: "Nothing is needed from you right now. We're working your income out from the bank activity you connected, and reading the property record the county holds.",
         action: null,
       },
       {

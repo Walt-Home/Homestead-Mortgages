@@ -14,6 +14,7 @@ import type {
   AssetReport,
   CreditReport,
   EmploymentRecord,
+  IncomeReportSource,
   IncomeSource,
   PayrollData,
   TaxTranscript,
@@ -142,6 +143,23 @@ export interface LoanFile {
    */
   readonly incomeSources: readonly IncomeSource[];
   readonly employment: readonly EmploymentRecord[];
+
+  /**
+   * Which retrieval last wrote each of the income rows the engine SUMS — the
+   * ones with an established continuance — with `null` where the row names no
+   * income pull.
+   *
+   * It is here rather than on the rows because an `IncomeSource` is what a
+   * report said, and nothing about the report it arrived in. The reader is the
+   * label on `ratios.totalQualifyingIncome`: `assets` above is the latest BANK
+   * snapshot and stops being the source of that figure the moment a payroll
+   * pull replaces the rows, so a label keyed on it names a retrieval the
+   * number no longer comes from.
+   *
+   * Optional because only the projection off the database can know it; a
+   * `LoanFile` assembled in memory has no snapshots to ask.
+   */
+  readonly qualifyingIncomeReportedBy?: readonly (IncomeReportSource | null)[];
 
   readonly documents: readonly UploadedDocument[];
   readonly disclosures: readonly DisclosureRecord[];

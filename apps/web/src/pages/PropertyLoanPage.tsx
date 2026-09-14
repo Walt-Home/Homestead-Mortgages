@@ -20,7 +20,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
 import { useLoanFile, type LoanFileView } from "../lib/file.js";
-import { money } from "../lib/figures.js";
+import { INCOME_WORKED_OUT_FROM_BANK, money } from "../lib/figures.js";
+import { PROPERTY_CORRECTION_PROMPT, PROPERTY_CORRECTION_RECORDED } from "../lib/disclosures.js";
 import { Why } from "../components/Why.js";
 import { Working } from "../components/Working.js";
 
@@ -560,7 +561,7 @@ export function PropertyLoanPage() {
               <p className="text-sm font-medium text-ink">We hold no record for this address</p>
               <p className="mt-1 text-sm text-ink-soft">
                 This prototype can only retrieve records for three sample addresses. It does not
-                stop your application — we will just confirm the details later.
+                stop your application: what you enter below is what it goes ahead on.
               </p>
             </>
           )}
@@ -673,8 +674,8 @@ export function PropertyLoanPage() {
           onChange={(e) => setIncome(e.target.value.replace(/[^\d]/g, ""))}
         />
         <Why>
-          A rough number is enough — we verify the real one from your bank later. We ask now because
-          it lets us tell you straight away if the loan will not work.
+          A rough number is enough — later we {INCOME_WORKED_OUT_FROM_BANK}. We ask now because it
+          lets us tell you straight away if the loan will not work.
         </Why>
       </Field>
 
@@ -813,10 +814,7 @@ function PropertyCard({
 
       {correction ? (
         <div className="mt-3 border-t border-ok/30 pt-3">
-          <p className="text-sm text-ink-soft">
-            Thanks — we have your correction and someone will check it against the county record. It
-            will not hold anything up, so carry on.
-          </p>
+          <p className="text-sm text-ink-soft">{PROPERTY_CORRECTION_RECORDED}</p>
           <button
             type="button"
             onClick={() => onCorrect(null)}
@@ -827,9 +825,7 @@ function PropertyCard({
         </div>
       ) : open ? (
         <div className="mt-3 border-t border-ok/30 pt-3">
-          <p className="text-sm text-ink-soft">
-            Tell us what is off. We will check it — you do not need to wait.
-          </p>
+          <p className="text-sm text-ink-soft">{PROPERTY_CORRECTION_PROMPT}</p>
           <div className="mt-3 flex flex-col gap-2">
             {FIELDS.map((f) => (
               <div key={f.key} className="flex items-center gap-3">

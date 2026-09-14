@@ -26,6 +26,7 @@ import { clearDraft, readDraft, saveDraft } from "../lib/identity.js";
 import { calendarDate } from "../lib/ledger.js";
 import { SAMPLE_FILE_START_YOUR_OWN } from "../lib/home-copy.js";
 import { Working } from "../components/Working.js";
+import { creditCheckCopy, identityCheckCopy, modeOf, ssnDisclosure } from "../lib/disclosures.js";
 
 interface DocumentRead {
   requiresRedirect?: boolean;
@@ -233,8 +234,16 @@ export function IdentityPage() {
     Number((location.state as { income?: number } | null)?.income ?? 0) ||
     (draft?.statedIncome ?? 0);
 
-  /** Whether pressing the button leaves this site. */
-  const identityRedirects = authConfig?.identityRequiresRedirect === true;
+  /*
+   * What this screen may say about the two things it starts.
+   *
+   * Both come off `connectorModes`, which is the server reading its own
+   * registry — so the button that leaves the site, the warning about test
+   * mode, and the note under the credit animation are three readings of one
+   * fact rather than three guesses.
+   */
+  const identityCopy = identityCheckCopy(modeOf(authConfig?.connectorModes, "identity"));
+  const creditCopy = creditCheckCopy(modeOf(authConfig?.connectorModes, "credit"));
 
   /*
    * Coming back from the vendor.
@@ -565,15 +574,14 @@ export function IdentityPage() {
               put in front of it, into an integration with no retention
               policy. Saying nothing here is an invitation to photograph a
               real driver's licence, which is the outcome the banner existed
-              to prevent. Shown only when a hosted vendor is configured; a
-              fixture reads nothing.
+              to prevent. Whether there is anything to say is
+              `identityCheckCopy`'s to decide: test mode is the sandbox, and a
+              live key verifying a real document would make this sentence the
+              false one.
             */}
-            {identityRedirects && (
+            {identityCopy.caveat && (
               <div className="super-notice super-notice-warn mb-4">
-                <p className="text-sm text-ink-soft">
-                  This check runs in Stripe&rsquo;s test mode, so it cannot verify a real document.
-                  Please use Stripe&rsquo;s test credentials rather than your own ID.
-                </p>
+                <p className="text-sm text-ink-soft">{identityCopy.caveat}</p>
               </div>
             )}
             <button
@@ -583,19 +591,19 @@ export function IdentityPage() {
               disabled={readOnly}
             >
               {/*
-                Named, because pressing it leaves our site.
-                A button reading "Scan your ID and take a selfie" that instead
-                navigates to a Stripe domain asking for a government ID looks
-                exactly like the thing people are told to be suspicious of.
+                Named, because pressing it leaves our site. A button reading
+                "Scan your ID and take a selfie" that instead navigates to a
+                Stripe domain asking for a government ID looks exactly like
+                the thing people are told to be suspicious of — so which of
+                the two it says is a function of the identity connector's
+                mode, in `identityCheckCopy`.
               */}
-              {identityRedirects ? "Verify your ID with Stripe" : "Scan your ID and take a selfie"}
+              {identityCopy.button}
             </button>
             <Why>
               We have to confirm you are who you say you are before we can pull anything. The check
               also saves you typing your name, date of birth and address.
-              {identityRedirects
-                ? " Stripe handles it and brings you straight back — we never see your document."
-                : ""}
+              {identityCopy.vendorNote}
             </Why>
           </>
         )}
@@ -616,10 +624,7 @@ export function IdentityPage() {
           value={ssn}
           onChange={(e) => setSsn(formatSsn(e.target.value))}
         />
-        <Why>
-          It is the only way to pull your credit. We keep the last four digits; the rest goes
-          straight to the credit bureaus and is never stored here.
-        </Why>
+        <Why>{ssnDisclosure()}</Why>
       </div>
 
       {/* 3 — Phone. Email comes from the account they signed in with. */}
@@ -698,11 +703,11 @@ export function IdentityPage() {
       {running && (
         <Working
           steps={[
-            { label: "Checking your credit", ms: 1400 },
+            { label: creditCopy.step, ms: 1400 },
             { label: "Running required screening", ms: 1200 },
             { label: "Searching the property records", ms: 1600 },
           ]}
-          note="A soft pull. This does not affect your score."
+          note={creditCopy.note}
         />
       )}
 
@@ -714,11 +719,7 @@ export function IdentityPage() {
       >
         {running ? "Working…" : "Continue"}
       </button>
-      {!identity && (
-        <p className="mt-2 text-xs text-ink-faint">
-          {identityRedirects ? "Verify your ID to continue." : "Scan your ID to continue."}
-        </p>
-      )}
+      {!identity && <p className="mt-2 text-xs text-ink-faint">{identityCopy.prompt}</p>}
     </form>
   );
 }

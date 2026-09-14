@@ -22,7 +22,7 @@ import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import type { EmploymentRecord, IncomeSourceType } from "@hm/shared";
 import { reconcileIncomeAndEmployment, type ReportedIncome } from "../services/income.js";
-import { recordSnapshot } from "../services/repository.js";
+import { loadLoanFile, recordSnapshot } from "../services/repository.js";
 import { type BorrowerInput } from "../services/party.js";
 import { createLoanFile, createUser, saveBorrower } from "./support/factories.js";
 
@@ -377,5 +377,73 @@ describe("removing an employer somebody's income names", () => {
       select: { employerId: true },
     });
     expect(employments).toEqual([{ employerId: survivor.id }]);
+  });
+});
+
+/**
+ * Which retrieval the qualifying income came from.
+ *
+ * It exists for one reader: the two screens that put a label on
+ * `ratios.totalQualifyingIncome`. That figure is the sum of these rows, and the
+ * payroll pull replaces them wholesale while the file's `assets` stays pointed
+ * at the bank snapshot from before — so a label keyed on the bank report names
+ * a retrieval that is no longer the source of the number under it. The rows
+ * are the only thing that knows.
+ *
+ * Beside the rows rather than on them. `income-identity.test.ts` holds
+ * `loadLoanFile`'s income sources to being exactly what the adapter reported,
+ * and a column on the row would make the two differ.
+ */
+describe("what the qualifying income says it came from", () => {
+  const reportedBy = async (fileId: string) =>
+    (await loadLoanFile(fileId))?.qualifyingIncomeReportedBy;
+
+  const snapshotOfKind = (fileId: string, partyId: string, kind: string) =>
+    recordSnapshot(
+      fileId,
+      kind,
+      "fixture",
+      `${kind}-${fileId}`,
+      {},
+      new Date().toISOString(),
+      partyId,
+    );
+
+  it("names the pull that last wrote the rows, and follows the replacement", async () => {
+    const { fileId, partyId, snapshotId } = await person();
+    await reconcile(fileId, partyId, snapshotId, REPORTED(["base_wage"]));
+    expect(await reportedBy(fileId)).toEqual(["bank"]);
+
+    const payroll = await snapshotOfKind(fileId, partyId, "payroll");
+    await reconcile(fileId, partyId, payroll.id, REPORTED(["base_wage"]));
+    expect(await reportedBy(fileId)).toEqual(["payroll"]);
+  });
+
+  /**
+   * Only the two kinds that carry income are answers. A row pointing at
+   * anything else — or at a snapshot that has since gone — has no retrieval to
+   * name, and null is what the label reads as the weaker of the two.
+   */
+  it("names nothing where the snapshot is not an income pull", async () => {
+    const { fileId, partyId } = await person();
+    const credit = await snapshotOfKind(fileId, partyId, "credit");
+    await reconcile(fileId, partyId, credit.id, REPORTED(["base_wage"]));
+    expect(await reportedBy(fileId)).toEqual([null]);
+  });
+
+  /**
+   * `totalQualifyingIncome` sums only the rows whose continuance is
+   * established, so only those rows may decide what the figure is called. A
+   * row the engine did not count answering the question would be the same
+   * mismatch one layer down.
+   */
+  it("leaves out the rows the engine did not count", async () => {
+    const { fileId, partyId, snapshotId } = await person();
+    await reconcile(fileId, partyId, snapshotId, REPORTED(["base_wage"]));
+    await prisma.incomeSource.updateMany({
+      where: { loanFileId: fileId },
+      data: { continuanceEstablished: null },
+    });
+    expect(await reportedBy(fileId)).toEqual([]);
   });
 });

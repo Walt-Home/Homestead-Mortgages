@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Figure } from "../components/Figure.js";
-import { QUALIFYING_INCOME_LABEL, money, qualifyingIncome } from "../lib/figures.js";
+import { assetsLabel, money, qualifyingIncome, qualifyingIncomeLabel } from "../lib/figures.js";
 import { screenOwnsStanding } from "../lib/flow.js";
 
 const SRC = new URL("..", import.meta.url).pathname;
@@ -115,21 +115,59 @@ describe("one label for the income the decision turns on", () => {
   it("is said the same way on both screens that show it", () => {
     for (const page of ["BankPage.tsx", "ReviewPage.tsx"]) {
       const text = read(join("pages", page));
-      expect(text, page).toContain("QUALIFYING_INCOME_LABEL");
+      expect(text, page).toContain("qualifyingIncomeLabel(");
+      expect(text, page).toContain("incomeBasis({");
       expect(text, page).toContain("qualifyingIncome(");
     }
   });
 
   it("leaves no second name for it anywhere", () => {
     const offenders = FILES.filter(
-      (f) => f.name !== "lib/figures.ts" && /"(Monthly|Verified) income"/.test(f.text),
+      (f) =>
+        f.name !== "lib/figures.ts" &&
+        /"(Monthly|Verified|Estimated|Sample|Test-mode) income"/.test(f.text),
     );
     expect(offenders.map((f) => f.name)).toEqual([]);
   });
 
+  /*
+   * The label stopped being a constant and became a function of what stands
+   * behind the figure, which is a change to what it says and not to how many
+   * places say it: one screen deriving it and another writing the word out
+   * would be the same drift this block was written for. All four words are
+   * checked here because all four are now the label.
+   */
   it("carries the period the other label carried", () => {
     expect(qualifyingIncome(7083.33)).toBe("$7,083/mo");
-    expect(QUALIFYING_INCOME_LABEL).toBe("Verified income");
+    expect(qualifyingIncomeLabel("verified")).toBe("Verified income");
+    expect(qualifyingIncomeLabel("estimated")).toBe("Estimated income");
+    expect(qualifyingIncomeLabel("sample")).toBe("Sample income");
+    expect(qualifyingIncomeLabel("test_mode")).toBe("Test-mode income");
+  });
+});
+
+/*
+ * Its row-mate, for the same reason and one round later. "Verified assets" was
+ * left a literal on the argument that balances ARE what the accounts evidence
+ * — true of a Plaid deployment, false of a fixture one, and a claim written
+ * into a component cannot tell the two apart.
+ */
+describe("one label for the assets beside it", () => {
+  it("is derived on the screen that shows it, not written out", () => {
+    expect(read(join("pages", "BankPage.tsx"))).toContain("assetsLabel(");
+  });
+
+  it("leaves no second name for it anywhere", () => {
+    const offenders = FILES.filter(
+      (f) => f.name !== "lib/figures.ts" && /"(Verified|Sample|Test-mode) assets"/.test(f.text),
+    );
+    expect(offenders.map((f) => f.name)).toEqual([]);
+  });
+
+  it("says verified only where something outside this repo did the counting", () => {
+    expect(assetsLabel("production")).toBe("Verified assets");
+    expect(assetsLabel("fixture")).not.toMatch(/verified/i);
+    expect(assetsLabel("sandbox")).not.toMatch(/verified/i);
   });
 });
 

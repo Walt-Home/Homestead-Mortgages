@@ -116,6 +116,13 @@ export interface LoanFileView {
   credit: unknown | null;
   assets: unknown | null;
   payroll: unknown | null;
+  /**
+   * Which retrieval last wrote each row `ratios.totalQualifyingIncome` is the
+   * sum of. The two screens that put a label on that figure read it, because
+   * `assets` above stops being its source the moment a payroll pull replaces
+   * the rows.
+   */
+  qualifyingIncomeReportedBy?: ("bank" | "payroll" | null)[];
   transcripts: unknown[];
   documents: { id: string; filename: string; satisfiesRequirementId: string; bytes: number }[];
   links: { kind: string; provider: string; persistentMonitoringEnabled: boolean }[];

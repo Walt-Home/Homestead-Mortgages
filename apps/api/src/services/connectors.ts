@@ -32,11 +32,37 @@ export interface ProviderMix {
   readonly [connector: string]: string;
 }
 
+/**
+ * The same answer with the decoration taken off: what each connector IS.
+ *
+ * `ProviderMix` is for a human reading a boot log — "google-places (+ fixture
+ * for records)" is the useful thing to print and the useless thing to branch
+ * on. A screen that has to decide whether it may say "we pulled your credit"
+ * needs the three-valued fact underneath, and it has to be the fact from the
+ * registry that actually answered the request rather than a second copy of the
+ * configuration read somewhere else.
+ */
+export type ConnectorMode = "fixture" | "sandbox" | "production";
+export interface ProviderModes {
+  readonly [connector: string]: ConnectorMode;
+}
+
 let mix: ProviderMix = {};
+let modes: ProviderModes = {};
 
 export function providerMix(): ProviderMix {
   connectors();
   return mix;
+}
+
+/**
+ * What /health reports and what /auth/config hands the client. One function,
+ * so the disclosure a borrower reads and the answer an operator checks cannot
+ * be two different readings of the same deployment.
+ */
+export function providerModes(): ProviderModes {
+  connectors();
+  return modes;
 }
 
 export function connectors(): ConnectorRegistry {
@@ -44,7 +70,10 @@ export function connectors(): ConnectorRegistry {
 
   const fixtures = fixtureRegistry({ persona: config.fixturePersona as PersonaId });
   const chosen: Record<string, string> = Object.fromEntries(
-    Object.entries(fixtures).map(([k, v]) => [k, (v as { capabilities: { provider: string } }).capabilities.provider]),
+    Object.entries(fixtures).map(([k, v]) => [
+      k,
+      (v as { capabilities: { provider: string } }).capabilities.provider,
+    ]),
   );
 
   let propertyData = fixtures.propertyData;
@@ -53,9 +82,7 @@ export function connectors(): ConnectorRegistry {
       // Failing at boot rather than at the first keystroke: an autocomplete
       // that silently returns nothing looks like a product with no addresses
       // in it.
-      throw new Error(
-        "PROPERTY_DATA_PROVIDER=google_places but GOOGLE_PLACES_API_KEY is not set.",
-      );
+      throw new Error("PROPERTY_DATA_PROVIDER=google_places but GOOGLE_PLACES_API_KEY is not set.");
     }
     propertyData = googlePlacesConnector({
       apiKey: config.googlePlacesApiKey,
@@ -88,9 +115,7 @@ export function connectors(): ConnectorRegistry {
   let bank = fixtures.bank;
   if (config.providers.bank === "plaid") {
     if (!config.plaid.clientId || !config.plaid.secret) {
-      throw new Error(
-        "BANK_PROVIDER=plaid but PLAID_CLIENT_ID or PLAID_SECRET is not set.",
-      );
+      throw new Error("BANK_PROVIDER=plaid but PLAID_CLIENT_ID or PLAID_SECRET is not set.");
     }
     bank = plaidConnector({
       clientId: config.plaid.clientId,
@@ -114,5 +139,22 @@ export function connectors(): ConnectorRegistry {
 
   registry = { ...fixtures, propertyData, identity, bank };
   mix = chosen;
+  // Read off the registry that was just assembled, not off `config`. The
+  // configuration is the intent and the registry is the outcome, and every
+  // branch above can decide not to honor the intent — a missing key throws,
+  // but a fallback need not. What a screen discloses has to follow the object
+  // that will answer the request.
+  //
+  // It is only as honest as the adapter it asks. `googlePlacesConnector`
+  // reports "production" while the assessor, valuation and flood lookups
+  // behind it are still the fixture's, so a disclosure keyed on propertyData
+  // would overclaim. Nothing keys on it today; whoever first does has to split
+  // that adapter's capabilities before believing this.
+  modes = Object.fromEntries(
+    Object.entries(registry).map(([name, connector]) => [
+      name,
+      (connector as { capabilities: { mode: ConnectorMode } }).capabilities.mode,
+    ]),
+  );
   return registry;
 }

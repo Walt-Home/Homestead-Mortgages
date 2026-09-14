@@ -47,7 +47,7 @@ import { ApplicationTimeline } from "../components/ApplicationTimeline.js";
 import { Branches } from "../components/Branches.js";
 import { Working } from "../components/Working.js";
 import { Figure } from "../components/Figure.js";
-import { money, qualifyingIncome, QUALIFYING_INCOME_LABEL } from "../lib/figures.js";
+import { incomeBasis, money, qualifyingIncome, qualifyingIncomeLabel } from "../lib/figures.js";
 import { branchesFor } from "../lib/flow.js";
 import { endingFor, proposedTerms } from "../lib/endings.js";
 import {
@@ -77,7 +77,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   const queryClient = useQueryClient();
   const { data } = useLoanFile(fileId);
   const file = data?.file;
-  const { user } = useAuth();
+  const { user, config: authConfig } = useAuth();
   /*
    * Read-only for two different reasons, and either is enough.
    *
@@ -425,7 +425,13 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
           {ratios.ltv != null && <Figure label="Loan-to-value" value={`${ratios.ltv}%`} />}
           {ratios.totalQualifyingIncome != null && (
             <Figure
-              label={QUALIFYING_INCOME_LABEL}
+              label={qualifyingIncomeLabel(
+                incomeBasis({
+                  reportedBy: file?.qualifyingIncomeReportedBy,
+                  assets: file?.assets,
+                  modes: authConfig?.connectorModes,
+                }),
+              )}
               value={qualifyingIncome(ratios.totalQualifyingIncome)}
             />
           )}

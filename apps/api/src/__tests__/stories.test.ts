@@ -22,6 +22,7 @@ import {
   DELIVERY_TIME,
   PROMISES,
   REQ_ID,
+  VENDOR_CLAIM,
   type ApplicationState,
 } from "@hm/shared";
 import { isSeeded, NOT_SEEDED_HERE, PERSONA_STORIES } from "../personas/stories.js";
@@ -50,6 +51,17 @@ describe("what a persona row says", () => {
   it("names no deadline", () => {
     for (const { key, text } of copy()) {
       expect(`${key}: ${text}`).not.toMatch(DELIVERY_TIME);
+    }
+  });
+
+  /**
+   * A story is written once and read on every deployment, so a sentence saying
+   * a bureau or a bank did something is true on one and false on the next.
+   * `borrower-copy.test.ts` holds the web app to this and cannot reach here.
+   */
+  it("claims nothing on behalf of a vendor", () => {
+    for (const { key, text } of copy()) {
+      expect(`${key}: ${text}`).not.toMatch(VENDOR_CLAIM);
     }
   });
 

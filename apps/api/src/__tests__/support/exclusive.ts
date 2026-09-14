@@ -31,9 +31,11 @@ import { testDatabaseUrl } from "../../../../../scripts/test-database-url.mjs";
  *
  * Any constant works as long as nothing else in this database picks the same
  * one; advisory locks share a namespace across the whole cluster, so the value
- * is arbitrary but the collision is not. Nothing else in this repo takes an
- * advisory lock — `grep pg_advisory` — and a future one should read this
- * comment before choosing.
+ * is arbitrary but the collision is not. One other thing in this repo takes an
+ * advisory lock — `grep pg_advisory` — and it cannot collide with this: the DU
+ * writer holds an application's identity space while it looks a row up, in the
+ * TWO-integer key space, which Postgres keeps separate from the single-bigint
+ * one this uses. A future lock should read this comment before choosing.
  */
 const SUITE_LOCK = 4_120_260_911;
 

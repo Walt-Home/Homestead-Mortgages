@@ -2044,8 +2044,19 @@ model DuAsset {
   /// reason: without them a re-pull can only insert a twin or delete and
   /// recreate, and both renumber every ASSET_n on the wire.
   ///
-  /// No writer computes one yet. Nothing in this change ingests an asset, so
-  /// every row here carries whatever key its caller supplied.
+  /// Computed by `assetIdentityKeys` in `packages/du`, which states the rule and
+  /// what each part of it costs. Three things a reader needs here: a
+  /// connector-written key opens with the SUBJECT PARTY, because this index
+  /// spans the application while the key is computed from one vendor's payload
+  /// about one person; there is no ordinal in it, because a position is the
+  /// vendor's row order wearing another name and a re-pull that reorders would
+  /// swap two rows' balances and owners silently; and a row a person typed
+  /// takes `manual:<uuid>`, which matches nothing on purpose.
+  ///
+  /// What that does NOT buy, because the column looks the same either way: an
+  /// unmasked account that closed and one that opened after it at the same bank
+  /// in the same subtype compute one key, so the second takes the first's row
+  /// and its owner arcs. Only a vendor item id tells those two apart.
   identityKey         String             @map("identity_key")
   firstSeenSnapshotId String?            @map("first_seen_snapshot_id") @db.Uuid
   firstSeenSnapshot   ConnectorSnapshot? @relation("DuAssetFirstSeen", fields: [firstSeenSnapshotId], references: [id], onDelete: SetNull)

@@ -22,8 +22,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const HAND_WRITTEN = [
   "scripts/build-du.mjs",
   "packages/du/src/index.ts",
+  "packages/du/src/identity.ts",
+  "packages/du/src/writer.ts",
   "packages/du/src/__tests__/build-du.test.mjs",
   "packages/du/src/__tests__/generated.test.ts",
+  "packages/du/src/__tests__/identity.test.ts",
 ];
 
 /**

@@ -11,10 +11,11 @@
  * generator reads them from DU_SPEC_DIR and says so when it cannot.
  *
  * Nothing here is wired to a route or a screen. The generated tables are what
- * the serializer will emit against, and the serializer is a later commit; the
- * writers below are how a DU row and its owner arcs reach Postgres at all,
- * because the database refuses a row that has no owner and only a transaction
- * carrying both can satisfy it.
+ * the serializer will emit against, and the serializer comes later; the writers
+ * below are how a DU row and its owner arcs reach Postgres at all, because the
+ * database refuses a row that has no owner and only a transaction carrying both
+ * can satisfy it. `identity.ts` is what lets a second pull recognize a row it
+ * already wrote rather than inserting a twin beside it.
  */
 
 export { CHILD_ORDER, TYPE_FOR_PATH } from "./generated/order.js";
@@ -37,9 +38,24 @@ export {
   type DuRequirement,
 } from "./generated/conditionality.js";
 export {
+  assetIdentityKeys,
+  liabilityIdentityKeys,
+  resolveIdentities,
+  UNMATCHED_PREFIX,
+  type AddressFacts,
+  type AmbiguousGroup,
+  type AssetIdentityFacts,
+  type IdentityKeys,
+  type IdentityPlan,
+  type LiabilityIdentityFacts,
+  type ResolvedIdentity,
+  type VendorItem,
+} from "./identity.js";
+export {
   writeAsset,
   writeExpense,
   writeLiability,
+  type MatchOnIdentity,
   type DuOwner,
   type DuSupersede,
   type DuTransaction,

@@ -176,7 +176,7 @@ async function connectAs(
   if (kind === "credit") {
     const credit = await registry.credit.pullTriMerge(
       file,
-      await tokenFor(primaryBorrower(file), "credit_report"),
+      await tokenFor(file, primaryBorrower(file), "credit_report"),
     );
     await recordSnapshot(
       fileId,
@@ -195,7 +195,7 @@ async function connectAs(
       ? await (async () => {
           const outcome = await registry.bank.fetchAssetReport(
             file,
-            await tokenFor(primaryBorrower(file), "bank_transactions"),
+            await tokenFor(file, primaryBorrower(file), "bank_transactions"),
             { sessionId: "s" },
             12,
           );
@@ -204,7 +204,7 @@ async function connectAs(
         })()
       : await registry.payroll.fetchPayroll(
           file,
-          await tokenFor(primaryBorrower(file), "payroll_income"),
+          await tokenFor(file, primaryBorrower(file), "payroll_income"),
           "s",
         );
 

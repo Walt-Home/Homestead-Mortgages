@@ -71,6 +71,37 @@ export interface ApplicationReceipt {
     readonly valueEstimate: boolean;
     readonly loanAmount: boolean;
   };
+  /**
+   * Each person on the file, what they have supplied, and what they signed.
+   *
+   * The three party-side pieces are counted PER PERSON here for the same
+   * reason the trigger counts them per person: TRID's pieces are about the
+   * consumer asking for credit, so one person's name beside another's SSN is
+   * nobody's application. What received the application is one applicant's
+   * three — the flat `sixPieces` above — and this says who else is on the file
+   * and how far each of them has got.
+   *
+   * A signature is one person's act too. `authorizedAt` is their own
+   * verification authorization and `taxRecordsAt` their own Form 4506-C, which
+   * names a single taxpayer; both are null for somebody who has not signed,
+   * and null is the reason nothing of theirs has been retrieved.
+   */
+  readonly signers: readonly ApplicationSigner[];
+}
+
+/** One person on the file, as the receipt names them. */
+export interface ApplicationSigner {
+  readonly borrowerId: string;
+  readonly name: string;
+  /** Their position in the submitted document, or null before they have one. */
+  readonly ordinal: number | null;
+  readonly pieces: {
+    readonly name: boolean;
+    readonly income: boolean;
+    readonly ssn: boolean;
+  };
+  readonly authorizedAt: string | null;
+  readonly taxRecordsAt: string | null;
 }
 
 /**

@@ -10,7 +10,7 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { BRITISH, DAY_FIRST, DELIVERY_TIME, PROMISES, REQ_ID } from "@hm/shared";
+import { BRITISH, DAY_FIRST, DELIVERY_TIME, PROMISES, REQ_ID, VENDOR_CLAIM } from "@hm/shared";
 import { endingFor, proposedTerms } from "../endings.js";
 import {
   ADVERSE_COPY,
@@ -58,8 +58,15 @@ function blockFor(ending: string): string {
   const start = REVIEW_SOURCE.indexOf(`if (ending === "${ending}"`);
   expect(start, ending).toBeGreaterThan(-1);
   const rest = REVIEW_SOURCE.slice(start + 1);
-  const next = rest.indexOf('if (ending === "');
-  return rest.slice(0, next === -1 ? undefined : next);
+  // The last ending has no ending after it, and the pre-signature view below
+  // renders the same catalog — so the divider that opens it ends the slice
+  // too. Without that, an assertion about what the final ending shows would
+  // pass on a line that only ever renders before the signature, which is the
+  // exact confusion these blocks exist to tell apart.
+  const next = [rest.indexOf('if (ending === "'), rest.indexOf("── Before signing")].filter(
+    (at) => at !== -1,
+  );
+  return rest.slice(0, next.length === 0 ? undefined : Math.min(...next));
 }
 
 describe("the referred ending says what is actually missing", () => {
@@ -86,12 +93,127 @@ describe("no ending promises something the system cannot do", () => {
     expect("your Loan Estimate will follow within three business days").toMatch(DELIVERY_TIME);
   });
 
+  it("claims nothing about a vendor that depends on which adapter answered", () => {
+    // The panel makes specific claims about what a federal form authorizes, in
+    // a repo whose IRS adapter is a fixture, which is the class this rule is
+    // for. Nothing in the catalog trips it today and this is what keeps that
+    // true — the mode-derived sentences live in `disclosures.ts`, and a
+    // sentence that has to be a function of the deployment does not belong in
+    // a catalog that is settled once.
+    for (const line of COPY) expect(line, line).not.toMatch(VENDOR_CLAIM);
+    expect("the rest goes straight to the credit bureaus").toMatch(VENDOR_CLAIM);
+  });
+
   it("renders nothing internal, in American English", () => {
     for (const line of COPY) {
       expect(line, line).not.toMatch(REQ_ID);
       expect(line, line).not.toMatch(BRITISH);
       expect(line, line).not.toMatch(DAY_FIRST);
     }
+  });
+});
+
+/**
+ * The signing panel, on a file with a second person on it.
+ *
+ * IRS Form 4506-C names a single taxpayer, so one signature on this screen
+ * authorizes one person's tax records. While a file held one borrower the
+ * panel could say "your tax records" and be right by accident; with two it is
+ * the one phrase that reads as the household's and is not.
+ *
+ * The panel block is read out of the source for the same reason the endings
+ * are: it only renders once the borrower has pressed Continue to sign, and
+ * there is no DOM here to press it in.
+ */
+describe("what the signature covers on a joint file", () => {
+  const PANEL = REVIEW_SOURCE.slice(
+    REVIEW_SOURCE.indexOf("SIGNING_COPY.panelTitle"),
+    REVIEW_SOURCE.indexOf("SIGNING_COPY.signButton"),
+  );
+
+  it("qualifies whose tax records the 4506-C reaches", () => {
+    expect(SIGNING_COPY.panelBody).toContain("your own tax records");
+    // The sentence this replaced. Unqualified, it is the household's records
+    // on a joint application and one person's on every other file.
+    expect(SIGNING_COPY.panelBody).not.toContain("request your tax records");
+  });
+
+  it("qualifies whose answers the signature attests to", () => {
+    // The other half of the same carve-out, one register over. "The answers
+    // above" is two blocks on a joint file, and the second is headed with
+    // somebody else's name — so an unqualified attestation asks the signer to
+    // swear that a block reading "X has not answered these yet" is true and
+    // complete.
+    expect(SIGNING_COPY.panelTerms).toContain("your own answers above");
+    expect(SIGNING_COPY.panelTerms).not.toContain("says the answers above");
+    expect(SIGNING_COPY.lead).toContain("your own are true and complete");
+    expect(SIGNING_COPY.lead).not.toContain("says they are true");
+  });
+
+  it("names the other person, and says the form is one taxpayer's", () => {
+    const line = CO_BORROWER_COPY.signatureIsYours(CO_BORROWER);
+    expect(line).toContain(CO_BORROWER);
+    expect(line).toContain("4506-C names one taxpayer");
+  });
+
+  it("says nothing of theirs is requested, and promises nothing about who will ask", () => {
+    const line = CO_BORROWER_COPY.theirOwnSignature(CO_BORROWER);
+    expect(line).toContain(`no tax records about ${CO_BORROWER} are requested`);
+    // There is no mailer, no invite and no screen for a co-borrower to sign
+    // on. A line saying somebody will ask them is the promise this rule is
+    // for, and it would be an easy one to write here.
+    expect(line).not.toMatch(PROMISES);
+  });
+
+  it("puts both of them in the panel that asks for the signature", () => {
+    expect(PANEL.length).toBeGreaterThan(0);
+    expect(PANEL).toContain("CO_BORROWER_COPY.signatureIsYours(");
+    expect(PANEL).toContain("CO_BORROWER_COPY.theirOwnSignature(");
+  });
+});
+
+/**
+ * The same fact after the signature, which is where it was being lost.
+ *
+ * `endingFor` returns an ending the moment `signed` is true, so the panel's
+ * two co-borrower lines stop rendering at exactly the point they start
+ * mattering — and what replaces them says there is nothing left to do, or that
+ * what remains is ours rather than theirs. On a joint file whose co-borrower
+ * has signed nothing both are false. Nothing else raises it either: INC-008 is
+ * per borrower and its source is the signature, which `branchesFor()` excludes
+ * from the work a borrower is sent to do, so there is no card and no other
+ * sentence anywhere.
+ */
+describe("what an ending says about a co-borrower who has not signed", () => {
+  it("names the person and what of theirs is unsigned", () => {
+    const line = CO_BORROWER_COPY.awaitingTheirSignature(CO_BORROWER);
+    expect(line).toContain(CO_BORROWER);
+    expect(line).toContain("4506-C");
+    expect(line).toContain(`Nothing about ${CO_BORROWER} has been requested`);
+  });
+
+  it("promises nobody will ask them, because nothing here would", () => {
+    const line = CO_BORROWER_COPY.awaitingTheirSignature(CO_BORROWER);
+    expect(line).not.toMatch(PROMISES);
+    expect(line).not.toMatch(DELIVERY_TIME);
+  });
+
+  it("renders in the two endings that say nothing is needed", () => {
+    // "That is everything we need" and "Nothing is needed from you right now"
+    // are both true of the applicant and neither is true of the file.
+    for (const ending of ["ours", "referred"]) {
+      expect(blockFor(ending), ending).toContain("stillToSign");
+    }
+    expect(REVIEW_SOURCE).toContain("CO_BORROWER_COPY.awaitingTheirSignature(");
+    // And it is one list, read once: two endings computing the same set is the
+    // second one that would drift.
+    expect(REVIEW_SOURCE.split("awaitingTheirSignature(")).toHaveLength(2);
+  });
+
+  it("asks whose signature it is per person rather than per file", () => {
+    // `hasConsent` with a borrower id. A file-level `some()` would call a
+    // co-borrower signed on the applicant's own 4506-C.
+    expect(REVIEW_SOURCE).toContain('hasConsent(file, "form_4506c", who.id)');
   });
 });
 

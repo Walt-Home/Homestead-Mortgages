@@ -324,7 +324,7 @@ propertyFileRouter.post(
 
     const result = await connectors().liens.searchLiens(
       file,
-      await tokenFor(primaryBorrower(file), "public_record_liens"),
+      await tokenFor(file, primaryBorrower(file), "public_record_liens"),
       apn.data,
     );
     await recordSnapshot(

@@ -10,6 +10,7 @@
  * All of it against a real Postgres, because all of it is a trigger.
  */
 
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   prisma,
@@ -18,7 +19,7 @@ import {
   type DataCategory as DataCategoryEnum,
 } from "@hm/db";
 import { PURPOSE_FOR } from "@hm/connectors";
-import type { Borrower, DataCategory } from "@hm/shared";
+import type { Borrower, DataCategory, LoanFile } from "@hm/shared";
 import { ImportedNameSchema } from "@hm/shared/portfolio";
 import { tokenFor } from "../services/authorization.js";
 import {
@@ -310,6 +311,11 @@ describe("a provisional party has authorized nothing", () => {
     // on a loan file — it has no application at all — and the only thing
     // `tokenFor` reads off one is the party whose permission it is about.
     const subject = { partyId } as unknown as Borrower;
+    // And no file, for the same reason. `tokenFor` asks the party's grants
+    // before it asks any application whether the signature was made there, so
+    // a party with no grant of any purpose is refused without the file being
+    // read at all — which is what this loop is about.
+    const nowhere = { id: randomUUID(), borrowers: [] } as unknown as LoanFile;
     for (const category of Object.keys(PURPOSE_FOR) as DataCategory[]) {
       // Both halves, in this order, because the denial on its own would read
       // the same if the trigger were gone: a party with no grant is refused by
@@ -327,7 +333,7 @@ describe("a provisional party has authorized nothing", () => {
           },
         }),
       ).rejects.toThrow(/an imported record is not a consent/);
-      await expect(tokenFor(subject, category)).rejects.toThrow(
+      await expect(tokenFor(nowhere, subject, category)).rejects.toThrow(
         /No authorization to retrieve .*: no authorization of this purpose has ever been granted/,
       );
     }

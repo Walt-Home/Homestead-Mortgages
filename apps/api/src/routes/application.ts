@@ -11,6 +11,11 @@
  * borrower signs when they sign the application in step 4, which is what
  * happens on paper — nobody signs a 4506-C in isolation. Once signed, the
  * transcripts are pulled server-side with no step in front of them.
+ *
+ * All of which is about ONE signer. Form 4506-C names a single taxpayer, so
+ * the signature this route takes covers the person who made it and the
+ * transcripts it goes on to pull are that person's. A co-borrower signs their
+ * own, and nothing of theirs is requested until they do.
  */
 
 import { Router } from "express";
@@ -24,7 +29,7 @@ import {
   recordSnapshot,
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
-import { primaryBorrower, subjectPartyId, tokenFor } from "../services/authorization.js";
+import { namedBorrower, signerOn, tokenFor } from "../services/authorization.js";
 import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
 import { applicationForFile } from "../services/applications.js";
@@ -41,10 +46,14 @@ applicationRouter.post(
     await assertFileAccess(id, req.user!.id, "write");
 
     const file = await loadLoanFile(id);
-    const borrower = file?.borrowers[0];
-    if (!borrower) {
+    if (!file || file.borrowers.length === 0) {
       throw new AppError(409, "Tell us who you are first.", "NO_BORROWER");
     }
+    // The person signed in, resolved by party: screen 2 is about whoever is
+    // filling it in, and on a file whose Borrower 1 has been replaced that is
+    // not the first row. A verification session stamped onto the wrong row
+    // records one person's government ID as another person's proof.
+    const borrower = await signerOn(file, req.user!.id);
     if (borrower.identityVerification?.status === "verified") {
       res.json({ alreadyVerified: true, verifiedAt: borrower.identityVerification.verifiedAt });
       return;
@@ -83,7 +92,7 @@ applicationRouter.post(
       }
     }
 
-    const session = await identity.createVerificationSession(file!, borrower.id);
+    const session = await identity.createVerificationSession(file, borrower.id);
     await prisma.borrower.update({
       where: { id: borrower.id },
       data: {
@@ -149,6 +158,13 @@ applicationRouter.post(
  * part of that package, which is why it is here rather than on a screen of its
  * own — and why the IRS pull that depends on it can happen immediately after
  * with nothing for the borrower to do.
+ *
+ * The package is one person's. IRS Form 4506-C names a single taxpayer, so
+ * what the signer authorizes is the release of the signer's transcripts — the
+ * same boundary the verification authorization keeps for credit, which is why
+ * they are kept identical rather than one being an exception. On a file with a
+ * co-borrower this route therefore signs nothing of theirs and pulls nothing
+ * of theirs, and says so in what it answers.
  */
 const SIGNED_DOCUMENTS = ["form_4506c"] as const;
 
@@ -160,8 +176,12 @@ applicationRouter.post(
 
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
-    const borrower = file.borrowers[0];
-    if (!borrower) throw new AppError(409, "Nothing to sign yet.", "NO_BORROWER");
+    if (file.borrowers.length === 0) throw new AppError(409, "Nothing to sign yet.", "NO_BORROWER");
+    // The signer is the person signed in, resolved by party rather than by
+    // position. On an ordinary file that is Borrower 1; on one whose Borrower 1
+    // has been replaced it is still the person signing, and the subscript would
+    // have put their signature under the replacement's name.
+    const borrower = await signerOn(file, req.user!.id);
 
     // Demographics are required before signing: Regulation B wants them
     // requested on the application, and the application is what is being
@@ -233,14 +253,22 @@ applicationRouter.post(
     // The transcripts need no screen now that the 4506-C is signed. Failing
     // here must not fail the signature — the application is signed either way,
     // and a transcript that did not arrive is a condition, not a dead end.
+    //
+    // The signer's, and only the signer's. The token is minted from the grant
+    // this signature just produced, which names one party, so the adapter
+    // refuses anything pulled under somebody else's — and nothing here asks
+    // it to. The signer is re-resolved on the refreshed file BY ID rather than
+    // by position, so a save landing between the two reads cannot move who
+    // this pull is about.
     let transcripts: unknown = null;
     let transcriptError: string | null = null;
     try {
       const refreshed = await loadLoanFile(id);
+      const signer = namedBorrower(refreshed!, borrower.id);
       const year = new Date().getFullYear();
       const result = await connectors().irs.fetchTranscripts(
         refreshed!,
-        await tokenFor(primaryBorrower(refreshed!), "tax_transcript"),
+        await tokenFor(refreshed!, signer, "tax_transcript"),
         [year - 1, year - 2],
       );
       await recordSnapshot(
@@ -250,7 +278,7 @@ applicationRouter.post(
         result.externalId,
         result.data,
         result.retrievedAt,
-        subjectPartyId(refreshed!),
+        signer.partyId,
       );
       transcripts = result.data;
       await recordEvent(id, "connector_pull", result.provider, { kind: "irs" }, "INC-003");
@@ -259,6 +287,15 @@ applicationRouter.post(
     }
 
     await advanceStage(id, "DECISION");
-    res.status(201).json({ signed, transcripts, transcriptError });
+    // WHOSE signature this was, because the request did not say: the route
+    // resolves the signer itself, and a caller that was handed back only
+    // `signed` could not tell which of two people it had just signed for.
+    //
+    // Who has NOT signed is deliberately not here. That is a fact about the
+    // file rather than about this request, `application.signers` on the next
+    // read carries it with each person's own pieces beside it, and a second
+    // copy in a response body is the one that would go stale — the review
+    // screen reads the file.
+    res.status(201).json({ signed, signedBy: borrower.id, transcripts, transcriptError });
   }),
 );

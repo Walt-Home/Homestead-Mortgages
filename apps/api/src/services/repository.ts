@@ -37,7 +37,7 @@ import type { Db } from "./db.js";
 import { liveFactsByParty } from "./party.js";
 import { declarationsOnFile } from "./declarations.js";
 import { borrowerOrdinals, documentOrder } from "./borrower-order.js";
-import { sixPieces } from "./evidence.js";
+import { piecesByParty, sixPieces } from "./evidence.js";
 import { toDomainState } from "./transition.js";
 
 /**
@@ -99,8 +99,20 @@ const PURPOSE_TO_DOMAIN = {
  * Null for a file with no application, which is the truthful reading for a row
  * created before the join existed: APP-002 is outstanding, not satisfied by
  * something nobody can point at.
+ *
+ * It names each signer, because on a joint file "received" is a statement
+ * about one applicant and every surface reading a flat six would take it for a
+ * statement about the household. A co-borrower who has not signed has supplied
+ * no pieces and authorized nothing, and the receipt says so by name rather
+ * than by leaving them out.
  */
-async function applicationReceipt(db: Db, loanFileId: string): Promise<ApplicationReceipt | null> {
+async function applicationReceipt(
+  db: Db,
+  loanFileId: string,
+  borrowers: readonly Borrower[],
+  consents: readonly Consent[],
+  ordinals: ReadonlyMap<string, number>,
+): Promise<ApplicationReceipt | null> {
   const app = await db.application.findUnique({
     where: { loanFileId },
     select: {
@@ -118,6 +130,13 @@ async function applicationReceipt(db: Db, loanFileId: string): Promise<Applicati
 
   // The engine's six keys, from the vocabulary the pins and the scenario use.
   const pieces = await sixPieces(app.id, db);
+  const held = await piecesByParty(app.id, db);
+
+  /** The live row of a kind signed by THIS borrower, which is the only one that speaks for them. */
+  const signedAt = (borrowerId: string, kind: string): string | null =>
+    consents.find((c) => c.borrowerId === borrowerId && c.kind === kind && !c.revokedAt)
+      ?.grantedAt ?? null;
+
   return {
     receivedAt: received.occurredAt.toISOString(),
     sixPieces: {
@@ -128,6 +147,21 @@ async function applicationReceipt(db: Db, loanFileId: string): Promise<Applicati
       valueEstimate: pieces.valueEstimateCents ?? false,
       loanAmount: pieces.loanAmountCents ?? false,
     },
+    signers: borrowers.map((b) => {
+      const theirs = held.get(b.partyId) ?? new Set<string>();
+      return {
+        borrowerId: b.id,
+        name: `${b.firstName} ${b.lastName}`,
+        ordinal: ordinals.get(b.partyId) ?? null,
+        pieces: {
+          name: theirs.has("legal_name"),
+          income: theirs.has("monthly_income"),
+          ssn: theirs.has("ssn_token"),
+        },
+        authorizedAt: signedAt(b.id, "verification_authorization"),
+        taxRecordsAt: signedAt(b.id, "form_4506c"),
+      };
+    }),
   };
 }
 
@@ -326,7 +360,7 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
     : null;
 
   const conditions = await db.loanCondition.findMany({ where: { loanFileId: id } });
-  const application = await applicationReceipt(db, id);
+  const application = await applicationReceipt(db, id, inDocumentOrder, consents, ordinals);
 
   return {
     id: row.id,

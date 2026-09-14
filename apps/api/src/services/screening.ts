@@ -44,7 +44,7 @@ export async function screenAndRecord(
 ): Promise<ScreeningOutcome> {
   const result = await registry.screening.screenSanctions(
     file,
-    await tokenFor(primaryBorrower(file), "sanctions_screening", db),
+    await tokenFor(file, primaryBorrower(file), "sanctions_screening", db),
   );
 
   const write = async (tx: Db): Promise<ScreeningOutcome> => {

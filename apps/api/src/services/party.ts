@@ -24,6 +24,21 @@ import type { Db } from "./db.js";
 
 type Tx = Db;
 
+/**
+ * The party behind a signed-in user, or null — and nothing is written.
+ *
+ * `partyForUser` below mints one on first use, which is right where a request
+ * is about to record something about the person and wrong on a read: a GET
+ * that created a row would make reading a file a write, and would mint a party
+ * for anybody who opened a demo file. A person with no party has signed
+ * nothing anywhere, so null is the truthful answer and every caller here reads
+ * it as "none of these borrowers is you".
+ */
+export async function partyOfUser(tx: Tx, userId: string): Promise<string | null> {
+  const user = await tx.user.findUnique({ where: { id: userId }, select: { partyId: true } });
+  return user?.partyId ?? null;
+}
+
 /** The party behind a signed-in user, created on first use. */
 export async function partyForUser(
   tx: Tx,

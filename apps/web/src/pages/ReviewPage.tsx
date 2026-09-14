@@ -37,7 +37,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
 import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
-import { useLoanFile } from "../lib/file.js";
+import { hasConsent, useLoanFile } from "../lib/file.js";
 import {
   DemographicQuestions,
   type DemographicAnswers,
@@ -114,6 +114,24 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   // one borrower's statement attributed to another.
   const primary = primaryBorrower(file);
   const others = coBorrowers(file);
+  /*
+   * Who on this file still owes their own Form 4506-C, by name.
+   *
+   * Per person, off that person's own consent rows — the file holding one is
+   * not the same question, and on a joint file it is the question that says
+   * "signed" about somebody who has not. It is read here rather than inside
+   * an ending because two of them render it and a second copy would be the
+   * one that drifts.
+   */
+  const awaitingSignature = others.filter((who) => !hasConsent(file, "form_4506c", who.id));
+  const stillToSign =
+    awaitingSignature.length === 0
+      ? null
+      : awaitingSignature.map((who) => (
+          <p key={who.id} className="mt-2 text-base text-ink-soft">
+            {CO_BORROWER_COPY.awaitingTheirSignature(borrowerName(who))}
+          </p>
+        ));
   // What the signer answered on screen 3, read back. Null is unasked, which
   // is why the block below says so rather than rendering an empty list.
   const declaration = primary?.declaration ?? null;
@@ -369,6 +387,9 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
           {REFERRED_COPY.headline}
         </h1>
         <p className="mt-2 text-base text-ink-soft">{REFERRED_COPY.body}</p>
+        {/* "Nothing is needed from you right now" is the applicant's own
+            position, and on a joint file it is not the file's. */}
+        {stillToSign}
         {done}
       </div>
     );
@@ -521,7 +542,13 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     );
   }
 
-  if (ending !== null) {
+  /*
+   * Everything that is left. `estimate` is named alongside it because the
+   * block above renders that one only with figures to print, and an estimate
+   * whose ratios did not compute has to land somewhere rather than falling
+   * through to the screen that asks for a signature the file already has.
+   */
+  if (ending === "ours" || ending === "estimate") {
     return (
       <div className="super-card">
         {header}
@@ -529,6 +556,11 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
           That is everything we need
         </h1>
         <p className="mt-2 text-base text-ink-soft">{ENDING_COPY.oursLead}</p>
+        {/* Everything WE need from the person reading this. The heading and
+            the line above are true of them and not of the household, and
+            without this the file looks finished while half of it has not
+            begun. */}
+        {stillToSign}
         {done}
       </div>
     );
@@ -595,6 +627,18 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
             <div className="super-notice">
               <p className="font-display text-base text-ink">{SIGNING_COPY.panelTitle}</p>
               <p className="mt-2 text-base text-ink-soft">{SIGNING_COPY.panelBody}</p>
+              {others.map((who) => (
+                /* Whose tax records this signature reaches, named in the panel
+                   that asks for it. The 4506-C is one taxpayer's form, so on a
+                   joint file "your tax records" is the one phrase the panel
+                   cannot leave unqualified — and the second line is what is
+                   true of the other person today rather than what we would
+                   like to be able to say. */
+                <p key={who.id} className="mt-2 text-base text-ink-soft">
+                  {CO_BORROWER_COPY.signatureIsYours(borrowerName(who))}{" "}
+                  {CO_BORROWER_COPY.theirOwnSignature(borrowerName(who))}
+                </p>
+              ))}
               <p className="mt-2 text-base text-ink-soft">{SIGNING_COPY.panelTerms}</p>
               <button
                 className="super-btn super-btn-primary mt-4"

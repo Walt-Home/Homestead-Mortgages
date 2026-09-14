@@ -74,8 +74,10 @@ three lists rather than trusting it after they change.
 - **More than one borrower.** Two are now real above the database: a route
   appends one, the projection orders everybody by `borrower_ordinal`, Section 5
   is answered and stored per person, and the review screen renders a block
-  apiece. What is missing is a screen that adds one, a bank a second borrower
-  can link, demographics asked of each of them, and the signature — item 5.
+  apiece, and a signature is one person's — their own authorization, their own
+  4506-C, and nobody may make either on their behalf. What is missing is a
+  screen that adds one, any surface a co-borrower can sign on at all, a bank a
+  second borrower can link, and demographics asked of each of them — item 5.
 - **Vesting and the non-borrower parties** have tables. `du_vestings` holds the
   sentence that will read on title, `du_deal_parties` holds the origination
   company, the originator, the note holder and the counseling agency, and a
@@ -256,6 +258,68 @@ adapters a token naming somebody who is not on the file. So the party half of
 "nothing may be pulled before APP-005" is enforced where the pull happens, not
 at the route.
 
+**Each borrower signs their own 4506-C.** The IRS form names one taxpayer, so
+the tax boundary is now identical to the credit boundary rather than an
+exception to it: the applicant's signature on screen 5 authorizes the
+applicant's transcripts, and a co-borrower who never finishes has nothing
+pulled rather than having their tax records pulled on their partner's
+signature.
+
+A signature is taken from the person signed in and from nobody else. `signerOn`
+resolves the signer by PARTY rather than by position — on a file whose Borrower
+1 has been replaced the person signing is still a borrower and no longer the
+first row, and `borrowers[0]` filed their signature under the replacement's name
+— and `assertSignsForThemselves` refuses the two doors that were handed a
+borrower id outright: completing an e-sign envelope minted for somebody else,
+and `POST /files/:id/consents`. The e-sign route takes no borrower id at all,
+because one there would be a capability rather than a question: the applicant
+owns a joint file and holds the only session on it, so it would let them execute
+the co-borrower's 4506-C. `du_declarations_are_self_attested` makes the same
+refusal about Section 5, and this is that rule where the signatures are taken.
+
+A RETRIEVAL is a different question, so `POST /files/:id/irs` does take a
+`borrowerId`: the pull is ours to make, and naming whose records to fetch is a
+question the minter then answers. Saying nothing means the person asking,
+resolved by party — the connector screens post no borrower id, and on a file
+whose Borrower 1 has been replaced defaulting to the first row refused the
+borrower who had signed and pulled the other person's records. `/credit`,
+`/bank` and `/payroll` resolve their subject the same way, so one press of
+Connect retrieves about the person who pressed it.
+
+**The signature that licenses a pull has to have been made HERE.** `tokenFor`
+takes the file as well as the person, and asks two things that fail in
+different directions: the party's own grants, which say whether the permission
+was never given, revoked or merely lapsed; and then this file's own consent row
+for that purpose. The second is the one a party-keyed read of `authorizations`
+did not do — a grant carries no loan file and lives 120 days, so read by party
+alone it is one person's permission everywhere, and the applicant on a joint
+file could pull a co-borrower's federal tax transcripts onto this application
+on a 4506-C the co-borrower signed for a different one. The row is what the
+engine reads too, so `evaluateSatisfaction` and the guard now agree about the
+same file rather than disagreeing out loud: a file where INC-008 is outstanding
+is a file where the pull is refused. `signedOn` asks about one party as well —
+it used to ask whether the FILE held a row of the kind, which answered "already
+signed" for somebody whose only signature on it was another person's. INC-008
+follows, and is per applicant now like APP-005 and APP-012, because the
+retrieval is.
+
+The receipt names each signer, with that person's own three party-side pieces
+and their own two signature dates. What it COUNTS is unchanged and deliberate:
+the TRID clock opens on one applicant's three pieces plus the three request-side
+ones, never on a mixture of two people's. Two reasons, and the second is why the
+clock does not wait for a co-borrower. TRID's pieces are about the consumer
+asking for credit, so one person's name beside another's SSN describes nobody;
+and a clock may only ever err EARLY, which is the rule `ECOA_ADVERSE_ACTION_30D`
+already follows — withholding the receipt until every borrower had finished
+would delay a legal deadline that has already started, and on a joint file today
+it would withhold it forever, because a co-borrower cannot sign in. So the
+consent and the e-sign routes put a signer on the application at the role they
+actually hold, through `borrowingRoleFor`. Naming `PRIMARY_BORROWER` outright,
+as both did, made a signer who is not Borrower 1 — the shape a replaced
+applicant leaves — a SECOND applicant at ordinal 2, because the index that says
+there is one Borrower 1 is over the position and not the role; and the receipt
+counts any primary's pieces, so their three would have started the clock.
+
 Two answers are still settled by a co-borrower's silence, and they are the two
 the party projection supplies for free. `marital_status` is required of every
 party and `preferred_language` falls back to `en`, so APP-015 and APP-017 read
@@ -288,17 +352,30 @@ What is still missing is narrower than it was, and none of it is structural:
   declaration is a statement the declaring borrower signs — but it means a
   joint application is not completable by the applicant alone, and the
   signature is still the applicant's own.
-- **Twelve `borrowers[0]` reads remain** in TypeScript source excluding tests
-  — sixteen lines counting the four comments that name it, sixty-six counting
-  tests, sixty-seven counting the one comment in `schema.prisma`. The
-  figure moves a lot with the filter, so it is stated here with its filter
-  attached. Eleven of the twelve are server-side: five in the connector routes,
-  two in `routes/application.ts`, one in `routes/esign.ts`, one in
-  `primaryBorrower`, one in the persona seed's ordering guard, and the one in
-  `conditions.ts` that says whose the file's single credit report is.
-  `satisfaction.ts` holds none of them any more. The twelfth is the screens'
-  own, in `apps/web/src/lib/borrowers.ts`, where `primaryBorrower` names the
-  intent the subscript used to stand for.
+- **A co-borrower has nowhere to sign, and the applicant may not sign for
+  them.** They are appended by the applicant and have never signed in, so
+  neither their verification authorization nor their 4506-C can be collected
+  through any route today, and nothing of theirs is retrieved. Both halves are
+  enforced rather than merely absent — the routes refuse a signature taken on
+  somebody else's behalf, and the minter refuses a pull on a signature made
+  anywhere else — and the review screen says so in the applicant's own words
+  instead of looking finished: in the signing panel before the signature, and
+  in the two endings after it, because the signature is what makes every other
+  sentence on that screen stop rendering. An outstanding co-borrower signature
+  raises no branch card — its source is the signature, which `branchesFor()`
+  deliberately excludes — so those sentences are the only place the product
+  says it. A claim or invite path is its own work.
+- **Four `borrowers[0]` reads remain** in TypeScript source excluding tests —
+  the figure moves a lot with the filter, so it is stated here with its filter
+  attached. The eight route reads are gone: the connector, application and
+  e-sign routes each resolve one person — the signer through `signerOn`, a
+  named retrieval subject through `namedBorrower`, the applicant through
+  `primaryBorrower` — and use that person for the token, the snapshot and the
+  ledger row. What is left is three server-side — the
+  subscript inside `primaryBorrower` itself, the persona seed's ordering guard,
+  and the one in `conditions.ts` that says whose the file's single credit
+  report is — and the screens' own in `apps/web/src/lib/borrowers.ts`, where
+  `primaryBorrower` names the intent the subscript used to stand for.
 
 **Item 6 — assets, liabilities and owned property.** Built, jointly owned from
 the first migration. `OWNED_PROPERTY` nests inside an asset through a composite

@@ -532,7 +532,7 @@ async function credit(w: Walk): Promise<void> {
   const file = await currentFile(w);
   const result = await w.registry.credit.pullTriMerge(
     file,
-    await tokenFor(primaryBorrower(file), "credit_report", w.tx),
+    await tokenFor(file, primaryBorrower(file), "credit_report", w.tx),
   );
   await recordSnapshot(
     w.loanFileId,
@@ -579,7 +579,7 @@ async function liens(w: Walk): Promise<void> {
   const apn = PUBLIC_RECORDS[w.story.fixture].record.apn;
   const result = await w.registry.liens.searchLiens(
     file,
-    await tokenFor(primaryBorrower(file), "public_record_liens", w.tx),
+    await tokenFor(file, primaryBorrower(file), "public_record_liens", w.tx),
     apn,
   );
   await recordSnapshot(
@@ -659,7 +659,7 @@ async function bank(w: Walk): Promise<void> {
   const file = await currentFile(w);
   const outcome = await w.registry.bank.fetchAssetReport(
     file,
-    await tokenFor(primaryBorrower(file), "bank_transactions", w.tx),
+    await tokenFor(file, primaryBorrower(file), "bank_transactions", w.tx),
     { sessionId: `persona-${w.story.key}` },
     12,
   );
@@ -699,7 +699,7 @@ async function bank(w: Walk): Promise<void> {
 /** The payroll branch, which replaces what the bank inferred. */
 async function payroll(w: Walk): Promise<void> {
   const file = await currentFile(w);
-  const token = await tokenFor(primaryBorrower(file), "payroll_income", w.tx);
+  const token = await tokenFor(file, primaryBorrower(file), "payroll_income", w.tx);
   const session = await w.registry.payroll.createLinkSession(file, token);
   const result = await w.registry.payroll.fetchPayroll(file, token, session.sessionId);
   const snapshot = await recordSnapshot(
@@ -766,7 +766,7 @@ async function signApplication(w: Walk): Promise<void> {
   const year = new Date().getFullYear();
   const result = await w.registry.irs.fetchTranscripts(
     file,
-    await tokenFor(primaryBorrower(file), "tax_transcript", w.tx),
+    await tokenFor(file, primaryBorrower(file), "tax_transcript", w.tx),
     [year - 1, year - 2],
   );
   await recordSnapshot(

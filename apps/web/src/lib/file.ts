@@ -105,8 +105,12 @@ export interface LoanFileView {
    * type, off the projection and off the wire together, and the engine walks
    * `borrowers` instead — so a reader that reached for the file-level copy
    * today would not compile anywhere, not just here.
+   *
+   * `consents` carries whose each row is for the same reason. A signature is
+   * one person's act, and a reader that asked only whether the file held one
+   * of a kind was answered about whoever had signed — see `hasConsent`.
    */
-  consents: { kind: string; grantedAt: string; revokedAt?: string }[];
+  consents: { kind: string; borrowerId: string; grantedAt: string; revokedAt?: string }[];
   loan: {
     purpose: string;
     loanAmount: number;
@@ -282,6 +286,20 @@ export interface FileRow {
 
 export interface LoanFileResponse {
   file: LoanFileView;
+  /**
+   * Which borrower on the file is the person reading it, by id.
+   *
+   * The server resolves it by party, and it is a sibling of the file rather
+   * than a field on it because it is a fact about the request. Null for
+   * somebody who is not a borrower here — which is every reader of a demo
+   * file, since a sample borrower's file is readable by all and nobody else's
+   * own.
+   *
+   * Every screen that means "the person signed in" reads this. A subscript
+   * meant it too, and on a file whose Borrower 1 has been replaced the two are
+   * different people.
+   */
+  you: string | null;
   /** Null for a file made before applications existed. Never a draft. */
   applicationState: ApplicationStandingView | null;
 }
@@ -365,6 +383,30 @@ export function hasStopped(
   );
 }
 
-export function hasConsent(file: LoanFileView | undefined, kind: string): boolean {
-  return Boolean(file?.consents.some((c) => c.kind === kind && !c.revokedAt));
+/**
+ * Whether `borrowerId` has signed `kind` themselves, on this file.
+ *
+ * Per signer, because the documents this answers about are per signer. IRS
+ * Form 4506-C names one taxpayer, so a co-borrower's signed 4506-C on a joint
+ * file is not the applicant's — and a file-level `some()` unblocked the
+ * applicant's transcript step on it, where the pull is then refused because
+ * the grant behind it is somebody else's.
+ *
+ * The borrower is passed in rather than worked out here, and `you` off the
+ * file response is what every caller passes. Resolving it as `borrowers[0]`
+ * would answer about whoever holds ordinal 1, which on a file whose applicant
+ * has been replaced is not the person looking at the screen — the same
+ * position-for-person swap the routes behind these screens stopped making.
+ * Nobody is `false`: a reader who is not a borrower here has signed nothing
+ * here.
+ */
+export function hasConsent(
+  file: LoanFileView | undefined,
+  kind: string,
+  borrowerId: string | null | undefined,
+): boolean {
+  return Boolean(
+    borrowerId &&
+    file?.consents.some((c) => c.kind === kind && c.borrowerId === borrowerId && !c.revokedAt),
+  );
 }

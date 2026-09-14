@@ -154,8 +154,8 @@ describe("a file with a co-borrower", () => {
 
     const file = (await loadLoanFile(fileId))!;
     const [her, him] = file.borrowers;
-    const hers = await tokenFor(her!, "credit_report");
-    const his = await tokenFor(him!, "credit_report");
+    const hers = await tokenFor(file, her!, "credit_report");
+    const his = await tokenFor(file, him!, "credit_report");
 
     expect(hers.partyId).toBe(her!.partyId);
     expect(his.partyId).toBe(him!.partyId);
@@ -170,15 +170,15 @@ describe("a file with a co-borrower", () => {
     await consent(fileId, primaryId, "verification_authorization");
 
     const file = (await loadLoanFile(fileId))!;
-    await expect(tokenFor(file.borrowers[1]!, "credit_report")).rejects.toBeInstanceOf(
+    await expect(tokenFor(file, file.borrowers[1]!, "credit_report")).rejects.toBeInstanceOf(
       AuthorizationError,
     );
-    await expect(tokenFor(file.borrowers[1]!, "credit_report")).rejects.toMatchObject({
+    await expect(tokenFor(file, file.borrowers[1]!, "credit_report")).rejects.toMatchObject({
       requirementId: "APP-005",
     });
     // And hers still works, so the refusal is about whose it is rather than
     // about the file having nothing on it.
-    expect((await tokenFor(file.borrowers[0]!, "credit_report")).partyId).toBe(
+    expect((await tokenFor(file, file.borrowers[0]!, "credit_report")).partyId).toBe(
       file.borrowers[0]!.partyId,
     );
   });
@@ -191,10 +191,10 @@ describe("a file with a co-borrower", () => {
     await consent(fileId, coId, "verification_authorization");
 
     const file = (await loadLoanFile(fileId))!;
-    await expect(tokenFor(primaryBorrower(file), "credit_report")).rejects.toThrow(
+    await expect(tokenFor(file, primaryBorrower(file), "credit_report")).rejects.toThrow(
       /No authorization to retrieve credit_report/,
     );
-    expect((await tokenFor(file.borrowers[1]!, "credit_report")).partyId).toBe(
+    expect((await tokenFor(file, file.borrowers[1]!, "credit_report")).partyId).toBe(
       file.borrowers[1]!.partyId,
     );
   });
@@ -217,7 +217,7 @@ describe("a file with a co-borrower", () => {
     // And the token names Dev's party. Reading the older row would mint one
     // for Priya, who is no longer on this credit request at all.
     await consent(fileId, coId, "verification_authorization");
-    expect((await tokenFor(primaryBorrower(file), "credit_report")).partyId).toBe(devPartyId);
+    expect((await tokenFor(file, primaryBorrower(file), "credit_report")).partyId).toBe(devPartyId);
   });
 
   it("refuses the primary's pull when only the person she replaced has signed", async () => {
@@ -229,7 +229,7 @@ describe("a file with a co-borrower", () => {
     await consent(fileId, primaryId, "verification_authorization");
 
     const file = (await loadLoanFile(fileId))!;
-    await expect(tokenFor(primaryBorrower(file), "credit_report")).rejects.toBeInstanceOf(
+    await expect(tokenFor(file, primaryBorrower(file), "credit_report")).rejects.toBeInstanceOf(
       AuthorizationError,
     );
   });

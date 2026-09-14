@@ -153,6 +153,18 @@ export function afterIdentity(): LoanFile {
         valueEstimate: true,
         loanAmount: true,
       },
+      // One person on this file, so the flat six above and her own three are
+      // the same three. A second signer is what makes them different answers.
+      signers: [
+        {
+          borrowerId: "b1",
+          name: "Dana Whitfield",
+          ordinal: 1,
+          pieces: { name: true, income: true, ssn: true },
+          authorizedAt: REFERENCE.toISOString(),
+          taxRecordsAt: null,
+        },
+      ],
     },
     credit: null,
     assets: null,

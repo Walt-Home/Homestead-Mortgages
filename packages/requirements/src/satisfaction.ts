@@ -63,18 +63,6 @@ function ofEveryBorrower(ask: (b: Borrower, f: LoanFile) => Met | Unmet): Evalua
 }
 
 /**
- * A live consent of this kind from anybody on the file.
- *
- * Only for the ones the product still executes once per FILE. INC-008's
- * transcripts are pulled under the first borrower's token and nobody else's,
- * so a file-level answer is what the retrieval actually does; APP-005 and
- * APP-012 are per applicant and use `consentOf` instead.
- */
-function hasConsent(file: LoanFile, kind: string): boolean {
-  return file.consents.some((c) => c.kind === kind && !c.revokedAt);
-}
-
-/**
  * This borrower's own live consent.
  *
  * `tokenFor` reads one party's `authorizations` rows and no other's, so a file
@@ -609,7 +597,22 @@ export const EVALUATORS: Record<string, Evaluator> = {
     );
   },
 
-  "INC-008": (f) => check(hasConsent(f, "form_4506c"), "4506-C executed", "4506-C not signed"),
+  /*
+   * IRS Form 4506-C names a single taxpayer, so it is signed by each borrower
+   * and answered about each of them. It read a file-level `some()` for as long
+   * as the transcripts were pulled under the first borrower's token and nobody
+   * else's — which made "4506-C executed" true of a joint file where one
+   * person had signed and the other's tax records were not requestable at all.
+   * Per applicant now, the same as APP-005 and APP-012, because the retrieval
+   * is per applicant.
+   */
+  "INC-008": ofEveryBorrower((b, f) =>
+    check(
+      consentOf(f, b, "form_4506c"),
+      "4506-C executed",
+      "4506-C not signed — no tax records may be requested for this borrower",
+    ),
+  ),
 
   "INC-009": derived("INC-009", "transcript reconciliation"),
 

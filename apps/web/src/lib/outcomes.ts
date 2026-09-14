@@ -126,7 +126,15 @@ export const SIGN_LEAD = "Sign to send it";
  */
 export const SIGNING_COPY = {
   heading: "What you told us",
-  lead: "These are your own answers, in your words. Signing says they are true and complete.",
+  /**
+   * Scoped to the signer, because on a joint file the answers below are two
+   * blocks and only one of them is theirs. "Signing says they are true and
+   * complete" over a block headed with somebody else's name asks a borrower to
+   * attest to a statement they did not make — and a co-borrower's block today
+   * renders "X has not answered these yet", so it asked them to attest that an
+   * explicitly empty one was complete.
+   */
+  lead: "These are your own answers, in your words. Signing says your own are true and complete.",
   /** Where the borrower goes to change one, rather than being told to ask us. */
   change: "Change an answer",
   /** The one thing this block cannot say when there is nothing stored to say it about. */
@@ -135,9 +143,10 @@ export const SIGNING_COPY = {
   answerThem: "Answer them now",
   panelTitle: "Your application",
   panelBody:
-    "This is the application itself — the property, the loan, your details and the answers above. It also includes IRS Form 4506-C, which lets us request your tax records directly rather than asking you to find them.",
+    "This is the application itself — the property, the loan, your details and the answers above. It also includes IRS Form 4506-C, which lets us request your own tax records directly rather than asking you to find them.",
+  /** Scoped for the same reason `lead` is: "the answers above" is two people's. */
   panelTerms:
-    "Signing submits it, and says the answers above are true and complete. It does not commit you to borrowing anything, and it is not an agreement to any particular rate or terms.",
+    "Signing submits it, and says your own answers above are true and complete. It does not commit you to borrowing anything, and it is not an agreement to any particular rate or terms.",
   signButton: "Sign and submit",
 } as const;
 
@@ -175,4 +184,40 @@ export const CO_BORROWER_COPY = {
    */
   whatTheyDo:
     "A co-borrower answers the same questions you did, about themselves: where they have lived, and the questions about their own finances. Their answers sit beside yours on the application.",
+  /**
+   * What the signature does NOT cover, said in the panel that asks for it.
+   *
+   * IRS Form 4506-C names a single taxpayer. So the signature on this screen
+   * authorizes the signer's own tax records and nobody else's, and the panel
+   * has to say whose — "your tax records" under a joint application reads as
+   * the household's, which is the one reading the form does not support.
+   *
+   * The second line is the honest end of it, and it says the part a product
+   * would rather leave out: a co-borrower is appended by the applicant and has
+   * never signed in, so there is nowhere for them to sign today. Saying
+   * nothing would leave an applicant believing a joint file was finished when
+   * half of it had not begun, and saying somebody would ask them would be a
+   * promise no code here can keep.
+   */
+  signatureIsYours: (name: string) =>
+    `You are signing for yourself. IRS Form 4506-C names one taxpayer, so this authorizes your own tax records and not ${name}'s.`,
+  theirOwnSignature: (name: string) =>
+    `That form is ${name}'s to sign, and there is nowhere for them to sign it here yet. Until it is signed, no tax records about ${name} are requested.`,
+  /**
+   * The same fact after the signature, which is where it was being lost.
+   *
+   * `endingFor` stops returning null the moment the application is signed, so
+   * the two lines above — which live in the pre-signature panel — become
+   * unreachable at exactly the point they start mattering. What replaced them
+   * said "there is nothing left for you to do", or that what remained was ours
+   * to work out; on a joint file whose co-borrower has signed nothing both are
+   * false, and the second one is false in our favor.
+   *
+   * Nothing raises it anywhere else either: INC-008 is per borrower now, and
+   * its source is the signature, which `branchesFor()` deliberately excludes
+   * from the work a borrower is sent to do. So the outstanding signature has
+   * no card, and this sentence is the only place the file says it.
+   */
+  awaitingTheirSignature: (name: string) =>
+    `${name} has not signed their own IRS Form 4506-C. Nothing about ${name} has been requested, and their half of this application is not in.`,
 } as const;

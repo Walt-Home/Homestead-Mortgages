@@ -17,7 +17,8 @@ import {
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
 import { reconcileIncomeAndEmployment } from "../services/income.js";
-import { primaryBorrower, subjectPartyId, tokenFor } from "../services/authorization.js";
+import { assertSignsForThemselves, retrievalSubject, tokenFor } from "../services/authorization.js";
+import { borrowingRoleFor } from "../services/borrower-order.js";
 import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
 import { applicationForFile, ensureApplicationParty } from "../services/applications.js";
@@ -74,12 +75,18 @@ connectorRouter.post(
 
     // The borrower must be THIS file's, or the row would name a person the
     // caller has no file for — and the trigger mirrors the grant onto whoever
-    // the borrower row points at.
+    // the borrower row points at. Their own row, and their own signature: the
+    // consent below is written against this borrower and nobody else's.
     const borrower = await prisma.borrower.findFirst({
       where: { id: input.borrowerId, loanFileId: id },
       select: { partyId: true },
     });
     if (!borrower) throw new AppError(404, "That borrower is not on this file.", "NOT_FOUND");
+    // And the borrower must be the person sending this. Recording a consent is
+    // recording a signature, and the applicant holds the only session on a
+    // joint file — so without this they could authorize a credit pull and a
+    // tax-transcript request in the co-borrower's name.
+    await assertSignsForThemselves(req.user!.id, borrower.partyId);
 
     // The signature, the grant the trigger mirrors from it, the facts that
     // grant lets the application borrow, and the receipt those pins fire, are
@@ -114,7 +121,16 @@ connectorRouter.post(
       if (input.kind === "verification_authorization") {
         const app = await applicationForFile(tx, id);
         if (app) {
-          await ensureApplicationParty(tx, app.id, borrower.partyId, "PRIMARY_BORROWER");
+          // The role this person holds on the file, which is not always the
+          // primary's: on a file whose Borrower 1 has been replaced, the
+          // person signing is a borrower who is no longer the first one.
+          // Naming PRIMARY_BORROWER outright put them on as a SECOND
+          // applicant — the ordinal allocator hands one the next free position
+          // rather than refusing — and the receipt counts any primary's
+          // party-side pieces, so their three would have opened the Loan
+          // Estimate clock.
+          const role = await borrowingRoleFor(tx, id, borrower.partyId);
+          await ensureApplicationParty(tx, app.id, borrower.partyId, role);
           // The PERSON, not this file. The grant this consent mints is what
           // licenses borrowing their facts anywhere, so it can complete the
           // six pieces of an application on a file they started last month and
@@ -162,9 +178,17 @@ connectorRouter.post(
     const id = z.string().uuid().parse(req.params.id);
     const file = await requireFile(id, req.user!.id);
 
+    // Whose credit this is, resolved once and used for the token AND for the
+    // snapshot's subject. Two separate resolutions in one handler is how a
+    // pull authorized for one person gets recorded against another.
+    //
+    // The person who pressed Connect, not the file's first row. The screen
+    // sends no borrower id, so a subscript here made one borrower's press pull
+    // the other's credit report.
+    const subject = await retrievalSubject(file, req.user!.id);
     const result = await connectors().credit.pullTriMerge(
       file,
-      await tokenFor(primaryBorrower(file), "credit_report"),
+      await tokenFor(file, subject, "credit_report"),
     );
     await recordSnapshot(
       id,
@@ -173,7 +197,7 @@ connectorRouter.post(
       result.externalId,
       result.data,
       result.retrievedAt,
-      subjectPartyId(file),
+      subject.partyId,
     );
     await upsertLink(id, "credit", result.provider);
     // APP-018 names the credit pull as its source: a refinance's existing
@@ -224,6 +248,11 @@ connectorRouter.post(
     const id = z.string().uuid().parse(req.params.id);
     const file = await requireFile(id, req.user!.id);
 
+    // Whose assets these are: the borrower doing the connecting, resolved by
+    // party. `connector_links` is unique on (file, kind), so a second borrower
+    // cannot link a bank of their own today — which is a reason to name the
+    // subject once rather than a reason not to.
+    const subject = await retrievalSubject(file, req.user!.id);
     const bank = connectors().bank;
     const publicToken = req.body?.publicToken as string | undefined;
     let sessionId = req.body?.sessionId as string | undefined;
@@ -235,7 +264,7 @@ connectorRouter.post(
     if (!sessionId && !publicToken) {
       const session = await bank.createLinkSession(
         file,
-        await tokenFor(primaryBorrower(file), "bank_transactions"),
+        await tokenFor(file, subject, "bank_transactions"),
       );
       sessionId = session.sessionId;
 
@@ -256,7 +285,7 @@ connectorRouter.post(
 
     const outcome = await bank.fetchAssetReport(
       file,
-      await tokenFor(primaryBorrower(file), "bank_transactions"),
+      await tokenFor(file, subject, "bank_transactions"),
       { sessionId: sessionId ?? id, publicToken },
       12,
     );
@@ -280,10 +309,6 @@ connectorRouter.post(
     // newer truth about the same twelve months, so what this report names is
     // updated in place and what it stops naming is retired. Merging would
     // double the income.
-    //
-    // `primaryBorrower` above refuses a file with no borrower, so by here there
-    // is somebody for this income to be about.
-    const subject = file.borrowers[0]!;
     await prisma.$transaction(async (tx) => {
       const snapshot = await recordSnapshot(
         id,
@@ -292,7 +317,7 @@ connectorRouter.post(
         result.externalId,
         result.data,
         result.retrievedAt,
-        subjectPartyId(file),
+        subject.partyId,
         tx,
       );
       await upsertLink(id, "bank", result.provider, tx);
@@ -310,7 +335,7 @@ connectorRouter.post(
       });
       await recordEvent(id, "connector_pull", result.provider, { kind: "bank" }, "AST-001", tx);
 
-      await settleBranch(tx, id, file.borrowers[0]?.partyId, "bank_connected", {
+      await settleBranch(tx, id, subject.partyId, "bank_connected", {
         causedBy: `snapshot:${snapshot.id}`,
         // A file whose receipt fired late never got an obligation to satisfy.
         // Connecting the bank is then where work begins.
@@ -338,8 +363,12 @@ connectorRouter.post(
     const id = z.string().uuid().parse(req.params.id);
     const file = await requireFile(id, req.user!.id);
 
+    // Whose employment this is, resolved before the session so the token, the
+    // snapshot and the income rows all name one person — and resolved from the
+    // person asking, because this branch is entered from their own screen.
+    const subject = await retrievalSubject(file, req.user!.id);
     const payroll = connectors().payroll;
-    const payrollToken = await tokenFor(primaryBorrower(file), "payroll_income");
+    const payrollToken = await tokenFor(file, subject, "payroll_income");
     const session = await payroll.createLinkSession(file, payrollToken);
     const result = await payroll.fetchPayroll(file, payrollToken, session.sessionId);
 
@@ -348,10 +377,6 @@ connectorRouter.post(
     // double-count income, which is the kind of error that reaches closing.
     // The employer survives that replacement: payroll carries the EIN the bank
     // never had, so the row the bank created is promoted rather than twinned.
-    //
-    // `primaryBorrower` above refuses a file with no borrower, so by here there
-    // is somebody for this income to be about.
-    const subject = file.borrowers[0]!;
     await prisma.$transaction(async (tx) => {
       const snapshot = await recordSnapshot(
         id,
@@ -360,7 +385,7 @@ connectorRouter.post(
         result.externalId,
         result.data,
         result.retrievedAt,
-        subjectPartyId(file),
+        subject.partyId,
         tx,
       );
       await upsertLink(id, "payroll", result.provider, tx);
@@ -373,7 +398,7 @@ connectorRouter.post(
         now: new Date(result.retrievedAt),
       });
       await recordEvent(id, "connector_pull", result.provider, { kind: "payroll" }, "INC-002", tx);
-      await settleBranch(tx, id, file.borrowers[0]?.partyId, "payroll_connected", {
+      await settleBranch(tx, id, subject.partyId, "payroll_connected", {
         causedBy: `snapshot:${snapshot.id}`,
       });
     });
@@ -383,17 +408,35 @@ connectorRouter.post(
   }),
 );
 
-/** Screen 6 — IRS transcripts. Needs an executed 4506-C on top of APP-005. */
+/**
+ * Screen 6 — IRS transcripts. Needs an executed 4506-C on top of APP-005.
+ *
+ * One taxpayer per pull, because Form 4506-C names one. The request may say
+ * which borrower, and the token is minted from that person's own signature ON
+ * THIS FILE — so a file where the applicant has signed and the co-borrower has
+ * not answers 403 for the co-borrower rather than pulling their transcripts on
+ * a 4506-C they executed for some other application. Naming a subject is a
+ * question, and the minter is what answers it.
+ *
+ * Saying nothing means the person asking. The transcript screen posts no
+ * borrower id, and on a file whose Borrower 1 has been replaced the borrower
+ * reading that screen is not the first row — so the default is their own
+ * records rather than the document's first taxpayer.
+ */
+const irsSchema = z.object({ borrowerId: z.string().uuid().optional() });
+
 connectorRouter.post(
   "/:id/irs",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
+    const { borrowerId } = irsSchema.parse(req.body ?? {});
     const file = await requireFile(id, req.user!.id);
 
+    const subject = await retrievalSubject(file, req.user!.id, borrowerId);
     const currentYear = new Date().getFullYear();
     const result = await connectors().irs.fetchTranscripts(
       file,
-      await tokenFor(primaryBorrower(file), "tax_transcript"),
+      await tokenFor(file, subject, "tax_transcript"),
       [currentYear - 1, currentYear - 2],
     );
 
@@ -405,14 +448,15 @@ connectorRouter.post(
         result.externalId,
         result.data,
         result.retrievedAt,
-        subjectPartyId(file),
+        subject.partyId,
         tx,
       );
       await upsertLink(id, "irs", result.provider, tx);
       await recordEvent(id, "connector_pull", result.provider, { kind: "irs" }, "INC-003", tx);
       // The pull is ours to make, but the borrower's signature is what
-      // licensed it, so the act is recorded as theirs.
-      await settleBranch(tx, id, file.borrowers[0]?.partyId, "transcripts_received", {
+      // licensed it, so the act is recorded as theirs — the same person the
+      // token was minted for, and not the file's first borrower by subscript.
+      await settleBranch(tx, id, subject.partyId, "transcripts_received", {
         causedBy: `snapshot:${snapshot.id}`,
       });
     });

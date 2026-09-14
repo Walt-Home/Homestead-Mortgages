@@ -12,6 +12,19 @@
  * URL, the borrower signs somewhere else, and completion arrives later — a
  * one-shot "sign this" endpoint would model a flow that does not exist and
  * would have to be pulled apart the day Docusign is wired in.
+ *
+ * Every one of the three is signed by ONE person, and the person is whoever
+ * is signed in. It used to be the file's first borrower, which on a file with
+ * a co-borrower answers the whole question by accident: Form 4506-C names a
+ * single taxpayer, so a signature on it authorizes the signer's tax records
+ * and nobody else's. A co-borrower signs their own, and until they do nothing
+ * of theirs is requested — the same boundary the verification authorization
+ * already keeps for credit, which is the point of keeping them identical.
+ *
+ * Nothing here can be told whose signature to take. A co-borrower has never
+ * signed in, so today that means their signature cannot be collected at all;
+ * an endpoint that accepted a name instead would mean the applicant executing
+ * their partner's federal tax authorization, which is worse than a gap.
  */
 
 import { Router } from "express";
@@ -20,6 +33,8 @@ import { prisma } from "@hm/db";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { assertFileAccess, loadLoanFile, recordEvent } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
+import { assertSignsForThemselves, signerOn } from "../services/authorization.js";
+import { borrowingRoleFor } from "../services/borrower-order.js";
 import { signedOn } from "../services/signature.js";
 import { applicationForFile, ensureApplicationParty } from "../services/applications.js";
 import { pinTridPieces } from "../services/evidence.js";
@@ -36,6 +51,13 @@ const REQUIREMENT_FOR: Record<(typeof SIGNABLE)[number], string> = {
   form_4506c: "INC-008",
 };
 
+/**
+ * Which document. Never whose — the signer is the person signed in.
+ *
+ * A `borrowerId` here would be a capability rather than a question: the
+ * applicant owns a joint file and holds the only session on it, so it would
+ * let them execute the co-borrower's Form 4506-C. See `signerOn`.
+ */
 const startSchema = z.object({ kind: z.enum(SIGNABLE) });
 
 esignRouter.post(
@@ -47,9 +69,7 @@ esignRouter.post(
 
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
-
-    const borrower = file.borrowers[0];
-    if (!borrower) {
+    if (file.borrowers.length === 0) {
       throw new AppError(
         409,
         "There is nobody to sign yet — finish the identity step first.",
@@ -57,13 +77,19 @@ esignRouter.post(
       );
     }
 
+    // The signer: this requester's own row on this file, by party. Not
+    // `borrowers[0]` — on a file whose Borrower 1 has been replaced the person
+    // signing is still a borrower and is no longer the first one, and the
+    // signature would have been filed under the replacement's name.
+    const borrower = await signerOn(file, req.user!.id);
+
     // Already signed is a success, not an error. A person who refreshes the
     // signing screen should not be told something went wrong. But "signed"
-    // is this file's row AND the party's live grant, together — see
-    // services/signature.ts for what each half alone got wrong.
+    // is this borrower's row on this file AND their party's live grant,
+    // together — see services/signature.ts for what each half alone got wrong.
     const signed = await signedOn(id, borrower.partyId, kind);
     if (signed) {
-      res.json({ alreadySigned: true, kind, signedAt: signed.grantedAt });
+      res.json({ alreadySigned: true, kind, borrowerId: borrower.id, signedAt: signed.grantedAt });
       return;
     }
 
@@ -71,6 +97,7 @@ esignRouter.post(
     res.status(201).json({
       alreadySigned: false,
       kind,
+      borrowerId: borrower.id,
       requirementId: REQUIREMENT_FOR[kind],
       envelopeId: envelope.envelopeId,
       signingUrl: envelope.signingUrl,
@@ -106,14 +133,20 @@ esignRouter.post(
     if (!borrower) {
       throw new AppError(404, "That signing session was not found.", "ENVELOPE_NOT_FOUND");
     }
+    // The envelope names its signer, and the signer must be the person sending
+    // this. The fixture's envelope ids are guessable by construction, so
+    // without this the applicant could complete an envelope minted for the
+    // co-borrower and put their signature on that person's 4506-C.
+    await assertSignsForThemselves(req.user!.id, borrower.partyId);
 
-    // Same rule as starting a signature: a completion that lands on a file
-    // already signed for this kind is absorbed, but a lapsed grant or a second
-    // file is not "already signed" and writes this file's row.
+    // Same rule as starting a signature: a completion that lands where THIS
+    // borrower has already signed this kind is absorbed, but a lapsed grant, a
+    // second file, or the other borrower's signature on the same file is not
+    // "already signed" and writes this borrower's row.
     const kind = consent.kind as (typeof SIGNABLE)[number];
     const signed = await signedOn(id, borrower.partyId, kind);
     if (signed) {
-      res.json({ kind, signedAt: signed.grantedAt, alreadySigned: true });
+      res.json({ kind, borrowerId: borrower.id, signedAt: signed.grantedAt, alreadySigned: true });
       return;
     }
 
@@ -144,7 +177,16 @@ esignRouter.post(
       if (kind === "verification_authorization") {
         const app = await applicationForFile(tx, id);
         if (app) {
-          await ensureApplicationParty(tx, app.id, borrower.partyId, "PRIMARY_BORROWER");
+          // The role this person holds on the file, which is not always the
+          // primary's: on a file whose Borrower 1 has been replaced, the
+          // person signing is a borrower who is no longer the first one.
+          // Naming PRIMARY_BORROWER outright put them on as a SECOND
+          // applicant — the index that says there is one Borrower 1 is over
+          // the position and not the role — and the receipt counts any
+          // primary's party-side pieces, so their three would have opened the
+          // Loan Estimate clock.
+          const role = await borrowingRoleFor(tx, id, borrower.partyId);
+          await ensureApplicationParty(tx, app.id, borrower.partyId, role);
           await pinTridPieces(tx, { applicationId: app.id, partyId: borrower.partyId });
           // The same cause as the consent handler's, because it is the same
           // cause: a verification authorization signed on this file. Where the
@@ -172,6 +214,7 @@ esignRouter.post(
 
     res.status(201).json({
       kind: created.kind,
+      borrowerId: borrower.id,
       signedAt: created.grantedAt,
       alreadySigned: false,
     });

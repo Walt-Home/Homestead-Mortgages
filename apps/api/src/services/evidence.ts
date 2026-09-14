@@ -323,6 +323,34 @@ export async function proposeScenario(
   }
 }
 
+/**
+ * Which of the three party-side pieces each person on the application holds.
+ *
+ * Every party with live pins, whatever role they hold — unlike `sixPieces`,
+ * which answers the receipt's question and so looks only where the receipt
+ * looks. The receipt names each signer and says what each of them has
+ * supplied, and a co-borrower whose pieces were invisible would read as
+ * somebody who had done nothing. This reports; it judges nothing, and no
+ * count taken from it may stamp anything.
+ */
+export async function piecesByParty(
+  applicationId: string,
+  db: Db = prisma,
+): Promise<Map<string, Set<string>>> {
+  const pins = await db.applicationEvidenceLink.findMany({
+    where: { applicationId, releasedAt: null, predicate: { in: [...TRID_PARTY_PREDICATES] } },
+    select: { predicate: true, fact: { select: { partyId: true } } },
+  });
+  const byParty = new Map<string, Set<string>>();
+  for (const pin of pins) {
+    if (pin.fact.partyId == null) continue;
+    const held = byParty.get(pin.fact.partyId) ?? new Set<string>();
+    held.add(pin.predicate);
+    byParty.set(pin.fact.partyId, held);
+  }
+  return byParty;
+}
+
 /** Which of TRID's six pieces an application holds. For a screen, not a guard. */
 export async function sixPieces(
   applicationId: string,

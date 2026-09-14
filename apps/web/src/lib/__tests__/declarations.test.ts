@@ -104,7 +104,10 @@ describe("the words above the signature", () => {
   it("says the answers are the borrower's own, and that signing says they are true", () => {
     expect(SIGNING_COPY).toEqual({
       heading: "What you told us",
-      lead: "These are your own answers, in your words. Signing says they are true and complete.",
+      // "your own", twice, and both are load-bearing on a joint file: the
+      // answers below the lead are one block per person, and a signature
+      // attests to the signer's own and to nothing anybody else wrote.
+      lead: "These are your own answers, in your words. Signing says your own are true and complete.",
       change: "Change an answer",
       unanswered: "There are a few questions still to answer before you sign.",
       // The sentence above names work on another screen, so it needs a
@@ -113,9 +116,9 @@ describe("the words above the signature", () => {
       answerThem: "Answer them now",
       panelTitle: "Your application",
       panelBody:
-        "This is the application itself — the property, the loan, your details and the answers above. It also includes IRS Form 4506-C, which lets us request your tax records directly rather than asking you to find them.",
+        "This is the application itself — the property, the loan, your details and the answers above. It also includes IRS Form 4506-C, which lets us request your own tax records directly rather than asking you to find them.",
       panelTerms:
-        "Signing submits it, and says the answers above are true and complete. It does not commit you to borrowing anything, and it is not an agreement to any particular rate or terms.",
+        "Signing submits it, and says your own answers above are true and complete. It does not commit you to borrowing anything, and it is not an agreement to any particular rate or terms.",
       signButton: "Sign and submit",
     });
   });

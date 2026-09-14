@@ -25,6 +25,7 @@ import {
   assertFacts,
   liveFact,
   partyForUser,
+  partyOfUser,
   principalForParty,
   recordBorrowerFacts,
 } from "../services/party.js";
@@ -666,7 +667,25 @@ fileRouter.get(
     await assertFileAccess(id, req.user!.id, "read");
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
-    res.json({ file, applicationState: await applicationStanding(prisma, id) });
+    // Which of these people is the one reading the screen, by party.
+    //
+    // The file itself cannot say — `loadLoanFile` is about the application and
+    // knows nothing about who asked for it — so the answer rides beside it
+    // rather than on it. Without it the screens had only a position to read,
+    // and on a file whose Borrower 1 has been replaced they are two different
+    // people: the transcript step asked whether BORROWER 1 had signed a
+    // 4506-C, told the borrower actually present that we needed a signature
+    // she had already given, and the pull behind it is about her.
+    //
+    // Null for somebody reading a file they are not a borrower on, which a
+    // demo file is: the sample borrowers are readable by everybody and are
+    // nobody else's own.
+    const you = await partyOfUser(prisma, req.user!.id);
+    res.json({
+      file,
+      you: file.borrowers.find((b) => b.partyId === you)?.id ?? null,
+      applicationState: await applicationStanding(prisma, id),
+    });
   }),
 );
 

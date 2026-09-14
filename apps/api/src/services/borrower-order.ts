@@ -15,7 +15,7 @@
  * different people.
  */
 
-import type { Prisma } from "@hm/db";
+import type { ApplicationPartyRole, Prisma } from "@hm/db";
 import type { Db } from "./db.js";
 
 /**
@@ -95,4 +95,36 @@ export async function primaryBorrowerRow(
     rows.map((r) => r.partyId),
   );
   return documentOrder(rows, ordinals)[0]!;
+}
+
+/**
+ * Which borrowing role a person on this file holds on the credit request.
+ *
+ * The two routes that can put a party on an application outside screen 1 —
+ * the consent and the e-sign completion — named `PRIMARY_BORROWER` outright,
+ * because for as long as a file held one borrower there was nothing else to
+ * name. The membership is create-only, so somebody already on the application
+ * keeps the role they were put on with; the case this exists for is the
+ * signer who has no membership yet and is NOT the person at ordinal 1, which
+ * is what a file whose applicant was dropped and replaced looks like.
+ *
+ * Written on as a primary, they become a SECOND one: the ordinal allocator
+ * hands them the next free position rather than refusing, because the index
+ * that says there is one Borrower 1 is over the position and not over the
+ * role. The receipt counts the party-side pieces of ANY primary borrower, so
+ * their three would stamp it and open the Loan Estimate clock on an
+ * application the borrower the document calls the applicant has not finished
+ * — a legal deadline started by the wrong person's evidence.
+ *
+ * Borrower 1 is the applicant and everybody else asked with them is a
+ * co-borrower. `NON_OCCUPANT_CO_BORROWER` is a distinction nothing in the
+ * borrower flow collects, so it is not one this can return.
+ */
+export async function borrowingRoleFor(
+  db: Db,
+  loanFileId: string,
+  partyId: string,
+): Promise<ApplicationPartyRole> {
+  const primary = await primaryBorrowerRow(db, loanFileId);
+  return primary?.partyId === partyId ? "PRIMARY_BORROWER" : "CO_BORROWER";
 }

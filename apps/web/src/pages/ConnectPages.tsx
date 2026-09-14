@@ -4,6 +4,7 @@ import { ConnectorStep } from "../components/ConnectorStep.js";
 import { SignDocument } from "../components/SignDocument.js";
 import { api } from "../lib/api.js";
 import { useLoanFile, hasConsent } from "../lib/file.js";
+import { TRANSCRIPT_COPY } from "../lib/transcript-copy.js";
 
 function useStep(next: string) {
   const { fileId = "" } = useParams<{ fileId: string }>();
@@ -14,6 +15,10 @@ function useStep(next: string) {
   return {
     fileId,
     file: data?.file,
+    // Which borrower on the file is the person looking at it. A branch screen
+    // asks about their OWN signature and triggers a pull about them, and a
+    // position cannot say which of two people that is.
+    you: data?.you ?? null,
     readOnly,
     // Ask the engine again before going back, with the evidence this branch
     // just supplied. Without it the review screen renders the decision from
@@ -101,17 +106,22 @@ export function PayrollPage() {
  * now part of the screen rather than a prerequisite nobody could satisfy.
  */
 export function IrsPage() {
-  const { fileId, file, readOnly, onDone } = useStep("review");
-  const signed = hasConsent(file, "form_4506c");
+  const { fileId, file, you, readOnly, onDone } = useStep("review");
+  // Their own 4506-C, and nobody else's. The pull this screen triggers is
+  // resolved server-side from the person asking, so reading the file's first
+  // borrower here would gate the screen on a signature belonging to somebody
+  // the request is not about — and on a file whose Borrower 1 has been
+  // replaced that is exactly what it did.
+  const signed = hasConsent(file, "form_4506c", you);
   const transcripts = file?.transcripts?.length ? file.transcripts : null;
 
   return (
     <ConnectorStep
       fileId={fileId}
       endpoint="irs"
-      title="Your tax transcripts"
-      promise="Two years of filed income, from the IRS directly."
-      detail="This is the record every lender reconciles against. Having it now is what keeps a question from arriving three weeks before closing."
+      title={TRANSCRIPT_COPY.title}
+      promise={TRANSCRIPT_COPY.promise}
+      detail={TRANSCRIPT_COPY.detail}
       duration="About five seconds"
       existing={transcripts}
       extract={(r) => r.transcripts}
@@ -120,8 +130,7 @@ export function IrsPage() {
         signed || readOnly
           ? null
           : {
-              message:
-                "The IRS will only release transcripts to someone you have authorized in writing. Form 4506-C is that authorization.",
+              message: TRANSCRIPT_COPY.needsSignature,
               action: (
                 <SignDocument
                   fileId={fileId}

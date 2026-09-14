@@ -8,4 +8,10 @@
  * second copy of the naming rule is how a suite ends up truncating a database
  * nobody meant to give it.
  */
-export declare function testDatabaseUrl(): string;
+export declare function testDatabaseUrl(env?: Record<string, string | undefined>): string;
+
+/** The same URL pointed at the `postgres` maintenance database. */
+export declare function maintenanceUrl(testUrl: string): string;
+
+/** The database name inside a connection string. */
+export declare function databaseName(url: string): string;

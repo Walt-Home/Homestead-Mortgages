@@ -293,3 +293,28 @@ postgres`, then `npm run db:test:setup`. Every promise about who may read whose
 file, about cascades, and about a stage that only moves forward is kept by the
 database, and a suite that mocks `@hm/db` can see none of them — see
 `docs/decisions.md`, "Tests run against a real Postgres".
+
+**Two runs cannot share one test database, and the suite enforces that rather
+than hoping.** `setup.ts` truncates every table between tests, so a second
+`npm test` against the same database truncates the tables the first one is
+midway through — measured at 235 and 226 failures out of 511, all of which
+read like real bugs. A Postgres advisory lock in `globalSetup` makes the second
+run wait instead, and says so.
+
+**So to run two suites at once, give them two databases.** Waiting is the
+fallback, not the goal — it is exactly what one developer with a watch process
+wants and exactly what two agents working in parallel do not.
+
+```bash
+TEST_DATABASE_URL=postgresql://homestead_mortgages:homestead_mortgages@localhost:5433/hm_<agent> \
+  npm run db:test:setup && npm test
+```
+
+`db:test:setup` creates the database if it is absent and applies every
+migration — 3.6 seconds from nothing — and `testDatabaseUrl()` in
+`scripts/test-database-url.mjs` is the single place that reads the variable, so
+every test path follows. The isolation is real rather than nominal because a
+Postgres advisory lock is scoped to its **database**, not to the cluster: two
+runs take the same lock number under different databases and neither blocks the
+other. Name the database after the agent or the branch, not after the suite,
+and nothing has to clean up after a run that was killed.

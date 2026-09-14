@@ -46,5 +46,13 @@ export default defineConfig({
     // worse, can cut a test off mid-transaction and leave the schema wrong
     // for every run after it. Time out on a hang, not on a slow machine.
     testTimeout: 30_000,
+    // The same argument, applied to the place it was first needed. The hooks
+    // are what TRUNCATE every table, so they are the slowest thing here and
+    // the first to suffer when the machine is busy — and they kept vitest's
+    // ten-second default while the tests got thirty. Five files failed that
+    // way in one run, every one of them "Hook timed out in 10000ms" and not
+    // one of them a failing assertion, which is the worst shape a flake can
+    // take: it reads exactly like a hang in the code under test.
+    hookTimeout: 30_000,
   },
 });

@@ -9,6 +9,14 @@ person is trying to do, and where it stands. It covers both what is built today
 and the Party / Application / Loan model replacing it, and marks which is which.
 Read it before adding anything that looks like a status.
 
+`docs/du-graph.md` is what a DU submission actually is — a graph of
+`RELATIONSHIP` arcs between labelled containers, not a nested document. Read it
+before modelling anything a submission has to carry, because it is the reason
+ownership here is join tables rather than nesting. `docs/du-generation.md` is
+where the six generated DU tables come from and what CI checks about them; read
+it before touching `scripts/build-du.mjs` or anything under
+`packages/du/src/generated`, which is never hand-edited.
+
 `docs/du-readiness.md` is where the Desktop Underwriter work stands, item by
 item, against the readiness audit. Read it before building anything a DU
 submission would have to carry — borrowers, assets, liabilities, declarations,

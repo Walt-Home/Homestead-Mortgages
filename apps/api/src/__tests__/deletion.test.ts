@@ -166,6 +166,113 @@ describe("deleting the account deletes the person", () => {
 });
 
 /**
+ * A person with a job, and income the database will not let go of loosely.
+ *
+ * `income_sources.employer_id` is ON DELETE RESTRICT — the only edge that can
+ * hold `employment_income = (employer_id IS NOT NULL)` true, since SET NULL
+ * would break it from inside somebody else's DELETE. A restrict on the way out
+ * is exactly the shape that turns "there is no archive and no undo" into an
+ * account nobody can close, so the deletion paths are asserted rather than
+ * assumed.
+ */
+async function personWithAJob(on: { fileId?: string; partyId?: string } = {}) {
+  const fileId = on.fileId ?? (await createLoanFile()).id;
+  const party = on.partyId ?? (await createParty({ sourceFirstSeen: "grander_import" })).id;
+  const employer = await prisma.employer.create({
+    data: {
+      partyId: party,
+      identityKey: "name:fixturehealthsystems",
+      nameKey: "name:fixturehealthsystems",
+      derivedFrom: "name",
+      displayName: "Fixture Health Systems",
+    },
+    select: { id: true },
+  });
+  const income = await prisma.incomeSource.create({
+    data: {
+      loanFileId: fileId,
+      partyId: party,
+      identityKey: `emp:${employer.id}|base_wage`,
+      employerId: employer.id,
+      employmentIncome: true,
+      type: "base_wage",
+      monthlyAmount: 6_250,
+      historyMonths: 24,
+    },
+    select: { id: true },
+  });
+  return { fileId, partyId: party, employerId: employer.id, incomeId: income.id };
+}
+
+describe("deleting a person takes their employer and their income", () => {
+  it("closes an account whose file holds both", async () => {
+    // The product's own path, and the order is the file's: deleting the user
+    // takes the loan file, which takes the income, and the party that follows
+    // takes the employer with nothing left pointing at it.
+    const me = await createUser();
+    const file = await createLoanFile({ userId: me.id });
+    const row = await saveBorrower(file.id, dana);
+    const job = await personWithAJob({ fileId: file.id, partyId: row.partyId });
+
+    await prisma.user.delete({ where: { id: me.id } });
+
+    expect(await prisma.employer.count({ where: { id: job.employerId } })).toBe(0);
+    expect(await prisma.incomeSource.count({ where: { id: job.incomeId } })).toBe(0);
+    expect(await prisma.party.count({ where: { id: row.partyId } })).toBe(0);
+  });
+
+  it("removes the party itself, though the employer cascade fires first", async () => {
+    // The shape with no file deletion in front of it — a provisional party a
+    // partner sent us, folded away or swept up on its own. The party is the
+    // parent of BOTH tables, so one DELETE fires two cascades, and on this
+    // database the employers one fires FIRST: measured, by watching an AFTER
+    // DELETE probe on each table during a party delete.
+    //
+    // It still succeeds, and not by luck. RESTRICT is checked at the end of
+    // the statement that fired the cascades rather than inside the cascade
+    // that deleted the employer, so the check is queued behind the sibling
+    // cascade that removes the income and finds nothing pointing at it.
+    // Recreating `employers_party_id_fkey` so its trigger sorts last reverses
+    // the firing order and changes the result not at all — which is why there
+    // is no trigger here declaring an order, and why this test is an assertion
+    // rather than a bet on an oid allocation.
+    const job = await personWithAJob();
+
+    await prisma.party.delete({ where: { id: job.partyId } });
+
+    expect(await prisma.employer.count({ where: { id: job.employerId } })).toBe(0);
+    expect(await prisma.incomeSource.count({ where: { id: job.incomeId } })).toBe(0);
+  });
+
+  it("refuses while somebody else's income names their employer", async () => {
+    // What keeps the test above from being a green light over a toothless
+    // edge. No writer makes this row — an employer is looked up under the
+    // party whose income is being reconciled — and if one ever did, the delete
+    // SHOULD refuse: the alternative is another person's income left naming an
+    // employer that is gone.
+    const job = await personWithAJob();
+    const other = await createParty({ sourceFirstSeen: "grander_import" });
+    await prisma.incomeSource.create({
+      data: {
+        loanFileId: job.fileId,
+        partyId: other.id,
+        identityKey: `emp:${job.employerId}|base_wage`,
+        employerId: job.employerId,
+        employmentIncome: true,
+        type: "base_wage",
+        monthlyAmount: 4_100,
+        historyMonths: 18,
+      },
+    });
+
+    await expect(prisma.party.delete({ where: { id: job.partyId } })).rejects.toThrow(
+      /income_sources_employer_id_fkey/,
+    );
+    expect(await prisma.party.count({ where: { id: job.partyId } })).toBe(1);
+  });
+});
+
+/**
  * A file that has become an application, with a ledger row the borrower caused.
  *
  * That row is the shape the deletion chain used to break on: its actor is the

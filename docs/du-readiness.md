@@ -99,7 +99,7 @@ which have a longer lead time than anything above.
 | 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate             |
 | —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person |
 | —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets             |
-| 7   | Employer as an entity               | Yellow | Real entity — but only a vendor pull ever creates one       |
+| 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none  |
 | 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it          |
 | 5   | Up to four borrowers                | Red    | The route cannot append a second; 24 `borrowers[0]` sites   |
 | 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary           |
@@ -195,8 +195,16 @@ so a second lien moves the total with nobody updating it.
 
 **Item 7 — employer as an entity.** Real, with a party FK and an identity key
 that survives the EIN promotion; `income_sources` and `employments` both carry
-`employer_id`. But `services/income.ts` is called only from the connector
-routes, so a job a borrower typed has no employer behind it.
+`employer_id`. `income_sources.employment_income` now makes
+`CURRENT_INCOME_ITEM_IsAssociatedWith_EMPLOYER` derivable rather than stored
+twice — it is true exactly when the row names an employer, held by a CHECK,
+which is why that edge is `ON DELETE RESTRICT` and why removing an employer
+means repointing its income first. Two gaps stay open. `services/income.ts` is
+called only from the connector routes, so a job a borrower typed has no
+employer behind it. And no port links an income item to one of the employments
+beside it, so a borrower with TWO current employers gets wage income attached
+to neither, which the discriminator now turns into a wire-visible
+`EmploymentIncomeIndicator` of false — `DI-C04` is exactly that shape.
 
 **Item 8 — what we compute versus what DU computes.** Not started.
 `decisions.ratios` and `decisions.reserves` are bare `Json`, written through a

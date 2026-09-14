@@ -233,6 +233,14 @@ export async function reconcileIncomeAndEmployment(
 
     const fields = {
       employerId,
+      // The discriminator and the arc are one fact and the database holds them
+      // to each other, so they are written in one statement. Wage income the
+      // report could not attach to a single active employer therefore arrives
+      // as NON-employment income: understating what a row is, which costs a
+      // DU indicator, rather than claiming employment income with no employer
+      // to point at — and rather than refusing the pull over a shape the
+      // vendor chose.
+      employmentIncome: employerId !== null,
       type: source.type,
       monthlyAmount: source.monthlyAmount,
       historyMonths: source.historyMonths,

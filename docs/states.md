@@ -304,7 +304,8 @@ year's pull.
 | Casefile, income and employer identity | Built — survives a re-pull; see `docs/du-readiness.md`                     |
 | Sample borrowers in real states        | Built — eight, walked through the real services, behind a deploy flag      |
 | Loans and servicing                    | Built at the database. **No production writer** — `docs/loan-lifecycle.md` |
-| Assets, liabilities, declarations      | **Not built.** The DU blockers — `docs/du-readiness.md`                    |
+| Declarations and residences            | Built and on the production path — screen 3 writes them                    |
+| Assets, liabilities, owned property    | Built at the database. **No production writer** — `docs/du-readiness.md`   |
 | Evidence artifacts, retrieval requests | Designed                                                                   |
 | Rewritten decision engine (three-axis) | Designed                                                                   |
 | Roles and staff tooling                | Designed                                                                   |

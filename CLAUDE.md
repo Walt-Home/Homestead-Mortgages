@@ -109,11 +109,21 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   declaring themselves clean. `buildDeclarations` is gone and a test keeps it
   gone.
 - **The Grander persona is a row on the sign-in page and nothing else.** An
-  imported member is a party and a loan with no application; there is no
-  `loans` table, an application in any state would say they asked us for
-  credit, and an unclaimed party has never signed in, so there is no user to
-  sign a tester in as. The nearest truthful shape is written into
-  `apps/api/src/personas/stories.ts` as a comment for whoever builds loans.
+  imported member is a party and a loan with no application, and the loan half
+  is built: `Loan`, `Servicer`, `LoanParty` and `LoanTransition` are tables,
+  `createImportedLoan` births one `imported_unclaimed` from a `partner_import`,
+  and the `borrower_claimed` edge out of it is in
+  `packages/shared/src/loan-machine.ts`. What is missing is anything that would
+  put a row there: nothing outside the tests calls `createImportedLoan`, there
+  is no ingest route and no importer, and the API accepts no machine credential
+  at all — `requireAuth` takes a Google sign-in cookie and nothing else. The
+  claim flow `docs/states.md` specifies, a signed single-use token delivered by
+  Grander rather than an email match at sign-in, is unbuilt too. The persona
+  would still refuse to seed if all of that existed: an application in any
+  state would say they asked us for credit, and an unclaimed party has never
+  authenticated, so there is no user to sign a tester in as. The nearest
+  truthful shape is written into `apps/api/src/personas/stories.ts` as a
+  comment for whoever builds the importer.
 - **A sample borrower on hold needs a knob to be held.** All three connector
   fixtures screen clear, so `FixtureOptions.screening: "near_match"` is what
   makes Omar's snapshot, his `sanctionsScreenClear` column and his ledger row

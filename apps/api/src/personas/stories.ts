@@ -280,17 +280,30 @@ export const PERSONA_STORIES: readonly PersonaStory[] = [
     /*
      * Not seeded, and not fixable by seeding harder.
      *
-     * A Grander member is a party and a loan with no application. There is no
-     * `loans` table yet, an application in any state would say this person
-     * asked us for credit when they did not, and an unclaimed party has never
-     * authenticated — so there is no user to sign a tester in as. Claiming one
-     * is a signed single-use token from Grander, not a sign-in match.
+     * A Grander member is a party and a loan with no application. The loan
+     * half is built: `createImportedLoan` in `services/loans.ts` births one
+     * `imported_unclaimed` from a `partner_import` with no originating
+     * application, and `loan-machine.ts` holds the `borrower_claimed` edge out
+     * of it. What is missing is anything that would put a row there. Nothing
+     * outside the tests calls `createImportedLoan`, there is no ingest route
+     * and no importer, and the API accepts no machine credential for one to
+     * present — `requireAuth` takes a Google sign-in cookie and nothing else.
+     * Claiming one is a signed single-use token from Grander, not a sign-in
+     * match, and that is unbuilt too.
      *
-     * The nearest truthful shape, for whoever builds loans: a PROVISIONAL
-     * party with `sourceFirstSeen: "grander_import"`, its facts asserted by a
-     * PARTNER principal at PARTNER_SHARED/UNVERIFIED, one loan row in
-     * `imported_unclaimed`, no user, and nothing person-keyed retrievable
-     * until the claim.
+     * The seed would refuse even with all of that built. An application in any
+     * state would say this person asked us for credit when they did not, and
+     * an unclaimed party has never authenticated — so there is no user to sign
+     * a tester in as.
+     *
+     * The nearest truthful shape, for whoever builds the importer: a
+     * PROVISIONAL party with `sourceFirstSeen: "grander_import"`, its facts
+     * asserted by a PARTNER principal at PARTNER_SHARED/UNVERIFIED, one loan
+     * row in `imported_unclaimed`, no user, and nothing person-keyed
+     * retrievable until the claim. Every piece of that exists already —
+     * `createProvisionalParty`, `partnerPrincipal` and `assertPartnerFacts` in
+     * `services/party.ts`, and `moveLoanIfLegal` in
+     * `services/loan-transition.ts` for the claim itself.
      */
     unavailableBecause: "This is a mortgage that already exists, and we don't hold those yet.",
   },

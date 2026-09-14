@@ -69,14 +69,6 @@ jobs:
       - name: Design tokens match their source
         run: npm run brand:verify
 
-      # The DU tables are generated from Fannie Mae's specification, which is
-      # licensed and is deliberately not in this repository. With no
-      # DU_SPEC_DIR here, this runs the half of the check that needs no spec:
-      # every Du* enum in schema.prisma against the members the generator
-      # derived. It says which half it skipped.
-      - name: DU tables match the spec
-        run: npm run du:verify
-
       - name: TypeScript
         run: npx tsc -b packages/shared packages/requirements packages/connectors packages/underwriting packages/du packages/db apps/api apps/web
 
@@ -92,6 +84,19 @@ jobs:
       # `migrate dev` shadow database does not prove.
       - name: Test database
         run: npm run db:test:setup
+
+      # The DU tables are generated from Fannie Mae's specification, which is
+      # licensed and is deliberately not in this repository. With no
+      # DU_SPEC_DIR here, this runs the halves of the check that need no spec:
+      # every Du* enum in schema.prisma against the members the generator
+      # derived, and the two database objects holding the REO nesting that
+      # Prisma cannot model and so cannot miss. It says which half it skipped.
+      #
+      # After the test database, not before: the REO nesting half asks the
+      # database the migrations built, and a check that skips because there is
+      # nothing to ask is a green tick that means nothing.
+      - name: DU tables match the spec
+        run: npm run du:verify
 
       - name: Test
         run: npm test

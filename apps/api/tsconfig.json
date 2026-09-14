@@ -12,15 +12,29 @@
       "@hm/underwriting/test-support": [
         "../../packages/underwriting/src/__tests__/support/in-memory-file.ts"
       ],
-      "@hm/db": ["../../packages/db/src/index.ts"]
+      "@hm/db": ["../../packages/db/src/index.ts"],
+      "@hm/du": ["../../packages/du/src/index.ts"]
     }
   },
   "include": ["src"],
   "references": [
-    { "path": "../../packages/shared" },
-    { "path": "../../packages/requirements" },
-    { "path": "../../packages/connectors" },
-    { "path": "../../packages/underwriting" },
-    { "path": "../../packages/db" }
+    {
+      "path": "../../packages/shared"
+    },
+    {
+      "path": "../../packages/requirements"
+    },
+    {
+      "path": "../../packages/connectors"
+    },
+    {
+      "path": "../../packages/underwriting"
+    },
+    {
+      "path": "../../packages/db"
+    },
+    {
+      "path": "../../packages/du"
+    }
   ]
 }

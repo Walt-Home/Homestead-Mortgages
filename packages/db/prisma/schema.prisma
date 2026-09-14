@@ -1066,6 +1066,7 @@ model Application {
   ownedProperties DuOwnedProperty[]
   liabilities     DuLiability[]
   expenses        DuExpense[]
+  jointCredit     DuJointCreditReportLink[]
   /// The mortgage this request became, if it funded. Not a cascade in either
   /// direction: the loan names the application, and survives it.
   loan            Loan?
@@ -1092,8 +1093,17 @@ model ApplicationParty {
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  declaration DuDeclaration?
-  residences  DuResidence[]
+  declaration             DuDeclaration?
+  residences              DuResidence[]
+  /// The arcs. Cascading, so dropping a borrower removes every arc naming them
+  /// rather than leaving one pointed at a ROLE the document no longer emits.
+  assetLinks              DuAssetParty[]
+  liabilityLinks          DuLiabilityParty[]
+  expenseLinks            DuExpenseParty[]
+  /// This edge as an additional borrower on a joint credit report, and as the
+  /// primary of one. Never both on an application: a trigger says so.
+  jointCreditAsAdditional DuJointCreditReportLink[] @relation("JointCreditFrom")
+  jointCreditAsPrimary    DuJointCreditReportLink[] @relation("JointCreditTo")
 
   @@unique([applicationId, partyId])
   @@index([partyId])
@@ -2051,6 +2061,9 @@ model DuAsset {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   ownedProperty DuOwnedProperty?
+  /// Whose asset it is. At least one, at COMMIT, by a deferred constraint
+  /// trigger: an ASSET with no owner arc is a row that cannot be emitted.
+  owners        DuAssetParty[]
   /// The other end of the composite foreign key on `du_owned_properties`, which
   /// Prisma requires a field for. A list only because Prisma reserves the 0:1
   /// spelling for a relation whose own columns are unique: `asset_id` is
@@ -2238,6 +2251,10 @@ model DuLiability {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  /// Who owes it. At least one, at COMMIT, for the reason an asset needs an
+  /// owner: the arc is how DU learns whose liability this is.
+  obligors DuLiabilityParty[]
+
   /// Full, spanning retired rows, for the reason spelled out on `DuAsset`.
   @@unique([applicationId, identityKey], map: "du_liabilities_application_identity_key")
   @@index([applicationId])
@@ -2270,6 +2287,121 @@ model DuExpense {
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  /// Who pays it. At least one, at COMMIT. An expense has no `retiredAt` — a
+  /// person types one and no connector supersedes it — so the check that reads
+  /// this list is told so rather than assuming the column exists.
+  payers DuExpenseParty[]
+
   @@index([applicationId])
   @@map("du_expenses")
+}
+
+// ─── THE ARCS, AS TABLES ────────────────────────────────────────────────────
+//
+// `ASSET_IsAssociatedWith_ROLE` is the most common arc in the corpus, 126
+// instances, and its two siblings work the same way. Each is a join table
+// rather than a column because two rows for one asset IS joint ownership:
+// MISMO has no "joint" flag and no place on a RELATIONSHIP to record a share,
+// so a 60/40 split has no wire representation and a second owner is a second
+// arc.
+//
+// All four point at `application_parties`, not at `parties`. The arc's endpoint
+// is the ROLE element, which is emitted from the EDGE — so a party merge, or a
+// borrower dropped on resubmission, would otherwise leave an arc naming a label
+// the document does not contain, which the XSD accepts in silence. Pointing at
+// the edge makes removing the borrower remove the arc.
+//
+// A deferred constraint trigger refuses to let a transaction commit with a live
+// asset, liability or expense that has no arc at all, and it fires on these
+// tables' deletes as well as on the parent's writes. `writeAsset` in
+// `packages/du` is the shape that can satisfy it: the row and its owners in one
+// transaction.
+
+/// Who owns an asset. `role` carries a distinction we need and DU does not —
+/// which borrower supplied the statement — without polluting the arc, which on
+/// the wire is an empty element with a from, a to and an arcrole.
+model DuAssetParty {
+  id                 String           @id @default(uuid()) @db.Uuid
+  assetId            String           @map("asset_id") @db.Uuid
+  asset              DuAsset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  applicationPartyId String           @map("application_party_id") @db.Uuid
+  applicationParty   ApplicationParty @relation(fields: [applicationPartyId], references: [id], onDelete: Cascade)
+
+  role String @default("OWNER")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([assetId, applicationPartyId])
+  @@index([applicationPartyId])
+  @@map("du_asset_parties")
+}
+
+/// `LIABILITY_IsAssociatedWith_ROLE`, 120 instances.
+model DuLiabilityParty {
+  id                 String           @id @default(uuid()) @db.Uuid
+  liabilityId        String           @map("liability_id") @db.Uuid
+  liability          DuLiability      @relation(fields: [liabilityId], references: [id], onDelete: Cascade)
+  applicationPartyId String           @map("application_party_id") @db.Uuid
+  applicationParty   ApplicationParty @relation(fields: [applicationPartyId], references: [id], onDelete: Cascade)
+
+  role String @default("OBLIGOR")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([liabilityId, applicationPartyId])
+  @@index([applicationPartyId])
+  @@map("du_liability_parties")
+}
+
+/// `EXPENSE_IsAssociatedWith_ROLE`. Two instances in the corpus, both n:1 — and
+/// a join table anyway, because the wording of the arc role is identical to the
+/// asset's and alimony can be joint. A foreign key here would be a bet against
+/// a shape nothing forbids, for no saving.
+model DuExpenseParty {
+  id                 String           @id @default(uuid()) @db.Uuid
+  expenseId          String           @map("expense_id") @db.Uuid
+  expense            DuExpense        @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  applicationPartyId String           @map("application_party_id") @db.Uuid
+  applicationParty   ApplicationParty @relation(fields: [applicationPartyId], references: [id], onDelete: Cascade)
+
+  role String @default("PAYER")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([expenseId, applicationPartyId])
+  @@index([applicationPartyId])
+  @@map("du_expense_parties")
+}
+
+/// `ROLE_SharesJointCreditReportWith_ROLE`. Directed, and the direction is
+/// load-bearing: the group's primary goes under `to` and the additional
+/// borrower under `from`, and reversing it makes DU read the wrong borrower as
+/// primary.
+///
+/// It is a GROUPING, not a star and not a flag. DI-C02 emits BORROWER_3 →
+/// BORROWER_2 while BORROWER_1 stands alone, so the primary of a joint pair is
+/// not the application's primary borrower and cannot be derived from
+/// PRIMARY_BORROWER versus CO_BORROWER. A boolean column cannot express it, and
+/// a symmetric join row emits it backwards half the time.
+model DuJointCreditReportLink {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  /// The additional borrower.
+  fromApplicationPartyId String           @map("from_application_party_id") @db.Uuid
+  fromApplicationParty   ApplicationParty @relation("JointCreditFrom", fields: [fromApplicationPartyId], references: [id], onDelete: Cascade)
+  /// The group's primary.
+  toApplicationPartyId   String           @map("to_application_party_id") @db.Uuid
+  toApplicationParty     ApplicationParty @relation("JointCreditTo", fields: [toApplicationPartyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// One group per additional borrower: a borrower whose report is shared with
+  /// two different primaries is two contradictory groups. A trigger checks the
+  /// rest — that both endpoints are borrowing edges on THIS application, and
+  /// that a group primary is not also somebody else's additional borrower.
+  @@unique([applicationId, fromApplicationPartyId], map: "du_joint_credit_links_one_group_per_additional_borrower")
+  @@index([applicationId, toApplicationPartyId], map: "du_joint_credit_links_by_group_primary")
+  @@map("du_joint_credit_report_links")
 }

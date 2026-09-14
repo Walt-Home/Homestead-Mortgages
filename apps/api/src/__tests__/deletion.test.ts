@@ -17,6 +17,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
+import { writeAsset, writeExpense, writeLiability } from "@hm/du";
 import { TRID_PARTY_PREDICATES } from "@hm/shared";
 import { pinFact, proposeScenario } from "../services/evidence.js";
 import { moveLoan } from "../services/loan-transition.js";
@@ -747,5 +748,199 @@ describe("deleting one file is not how a credit request goes away", () => {
       code: "APPLICATION_ON_RECORD",
     });
     expect(await prisma.applicationTransition.count({ where: { applicationId: app.id } })).toBe(2);
+  });
+});
+
+/**
+ * A co-borrower on a file somebody ELSE owns, with DU rows only they own.
+ *
+ * This is the one person the deferred owner check breaks account deletion for.
+ * `users_delete_takes_files` removes only the files the departing user owns, so
+ * the application, its rows and the other borrower all outlive the party — and
+ * the party's cascade prunes their ownership arcs, leaving a live asset with no
+ * owner for the check to refuse at COMMIT. Reproduced before the sweep existed:
+ * `DELETE FROM users` raised `du_assets ... has no party link left and cannot
+ * be emitted`, and the co-borrower could not be forgotten by any path.
+ *
+ * The fourth row is jointly owned, and it is what says the sweep takes only
+ * what nobody is left to own.
+ */
+async function coBorrowerOnSomebodyElsesFile() {
+  const owner = await createUser();
+  const file = await createLoanFile({ userId: owner.id });
+  const ownerParty = await partyForUser(prisma, owner.id);
+  const app = await prisma.application.create({
+    data: { loanFileId: file.id, ausCasefileId: randomUUID() },
+    select: { id: true },
+  });
+  const ownerEdge = await prisma.applicationParty.create({
+    data: { applicationId: app.id, partyId: ownerParty, role: "PRIMARY_BORROWER" },
+    select: { id: true },
+  });
+
+  const leaver = await createUser();
+  const leaverParty = await partyForUser(prisma, leaver.id);
+  const leaverEdge = await prisma.applicationParty.create({
+    data: { applicationId: app.id, partyId: leaverParty, role: "CO_BORROWER" },
+    select: { id: true },
+  });
+
+  const theirs = { applicationPartyId: leaverEdge.id };
+  const rows = await prisma.$transaction(async (tx) => ({
+    asset: await writeAsset(tx, {
+      asset: {
+        applicationId: app.id,
+        kind: "DEPOSIT_ACCOUNT",
+        assetType: "SavingsAccount",
+        cashOrMarketValueCents: 850_000n,
+        holderName: "Shoreline CU",
+        identityKey: `manual:${randomUUID()}`,
+      },
+      owners: [theirs],
+    }),
+    liability: await writeLiability(tx, {
+      liability: {
+        applicationId: app.id,
+        liabilityType: "Revolving",
+        holderName: "Store Card",
+        unpaidBalanceCents: 120_000n,
+        monthlyPaymentCents: 3_500n,
+        payoffStatus: false,
+        identityKey: `manual:${randomUUID()}`,
+      },
+      obligors: [theirs],
+    }),
+    expense: await writeExpense(tx, {
+      expense: { applicationId: app.id, expenseType: "ChildSupport", monthlyPaymentCents: 60_000n },
+      payers: [theirs],
+    }),
+    joint: await writeAsset(tx, {
+      asset: {
+        applicationId: app.id,
+        kind: "DEPOSIT_ACCOUNT",
+        assetType: "CheckingAccount",
+        cashOrMarketValueCents: 410_000n,
+        holderName: "First Federal",
+        identityKey: `manual:${randomUUID()}`,
+      },
+      owners: [theirs, { applicationPartyId: ownerEdge.id }],
+    }),
+  }));
+
+  return { owner, ownerEdge, file, app, leaver, leaverParty, rows };
+}
+
+type SomebodyElsesFile = Awaited<ReturnType<typeof coBorrowerOnSomebodyElsesFile>>;
+
+/** What the surviving file still holds, and what the departure was recorded as. */
+async function whatSurvives({ app, ownerEdge, rows }: SomebodyElsesFile) {
+  const events = await prisma.fileEvent.findMany({
+    where: { kind: "du_rows_left_with_no_owner" },
+    select: { payload: true },
+  });
+  const removed = events.flatMap((event) =>
+    ((event.payload as { removed?: { table: string; id: string }[] }).removed ?? []).map(
+      (row) => `${row.table}:${row.id}`,
+    ),
+  );
+  return {
+    applications: await prisma.application.count({ where: { id: app.id } }),
+    assets: await prisma.duAsset.count({ where: { applicationId: app.id } }),
+    liabilities: await prisma.duLiability.count({ where: { applicationId: app.id } }),
+    expenses: await prisma.duExpense.count({ where: { applicationId: app.id } }),
+    jointOwners: await prisma.duAssetParty.findMany({
+      where: { assetId: rows.joint },
+      select: { applicationPartyId: true },
+    }),
+    survivingEdges: await prisma.applicationParty.count({ where: { id: ownerEdge.id } }),
+    removed: removed.sort(),
+  };
+}
+
+/** Everything the sweep should have taken, named. */
+function swept(person: SomebodyElsesFile): string[] {
+  return [
+    `du_assets:${person.rows.asset}`,
+    `du_liabilities:${person.rows.liability}`,
+    `du_expenses:${person.rows.expense}`,
+  ].sort();
+}
+
+describe("a departing co-borrower takes their own rows and leaves the shared one", () => {
+  it("deletes the party directly, which several paths in this repo do", async () => {
+    // Against `parties` rather than through the route, because the persona
+    // seed's drift repair, its orphan sweep and a handful of tests go straight
+    // at the table — and the sweep is a BEFORE DELETE trigger there for
+    // exactly that reason.
+    const person = await coBorrowerOnSomebodyElsesFile();
+    await prisma.party.delete({ where: { id: person.leaverParty } });
+
+    expect(await whatSurvives(person)).toEqual({
+      applications: 1,
+      assets: 1,
+      liabilities: 0,
+      expenses: 0,
+      jointOwners: [{ applicationPartyId: person.ownerEdge.id }],
+      survivingEdges: 1,
+      removed: swept(person),
+    });
+  });
+
+  it("deletes the account, and the other person's file still stands", async () => {
+    const person = await coBorrowerOnSomebodyElsesFile();
+    await prisma.user.delete({ where: { id: person.leaver.id } });
+
+    expect(await prisma.party.count({ where: { id: person.leaverParty } })).toBe(0);
+    expect(await prisma.loanFile.count({ where: { id: person.file.id } })).toBe(1);
+    expect(await whatSurvives(person)).toEqual({
+      applications: 1,
+      assets: 1,
+      liabilities: 0,
+      expenses: 0,
+      jointOwners: [{ applicationPartyId: person.ownerEdge.id }],
+      survivingEdges: 1,
+      removed: swept(person),
+    });
+  });
+
+  it("leaves nothing behind through the route's own order either", async () => {
+    const person = await coBorrowerOnSomebodyElsesFile();
+    await prisma.$transaction(async (tx) => {
+      await tx.loanFile.deleteMany({ where: { userId: person.leaver.id } });
+      await tx.user.delete({ where: { id: person.leaver.id } });
+      await tx.party.deleteMany({ where: { id: person.leaverParty } });
+    });
+
+    expect(await prisma.user.count({ where: { id: person.leaver.id } })).toBe(0);
+    expect(await whatSurvives(person)).toEqual({
+      applications: 1,
+      assets: 1,
+      liabilities: 0,
+      expenses: 0,
+      jointOwners: [{ applicationPartyId: person.ownerEdge.id }],
+      survivingEdges: 1,
+      removed: swept(person),
+    });
+  });
+
+  it("leaves a retired row where it is, because it emits nothing", async () => {
+    // A superseded row exists so a later pull can revive it as the same
+    // account. The person whose account it was is gone, so there is nothing it
+    // could be revived as — but it belongs to a file that still belongs to
+    // somebody, and it is that file's history.
+    const person = await coBorrowerOnSomebodyElsesFile();
+    await prisma.duAsset.update({
+      where: { id: person.rows.asset },
+      data: { retiredAt: new Date() },
+    });
+    await prisma.user.delete({ where: { id: person.leaver.id } });
+
+    const left = await prisma.duAsset.findMany({
+      where: { applicationId: person.app.id },
+      select: { id: true, retiredAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(left.map((row) => row.id).sort()).toEqual([person.rows.asset, person.rows.joint].sort());
+    expect(await prisma.duAssetParty.count({ where: { assetId: person.rows.asset } })).toBe(0);
   });
 });

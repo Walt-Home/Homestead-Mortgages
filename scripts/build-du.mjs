@@ -38,6 +38,9 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
 import { inflateRawSync } from "node:zlib";
+import { config as loadEnv } from "dotenv";
+import pg from "pg";
+import { testDatabaseUrl } from "./test-database-url.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = resolve(ROOT, "packages/du/src/generated");
@@ -1912,12 +1915,107 @@ function runAssetShapeCheck() {
   return true;
 }
 
-function main() {
+/**
+ * Two database objects that hold "an owned property hangs off an REO asset",
+ * and that nothing in Prisma's model of the schema can see.
+ *
+ * `du_owned_properties.asset_kind` is a generated column and
+ * `du_owned_properties_attach_to_an_reo_asset` is the composite foreign key
+ * pairing it with the parent's `kind`. Prisma has no representation for a
+ * generated column: it is raw SQL in the migration and `@ignore`d in the
+ * schema, so the next `prisma migrate dev` that gets the declaration wrong
+ * proposes DROP COLUMN and takes the foreign key with it — leaving the nesting
+ * true only by convention, on a shape MISMO itself enforces.
+ *
+ * The other checks in this script read committed files. This one cannot: what
+ * it catches is a LATER migration dropping either object, and no file that
+ * exists today mentions that migration. So it asks the database the migrations
+ * actually built, which is the test database, and says so when there is not one
+ * to ask.
+ */
+const REO_NESTING_COLUMN = ["du_owned_properties", "asset_kind"];
+const REO_NESTING_CONSTRAINT = "du_owned_properties_attach_to_an_reo_asset";
+
+async function runDatabaseObjectCheck() {
+  loadEnv();
+  let url;
+  try {
+    url = testDatabaseUrl();
+  } catch {
+    console.log("- skipped the REO nesting check: no DATABASE_URL or TEST_DATABASE_URL");
+    return true;
+  }
+
+  const db = new pg.Client({ connectionString: url, connectionTimeoutMillis: 3000 });
+  try {
+    await db.connect();
+  } catch {
+    console.log(
+      "- skipped the REO nesting check: the test database is unreachable. " +
+        "`docker compose up -d postgres`, then `npm run db:test:setup`",
+    );
+    return true;
+  }
+
+  try {
+    const [table, column] = REO_NESTING_COLUMN;
+    const { rows: present } = await db.query("SELECT to_regclass($1) AS name", [table]);
+    if (!present[0].name) {
+      console.log(
+        `- skipped the REO nesting check: ${table} is not in the test database. ` +
+          "Run `npm run db:test:setup`",
+      );
+      return true;
+    }
+
+    const problems = [];
+    const { rows: columns } = await db.query(
+      `SELECT attgenerated FROM pg_attribute
+        WHERE attrelid = $1::regclass AND attname = $2 AND NOT attisdropped`,
+      [table, column],
+    );
+    if (columns.length === 0) {
+      problems.push(
+        `${table}.${column} is gone; the composite foreign key cannot stand without it`,
+      );
+    } else if (columns[0].attgenerated !== "s") {
+      problems.push(
+        `${table}.${column} is no longer a generated column, so a caller can now write it ` +
+          "and name any kind of asset as this property's parent",
+      );
+    }
+
+    const { rows: constraints } = await db.query(
+      "SELECT contype FROM pg_constraint WHERE conname = $1 AND conrelid = $2::regclass",
+      [REO_NESTING_CONSTRAINT, table],
+    );
+    if (constraints.length === 0) {
+      problems.push(
+        `${REO_NESTING_CONSTRAINT} is gone; an owned property could hang off a checking account`,
+      );
+    } else if (constraints[0].contype !== "f") {
+      problems.push(`${REO_NESTING_CONSTRAINT} is no longer a foreign key`);
+    }
+
+    if (problems.length) {
+      console.error("✗ the REO nesting is no longer held by the database:");
+      for (const problem of problems) console.error(`    ${problem}`);
+      return false;
+    }
+    console.log(`✓ ${table}.${column} and ${REO_NESTING_CONSTRAINT} still hold the REO nesting`);
+    return true;
+  } finally {
+    await db.end();
+  }
+}
+
+async function main() {
   const verify = process.argv.includes("--verify");
 
   if (verify) {
     let ok = runPrismaCheck();
     if (!runAssetShapeCheck()) ok = false;
+    if (!(await runDatabaseObjectCheck())) ok = false;
     let files;
     try {
       files = buildFromSpec(resolveSpecFiles());
@@ -1957,14 +2055,13 @@ function main() {
   console.log(`✓ wrote ${Object.keys(files).length} files to packages/du/src/generated/`);
   let ok = runPrismaCheck();
   if (!runAssetShapeCheck()) ok = false;
+  if (!(await runDatabaseObjectCheck())) ok = false;
   if (!ok) process.exit(1);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
+  main().catch((error) => {
     console.error(`✗ ${error.message}`);
     process.exit(1);
-  }
+  });
 }

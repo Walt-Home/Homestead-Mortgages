@@ -10,8 +10,11 @@
  * The spec files themselves are not in this repository and must not be. The
  * generator reads them from DU_SPEC_DIR and says so when it cannot.
  *
- * Nothing here is wired to a route, a screen or a table yet. These are the
- * tables the serializer will emit against; the serializer is a later commit.
+ * Nothing here is wired to a route or a screen. The generated tables are what
+ * the serializer will emit against, and the serializer is a later commit; the
+ * writers below are how a DU row and its owner arcs reach Postgres at all,
+ * because the database refuses a row that has no owner and only a transaction
+ * carrying both can satisfy it.
  */
 
 export { CHILD_ORDER, TYPE_FOR_PATH } from "./generated/order.js";
@@ -33,3 +36,15 @@ export {
   type DuConditionalityEntry,
   type DuRequirement,
 } from "./generated/conditionality.js";
+export {
+  writeAsset,
+  writeExpense,
+  writeLiability,
+  type DuOwner,
+  type DuSupersede,
+  type DuTransaction,
+  type NonEmpty,
+  type WriteAssetInput,
+  type WriteExpenseInput,
+  type WriteLiabilityInput,
+} from "./writer.js";

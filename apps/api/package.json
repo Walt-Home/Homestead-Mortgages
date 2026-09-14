@@ -13,6 +13,7 @@
   "dependencies": {
     "@hm/connectors": "*",
     "@hm/db": "*",
+    "@hm/du": "*",
     "@hm/requirements": "*",
     "@hm/shared": "*",
     "@hm/underwriting": "*",

@@ -18,6 +18,9 @@
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
+  "dependencies": {
+    "@hm/db": "*"
+  },
   "devDependencies": {
     "typescript": "^5.4.0",
     "vitest": "^4.1.9"

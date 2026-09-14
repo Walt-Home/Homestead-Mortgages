@@ -1079,6 +1079,10 @@ model Application {
   liabilities     DuLiability[]
   expenses        DuExpense[]
   jointCredit     DuJointCreditReportLink[]
+  /// How title reads, and everyone on the deal who is not a borrower. Both
+  /// count against the same ten-party ceiling the borrowing parties do.
+  vestings        DuVesting[]
+  dealParties     DuDealParty[]
   /// The mortgage this request became, if it funded. Not a cascade in either
   /// direction: the loan names the application, and survives it.
   loan            Loan?
@@ -2442,4 +2446,162 @@ model DuJointCreditReportLink {
   @@unique([applicationId, fromApplicationPartyId], map: "du_joint_credit_links_one_group_per_additional_borrower")
   @@index([applicationId, toApplicationPartyId], map: "du_joint_credit_links_by_group_primary")
   @@map("du_joint_credit_report_links")
+}
+
+/// L2.1 and L2.2. How title is held today, and how it will read after closing.
+enum DuPropertyOwnerStatus {
+  Current
+  Proposed
+}
+
+/// `RelationshipVestingType` at L2.4 — the six ways a title can be held.
+///
+/// The DU data point is NOT called `VestingType`: that string appears nowhere
+/// in the Enumerations tab, which is why `DU_DATA_POINT_FOR_ENUM` names the
+/// data point for this enum explicitly instead of matching on the enum's own
+/// name. Nine of the corpus's twelve `PropertyOwner` parties carry one and
+/// three carry none, so the column is nullable.
+enum DuVestingType {
+  Individual
+  JointTenantsWithRightOfSurvivorship
+  LifeEstate
+  Other
+  TenantsByTheEntirety
+  TenantsInCommon
+}
+
+/// Which register a license is from. `Private` is NMLS; `PublicState` is a
+/// state register. All thirty-six licenses in the corpus carry one.
+enum DuLicenseAuthorityLevel {
+  Private
+  PublicState
+}
+
+/// The non-borrower `PartyRoleType` values this repo models.
+///
+/// `Borrower` is not here — it is `application_parties`, with a position and a
+/// borrowing role — and neither is `PropertyOwner`, which carries a vesting
+/// string rather than a person and lives in `du_vestings`. `Trust` is one of
+/// the eight values the tab carries and is deliberately not modeled; no sample
+/// exercises it.
+///
+/// Eight values across thirteen rows: `Borrower` is filed four times and
+/// `PropertyOwner` and `HousingCounselingAgency` twice each. Four modeled here
+/// plus the four `DU_DATA_POINT_FOR_ENUM` excludes is the whole set, which is
+/// why this enum needs no `VALUES_NOT_IN_SCOPE` entry.
+enum DuDealPartyRole {
+  LoanOriginationCompany
+  LoanOriginator
+  /// Conditionally required whenever there is concurrent subordinate
+  /// financing. The `RelatedLoan` containers are not modeled yet; the party
+  /// they require is, so that deferral is about the loan and not silently also
+  /// about a party DU would demand.
+  NotePayTo
+  HousingCounselingAgency
+}
+
+/// URLA L2.1 and L2.2 — "title will be held in what names", current and
+/// proposed.
+///
+/// NOT parties, and that is measured rather than assumed. All twelve
+/// `PropertyOwner` parties in the eighteen samples are `INDIVIDUAL`s whose
+/// `NAME/FullName` holds a vesting string — "Andy America and Amy America and
+/// Ken N Customer JR" in DI-C09 — with no taxpayer identifier and no arc
+/// pointing at them. MISMO does not model co-titleholding relationally here at
+/// all, so a row that stores the sentence is closer to the wire than a person
+/// who does not exist.
+model DuVesting {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  status DuPropertyOwnerStatus
+
+  /// The vesting string, verbatim, as it will read on title.
+  fullName String @map("full_name")
+
+  /// `RelationshipVestingType`, L2.4. Null where title names one person and
+  /// there is no relationship to state.
+  vestingType DuVestingType? @map("vesting_type")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// One current vesting and one proposed, which is also what caps this table's
+  /// share of the ten-party ceiling at two. Nine of the eighteen samples carry
+  /// a proposed vesting and three of those also carry a current one; none
+  /// carries two of either.
+  @@unique([applicationId, status], map: "du_vestings_one_per_status")
+  @@map("du_vestings")
+}
+
+/// `DEAL/PARTIES/PARTY` for everyone who is not a borrower — the MIN-1 that the
+/// borrower rows do not satisfy. `Cardinality.csv` reads `1:10` with the note
+/// "Each Deal must have at least one party (non-Borrower)", and every one of
+/// the eighteen samples carries a `LoanOriginationCompany` and a
+/// `LoanOriginator`.
+///
+/// Its own table rather than more `ApplicationPartyRole` values. The
+/// origination company is a legal entity we do not underwrite and the
+/// originator is our own loan officer, so putting either on
+/// `application_parties` drags an institution through every borrower-scoped
+/// trigger there, forces a `parties` row for a company, and makes "is this a
+/// DU Borrower" a question answered by exclusion forever. A separate table also
+/// lets these rows carry the one thing a borrower never does: a license.
+model DuDealParty {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  role DuDealPartyRole
+
+  /// `LEGAL_ENTITY/LEGAL_ENTITY_DETAIL/FullName` for a company, or
+  /// `INDIVIDUAL/NAME` for a person. A CHECK binds the shape to the role: the
+  /// originator is the one person among these, the rest are entities. Both are
+  /// nullable because two of the eighteen samples carry an origination company
+  /// with no name element at all.
+  ///
+  /// `NotePayTo` is bound to the entity shape by decision, not by the spec. DU
+  /// Map 4b.1 gives it both containers and defines the role as "The individual
+  /// or legal entity whose name appears on a note", so a seller carryback or a
+  /// private second — the case this role exists for — cannot be recorded. Its
+  /// individual slot is an unparsed `NAME/FullName` that the parsed columns
+  /// here cannot express, and all nine corpus NotePayTo parties are
+  /// institutions; the fix when one is needed is that unparsed name, not a
+  /// wider CHECK.
+  legalEntityName String? @map("legal_entity_name")
+  firstName       String? @map("first_name")
+  lastName        String? @map("last_name")
+
+  /// `ROLE/LICENSES/LICENSE/LICENSE_DETAIL`: the NMLS or state license number,
+  /// and the register it is from. Required on the two origination roles — all
+  /// eighteen samples carry exactly one license on each — and refused on the
+  /// other two, which have no license slot on the DU form to be emitted into.
+  ///
+  /// ONE license, where the container is `0:2` and the DU Map gives each
+  /// origination role an NMLS slot and a state-license slot. Every sample
+  /// carries one, so the bet is measured; the second license is a child table
+  /// the day somebody needs it.
+  licenseIdentifier    String?                  @map("license_identifier")
+  licenseAuthorityType DuLicenseAuthorityLevel? @map("license_authority_type")
+
+  /// `PARTY_ROLE_IDENTIFIER`, where a role carries its own id rather than a
+  /// license.
+  partyRoleIdentifier String? @map("party_role_identifier")
+
+  addressLineText  String? @map("address_line_text")
+  cityName         String? @map("city_name")
+  stateCode        String? @map("state_code")
+  postalCode       String? @map("postal_code")
+  contactTelephone String? @map("contact_telephone")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// No unique on the role. `PARTY` is `1:10` and nothing in the specification
+  /// says a deal has one counseling agency, so the ceiling is the rule that
+  /// binds here and a unique index would quietly replace it with a different,
+  /// stricter one.
+  @@index([applicationId], map: "du_deal_parties_by_application")
+  @@map("du_deal_parties")
 }

@@ -34,7 +34,9 @@ const HAND_WRITTEN = [
  *
  * Their headers are written here and their contents are not: a member name is
  * MISMO's spelling and must survive verbatim, so `PROJECT_ANALYSIS` and
- * `SalesContractAnalysisDescription` are not ours to correct.
+ * `SalesContractAnalysisDescription` are not ours to correct. The inventory of
+ * what no table holds is the same arrangement in a different directory: its
+ * header is ours and its rows are element paths.
  */
 const GENERATED = [
   "packages/du/src/generated/cardinality.ts",
@@ -42,6 +44,7 @@ const GENERATED = [
   "packages/du/src/generated/enums.ts",
   "packages/du/src/generated/lengths.ts",
   "packages/du/src/generated/order.ts",
+  "packages/du-schema/du-not-round-tripped.txt",
 ];
 
 const BRITISH =

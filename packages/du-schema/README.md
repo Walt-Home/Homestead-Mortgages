@@ -135,6 +135,21 @@ mapping in the generator is still exhaustive against the release it was read
 against — so a format, a conditionality phrase or an enumeration that 1.9.4
 added stops the build and somebody re-reads the tabs.
 
+### `du-not-round-tripped.txt` — the one file here that is ours
+
+Generated, not vendored, and at the package root rather than inside any of the
+three directories above so that nothing can mistake it for somebody else's
+bytes. It is every element path the eighteen samples carry that our model has
+nowhere to put: the corpus minus the modeled set declared in
+`scripts/build-du.mjs`. `npm run du:build` writes it and `npm run du:verify`
+fails when it is stale, exactly as for the six tables in `packages/du`.
+
+It lives beside the samples because that is what it is measured from, and it is
+read by a person and by the round-trip test rather than by a compiler — nothing
+imports it and nothing type-checks it. `docs/du-generation.md` says why each
+container it stops at is stopped at, and the same check holds that page and this
+file to each other.
+
 ## The assembly traps
 
 Three, in the order somebody hits them.

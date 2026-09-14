@@ -726,10 +726,25 @@ export const DU_DATA_POINT_FOR_ENUM = {
     dataPoints: [{ name: "LicenseAuthorityLevelType", formFields: ["9.3", "9.4", "9.6", "9.7"] }],
   },
   DuDealPartyRole: {
-    // Every role a DEAL party can hold except Borrower, which has its own
-    // container and its own table and is never one of these.
+    // Every role a DEAL party can hold except four, each of which is somewhere
+    // else or nowhere on purpose:
+    //
+    //   Borrower       has its own container, its own table and a position.
+    //   PropertyOwner  carries a vesting string rather than a person, so it is
+    //                  `du_vestings` and not a party at all.
+    //   SubmittingParty is the tab's only "Institution ID" row and sits outside
+    //                  the DEAL; who we are to Fannie is still an open question.
+    //   Trust          is not modeled. No sample carries one, and a community
+    //                  land trust is a real product, so this exclusion is the
+    //                  place it stays visible -- and it is checked back against
+    //                  the tab, so it cannot become a name Fannie Mae dropped.
+    //
+    // The tab files PartyRoleType on thirteen rows carrying eight values:
+    // Borrower four times, PropertyOwner and HousingCounselingAgency twice
+    // each. Four excluded plus four declared is all eight, which is why this
+    // enum needs no VALUES_NOT_IN_SCOPE entry.
     dataPoints: [{ name: "PartyRoleType", formFields: [] }],
-    exclude: ["Borrower"],
+    exclude: ["Borrower", "PropertyOwner", "SubmittingParty", "Trust"],
   },
 
   // DU:UNDERWRITING_VERIFICATION
@@ -896,9 +911,14 @@ export function deriveEnumerations(enumerationRows, options = {}) {
       }
       const wanted = dataPoint.formFields.map((f) => reconcile(dataPoint.name, f));
       const values = [];
+      // What the tab offers at the fields this enum reads, before the exclusion
+      // list gets to it. Kept so an exclusion can be checked against the tab
+      // rather than merely obeyed.
+      const offered = [];
       for (const row of all) {
         if (wanted.length && !wanted.includes(row.formFieldId)) continue;
         if (row.value === null) continue;
+        if (!offered.includes(row.value)) offered.push(row.value);
         if (spec.exclude?.includes(row.value)) continue;
         if (!values.includes(row.value)) values.push(row.value);
       }
@@ -918,7 +938,7 @@ export function deriveEnumerations(enumerationRows, options = {}) {
           );
         }
       }
-      perDataPoint.push({ name: dataPoint.name, values, wanted });
+      perDataPoint.push({ name: dataPoint.name, values, wanted, offered });
     }
 
     const [first, ...rest] = perDataPoint;
@@ -959,6 +979,24 @@ export function deriveEnumerations(enumerationRows, options = {}) {
       throw new Error(
         `VALUES_NOT_IN_SCOPE claims ${enumName} leaves ${missing.join(", ")} behind, but the ` +
           "tab no longer carries them.",
+      );
+    }
+
+    // And an exclusion is a claim about the tab too, so it rots the same way.
+    // `VALUES_NOT_IN_SCOPE` is checked in both directions and `exclude` was
+    // checked in neither: a value Fannie Mae renames or drops would sit in the
+    // list forever, silently skipping nothing, while the doc comment that calls
+    // the exclusion "the place it stays visible" went on being believed. With
+    // both directions checked, what the tab carries for an enum is exactly its
+    // members plus its exclusions plus what VALUES_NOT_IN_SCOPE names — which
+    // is what lets a comment state that total and be held to it.
+    const offered = new Set(perDataPoint.flatMap((d) => d.offered));
+    const stale = [...excluded].filter((v) => !offered.has(v));
+    if (stale.length) {
+      throw new Error(
+        `DU_DATA_POINT_FOR_ENUM excludes ${stale.join(", ")} from ${enumName}, which the ` +
+          `${TABS.enumerations} tab does not carry at the form field(s) this enum reads.\n` +
+          "  Drop the exclusion, or follow the value to the name it has now.",
       );
     }
   }
@@ -1884,6 +1922,681 @@ function runArcRoleCorpusCheck() {
   return true;
 }
 
+// ── The modeled set, and the inventory it does not cover ───────────────────
+
+/**
+ * Where the subtraction below is written, and where its prose half lives.
+ *
+ * The artifact sits beside the samples it is derived from rather than with the
+ * six TypeScript tables, because nothing type-checks it and nothing imports it:
+ * it is evidence about a corpus, read by a person and by the round-trip test.
+ */
+const NOT_ROUND_TRIPPED_FILE = resolve(ROOT, "packages/du-schema/du-not-round-tripped.txt");
+const NOT_MODELED_PROSE_FILE = resolve(ROOT, "docs/du-generation.md");
+const NOT_MODELED_PROSE_HEADING = "## What a submission carries and this model does not";
+
+/** The DEAL every container but the envelope hangs under, written once. */
+export const DEAL_XPATH = "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL";
+const ROLE_XPATH = `${DEAL_XPATH}/PARTIES/PARTY/ROLES/ROLE`;
+const BORROWER_XPATH = `${ROLE_XPATH}/BORROWER`;
+
+/**
+ * The attributes that change what an element IS, and so belong in its path.
+ *
+ * A `LOAN` is either the loan being applied for or one the borrower already
+ * owes, and only `LoanRoleType` says which. Nine of the corpus's twenty-seven
+ * LOAN elements are `RelatedLoan` — simultaneous second liens and community
+ * seconds — and on a path built from tag names alone all nine land on the
+ * subject loan's, where a model holding one loan per application reads as
+ * holding them too.
+ *
+ * One entry, because one attribute earns it: everything else the samples put
+ * on an element is an `xlink:*` label, a `SequenceNumber`, or the envelope's
+ * `MISMOReferenceModelIdentifier`, none of which changes what the element is.
+ * `elementPathsInCorpus` throws on an element named here that arrives without
+ * its attribute, so a sample shipping a LOAN with no role stops the build
+ * rather than quietly becoming a third path.
+ */
+export const PATH_PREDICATES = { LOAN: "LoanRoleType" };
+
+/** The loan being applied for, which is the only one of the two this holds. */
+const SUBJECT_LOAN_XPATH = `${DEAL_XPATH}/LOANS/LOAN[@LoanRoleType="SubjectLoan"]`;
+
+/**
+ * A block whose bytes are asserted about us rather than read out of a row.
+ *
+ * The envelope's version identifier, our own name and address as the
+ * origination company, the note payee. Naming it is not a lesser claim than
+ * naming a table — the submission carries the element either way — but it is a
+ * different one, and a block that can name neither has nowhere to put what it
+ * claims.
+ */
+const CONSTANT = "constant";
+
+/**
+ * Every element this model has somewhere to put, keyed by its parent's XPath.
+ *
+ * This is the one HAND-WRITTEN list in this file that the spec does not
+ * produce, and it is what the inventory beside it is subtracted from. It
+ * exists because the inventory used to be hand-written instead, and a written
+ * inventory was wrong in both directions at once: it named seven containers as
+ * excluded while eight more that are in every sample went unmentioned, and two
+ * of its seven — `RELATED_LOAN` and `ALIAS` — occur zero times in the corpus
+ * as element names. Subtracting a declared set from a measured one cannot make
+ * either mistake: a container nobody claimed appears in the file, and a name
+ * nothing matches stops the build.
+ *
+ * Ancestors are implied, so only the leaves are listed — an element cannot be
+ * emitted without the containers it hangs inside, and repeating them here
+ * would be a second place to get them wrong. A container with no leaf of its
+ * own is named as its parent's child, which is why `RELATIONSHIPS` carries
+ * `RELATIONSHIP`: every arc is attributes, and the element has no children.
+ *
+ * **`held` is what does the holding, and it is checked too.** Every name in it
+ * is either a table `schema.prisma` maps or the literal `constant`, and
+ * `diffModeledHolders` fails on a block that names a table the schema does not
+ * have or that claims nothing at all. Without it this list was checked in one
+ * direction only — the corpus proves an entry matches something Fannie Mae
+ * ships, and nothing proved the model had anywhere to put it, which is how
+ * vesting, an originator's license and a counseling agency's identifier were
+ * all claimed by a database holding none of them.
+ *
+ * A path is claimed wherever it occurs, so `held` has to cover every party the
+ * corpus hangs it under, and three blocks are claimed from both sides at once:
+ * a borrower's address, name and taxpayer identifier are facts, and the
+ * origination company's are constants about us. Where the borrower's side is
+ * the only side, the comment says so.
+ *
+ * **Every entry has to occur in the corpus, and `deriveNotRoundTripped` throws
+ * on one that does not.** The list's job is to partition the eighteen samples,
+ * so an entry that partitions nothing is either a typo or a claim about a shape
+ * no shipped submission exercises — and a round trip over the samples can only
+ * ever prove the shapes the samples carry. A modeled data point the corpus
+ * never shows, like `BANKRUPTCY_DETAIL/BankruptcyChapterType`, belongs in the
+ * schema and not in this list.
+ */
+export const MODELED_CHILDREN = {
+  // The envelope. Constant bytes rather than rows, and emitted on every file.
+  "MESSAGE/ABOUT_VERSIONS/ABOUT_VERSION": {
+    held: [CONSTANT],
+    children: ["AboutVersionIdentifier", "CreatedDatetime"],
+  },
+
+  // `du_assets`, and the three of its four kinds that carry an ASSET_DETAIL.
+  [`${DEAL_XPATH}/ASSETS/ASSET/ASSET_DETAIL`]: {
+    held: ["du_assets"],
+    children: [
+      "AssetAccountIdentifier",
+      "AssetCashOrMarketValueAmount",
+      "AssetType",
+      "AssetTypeOtherDescription",
+      "FundsSourceType",
+    ],
+  },
+  [`${DEAL_XPATH}/ASSETS/ASSET/ASSET_DETAIL/EXTENSION/OTHER/ULAD:ASSET_DETAIL_EXTENSION`]: {
+    held: ["du_assets"],
+    children: ["ULAD:IncludedInAssetAccountIndicator"],
+  },
+  [`${DEAL_XPATH}/ASSETS/ASSET/ASSET_HOLDER/NAME`]: {
+    held: ["du_assets"],
+    children: ["FullName"],
+  },
+
+  // `du_owned_properties`, the fourth kind, which carries no ASSET_DETAIL.
+  [`${DEAL_XPATH}/ASSETS/ASSET/OWNED_PROPERTY/OWNED_PROPERTY_DETAIL`]: {
+    held: ["du_owned_properties"],
+    children: [
+      "OwnedPropertyDispositionStatusType",
+      "OwnedPropertyLienUPBAmount",
+      "OwnedPropertyMaintenanceExpenseAmount",
+      "OwnedPropertyRentalIncomeGrossAmount",
+      "OwnedPropertyRentalIncomeNetAmount",
+      "OwnedPropertySubjectIndicator",
+    ],
+  },
+  [`${DEAL_XPATH}/ASSETS/ASSET/OWNED_PROPERTY/PROPERTY/ADDRESS`]: {
+    held: ["du_owned_properties"],
+    children: [
+      "AddressLineText",
+      "AddressUnitIdentifier",
+      "CityName",
+      "CountryCode",
+      "PostalCode",
+      "StateCode",
+    ],
+  },
+  [`${DEAL_XPATH}/ASSETS/ASSET/OWNED_PROPERTY/PROPERTY/PROPERTY_DETAIL`]: {
+    held: ["du_owned_properties"],
+    children: ["PropertyCurrentUsageType", "PropertyEstimatedValueAmount", "PropertyUsageType"],
+  },
+
+  // The subject property, from the `loan_files` and `loan_scenarios` fields
+  // that stand in for a properties table.
+  [`${DEAL_XPATH}/COLLATERALS/COLLATERAL/SUBJECT_PROPERTY/ADDRESS`]: {
+    held: ["loan_files"],
+    children: ["AddressLineText", "AddressUnitIdentifier", "CityName", "PostalCode", "StateCode"],
+  },
+  [`${DEAL_XPATH}/COLLATERALS/COLLATERAL/SUBJECT_PROPERTY/PROPERTY_DETAIL`]: {
+    held: ["loan_files", "loan_scenarios"],
+    children: ["PropertyEstimatedValueAmount", "PropertyUsageType"],
+  },
+
+  // `du_expenses` and `du_liabilities`.
+  [`${DEAL_XPATH}/EXPENSES/EXPENSE`]: {
+    held: ["du_expenses"],
+    children: [
+      "ExpenseMonthlyPaymentAmount",
+      "ExpenseRemainingTermMonthsCount",
+      "ExpenseType",
+      "ExpenseTypeOtherDescription",
+    ],
+  },
+  [`${DEAL_XPATH}/LIABILITIES/LIABILITY/LIABILITY_DETAIL`]: {
+    held: ["du_liabilities"],
+    children: [
+      "HELOCMaximumBalanceAmount",
+      "LiabilityAccountIdentifier",
+      "LiabilityExclusionIndicator",
+      "LiabilityMonthlyPaymentAmount",
+      "LiabilityPaymentIncludesTaxesInsuranceIndicator",
+      "LiabilityPayoffStatusIndicator",
+      "LiabilityRemainingTermMonthsCount",
+      "LiabilityType",
+      "LiabilityUnpaidBalanceAmount",
+      "MortgageType",
+    ],
+  },
+  [`${DEAL_XPATH}/LIABILITIES/LIABILITY/LIABILITY_HOLDER/NAME`]: {
+    held: ["du_liabilities"],
+    children: ["FullName"],
+  },
+
+  // The subject loan, and the LenderLoan identifier beside DU's own casefile.
+  // The predicate is the whole of what separates these from the related loan
+  // this model has nowhere to put; see PATH_PREDICATES.
+  [`${SUBJECT_LOAN_XPATH}/AMORTIZATION/AMORTIZATION_RULE`]: {
+    held: ["loan_files", "loan_scenarios"],
+    children: ["AmortizationType", "LoanAmortizationPeriodCount", "LoanAmortizationPeriodType"],
+  },
+  [`${SUBJECT_LOAN_XPATH}/LOAN_DETAIL`]: {
+    held: ["application_parties"],
+    children: ["BorrowerCount"],
+  },
+  [`${SUBJECT_LOAN_XPATH}/LOAN_IDENTIFIERS/LOAN_IDENTIFIER`]: {
+    held: ["loan_files"],
+    children: ["LoanIdentifier", "LoanIdentifierType"],
+  },
+  [`${SUBJECT_LOAN_XPATH}/TERMS_OF_LOAN`]: {
+    held: ["loan_files", "loan_scenarios"],
+    children: ["BaseLoanAmount", "LienPriorityType", "LoanPurposeType", "NoteRatePercent"],
+  },
+
+  // `connector_snapshots`, as the vendor reports DU is told about.
+  [`${SUBJECT_LOAN_XPATH}/EXTENSION/OTHER/DU:LOAN_EXTENSION/DU:UNDERWRITING_VERIFICATIONS/DU:UNDERWRITING_VERIFICATION`]:
+    {
+      held: ["connector_snapshots"],
+      children: ["DU:VerificationReportIdentifier", "DU:VerificationReportType"],
+    },
+
+  // The party blocks, which the corpus hangs under six kinds of role and this
+  // model reaches from two directions. A borrower's name, address, telephone,
+  // email and taxpayer identifier are facts on the party; the origination
+  // company's and the originator's are constants about us. Neither direction
+  // reaches the property owner, whose only distinguishing container —
+  // PROPERTY_OWNER, and the vesting in it — is in the inventory.
+  [`${DEAL_XPATH}/PARTIES/PARTY/ADDRESSES/ADDRESS`]: {
+    held: ["facts", CONSTANT],
+    children: ["AddressLineText", "CityName", "PostalCode", "StateCode"],
+  },
+  [`${DEAL_XPATH}/PARTIES/PARTY/INDIVIDUAL/NAME`]: {
+    held: ["facts", CONSTANT],
+    children: ["FirstName", "FullName", "LastName"],
+  },
+  [`${DEAL_XPATH}/PARTIES/PARTY/INDIVIDUAL/CONTACT_POINTS/CONTACT_POINT/CONTACT_POINT_DETAIL`]: {
+    held: [CONSTANT],
+    children: ["ContactPointRoleType"],
+  },
+  [`${DEAL_XPATH}/PARTIES/PARTY/INDIVIDUAL/CONTACT_POINTS/CONTACT_POINT/CONTACT_POINT_EMAIL`]: {
+    held: ["facts"],
+    children: ["ContactPointEmailValue"],
+  },
+  [`${DEAL_XPATH}/PARTIES/PARTY/INDIVIDUAL/CONTACT_POINTS/CONTACT_POINT/CONTACT_POINT_TELEPHONE`]: {
+    held: ["facts", CONSTANT],
+    children: ["ContactPointTelephoneValue"],
+  },
+  // Institutional only: no borrower in the corpus is a LEGAL_ENTITY, and the
+  // two entities we can name are ourselves. The counseling agency's name is
+  // the third, and it is deferred with COUNSELING rather than claimed here.
+  [`${DEAL_XPATH}/PARTIES/PARTY/LEGAL_ENTITY/LEGAL_ENTITY_DETAIL`]: {
+    held: [CONSTANT],
+    children: ["FullName"],
+  },
+  [`${DEAL_XPATH}/PARTIES/PARTY/TAXPAYER_IDENTIFIERS/TAXPAYER_IDENTIFIER`]: {
+    held: ["facts", CONSTANT],
+    children: ["TaxpayerIdentifierType", "TaxpayerIdentifierValue"],
+  },
+  // `application_parties` holds the five borrower-side roles; the three
+  // institutional ones are constants. PropertyOwner is neither.
+  [`${ROLE_XPATH}/ROLE_DETAIL`]: {
+    held: ["application_parties", CONSTANT],
+    children: ["PartyRoleType"],
+  },
+
+  // Vesting, and the two things a role carries that are not the borrower's.
+  //
+  // These three moved out of the not-round-tripped inventory in the same commit
+  // that gave them tables. Left unclaimed they would have read as "no table
+  // holds this" while `du_vestings` and `du_deal_parties` held all three — an
+  // inventory overstating what we cannot emit is the same defect as one
+  // understating it, arriving from the other side.
+  [`${ROLE_XPATH}/PROPERTY_OWNER`]: {
+    held: ["du_vestings"],
+    children: ["PropertyOwnerStatusType", "RelationshipVestingType"],
+  },
+  [`${ROLE_XPATH}/LICENSES/LICENSE/LICENSE_DETAIL`]: {
+    held: ["du_deal_parties"],
+    children: ["LicenseAuthorityLevelType", "LicenseIdentifier"],
+  },
+  [`${ROLE_XPATH}/PARTY_ROLE_IDENTIFIERS/PARTY_ROLE_IDENTIFIER`]: {
+    held: ["du_deal_parties"],
+    children: ["PartyRoleIdentifier"],
+  },
+
+  // The borrower: pinned facts, `du_declarations`, `du_residences`,
+  // `income_sources` and `employments`.
+  [`${BORROWER_XPATH}/BORROWER_DETAIL`]: {
+    held: ["facts"],
+    children: ["BorrowerBirthDate", "MaritalStatusType"],
+  },
+  [`${BORROWER_XPATH}/CURRENT_INCOME/CURRENT_INCOME_ITEMS/CURRENT_INCOME_ITEM/CURRENT_INCOME_ITEM_DETAIL`]:
+    {
+      held: ["income_sources"],
+      children: ["CurrentIncomeMonthlyTotalAmount", "EmploymentIncomeIndicator", "IncomeType"],
+    },
+  [`${BORROWER_XPATH}/DECLARATION/DECLARATION_DETAIL`]: {
+    held: ["du_declarations"],
+    children: [
+      "BankruptcyIndicator",
+      "CitizenshipResidencyType",
+      "FHASecondaryResidenceIndicator",
+      "HomeownerPastThreeYearsType",
+      "IntentToOccupyType",
+      "OutstandingJudgmentsIndicator",
+      "PartyToLawsuitIndicator",
+      "PresentlyDelinquentIndicator",
+      "PriorPropertyDeedInLieuConveyedIndicator",
+      "PriorPropertyForeclosureCompletedIndicator",
+      "PriorPropertyShortSaleCompletedIndicator",
+      "PriorPropertyTitleType",
+      "PriorPropertyUsageType",
+      "PropertyProposedCleanEnergyLienIndicator",
+      "UndisclosedBorrowedFundsIndicator",
+      "UndisclosedComakerOfNoteIndicator",
+      "UndisclosedCreditApplicationIndicator",
+      "UndisclosedMortgageApplicationIndicator",
+    ],
+  },
+  [`${BORROWER_XPATH}/DECLARATION/DECLARATION_DETAIL/EXTENSION/OTHER/ULAD:DECLARATION_DETAIL_EXTENSION`]:
+    {
+      held: ["du_declarations"],
+      children: ["ULAD:SpecialBorrowerSellerRelationshipIndicator"],
+    },
+  [`${BORROWER_XPATH}/EMPLOYERS/EMPLOYER/EMPLOYMENT`]: {
+    held: ["employments"],
+    children: ["EmploymentPositionDescription", "EmploymentStartDate", "EmploymentStatusType"],
+  },
+  [`${BORROWER_XPATH}/EMPLOYERS/EMPLOYER/LEGAL_ENTITY/LEGAL_ENTITY_DETAIL`]: {
+    held: ["employers"],
+    children: ["FullName"],
+  },
+  [`${BORROWER_XPATH}/RESIDENCES/RESIDENCE/ADDRESS`]: {
+    held: ["du_residences"],
+    children: [
+      "AddressLineText",
+      "AddressUnitIdentifier",
+      "CityName",
+      "CountryCode",
+      "PostalCode",
+      "StateCode",
+    ],
+  },
+  [`${BORROWER_XPATH}/RESIDENCES/RESIDENCE/LANDLORD/LANDLORD_DETAIL`]: {
+    held: ["du_residences"],
+    children: ["MonthlyRentAmount"],
+  },
+  [`${BORROWER_XPATH}/RESIDENCES/RESIDENCE/RESIDENCE_DETAIL`]: {
+    held: ["du_residences"],
+    children: [
+      "BorrowerResidencyBasisType",
+      "BorrowerResidencyDurationMonthsCount",
+      "BorrowerResidencyType",
+    ],
+  },
+
+  // The graph. Every arc is attributes, so the element has no children of its
+  // own and has to be named as one.
+  [`${DEAL_XPATH}/RELATIONSHIPS`]: {
+    held: [
+      "du_asset_parties",
+      "du_liability_parties",
+      "du_expense_parties",
+      "du_joint_credit_report_links",
+      "du_liabilities",
+      "income_sources",
+      "application_parties",
+    ],
+    children: ["RELATIONSHIP"],
+  },
+};
+
+/** Every modeled path, leaves and the ancestors they imply, as one flat set. */
+export function modeledElementPaths(children = MODELED_CHILDREN) {
+  const paths = new Set();
+  const addWithAncestors = (xpath) => {
+    const parts = xpath.split("/");
+    for (let depth = 1; depth <= parts.length; depth += 1) {
+      paths.add(parts.slice(0, depth).join("/"));
+    }
+  };
+  for (const [parent, block] of Object.entries(children)) {
+    addWithAncestors(parent);
+    for (const name of block.children) paths.add(`${parent}/${name}`);
+  }
+  return paths;
+}
+
+/** Every table `schema.prisma` maps, which is what a `held` name has to be. */
+export function prismaTableNames(schemaText) {
+  return new Set([...schemaText.matchAll(/^\s*@@map\("([^"]+)"\)/gm)].map((row) => row[1]));
+}
+
+/**
+ * Every block that claims a home the database does not have.
+ *
+ * The one direction the modeled set was never checked in. A path only has to
+ * occur in the corpus to pass the subtraction, so a block naming a container
+ * Fannie Mae ships and nothing here stores would disappear from the inventory
+ * without ever appearing in the page that explains it — a silent exemption in
+ * a file whose header says there are none.
+ */
+export function diffModeledHolders(children, tables) {
+  const problems = [];
+  for (const [parent, block] of Object.entries(children)) {
+    if (!block.held?.length) {
+      problems.push(`${parent} claims to be modeled and names nothing that holds it`);
+      continue;
+    }
+    for (const name of block.held) {
+      if (name !== CONSTANT && !tables.has(name)) {
+        problems.push(`${parent} is held by ${name}, which schema.prisma does not map`);
+      }
+    }
+  }
+  return problems;
+}
+
+/**
+ * Every element path the vendored samples carry, with how often.
+ *
+ * A tokenizer rather than an XML parser, for the same reason `arcRolesInCorpus`
+ * uses a regex: nothing here needs a document object, and adding a parser to
+ * the dependency tree to count elements would be the tail wagging the dog. It
+ * does strip comments first, though, which the arcrole count deliberately does
+ * not — that one asks which URIs appear anywhere in bytes Fannie Mae shipped,
+ * and this one has to keep a stack balanced, which a `<TAG>` inside a comment
+ * would break.
+ *
+ * The stack is popped by name rather than by position, so a mismatched close
+ * tag stops the build instead of producing a wrong path for everything after
+ * it. `PATH_PREDICATES` is what puts an attribute into a path, and an element
+ * listed there without its attribute is the same kind of loud failure.
+ *
+ * `elements` is how many of that element the corpus holds; `files` is how many
+ * of the eighteen carry at least one. Both are recorded because they answer
+ * different questions: 84 HOUSING_EXPENSE elements in 18 files is a container
+ * every submission repeats, and 5 DEPENDENT elements in 4 files is not.
+ */
+export function elementPathsInCorpus(dir = SAMPLES_DIR) {
+  const counts = new Map();
+  for (const name of readdirSync(dir).sort()) {
+    if (!name.endsWith(".xml")) continue;
+    const xml = readFileSync(join(dir, name), "utf8").replace(/<!--[\s\S]*?-->/g, "");
+    const stack = [];
+    const seen = new Set();
+    for (const tag of xml.matchAll(/<(\/?)([A-Za-z_][\w.:-]*)((?:"[^"]*"|[^>"])*)>/g)) {
+      const [, closing, element, rest] = tag;
+      if (closing) {
+        const open = stack.pop();
+        if (!open || open.element !== element) {
+          throw new Error(
+            `${name} closes ${element} inside ${open ? open.element : "nothing"}, ` +
+              "so its element paths cannot be read.",
+          );
+        }
+        continue;
+      }
+      let segment = element;
+      const attribute = PATH_PREDICATES[element];
+      if (attribute) {
+        const value = rest.match(new RegExp(`\\b${attribute}="([^"]*)"`));
+        if (!value) {
+          throw new Error(
+            `${name} has a ${element} with no ${attribute}, and that attribute is what says ` +
+              "which one it is.",
+          );
+        }
+        segment = `${element}[@${attribute}="${value[1]}"]`;
+      }
+      stack.push({ element, segment });
+      const xpath = stack.map((open) => open.segment).join("/");
+      const count = counts.get(xpath) ?? { elements: 0, files: 0 };
+      count.elements += 1;
+      counts.set(xpath, count);
+      seen.add(xpath);
+      if (rest.trimEnd().endsWith("/")) stack.pop();
+    }
+    if (stack.length) {
+      throw new Error(
+        `${name} does not close ${stack[stack.length - 1].element}, so its element paths ` +
+          "cannot be read.",
+      );
+    }
+    for (const xpath of seen) counts.get(xpath).files += 1;
+  }
+  return counts;
+}
+
+/**
+ * The corpus minus the modeled set: what a round trip cannot claim to cover.
+ *
+ * Sorted by path so the committed artifact diffs one line at a time — a
+ * container that becomes modeled disappears from it, and a container a future
+ * sample introduces appears.
+ */
+export function deriveNotRoundTripped(corpus, modeled) {
+  const unmatched = [...modeled].filter((xpath) => !corpus.has(xpath)).sort();
+  if (unmatched.length) {
+    throw new Error(
+      `MODELED_CHILDREN names ${unmatched.length} element path(s) no vendored sample carries:\n` +
+        unmatched.map((xpath) => `    ${xpath}`).join("\n") +
+        "\n  Either the path is mistyped, or it is a shape the eighteen samples do not " +
+        "exercise\n  and this list cannot be the place that claims it.",
+    );
+  }
+  return [...corpus.entries()]
+    .filter(([xpath]) => !modeled.has(xpath))
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([xpath, count]) => ({ xpath, ...count }));
+}
+
+/**
+ * MISMO writes containers in capitals and data points in mixed case, which is
+ * what tells the two apart without asking the schema. A `PATH_PREDICATES`
+ * predicate rides on the container it discriminates and does not change that.
+ */
+const CONTAINER_NAME = /^(?:[A-Za-z]+:)?[A-Z][A-Z0-9_]*(?:\[@[A-Za-z]+="[^"]*"\])?$/;
+
+/** The short form Fannie Mae's own ArcRoles tab uses: `DEAL/ASSETS/ASSET`. */
+export function shortElementPath(xpath) {
+  return xpath.startsWith(`${DEAL_XPATH}/`)
+    ? xpath.slice("MESSAGE/DEAL_SETS/DEAL_SET/DEALS/".length)
+    : xpath;
+}
+
+/**
+ * The unmodeled CONTAINERS whose parent is modeled — the roots of the subtrees
+ * this model stops at, and the list the prose has to name one by one.
+ *
+ * Roots rather than every path, because a reader owes an explanation for
+ * stopping at `HOUSING_EXPENSES` and not for each of the four elements beneath
+ * it; and containers rather than every root, because the data points that sit
+ * loose inside containers we DO model are gaps of a different kind and the
+ * artifact is where they are listed.
+ */
+export function notModeledContainers(entries, modeled) {
+  const roots = [];
+  const byShortPath = new Map();
+  for (const entry of entries) {
+    const cut = entry.xpath.lastIndexOf("/");
+    if (cut < 0 || !modeled.has(entry.xpath.slice(0, cut))) continue;
+    if (!CONTAINER_NAME.test(entry.xpath.slice(cut + 1))) continue;
+    const short = shortElementPath(entry.xpath);
+    if (byShortPath.has(short)) {
+      throw new Error(
+        `Two unmodeled containers both shorten to ${short}, so the prose cannot name either.`,
+      );
+    }
+    byShortPath.set(short, entry);
+    roots.push({ ...entry, short });
+  }
+  return roots;
+}
+
+/**
+ * The containers the prose names, read back out of the page that names them.
+ *
+ * One bullet per container, its path first and in backticks, so the reason is
+ * free to be a sentence. Anything else under that heading is prose about the
+ * list rather than a member of it. The section ends at the next heading of any
+ * depth, so a sub-heading added inside it cannot quietly enrol its own bullets.
+ */
+export function proseNotModeledContainers(markdown, heading = NOT_MODELED_PROSE_HEADING) {
+  const start = markdown.indexOf(`\n${heading}\n`);
+  if (start < 0) {
+    throw new Error(`docs/du-generation.md has no ${JSON.stringify(heading)} heading.`);
+  }
+  const body = markdown.slice(start + heading.length + 2);
+  const end = body.search(/\n#{1,6} /);
+  const section = end < 0 ? body : body.slice(0, end);
+  return [...section.matchAll(/^- `([^`]+)`/gm)].map((bullet) => bullet[1]);
+}
+
+/** The artifact itself: a header saying what regenerates it, then the rows. */
+export function renderNotRoundTripped(entries, corpusSize) {
+  const modeledCount = corpusSize - entries.length;
+  const rows = entries.map(
+    (entry) =>
+      `${String(entry.elements).padStart(8)}${String(entry.files).padStart(7)}  ${entry.xpath}`,
+  );
+  return `# GENERATED by scripts/build-du.mjs from the eighteen DU sample submissions
+# vendored in packages/du-schema/samples.
+# Do not edit. Run \`npm run du:build\`; \`npm run du:verify\` fails on drift.
+#
+# Every element path the samples carry that MODELED_CHILDREN in
+# scripts/build-du.mjs does not claim. This is the corpus minus the modeled
+# set, so a container that becomes modeled leaves this file in the same commit
+# that models it, and one a future sample introduces arrives here until
+# somebody decides what to do about it.
+#
+# It is the inventory a round trip is allowed to ignore, and nothing else: an
+# element in neither this file nor the modeled set is a gap in the model, not
+# an exemption from it.
+#
+# Elements, not attributes — with one exception. A LOAN carries its
+# LoanRoleType in its path, because that attribute is the whole of what
+# separates the loan being applied for from one the borrower already owes. The
+# xlink labels that carry the submission's graph are counted nowhere here;
+# packages/du/src/generated/arcroles.ts is where the arcs are.
+#
+# ${corpusSize} element paths occur across the eighteen samples. ${modeledCount} are modeled; the
+# ${entries.length} below are not.
+#
+# elements  files  element path
+${rows.join("\n")}
+`;
+}
+
+/**
+ * Diff the committed inventory, and the prose list, against the corpus.
+ *
+ * Three halves of one claim, so one check. The modeled set names what holds
+ * each block it claims; the file is the complete subtraction; the prose names
+ * the containers it stops at and says why. Letting any of them drift alone
+ * would leave a page that reads as an explanation of a file it no longer
+ * describes, which is the failure that produced a hand-written inventory
+ * naming two containers the corpus does not contain.
+ */
+function runNotRoundTrippedCheck() {
+  const corpus = elementPathsInCorpus();
+  const modeled = modeledElementPaths();
+  let entries;
+  let containers;
+  try {
+    entries = deriveNotRoundTripped(corpus, modeled);
+    containers = notModeledContainers(entries, modeled);
+  } catch (error) {
+    console.error(`✗ ${error.message}`);
+    return false;
+  }
+
+  const problems = diffModeledHolders(
+    MODELED_CHILDREN,
+    prismaTableNames(readFileSync(PRISMA_SCHEMA, "utf8")),
+  );
+  let committed = null;
+  try {
+    committed = readFileSync(NOT_ROUND_TRIPPED_FILE, "utf8");
+  } catch {
+    committed = null;
+  }
+  if (committed !== renderNotRoundTripped(entries, corpus.size)) {
+    problems.push(
+      "packages/du-schema/du-not-round-tripped.txt is not what the samples minus the modeled " +
+        "set produce",
+    );
+  }
+
+  const named = new Set(proseNotModeledContainers(readFileSync(NOT_MODELED_PROSE_FILE, "utf8")));
+  for (const container of containers) {
+    if (!named.has(container.short)) {
+      problems.push(
+        `${container.short} is in ${container.files} of the eighteen samples, nothing models it, ` +
+          "and docs/du-generation.md does not say why",
+      );
+    }
+    named.delete(container.short);
+  }
+  for (const short of named) {
+    problems.push(`docs/du-generation.md names ${short}, which is modeled or is not a container`);
+  }
+
+  if (problems.length) {
+    console.error("✗ the derived inventory and what is committed disagree:");
+    for (const problem of problems) console.error(`    ${problem}`);
+    console.error("    Run: npm run du:build");
+    return false;
+  }
+  console.log(
+    `✓ ${entries.length} of ${corpus.size} element paths in the vendored samples are not ` +
+      `modeled, and du-not-round-tripped.txt lists them under ${containers.length} named containers`,
+  );
+  console.log(
+    `✓ ${Object.keys(MODELED_CHILDREN).length} modeled blocks name the table or the constant ` +
+      "that holds them",
+  );
+  return true;
+}
+
 /**
  * Diff every `Du*` enum in schema.prisma against the values the spec derives.
  *
@@ -2692,6 +3405,7 @@ async function main() {
     let ok = runPrismaCheck();
     if (!runSchemaOrderCheck()) ok = false;
     if (!runArcRoleCorpusCheck()) ok = false;
+    if (!runNotRoundTrippedCheck()) ok = false;
     if (!runAssetShapeCheck()) ok = false;
     if (!(await runDatabaseObjectCheck())) ok = false;
     const files = buildFromSpec();
@@ -2719,7 +3433,19 @@ async function main() {
     writeFileSync(resolve(OUT_DIR, name), contents);
   }
   console.log(`✓ wrote ${Object.keys(files).length} files to packages/du/src/generated/`);
+
+  // The inventory is written from the samples rather than from the workbook,
+  // so it is not one of the files above and does not move when the spec does.
+  // Writing it before the check below is what makes `du:build` the way to fix
+  // a stale artifact, and leaves the check to report the half a build cannot
+  // write for anybody: the prose.
+  const corpus = elementPathsInCorpus();
+  const entries = deriveNotRoundTripped(corpus, modeledElementPaths());
+  writeFileSync(NOT_ROUND_TRIPPED_FILE, renderNotRoundTripped(entries, corpus.size));
+  console.log(`✓ wrote ${entries.length} rows to packages/du-schema/du-not-round-tripped.txt`);
+
   let ok = runPrismaCheck();
+  if (!runNotRoundTrippedCheck()) ok = false;
   if (!runAssetShapeCheck()) ok = false;
   if (!(await runDatabaseObjectCheck())) ok = false;
   if (!ok) process.exit(1);

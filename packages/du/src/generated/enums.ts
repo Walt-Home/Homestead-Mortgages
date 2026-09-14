@@ -27,7 +27,7 @@ export const DU_ENUMERATIONS: Readonly<Record<string, readonly string[]>> = {
   DuPropertyOwnerStatus: ["Proposed", "Current"],
   DuVestingType: ["Individual", "JointTenantsWithRightOfSurvivorship", "LifeEstate", "Other", "TenantsByTheEntirety", "TenantsInCommon"],
   DuLicenseAuthorityLevel: ["Private", "PublicState"],
-  DuDealPartyRole: ["SubmittingParty", "NotePayTo", "LoanOriginationCompany", "LoanOriginator", "PropertyOwner", "Trust", "HousingCounselingAgency"],
+  DuDealPartyRole: ["NotePayTo", "LoanOriginationCompany", "LoanOriginator", "HousingCounselingAgency"],
   DuVerificationReportType: ["VOD", "VOE", "TAXTRANSCRIPT", "IncomeCalculator"],
 } as const;
 

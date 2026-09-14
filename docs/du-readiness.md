@@ -12,8 +12,8 @@ believed. Line numbers move; treat them as pointers to a name.
 **The model a submission is assembled from is built. Assembling and sending
 one has not been started.**
 
-Thirteen items are tracked below: eight done, two partial, three not. That is
-about two thirds by count, and the count still flatters us — the three that
+Fourteen items are tracked below: eight done, four partial, two not. That is
+about two thirds by count, and the count still flatters us — the two that
 remain include the whole submission path, the serializer and the preflight and
 the transport and the handling of what DU answers, which is the largest single
 body of work left.
@@ -76,6 +76,12 @@ three lists rather than trusting it after they change.
   is answered and stored per person, and the review screen renders a block
   apiece. What is missing is a screen that adds one, a bank a second borrower
   can link, demographics asked of each of them, and the signature — item 5.
+- **Vesting and the non-borrower parties** have tables. `du_vestings` holds the
+  sentence that will read on title, `du_deal_parties` holds the origination
+  company, the originator, the note holder and the counseling agency, and a
+  deferred trigger counts the ten-party ceiling across those two and the
+  borrowing parties together. Nothing writes either table yet: there is no
+  screen for a vesting and no place an NMLS number is configured.
 
 ### Missing
 
@@ -106,6 +112,7 @@ which have a longer lead time than anything above.
 | 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none               |
 | 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                       |
 | 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                 |
+| —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet            |
 | 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                        |
 | —   | The submission                      | Red    | Serializer, preflight, transport, response. Nothing yet                  |
 
@@ -316,6 +323,33 @@ beside it, so a borrower with TWO current employers gets wage income attached
 to neither, which the discriminator now turns into a wire-visible
 `EmploymentIncomeIndicator` of false — `DI-C04` is exactly that shape.
 
+**Vesting and the non-borrower parties.** `DEAL/PARTIES/PARTY` is `1:10` with
+the note "Each Deal must have at least one party (non-Borrower)", and a
+submission made only of borrowers satisfies neither half — all eighteen samples
+carry a `LoanOriginationCompany` and a `LoanOriginator`, nine carry a
+`PropertyOwner`. Both tables exist now. They are two tables rather than one
+because the corpus says they are two kinds of thing: every `PropertyOwner` is
+an `INDIVIDUAL` whose `FullName` holds a vesting sentence with no taxpayer
+identifier and no arc pointing at it, so `du_vestings` stores the sentence,
+while `du_deal_parties` holds institutions and one employee and carries the
+thing no borrower does, a license. The ten is counted across all three sources
+by a deferred trigger that fires on those two tables and deliberately not on
+`application_parties`: the only writer that appends a borrowing party cannot
+see the other two, and refusing a co-borrower because somebody recorded a
+counseling agency would be a lockout in the borrower flow. An honest eleventh
+is therefore reachable, and it is the preflight that has to catch it — item 5
+below, and not built, so nothing catches it today. The trigger fires only on a
+write that could ADD a party, so a file already over ten stays editable.
+
+Nothing writes either table yet, `Trust` has no home in either, and each role
+carries one license where the container allows two. One narrowing is worth
+knowing before it bites: `NotePayTo` is bound to the legal-entity name shape,
+while DU Map 4b.1 gives it both containers and defines the role as "The
+individual or legal entity whose name appears on a note". All nine in the
+corpus are institutions and DU's individual slot there is an unparsed
+`NAME/FullName` the parsed columns cannot express, so a seller carryback or a
+private second cannot be recorded until that column exists.
+
 **Item 8 — what we compute versus what DU computes.** Not started.
 `decisions.ratios` and `decisions.reserves` are bare `Json`, written through a
 cast and read back through another, and nothing records which figures are ours
@@ -356,8 +390,10 @@ this with the people doing the work.
    one, a bank each of them can link, the demographics asked of each applicant,
    and a signature apiece.
 2. **Write down the compute boundary** and type the two JSON columns.
-3. **Vesting and the non-borrower parties**, which every shipped sample carries
-   and no submission can omit.
+3. **Writers for vesting and the non-borrower parties.** The tables and the
+   ten-party ceiling landed; what is missing is anything that fills them — a
+   vesting on the review screen, and our own NMLS numbers somewhere other than
+   a fixture.
 4. **The modeled set and the derived inventory** — what we emit, and what we
    deliberately do not, derived from the corpus rather than hand-listed.
 5. **Assemble and emit**, then **preflight**, which refuses to send a file DU

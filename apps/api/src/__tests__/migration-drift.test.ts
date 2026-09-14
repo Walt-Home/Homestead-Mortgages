@@ -13,6 +13,13 @@
  * `requirements:verify` and `brand:verify` are the other two, and both run
  * without a database. This one cannot, which is why it lives with the suite
  * that already talks to a real Postgres and mocks nothing.
+ *
+ * The formatting check below is here for the same reason, one step earlier in
+ * the same story: `prisma format` is what the CLI and the editor extension run
+ * on their own, so a hand-aligned block sits there until somebody else opens
+ * the file and their diff carries lines they never touched. Nothing else in
+ * the gate can see it — `npm run check` is tsc and the three verifies, and
+ * prettier infers no parser for `.prisma`.
  */
 
 import { spawnSync } from "node:child_process";
@@ -50,5 +57,22 @@ describe("the schema and the migrations agree", () => {
     // anything else is the CLI failing rather than the schema disagreeing.
     expect(diff.stderr, "prisma migrate diff could not run").not.toMatch(/^Error/m);
     expect(diff.status, `the schema and the migrations differ:\n${diff.stdout}`).toBe(0);
+  });
+});
+
+describe("the schema is written the way prisma writes it", () => {
+  it("has nothing left for the formatter to change", () => {
+    // `--check` reformats nothing and exits 1 on a file that would change,
+    // which is what makes this safe to run from a test.
+    const formatted = spawnSync(
+      join(repoRoot, "node_modules", ".bin", "prisma"),
+      ["format", "--schema", join("prisma", "schema.prisma"), "--check"],
+      { cwd: join(repoRoot, "packages", "db"), encoding: "utf8" },
+    );
+
+    expect(formatted.stderr, "prisma format could not run").not.toMatch(/^Error/m);
+    expect(formatted.status, `run \`npx prisma format\` in packages/db:\n${formatted.stdout}`).toBe(
+      0,
+    );
   });
 });

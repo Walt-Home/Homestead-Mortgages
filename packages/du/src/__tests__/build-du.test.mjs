@@ -16,7 +16,8 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -25,7 +26,9 @@ import {
   ASSET_TYPE_SECTIONS,
   BLANK_ENUMERATION_CELLS,
   COLUMN_NAME_ALIASES,
+  DEAL_XPATH,
   DU_DATA_POINT_FOR_ENUM,
+  MODELED_CHILDREN,
   TAB_DISAGREEMENTS,
   UNPARSEABLE_STATEMENTS,
   arcRoleColumnNamesFor,
@@ -36,8 +39,13 @@ import {
   deriveArcRoles,
   deriveAssetTypeSections,
   deriveEnumerations,
+  deriveNotRoundTripped,
   diffAssetTypeChecks,
+  diffModeledHolders,
   diffPrismaEnums,
+  elementPathsInCorpus,
+  modeledElementPaths,
+  notModeledContainers,
   parseCardinality,
   parseConditionality,
   parseFormat,
@@ -45,6 +53,10 @@ import {
   parseGeneratedAssetTypeSections,
   parseGeneratedOrder,
   prismaEnums,
+  prismaTableNames,
+  proseNotModeledContainers,
+  renderNotRoundTripped,
+  shortElementPath,
   buildFromSpec,
 } from "../../../../scripts/build-du.mjs";
 
@@ -491,6 +503,43 @@ describe("enumerations", () => {
       notInScope: [{ enumName: "DuFundsSourceType", values: ["PropertySeller"] }],
     });
     expect(enumerations.DuFundsSourceType).toEqual(["Relative"]);
+  });
+
+  it("throws when an exclusion names a value the tab no longer carries", () => {
+    // `exclude` skips a value the enum will not take, and it is a claim about
+    // the tab exactly as VALUES_NOT_IN_SCOPE is. Checked in both directions,
+    // the tab's values for an enum are its members plus its exclusions plus
+    // what VALUES_NOT_IN_SCOPE names, and nothing else — which is what lets a
+    // comment count them and be held to the count. Unchecked, a renamed or
+    // dropped value would sit in the list forever, skipping nothing.
+    const table = {
+      DuDealPartyRole: {
+        dataPoints: [{ name: "PartyRoleType", formFields: [] }],
+        exclude: ["Borrower", "Trust"],
+      },
+    };
+    const options = { table, disagreements: [], blanks: [], notInScope: [] };
+
+    const { enumerations } = deriveEnumerations(
+      [
+        enumerationRow("PartyRoleType", "1a.1", "Borrower"),
+        enumerationRow("PartyRoleType", "L2.5", "Trust"),
+        enumerationRow("PartyRoleType", "9.5", "LoanOriginator"),
+      ],
+      options,
+    );
+    expect(enumerations.DuDealPartyRole).toEqual(["LoanOriginator"]);
+
+    // The same table against a tab that has stopped carrying `Trust`.
+    expect(() =>
+      deriveEnumerations(
+        [
+          enumerationRow("PartyRoleType", "1a.1", "Borrower"),
+          enumerationRow("PartyRoleType", "9.5", "LoanOriginator"),
+        ],
+        options,
+      ),
+    ).toThrow(/excludes Trust from DuDealPartyRole/);
   });
 });
 
@@ -1112,5 +1161,216 @@ describe("the AssetType partition, and the CHECKs that carry it", () => {
     const members = prismaEnums(readFileSync(resolve(ROOT, PRISMA_SCHEMA), "utf8")).DuAssetType;
     const lists = assetTypeListsInMigration(readFileSync(resolve(ROOT, ASSET_MIGRATION), "utf8"));
     expect(diffAssetTypeChecks(sections, lists, members)).toEqual([]);
+  });
+});
+
+describe("the modeled set, and the inventory derived from it", () => {
+  const NOT_ROUND_TRIPPED = resolve(ROOT, "packages/du-schema/du-not-round-tripped.txt");
+  const PROSE = resolve(ROOT, "docs/du-generation.md");
+  const SAMPLES = resolve(ROOT, "packages/du-schema/samples");
+  const SUBJECT_LOAN = `${DEAL_XPATH}/LOANS/LOAN[@LoanRoleType="SubjectLoan"]`;
+  const RELATED_LOAN = `${DEAL_XPATH}/LOANS/LOAN[@LoanRoleType="RelatedLoan"]`;
+  const ROLE = `${DEAL_XPATH}/PARTIES/PARTY/ROLES/ROLE`;
+
+  /** The corpus and the declaration, measured once for the whole block. */
+  const corpus = elementPathsInCorpus();
+  const modeled = modeledElementPaths();
+  const entries = deriveNotRoundTripped(corpus, modeled);
+
+  it("is exactly what the committed artifact holds", () => {
+    // The promise the file makes. A container that becomes modeled shrinks it,
+    // a container a future sample introduces grows it, and either way this is
+    // the assertion that makes the change show up as a diff rather than as
+    // nothing at all.
+    expect(readFileSync(NOT_ROUND_TRIPPED, "utf8")).toBe(
+      renderNotRoundTripped(entries, corpus.size),
+    );
+  });
+
+  it("lists only element paths the samples actually carry, counted again", () => {
+    // Counted a second way, by the element's own name across the bytes of all
+    // eighteen files, because the first count comes from the same function the
+    // artifact does and would agree with itself about a path nothing matches.
+    // The name count is a ceiling rather than an equality — one name can sit at
+    // several XPaths — but it is zero for a name that is not there, which is
+    // the mistake this file exists to stop repeating.
+    const bytes = readdirSync(SAMPLES)
+      .filter((name) => name.endsWith(".xml"))
+      .map((name) => readFileSync(resolve(SAMPLES, name), "utf8"))
+      .join("");
+
+    expect(entries.length).toBeGreaterThan(0);
+    const wrong = [];
+    for (const entry of entries) {
+      const name = entry.xpath.slice(entry.xpath.lastIndexOf("/") + 1).replace(/\[@.*$/, "");
+      const occurrences = bytes.split(`<${name}`).length - 1;
+      if (entry.elements < 1 || entry.files < 1 || entry.files > 18) {
+        wrong.push(`${entry.xpath} claims ${entry.elements} elements in ${entry.files} files`);
+      } else if (occurrences < entry.elements) {
+        wrong.push(`${entry.xpath} claims ${entry.elements} and <${name} occurs ${occurrences}`);
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it("refuses a modeled path no sample carries", () => {
+    // The failure mode the hand-written inventory had twice over: RELATED_LOAN
+    // and ALIAS, both named, both absent from all eighteen files. A name that
+    // matches nothing subtracts nothing, so without this it would sit in the
+    // list looking like a claim.
+    expect(() =>
+      deriveNotRoundTripped(corpus, new Set([...modeled, `${DEAL_XPATH}/LOANS/RELATED_LOAN`])),
+    ).toThrow(/RELATED_LOAN/);
+    expect(corpus.has(`${DEAL_XPATH}/LOANS/RELATED_LOAN`)).toBe(false);
+  });
+
+  it("drops a container from the inventory when the model claims it", () => {
+    // The other direction, which is what makes the file a progress record
+    // rather than a list of excuses. HOUSING_EXPENSE is the largest single
+    // absence: 84 elements across all eighteen files.
+    const housing = `${SUBJECT_LOAN}/HOUSING_EXPENSES/HOUSING_EXPENSE`;
+    const listed = entries.filter((entry) => entry.xpath.startsWith(housing));
+    expect(listed.map((entry) => entry.elements)).toEqual([84, 84, 84, 84]);
+
+    const claimed = modeledElementPaths({
+      ...MODELED_CHILDREN,
+      [housing]: {
+        held: ["loan_files"],
+        children: ["HousingExpensePaymentAmount", "HousingExpenseTimingType", "HousingExpenseType"],
+      },
+    });
+    const after = deriveNotRoundTripped(corpus, claimed);
+    expect(after.filter((entry) => entry.xpath.startsWith(housing))).toEqual([]);
+    expect(entries.length - after.length).toBe(5);
+  });
+
+  it("keeps the related loan off the subject loan's path", () => {
+    // The whole of what separates the loan being applied for from a
+    // simultaneous second is one attribute, so one attribute is in the path.
+    // Without it these nine elements land on paths MODELED_CHILDREN claims and
+    // a model that holds one loan per application reads as holding them.
+    expect(corpus.has(`${DEAL_XPATH}/LOANS/LOAN`)).toBe(false);
+    expect(corpus.get(SUBJECT_LOAN)).toEqual({ elements: 18, files: 18 });
+    expect(corpus.get(RELATED_LOAN)).toEqual({ elements: 9, files: 8 });
+
+    // Four paths the two loans share as bare tag names, and the subject loan's
+    // half of each is modeled while the related loan's is not.
+    for (const tail of ["", "/LOAN_DETAIL", "/TERMS_OF_LOAN", "/TERMS_OF_LOAN/LienPriorityType"]) {
+      expect(modeled.has(`${SUBJECT_LOAN}${tail}`)).toBe(true);
+      expect(modeled.has(`${RELATED_LOAN}${tail}`)).toBe(false);
+    }
+    expect(entries.filter((entry) => entry.xpath.startsWith(RELATED_LOAN))).toHaveLength(18);
+  });
+
+  it("stops on a LOAN that does not say which loan it is", () => {
+    // A predicate that silently falls back to the bare name would put a future
+    // sample's roleless LOAN back on the subject loan's path, which is the
+    // reading this predicate exists to prevent.
+    const dir = mkdtempSync(resolve(tmpdir(), "du-corpus-"));
+    try {
+      writeFileSync(resolve(dir, "a.xml"), "<MESSAGE><LOANS><LOAN/></LOANS></MESSAGE>");
+      expect(() => elementPathsInCorpus(dir)).toThrow(/a\.xml has a LOAN with no LoanRoleType/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("stops on a close tag that does not match what is open", () => {
+    // Popping by position rather than by name produces a wrong path for every
+    // element after the mismatch and no error at all, which is the one failure
+    // mode a counting tokenizer must not have.
+    const dir = mkdtempSync(resolve(tmpdir(), "du-corpus-"));
+    try {
+      writeFileSync(resolve(dir, "b.xml"), "<MESSAGE><DEALS></MESSAGE></DEALS>");
+      expect(() => elementPathsInCorpus(dir)).toThrow(/b\.xml closes MESSAGE inside DEALS/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a modeled block with nowhere to put what it claims", () => {
+    // The direction that went unchecked, and what it let through: vesting, an
+    // originator's license and a counseling agency's identifier were all
+    // declared modeled while `schema.prisma` held none of them. Naming a table
+    // is what makes the claim answerable, and a table the schema does not map
+    // is not an answer.
+    const tables = prismaTableNames(
+      readFileSync(resolve(ROOT, "packages/db/prisma/schema.prisma"), "utf8"),
+    );
+    expect(tables.has("du_assets")).toBe(true);
+    // Deliberately a name no schema will ever map, rather than a table that
+    // does not exist YET: `du_vestings` was this fixture's example until the
+    // commit that added it, and a fixture that has to be revisited every time
+    // the schema grows is a fixture that will one day be revisited wrongly.
+    expect(tables.has("du_nothing_will_ever_map_this")).toBe(false);
+    expect(diffModeledHolders(MODELED_CHILDREN, tables)).toEqual([]);
+
+    expect(
+      diffModeledHolders(
+        { [`${ROLE}/PROPERTY_OWNER`]: { held: ["du_nothing_will_ever_map_this"], children: ["x"] } },
+        tables,
+      ),
+    ).toEqual([`${ROLE}/PROPERTY_OWNER is held by du_nothing_will_ever_map_this, which schema.prisma does not map`]);
+    expect(diffModeledHolders({ "MESSAGE/X": { held: [], children: ["x"] } }, tables)).toEqual([
+      "MESSAGE/X claims to be modeled and names nothing that holds it",
+    ]);
+  });
+
+  it("checks the holders on the same --verify run that checks the file", () => {
+    // A declaration nothing reads is a comment. The run says how many blocks
+    // it put the question to, so a check quietly dropped out of the verify
+    // path takes its own line with it.
+    const result = runScript(["--verify"], {});
+    expect(result.stdout).toContain(
+      `✓ ${Object.keys(MODELED_CHILDREN).length} modeled blocks name the table or the constant ` +
+        "that holds them",
+    );
+  });
+
+  it("names every container it stops at in the page that explains them", () => {
+    // The prose and the artifact are one claim. The page carries a bullet per
+    // container and the subtraction carries the containers; a reader who
+    // trusts the page has to be reading something the corpus still supports.
+    const derived = notModeledContainers(entries, modeled).map((c) => c.short);
+    expect(derived.length).toBeGreaterThan(0);
+    expect(proseNotModeledContainers(readFileSync(PROSE, "utf8")).sort()).toEqual(derived.sort());
+  });
+
+  it("stops reading bullets at a heading of any depth", () => {
+    // The section is bounded by the next heading, and a sub-heading is a
+    // heading: bullets under one belong to it, not to the checked list.
+    const page = ["", "## Heading", "", "- `A/B`", "", "### Deeper", "", "- `C/D`", ""].join("\n");
+    expect(proseNotModeledContainers(page, "## Heading")).toEqual(["A/B"]);
+  });
+
+  it("fails --verify on a bullet the page no longer carries", () => {
+    // The check that runs in CI, driven the way a careless edit would drive it.
+    const original = readFileSync(PROSE, "utf8");
+    const bullet = `- \`${shortElementPath(SUBJECT_LOAN)}/HOUSING_EXPENSES\``;
+    expect(original).toContain(bullet);
+    try {
+      writeFileSync(PROSE, original.replace(bullet, "- HOUSING_EXPENSES"));
+      const result = runScript(["--verify"], {});
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        `DEAL/LOANS/LOAN[@LoanRoleType="SubjectLoan"]/HOUSING_EXPENSES is in 18 of the eighteen`,
+      );
+    } finally {
+      writeFileSync(PROSE, original);
+    }
+  });
+
+  it("fails --verify on a hand-edited du-not-round-tripped.txt", () => {
+    const original = readFileSync(NOT_ROUND_TRIPPED, "utf8");
+    const line = original.split("\n").find((text) => text.endsWith("/HOUSING_EXPENSE"));
+    expect(line).toBeDefined();
+    try {
+      writeFileSync(NOT_ROUND_TRIPPED, original.replace(`${line}\n`, ""));
+      const result = runScript(["--verify"], {});
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("du-not-round-tripped.txt is not what the samples minus");
+    } finally {
+      writeFileSync(NOT_ROUND_TRIPPED, original);
+    }
   });
 });

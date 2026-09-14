@@ -21,6 +21,7 @@ import {
   type ApplicationEvent,
   type ApplicationState,
 } from "@hm/shared";
+import { ensureApplicationParty } from "../services/applications.js";
 import { AppError } from "../middleware/error-handler.js";
 import { pinFact, proposeScenario } from "../services/evidence.js";
 import {
@@ -67,13 +68,12 @@ async function borrower() {
  */
 async function application(partyId?: string) {
   const app = await bareApplication();
-  await prisma.applicationParty.create({
-    data: {
-      applicationId: app.id,
-      partyId: partyId ?? (await borrower()).partyId,
-      role: "PRIMARY_BORROWER",
-    },
-  });
+  await ensureApplicationParty(
+    prisma,
+    app.id,
+    partyId ?? (await borrower()).partyId,
+    "PRIMARY_BORROWER",
+  );
   return app;
 }
 
@@ -547,9 +547,7 @@ describe("withdrawing is the borrower's act", () => {
     // it a guarantor's.
     const spouse = await borrower();
     const app = await application();
-    await prisma.applicationParty.create({
-      data: { applicationId: app.id, partyId: spouse.partyId, role: "NON_BORROWING_SPOUSE" },
-    });
+    await ensureApplicationParty(prisma, app.id, spouse.partyId, "NON_BORROWING_SPOUSE");
     await expect(
       transition({
         applicationId: app.id,
@@ -626,9 +624,7 @@ describe("an application is received with somebody on it", () => {
     const who = await principal();
     const spouse = await borrower();
     const app = await bareApplication();
-    await prisma.applicationParty.create({
-      data: { applicationId: app.id, partyId: spouse.partyId, role: "NON_BORROWING_SPOUSE" },
-    });
+    await ensureApplicationParty(prisma, app.id, spouse.partyId, "NON_BORROWING_SPOUSE");
     await expect(
       transition({ applicationId: app.id, event: "intake_completed", actorPrincipalId: who.id }),
     ).rejects.toThrow(/cannot be received with no primary borrower on it/);

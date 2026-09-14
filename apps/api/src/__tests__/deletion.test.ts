@@ -31,6 +31,7 @@ import {
   staffPrincipal,
   type BorrowerInput,
 } from "../services/party.js";
+import { ensureApplicationParty } from "../services/applications.js";
 import { assertFileMayBeDeleted } from "../services/repository.js";
 import { transition } from "../services/transition.js";
 import { fileRouter } from "../routes/files.js";
@@ -185,9 +186,7 @@ async function personWithAnApplication(ending: "withdrawn" | "declined" = "withd
     data: { loanFileId: file.id, ausCasefileId: randomUUID() },
     select: { id: true },
   });
-  await prisma.applicationParty.create({
-    data: { applicationId: app.id, partyId: row.partyId, role: "PRIMARY_BORROWER" },
-  });
+  await ensureApplicationParty(prisma, app.id, row.partyId, "PRIMARY_BORROWER");
   await proposeScenario(app.id, {
     objective: "PURCHASE",
     occupancy: "PRIMARY_RESIDENCE",
@@ -773,17 +772,11 @@ async function coBorrowerOnSomebodyElsesFile() {
     data: { loanFileId: file.id, ausCasefileId: randomUUID() },
     select: { id: true },
   });
-  const ownerEdge = await prisma.applicationParty.create({
-    data: { applicationId: app.id, partyId: ownerParty, role: "PRIMARY_BORROWER" },
-    select: { id: true },
-  });
+  const ownerEdge = await ensureApplicationParty(prisma, app.id, ownerParty, "PRIMARY_BORROWER");
 
   const leaver = await createUser();
   const leaverParty = await partyForUser(prisma, leaver.id);
-  const leaverEdge = await prisma.applicationParty.create({
-    data: { applicationId: app.id, partyId: leaverParty, role: "CO_BORROWER" },
-    select: { id: true },
-  });
+  const leaverEdge = await ensureApplicationParty(prisma, app.id, leaverParty, "CO_BORROWER");
 
   const theirs = { applicationPartyId: leaverEdge.id };
   const rows = await prisma.$transaction(async (tx) => ({

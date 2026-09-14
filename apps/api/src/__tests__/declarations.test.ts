@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 import { prisma, type Prisma } from "@hm/db";
 import { partyForUser, principalForParty, staffPrincipal } from "../services/party.js";
 import type { BorrowerInput } from "../services/party.js";
+import { ensureApplicationParty } from "../services/applications.js";
 import { authRouter } from "../routes/auth.js";
 import { fileRouter } from "../routes/files.js";
 import { createLoanFile, createUser, saveBorrower } from "./support/factories.js";
@@ -51,10 +52,7 @@ async function borrowerOnAnApplication() {
     data: { loanFileId: file.id, ausCasefileId: randomUUID() },
     select: { id: true },
   });
-  const edge = await prisma.applicationParty.create({
-    data: { applicationId: app.id, partyId: borrower.partyId, role: "PRIMARY_BORROWER" },
-    select: { id: true },
-  });
+  const edge = await ensureApplicationParty(prisma, app.id, borrower.partyId, "PRIMARY_BORROWER");
   return {
     user,
     file,
@@ -340,10 +338,12 @@ describe("nobody but the borrower declares", () => {
     const primary = await borrowerOnAnApplication();
     const other = await createUser();
     const otherPartyId = await partyForUser(prisma, other.id);
-    const otherEdge = await prisma.applicationParty.create({
-      data: { applicationId: primary.app.id, partyId: otherPartyId, role: "CO_BORROWER" },
-      select: { id: true },
-    });
+    const otherEdge = await ensureApplicationParty(
+      prisma,
+      primary.app.id,
+      otherPartyId,
+      "CO_BORROWER",
+    );
     await expect(
       prisma.duDeclaration.create({ data: declarationFor(otherEdge.id, primary.principalId) }),
     ).rejects.toThrow(/cannot declare for party/);
@@ -365,14 +365,12 @@ describe("a declaration belongs to a borrowing party", () => {
     const primary = await borrowerOnAnApplication();
     const spouse = await createUser();
     const spousePartyId = await partyForUser(prisma, spouse.id);
-    const edge = await prisma.applicationParty.create({
-      data: {
-        applicationId: primary.app.id,
-        partyId: spousePartyId,
-        role: "NON_BORROWING_SPOUSE",
-      },
-      select: { id: true },
-    });
+    const edge = await ensureApplicationParty(
+      prisma,
+      primary.app.id,
+      spousePartyId,
+      "NON_BORROWING_SPOUSE",
+    );
     return { edgeId: edge.id, principalId: await principalForParty(prisma, spousePartyId) };
   }
 
@@ -398,10 +396,7 @@ describe("a declaration belongs to a borrowing party", () => {
     const primary = await borrowerOnAnApplication();
     const co = await createUser();
     const coPartyId = await partyForUser(prisma, co.id);
-    const edge = await prisma.applicationParty.create({
-      data: { applicationId: primary.app.id, partyId: coPartyId, role: "CO_BORROWER" },
-      select: { id: true },
-    });
+    const edge = await ensureApplicationParty(prisma, primary.app.id, coPartyId, "CO_BORROWER");
     const coPrincipal = await principalForParty(prisma, coPartyId);
     await prisma.duDeclaration.create({ data: declarationFor(edge.id, coPrincipal) });
 
@@ -422,10 +417,7 @@ describe("a declaration belongs to a borrowing party", () => {
     const primary = await borrowerOnAnApplication();
     const co = await createUser();
     const coPartyId = await partyForUser(prisma, co.id);
-    const edge = await prisma.applicationParty.create({
-      data: { applicationId: primary.app.id, partyId: coPartyId, role: "CO_BORROWER" },
-      select: { id: true },
-    });
+    const edge = await ensureApplicationParty(prisma, primary.app.id, coPartyId, "CO_BORROWER");
     await prisma.duResidence.create({ data: residenceFor(edge.id) });
     await expect(
       prisma.applicationParty.update({
@@ -557,10 +549,7 @@ async function aCoBorrowerWithAPhoneDeclaration() {
   const owner = await borrowerOnAnApplication();
   const co = await createUser();
   const coPartyId = await partyForUser(prisma, co.id);
-  const edge = await prisma.applicationParty.create({
-    data: { applicationId: owner.app.id, partyId: coPartyId, role: "CO_BORROWER" },
-    select: { id: true },
-  });
+  const edge = await ensureApplicationParty(prisma, owner.app.id, coPartyId, "CO_BORROWER");
   const ops = await staffPrincipal(prisma, `ops-${owner.app.id}`);
   await prisma.duDeclaration.create({ data: declarationFor(edge.id, ops) });
   await prisma.duResidence.createMany({

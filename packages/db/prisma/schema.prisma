@@ -1091,6 +1091,18 @@ model ApplicationParty {
 
   role ApplicationPartyRole
 
+  /// DU Borrower 1 through 4. A POSITION in one submitted document, not an
+  /// identity — `id` is the identity — because DU conveys the position by
+  /// document order and label ordinal and states it in no element. Null for a
+  /// non-borrowing spouse or a guarantor, who emit no `BORROWER` at all, and a
+  /// CHECK ties the two directions together: a borrowing role without a number
+  /// is a borrower with no position in the document.
+  ///
+  /// Allocated by `ensureApplicationParty` as the SMALLEST UNUSED number, under
+  /// a lock on the application row. A freed ordinal is refilled and the
+  /// survivors are never renumbered: a borrower who was 2 stays 2.
+  borrowerOrdinal Int? @map("borrower_ordinal")
+
   createdAt DateTime @default(now()) @map("created_at")
 
   declaration             DuDeclaration?

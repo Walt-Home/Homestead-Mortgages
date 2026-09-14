@@ -53,6 +53,7 @@ import {
   type AssetIdentityFacts,
   type DuTransaction,
 } from "@hm/du";
+import { ensureApplicationParty } from "../services/applications.js";
 import { recordSnapshot } from "../services/repository.js";
 import { createLoanFile, createParty, createUser } from "./support/factories.js";
 
@@ -83,10 +84,7 @@ async function anApplication(
   const borrowers: Borrower[] = [];
   for (let index = 0; index < roles.length; index += 1) {
     const partyId = parties[index] ?? (await createParty()).id;
-    const edge = await prisma.applicationParty.create({
-      data: { applicationId: app.id, partyId, role: roles[index]! },
-      select: { id: true },
-    });
+    const edge = await ensureApplicationParty(prisma, app.id, partyId, roles[index]!);
     borrowers.push({ edgeId: edge.id, partyId });
   }
   return { id: app.id, loanFileId: file.id, borrowers };

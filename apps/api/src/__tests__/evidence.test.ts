@@ -19,6 +19,7 @@ import {
   releasePin,
   sixPieces,
 } from "../services/evidence.js";
+import { ensureApplicationParty } from "../services/applications.js";
 import { createLoanFile } from "./support/factories.js";
 
 type BorrowerRole = "PRIMARY_BORROWER" | "CO_BORROWER";
@@ -54,13 +55,13 @@ async function application(partyId: string, role: BorrowerRole = "PRIMARY_BORROW
     data: { loanFileId: file.id, ausCasefileId: randomUUID() },
     select: { id: true },
   });
-  await prisma.applicationParty.create({ data: { applicationId: app.id, partyId, role } });
+  await ensureApplicationParty(prisma, app.id, partyId, role);
   return app;
 }
 
 /** A second person on an application already made. */
 async function addParty(applicationId: string, partyId: string, role: BorrowerRole) {
-  await prisma.applicationParty.create({ data: { applicationId, partyId, role } });
+  await ensureApplicationParty(prisma, applicationId, partyId, role);
 }
 async function grant(partyId: string, over: Record<string, unknown> = {}) {
   return prisma.authorization.create({
@@ -147,9 +148,7 @@ describe("what a pin may borrow", () => {
     const a = await personWithSixPieces();
     const b = await personWithSixPieces();
     const app = await application(a.p.id);
-    await prisma.applicationParty.create({
-      data: { applicationId: app.id, partyId: b.p.id, role: "CO_BORROWER" },
-    });
+    await ensureApplicationParty(prisma, app.id, b.p.id, "CO_BORROWER");
     await expect(
       pinFact({ applicationId: app.id, factId: b.facts.legal_name!.id, authorizationId: a.g.id }),
     ).rejects.toThrow(/different party/);
@@ -575,9 +574,7 @@ describe("THE RECEIPT", () => {
     const id = randomUUID();
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`INSERT INTO "applications" ("id", "loan_file_id", "aus_casefile_id", "updated_at") VALUES (${id}::uuid, ${file.id}::uuid, ${randomUUID()}, now())`;
-      await tx.applicationParty.create({
-        data: { applicationId: id, partyId: p.id, role: "PRIMARY_BORROWER" },
-      });
+      await ensureApplicationParty(tx, id, p.id, "PRIMARY_BORROWER");
       await tx.loanScenario.create({ data: { applicationId: id, seq: 1, ...fullTerms } });
       for (const pred of TRID_PARTY_PREDICATES) {
         await tx.applicationEvidenceLink.create({
@@ -613,9 +610,7 @@ describe("THE RECEIPT", () => {
       await tx.application.create({
         data: { id, loanFileId: file.id, ausCasefileId: randomUUID() },
       });
-      await tx.applicationParty.create({
-        data: { applicationId: id, partyId: p.id, role: "PRIMARY_BORROWER" },
-      });
+      await ensureApplicationParty(tx, id, p.id, "PRIMARY_BORROWER");
       await tx.loanScenario.create({ data: { applicationId: id, seq: 1, ...fullTerms } });
       for (const pred of TRID_PARTY_PREDICATES) {
         await tx.applicationEvidenceLink.create({

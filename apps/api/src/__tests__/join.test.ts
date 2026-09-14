@@ -110,9 +110,13 @@ describe("screen 1 makes a draft", () => {
     const app = await applicationForFile(prisma, fileId);
     const parties = await prisma.applicationParty.findMany({
       where: { applicationId: app!.id },
-      select: { partyId: true, role: true },
+      select: { partyId: true, role: true, borrowerOrdinal: true },
     });
-    expect(parties).toEqual([{ partyId: await partyOf(user.id), role: "PRIMARY_BORROWER" }]);
+    // And at a DU Borrower position, because a borrowing role without one is a
+    // row `application_parties` refuses to hold.
+    expect(parties).toEqual([
+      { partyId: await partyOf(user.id), role: "PRIMARY_BORROWER", borrowerOrdinal: 1 },
+    ]);
   });
 
   it("records the stated income as a fact on the party, not as router state", async () => {

@@ -21,6 +21,7 @@ import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import type { BorrowerInput } from "../services/party.js";
 import { declarationRouter } from "../routes/declarations.js";
+import { ensureApplicationParty } from "../services/applications.js";
 import { fileRouter } from "../routes/files.js";
 import { createLoanFile, createUser, saveBorrower } from "./support/factories.js";
 import { callAs } from "./support/http.js";
@@ -60,9 +61,7 @@ async function applicationFile() {
     data: { loanFileId: file.id, ausCasefileId: randomUUID() },
     select: { id: true },
   });
-  await prisma.applicationParty.create({
-    data: { applicationId: app.id, partyId: borrower.partyId, role: "PRIMARY_BORROWER" },
-  });
+  await ensureApplicationParty(prisma, app.id, borrower.partyId, "PRIMARY_BORROWER");
   return { user, file, borrower };
 }
 

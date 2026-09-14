@@ -24,6 +24,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { prisma, type Prisma } from "@hm/db";
 import { writeAsset, writeExpense, writeLiability } from "@hm/du";
+import { ensureApplicationParty } from "../services/applications.js";
 import { createLoanFile, createParty, createUser } from "./support/factories.js";
 
 /** A credit request, and the one borrowing edge that owns every row on it. */
@@ -41,10 +42,7 @@ async function anApplication(): Promise<Application> {
     select: { id: true },
   });
   const party = await createParty();
-  const edge = await prisma.applicationParty.create({
-    data: { applicationId: app.id, partyId: party.id, role: "PRIMARY_BORROWER" },
-    select: { id: true },
-  });
+  const edge = await ensureApplicationParty(prisma, app.id, party.id, "PRIMARY_BORROWER");
   return { id: app.id, owner: edge.id };
 }
 

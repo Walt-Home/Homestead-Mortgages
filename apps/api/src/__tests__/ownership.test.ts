@@ -28,6 +28,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { prisma, type ApplicationPartyRole, type Prisma } from "@hm/db";
 import { writeAsset, writeExpense, writeLiability } from "@hm/du";
+import { ensureApplicationParty } from "../services/applications.js";
 import { createLoanFile, createParty, createUser } from "./support/factories.js";
 
 /** A credit request with as many borrowing edges as a test asks for. */
@@ -50,10 +51,7 @@ async function anApplication(
   const borrowers: string[] = [];
   for (const role of roles) {
     const party = await createParty();
-    const edge = await prisma.applicationParty.create({
-      data: { applicationId: app.id, partyId: party.id, role },
-      select: { id: true },
-    });
+    const edge = await ensureApplicationParty(prisma, app.id, party.id, role);
     borrowers.push(edge.id);
   }
   return { id: app.id, loanFileId: file.id, borrowers };
@@ -462,8 +460,15 @@ describe("the joint credit report is a partition", () => {
 });
 
 describe("a role flip cannot strand an arc", () => {
+  // The position goes with the role. A non-borrowing spouse emits no BORROWER
+  // element, so there is no document position for them to keep, and
+  // `application_parties_borrowers_are_numbered` refuses a demotion that tries
+  // to hold on to one.
   const flip = (id: string) =>
-    prisma.applicationParty.update({ where: { id }, data: { role: "NON_BORROWING_SPOUSE" } });
+    prisma.applicationParty.update({
+      where: { id },
+      data: { role: "NON_BORROWING_SPOUSE", borrowerOrdinal: null },
+    });
 
   it("refuses a co-borrower who owns an asset", async () => {
     const app = await anApplication(["PRIMARY_BORROWER", "CO_BORROWER"]);

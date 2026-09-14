@@ -20,7 +20,7 @@ import type { ApplicationPartyRole, LoanPurpose, Prisma } from "@hm/db";
 import type { ApplicationState } from "@hm/shared";
 import { proposeScenario, type ScenarioTerms } from "./evidence.js";
 import { toCents } from "./money.js";
-import { toDomainState } from "./transition.js";
+import { BORROWING_ROLES, toDomainState } from "./transition.js";
 import type { Db } from "./db.js";
 
 export interface ApplicationRef {
@@ -93,25 +93,107 @@ export async function createDraftApplication(
   return { applicationId: app.id, scenarioId: scenario.id };
 }
 
+/** What a membership is, once it has one: the edge, and its DU position. */
+export interface ApplicationPartyRef {
+  readonly id: string;
+  /** Borrower 1 through 4, or null for a role that emits no `BORROWER`. */
+  readonly borrowerOrdinal: number | null;
+}
+
 /**
- * Put a party on an application, once.
+ * Put a party on an application, once, at a DU Borrower position.
  *
- * Create-only: an existing membership keeps the role it has, because a
- * demotion or a promotion is a decision somebody makes rather than a side
- * effect of saving a screen. `createMany` with `skipDuplicates` is the
- * ON CONFLICT DO NOTHING that raises nothing when two saves race — an upsert
- * would abort the caller's whole transaction on the loser.
+ * Create-only: an existing membership keeps the role and the position it has,
+ * because a demotion or a promotion is a decision somebody makes rather than a
+ * side effect of saving a screen.
+ *
+ * The position is not optional. `application_parties` carries a CHECK that ties
+ * a borrowing role to a number, and this is the only thing in the product that
+ * writes one of those rows — which is why the constraint and this function are
+ * one change rather than two.
+ *
+ * The lock is what makes two savers safe. `createMany({ skipDuplicates: true })`
+ * used to absorb a race for free, because the only thing two writers could
+ * collide on was a row they both wanted to exist. An ordinal is different: two
+ * writers reading the same vacancy both compute the same number, and the unique
+ * index gives the loser an error instead of a row. So the application row is
+ * locked before the vacancies are read, and the second writer queues behind the
+ * first and sees what it did.
  */
 export async function ensureApplicationParty(
   tx: Db,
   applicationId: string,
   partyId: string,
   role: ApplicationPartyRole,
-): Promise<void> {
-  await tx.applicationParty.createMany({
-    data: [{ applicationId, partyId, role }],
-    skipDuplicates: true,
+): Promise<ApplicationPartyRef> {
+  // Taken before the read, not after: a lock acquired once the vacancies are
+  // already in hand protects nothing.
+  await tx.$queryRaw`SELECT "id" FROM "applications" WHERE "id" = ${applicationId}::uuid FOR UPDATE`;
+
+  const existing = await tx.applicationParty.findUnique({
+    where: { applicationId_partyId: { applicationId, partyId } },
+    select: { id: true, borrowerOrdinal: true },
   });
+  if (existing) return existing;
+
+  return tx.applicationParty.create({
+    data: {
+      applicationId,
+      partyId,
+      role,
+      borrowerOrdinal: BORROWING_ROLES.includes(role)
+        ? await freeBorrowerOrdinal(tx, applicationId, role)
+        : null,
+    },
+    select: { id: true, borrowerOrdinal: true },
+  });
+}
+
+/**
+ * The smallest unused Borrower position on this application, and not `max + 1`.
+ *
+ * Dropping a borrower before a resubmission is an ordinary operation — the
+ * ownership arcs cascade off the edge precisely so it can be — and counting
+ * rather than allocating turns it into a lockout: ordinals 1 through 4 filled,
+ * borrower 3 leaves, and the replacement is handed 5, which
+ * `application_parties_borrower_ordinal_is_one_to_four` refuses. A fourth
+ * borrower rejected on an application holding three.
+ *
+ * Reuse is correct here for the same reason it is cheap: the ordinal is a
+ * position in one submitted document rather than an identity, so a vacancy is
+ * filled and nobody is renumbered.
+ *
+ * The search starts at 2 for every role but the primary. Position 1 is the
+ * primary borrower's — `application_parties_one_first_borrower` says there is
+ * only ever one — so a hole there means the application has lost its primary,
+ * and appending a co-borrower is not the operation that fills it.
+ *
+ * Must run inside the caller's lock on the application row.
+ */
+async function freeBorrowerOrdinal(
+  tx: Db,
+  applicationId: string,
+  role: ApplicationPartyRole,
+): Promise<number> {
+  const from = role === "PRIMARY_BORROWER" ? 1 : 2;
+  const free = await tx.$queryRaw<{ n: number }[]>`
+    SELECT n FROM generate_series(${from}, 4) AS n
+     WHERE n NOT IN (
+       SELECT "borrower_ordinal" FROM "application_parties"
+        WHERE "application_id" = ${applicationId}::uuid AND "borrower_ordinal" IS NOT NULL
+     )
+     ORDER BY n LIMIT 1`;
+
+  const n = free[0]?.n;
+  // By name, because the CHECK would say "violates constraint" about a number
+  // nobody chose, and the operation that failed is a person being added to a
+  // household that is already four people.
+  if (n === undefined) {
+    throw new Error(
+      `application ${applicationId} already holds four borrowers and DU allows four; a ${role} cannot be added`,
+    );
+  }
+  return n;
 }
 
 /** The screen-1 columns a scenario is built from. A loan file row, narrowed. */

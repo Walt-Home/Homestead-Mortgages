@@ -76,8 +76,8 @@ three lists rather than trusting it after they change.
 
 - **More than one borrower.** The ordinal exists and the database holds the
   rules; what is missing is above it — no route appends a second borrower, no
-  screen renders one, and thirty-five `borrowers[0]` sites still assume there
-  is only ever one. DU allows four.
+  screen renders one, and thirty-two `borrowers[0]` sites in TypeScript source
+  still assume there is only ever one. DU allows four.
 - **The compute boundary** — which figures we assert and which DU derives —
   still unrecorded, still two untyped JSON columns.
 - **The submission itself**: the serializer that emits MISMO 3.4 with its
@@ -186,9 +186,14 @@ smallest free position, so two concurrent appends cannot take the same one.
 What is missing is everything above it. `POST /api/files/:id/borrowers` still
 updates the first borrower or creates the only one — it cannot append. No
 co-borrower screen. `connector_links` is unique on `(loanFileId, kind)`, so a
-second borrower cannot link their own bank. And thirty-five `borrowers[0]`
-sites across sixteen files still assume there is only ever one, of which the
+second borrower cannot link their own bank. And thirty-two `borrowers[0]`
+sites in TypeScript source still assume there is only ever one, of which the
 engine and the authorization boundary hold eleven and the screens seven.
+Thirty-three counting the one comment in `schema.prisma`, sixty-six counting
+tests and migrations — the figure moves a lot with the filter, so it is stated
+here with its filter attached. The `twenty-four` this page carried until now
+was not reachable under any of them, and was already wrong when it was
+written rather than having gone stale.
 
 **Item 6 — assets, liabilities and owned property.** Built, jointly owned from
 the first migration. `OWNED_PROPERTY` nests inside an asset through a composite

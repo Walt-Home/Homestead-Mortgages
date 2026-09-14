@@ -19,24 +19,32 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  ASSET_TYPE_SECTIONS,
   BLANK_ENUMERATION_CELLS,
   COLUMN_NAME_ALIASES,
   DU_DATA_POINT_FOR_ENUM,
   TAB_DISAGREEMENTS,
   UNPARSEABLE_STATEMENTS,
+  assetTypeListsInMigration,
   buildOrderTable,
   checkTabDisagreements,
+  deriveAssetTypeSections,
   deriveEnumerations,
+  diffAssetTypeChecks,
   diffPrismaEnums,
   parseCardinality,
   parseConditionality,
   parseFormat,
+  parseGeneratedAssetTypeSections,
   prismaEnums,
   resolveSpecFiles,
 } from "../../../../scripts/build-du.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const SCRIPT = resolve(ROOT, "scripts/build-du.mjs");
+const PRISMA_SCHEMA = "packages/db/prisma/schema.prisma";
+const ASSET_MIGRATION =
+  "packages/db/prisma/migrations/20260913110000_an_asset_has_an_owner/migration.sql";
 
 /** One row of the DU Enumerations tab. */
 function enumerationRow(dataPoint, formFieldId, value, extra = {}) {
@@ -608,5 +616,119 @@ describe("DU_DATA_POINT_FOR_ENUM", () => {
         expect(Array.isArray(dataPoint.formFields)).toBe(true);
       }
     }
+  });
+});
+
+describe("the AssetType partition, and the CHECKs that carry it", () => {
+  /** The AssetType block of the tab: thirteen at 2a.1, six at 2b.1, three at 4d.1. */
+  const ASSET_TYPE_ROWS = [
+    ["2a.1", "Bond"],
+    ["2a.1", "BridgeLoanNotDeposited"],
+    ["2a.1", "CertificateOfDepositTimeDeposit"],
+    ["2a.1", "CheckingAccount"],
+    ["2a.1", "IndividualDevelopmentAccount**"],
+    ["2a.1", "LifeInsurance"],
+    ["2a.1", "MoneyMarketFund"],
+    ["2a.1", "MutualFund"],
+    ["2a.1", "RetirementFund"],
+    ["2a.1", "SavingsAccount"],
+    ["2a.1", "Stock"],
+    ["2a.1", "StockOptions**"],
+    ["2a.1", "TrustAccount"],
+    ["2b.1", "CashOnHand"],
+    ["2b.1", "Other"],
+    ["2b.1", "PendingNetSaleProceedsFromRealEstateAssets"],
+    ["2b.1", "ProceedsFromSaleOfNonRealEstateAsset**"],
+    ["2b.1", "ProceedsFromSecuredLoan"],
+    ["2b.1", "ProceedsFromUnsecuredLoan**"],
+    ["4d.1", "GiftOfCash"],
+    ["4d.1", "GiftOfPropertyEquity"],
+    ["4d.1", "Grant"],
+  ];
+
+  const rowsFor = (values) =>
+    values.map(([formField, value]) => enumerationRow("AssetType", formField, value));
+
+  it("splits AssetType the way the tab files it, footnote markers and all", () => {
+    const sections = deriveAssetTypeSections(rowsFor(ASSET_TYPE_ROWS));
+    expect(Object.keys(sections)).toEqual(["2a.1", "2b.1", "4d.1"]);
+    expect(sections["2a.1"]).toHaveLength(13);
+    expect(sections["2b.1"]).toHaveLength(6);
+    expect(sections["4d.1"]).toEqual(["GiftOfCash", "GiftOfPropertyEquity", "Grant"]);
+    // The marker is the tab's "new for DU" footnote and not part of the value.
+    expect(sections["2a.1"]).toContain("StockOptions");
+    expect(sections["2a.1"].join(" ")).not.toMatch(/\*/);
+  });
+
+  it("stops on a fourth section rather than dropping its values", () => {
+    // A spec revision that files a value under a section no kind reads is a
+    // value that would silently belong to no CHECK.
+    expect(() =>
+      deriveAssetTypeSections(rowsFor([...ASSET_TYPE_ROWS, ["2b.2", "Cryptocurrency"]])),
+    ).toThrow(/files AssetType under 2b\.2/);
+  });
+
+  it("stops on a section the tab no longer carries", () => {
+    expect(() =>
+      deriveAssetTypeSections(rowsFor(ASSET_TYPE_ROWS.filter(([field]) => field !== "4d.1"))),
+    ).toThrow(/no members at form field 4d\.1/);
+  });
+
+  it("reads the three lists out of the migration that carries them", () => {
+    const lists = assetTypeListsInMigration(readFileSync(resolve(ROOT, ASSET_MIGRATION), "utf8"));
+    expect(lists.du_assets_deposit_account_shape).toHaveLength(13);
+    expect(lists.du_assets_other_asset_shape).toHaveLength(6);
+    expect(lists.du_assets_gift_or_grant_shape).toEqual([
+      "GiftOfCash",
+      "GiftOfPropertyEquity",
+      "Grant",
+    ]);
+  });
+
+  it("fails a shape CHECK that constrains the columns and not the type", () => {
+    const sql = readFileSync(resolve(ROOT, ASSET_MIGRATION), "utf8").replace(
+      /asset_type IN \('CashOnHand',[\s\S]*?'ProceedsFromUnsecuredLoan'\)\n {12}AND /,
+      "",
+    );
+    expect(() => assetTypeListsInMigration(sql)).toThrow(
+      /du_assets_other_asset_shape does not name the AssetType values it admits/,
+    );
+  });
+
+  it("names the value a CHECK admits from the wrong section, and the one it drops", () => {
+    const sections = deriveAssetTypeSections(rowsFor(ASSET_TYPE_ROWS));
+    const members = Object.values(sections).flat();
+    const widened = {
+      du_assets_deposit_account_shape: [...sections["2a.1"], "CashOnHand"],
+      du_assets_other_asset_shape: sections["2b.1"].filter((v) => v !== "CashOnHand"),
+      du_assets_gift_or_grant_shape: sections["4d.1"],
+    };
+    expect(diffAssetTypeChecks(sections, widened, members)).toEqual([
+      "du_assets_deposit_account_shape admits CashOnHand, which the DU Enumerations tab does " +
+        "not file under 2a.1.",
+      "du_assets_other_asset_shape is missing CashOnHand, which the tab files under 2b.1; " +
+        "no OTHER_ASSET row could hold it.",
+    ]);
+  });
+
+  it("names a member no kind's CHECK admits", () => {
+    const sections = deriveAssetTypeSections(rowsFor(ASSET_TYPE_ROWS));
+    const lists = Object.fromEntries(
+      ASSET_TYPE_SECTIONS.map((s) => [s.constraint, sections[s.formField]]),
+    );
+    expect(
+      diffAssetTypeChecks(sections, lists, [...Object.values(sections).flat(), "Bullion"]),
+    ).toEqual(["DuAssetType.Bullion is admitted by no kind's CHECK, so no row can carry it."]);
+  });
+
+  it("agrees with the migration on the committed spec, with no spec directory", () => {
+    // The check CI runs. Both sides are committed files, which is what makes a
+    // widened CHECK catchable on a machine that has no DU_SPEC_DIR — and a
+    // widened CHECK has no other local symptom.
+    const generated = readFileSync(resolve(ROOT, "packages/du/src/generated/enums.ts"), "utf8");
+    const sections = parseGeneratedAssetTypeSections(generated);
+    const members = prismaEnums(readFileSync(resolve(ROOT, PRISMA_SCHEMA), "utf8")).DuAssetType;
+    const lists = assetTypeListsInMigration(readFileSync(resolve(ROOT, ASSET_MIGRATION), "utf8"));
+    expect(diffAssetTypeChecks(sections, lists, members)).toEqual([]);
   });
 });

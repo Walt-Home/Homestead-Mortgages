@@ -372,6 +372,14 @@ model ConnectorSnapshot {
   employmentFirstSeen Employment[]   @relation("EmploymentFirstSeen")
   employmentLastSeen  Employment[]   @relation("EmploymentLastSeen")
   employmentRetiredBy Employment[]   @relation("EmploymentRetiredBy")
+  assetSource         DuAsset[]      @relation("DuAssetSource")
+  assetFirstSeen      DuAsset[]      @relation("DuAssetFirstSeen")
+  assetLastSeen       DuAsset[]      @relation("DuAssetLastSeen")
+  assetRetiredBy      DuAsset[]      @relation("DuAssetRetiredBy")
+  liabilitySource     DuLiability[]  @relation("DuLiabilitySource")
+  liabilityFirstSeen  DuLiability[]  @relation("DuLiabilityFirstSeen")
+  liabilityLastSeen   DuLiability[]  @relation("DuLiabilityLastSeen")
+  liabilityRetiredBy  DuLiability[]  @relation("DuLiabilityRetiredBy")
 
   @@index([loanFileId, kind, retrievedAt])
   /// The person-to-reports direction, which is what a submission assembles from.
@@ -1049,14 +1057,18 @@ model Application {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  parties     ApplicationParty[]
-  transitions ApplicationTransition[]
-  scenarios   LoanScenario[]
-  pins        ApplicationEvidenceLink[]
-  clocks      RegulatoryClock[]
+  parties         ApplicationParty[]
+  transitions     ApplicationTransition[]
+  scenarios       LoanScenario[]
+  pins            ApplicationEvidenceLink[]
+  clocks          RegulatoryClock[]
+  assets          DuAsset[]
+  ownedProperties DuOwnedProperty[]
+  liabilities     DuLiability[]
+  expenses        DuExpense[]
   /// The mortgage this request became, if it funded. Not a cascade in either
   /// direction: the loan names the application, and survives it.
-  loan        Loan?
+  loan            Loan?
 
   /// The queue query this exists to make cheap: everything in one state,
   /// oldest first.
@@ -1825,4 +1837,439 @@ model DuResidence {
 
   @@unique([applicationPartyId, residencyType])
   @@map("du_residences")
+}
+
+// ─── ASSETS, LIABILITIES, EXPENSES AND OWNED PROPERTY ───────────────────────
+//
+// URLA sections 2a, 2b, 2c, 2d, 3a and 4d. They hang off the APPLICATION and
+// not off a borrower: `DEAL/ASSETS/ASSET` is a sibling of `PARTIES`, and who
+// owns an asset is an arc between the two. Nothing here carries an owner
+// column, and the join that carries the arc is not in this change — an asset
+// written today has no owner and nothing yet requires one.
+
+/// Which URLA section a stored asset belongs to.
+///
+/// Ours, with no DU data point behind it. One XML container serves four
+/// sections whose fields are disjoint, and this is what says which set of them
+/// a row is allowed to fill. It is also the discriminator the emitter keys
+/// conditionality on, so a row whose kind disagrees with its `assetType` would
+/// be emitted under the wrong rules — which is why the per-kind CHECKs in the
+/// migration name the AssetType values each section carries rather than only
+/// which columns must be null.
+enum DuAssetKind {
+  DEPOSIT_ACCOUNT
+  OTHER_ASSET
+  GIFT_OR_GRANT
+  OWNED_PROPERTY
+}
+
+/// `AssetType`, the union across 2a.1, 2b.1 and 4d.1. Which members a row may
+/// take is decided by its `kind`, in the database.
+enum DuAssetType {
+  // 2a.1 — the accounts.
+  Bond
+  BridgeLoanNotDeposited
+  CertificateOfDepositTimeDeposit
+  CheckingAccount
+  IndividualDevelopmentAccount
+  LifeInsurance
+  MoneyMarketFund
+  MutualFund
+  RetirementFund
+  SavingsAccount
+  Stock
+  StockOptions
+  TrustAccount
+  // 2b.1 — the other assets and credits.
+  CashOnHand
+  Other
+  PendingNetSaleProceedsFromRealEstateAssets
+  ProceedsFromSaleOfNonRealEstateAsset
+  ProceedsFromSecuredLoan
+  ProceedsFromUnsecuredLoan
+  // 4d.1 — gifts and grants.
+  GiftOfCash
+  GiftOfPropertyEquity
+  Grant
+}
+
+/// `AssetTypeOtherDescription`, which is an enumeration and not free text.
+///
+/// The Map types it `String (DU Enumerated)` and the DU Enumerations tab gives
+/// it exactly these two members. Held as text it would take a borrower's "Coin
+/// collection" through every check this repo has — the XSD types the element as
+/// a plain string — and into a DU rejection days later.
+enum DuAssetTypeOtherDescription {
+  OtherLiquidAsset
+  OtherNonLiquidAsset
+}
+
+/// Who the gift or grant came from. 4d.2 on the wire.
+///
+/// `PropertySeller` is a thirteenth member of this data point on
+/// ORIGINATION_FUND and is deliberately absent: a gift or grant on an ASSET
+/// cannot come from the seller.
+enum DuFundsSourceType {
+  CommunityNonProfit
+  Employer
+  FederalAgency
+  Lender
+  LocalAgency
+  Other
+  Parent
+  Relative
+  ReligiousNonProfit
+  StateAgency
+  UnmarriedPartner
+  UnrelatedFriend
+}
+
+/// `LiabilityType`. 2c.1 is what the borrower declares and 3a.11 the mortgages
+/// against owned property; one column holds both, so this is their union.
+enum DuLiabilityType {
+  CollectionsJudgmentsAndLiens
+  Installment
+  LeasePayment
+  Open30DayChargeAccount
+  Other
+  Revolving
+  Taxes
+  TaxLien
+  HELOC
+  MortgageLoan
+}
+
+/// `MortgageType` on LIABILITY_DETAIL (3a.14). One legal value, and it is not
+/// the loan-level MortgageType on TERMS_OF_LOAN, which is a different data
+/// point with a wider set.
+enum DuLiabilityMortgageType {
+  FHA
+}
+
+enum DuExpenseType {
+  Alimony
+  ChildSupport
+  JobRelatedExpenses
+  Other
+  SeparateMaintenanceExpense
+}
+
+/// What the borrower intends to do with a property they already own.
+enum DuOwnedPropertyDisposition {
+  PendingSale
+  Retain
+  Sold
+}
+
+/// 3a.5 `PropertyUsageType`. Four values, and deliberately not `DuPropertyUsage`
+/// — this is the one usage data point that admits `Other`, and merging the two
+/// would let `Other` reach a destination whose set is three words.
+enum DuIntendedPropertyUsage {
+  Investment
+  Other
+  PrimaryResidence
+  SecondHome
+}
+
+/// `PropertyUsageTypeOtherDescription`, the six things a retained property can
+/// be when it is none of the three occupancy words. This is what lets a farm, a
+/// timeshare or an undeveloped lot be an REO without asserting a usage that is
+/// not true.
+enum DuPropertyUsageOtherDescription {
+  Chattel
+  Commercial
+  Farm
+  Land
+  Multifamily
+  Timeshare
+}
+
+/// One asset: a deposit account, another asset, a gift or grant, or a property
+/// the borrower already owns.
+///
+/// One table for four URLA sections because they are one XML container. What
+/// keeps that from being a bag of nullable columns is `kind`: the migration
+/// gives each kind the AssetType values its section carries and the columns it
+/// may fill, so a row cannot claim to be a 4d gift and carry a checking
+/// account's fields.
+model DuAsset {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  kind DuAssetKind
+
+  /// Null on an OWNED_PROPERTY row, with every other ASSET_DETAIL column, by
+  /// CHECK. An REO asset carries no ASSET_DETAIL at all — the XSD permits the
+  /// combination, so the database is the only place it is refused.
+  ///
+  /// Nullable only for that one kind: the per-kind shape CHECKs require it on
+  /// the other three, and require it from that kind's own section list. It is
+  /// what tells the emitter which conditionality a row is under, so a row
+  /// without one is a row nothing downstream can read.
+  assetType                       DuAssetType?                 @map("asset_type")
+  assetTypeOtherDescription       DuAssetTypeOtherDescription? @map("asset_type_other_description")
+  cashOrMarketValueCents          BigInt?                      @map("cash_or_market_value_cents")
+  /// DEPOSIT_ACCOUNT only. `ASSET_HOLDER/NAME/FullName`, String 150.
+  holderName                      String?                      @map("holder_name")
+  /// `AssetAccountIdentifier`, String 30.
+  accountIdentifier               String?                      @map("account_identifier")
+  /// GIFT_OR_GRANT only.
+  fundsSourceType                 DuFundsSourceType?           @map("funds_source_type")
+  /// 4d.3, String 80, required exactly when the source is `Other`. Genuinely a
+  /// bare string, unlike its neighbor above.
+  fundsSourceTypeOtherDescription String?                      @map("funds_source_type_other_description")
+  /// 4d.2, and only for a gift of cash or a grant: a gift of property equity is
+  /// a credit in the transaction and was never in an account to be included in.
+  includedInAssetAccount          Boolean?                     @map("included_in_asset_account")
+
+  /// Which vendor report this figure came from, so a number on the wire can be
+  /// traced to the pull that produced it. Null for a row a person typed, and
+  /// saying so is the honest answer.
+  sourceSnapshotId String?            @map("source_snapshot_id") @db.Uuid
+  sourceSnapshot   ConnectorSnapshot? @relation("DuAssetSource", fields: [sourceSnapshotId], references: [id], onDelete: SetNull)
+
+  /// What a second pull recognizes this row by, so it is updated rather than
+  /// duplicated. The same five columns as `IncomeSource`, and for the same
+  /// reason: without them a re-pull can only insert a twin or delete and
+  /// recreate, and both renumber every ASSET_n on the wire.
+  ///
+  /// No writer computes one yet. Nothing in this change ingests an asset, so
+  /// every row here carries whatever key its caller supplied.
+  identityKey         String             @map("identity_key")
+  firstSeenSnapshotId String?            @map("first_seen_snapshot_id") @db.Uuid
+  firstSeenSnapshot   ConnectorSnapshot? @relation("DuAssetFirstSeen", fields: [firstSeenSnapshotId], references: [id], onDelete: SetNull)
+  lastSeenSnapshotId  String?            @map("last_seen_snapshot_id") @db.Uuid
+  lastSeenSnapshot    ConnectorSnapshot? @relation("DuAssetLastSeen", fields: [lastSeenSnapshotId], references: [id], onDelete: SetNull)
+  /// Superseded rather than deleted — you cannot diff against a row you
+  /// deleted, and only live rows are emitted.
+  retiredAt           DateTime?          @map("retired_at")
+  retiredBySnapshotId String?            @map("retired_by_snapshot_id") @db.Uuid
+  retiredBySnapshot   ConnectorSnapshot? @relation("DuAssetRetiredBy", fields: [retiredBySnapshotId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  ownedProperty DuOwnedProperty?
+  /// The other end of the composite foreign key on `du_owned_properties`, which
+  /// Prisma requires a field for. A list only because Prisma reserves the 0:1
+  /// spelling for a relation whose own columns are unique: `asset_id` is
+  /// unique, so this holds `ownedProperty` and nothing else.
+  reoProperty   DuOwnedProperty[] @relation("DuOwnedPropertyAttachesToAnReoAsset") @ignore
+
+  /// Spans retired rows on purpose, word for word the reasoning
+  /// `income_sources_file_party_identity_key` carries: an asset that goes away
+  /// and comes back is one asset, so a later pull revives the row rather than
+  /// inserting a twin. A partial index `WHERE retired_at IS NULL` would let a
+  /// retired row and a live row share a key, and the twin it admits renumbers
+  /// every ASSET_n after it.
+  @@unique([applicationId, identityKey], map: "du_assets_application_identity_key")
+  /// Not a rule about assets — it is the target the composite foreign key on
+  /// `du_owned_properties` needs, and Postgres requires a unique index on the
+  /// referenced columns. `id` is already the primary key, so this admits
+  /// nothing new; what it does is let an owned property name its parent's kind
+  /// as well as its id, which is how "only an REO asset has one" is held.
+  @@unique([id, kind], map: "du_assets_id_kind")
+  @@index([applicationId])
+  @@map("du_assets")
+}
+
+/// URLA 3a. A 0:1 child OF an asset, never a sibling.
+///
+/// This is the one structural rule MISMO itself enforces: moving
+/// `<OWNED_PROPERTY>` to a DEAL-level position beside `<COLLATERALS>` fails
+/// schema validation, and there is no other legal location. `asset_id` being
+/// unique and not null is the 0:1; the cascade is the nesting; and a composite
+/// foreign key in the migration makes OWNED_PROPERTY the only kind of asset one
+/// of these may hang off.
+model DuOwnedProperty {
+  id      String  @id @default(uuid()) @db.Uuid
+  assetId String  @unique @map("asset_id") @db.Uuid
+  asset   DuAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  /// Denormalized from the asset and written ONLY by a trigger. A partial
+  /// unique index cannot see through the asset to the application, and "at most
+  /// one subject REO per application" has to be an index. Nothing sets it by
+  /// hand; a value passed to `create()` is overwritten.
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  /// A generated column holding the one value it can hold, so that
+  /// `(asset_id, asset_kind)` can only match an asset whose kind is
+  /// OWNED_PROPERTY. Prisma has no representation for a generated column, so it
+  /// is raw SQL in the migration and `@ignore`d here — declared all the same,
+  /// because an undeclared column is drift, and the DROP COLUMN the next
+  /// `prisma migrate dev` would propose takes the foreign key with it.
+  ///
+  /// Optional, and the `@default` is how Prisma reads the generation
+  /// expression. Both halves are what the introspected shape actually is: a
+  /// STORED generated column is nullable in the catalog, and declaring this
+  /// required makes `prisma migrate diff` propose `SET NOT NULL` — drift again,
+  /// pointed the other way. Nothing writes it; Postgres refuses to let anything
+  /// try.
+  assetKind DuAssetKind? @default(OWNED_PROPERTY) @map("asset_kind") @ignore
+
+  /// The composite foreign key, spelled the only way Prisma can spell one. It
+  /// names the same parent row as `asset` above and buys no second traversal —
+  /// what it buys is that `(asset_id, asset_kind)` is checked against
+  /// `(id, kind)`, so an owned property cannot hang off a deposit account.
+  /// Ignored, because nothing should read the parent twice.
+  reoAsset DuAsset? @relation("DuOwnedPropertyAttachesToAnReoAsset", fields: [assetId, assetKind], references: [id, kind], onDelete: Cascade, onUpdate: NoAction, map: "du_owned_properties_attach_to_an_reo_asset") @ignore
+
+  dispositionStatus DuOwnedPropertyDisposition @map("disposition_status")
+  /// True on the one REO that IS the subject property of this application.
+  /// There is no arc joining the REO schedule to COLLATERALS — this boolean is
+  /// the link, and a partial unique index holds at most one per application.
+  isSubject         Boolean                    @default(false) @map("is_subject")
+
+  /// Null on a subject REO means "render the subject property's address here".
+  ///
+  /// The two destinations are not the same width — AddressLineText is String 50
+  /// under the subject property and String 35 here — so a legal 41-character
+  /// street line is valid at one and invalid at the other, and byte-identity
+  /// between the two renderings is unsatisfiable rather than merely unenforced.
+  /// A value stored here says this REO's address is recorded as different. A
+  /// non-subject REO must carry its own, because nothing else knows it.
+  addressLineText String? @map("address_line_text")
+  addressUnit     String? @map("address_unit")
+  cityName        String? @map("city_name")
+  stateCode       String? @map("state_code")
+  /// MISMO 3.4 does not separate zip from zip+4: five digits or nine, no dash.
+  postalCode      String? @map("postal_code")
+  countryCode     String? @map("country_code")
+
+  currentUsage                  DuPropertyUsage?                 @map("current_usage")
+  /// 3a.5. Conditional on the disposition being `Retain`.
+  intendedUsage                 DuIntendedPropertyUsage?         @map("intended_usage")
+  /// Present exactly when the intended usage is `Other`, by CHECK.
+  intendedUsageOtherDescription DuPropertyUsageOtherDescription? @map("intended_usage_other_description")
+  estimatedValueCents           BigInt?                          @map("estimated_value_cents")
+
+  /// DERIVED, and never written by a caller.
+  ///
+  /// 3a.12 is "the total amount of all remaining mortgages and liens against
+  /// the owned real property" — the total across every live liability securing
+  /// this row, not the balance of any one of them. Two triggers keep it: one
+  /// here and one on `du_liabilities`, so a second lien added by a credit
+  /// re-pull moves the figure with nobody recomputing it. A value passed to
+  /// `create()` or `update()` is overwritten rather than refused. Null when no
+  /// live liability points at the row, which is a property owned free and clear.
+  lienUpbCents            BigInt? @map("lien_upb_cents")
+  /// Conditional on the securing LIABILITY saying its payment does not include
+  /// taxes and insurance — a condition on a different container, reachable only
+  /// along the arc, so no CHECK on this table can see it.
+  maintenanceExpenseCents BigInt? @map("maintenance_expense_cents")
+  /// 3a.7, optional with no conditionality of its own. Zero is a legitimate
+  /// answer: a retained second home is not rented out.
+  rentalIncomeGrossCents  BigInt? @map("rental_income_gross_cents")
+  /// 3a.8, conditional on the disposition being `Retain`. Legitimately
+  /// negative — a rental that loses money emits a negative net amount — so the
+  /// bound on it is signed while every other amount here is not.
+  rentalIncomeNetCents    BigInt? @map("rental_income_net_cents")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  securedBy DuLiability[]
+
+  @@map("du_owned_properties")
+}
+
+/// URLA 2c and 3a.9-3a.15, which are one XML container.
+model DuLiability {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  liabilityType                 DuLiabilityType          @map("liability_type")
+  /// 2c.1, String 80, required exactly when the type is `Other`.
+  liabilityTypeOtherDescription String?                  @map("liability_type_other_description")
+  /// `LIABILITY_HOLDER/NAME/FullName`, String 150.
+  holderName                    String                   @map("holder_name")
+  accountIdentifier             String?                  @map("account_identifier")
+  /// 3a.14. It belongs to the REO mortgage variant, like the two indicators
+  /// below, and a CHECK binds it there.
+  mortgageType                  DuLiabilityMortgageType? @map("mortgage_type")
+
+  unpaidBalanceCents  BigInt  @map("unpaid_balance_cents")
+  monthlyPaymentCents BigInt  @map("monthly_payment_cents")
+  /// `LiabilityRemainingTermMonthsCount`, Numeric 3 on the wire. A thousand
+  /// months is not a longer term, it is a rejected file.
+  remainingTermMonths Int?    @map("remaining_term_months")
+  payoffStatus        Boolean @map("payoff_status")
+  /// Excluded from the ratios, with a reason a human wrote.
+  exclusionIndicator  Boolean @default(false) @map("exclusion_indicator")
+
+  /// HELOC only, by CHECK.
+  helocMaximumBalanceCents      BigInt?  @map("heloc_maximum_balance_cents")
+  /// MortgageLoan and HELOC only, and it is what makes the owned property's
+  /// maintenance expense conditionally required.
+  paymentIncludesTaxesInsurance Boolean? @map("payment_includes_taxes_insurance")
+
+  /// The property this lien is against, and the arc that is a foreign key
+  /// rather than a join table.
+  ///
+  /// `ASSET_IsAssociatedWith_LIABILITY` is many-to-many in the abstract. Across
+  /// the eighteen shipped samples there are 23 of these arcs and not one
+  /// liability is the target of more than one asset; what the corpus does show
+  /// is one property with two liens, a first mortgage and a HELOC, which is
+  /// exactly what a nullable foreign key on this side expresses. A trigger
+  /// keeps it inside one application: an arc across two of them emits an
+  /// `xlink:from` naming a label the document does not contain, and the XSD
+  /// accepts that silently.
+  securedByOwnedPropertyId String?          @map("secured_by_owned_property_id") @db.Uuid
+  securedByOwnedProperty   DuOwnedProperty? @relation(fields: [securedByOwnedPropertyId], references: [id], onDelete: SetNull)
+
+  sourceSnapshotId String?            @map("source_snapshot_id") @db.Uuid
+  sourceSnapshot   ConnectorSnapshot? @relation("DuLiabilitySource", fields: [sourceSnapshotId], references: [id], onDelete: SetNull)
+
+  /// Re-pull identity, the same five columns as an asset's and for the same
+  /// reason. A credit re-pull that recognizes a tradeline updates this row
+  /// rather than inserting a twin.
+  identityKey         String             @map("identity_key")
+  firstSeenSnapshotId String?            @map("first_seen_snapshot_id") @db.Uuid
+  firstSeenSnapshot   ConnectorSnapshot? @relation("DuLiabilityFirstSeen", fields: [firstSeenSnapshotId], references: [id], onDelete: SetNull)
+  lastSeenSnapshotId  String?            @map("last_seen_snapshot_id") @db.Uuid
+  lastSeenSnapshot    ConnectorSnapshot? @relation("DuLiabilityLastSeen", fields: [lastSeenSnapshotId], references: [id], onDelete: SetNull)
+  retiredAt           DateTime?          @map("retired_at")
+  retiredBySnapshotId String?            @map("retired_by_snapshot_id") @db.Uuid
+  retiredBySnapshot   ConnectorSnapshot? @relation("DuLiabilityRetiredBy", fields: [retiredBySnapshotId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// Full, spanning retired rows, for the reason spelled out on `DuAsset`.
+  @@unique([applicationId, identityKey], map: "du_liabilities_application_identity_key")
+  @@index([applicationId])
+  @@index([securedByOwnedPropertyId])
+  @@map("du_liabilities")
+}
+
+/// Alimony, child support, job-related expenses. `EXPENSE` is the one container
+/// in this set with no `_DETAIL` child — the fields hang directly off it.
+model DuExpense {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  expenseType             DuExpenseType @map("expense_type")
+  /// 2d.1. Present exactly when the type is `Other`, by CHECK, in both
+  /// directions — an expense filed as `Other` and left unexplained says
+  /// nothing.
+  expenseOtherDescription String?       @map("expense_other_description")
+  monthlyPaymentCents     BigInt        @map("monthly_payment_cents")
+  /// `ExpenseRemainingTermMonthsCount`, Numeric 3, same as a liability's.
+  remainingTermMonths     Int?          @map("remaining_term_months")
+  /// OURS, not DU's. The EXPENSE container carries four data points and this is
+  /// none of them, so the serializer must never look for somewhere to put it.
+  /// Marked the way `du_declarations.explanations` is marked, because in a set
+  /// of tables whose warrant is that every column is a named row in a named
+  /// extract, an unmarked column that is not one reads as a citation nobody
+  /// checked.
+  alimonyOwedToName       String?       @map("alimony_owed_to_name")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([applicationId])
+  @@map("du_expenses")
 }

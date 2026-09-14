@@ -15,7 +15,11 @@
  */
 
 export { CHILD_ORDER, TYPE_FOR_PATH } from "./generated/order.js";
-export { DU_ENUMERATIONS, LOCAL_ENUMERATIONS } from "./generated/enums.js";
+export {
+  DU_ASSET_TYPES_BY_SECTION,
+  DU_ENUMERATIONS,
+  LOCAL_ENUMERATIONS,
+} from "./generated/enums.js";
 export { DU_FORMATS, type DuFormat } from "./generated/lengths.js";
 export {
   DU_CARDINALITY,

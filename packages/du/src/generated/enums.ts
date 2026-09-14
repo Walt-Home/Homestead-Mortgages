@@ -33,3 +33,15 @@ export const DU_ENUMERATIONS: Readonly<Record<string, readonly string[]>> = {
 
 /** Enums that are ours, with no DU data point behind them and nothing to diff. */
 export const LOCAL_ENUMERATIONS: readonly string[] = ["DuAssetKind"] as const;
+
+/**
+ * AssetType, split by the URLA section the DU Enumerations tab files each
+ * member under. The union is DuAssetType; the split is which values each
+ * du_assets.kind may take, and the per-kind CHECKs in
+ * 20260913110000_an_asset_has_an_owner are diffed against it by du:verify.
+ */
+export const DU_ASSET_TYPES_BY_SECTION: Readonly<Record<string, readonly string[]>> = {
+  "2a.1": ["Bond", "BridgeLoanNotDeposited", "CertificateOfDepositTimeDeposit", "CheckingAccount", "IndividualDevelopmentAccount", "LifeInsurance", "MoneyMarketFund", "MutualFund", "RetirementFund", "SavingsAccount", "Stock", "StockOptions", "TrustAccount"],
+  "2b.1": ["CashOnHand", "Other", "PendingNetSaleProceedsFromRealEstateAssets", "ProceedsFromSaleOfNonRealEstateAsset", "ProceedsFromSecuredLoan", "ProceedsFromUnsecuredLoan"],
+  "4d.1": ["GiftOfCash", "GiftOfPropertyEquity", "Grant"],
+} as const;

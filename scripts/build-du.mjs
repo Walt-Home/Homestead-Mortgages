@@ -42,6 +42,14 @@ import { inflateRawSync } from "node:zlib";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = resolve(ROOT, "packages/du/src/generated");
 const PRISMA_SCHEMA = resolve(ROOT, "packages/db/prisma/schema.prisma");
+/**
+ * The migration that gives each kind of asset the AssetType values its URLA
+ * section carries. Named here because the three lists inside it are the
+ * partition this script derives, and a check that reads them is the only thing
+ * that keeps them from being three hand-typed lists that drift.
+ */
+const ASSET_SHAPE_MIGRATION =
+  "packages/db/prisma/migrations/20260913110000_an_asset_has_an_owner/migration.sql";
 
 /**
  * The DU Spec release these mappings were read against.
@@ -900,6 +908,164 @@ export function deriveEnumerations(enumerationRows, options = {}) {
   return { enumerations, local };
 }
 
+/**
+ * The three URLA sections `AssetType` is filed under, and the CHECK that gives
+ * each one its values.
+ *
+ * `du_assets.kind` says which section a row belongs to and the emitter keys
+ * conditionality on it, so a row whose kind and type disagree is emitted under
+ * the wrong rules — `kind = OTHER_ASSET` with `asset_type = 'CheckingAccount'`
+ * writes a checking account with no holder name and no account identifier, both
+ * of which DU requires once an amount exists. The CHECKs are what stop it, and
+ * this table is what stops the CHECKs from being three hand-typed lists.
+ */
+export const ASSET_TYPE_SECTIONS = [
+  { kind: "DEPOSIT_ACCOUNT", formField: "2a.1", constraint: "du_assets_deposit_account_shape" },
+  { kind: "OTHER_ASSET", formField: "2b.1", constraint: "du_assets_other_asset_shape" },
+  { kind: "GIFT_OR_GRANT", formField: "4d.1", constraint: "du_assets_gift_or_grant_shape" },
+];
+
+/**
+ * `AssetType`, split by the Form Field ID the DU Enumerations tab files each
+ * member under.
+ *
+ * The union of these is `DuAssetType`, which is what `du_assets.asset_type`
+ * holds; the split is which of them each `kind` may take. Deriving it here
+ * rather than reading the three lists off the migration is the point: a spec
+ * revision that moves a value from 2b.1 to 2a.1 changes this table, and the
+ * check below then fails rather than leaving a CHECK quietly widened.
+ */
+export function deriveAssetTypeSections(enumerationRows, options = {}) {
+  const sections = options.sections ?? ASSET_TYPE_SECTIONS;
+  const wanted = new Set(sections.map((s) => s.formField));
+  const byFormField = new Map(sections.map((s) => [s.formField, []]));
+  const strays = [];
+
+  for (const row of enumerationRows) {
+    if (row.dataPoint !== "AssetType") continue;
+    const value = row.value.replace(FOOTNOTE_MARKER, "");
+    if (!value) {
+      throw new Error(
+        `AssetType has a blank enumeration cell at row ${row.rowNumber} of the ` +
+          `${TABS.enumerations} tab. There is no value to give a CHECK.`,
+      );
+    }
+    if (!wanted.has(row.formFieldId)) {
+      if (!strays.includes(row.formFieldId)) strays.push(row.formFieldId);
+      continue;
+    }
+    const values = byFormField.get(row.formFieldId);
+    if (!values.includes(value)) values.push(value);
+  }
+
+  if (strays.length) {
+    throw new Error(
+      `The ${TABS.enumerations} tab files AssetType under ${strays.join(", ")} as well as ` +
+        `${sections.map((s) => s.formField).join(", ")}.\n` +
+        "  A fourth section is a fourth kind of asset row, or a value with no CHECK to admit\n" +
+        "  it. Add it to ASSET_TYPE_SECTIONS with the kind and the constraint that carries it.",
+    );
+  }
+  for (const [formField, values] of byFormField) {
+    if (!values.length) {
+      throw new Error(
+        `AssetType has no members at form field ${formField}, which ASSET_TYPE_SECTIONS names.`,
+      );
+    }
+  }
+  return Object.fromEntries(byFormField);
+}
+
+/** Read the partition back out of the generated enums.ts. */
+export function parseGeneratedAssetTypeSections(source) {
+  const body = /export const DU_ASSET_TYPES_BY_SECTION[^=]*=\s*\{([\s\S]*?)\n\} as const;/.exec(
+    source,
+  );
+  if (!body) {
+    throw new Error(
+      "packages/du/src/generated/enums.ts does not carry DU_ASSET_TYPES_BY_SECTION.\n" +
+        "  Run: npm run du:build",
+    );
+  }
+  const found = {};
+  for (const entry of body[1].matchAll(/^ {2}"([^"]+)":\s*\[([^\]]*)\],$/gm)) {
+    found[entry[1]] = [...entry[2].matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+  }
+  return found;
+}
+
+/**
+ * The AssetType values each per-kind CHECK in the migration admits.
+ *
+ * A regex over SQL is safe here for the same reason it is safe over the
+ * generated file: the shape is asserted rather than assumed, and a constraint
+ * this cannot find is an error instead of an empty list.
+ */
+export function assetTypeListsInMigration(sql, options = {}) {
+  const sections = options.sections ?? ASSET_TYPE_SECTIONS;
+  const found = {};
+  for (const section of sections) {
+    const block = new RegExp(
+      `ADD CONSTRAINT "${section.constraint}" CHECK \\(([\\s\\S]*?)\\n    \\)`,
+    ).exec(sql);
+    if (!block) {
+      throw new Error(
+        `${ASSET_SHAPE_MIGRATION} has no CHECK named ${section.constraint}.\n` +
+          "  The per-kind shapes are where the AssetType partition is enforced; a missing one\n" +
+          "  is a kind that may hold any type at all.",
+      );
+    }
+    const list = /asset_type IN \(([\s\S]*?)\)/.exec(block[1]);
+    if (!list) {
+      throw new Error(
+        `${section.constraint} does not name the AssetType values it admits.\n` +
+          "  A shape CHECK that constrains only the columns lets the discriminator lie.",
+      );
+    }
+    found[section.constraint] = [...list[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
+  }
+  return found;
+}
+
+/**
+ * Diff the migration's three value lists against the partition the spec draws,
+ * and account for every member of the enum.
+ */
+export function diffAssetTypeChecks(sections, migrationLists, assetTypeMembers, options = {}) {
+  const table = options.sections ?? ASSET_TYPE_SECTIONS;
+  const problems = [];
+  const claimed = new Set();
+  for (const section of table) {
+    const expected = sections[section.formField] ?? [];
+    const actual = migrationLists[section.constraint] ?? [];
+    for (const value of actual) {
+      claimed.add(value);
+      if (!expected.includes(value)) {
+        problems.push(
+          `${section.constraint} admits ${value}, which the DU Enumerations tab does not file ` +
+            `under ${section.formField}.`,
+        );
+      }
+    }
+    for (const value of expected) {
+      if (!actual.includes(value)) {
+        problems.push(
+          `${section.constraint} is missing ${value}, which the tab files under ` +
+            `${section.formField}; no ${section.kind} row could hold it.`,
+        );
+      }
+    }
+  }
+  for (const member of assetTypeMembers) {
+    if (!claimed.has(member)) {
+      problems.push(
+        `DuAssetType.${member} is admitted by no kind's CHECK, so no row can carry it.`,
+      );
+    }
+  }
+  return problems;
+}
+
 // ── Formats, from the DU Map ───────────────────────────────────────────────
 
 /**
@@ -1555,6 +1721,21 @@ ${Object.entries(spec.enumerations.enumerations)
 export const LOCAL_ENUMERATIONS: readonly string[] = [${spec.enumerations.local
     .map((n) => JSON.stringify(n))
     .join(", ")}] as const;
+
+/**
+ * AssetType, split by the URLA section the DU Enumerations tab files each
+ * member under. The union is DuAssetType; the split is which values each
+ * du_assets.kind may take, and the per-kind CHECKs in
+ * 20260913110000_an_asset_has_an_owner are diffed against it by du:verify.
+ */
+export const DU_ASSET_TYPES_BY_SECTION: Readonly<Record<string, readonly string[]>> = {
+${Object.entries(spec.assetTypeSections)
+  .map(
+    ([field, values]) =>
+      `  ${JSON.stringify(field)}: [${values.map((v) => JSON.stringify(v)).join(", ")}],`,
+  )
+  .join("\n")}
+} as const;
 `;
 
   files["lengths.ts"] = `${banner(
@@ -1671,6 +1852,7 @@ export function buildFromSpec(paths) {
   return render({
     order: buildOrderTable(parseSchemas(paths), [...xpaths].sort()),
     enumerations: deriveEnumerations(spec.enumerations),
+    assetTypeSections: deriveAssetTypeSections(spec.enumerations),
     formats: buildFormats(spec.map),
     cardinality: buildCardinality(spec.cardinality),
     conditionality: buildConditionality(spec.map),
@@ -1697,11 +1879,45 @@ function runPrismaCheck() {
   return true;
 }
 
+/**
+ * The per-kind CHECKs still admit exactly the values their URLA section carries.
+ *
+ * Two committed files, like the Prisma diff above and for the same reason: this
+ * has to run in CI on a machine with no DU_SPEC_DIR, because the failure it
+ * catches is a widened CHECK and a widened CHECK has no local symptom at all.
+ *
+ * It reads the value list and nothing else. Everything the same CHECK says
+ * about nulls, amounts and the columns each kind forbids is invisible here and
+ * belongs to the suite that writes rows: `apps/api/src/__tests__/assets.test.ts`
+ * is what knows that a row with no AssetType at all is refused, which is not a
+ * fact about the list.
+ */
+function runAssetShapeCheck() {
+  const generated = readFileSync(resolve(OUT_DIR, "enums.ts"), "utf8");
+  const sections = parseGeneratedAssetTypeSections(generated);
+  const members = parseGeneratedEnums(generated).enumerations.DuAssetType ?? [];
+  const migration = assetTypeListsInMigration(
+    readFileSync(resolve(ROOT, ASSET_SHAPE_MIGRATION), "utf8"),
+  );
+  const problems = diffAssetTypeChecks(sections, migration, members);
+  if (problems.length) {
+    console.error("✗ the per-kind asset CHECKs and the DU Spec disagree:");
+    for (const problem of problems) console.error(`    ${problem}`);
+    return false;
+  }
+  console.log(
+    `✓ ${ASSET_TYPE_SECTIONS.length} per-kind asset CHECK(s) admit exactly their section's ` +
+      `${members.length} AssetType values`,
+  );
+  return true;
+}
+
 function main() {
   const verify = process.argv.includes("--verify");
 
   if (verify) {
     let ok = runPrismaCheck();
+    if (!runAssetShapeCheck()) ok = false;
     let files;
     try {
       files = buildFromSpec(resolveSpecFiles());
@@ -1739,7 +1955,9 @@ function main() {
     writeFileSync(resolve(OUT_DIR, name), contents);
   }
   console.log(`✓ wrote ${Object.keys(files).length} files to packages/du/src/generated/`);
-  if (!runPrismaCheck()) process.exit(1);
+  let ok = runPrismaCheck();
+  if (!runAssetShapeCheck()) ok = false;
+  if (!ok) process.exit(1);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

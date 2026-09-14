@@ -74,9 +74,10 @@ three lists rather than trusting it after they change.
 
 ### Missing
 
-- **More than one borrower.** The route cannot append a second, there is no
-  ordinal column, and the requirements engine reads `borrowers[0]` in
-  twenty-four places. DU allows four.
+- **More than one borrower.** The ordinal exists and the database holds the
+  rules; what is missing is above it — no route appends a second borrower, no
+  screen renders one, and thirty-five `borrowers[0]` sites still assume there
+  is only ever one. DU allows four.
 - **The compute boundary** — which figures we assert and which DU derives —
   still unrecorded, still two untyped JSON columns.
 - **The submission itself**: the serializer that emits MISMO 3.4 with its
@@ -101,7 +102,7 @@ which have a longer lead time than anything above.
 | —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets             |
 | 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none  |
 | 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it          |
-| 5   | Up to four borrowers                | Red    | The route cannot append a second; 24 `borrowers[0]` sites   |
+| 5   | Up to four borrowers                | Yellow | Ordinal and its rules landed; no route, no screen, 35 sites |
 | 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary           |
 | —   | The submission                      | Red    | Serializer, preflight, transport, response. Nothing yet     |
 
@@ -175,13 +176,19 @@ landed too, so a report on a two-person file says whose it is — required for
 person-keyed kinds, forbidden for address-keyed ones, and an unrecognized kind
 raises. Assets read neither yet.
 
-**Item 5 — up to four borrowers.** Not started.
-`POST /api/files/:id/borrowers` updates the first borrower or creates the only
-one; it cannot append. No ordinal column, no co-borrower screen,
-`connector_links` unique on `(loanFileId, kind)` so a second borrower cannot
-link their own bank, and twenty-four `borrowers[0]` sites. The database is
-ready for it — every DU table hangs off `application_parties` with a role — but
-nothing creates the second row.
+**Item 5 — up to four borrowers.** Half done, and the half that landed is the
+one the database owns. `application_parties.borrower_ordinal` exists, is
+constrained to one through four, admits exactly one Borrower 1, is required of
+a borrowing role and forbidden of a non-borrowing one, and existing rows were
+backfilled; `ensureApplicationParty` locks the application and allocates the
+smallest free position, so two concurrent appends cannot take the same one.
+
+What is missing is everything above it. `POST /api/files/:id/borrowers` still
+updates the first borrower or creates the only one — it cannot append. No
+co-borrower screen. `connector_links` is unique on `(loanFileId, kind)`, so a
+second borrower cannot link their own bank. And thirty-five `borrowers[0]`
+sites across sixteen files still assume there is only ever one, of which the
+engine and the authorization boundary hold eleven and the screens seven.
 
 **Item 6 — assets, liabilities and owned property.** Built, jointly owned from
 the first migration. `OWNED_PROPERTY` nests inside an asset through a composite

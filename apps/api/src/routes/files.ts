@@ -19,6 +19,7 @@ import {
   recordEvent,
   STAGE_TO_DOMAIN,
 } from "../services/repository.js";
+import { primaryBorrowerRow } from "../services/borrower-order.js";
 import { advanceStage } from "../services/stage.js";
 import {
   assertFacts,
@@ -400,17 +401,16 @@ fileRouter.post(
     // and a party whose facts will not project must be repairable by saving
     // this screen again. The projection runs once, after the write.
 
-    // Whose record this screen is about, in the order every other reader of
-    // this file uses. A file can carry more than one borrower row, and left
-    // unordered the planner chose which of them screen 2 superseded, updated
-    // and promoted to PRIMARY_BORROWER — so on a co-borrower file the pins,
-    // the TRID receipt and the Loan Estimate clock could land on the wrong
-    // person from one save to the next.
-    const existingBorrower = await prisma.borrower.findFirst({
-      where: { loanFileId: id },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      select: { id: true, partyId: true },
-    });
+    // Whose record this screen is about: Borrower 1 by ordinal, which is the
+    // person the screen prefilled itself from. A file can carry more than one
+    // borrower row, and left unordered the planner chose which of them screen
+    // 2 superseded, updated and promoted to PRIMARY_BORROWER — so on a
+    // co-borrower file the pins, the TRID receipt and the Loan Estimate clock
+    // could land on the wrong person from one save to the next. Creation order
+    // fixed the planner and not the question: on a file whose ordinal 1 was
+    // refilled it names the person the replacement took over from, so the
+    // screen showed one borrower's details and saved them onto another's row.
+    const existingBorrower = await primaryBorrowerRow(prisma, id);
 
     if (!existingBorrower && (!input.ssnVaultHandle || !input.ssnLast4)) {
       throw new AppError(400, "An SSN is required the first time.", "SSN_REQUIRED");
@@ -522,6 +522,95 @@ fileRouter.post(
       stage: "credit",
       applicationState: await applicationStanding(prisma, id),
     });
+  }),
+);
+
+/**
+ * A second person on this application.
+ *
+ * The same fields screen 2 collects, about somebody else. Three of screen 2's
+ * are deliberately not here:
+ *
+ * - `statedMonthlyIncome`, because TRID's six pieces are the APPLICANT's, and
+ *   an income posted here would supersede the figure screen 1 recorded and
+ *   then be counted as one of them.
+ * - `currentHousing` and `monthlyRent`, because `du_residences` is where a
+ *   housing basis comes from and this route asks nobody. A co-borrower who has
+ *   not answered reads NULL, which is the same three-valued rule screen 2 now
+ *   keeps.
+ *
+ * The SSN is required. It is optional on screen 2 only because a revisit must
+ * not make somebody type it again, and there is no revisit here: this route
+ * only ever appends, so every call is a first save for the person it is about.
+ *
+ * Create-only, and it never touches borrower 1. Appending is not the operation
+ * that corrects the applicant, and a route that could do both would let a
+ * co-borrower's details land on the person whose request this is.
+ */
+const coBorrowerSchema = identitySchema
+  .omit({ statedMonthlyIncome: true, currentHousing: true, monthlyRent: true })
+  .extend({
+    ssnVaultHandle: z.string().min(1),
+    ssnLast4: z.string().length(4),
+  });
+
+fileRouter.post(
+  "/:id/co-borrowers",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    const input = coBorrowerSchema.parse(req.body);
+    await assertFileAccess(id, req.user!.id, "write");
+
+    // Whose request this is — Borrower 1 by ordinal, the same person the other
+    // two writers and every reader resolve to. Their principal is what stamps
+    // the appended party's facts, so resolving it by creation order would
+    // record this person's name and date of birth as asserted by somebody who
+    // is not the applicant. A file with nobody on it has no applicant for a
+    // co-borrower to be second to, and appending onto one would make this
+    // person Borrower 1 by accident.
+    const primary = await primaryBorrowerRow(prisma, id);
+    if (!primary) throw new AppError(409, "Tell us who you are first.", "NO_BORROWER");
+
+    const appended = await prisma.$transaction(async (tx) => {
+      const app = await applicationForFile(tx, id);
+      if (!app) throw new AppError(409, "This file is not an application yet.", "NO_APPLICATION");
+
+      const partyId = await recordBorrowerFacts(tx, {
+        loanFileId: id,
+        existingPartyId: null,
+        input,
+        namedBy: {
+          principalId: await principalForParty(tx, primary.partyId),
+          sourceFirstSeen: "co_borrower_named_by_applicant",
+        },
+      });
+      const borrower = await tx.borrower.create({
+        data: {
+          loanFileId: id,
+          partyId,
+          ssnLast4: input.ssnLast4,
+          nonBorrowingSpouseName: input.nonBorrowingSpouseName ?? null,
+          nonBorrowingSpouseSignatureRequired:
+            input.maritalStatus === "married" && Boolean(input.nonBorrowingSpouseName),
+          demographics: input.demographics ?? undefined,
+        },
+        select: { id: true },
+      });
+
+      // The position in the submitted document, allocated as the smallest free
+      // one under a lock on the application row. Not `max + 1`: a borrower
+      // dropped before a resubmission leaves a vacancy, and counting past it
+      // hands the replacement a 5 on an application holding three.
+      const edge = await ensureApplicationParty(tx, app.id, partyId, "CO_BORROWER");
+      return { borrowerId: borrower.id, borrowerOrdinal: edge.borrowerOrdinal };
+    });
+
+    // Not `screen_completed`: there is no co-borrower screen, and an event
+    // claiming one would put a screen nobody has built into the file's own
+    // history. What happened is that a person was added, and where.
+    await recordEvent(id, "co_borrower_added", "borrower", appended);
+
+    res.status(201).json(appended);
   }),
 );
 

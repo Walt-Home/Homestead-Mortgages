@@ -143,7 +143,8 @@ describe("what the screen posts", () => {
     expect((await post(user.id, file.id, EVERY_ANSWER)).status).toBe(201);
 
     const loaded = await loadLoanFile(file.id);
-    const said = loaded!.declaration!;
+    const answered = loaded!.borrowers[0]!;
+    const said = answered.declaration!;
     for (const [field, answer] of Object.entries(EVERY_ANSWER.declaration)) {
       if (field === "bankruptcyChapters" || field === "explanations") continue;
       expect(said[field as keyof BorrowerDeclaration], field).toEqual(answer);
@@ -153,11 +154,11 @@ describe("what the screen posts", () => {
 
     // The residences come back in dollars, with the address on the row that
     // carries one and nothing on the row that reads the pinned fact.
-    expect(loaded!.residences).toHaveLength(2);
-    const current = loaded!.residences.find((r) => r.residencyType === "Current")!;
+    expect(answered.residences).toHaveLength(2);
+    const current = answered.residences.find((r) => r.residencyType === "Current")!;
     expect(current).toMatchObject({ basis: "Rent", durationMonths: 14, monthlyRent: 2_400 });
     expect(current.addressLineText).toBeNull();
-    expect(loaded!.residences.find((r) => r.residencyType === "Prior")).toMatchObject({
+    expect(answered.residences.find((r) => r.residencyType === "Prior")).toMatchObject({
       addressLineText: "12 Old Street",
       cityName: "Austin",
       stateCode: "TX",
@@ -170,8 +171,8 @@ describe("what the screen posts", () => {
     // reads null here, and screen 5 says so instead of printing a clean set.
     const { file } = await applicationFile();
     const loaded = await loadLoanFile(file.id);
-    expect(loaded!.declaration).toBeNull();
-    expect(loaded!.residences).toEqual([]);
+    expect(loaded!.borrowers[0]!.declaration).toBeNull();
+    expect(loaded!.borrowers[0]!.residences).toEqual([]);
   });
 
   it("moves the file to the declarations stage, and never backwards", async () => {

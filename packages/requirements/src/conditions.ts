@@ -17,7 +17,7 @@
  * is the single worst thing this product can do.
  */
 
-import type { LoanFile } from "@hm/shared";
+import type { Borrower, LoanFile } from "@hm/shared";
 import { COMMUNITY_PROPERTY_STATES, RESIDENCE_HISTORY_MONTHS } from "@hm/shared";
 import type { ConditionKey } from "./types.js";
 
@@ -25,6 +25,25 @@ import type { ConditionKey } from "./types.js";
 export type Applicability = boolean | null;
 
 type Predicate = (file: LoanFile) => Applicability;
+
+/**
+ * True of anybody makes it true; false only once it is false of everybody.
+ *
+ * `some()` over a three-valued answer would read "nobody has asked him" as a
+ * no, which is rule 2's mistake wearing a second borrower's name. One person
+ * saying they rent has to survive the other person's silence, and one person's
+ * silence has to leave the file undetermined rather than settle it — the same
+ * reason `null` exists at all.
+ */
+function ofAnyBorrower(
+  borrowers: readonly Borrower[],
+  of: (b: Borrower) => Applicability,
+): Applicability {
+  if (borrowers.length === 0) return null;
+  const answers = borrowers.map(of);
+  if (answers.includes(true)) return true;
+  return answers.includes(null) ? null : false;
+}
 
 /** Months back from today, for "recent" windows the sheet leaves in prose. */
 function monthsAgo(iso: string, now: Date): number {
@@ -95,8 +114,10 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
   asset_report_available: (f) => f.assets !== null,
 
   /**
-   * A renter with no mortgage rating in the last 12 months. Owning already
-   * settles it as false; renting plus a mortgage tradeline does too.
+   * Anybody on the file who rents and has no mortgage rating in the last 12
+   * months. Owning already settles one person as false; renting plus a
+   * mortgage tradeline does too. The rent history is asked for once and covers
+   * whoever pays it, so one renter makes it apply to the file.
    *
    * A null basis is "we have not asked", and it answers null. The test used to
    * be `=== "own"` alone, which made everybody else a renter — and while the
@@ -106,15 +127,23 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
    * housing that nobody has put to them.
    */
   renter_limited_mortgage_history: (f) => {
-    const borrower = f.borrowers[0];
-    if (!borrower) return null;
-    if (borrower.currentHousing === null) return null;
-    if (borrower.currentHousing === "own") return false;
-    if (!f.credit) return null;
-    const hasMortgageHistory = f.credit.tradelines.some(
-      (t) => t.type === "mortgage" && t.paymentHistory.length >= 12,
-    );
-    return !hasMortgageHistory;
+    // The file carries ONE credit report and that report carries no party.
+    // Every pull mints its token from the first borrower, so the tradelines
+    // are hers and nobody else's — judging a co-borrower by them retires his
+    // rent history on the strength of her mortgage, which is the borrowed
+    // evidence this predicate was made per-borrower to stop. Until a report
+    // exists per borrower, everybody but her answers null: "we have not
+    // pulled his credit" has to stay distinguishable from "he has a mortgage".
+    const whoseCreditThisIs = f.borrowers[0];
+    return ofAnyBorrower(f.borrowers, (borrower) => {
+      if (borrower.currentHousing === null) return null;
+      if (borrower.currentHousing === "own") return false;
+      if (borrower !== whoseCreditThisIs || !f.credit) return null;
+      const hasMortgageHistory = f.credit.tradelines.some(
+        (t) => t.type === "mortgage" && t.paymentHistory.length >= 12,
+      );
+      return !hasMortgageHistory;
+    });
   },
 
   wage_earner: (f) =>
@@ -251,16 +280,32 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
    * not answer the homeowner question, and a file with neither answers
    * neither — which is why none of these predicates so much as looks at a
    * snapshot.
+   *
+   * All three are `ofAnyBorrower`, and each for its own reason rather than by
+   * one rule. The follow-up questions they gate are asked of whoever triggered
+   * them: one person's bankruptcy needs its chapters, one person's prior
+   * property needs its usage, one person's recent move needs the address
+   * before it. A file-level read took those answers from borrower 1, so a
+   * co-borrower's declared bankruptcy left `declared_bankruptcy` false and
+   * APP-024 off the outstanding list entirely — while the review screen showed
+   * him the bankruptcy he had declared, above the signature.
+   *
+   * Whether every borrower ANSWERED is a different question, and it is
+   * APP-022, APP-023 and APP-026 in `satisfaction.ts` that ask it.
    */
   declared_homeowner_past_three_years: (f) =>
-    f.declaration ? f.declaration.homeownerPastThreeYears === "Yes" : null,
+    ofAnyBorrower(f.borrowers, (b) =>
+      b.declaration ? b.declaration.homeownerPastThreeYears === "Yes" : null,
+    ),
 
-  declared_bankruptcy: (f) => (f.declaration ? f.declaration.bankruptcy : null),
+  declared_bankruptcy: (f) =>
+    ofAnyBorrower(f.borrowers, (b) => (b.declaration ? b.declaration.bankruptcy : null)),
 
-  current_residence_under_two_years: (f) => {
-    const current = f.residences.find((r) => r.residencyType === "Current");
-    return current ? current.durationMonths < RESIDENCE_HISTORY_MONTHS : null;
-  },
+  current_residence_under_two_years: (f) =>
+    ofAnyBorrower(f.borrowers, (b) => {
+      const current = b.residences.find((r) => r.residencyType === "Current");
+      return current ? current.durationMonths < RESIDENCE_HISTORY_MONTHS : null;
+    }),
 };
 
 export function evaluateCondition(key: ConditionKey, file: LoanFile): Applicability {

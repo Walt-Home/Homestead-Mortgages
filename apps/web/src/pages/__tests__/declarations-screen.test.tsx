@@ -32,7 +32,7 @@ import {
   PRIOR_PROPERTY_USAGE,
   QUESTIONS,
 } from "../../lib/declarations.js";
-import { SIGNING_COPY } from "../../lib/outcomes.js";
+import { CO_BORROWER_COPY, SIGNING_COPY } from "../../lib/outcomes.js";
 
 const session = vi.hoisted(() => ({ user: null as { persona: unknown } | null }));
 
@@ -83,6 +83,25 @@ const DECLARED: BorrowerDeclaration = {
   explanations: null,
 };
 
+/**
+ * One person on the file, with their own answers or without them.
+ *
+ * The answers hang off the borrower rather than off the file, because the
+ * questions are about the person answering: a file with two borrowers has two
+ * sets, and a file-level copy rendered under a second name would be one
+ * person's statement attributed to another.
+ */
+const borrower = (over: Record<string, unknown> = {}) => ({
+  id: "b1",
+  firstName: "Dana",
+  lastName: "Whitfield",
+  ssn: { last4: "1234" },
+  declaration: null,
+  residences: [],
+  identityVerification: null,
+  ...over,
+});
+
 /** As much of the wire shape as these two screens read. */
 const response = (over: Record<string, unknown>): LoanFileResponse =>
   ({
@@ -90,15 +109,13 @@ const response = (over: Record<string, unknown>): LoanFileResponse =>
       id: "f1",
       isDemo: false,
       stage: "declarations",
-      borrowers: [],
+      borrowers: [borrower()],
       consents: [],
       documents: [],
       transcripts: [],
       links: [],
       loan: { purpose: "purchase", loanAmount: 450_000, downPayment: 90_000 },
       property: { occupancy: "primary_residence" },
-      declaration: null,
-      residences: [],
       decision: { outcome: "approve_eligible", ratios: {} },
       applicationSignedAt: null,
       intentToProceedAt: null,
@@ -106,6 +123,10 @@ const response = (over: Record<string, unknown>): LoanFileResponse =>
     },
     applicationState: null,
   }) as unknown as LoanFileResponse;
+
+/** A file whose one borrower has answered. */
+const answered = (over: Record<string, unknown> = {}) =>
+  response({ borrowers: [borrower({ declaration: DECLARED, residences: [RENTING] })], ...over });
 
 function render(node: React.ReactNode, file: LoanFileResponse): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -151,10 +172,7 @@ describe("the screen that asks", () => {
 
 describe("the screen that reads them back", () => {
   it("shows the borrower's own answers above the signature", () => {
-    const markup = render(
-      <ReviewPage />,
-      response({ declaration: DECLARED, residences: [RENTING] }),
-    );
+    const markup = render(<ReviewPage />, answered());
     expect(markup).toContain(SIGNING_COPY.heading);
     expect(markup).toContain(SIGNING_COPY.lead);
     expect(markup).toContain(INTENT_TO_OCCUPY.prompt);
@@ -195,25 +213,171 @@ describe("the screen that reads them back", () => {
 
   it("offers it once the questions are answered", () => {
     // The other half: a gate that never opens is not a gate.
-    const markup = render(
-      <ReviewPage />,
-      response({
-        declaration: DECLARED,
-        residences: [RENTING],
-        property: { occupancy: "second_home" },
-      }),
-    );
+    const markup = render(<ReviewPage />, answered({ property: { occupancy: "second_home" } }));
     expect(markup).toContain("Continue to sign");
     expect(markup).not.toMatch(/<button[^>]*disabled[^>]*>Continue to sign<\/button>/);
     expect(markup).not.toContain(SIGNING_COPY.unanswered);
   });
 
   it("no longer claims to have found anything", () => {
+    const markup = render(<ReviewPage />, answered());
+    expect(markup).not.toContain("Here is what we found");
+  });
+});
+
+/**
+ * Two people on one file, each answering for themselves.
+ *
+ * The questions are about the person answering — "have you declared bankruptcy
+ * in the past seven years" has one answer per borrower — so a file with two of
+ * them has two sets and neither may stand in for the other. Before this, the
+ * screen read ONE declaration off the file and rendered it under the heading
+ * "What you told us": a co-borrower's block could only ever have shown the
+ * applicant's answers, with the applicant's name taken off them.
+ *
+ * The two borrowers below are told apart by facts that cannot be confused for
+ * one another — one rents and one owns, one has a bankruptcy and one does not —
+ * so "neither shows the other's" is checked against the words rather than
+ * against the presence of a second block.
+ */
+describe("a file with two borrowers", () => {
+  const OWNING: BorrowerResidence = {
+    ...RENTING,
+    basis: "Own",
+    durationMonths: 90,
+    monthlyRent: null,
+  };
+
+  const THEIR_DECLARATION: BorrowerDeclaration = {
+    ...DECLARED,
+    bankruptcy: true,
+    bankruptcyChapters: ["ChapterSeven"],
+    explanations: { M: "Discharged in 2019." },
+  };
+
+  const THEIR_NAME = "Theo Okafor";
+
+  /** The applicant, who rents and has declared no bankruptcy. */
+  const me = borrower({ declaration: DECLARED, residences: [RENTING] });
+
+  /** The co-borrower, who owns and has. */
+  const them = (over: Record<string, unknown> = {}) =>
+    borrower({
+      id: "b2",
+      firstName: "Theo",
+      lastName: "Okafor",
+      declaration: THEIR_DECLARATION,
+      residences: [OWNING],
+      ...over,
+    });
+
+  const joint = (over: Record<string, unknown> = {}) =>
+    response({ borrowers: [me, them()], ...over });
+
+  /** The markup above the co-borrower's heading, and the markup below it. */
+  function split(markup: string): { mine: string; theirs: string } {
+    const at = markup.indexOf(CO_BORROWER_COPY.answersOf(THEIR_NAME));
+    expect(at, "the co-borrower's block is not on the page").toBeGreaterThan(-1);
+    return { mine: markup.slice(0, at), theirs: markup.slice(at) };
+  }
+
+  it("renders a block for each of them, under their own names", () => {
+    const markup = render(<ReviewPage />, joint());
+    expect(markup).toContain(SIGNING_COPY.heading);
+    expect(markup).toContain(CO_BORROWER_COPY.answersOf(THEIR_NAME));
+  });
+
+  it("puts each person's own answers in their own block", () => {
+    const { mine, theirs } = split(render(<ReviewPage />, joint()));
+
+    // The applicant rents; the co-borrower owns.
+    expect(mine).toContain("I rent it, 30 months, $1,850 a month");
+    expect(theirs).toContain("I own it, 90 months");
+
+    // The co-borrower has declared a bankruptcy, in their own words.
+    expect(theirs).toContain("Chapter 7");
+    expect(theirs).toContain("Discharged in 2019.");
+  });
+
+  it("shows neither of them the other's answers", () => {
+    // The failure this exists to stop, stated from both sides: one file-level
+    // declaration rendered twice would put the bankruptcy under both names and
+    // the rent under both, and every assertion above would still pass.
+    const { mine, theirs } = split(render(<ReviewPage />, joint()));
+    expect(mine).not.toContain("Chapter 7");
+    expect(mine).not.toContain("Discharged in 2019.");
+    expect(theirs).not.toContain("I rent it, 30 months, $1,850 a month");
+  });
+
+  it("renders them in the order the file sends them", () => {
+    // Document order is the API's answer, off `borrower_ordinal`, and this
+    // screen does not hold a second opinion about who Borrower 1 is. So a file
+    // whose list arrives the other way round renders the other way round —
+    // and the heading that says "What you told us" follows the position, which
+    // is what makes the order load-bearing rather than cosmetic.
+    const markup = render(<ReviewPage />, response({ borrowers: [them(), me] }));
+    const signer = markup.indexOf(SIGNING_COPY.heading);
+    const other = markup.indexOf(CO_BORROWER_COPY.answersOf("Dana Whitfield"));
+    expect(signer).toBeGreaterThan(-1);
+    expect(other).toBeGreaterThan(signer);
+  });
+
+  it("says whose answers are missing when a co-borrower has not given any", () => {
+    // Not the applicant's sentence. They have answered, and the button they
+    // are looking at is about their own signature — "there are a few questions
+    // still to answer before you sign" over somebody else's empty block reads
+    // as work the reader can do.
     const markup = render(
       <ReviewPage />,
-      response({ declaration: DECLARED, residences: [RENTING] }),
+      response({ borrowers: [me, them({ declaration: null, residences: [] })] }),
     );
-    expect(markup).not.toContain("Here is what we found");
+    expect(markup).toContain(CO_BORROWER_COPY.theirs(THEIR_NAME));
+    expect(markup).not.toContain(SIGNING_COPY.unanswered);
+  });
+
+  it("offers no way to answer for them", () => {
+    // Screen 3 posts as whoever is signed in, so a link out of a co-borrower's
+    // block would take the applicant there to answer in their own name — which
+    // is the misattribution the separate blocks exist to stop, arriving by the
+    // one control on the block.
+    //
+    // Split on the co-borrower's own sentence rather than on their heading: an
+    // unanswered block has no heading, and that is the block a link would be
+    // most tempting on.
+    const markup = render(
+      <ReviewPage />,
+      response({ borrowers: [me, them({ declaration: null, residences: [] })] }),
+    );
+    const at = markup.indexOf(CO_BORROWER_COPY.theirs(THEIR_NAME));
+    expect(at, "the co-borrower's block is not on the page").toBeGreaterThan(-1);
+    const theirs = markup.slice(at);
+    expect(theirs).not.toContain(SIGNING_COPY.answerThem);
+    expect(theirs).not.toContain(SIGNING_COPY.change);
+    expect(theirs).not.toContain('href="/f/f1/declarations"');
+
+    // And the applicant's block still has one, so the assertion above is about
+    // whose block it is rather than about the link having been removed.
+    expect(markup.slice(0, at)).toContain('href="/f/f1/declarations"');
+  });
+
+  it("says what a co-borrower is asked to do, and only where there is one", () => {
+    expect(render(<ReviewPage />, joint())).toContain(CO_BORROWER_COPY.whatTheyDo);
+    expect(render(<ReviewPage />, answered())).not.toContain(CO_BORROWER_COPY.whatTheyDo);
+  });
+
+  it("lets the applicant sign on their own answers alone", () => {
+    // Who signs what is not this screen's to change. Holding the applicant's
+    // signature until a co-borrower has answered would make one person's
+    // progress wait on another's, which is a rule nothing here has been given.
+    const markup = render(
+      <ReviewPage />,
+      response({
+        borrowers: [me, them({ declaration: null, residences: [] })],
+        property: { occupancy: "second_home" },
+      }),
+    );
+    expect(markup).toContain("Continue to sign");
+    expect(markup).not.toMatch(/<button[^>]*disabled[^>]*>Continue to sign<\/button>/);
   });
 });
 

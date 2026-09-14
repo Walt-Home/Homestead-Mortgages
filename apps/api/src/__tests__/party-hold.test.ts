@@ -18,7 +18,7 @@ import {
   type DataCategory as DataCategoryEnum,
 } from "@hm/db";
 import { PURPOSE_FOR } from "@hm/connectors";
-import type { DataCategory, LoanFile } from "@hm/shared";
+import type { Borrower, DataCategory } from "@hm/shared";
 import { ImportedNameSchema } from "@hm/shared/portfolio";
 import { tokenFor } from "../services/authorization.js";
 import {
@@ -306,10 +306,10 @@ describe("a provisional party has authorized nothing", () => {
     // whole retrieval surface: an imported party cannot be pulled on by any
     // route, including one somebody writes without reading the trigger.
     //
-    // The file is a stand-in and says so. An imported party never appears on a
-    // loan file — it has no application at all — and the only thing `tokenFor`
-    // reads off one is the party whose permission it is about.
-    const file = { borrowers: [{ partyId }] } as unknown as LoanFile;
+    // The borrower is a stand-in and says so. An imported party never appears
+    // on a loan file — it has no application at all — and the only thing
+    // `tokenFor` reads off one is the party whose permission it is about.
+    const subject = { partyId } as unknown as Borrower;
     for (const category of Object.keys(PURPOSE_FOR) as DataCategory[]) {
       // Both halves, in this order, because the denial on its own would read
       // the same if the trigger were gone: a party with no grant is refused by
@@ -327,7 +327,7 @@ describe("a provisional party has authorized nothing", () => {
           },
         }),
       ).rejects.toThrow(/an imported record is not a consent/);
-      await expect(tokenFor(file, category)).rejects.toThrow(
+      await expect(tokenFor(subject, category)).rejects.toThrow(
         /No authorization to retrieve .*: no authorization of this purpose has ever been granted/,
       );
     }

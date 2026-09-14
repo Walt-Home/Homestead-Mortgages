@@ -18,6 +18,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@hm/db";
 import type { ApplicationPartyRole, LoanPurpose, Prisma } from "@hm/db";
 import type { ApplicationState } from "@hm/shared";
+import { AppError } from "../middleware/error-handler.js";
 import { proposeScenario, type ScenarioTerms } from "./evidence.js";
 import { toCents } from "./money.js";
 import { BORROWING_ROLES, toDomainState } from "./transition.js";
@@ -185,12 +186,20 @@ async function freeBorrowerOrdinal(
      ORDER BY n LIMIT 1`;
 
   const n = free[0]?.n;
-  // By name, because the CHECK would say "violates constraint" about a number
-  // nobody chose, and the operation that failed is a person being added to a
-  // household that is already four people.
+  // Refused here, by name, because the CHECK would say "violates constraint"
+  // about a number nobody chose, and the operation that failed is a person
+  // being added to a household that is already four people.
+  //
+  // An `AppError` rather than a bare one because `POST /files/:id/co-borrowers`
+  // reaches this: a route that let it through answered the fifth append with a
+  // 500 and no sentence, which is a client being told the server broke when
+  // what happened is that the application is full. A stack trace still carries
+  // the same words.
   if (n === undefined) {
-    throw new Error(
-      `application ${applicationId} already holds four borrowers and DU allows four; a ${role} cannot be added`,
+    throw new AppError(
+      409,
+      "An application carries four borrowers, and this one already has four.",
+      "BORROWER_LIMIT",
     );
   }
   return n;

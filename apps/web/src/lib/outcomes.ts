@@ -140,3 +140,39 @@ export const SIGNING_COPY = {
     "Signing submits it, and says the answers above are true and complete. It does not commit you to borrowing anything, and it is not an agreement to any particular rate or terms.",
   signButton: "Sign and submit",
 } as const;
+
+/**
+ * The words for a second person on the file.
+ *
+ * The review screen renders one block of answers per borrower, and the blocks
+ * have to be told apart by more than their order. `SIGNING_COPY.heading` is
+ * "What you told us" and it is the applicant's — put over somebody else's
+ * answers it is the screen attributing one person's statement to another,
+ * which is the same defect the derived declarations were, with the borrower
+ * swapped instead of the source.
+ *
+ * `theirs` is what stands in the co-borrower's block when they have not
+ * answered. It says whose answers are missing rather than that answers are
+ * missing, because the applicant reading it has answered and the button they
+ * are looking at is about their own signature.
+ *
+ * Nothing here says what happens NEXT for a co-borrower — no message sent, no
+ * invitation, no date. There is no mailer in this repo and nothing schedules
+ * anything, and a line promising one is a line a borrower watches us break.
+ * What these say is what is true today: the questions are about them, and an
+ * applicant cannot answer them on their behalf.
+ */
+export const CO_BORROWER_COPY = {
+  /** The heading over one person's answers, once a file carries more than one. */
+  answersOf: (name: string) => `What ${name} told us`,
+  /** Said in the co-borrower's own block, where their answers would be. */
+  theirs: (name: string) =>
+    `${name} has not answered these yet. They are questions about ${name}, so nothing you answer here answers them.`,
+  /**
+   * What a co-borrower is asked to do, said on the one screen where both
+   * people on a file are visible. There is no screen that adds one yet, so
+   * this is where an applicant meets the answer.
+   */
+  whatTheyDo:
+    "A co-borrower answers the same questions you did, about themselves: where they have lived, and the questions about their own finances. Their answers sit beside yours on the application.",
+} as const;

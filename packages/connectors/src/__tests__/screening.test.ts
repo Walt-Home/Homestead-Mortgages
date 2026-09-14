@@ -24,29 +24,33 @@ import {
 import { AuthorizationError, fixtureRegistry, PURPOSE_FOR } from "../index.js";
 
 const PARTY = "11111111-1111-1111-1111-111111111111";
+const CO_PARTY = "22222222-2222-2222-2222-222222222222";
 const NOW = new Date("2026-09-08T12:00:00.000Z");
 
-const GRANT: Grant = {
-  id: "grant-app-005",
-  partyId: PARTY,
+const grantFor = (partyId: string): Grant => ({
+  id: `grant-app-005-${partyId}`,
+  partyId,
   purpose: "fcra_written_instruction",
   dataCategories: ["credit_report", "sanctions_screening"],
   grantedAt: "2026-09-01T00:00:00.000Z",
   expiresAt: "2026-12-01T00:00:00.000Z",
   revokedAt: null,
-};
+});
 
-function token(category: DataCategory): PurposeToken {
+/** A token for one named party. Two people on a file are two of these. */
+function tokenFor(partyId: string, category: DataCategory): PurposeToken {
   const result = mintPurposeToken({
-    partyId: PARTY,
+    partyId,
     purpose: PURPOSE_FOR[category],
     dataCategory: category,
-    grants: [GRANT],
+    grants: [grantFor(PARTY), grantFor(CO_PARTY)],
     now: NOW,
   });
   if (!result.ok) throw new Error(result.message);
   return result.token;
 }
+
+const token = (category: DataCategory) => tokenFor(PARTY, category);
 
 const OMAR: Borrower = {
   id: "borrower-1",
@@ -67,6 +71,18 @@ const OMAR: Borrower = {
   firstTimeHomebuyer: null,
   isMilitary: false,
   currentHousing: "rent",
+  declaration: null,
+  residences: [],
+};
+
+/** His co-borrower, who has her own party and therefore her own permission. */
+const NOUR: Borrower = {
+  ...OMAR,
+  id: "borrower-2",
+  partyId: CO_PARTY,
+  firstName: "Nour",
+  email: "nour@example.test",
+  ssn: { last4: "4417", vaultHandle: "vault:persona:nour_haddad" },
 };
 
 const file: LoanFile = {
@@ -80,8 +96,6 @@ const file: LoanFile = {
   borrowers: [OMAR],
   consents: [],
   application: null,
-  declaration: null,
-  residences: [],
   propertyRecord: null,
   valuation: null,
   flood: null,
@@ -131,6 +145,21 @@ describe("the screening fixture", () => {
     expect(screened.data.matches[0]!.score).toBeLessThan(100);
     expect(screened.data.listsChecked.length).toBeGreaterThan(0);
     expect(screened.provider).toBe("fixture-screening");
+  });
+
+  it("names the party the token speaks for, not whoever sorts first", async () => {
+    // Two people on one file, and a screening run under the co-borrower's own
+    // authorization. Reading `borrowers[0]` here put the PRIMARY borrower's
+    // name on a hit retrieved about somebody else — a watchlist match filed
+    // against a person the search was never run on. The token is the only
+    // thing that knows whose retrieval this is, so the name comes from it.
+    const together: LoanFile = { ...file, borrowers: [OMAR, NOUR] };
+    const screened = await fixtureRegistry({
+      latencyMs: 0,
+      screening: "near_match",
+    }).screening.screenSanctions(together, tokenFor(CO_PARTY, "sanctions_screening"));
+
+    expect(screened.data.matches[0]!.matchedName).toBe("NOUR HADDAD");
   });
 
   it("still refuses without the sanctions category, near match or not", async () => {

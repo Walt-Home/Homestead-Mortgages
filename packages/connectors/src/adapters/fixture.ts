@@ -43,7 +43,7 @@ import type {
   PropertyDataConnector,
   ScreeningConnector,
 } from "../ports/index.js";
-import { requireCategory } from "../guard.js";
+import { requireCategory, requireSubject, subjectOf } from "../guard.js";
 import { PERSONAS, type PersonaId, DEFAULT_PERSONA } from "../fixtures/personas.js";
 import { ADDRESS_BOOK, OFAC_LISTS, PUBLIC_RECORDS } from "../fixtures/public-records.js";
 
@@ -109,6 +109,7 @@ export function fixtureCreditConnector(options: FixtureOptions = {}): CreditConn
       token: PurposeToken,
     ): Promise<ConnectorResult<CreditReport>> {
       requireCategory(token, "credit_report");
+      requireSubject(token, file);
       await sleep(latencyMs);
       return result(PERSONAS[persona].credit(ref), "fixture-credit", `credit-${persona}`);
     },
@@ -134,6 +135,7 @@ export function fixtureBankConnector(options: FixtureOptions = {}): BankConnecto
     },
     async createLinkSession(file: LoanFile, token: PurposeToken): Promise<LinkSession> {
       requireCategory(token, "bank_transactions");
+      requireSubject(token, file);
       return session("bank", ref);
     },
     async fetchAssetReport(
@@ -143,6 +145,7 @@ export function fixtureBankConnector(options: FixtureOptions = {}): BankConnecto
       monthsRequested: number,
     ): Promise<AssetReportResult> {
       requireCategory(token, "bank_transactions");
+      requireSubject(token, file);
       // The 12-month window is not a preference. CRD-017's cash flow assessment
       // and CRD-018's rent history both need twelve, and a shorter report
       // satisfies neither — so a caller asking for less is a bug, not a choice.
@@ -170,6 +173,7 @@ export function fixturePayrollConnector(options: FixtureOptions = {}): PayrollCo
     },
     async createLinkSession(file: LoanFile, token: PurposeToken): Promise<LinkSession> {
       requireCategory(token, "payroll_income");
+      requireSubject(token, file);
       return session("payroll", ref);
     },
     async fetchPayroll(
@@ -178,6 +182,7 @@ export function fixturePayrollConnector(options: FixtureOptions = {}): PayrollCo
       _sessionId: string,
     ): Promise<ConnectorResult<PayrollData>> {
       requireCategory(token, "payroll_income");
+      requireSubject(token, file);
       await sleep(latencyMs);
       return result(PERSONAS[persona].payroll(ref), "fixture-payroll", `payroll-${persona}`);
     },
@@ -202,6 +207,7 @@ export function fixtureIrsConnector(options: FixtureOptions = {}): IrsConnector 
       // `assert4506cExecuted(file)` could not do — it checked the file for any
       // 4506-C, by anyone.
       requireCategory(token, "tax_transcript");
+      requireSubject(token, file);
       await sleep(latencyMs);
       const all = PERSONAS[persona].transcripts(ref);
       const filtered = taxYears.length ? all.filter((t) => taxYears.includes(t.taxYear)) : all;
@@ -361,8 +367,10 @@ export function fixturePropertyDataConnector(options: FixtureOptions = {}): Prop
  * public-record fixtures come back clear — variable_income's score-41 hit is
  * deliberately below the threshold — so a sample borrower whose application is
  * held would otherwise wear a pill its own evidence contradicts. The match is
- * built against the name on the file rather than a fixed one, because a hold
- * that named somebody else would be the same contradiction one layer down.
+ * built against the name of the party the TOKEN speaks for rather than a fixed
+ * one, because a hold that named somebody else would be the same contradiction
+ * one layer down — and on a file with a co-borrower, "whoever sorts first" is
+ * not the person the search was run on.
  */
 export function fixtureScreeningConnector(options: FixtureOptions = {}): ScreeningConnector {
   const { persona, latencyMs, ref, screening } = resolve(options);
@@ -377,9 +385,10 @@ export function fixtureScreeningConnector(options: FixtureOptions = {}): Screeni
       token: PurposeToken,
     ): Promise<ConnectorResult<SanctionsScreening>> {
       requireCategory(token, "sanctions_screening");
+      requireSubject(token, file);
       await sleep(latencyMs);
       if (screening === "near_match") {
-        const who = file.borrowers[0];
+        const who = file.borrowers.find((b) => b.partyId === subjectOf(token));
         const matchedName = who ? `${who.firstName} ${who.lastName}`.toUpperCase() : "UNKNOWN";
         return result(
           {
@@ -421,6 +430,7 @@ export function fixtureLienConnector(options: FixtureOptions = {}): LienConnecto
       apn: string,
     ): Promise<ConnectorResult<LienSearch>> {
       requireCategory(token, "public_record_liens");
+      requireSubject(token, file);
       if (!apn) {
         // The search is keyed on the APN the assessor lookup returned. Calling
         // it without one silently searches nothing and reports a clean result,

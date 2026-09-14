@@ -12,7 +12,7 @@ import { prisma } from "@hm/db";
 import { AuthorizationError } from "@hm/connectors";
 import { evaluateSatisfaction, getRequirement } from "@hm/requirements";
 import { SHADOW_ENGINE_VERSION } from "@hm/underwriting";
-import { tokenFor } from "../services/authorization.js";
+import { primaryBorrower, tokenFor } from "../services/authorization.js";
 import {
   liveFact as liveFactOn,
   partyForUser,
@@ -180,7 +180,9 @@ describe("a consent mirrors to an authorization", () => {
     const a = await createLoanFile({ userId: user.id });
     const rowA = await saveBorrower(a.id, dana);
     await consent(a.id, rowA.id, "verification_authorization", new Date(Date.now() - 121 * DAY));
-    await expect(tokenFor((await loadLoanFile(a.id))!, "credit_report")).rejects.toThrow(/expired/);
+    await expect(
+      tokenFor(primaryBorrower((await loadLoanFile(a.id))!), "credit_report"),
+    ).rejects.toThrow(/expired/);
 
     const b = await createLoanFile({ userId: user.id });
     const rowB = await saveBorrower(b.id, dana);
@@ -193,7 +195,7 @@ describe("a consent mirrors to an authorization", () => {
     expect(auths).toHaveLength(2);
     expect(auths[0]!.revocationReason).toBe("lapsed; renewed by a new consent");
     expect(auths[1]!.revokedAt).toBeNull();
-    const token = await tokenFor((await loadLoanFile(b.id))!, "credit_report");
+    const token = await tokenFor(primaryBorrower((await loadLoanFile(b.id))!), "credit_report");
     expect(token.authorizationId).toBe(auths[1]!.id);
   });
 
@@ -283,9 +285,9 @@ describe("a signature is judged by the file's row and the party's grant together
     const file = await createLoanFile({ userId: user.id });
     const row = await saveBorrower(file.id, dana);
     await consent(file.id, row.id, "verification_authorization", new Date(Date.now() - 121 * DAY));
-    await expect(tokenFor((await loadLoanFile(file.id))!, "credit_report")).rejects.toThrow(
-      /expired/,
-    );
+    await expect(
+      tokenFor(primaryBorrower((await loadLoanFile(file.id))!), "credit_report"),
+    ).rejects.toThrow(/expired/);
 
     const { started, completed } = await signVia(user.id, file.id, "verification_authorization");
     expect(started.body.alreadySigned).toBe(false);
@@ -296,7 +298,7 @@ describe("a signature is judged by the file's row and the party's grant together
     expect(auths).toHaveLength(2);
     expect(auths[0]!.revocationReason).toBe("lapsed; renewed by a new consent");
     expect(auths[1]!.revokedAt).toBeNull();
-    const token = await tokenFor((await loadLoanFile(file.id))!, "credit_report");
+    const token = await tokenFor(primaryBorrower((await loadLoanFile(file.id))!), "credit_report");
     expect(token.authorizationId).toBe(auths[1]!.id);
   });
 
@@ -399,9 +401,9 @@ describe("a signature is judged by the file's row and the party's grant together
       },
     });
     await consent(file.id, row.id, "form_4506c", new Date(Date.now() - 121 * DAY));
-    await expect(tokenFor((await loadLoanFile(file.id))!, "tax_transcript")).rejects.toThrow(
-      /expired/,
-    );
+    await expect(
+      tokenFor(primaryBorrower((await loadLoanFile(file.id))!), "tax_transcript"),
+    ).rejects.toThrow(/expired/);
 
     const res = await callAs<{ signed: string[]; transcriptError: string | null }>(
       user.id,
@@ -427,7 +429,7 @@ describe("the minter reads the authorizations table, and nothing else", () => {
     const file = await createLoanFile({ userId: user.id });
     const row = await saveBorrower(file.id, dana);
     await consent(file.id, row.id, "verification_authorization");
-    const token = await tokenFor((await loadLoanFile(file.id))!, "credit_report");
+    const token = await tokenFor(primaryBorrower((await loadLoanFile(file.id))!), "credit_report");
     expect(token.partyId).toBe(row.partyId);
     const auth = await prisma.authorization.findFirstOrThrow({ where: { partyId: row.partyId } });
     expect(token.authorizationId).toBe(auth.id);
@@ -437,7 +439,9 @@ describe("the minter reads the authorizations table, and nothing else", () => {
     const user = await createUser();
     const file = await createLoanFile({ userId: user.id });
     await saveBorrower(file.id, dana);
-    await expect(tokenFor((await loadLoanFile(file.id))!, "credit_report")).rejects.toMatchObject({
+    await expect(
+      tokenFor(primaryBorrower((await loadLoanFile(file.id))!), "credit_report"),
+    ).rejects.toMatchObject({
       requirementId: "APP-005",
     });
   });
@@ -447,7 +451,9 @@ describe("the minter reads the authorizations table, and nothing else", () => {
     const file = await createLoanFile({ userId: user.id });
     const row = await saveBorrower(file.id, dana);
     await consent(file.id, row.id, "verification_authorization");
-    await expect(tokenFor((await loadLoanFile(file.id))!, "tax_transcript")).rejects.toMatchObject({
+    await expect(
+      tokenFor(primaryBorrower((await loadLoanFile(file.id))!), "tax_transcript"),
+    ).rejects.toMatchObject({
       requirementId: "INC-008",
     });
   });
@@ -458,7 +464,7 @@ describe("the minter reads the authorizations table, and nothing else", () => {
     const row = await saveBorrower(file.id, dana);
     await consent(file.id, row.id, "verification_authorization");
     await consent(file.id, row.id, "form_4506c");
-    const token = await tokenFor((await loadLoanFile(file.id))!, "tax_transcript");
+    const token = await tokenFor(primaryBorrower((await loadLoanFile(file.id))!), "tax_transcript");
     expect(token.purpose).toBe("irs_4506c");
   });
 
@@ -468,8 +474,10 @@ describe("the minter reads the authorizations table, and nothing else", () => {
     const row = await saveBorrower(file.id, dana);
     await consent(file.id, row.id, "verification_authorization", new Date(Date.now() - 121 * DAY));
     const domain = (await loadLoanFile(file.id))!;
-    await expect(tokenFor(domain, "credit_report")).rejects.toBeInstanceOf(AuthorizationError);
-    await expect(tokenFor(domain, "credit_report")).rejects.toThrow(/expired/);
+    await expect(tokenFor(primaryBorrower(domain), "credit_report")).rejects.toBeInstanceOf(
+      AuthorizationError,
+    );
+    await expect(tokenFor(primaryBorrower(domain), "credit_report")).rejects.toThrow(/expired/);
   });
 });
 

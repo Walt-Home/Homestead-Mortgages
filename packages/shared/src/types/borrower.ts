@@ -1,5 +1,6 @@
 /** Borrower identity, declarations, and the consents that gate everything. */
 
+import type { BorrowerDeclaration, BorrowerResidence } from "./declaration.js";
 import type { Address, StateCode } from "./loan.js";
 
 export type MaritalStatus = "married" | "unmarried" | "separated";
@@ -94,6 +95,21 @@ export interface Borrower {
    */
   readonly currentHousing: "rent" | "own" | "rent_free" | null;
   readonly monthlyRent?: number;
+  /**
+   * Section 5 and the residence history, as THIS person answered them.
+   *
+   * Per borrower rather than per file, because the questions are about the
+   * person answering: "have you declared bankruptcy in the past seven years"
+   * has one answer per borrower and a file with two of them has two. A single
+   * file-level copy meant a co-borrower's block on the review screen could
+   * only show borrower 1's answers back under a second person's name.
+   *
+   * Null is unasked, and it is not "no" — the same three-valued rule the rest
+   * of this type keeps. A borrower who has said nothing has not said no.
+   */
+  readonly declaration: BorrowerDeclaration | null;
+  /** Empty until the same answers are given; one current row, at most one prior. */
+  readonly residences: readonly BorrowerResidence[];
 }
 
 /**

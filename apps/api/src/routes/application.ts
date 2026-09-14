@@ -24,7 +24,7 @@ import {
   recordSnapshot,
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
-import { subjectPartyId, tokenFor } from "../services/authorization.js";
+import { primaryBorrower, subjectPartyId, tokenFor } from "../services/authorization.js";
 import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
 import { applicationForFile } from "../services/applications.js";
@@ -240,7 +240,7 @@ applicationRouter.post(
       const year = new Date().getFullYear();
       const result = await connectors().irs.fetchTranscripts(
         refreshed!,
-        await tokenFor(refreshed!, "tax_transcript"),
+        await tokenFor(primaryBorrower(refreshed!), "tax_transcript"),
         [year - 1, year - 2],
       );
       await recordSnapshot(

@@ -26,9 +26,11 @@
 
 import { Router } from "express";
 import { z } from "zod";
+import { prisma } from "@hm/db";
 import { asyncRoute } from "../middleware/error-handler.js";
 import { assertFileAccess } from "../services/repository.js";
 import { loadDeclaration, recordDeclaration } from "../services/declarations.js";
+import { partyForUser, principalForParty } from "../services/party.js";
 import { advanceStage } from "../services/stage.js";
 
 export const declarationRouter = Router();
@@ -138,6 +140,23 @@ const bodySchema = z
   .object({
     declaration: declarationSchema,
     residences: z.array(residenceSchema).min(1),
+    /**
+     * Which person on this file is answering. Absent is borrower 1 — the
+     * person whose request it is — which is what every file with one borrower
+     * on it sends and what screen 3 sends for itself.
+     *
+     * A co-borrower's answers are their own row on their own edge. Before this
+     * existed there was one edge a save could reach, so a second person's
+     * answers would have replaced the first person's under the first person's
+     * name, on a document both of them sign.
+     *
+     * Naming somebody else does not let this request answer for them: the row
+     * is stamped with the principal of whoever sent it, and
+     * `du_declarations_are_self_attested` admits only the declaring borrower
+     * or a member of staff. A co-borrower with no session of their own is
+     * answered for by nobody.
+     */
+    borrowerId: z.string().uuid().optional(),
   })
   .superRefine((body, ctx) => {
     const d = body.declaration;
@@ -231,7 +250,15 @@ declarationRouter.post(
     const input = bodySchema.parse(req.body);
     await assertFileAccess(id, req.user!.id, "write");
 
-    const view = await recordDeclaration(id, input);
+    // Who is asserting this, which is whoever sent the request and never
+    // whoever it is about. Read here rather than inside the service because
+    // `req.user` is the one thing a service has no honest way to recover, and
+    // a declaration stamped with the subject's own principal is how somebody
+    // ends up on record attesting to a form they have never seen.
+    const partyId = await partyForUser(prisma, req.user!.id);
+    const assertedByPrincipalId = await principalForParty(prisma, partyId);
+
+    const view = await recordDeclaration(id, { ...input, assertedByPrincipalId });
     // The high-water mark, not a cursor: a borrower who comes back to correct
     // one answer after connecting their bank is not moved back to this screen.
     await advanceStage(id, "DECLARATIONS");
@@ -245,7 +272,10 @@ declarationRouter.get(
     const id = z.string().uuid().parse(req.params.id);
     await assertFileAccess(id, req.user!.id, "read");
 
-    const view = await loadDeclaration(id);
+    // Absent is borrower 1, the same way the POST reads it.
+    const borrowerId = z.string().uuid().optional().parse(req.query.borrowerId);
+
+    const view = await loadDeclaration(id, borrowerId);
     res.json({ declaration: view });
   }),
 );

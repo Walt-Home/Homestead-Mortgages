@@ -11,26 +11,82 @@
  * done" in different words.
  */
 
-import type { LoanFile } from "@hm/shared";
+import { RESIDENCE_HISTORY_MONTHS, type Borrower, type LoanFile } from "@hm/shared";
 import type { Requirement } from "./types.js";
 
+/** Evidence that it is done. */
+type Met = { readonly status: "satisfied"; readonly evidence: string };
+/** Not done, and what is missing — in the words a person would use. */
+type Unmet = { readonly status: "unsatisfied"; readonly missing: string };
+
 export type Satisfaction =
-  | { readonly status: "satisfied"; readonly evidence: string }
-  | { readonly status: "unsatisfied"; readonly missing: string }
+  | Met
+  | Unmet
   /** Cannot be judged yet — an upstream requirement has not produced its data. */
   | { readonly status: "blocked"; readonly waitingFor: string };
 
 type Evaluator = (file: LoanFile) => Satisfaction;
 
-const ok = (evidence: string): Satisfaction => ({ status: "satisfied", evidence });
-const no = (missing: string): Satisfaction => ({ status: "unsatisfied", missing });
+const ok = (evidence: string): Met => ({ status: "satisfied", evidence });
+const no = (missing: string): Unmet => ({ status: "unsatisfied", missing });
 const wait = (waitingFor: string): Satisfaction => ({ status: "blocked", waitingFor });
 
-const check = (condition: boolean, evidence: string, missing: string): Satisfaction =>
+const check = (condition: boolean, evidence: string, missing: string): Met | Unmet =>
   condition ? ok(evidence) : no(missing);
 
+/**
+ * The same question, put to every borrower on the file.
+ *
+ * The URLA, Reg B and the FCRA owe these to each applicant, so one person
+ * answering does not settle them: satisfied only once everybody's answer is
+ * in, unsatisfied naming whoever is still missing. Reading `borrowers[0]` here
+ * reported a file finished while a co-borrower had answered nothing — the
+ * quiet version of the same mistake that let one person's signature authorize
+ * a pull about another.
+ *
+ * On a file with one borrower the words are exactly the ones this produced
+ * before. A second person is what puts a name in front of them, and nothing
+ * else does, so no existing file's count moves for this.
+ */
+function ofEveryBorrower(ask: (b: Borrower, f: LoanFile) => Met | Unmet): Evaluator {
+  return (f) => {
+    if (f.borrowers.length === 0) return no("no borrower");
+    const named = (b: Borrower, text: string) =>
+      f.borrowers.length === 1 ? text : `${b.firstName} ${b.lastName}: ${text}`;
+    const answers = f.borrowers.map((b) => ({ b, answer: ask(b, f) }));
+    const unmet = answers.filter(
+      (a): a is { b: Borrower; answer: Unmet } => a.answer.status === "unsatisfied",
+    );
+    if (unmet.length) return no(unmet.map((a) => named(a.b, a.answer.missing)).join("; "));
+    return ok(answers.map((a) => named(a.b, (a.answer as Met).evidence)).join("; "));
+  };
+}
+
+/**
+ * A live consent of this kind from anybody on the file.
+ *
+ * Only for the ones the product still executes once per FILE. INC-008's
+ * transcripts are pulled under the first borrower's token and nobody else's,
+ * so a file-level answer is what the retrieval actually does; APP-005 and
+ * APP-012 are per applicant and use `consentOf` instead.
+ */
 function hasConsent(file: LoanFile, kind: string): boolean {
   return file.consents.some((c) => c.kind === kind && !c.revokedAt);
+}
+
+/**
+ * This borrower's own live consent.
+ *
+ * `tokenFor` reads one party's `authorizations` rows and no other's, so a file
+ * carrying only the first borrower's authorization can retrieve nothing about
+ * the second. A file-level `some()` answered "signed borrower authorization on
+ * record" for that same file — the engine and the only minter giving opposite
+ * answers about the requirement whose failure severity is a regulatory
+ * violation, with nothing on the outstanding list ever asking the second
+ * person to sign.
+ */
+function consentOf(file: LoanFile, borrower: Borrower, kind: string): boolean {
+  return file.consents.some((c) => c.kind === kind && c.borrowerId === borrower.id && !c.revokedAt);
 }
 
 function hasDisclosure(file: LoanFile, kind: string): boolean {
@@ -78,13 +134,11 @@ export const EVALUATORS: Record<string, Evaluator> = {
           "address not matched to a deliverable public record",
         ),
 
-  "APP-021": (f) => {
-    const b = f.borrowers[0];
-    if (!b) return no("no borrower");
-    return b.firstTimeHomebuyer === null
+  "APP-021": ofEveryBorrower((b) =>
+    b.firstTimeHomebuyer === null
       ? no("first-time homebuyer status not determined")
-      : ok(`fthb_flag = ${b.firstTimeHomebuyer}`);
-  },
+      : ok(`fthb_flag = ${b.firstTimeHomebuyer}`),
+  ),
 
   "AST-012": (f) =>
     !f.loan
@@ -97,9 +151,7 @@ export const EVALUATORS: Record<string, Evaluator> = {
 
   /* ── Screen 2 · Identity ─────────────────────────────────────────────── */
 
-  "APP-001": (f) => {
-    const b = f.borrowers[0];
-    if (!b) return no("no borrower");
+  "APP-001": ofEveryBorrower((b) => {
     const missing = [
       b.firstName && b.lastName ? null : "name",
       b.dateOfBirth ? null : "date of birth",
@@ -115,18 +167,17 @@ export const EVALUATORS: Record<string, Evaluator> = {
       return no("identity not yet verified against a government ID");
     }
     return ok(`identity verified ${b.identityVerification.verifiedAt?.slice(0, 10)}`);
-  },
+  }),
 
-  "APP-005": (f) =>
+  "APP-005": ofEveryBorrower((b, f) =>
     check(
-      hasConsent(f, "verification_authorization"),
+      consentOf(f, b, "verification_authorization"),
       "signed borrower authorization on record",
       "borrower has not authorized verification — no connector may be called",
     ),
+  ),
 
-  "APP-011": (f) => {
-    const b = f.borrowers[0];
-    if (!b) return no("no borrower");
+  "APP-011": ofEveryBorrower((b) => {
     if (!b.demographics) return no("demographic information not requested");
     // Reg B is about the ASKING. All three must have been put to the borrower;
     // an empty answer means the question was never shown, which is not the
@@ -144,26 +195,23 @@ export const EVALUATORS: Record<string, Evaluator> = {
       "URLA Section 7 requested; answers or declines recorded",
       `${missing.join(", ")} not requested`,
     );
-  },
+  }),
 
-  "APP-012": (f) =>
-    check(hasConsent(f, "econsent"), "E-SIGN consent recorded", "eConsent not obtained"),
+  "APP-012": ofEveryBorrower((b, f) =>
+    check(consentOf(f, b, "econsent"), "E-SIGN consent recorded", "eConsent not obtained"),
+  ),
 
-  "APP-015": (f) => {
-    const b = f.borrowers[0];
-    if (!b) return no("no borrower");
-    return b.maritalStatus === "married" && !b.nonBorrowingSpouseName
+  "APP-015": ofEveryBorrower((b) =>
+    b.maritalStatus === "married" && !b.nonBorrowingSpouseName
       ? no("non-borrowing spouse not identified")
-      : ok("marital status and spouse handling recorded");
-  },
+      : ok("marital status and spouse handling recorded"),
+  ),
 
-  "APP-017": (f) => {
-    const b = f.borrowers[0];
-    if (!b) return no("no borrower");
-    return b.preferredLanguage
+  "APP-017": ofEveryBorrower((b) =>
+    b.preferredLanguage
       ? ok(`preferred language ${b.preferredLanguage}`)
-      : no("language preference not captured");
-  },
+      : no("language preference not captured"),
+  ),
 
   "CRD-010": (f) =>
     f.sanctionsScreenClear === null
@@ -255,8 +303,21 @@ export const EVALUATORS: Record<string, Evaluator> = {
    * Section 5 is the borrower's own statement. The review screen used to
    * build five of these answers out of a credit report, a lien search, an
    * asset report and a county record — which means an unrun pull asserted "no bankruptcy" from
-   * having looked nowhere, above a signature. So `f.declaration` is the only
+   * having looked nowhere, above a signature. So `b.declaration` is the only
    * input here, and `null` means unasked rather than answered no.
+   *
+   * Per borrower, because the answers are. The file carried one copy of
+   * Section 5 and it was borrower 1's, so a co-borrower who declared a
+   * bankruptcy was judged by somebody else's "no" — under a review screen
+   * showing his own answer back to him, above the signature that attests to
+   * it.
+   *
+   * Three of the six are asked only of the people they are about, and that
+   * gate is HERE rather than in `conditions.ts`: applicability is a fact about
+   * the file, and one person declaring a bankruptcy makes APP-024 apply to it.
+   * Who on the file then owes chapters is a different question, and answering
+   * it file-wide would tell the other borrower they had failed to document a
+   * bankruptcy they never declared.
    *
    * The route refuses a partial submit, so a stored declaration carries all of
    * 5a or none of it. These still name their own fields rather than reporting
@@ -265,8 +326,8 @@ export const EVALUATORS: Record<string, Evaluator> = {
    * borrower signing a blank answer.
    */
 
-  "APP-022": (f) => {
-    const d = f.declaration;
+  "APP-022": ofEveryBorrower((b) => {
+    const d = b.declaration;
     if (!d) return no("the Section 5a declarations have not been asked");
     const missing = [
       d.intentToOccupy ? null : "intent to occupy",
@@ -280,10 +341,10 @@ export const EVALUATORS: Record<string, Evaluator> = {
     return missing.length
       ? no(missing.join(", "))
       : ok(`section 5a answered, occupancy ${d.intentToOccupy.toLowerCase()}`);
-  },
+  }),
 
-  "APP-023": (f) => {
-    const d = f.declaration;
+  "APP-023": ofEveryBorrower((b) => {
+    const d = b.declaration;
     if (!d) return no("the Section 5b declarations have not been asked");
     // Every one of the seven is a NOT NULL boolean, so a stored row has them
     // all. What this says is that they were ANSWERED, which is the fact the
@@ -299,21 +360,30 @@ export const EVALUATORS: Record<string, Evaluator> = {
       d.bankruptcy,
     ].filter(Boolean).length;
     return ok(yes === 0 ? "section 5b answered, all no" : `section 5b answered, ${yes} yes`);
-  },
+  }),
 
-  "APP-024": (f) => {
-    const d = f.declaration;
+  "APP-024": ofEveryBorrower((b) => {
+    const d = b.declaration;
     if (!d) return no("no bankruptcy has been declared or denied");
+    // Chapters are owed by whoever declared one. `declared_bankruptcy` is true
+    // of the file as soon as a single person says yes, so without this the
+    // other borrower would be reported as having failed to name the chapters
+    // of a bankruptcy they told us they never had.
+    if (!d.bankruptcy) return ok("no bankruptcy declared");
     return check(
       d.bankruptcyChapters.length > 0,
       d.bankruptcyChapters.join(", "),
       "a bankruptcy was declared with no chapter named",
     );
-  },
+  }),
 
-  "APP-025": (f) => {
-    const d = f.declaration;
+  "APP-025": ofEveryBorrower((b) => {
+    const d = b.declaration;
     if (!d) return no("the prior-property questions have not been asked");
+    // Asked of whoever owned, for the same reason APP-024 asks chapters of
+    // whoever declared a bankruptcy: one owner makes the condition true of the
+    // file, and does not give the other borrower a prior property.
+    if (d.homeownerPastThreeYears !== "Yes") return ok("no home owned in the past three years");
     // Title is optional in DU and unbound by any conditionality, so it is
     // reported when it is there and never demanded.
     return check(
@@ -323,18 +393,27 @@ export const EVALUATORS: Record<string, Evaluator> = {
         : `${d.priorPropertyUsage}`,
       "how the prior property was used has not been stated",
     );
-  },
+  }),
 
-  "APP-026": (f) => {
-    const current = f.residences.find((r) => r.residencyType === "Current");
-    if (!current) return no("where the borrower lives now has not been stated");
+  "APP-026": ofEveryBorrower((b) => {
+    const current = b.residences.find((r) => r.residencyType === "Current");
+    if (!current) return no("where they live now has not been stated");
     // The one-directional rule the table carries: an amount needs a Rent
     // basis, and a Rent basis does not need an amount.
     return ok(`${current.basis}, ${current.durationMonths} month(s)`);
-  },
+  }),
 
-  "APP-027": (f) => {
-    const prior = f.residences.find((r) => r.residencyType === "Prior");
+  "APP-027": ofEveryBorrower((b) => {
+    const current = b.residences.find((r) => r.residencyType === "Current");
+    if (!current) return no("where they live now has not been stated");
+    // Two years of history is the ask, so somebody who has been at one address
+    // for the whole window owes no second one. One borrower moving recently is
+    // what makes the condition true of the file; it does not put the other
+    // borrower's settled address in question.
+    if (current.durationMonths >= RESIDENCE_HISTORY_MONTHS) {
+      return ok(`${current.durationMonths} month(s) at the current address`);
+    }
+    const prior = b.residences.find((r) => r.residencyType === "Prior");
     if (!prior) return no("the previous address has not been stated");
     const missing = [
       prior.addressLineText ? null : "street",
@@ -345,7 +424,7 @@ export const EVALUATORS: Record<string, Evaluator> = {
     return missing.length
       ? no(`the previous address is missing its ${missing.join(", ")}`)
       : ok(`${prior.addressLineText}, ${prior.cityName} ${prior.stateCode}`);
-  },
+  }),
 
   /* ── Screen 5 · Bank ─────────────────────────────────────────────────── */
 

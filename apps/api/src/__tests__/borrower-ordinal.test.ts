@@ -168,9 +168,16 @@ describe("the allocator", () => {
     // The failing operation is a person being added to a household that is
     // already four people. "violates check constraint" names a number nobody
     // chose and no application.
-    await expect(append(app.id)).rejects.toThrow(
-      new RegExp(`application ${app.id} already holds four borrowers`),
-    );
+    //
+    // An `AppError` and not a bare one, because a route reaches this: the
+    // co-borrower append surfaced a plain `Error` to a client as a 500, and a
+    // full household is a refusal the caller can read rather than a fault.
+    // The application id stays out of it — the sentence goes to a borrower.
+    await expect(append(app.id)).rejects.toThrow(/An application carries four borrowers/);
+    await expect(append(app.id)).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BORROWER_LIMIT",
+    });
   });
 
   it("serializes two appends that arrive at once instead of aborting one", async () => {

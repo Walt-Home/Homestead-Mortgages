@@ -65,11 +65,29 @@ const PRIOR: BorrowerResidence = {
   postalCode: "78701",
 };
 
-/** Only the two fields these six read. Nothing else decides any of them. */
+/**
+ * One borrower, carrying only the two fields these six read.
+ *
+ * On the person rather than on the file, because that is where the answers
+ * are. A file-level copy was borrower 1's, and the engine read it for
+ * everybody.
+ */
+const who = (
+  firstName: string,
+  lastName: string,
+  declaration: BorrowerDeclaration | null,
+  residences: readonly BorrowerResidence[] = [],
+) => ({ firstName, lastName, declaration, residences });
+
 const file = (
   declaration: BorrowerDeclaration | null,
   residences: readonly BorrowerResidence[] = [],
-): LoanFile => ({ declaration, residences }) as unknown as LoanFile;
+): LoanFile =>
+  ({ borrowers: [who("Ada", "Lovelace", declaration, residences)] }) as unknown as LoanFile;
+
+/** Two people who answered differently, in document order. */
+const household = (hers: ReturnType<typeof who>, his: ReturnType<typeof who>): LoanFile =>
+  ({ borrowers: [hers, his] }) as unknown as LoanFile;
 
 /**
  * Everything a connector could possibly say about the same questions.
@@ -165,9 +183,79 @@ describe("the six evaluators", () => {
   });
 
   it("wants the whole previous address, not a fragment of one", () => {
-    expect(status("APP-027", file(DECLARED, [CURRENT, PRIOR]))).toBe("satisfied");
-    expect(status("APP-027", file(DECLARED, [CURRENT, { ...PRIOR, cityName: null }]))).toBe(
+    const recent = { ...CURRENT, durationMonths: 14 };
+    expect(status("APP-027", file(DECLARED, [recent, PRIOR]))).toBe("satisfied");
+    expect(status("APP-027", file(DECLARED, [recent, { ...PRIOR, cityName: null }]))).toBe(
       "unsatisfied",
     );
+  });
+
+  it("asks a previous address only of whoever moved recently", () => {
+    // One person moving is what makes the condition true of the FILE. It does
+    // not give the other person a previous address to state, and reporting
+    // that it does would put a question on the outstanding list that nobody
+    // can answer.
+    const settled = who("Ada", "Lovelace", DECLARED, [{ ...CURRENT, durationMonths: 90 }]);
+    const moved = who("Dev", "Raman", DECLARED, [{ ...CURRENT, durationMonths: 14 }, PRIOR]);
+    const both = household(settled, moved);
+
+    expect(evaluateCondition("current_residence_under_two_years", both)).toBe(true);
+    expect(EVALUATORS["APP-027"]!(both)).toEqual({
+      status: "satisfied",
+      evidence:
+        "Ada Lovelace: 90 month(s) at the current address; Dev Raman: 12 Old Street, Austin TX",
+    });
+  });
+});
+
+describe("a bankruptcy only the co-borrower declared", () => {
+  const clean = who("Ada", "Lovelace", DECLARED, [CURRENT]);
+  const declared = who(
+    "Dev",
+    "Raman",
+    { ...DECLARED, bankruptcy: true, bankruptcyChapters: ["ChapterSeven"] },
+    [CURRENT],
+  );
+  const both = household(clean, declared);
+
+  it("is a bankruptcy the file has declared", () => {
+    // The file used to carry ONE copy of Section 5 and it was borrower 1's, so
+    // this read false and APP-024 never reached the outstanding list.
+    expect(evaluateCondition("declared_bankruptcy", both)).toBe(true);
+  });
+
+  it("does not report it as all-no under APP-023", () => {
+    expect(EVALUATORS["APP-023"]!(both)).toEqual({
+      status: "satisfied",
+      evidence: "Ada Lovelace: section 5b answered, all no; Dev Raman: section 5b answered, 1 yes",
+    });
+  });
+
+  it("asks the chapters of him and not of her", () => {
+    expect(EVALUATORS["APP-024"]!(both)).toEqual({
+      status: "satisfied",
+      evidence: "Ada Lovelace: no bankruptcy declared; Dev Raman: ChapterSeven",
+    });
+    // And an unnamed chapter is his failure, under his name, rather than the
+    // file's.
+    const vague = household(
+      clean,
+      who("Dev", "Raman", { ...DECLARED, bankruptcy: true }, [CURRENT]),
+    );
+    expect(EVALUATORS["APP-024"]!(vague)).toEqual({
+      status: "unsatisfied",
+      missing: "Dev Raman: a bankruptcy was declared with no chapter named",
+    });
+  });
+
+  it("leaves a borrower nobody has asked undetermined rather than clean", () => {
+    // `ofAnyBorrower` over a three-valued answer: one silence cannot settle it.
+    const silent = household(who("Ada", "Lovelace", null), declared);
+    expect(evaluateCondition("declared_bankruptcy", silent)).toBe(true);
+    const neither = household(
+      who("Ada", "Lovelace", null),
+      who("Dev", "Raman", DECLARED, [CURRENT]),
+    );
+    expect(evaluateCondition("declared_bankruptcy", neither)).toBeNull();
   });
 });

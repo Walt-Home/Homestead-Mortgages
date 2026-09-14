@@ -17,7 +17,7 @@ import {
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
 import { reconcileIncomeAndEmployment } from "../services/income.js";
-import { subjectPartyId, tokenFor } from "../services/authorization.js";
+import { primaryBorrower, subjectPartyId, tokenFor } from "../services/authorization.js";
 import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
 import { applicationForFile, ensureApplicationParty } from "../services/applications.js";
@@ -164,7 +164,7 @@ connectorRouter.post(
 
     const result = await connectors().credit.pullTriMerge(
       file,
-      await tokenFor(file, "credit_report"),
+      await tokenFor(primaryBorrower(file), "credit_report"),
     );
     await recordSnapshot(
       id,
@@ -233,7 +233,10 @@ connectorRouter.post(
     // link token on every poll would both bill for sessions nobody opens and
     // hand back a token that invalidates the one Link is using.
     if (!sessionId && !publicToken) {
-      const session = await bank.createLinkSession(file, await tokenFor(file, "bank_transactions"));
+      const session = await bank.createLinkSession(
+        file,
+        await tokenFor(primaryBorrower(file), "bank_transactions"),
+      );
       sessionId = session.sessionId;
 
       // A real aggregator needs the borrower to log in inside its own widget
@@ -253,7 +256,7 @@ connectorRouter.post(
 
     const outcome = await bank.fetchAssetReport(
       file,
-      await tokenFor(file, "bank_transactions"),
+      await tokenFor(primaryBorrower(file), "bank_transactions"),
       { sessionId: sessionId ?? id, publicToken },
       12,
     );
@@ -278,8 +281,8 @@ connectorRouter.post(
     // updated in place and what it stops naming is retired. Merging would
     // double the income.
     //
-    // `tokenFor` above refuses a file with no borrower, so by here there is
-    // somebody for this income to be about.
+    // `primaryBorrower` above refuses a file with no borrower, so by here there
+    // is somebody for this income to be about.
     const subject = file.borrowers[0]!;
     await prisma.$transaction(async (tx) => {
       const snapshot = await recordSnapshot(
@@ -336,7 +339,7 @@ connectorRouter.post(
     const file = await requireFile(id, req.user!.id);
 
     const payroll = connectors().payroll;
-    const payrollToken = await tokenFor(file, "payroll_income");
+    const payrollToken = await tokenFor(primaryBorrower(file), "payroll_income");
     const session = await payroll.createLinkSession(file, payrollToken);
     const result = await payroll.fetchPayroll(file, payrollToken, session.sessionId);
 
@@ -346,8 +349,8 @@ connectorRouter.post(
     // The employer survives that replacement: payroll carries the EIN the bank
     // never had, so the row the bank created is promoted rather than twinned.
     //
-    // `tokenFor` above refuses a file with no borrower, so by here there is
-    // somebody for this income to be about.
+    // `primaryBorrower` above refuses a file with no borrower, so by here there
+    // is somebody for this income to be about.
     const subject = file.borrowers[0]!;
     await prisma.$transaction(async (tx) => {
       const snapshot = await recordSnapshot(
@@ -390,7 +393,7 @@ connectorRouter.post(
     const currentYear = new Date().getFullYear();
     const result = await connectors().irs.fetchTranscripts(
       file,
-      await tokenFor(file, "tax_transcript"),
+      await tokenFor(primaryBorrower(file), "tax_transcript"),
       [currentYear - 1, currentYear - 2],
     );
 

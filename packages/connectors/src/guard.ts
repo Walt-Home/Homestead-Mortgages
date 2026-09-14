@@ -25,7 +25,7 @@
  * with the columns it read.
  */
 
-import type { AuthorizationPurpose, DataCategory, PurposeToken } from "@hm/shared";
+import type { AuthorizationPurpose, DataCategory, LoanFile, PurposeToken } from "@hm/shared";
 
 export class AuthorizationError extends Error {
   constructor(
@@ -71,6 +71,29 @@ export function requireCategory(token: PurposeToken, expected: DataCategory): vo
     throw new AuthorizationError(
       `This authorization covers ${token.dataCategory}, not ${expected}.`,
       REQUIREMENT_FOR[expected],
+    );
+  }
+}
+
+/**
+ * An adapter's own check that the token names somebody this file is about.
+ *
+ * `requireCategory` proves the token is the permission for the data; this
+ * proves it is the permission about the right person. Every route happens to
+ * mint from the primary borrower, so without this the party half of the check
+ * lived in the routes as a habit — a token for any party at all, on any file,
+ * came back with that file's fixture data. The guard is in the adapters so a
+ * new route cannot forget it, and a check only the routes perform is exactly
+ * the convention this file exists to replace.
+ *
+ * The refusal names no party. A caller who may not fetch about somebody must
+ * not learn from the refusal whether that somebody is on the file.
+ */
+export function requireSubject(token: PurposeToken, file: LoanFile): void {
+  if (!file.borrowers.some((b) => b.partyId === token.partyId)) {
+    throw new AuthorizationError(
+      "This authorization is not for a borrower on this file, so nothing may be retrieved under it.",
+      REQUIREMENT_FOR[token.dataCategory],
     );
   }
 }

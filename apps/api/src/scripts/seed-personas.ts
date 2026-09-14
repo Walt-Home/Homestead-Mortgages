@@ -69,10 +69,10 @@ import {
   ensureApplicationParty,
   scenarioTermsFrom,
 } from "../services/applications.js";
-import { tokenFor } from "../services/authorization.js";
+import { primaryBorrower, tokenFor } from "../services/authorization.js";
 import type { Db } from "../services/db.js";
 import { decideApplication, recordDecision } from "../services/decide.js";
-import { recordDeclaration } from "../services/declarations.js";
+import { recordDeclaration, type DeclarationInput } from "../services/declarations.js";
 import { pinTridPieces, proposeScenario } from "../services/evidence.js";
 import {
   assertFacts,
@@ -432,57 +432,87 @@ async function declarations(w: Walk): Promise<void> {
   const said = DECLARED[w.story.key];
   const purchase = w.story.terms.purpose === "purchase";
 
+  // Their own principal, because each of these eight answered for themselves.
+  // The service refuses any other, and so does the trigger underneath it.
+  const assertedByPrincipalId = await principalForParty(w.tx, w.partyId);
+
+  const answers: DeclarationInput = {
+    intentToOccupy: "Yes",
+    homeownerPastThreeYears: said.owned ? "Yes" : "No",
+    // Both follow-ups exist exactly when their trigger says they were put,
+    // which is the direction the CHECK constraints read in as well.
+    priorPropertyUsage: said.owned ? "PrimaryResidence" : null,
+    priorPropertyTitle: said.owned ? "Sole" : null,
+    // Asked on an FHA file, which none of these is.
+    fhaSecondaryResidence: null,
+    specialBorrowerSellerRelationship: purchase ? false : null,
+    undisclosedBorrowedFunds: false,
+    undisclosedMortgageApplication: false,
+    undisclosedCreditApplication: false,
+    propertyProposedCleanEnergyLien: false,
+    undisclosedComakerOfNote: false,
+    outstandingJudgments: false,
+    presentlyDelinquent: false,
+    partyToLawsuit: false,
+    priorPropertyDeedInLieuConveyed: false,
+    priorPropertyShortSaleCompleted: false,
+    priorPropertyForeclosureCompleted: false,
+    bankruptcy: false,
+  };
+
+  const residences = [
+    {
+      residencyType: "Current" as const,
+      basis: said.basis,
+      durationMonths: said.months,
+      monthlyRent: said.rent ?? null,
+    },
+    ...(said.prior
+      ? [
+          {
+            residencyType: "Prior" as const,
+            basis: "Rent" as const,
+            durationMonths: 36,
+            monthlyRent: 2_600,
+            addressLineText: said.prior.line1,
+            cityName: said.prior.city,
+            stateCode: said.prior.state,
+            postalCode: said.prior.postalCode,
+          },
+        ]
+      : []),
+  ];
+
   await recordDeclaration(
     w.loanFileId,
-    {
-      declaration: {
-        intentToOccupy: "Yes",
-        homeownerPastThreeYears: said.owned ? "Yes" : "No",
-        // Both follow-ups exist exactly when their trigger says they were put,
-        // which is the direction the CHECK constraints read in as well.
-        priorPropertyUsage: said.owned ? "PrimaryResidence" : null,
-        priorPropertyTitle: said.owned ? "Sole" : null,
-        // Asked on an FHA file, which none of these is.
-        fhaSecondaryResidence: null,
-        specialBorrowerSellerRelationship: purchase ? false : null,
-        undisclosedBorrowedFunds: false,
-        undisclosedMortgageApplication: false,
-        undisclosedCreditApplication: false,
-        propertyProposedCleanEnergyLien: false,
-        undisclosedComakerOfNote: false,
-        outstandingJudgments: false,
-        presentlyDelinquent: false,
-        partyToLawsuit: false,
-        priorPropertyDeedInLieuConveyed: false,
-        priorPropertyShortSaleCompleted: false,
-        priorPropertyForeclosureCompleted: false,
-        bankruptcy: false,
-      },
-      residences: [
-        {
-          residencyType: "Current",
-          basis: said.basis,
-          durationMonths: said.months,
-          monthlyRent: said.rent ?? null,
-        },
-        ...(said.prior
-          ? [
-              {
-                residencyType: "Prior" as const,
-                basis: "Rent" as const,
-                durationMonths: 36,
-                monthlyRent: 2_600,
-                addressLineText: said.prior.line1,
-                cityName: said.prior.city,
-                stateCode: said.prior.state,
-                postalCode: said.prior.postalCode,
-              },
-            ]
-          : []),
-      ],
-    },
+    { assertedByPrincipalId, declaration: answers, residences },
     w.tx,
   );
+
+  // Everybody else on the file answers too, and the engine now asks each of
+  // them: APP-022, APP-023 and APP-026 are satisfied only once every borrower
+  // has answered, so a sample file where the co-borrower said nothing would
+  // read "needs you" for a screen the story is past.
+  //
+  // Taken by staff, because that is the only way his answers can exist. Dev
+  // has never signed in, so there is no principal of his own to assert them,
+  // and `du_declarations_are_self_attested` refuses Priya's — a declaration is
+  // a statement by the person it is about. They share the address and moved on
+  // the same day, so he says what she says; what differs is who wrote it down.
+  const file = await currentFile(w);
+  for (const other of file.borrowers) {
+    if (other.partyId === w.partyId) continue;
+    await recordDeclaration(
+      w.loanFileId,
+      {
+        assertedByPrincipalId: await staffPrincipal(w.tx, `ops-${w.applicationId}`),
+        borrowerId: other.id,
+        declaration: answers,
+        residences,
+      },
+      w.tx,
+    );
+  }
   // No stage to advance. A persona's file is created at its resume stage and
   // every walk runs inside one transaction, so the high-water mark is already
   // where the story says it is — and `advanceStage` reads its own connection,
@@ -502,7 +532,7 @@ async function credit(w: Walk): Promise<void> {
   const file = await currentFile(w);
   const result = await w.registry.credit.pullTriMerge(
     file,
-    await tokenFor(file, "credit_report", w.tx),
+    await tokenFor(primaryBorrower(file), "credit_report", w.tx),
   );
   await recordSnapshot(
     w.loanFileId,
@@ -549,7 +579,7 @@ async function liens(w: Walk): Promise<void> {
   const apn = PUBLIC_RECORDS[w.story.fixture].record.apn;
   const result = await w.registry.liens.searchLiens(
     file,
-    await tokenFor(file, "public_record_liens", w.tx),
+    await tokenFor(primaryBorrower(file), "public_record_liens", w.tx),
     apn,
   );
   await recordSnapshot(
@@ -629,7 +659,7 @@ async function bank(w: Walk): Promise<void> {
   const file = await currentFile(w);
   const outcome = await w.registry.bank.fetchAssetReport(
     file,
-    await tokenFor(file, "bank_transactions", w.tx),
+    await tokenFor(primaryBorrower(file), "bank_transactions", w.tx),
     { sessionId: `persona-${w.story.key}` },
     12,
   );
@@ -669,7 +699,7 @@ async function bank(w: Walk): Promise<void> {
 /** The payroll branch, which replaces what the bank inferred. */
 async function payroll(w: Walk): Promise<void> {
   const file = await currentFile(w);
-  const token = await tokenFor(file, "payroll_income", w.tx);
+  const token = await tokenFor(primaryBorrower(file), "payroll_income", w.tx);
   const session = await w.registry.payroll.createLinkSession(file, token);
   const result = await w.registry.payroll.fetchPayroll(file, token, session.sessionId);
   const snapshot = await recordSnapshot(
@@ -736,7 +766,7 @@ async function signApplication(w: Walk): Promise<void> {
   const year = new Date().getFullYear();
   const result = await w.registry.irs.fetchTranscripts(
     file,
-    await tokenFor(file, "tax_transcript", w.tx),
+    await tokenFor(primaryBorrower(file), "tax_transcript", w.tx),
     [year - 1, year - 2],
   );
   await recordSnapshot(
@@ -1032,11 +1062,12 @@ async function activeAddress(w: Walk): Promise<string | null> {
 /**
  * Dev Raman, who is on the application and has no sign-in.
  *
- * His `createdAt` is a second after Priya's row on purpose. Every reader of
- * this file takes `borrowers[0]` to be the person whose request it is — the
- * purpose token is minted for that party — and two rows created in one
- * transaction can share a millisecond. The id breaks a tie, but "whichever
- * uuid sorts first" is not the fact anybody wants; an explicit second is.
+ * His `createdAt` is a second after Priya's row on purpose. Between the insert
+ * below and the membership that gives him Borrower 2, he is on the file with
+ * no ordinal, and `loadLoanFile` falls back to creation order for exactly that
+ * case — two rows written in one transaction can share a millisecond, and the
+ * id breaks the tie by whichever uuid sorts first, which is not a fact anybody
+ * wants to depend on.
  *
  * His three pieces are pinned under his own authorization and do not complete
  * anything: the receipt counts ONE primary borrower's pieces, which is what
@@ -1077,19 +1108,23 @@ async function addCoBorrower(w: Walk): Promise<void> {
     select: { id: true },
   });
 
-  // Both rows exist now, so ask the reader itself which one it hands back
-  // first — not a copy of its ordering, which could drift from it. The second
-  // of daylight above should settle it; if it ever does not, the seed stops
-  // here rather than walking on and minting this household's purpose token for
-  // Dev, which is somebody else's authorization for Priya's credit.
+  await ensureApplicationParty(w.tx, w.applicationId, party.id, "CO_BORROWER");
+
+  // Both people are on the application now, so ask the reader itself which one
+  // it hands back first — not a copy of its ordering, which could drift from
+  // it. Priya holds `application_parties.borrower_ordinal` 1 and Dev holds 2,
+  // and that is what decides it; if the two ever come back the other way
+  // round, the seed stops here rather than walking on and minting this
+  // household's purpose token for Dev, which is somebody else's authorization
+  // for Priya's credit.
   const file = await loadLoanFile(w.loanFileId, w.tx);
   if (file?.borrowers[0]?.partyId !== w.partyId) {
     throw new Error(
-      `persona ${w.story.key}: the co-borrower sorts first, so every borrowers[0] read would be the wrong person`,
+      `persona ${w.story.key}: the co-borrower holds the lower borrower_ordinal, ` +
+        "so every borrowers[0] read would be the wrong person",
     );
   }
 
-  await ensureApplicationParty(w.tx, w.applicationId, party.id, "CO_BORROWER");
   await grantConsent(w.tx, w.loanFileId, dev.id, "verification_authorization");
   await pinTridPieces(w.tx, { applicationId: w.applicationId, partyId: party.id });
 }

@@ -285,6 +285,236 @@ describe("the onboarding flow", () => {
   });
 });
 
+/**
+ * What the engine counts when there are two people and one has answered.
+ *
+ * Every per-borrower evaluator read `borrowers[0]`, so a co-borrower who had
+ * answered nothing left the file reading exactly as complete as a file with
+ * nobody on it but the primary. That is the same shape of mistake as one
+ * person's signature authorizing another's credit pull, arriving as a number
+ * instead of as a retrieval: the product told a household it was finished on
+ * the strength of half a household's answers.
+ */
+describe("a second borrower", () => {
+  const SAM = "22222222-2222-2222-2222-222222222222";
+
+  /** On the file, and asked nothing so far. */
+  function withCoBorrower(file: LoanFile): LoanFile {
+    const first = file.borrowers[0]!;
+    return {
+      ...file,
+      borrowers: [
+        first,
+        {
+          ...first,
+          id: "b2",
+          partyId: SAM,
+          firstName: "Sam",
+          lastName: "Okafor",
+          email: "sam@example.com",
+          ssn: { last4: "8765", vaultHandle: "vault:8765:test" },
+          identityVerification: null,
+          demographics: null,
+          firstTimeHomebuyer: null,
+          currentHousing: null,
+          monthlyRent: undefined,
+          // He has said he is married and named nobody. The file's consent
+          // rows are all hers, so he has signed neither the verification
+          // authorization nor the eConsent either.
+          maritalStatus: "married",
+          nonBorrowingSpouseName: undefined,
+          // Different from hers, so a requirement that went back to reading
+          // the first borrower would answer with her language and still call
+          // itself satisfied.
+          preferredLanguage: "es",
+        },
+      ],
+    };
+  }
+
+  /** His own answers, given — one for every field the file puts to both people. */
+  function coBorrowerAnswers(file: LoanFile): LoanFile {
+    const first = file.borrowers[0]!;
+    return {
+      ...file,
+      borrowers: [
+        first,
+        {
+          ...file.borrowers[1]!,
+          identityVerification: {
+            verificationId: "fixture-idv.b2",
+            status: "verified",
+            verifiedAt: REFERENCE.toISOString(),
+          },
+          demographics: {
+            ethnicity: "declined",
+            race: "declined",
+            sex: "declined",
+            visualObservationNoted: false,
+          },
+          firstTimeHomebuyer: true,
+          currentHousing: "rent",
+          monthlyRent: 2_150,
+          nonBorrowingSpouseName: "Adaeze Okafor",
+        },
+      ],
+      consents: [
+        ...file.consents,
+        { ...consent("verification_authorization"), borrowerId: "b2" },
+        { ...consent("econsent"), borrowerId: "b2" },
+      ],
+    };
+  }
+
+  const idsSatisfied = (file: LoanFile) =>
+    assessAll(file)
+      .filter((a) => a.satisfaction.status === "satisfied")
+      .map((a) => a.requirement.id);
+
+  it("is not finished because the first borrower is", () => {
+    const alone = afterIdentity();
+    const together = withCoBorrower(alone);
+
+    // What the co-borrower genuinely owes: his identity is unverified, he has
+    // not been put the Reg B questions, nobody has asked whether he has owned a
+    // home, he has named no spouse, and he has signed neither the verification
+    // authorization nor the eConsent. Each was satisfied while he was
+    // invisible — APP-005 while `tokenFor` would refuse every pull about him.
+    for (const id of ["APP-001", "APP-005", "APP-011", "APP-012", "APP-015", "APP-021"]) {
+      expect(idsSatisfied(alone), id).toContain(id);
+      expect(idsSatisfied(together), id).not.toContain(id);
+    }
+  });
+
+  it("says which of the two it is still missing", () => {
+    const together = withCoBorrower(afterIdentity());
+    const identity = assessAll(together).find((a) => a.requirement.id === "APP-001")!;
+    expect(identity.satisfaction.status).toBe("unsatisfied");
+    // The name is the whole point of asking everybody: "identity not verified"
+    // on a two-person file is not an answer anybody can act on.
+    expect((identity.satisfaction as { missing: string }).missing).toContain("Sam Okafor");
+    expect((identity.satisfaction as { missing: string }).missing).not.toContain("Dana");
+  });
+
+  it("leaves a one-borrower file counting exactly what it counted before", () => {
+    // The guard on the change itself. A second person is what puts a name in
+    // front of the evidence and a requirement back on the list; a file with one
+    // borrower must read character for character as it did.
+    const alone = afterIdentity();
+    const identity = assessAll(alone).find((a) => a.requirement.id === "APP-001")!;
+    expect(identity.satisfaction).toEqual({
+      status: "satisfied",
+      evidence: "identity verified 2026-06-15",
+    });
+  });
+
+  it("counts his answers forward, never backward", () => {
+    // The 23 → 21 invariant, on the axis this commit adds. Answering for the
+    // second person may only ever raise the satisfied count, and must raise it:
+    // a co-borrower whose answers changed nothing would mean they were never
+    // being counted.
+    const unanswered = progress(withCoBorrower(afterIdentity()));
+    const answered = progress(coBorrowerAnswers(withCoBorrower(afterIdentity())));
+
+    expect(answered.satisfied).toBeGreaterThan(unanswered.satisfied);
+    expect(answered.borrowerOutstanding).toBeLessThan(unanswered.borrowerOutstanding);
+  });
+
+  it("does not let his silence settle a question about her", async () => {
+    // `renter_limited_mortgage_history` is true of anybody who rents and false
+    // only once it is false of everybody. She rents, so the rent history is
+    // owed whatever he turns out to be — his silence must not retire it, and
+    // `some()` over a three-valued answer would have read it as a no.
+    const file = afterIdentity();
+    const credit = await registry.credit.pullTriMerge(file, token("credit_report"));
+    const together = withCoBorrower({ ...file, credit: credit.data });
+
+    const rent = assessAll(together).find((a) => a.requirement.id === RENTER_REQUIREMENT)!;
+    expect(rent.applies).toBe(true);
+  });
+
+  it("cannot say whether a household rents when only the owner has answered", async () => {
+    // And the other direction: she owns outright, he has not been asked. False
+    // for everybody who has answered is not false for the file, because the one
+    // person who has not answered is the one who could still make it true.
+    const file = afterIdentity();
+    const credit = await registry.credit.pullTriMerge(file, token("credit_report"));
+    const owner = {
+      ...file,
+      credit: credit.data,
+      borrowers: [{ ...file.borrowers[0]!, currentHousing: "own" as const }],
+    };
+
+    expect(assessAll(owner).find((a) => a.requirement.id === RENTER_REQUIREMENT)!.applies).toBe(
+      false,
+    );
+    expect(
+      assessAll(withCoBorrower(owner)).find((a) => a.requirement.id === RENTER_REQUIREMENT)!
+        .applies,
+    ).toBeNull();
+  });
+
+  it("does not judge his rent history by her credit report", async () => {
+    // `LoanFile.credit` is ONE report and it carries no party; every pull mints
+    // its token from the first borrower, so the tradelines are hers. Asking the
+    // rent-history question of him and answering it out of her file said "he
+    // has twelve months of mortgage rating" about a man whose credit has never
+    // been pulled, and retired CRD-018 for an actual renter.
+    const file = afterIdentity();
+    const pulled = await registry.credit.pullTriMerge(file, token("credit_report"));
+    const herMortgage = {
+      id: "tl-her-mortgage",
+      creditorName: "Fixture Savings",
+      type: "mortgage" as const,
+      balance: 310_000,
+      monthlyPayment: 1_980,
+      openedDate: "2019-04-01",
+      disputed: false,
+      paymentHistory: Array.from({ length: 24 }, () => "0"),
+      maxDelinquency: 0,
+    };
+    const owner = {
+      ...file,
+      credit: { ...pulled.data, tradelines: [...pulled.data.tradelines, herMortgage] },
+      borrowers: [{ ...file.borrowers[0]!, currentHousing: "own" as const }],
+    };
+    const together = withCoBorrower(owner);
+    const heRents: LoanFile = {
+      ...together,
+      borrowers: [
+        together.borrowers[0]!,
+        { ...together.borrowers[1]!, currentHousing: "rent" as const, monthlyRent: 1_800 },
+      ],
+    };
+
+    // Null, not false. "We have not pulled his credit" and "he has a mortgage"
+    // are different answers and only one of them is true.
+    expect(
+      assessAll(heRents).find((a) => a.requirement.id === RENTER_REQUIREMENT)!.applies,
+    ).toBeNull();
+  });
+
+  it("reads every per-borrower answer off his own row", () => {
+    // Each field asked of both people, driven to a different value on his row
+    // than on hers. A requirement that went back to the first borrower would
+    // answer with her language, her spouse handling and her signature — and
+    // report itself satisfied on his behalf.
+    const together = coBorrowerAnswers(withCoBorrower(afterIdentity()));
+    const evidence = (id: string) => {
+      const a = assessAll(together).find((x) => x.requirement.id === id)!;
+      expect(a.satisfaction.status, id).toBe("satisfied");
+      return (a.satisfaction as { evidence: string }).evidence;
+    };
+
+    expect(evidence("APP-017")).toBe(
+      "Dana Whitfield: preferred language en; Sam Okafor: preferred language es",
+    );
+    for (const id of ["APP-005", "APP-012", "APP-015", "APP-021"]) {
+      expect(evidence(id), id).toContain("Sam Okafor");
+    }
+  });
+});
+
 describe("the decision", () => {
   async function fullyConnected(): Promise<LoanFile> {
     let file = afterIdentity();

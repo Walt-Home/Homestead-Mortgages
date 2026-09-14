@@ -321,9 +321,26 @@ export interface BorrowerInput {
  */
 export async function recordBorrowerFacts(
   tx: Tx,
-  args: { loanFileId: string; existingPartyId: string | null; input: BorrowerInput },
+  args: {
+    loanFileId: string;
+    existingPartyId: string | null;
+    input: BorrowerInput;
+    /**
+     * Who said this, when it was not the person it is about.
+     *
+     * A co-borrower is named by the applicant: they have never signed in, so
+     * there is no `users` row to find a party behind and no principal of their
+     * own that has said anything. The party is PROVISIONAL — a person we hold
+     * a record about who has not agreed to be here — and every fact below is
+     * stamped with the principal that actually asserted it, which is the
+     * applicant's. Writing them under the co-borrower's own principal would
+     * record somebody as having stated their own date of birth on a screen
+     * they have never seen.
+     */
+    namedBy?: { readonly principalId: string; readonly sourceFirstSeen: string };
+  },
 ): Promise<string> {
-  const { loanFileId, existingPartyId, input } = args;
+  const { loanFileId, existingPartyId, input, namedBy } = args;
   const owner = await tx.loanFile.findUniqueOrThrow({
     where: { id: loanFileId },
     select: { userId: true },
@@ -332,11 +349,20 @@ export async function recordBorrowerFacts(
   // nullable and the old demo seed used to leave files that way; nothing
   // creates one now, and minting a fresh party for each save would give one
   // person a new identity every time they corrected a typo.
-  if (!existingPartyId && !owner.userId) {
+  //
+  // A named person is the exception, and not because the rule is inconvenient:
+  // the owner is read here only to find the party BEHIND A SIGN-IN, and a
+  // co-borrower has none. Their party is minted below, once, by the call that
+  // names them.
+  if (!existingPartyId && !namedBy && !owner.userId) {
     throw new AppError(409, "A file with no owner cannot record a person.", "NO_OWNER");
   }
-  const partyId = existingPartyId ?? (await partyForUser(tx, owner.userId!));
-  const principalId = await principalForParty(tx, partyId);
+  const partyId =
+    existingPartyId ??
+    (namedBy
+      ? await createProvisionalParty(tx, { sourceFirstSeen: namedBy.sourceFirstSeen })
+      : await partyForUser(tx, owner.userId!));
+  const principalId = namedBy?.principalId ?? (await principalForParty(tx, partyId));
 
   await assertFacts(tx, partyId, principalId, [
     { predicate: "legal_name", value: { first: input.firstName, last: input.lastName } },

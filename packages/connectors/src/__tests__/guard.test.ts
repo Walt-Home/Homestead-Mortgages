@@ -33,6 +33,8 @@ import {
 } from "../index.js";
 
 const PARTY = "11111111-1111-1111-1111-111111111111";
+/** A real person with real grants of their own, who is on no borrower row here. */
+const NOT_ON_THE_FILE = "99999999-9999-9999-9999-999999999999";
 const NOW = new Date("2026-09-08T12:00:00.000Z");
 
 function borrower(id: string): Borrower {
@@ -55,6 +57,8 @@ function borrower(id: string): Borrower {
     firstTimeHomebuyer: null,
     isMilitary: false,
     currentHousing: "rent",
+    declaration: null,
+    residences: [],
   };
 }
 
@@ -70,8 +74,6 @@ function fileWith(borrowers: Borrower[]): LoanFile {
     borrowers,
     consents: [],
     application: null,
-    declaration: null,
-    residences: [],
     propertyRecord: null,
     valuation: null,
     flood: null,
@@ -126,11 +128,16 @@ const GRANTS: Grant[] = [
 
 /** A token for `category`, minted the way the API mints one. */
 function token(category: DataCategory, grants: Grant[] = GRANTS): PurposeToken {
+  return tokenFor(PARTY, category, grants);
+}
+
+/** The same, for a named party — the grants are rewritten to be that party's. */
+function tokenFor(partyId: string, category: DataCategory, grants: Grant[] = GRANTS): PurposeToken {
   const r = mintPurposeToken({
-    partyId: PARTY,
+    partyId,
     purpose: PURPOSE_FOR[category],
     dataCategory: category,
-    grants,
+    grants: grants.map((g) => ({ ...g, partyId })),
     now: NOW,
   });
   if (!r.ok) throw new Error(`test setup: ${r.message}`);
@@ -227,6 +234,51 @@ describe("the adapters, with and without a token", () => {
     const screened = await registry.screening.screenSanctions(file(), token("sanctions_screening"));
     expect(screened.data.listsChecked.length).toBeGreaterThan(0);
     expect(typeof screened.data.clear).toBe("boolean");
+  });
+
+  it("refuses every person-keyed pull when the token names somebody else", async () => {
+    // The party is half of what a token says, and until this the adapters read
+    // only the other half. Every route happens to mint from the primary
+    // borrower, so a real permission belonging to somebody who is not on this
+    // file — not on any file — fetched this file's data from all six of these.
+    // Rule 4 puts the guard in the adapters precisely so that a check the
+    // routes merely happen to perform is not the check.
+    const stranger = (category: DataCategory) => tokenFor(NOT_ON_THE_FILE, category);
+    const calls: readonly (readonly [string, () => Promise<unknown>])[] = [
+      ["credit", () => registry.credit.pullTriMerge(file(), stranger("credit_report"))],
+      [
+        "bank session",
+        () => registry.bank.createLinkSession(file(), stranger("bank_transactions")),
+      ],
+      [
+        "asset report",
+        () =>
+          registry.bank.fetchAssetReport(
+            file(),
+            stranger("bank_transactions"),
+            { sessionId: "s" },
+            12,
+          ),
+      ],
+      [
+        "payroll session",
+        () => registry.payroll.createLinkSession(file(), stranger("payroll_income")),
+      ],
+      ["payroll", () => registry.payroll.fetchPayroll(file(), stranger("payroll_income"), "s")],
+      ["transcripts", () => registry.irs.fetchTranscripts(file(), stranger("tax_transcript"), [])],
+      [
+        "screening",
+        () => registry.screening.screenSanctions(file(), stranger("sanctions_screening")),
+      ],
+      [
+        "liens",
+        () => registry.liens.searchLiens(file(), stranger("public_record_liens"), "0114230209"),
+      ],
+    ];
+
+    for (const [name, call] of calls) {
+      await expect(call(), name).rejects.toBeInstanceOf(AuthorizationError);
+    }
   });
 
   it("refuses a lien search with no APN rather than reporting a clean result", async () => {

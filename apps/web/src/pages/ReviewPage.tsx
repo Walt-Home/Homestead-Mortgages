@@ -52,6 +52,7 @@ import { branchesFor } from "../lib/flow.js";
 import { endingFor, proposedTerms } from "../lib/endings.js";
 import {
   ADVERSE_COPY,
+  CO_BORROWER_COPY,
   COUNTEROFFER_COPY,
   ENDING_COPY,
   REFERRED_COPY,
@@ -59,6 +60,7 @@ import {
   SIGN_LEAD,
 } from "../lib/outcomes.js";
 import { answerLines, type AnswerLine } from "../lib/declarations.js";
+import { borrowerName, coBorrowers, primaryBorrower } from "../lib/borrowers.js";
 import type { Assessment } from "../lib/api.js";
 
 /**
@@ -106,14 +108,24 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   const signed = Boolean(file?.applicationSignedAt);
   const intentRecorded = Boolean(file?.intentToProceedAt);
   const primaryResidence = file?.property?.occupancy === "primary_residence";
-  // What the borrower answered on screen 3, read back. Null is unasked, which
+  // Whose signature this screen is asking for, and who else is on the file.
+  // Read off the people rather than off the file: the answers below are one
+  // block per person, and a file-level copy rendered under a second name is
+  // one borrower's statement attributed to another.
+  const primary = primaryBorrower(file);
+  const others = coBorrowers(file);
+  // What the signer answered on screen 3, read back. Null is unasked, which
   // is why the block below says so rather than rendering an empty list.
-  const declaration = file?.declaration ?? null;
-  const residences = file?.residences ?? [];
+  const declaration = primary?.declaration ?? null;
   // What the signature says is true. One POST writes the declaration and the
-  // residences together, so a file has both or neither — and the gate is the
-  // declaration rather than the line count below, because a residence on its
-  // own would make that count non-zero while Section 5 went unanswered.
+  // residences together, so a borrower has both or neither — and the gate is
+  // the declaration rather than the line count below, because a residence on
+  // its own would make that count non-zero while Section 5 went unanswered.
+  //
+  // Only the signer's own answers gate their signature. A co-borrower's are
+  // theirs to give and theirs to attest to; holding this button until they
+  // have would make one person's progress wait on another's, and who signs
+  // what is not this screen's to change.
   const declared = declaration != null;
   const decision = file?.decision;
   const ratios = decision?.ratios;
@@ -165,10 +177,13 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     // above are true and complete — so an unanswered file must not be able to
     // reach it by any route, including a stale render.
     if (!declared) return;
-    if (!fileId || !file?.borrowers[0]) return;
+    if (!fileId || !primary) return;
     setSaving(true);
     setError(null);
-    const b = file.borrowers[0];
+    // The signer, and only them. HMDA collects demographics per application
+    // from each applicant, and this screen asks its three questions once — so
+    // it re-sends the person it asked and never a co-borrower it did not.
+    const b = primary;
     try {
       await api.post(`/files/${fileId}/borrowers`, {
         firstName: b.firstName,
@@ -530,10 +545,44 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
         <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">Nearly done</h1>
         <p className="mt-2 text-base text-ink-soft">{SIGNING_COPY.lead}</p>
 
-        <YourAnswers
-          lines={answerLines(declaration, residences)}
+        {/*
+          One block per person, in document order.
+
+          The questions are about the person answering — "have you declared
+          bankruptcy in the past seven years" has one answer per borrower — so
+          a file with two of them has two sets and neither may stand in for
+          the other. Each block reads that borrower's own stored answers and
+          nothing else.
+
+          The signer's block keeps the words it had and the link to change an
+          answer. A co-borrower's carries neither: screen 3 posts as whoever
+          is signed in, so a link from here would send the applicant to answer
+          in their own name, which is the thing the separate blocks exist to
+          stop.
+        */}
+        <Answers
+          heading={SIGNING_COPY.heading}
+          lines={answerLines(declaration, primary?.residences ?? [])}
+          unanswered={SIGNING_COPY.unanswered}
           to={`/f/${fileId}/declarations`}
         />
+        {others.map((who) => (
+          <Answers
+            key={who.id}
+            heading={CO_BORROWER_COPY.answersOf(borrowerName(who))}
+            lines={answerLines(who.declaration, who.residences)}
+            unanswered={CO_BORROWER_COPY.theirs(borrowerName(who))}
+            to={null}
+          />
+        ))}
+        {others.length > 0 && (
+          /* What a co-borrower is actually for, once there is one to explain.
+             It renders under the blocks rather than over them, because the
+             blocks are the answer to "where are their answers" and this is the
+             answer to "what are they asked" — and only the first of those is a
+             question somebody reading a co-borrower's empty block has. */
+          <p className="mt-4 text-sm text-ink-muted">{CO_BORROWER_COPY.whatTheyDo}</p>
+        )}
 
         {primaryResidence && (
           <DemographicQuestions value={demographics} onChange={setDemographics} />
@@ -625,31 +674,53 @@ function Reasons({
 }
 
 /**
- * The borrower's own answers, read back above the signature.
+ * One person's own answers, read back above the signature.
  *
  * Every line is something a person typed on screen 3. Nothing on this path
  * reads a connector: the list this replaced was built from a credit report, a
  * lien search, an asset report and a county record, so a file whose pulls had
  * not run showed five clean declarations above a signature — absence of
  * evidence rendered as the borrower's statement.
+ *
+ * The heading and the empty-state sentence are passed in rather than read from
+ * `SIGNING_COPY` here, because both name WHOSE answers these are. "What you
+ * told us" over a co-borrower's block is the same misattribution the derived
+ * declarations were, with the person swapped instead of the source.
+ *
+ * `to` is null when the reader is not the person who answers. Screen 3 posts
+ * as whoever is signed in, so a link out of somebody else's block would take
+ * the applicant to answer in their own name.
  */
-function YourAnswers({ lines, to }: { lines: readonly AnswerLine[]; to: string }) {
+function Answers({
+  heading,
+  lines,
+  unanswered,
+  to,
+}: {
+  heading: string;
+  lines: readonly AnswerLine[];
+  unanswered: string;
+  to: string | null;
+}) {
   if (lines.length === 0) {
-    // The sentence needs somewhere to go. It names work the borrower has to
-    // do on another screen, and without the link the only thing on this one
-    // that reacts to it is a button that is now refusing to be pressed.
+    // The sentence names work to be done on another screen, so it needs a way
+    // there wherever there is one to give: without the link the only thing on
+    // this page that reacts to it is a button that is now refusing to be
+    // pressed, which tells the reader they are stuck rather than where to go.
     return (
       <div className="mt-7">
-        <p className="text-base text-ink-soft">{SIGNING_COPY.unanswered}</p>
-        <Link to={to} className="super-link-quiet mt-2 inline-block text-sm">
-          {SIGNING_COPY.answerThem}
-        </Link>
+        <p className="text-base text-ink-soft">{unanswered}</p>
+        {to && (
+          <Link to={to} className="super-link-quiet mt-2 inline-block text-sm">
+            {SIGNING_COPY.answerThem}
+          </Link>
+        )}
       </div>
     );
   }
   return (
     <div className="mt-7 border-t border-rule-soft pt-5">
-      <p className="font-display text-base text-ink">{SIGNING_COPY.heading}</p>
+      <p className="font-display text-base text-ink">{heading}</p>
       <dl className="mt-4 flex flex-col gap-3">
         {lines.map((line) => (
           <div key={line.prompt} className="flex flex-col gap-0.5">
@@ -663,9 +734,11 @@ function YourAnswers({ lines, to }: { lines: readonly AnswerLine[]; to: string }
           </div>
         ))}
       </dl>
-      <Link to={to} className="super-link-quiet mt-4 inline-block text-sm">
-        {SIGNING_COPY.change}
-      </Link>
+      {to && (
+        <Link to={to} className="super-link-quiet mt-4 inline-block text-sm">
+          {SIGNING_COPY.change}
+        </Link>
+      )}
     </div>
   );
 }

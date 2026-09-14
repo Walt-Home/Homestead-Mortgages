@@ -24,6 +24,7 @@ import { getRequirement } from "@hm/requirements";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { assertFileAccess, recordEvent } from "../services/repository.js";
 import { applicationForFile } from "../services/applications.js";
+import { primaryBorrowerRow } from "../services/borrower-order.js";
 import { settleBorrowerAct } from "../services/standing.js";
 
 export const documentRouter = Router();
@@ -83,17 +84,12 @@ documentRouter.post(
         tx,
       );
 
-      // The uploader is whoever owns this file's first borrower row; the
-      // upload screen has no borrower id of its own to send. The id breaks the
-      // tie, the same way every other reader of `borrowers[0]` does: two rows
-      // written in one transaction can share a millisecond, and a ledger row
-      // that names the co-borrower as the person who uploaded something is a
-      // record of the wrong person having acted.
-      const borrower = await tx.borrower.findFirst({
-        where: { loanFileId: id },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        select: { partyId: true },
-      });
+      // The uploader is Borrower 1; the upload screen has no borrower id of
+      // its own to send. Resolved by ordinal, the way every reader of a file
+      // is ordered and the way the other screens that write one resolve it —
+      // a ledger row that names the co-borrower as the person who uploaded
+      // something is a record of the wrong person having acted.
+      const borrower = await primaryBorrowerRow(tx, id);
       const app = await applicationForFile(tx, id);
       if (app && borrower) {
         await settleBorrowerAct(tx, {

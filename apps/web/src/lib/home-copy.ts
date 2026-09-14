@@ -597,6 +597,14 @@ export function fileLabel(row: {
  *
  * Only for a file that is not the reader's own: on their own list every row
  * would carry their own name, which distinguishes nothing.
+ *
+ * Everybody on it, not the first of them. A file with a co-borrower is a joint
+ * application, and naming it after one of the two people on it is the list
+ * quietly deciding which of them it is about — the same read that an index
+ * into `borrowers` always was, on the one surface where the answer is neither
+ * of the two things the index used to mean. Four are permitted, so the names
+ * are joined rather than paired — and past two that is a list, because "A and
+ * B and C and D" is not a sentence anybody writes.
  */
 export function sharedFileLabel(row: {
   readonly borrowers: readonly { readonly firstName: string; readonly lastName: string }[];
@@ -605,11 +613,17 @@ export function sharedFileLabel(row: {
   readonly propertyState: string | null;
   readonly createdAt: string;
 }): string {
-  const who = row.borrowers[0];
-  if (!who) return fileLabel(row);
+  if (row.borrowers.length === 0) return fileLabel(row);
+  const names = row.borrowers.map((who) => `${who.firstName} ${who.lastName}`);
   const place =
     row.propertyCity && row.propertyState ? ` — ${row.propertyCity}, ${row.propertyState}` : "";
-  return `${who.firstName} ${who.lastName}${place}`;
+  return `${andList(names)}${place}`;
+}
+
+/** "A", "A and B", "A, B and C" — the shape four names have to read in. */
+function andList(names: readonly string[]): string {
+  if (names.length < 3) return names.join(" and ");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 /**

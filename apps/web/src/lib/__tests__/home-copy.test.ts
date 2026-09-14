@@ -37,6 +37,7 @@ import {
   START_BODY,
   fileLabel,
   labelWithStartTime,
+  sharedFileLabel,
 } from "../home-copy.js";
 import { SCREENS } from "../flow.js";
 import { ADVERSE_COPY } from "../outcomes.js";
@@ -89,7 +90,9 @@ const SHARED = {
 const CALLED: Calls = {
   // A shared file with a borrower on it, and one without — the second is the
   // fallback to the ordinary name, which is the branch a demo file with no
-  // borrower row would take.
+  // borrower row would take. One borrower and not two: the joint name is the
+  // same string with a second one joined into it, so a second call would add
+  // no rule coverage and would weigh the label side of the split below.
   sharedFileLabel: [[SHARED], [{ ...SHARED, borrowers: [] }], [{ ...SHARED, propertyCity: null }]],
   fileLabel: [
     [
@@ -596,6 +599,91 @@ describe("the labels this page takes rather than writes", () => {
     for (const payload of ["reason", "term", "estimate", "list", "notice", "document"]) {
       expect(SEE_WHERE_THIS_STANDS.toLowerCase(), payload).not.toContain(payload);
     }
+  });
+});
+
+/**
+ * A joint application is two people, and the list says so.
+ *
+ * This named the file after `borrowers[0]` while the wire only ever sent one
+ * of them, so the read and the shape agreed by accident. A file can carry four
+ * now, and naming one of the two people on a joint application after whichever
+ * of them sorts first is the list deciding whose file it is — on the one
+ * surface where the reader is looking for exactly that.
+ */
+describe("what somebody else's file is called", () => {
+  const shared = {
+    purpose: "PURCHASE",
+    propertyCity: "Austin",
+    propertyState: "TX",
+    createdAt: CREATED_AT,
+  };
+
+  it("names the one person on it", () => {
+    expect(
+      sharedFileLabel({ ...shared, borrowers: [{ firstName: "Maya", lastName: "Okafor" }] }),
+    ).toBe("Maya Okafor — Austin, TX");
+  });
+
+  it("names both people on a joint one", () => {
+    expect(
+      sharedFileLabel({
+        ...shared,
+        borrowers: [
+          { firstName: "Maya", lastName: "Okafor" },
+          { firstName: "Theo", lastName: "Okafor" },
+        ],
+      }),
+    ).toBe("Maya Okafor and Theo Okafor — Austin, TX");
+  });
+
+  it("reads as a list once there are more than two", () => {
+    // The schema carries four and the append route allocates up to it, so this
+    // is a reachable file and not a hypothetical one. "A and B and C" is not a
+    // sentence anybody writes, and the names are the whole of the label.
+    expect(
+      sharedFileLabel({
+        ...shared,
+        borrowers: [
+          { firstName: "Maya", lastName: "Okafor" },
+          { firstName: "Theo", lastName: "Okafor" },
+          { firstName: "Sam", lastName: "Okafor" },
+        ],
+      }),
+    ).toBe("Maya Okafor, Theo Okafor and Sam Okafor — Austin, TX");
+  });
+
+  it("reads as a list at the ceiling of four", () => {
+    expect(
+      sharedFileLabel({
+        ...shared,
+        borrowers: [
+          { firstName: "Maya", lastName: "Okafor" },
+          { firstName: "Theo", lastName: "Okafor" },
+          { firstName: "Sam", lastName: "Okafor" },
+          { firstName: "Kenji", lastName: "Okafor" },
+        ],
+      }),
+    ).toBe("Maya Okafor, Theo Okafor, Sam Okafor and Kenji Okafor — Austin, TX");
+  });
+
+  it("takes them in the order the row sends them, which is document order", () => {
+    // The API sorts a file's borrowers by `borrower_ordinal`, so the applicant
+    // is first. Sorting or reordering here would be this module holding a
+    // second opinion about who Borrower 1 is.
+    expect(
+      sharedFileLabel({
+        ...shared,
+        borrowers: [
+          { firstName: "Theo", lastName: "Okafor" },
+          { firstName: "Maya", lastName: "Okafor" },
+        ],
+      }),
+    ).toBe("Theo Okafor and Maya Okafor — Austin, TX");
+  });
+
+  it("falls back to the ordinary name when nobody is on it yet", () => {
+    expect(sharedFileLabel({ ...shared, borrowers: [] })).toBe(fileLabel(shared));
   });
 });
 

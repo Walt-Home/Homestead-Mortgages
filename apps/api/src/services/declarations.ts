@@ -27,8 +27,8 @@ import type { DuBankruptcyChapter, DuResidencyBasis, DuResidencyType, DuYesNo } 
 import type { BorrowerDeclaration, BorrowerResidence } from "@hm/shared";
 import { AppError } from "../middleware/error-handler.js";
 import { fromCents, toCents } from "./money.js";
-import { principalForParty } from "./party.js";
 import { ownsTransaction, type Db } from "./db.js";
+import { primaryBorrowerRow } from "./borrower-order.js";
 
 /** The housing basis, in the two vocabularies that have to agree. */
 const HOUSING_FOR_BASIS: Readonly<Record<DuResidencyBasis, "own" | "rent" | "rent_free">> = {
@@ -98,7 +98,7 @@ export interface DeclarationView {
 }
 
 /**
- * The edge this file's primary borrower answers on.
+ * The edge one borrower on this file answers on.
  *
  * A declaration hangs off `application_parties` and not off the party, because
  * the answer to "have you declared bankruptcy in the past seven years" is
@@ -106,8 +106,17 @@ export interface DeclarationView {
  * stay recoverable. A file with no application has nobody to answer as, and
  * saying so is better than lazily minting the credit request somebody has not
  * asked for.
+ *
+ * `borrowerId` names WHICH person is answering, and it is required as soon as
+ * a file carries more than one. Absent, it is the person whose request this is
+ * — Borrower 1, resolved through `primaryBorrowerRow`, which is the same
+ * ordinal every reader of a file is sorted by. Screen 3 posts without one, so
+ * resolving it any other way put the signer's Section 5 answers onto a
+ * different person's edge on a file whose ordinal 1 had been refilled: the
+ * review screen then showed the bankruptcy under somebody else's name and told
+ * the person who declared it that they had not answered yet.
  */
-async function borrowerEdge(db: Db, loanFileId: string) {
+async function borrowerEdge(db: Db, loanFileId: string, borrowerId?: string) {
   const application = await db.application.findUnique({
     where: { loanFileId },
     select: { id: true },
@@ -115,13 +124,18 @@ async function borrowerEdge(db: Db, loanFileId: string) {
   if (!application) {
     throw new AppError(409, "This file is not an application yet.", "NO_APPLICATION");
   }
-  const borrower = await db.borrower.findFirst({
-    where: { loanFileId },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { id: true, partyId: true },
-  });
+  // Scoped to the file, so an id from somebody else's application answers 404
+  // rather than writing a declaration onto a person this request cannot reach.
+  const borrower = borrowerId
+    ? await db.borrower.findFirst({
+        where: { loanFileId, id: borrowerId },
+        select: { id: true, partyId: true },
+      })
+    : await primaryBorrowerRow(db, loanFileId);
   if (!borrower) {
-    throw new AppError(409, "Tell us who you are first.", "NO_BORROWER");
+    throw borrowerId
+      ? new AppError(404, "That person is not on this file.", "NOT_FOUND")
+      : new AppError(409, "Tell us who you are first.", "NO_BORROWER");
   }
   const edge = await db.applicationParty.findFirst({
     where: { applicationId: application.id, partyId: borrower.partyId },
@@ -131,6 +145,41 @@ async function borrowerEdge(db: Db, loanFileId: string) {
     throw new AppError(409, "You are not on this application.", "NOT_ON_APPLICATION");
   }
   return { applicationId: application.id, borrower, edgeId: edge.id };
+}
+
+/**
+ * Who may say this, checked where a refusal can carry a sentence.
+ *
+ * `du_declarations_are_self_attested` is the rule and stays the backstop: a
+ * declaration is a statement the declaring borrower signs, a member of staff
+ * may record one taken by phone, and nobody else may write one at all. Letting
+ * that trigger be the only refusal would reach the caller as a 500 with the
+ * reason filed off, which is what every other constraint this path mirrors is
+ * mirrored to avoid.
+ *
+ * The asserting principal is the REQUESTER's, never the declaring borrower's.
+ * Deriving it from the person being declared about made every write
+ * self-attested by construction, so the trigger could not fire: an applicant
+ * answering for a co-borrower minted that co-borrower a BORROWER principal —
+ * for somebody who has never signed in — and recorded them as having
+ * personally attested to a bankruptcy on a screen they have never seen.
+ */
+async function assertMaySpeakFor(
+  db: Db,
+  principalId: string,
+  declaringPartyId: string,
+): Promise<void> {
+  const actor = await db.principal.findUnique({
+    where: { id: principalId },
+    select: { kind: true, partyId: true },
+  });
+  if (actor?.kind === "STAFF") return;
+  if (actor?.kind === "BORROWER" && actor.partyId === declaringPartyId) return;
+  throw new AppError(
+    403,
+    "Section 5 is answered by the borrower it is about, so we cannot record these answers for somebody else.",
+    "NOT_THE_DECLARING_BORROWER",
+  );
 }
 
 function declarationRow(
@@ -176,7 +225,19 @@ function declarationRow(
  */
 export async function recordDeclaration(
   loanFileId: string,
-  input: { declaration: DeclarationInput; residences: readonly ResidenceInput[] },
+  input: {
+    declaration: DeclarationInput;
+    residences: readonly ResidenceInput[];
+    /** Who is answering. Absent is borrower 1, the person whose request this is. */
+    borrowerId?: string;
+    /**
+     * Who is ASSERTING it, which is whoever made the request and not whoever
+     * it is about. The two are the same person on every borrower's own save
+     * and differ the moment a `borrowerId` names somebody else, which is the
+     * case `assertMaySpeakFor` refuses.
+     */
+    assertedByPrincipalId: string;
+  },
   db: Db = prisma,
 ): Promise<DeclarationView> {
   // The deferred trigger is why this cannot run statement by statement. The
@@ -188,8 +249,9 @@ export async function recordDeclaration(
     return prisma.$transaction((tx) => recordDeclaration(loanFileId, input, tx));
   }
 
-  const { edgeId, borrower } = await borrowerEdge(db, loanFileId);
-  const principalId = await principalForParty(db, borrower.partyId);
+  const { edgeId, borrower } = await borrowerEdge(db, loanFileId, input.borrowerId);
+  const principalId = input.assertedByPrincipalId;
+  await assertMaySpeakFor(db, principalId, borrower.partyId);
   const row = declarationRow(input.declaration);
 
   const declaration = await db.duDeclaration.upsert({
@@ -248,52 +310,74 @@ export async function recordDeclaration(
     },
   });
 
-  return (await loadDeclaration(loanFileId, db))!;
+  // Read back off the edge that was just written, never off the file's first
+  // borrower: a co-borrower's save would otherwise answer with the primary
+  // borrower's stored answers, and the screen that posted would render them
+  // as its own.
+  return (await answersOn(db, edgeId))!;
 }
 
-/**
- * The same edge, for a reader that has to answer about a file without one.
- *
- * `borrowerEdge` refuses — correctly, for a writer: a file with no application
- * has nobody to answer as, and saying so beats minting a credit request
- * nobody asked for. The projection is the other case. Every screen reads the
- * file, most of them before an application exists, and "nobody has been asked
- * yet" is the honest answer there rather than a 409 that would take the whole
- * file down with it.
- */
-async function borrowerEdgeIfAny(db: Db, loanFileId: string): Promise<string | null> {
-  try {
-    return (await borrowerEdge(db, loanFileId)).edgeId;
-  } catch (err) {
-    if (err instanceof AppError && err.statusCode === 409) return null;
-    throw err;
-  }
-}
+/** One person's answers, in the shape the loan file projection carries. */
+export type AnswersOnFile = Pick<DeclarationView, "declaration" | "residences">;
 
 /**
- * What the primary borrower answered, for the loan file projection.
+ * What every borrower on this file answered, by `borrowers.id`.
  *
- * The engine and the screen that reads the answers back both go through
- * `LoanFile`, so this is where the tables reach them. Null means unasked — not
- * "answered no", which is the distinction the questions turn on: a borrower
- * who has said nothing has not said no.
+ * The application and the edges are read once for the whole file; the answers
+ * themselves go through `answersOn` per person, because that is the one place
+ * a stored row becomes a view — cents into dollars, chapters into a list — and
+ * a second copy of that mapping is a second thing to keep true. Four borrowers
+ * is the schema's ceiling, so the loop is bounded by a CHECK constraint.
+ *
+ * A borrower with no entry has not been asked. That is not "answered no",
+ * which is the distinction every one of these questions turns on, and it is
+ * why an absent key is left absent rather than filled with an empty view.
  */
-export async function declarationOnFile(
+export async function declarationsOnFile(
   loanFileId: string,
   db: Db = prisma,
-): Promise<Pick<DeclarationView, "declaration" | "residences"> | null> {
-  const edgeId = await borrowerEdgeIfAny(db, loanFileId);
-  if (!edgeId) return null;
-  const view = await answersOn(db, edgeId);
-  return view && { declaration: view.declaration, residences: view.residences };
+): Promise<Map<string, AnswersOnFile>> {
+  const answers = new Map<string, AnswersOnFile>();
+  const application = await db.application.findUnique({
+    where: { loanFileId },
+    select: { id: true },
+  });
+  if (!application) return answers;
+
+  const borrowers = await db.borrower.findMany({
+    where: { loanFileId },
+    select: { id: true, partyId: true },
+  });
+  if (borrowers.length === 0) return answers;
+
+  const edges = await db.applicationParty.findMany({
+    where: { applicationId: application.id, partyId: { in: borrowers.map((b) => b.partyId) } },
+    select: { id: true, partyId: true },
+  });
+  const edgeByParty = new Map(edges.map((e) => [e.partyId, e.id]));
+
+  for (const borrower of borrowers) {
+    const edgeId = edgeByParty.get(borrower.partyId);
+    if (!edgeId) continue;
+    const view = await answersOn(db, edgeId);
+    if (view)
+      answers.set(borrower.id, { declaration: view.declaration, residences: view.residences });
+  }
+  return answers;
 }
 
-/** What was said, in dollars, with no bigint left for `res.json` to throw on. */
+/**
+ * What was said, in dollars, with no bigint left for `res.json` to throw on.
+ *
+ * The client stays last, like every other reader here, so a caller already
+ * inside a transaction sees what that transaction has written.
+ */
 export async function loadDeclaration(
   loanFileId: string,
+  borrowerId?: string,
   db: Db = prisma,
 ): Promise<DeclarationView | null> {
-  const { edgeId } = await borrowerEdge(db, loanFileId);
+  const { edgeId } = await borrowerEdge(db, loanFileId, borrowerId);
   return answersOn(db, edgeId);
 }
 

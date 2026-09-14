@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
 import { useLoanFile } from "../lib/file.js";
+import { primaryBorrower } from "../lib/borrowers.js";
 import { readDraft } from "../lib/identity.js";
 import { StatusPill } from "../components/StatusPill.js";
 import { useAuth } from "../lib/auth.js";
@@ -44,7 +45,11 @@ export function IdentityReturnPage() {
   const [reason, setReason] = useState<string | null>(null);
   const attempts = useRef(0);
 
-  const verificationId = data?.file.borrowers[0]?.identityVerification?.verificationId;
+  // The applicant's verification: screen 2 verifies the person signed in, and
+  // theirs is the session the vendor is handing back. Named rather than
+  // subscripted, because on a file with two borrowers the position and the
+  // person are two different claims and only one of them is meant here.
+  const verificationId = primaryBorrower(data?.file)?.identityVerification?.verificationId;
 
   /*
    * A saved draft is what says they left from the ID button.

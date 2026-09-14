@@ -14,11 +14,16 @@ import { BRITISH, DAY_FIRST, DELIVERY_TIME, PROMISES, REQ_ID } from "@hm/shared"
 import { endingFor, proposedTerms } from "../endings.js";
 import {
   ADVERSE_COPY,
+  CO_BORROWER_COPY,
   COUNTEROFFER_COPY,
   ENDING_COPY,
   REFERRED_COPY,
+  SIGNING_COPY,
   SIGN_LEAD,
 } from "../outcomes.js";
+
+/** A name to render the co-borrower lines with, since two of them take one. */
+const CO_BORROWER = "Theo Okafor";
 
 /** Every string a borrower can read out of the catalog. */
 const COPY = [
@@ -26,6 +31,13 @@ const COPY = [
   ...Object.values(ADVERSE_COPY),
   ...Object.values(COUNTEROFFER_COPY),
   ...Object.values(ENDING_COPY),
+  ...Object.values(SIGNING_COPY),
+  // Two of these are functions of a name, so they are rendered rather than
+  // walked: a line that only exists once a name is in it is still a line a
+  // borrower reads, and skipping it is how the rules stop seeing half a module.
+  ...Object.values(CO_BORROWER_COPY).map((line) =>
+    typeof line === "function" ? line(CO_BORROWER) : line,
+  ),
   SIGN_LEAD,
 ];
 

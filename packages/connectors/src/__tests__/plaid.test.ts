@@ -59,6 +59,20 @@ function token(
   return r.token;
 }
 
+/** The same permission, held by a party who is on no borrower row of this file. */
+function strangerToken(): PurposeToken {
+  const partyId = "99999999-9999-9999-9999-999999999999";
+  const r = mintPurposeToken({
+    partyId,
+    purpose: "fcra_written_instruction",
+    dataCategory: "bank_transactions",
+    grants: [{ ...GRANT, partyId }],
+    now: new Date("2026-09-08T12:00:00.000Z"),
+  });
+  if (!r.ok) throw new Error(`test setup: ${r.message}`);
+  return r.token;
+}
+
 function file(authorized = true): LoanFile {
   return {
     id: "11111111-1111-1111-1111-111111111111",
@@ -96,6 +110,8 @@ function file(authorized = true): LoanFile {
         firstTimeHomebuyer: null,
         isMilitary: false,
         currentHousing: "rent",
+        declaration: null,
+        residences: [],
       },
     ],
     consents: authorized
@@ -110,8 +126,6 @@ function file(authorized = true): LoanFile {
         ]
       : [],
     application: null,
-    declaration: null,
-    residences: [],
     propertyRecord: null,
     valuation: null,
     flood: null,
@@ -251,6 +265,21 @@ describe("plaid adapter — the guard", () => {
     await expect(c.createLinkSession(file(), token("credit_report"))).rejects.toBeInstanceOf(
       AuthorizationError,
     );
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("refuses a bank token that was minted for somebody else", async () => {
+    // The adapter written for a real vendor gets the same party check as the
+    // fixtures. A permission belonging to a party this file is not about is a
+    // real permission about the wrong person, and no request may leave for it.
+    const spy = vi.fn();
+    const { c } = connector(spy as unknown as typeof fetch);
+    await expect(c.createLinkSession(file(), strangerToken())).rejects.toBeInstanceOf(
+      AuthorizationError,
+    );
+    await expect(
+      c.fetchAssetReport(file(), strangerToken(), { sessionId: "s", publicToken: "pub" }, 12),
+    ).rejects.toBeInstanceOf(AuthorizationError);
     expect(spy).not.toHaveBeenCalled();
   });
 });

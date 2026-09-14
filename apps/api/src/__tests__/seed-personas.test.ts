@@ -248,18 +248,19 @@ describe("the seed walks every persona to its state", () => {
     // derived column asserting a basis with no `du_residences` row behind it,
     // which is the one thing that column is not allowed to do.
     //
-    // Each of the eight answers the declarations screen now, so each of them
-    // HAS a basis — and this is the assertion that says the column is still
-    // derived rather than manufactured: every stated basis has the row the
-    // borrower's own answer created behind it, and Dev, who answers nothing,
-    // states nothing.
+    // Everybody on a sample file answers the declarations screen now — the
+    // eight for themselves, and Dev through the staff principal that is the
+    // only way a co-borrower with no sign-in can answer at all. So each of
+    // them HAS a basis, and this is the assertion that says the column is
+    // still derived rather than manufactured: every stated basis has the row
+    // that person's own answer created behind it.
     await seedAll();
 
     const stated = await prisma.borrower.findMany({
       where: { currentHousing: { not: null } },
       select: { partyId: true, currentHousing: true, loanFileId: true },
     });
-    expect(stated).toHaveLength(SEEDED.length);
+    expect(stated).toHaveLength(SEEDED.length + 1);
 
     for (const borrower of stated) {
       const residence = await prisma.duResidence.findFirst({
@@ -276,10 +277,9 @@ describe("the seed walks every persona to its state", () => {
       expect(HOUSING_FOR_BASIS[residence!.basis]).toBe(borrower.currentHousing);
     }
 
-    // A co-borrower nobody asked. The declaration hangs off one edge, and
-    // commit 10 is where a second person answers for themselves.
-    const dev = await prisma.borrower.count({ where: { currentHousing: null } });
-    expect(dev).toBe(1);
+    // And nobody is left manufactured OR silent: a borrower with no basis
+    // would be one the seed walked past a screen it never put to them.
+    expect(await prisma.borrower.count({ where: { currentHousing: null } })).toBe(0);
 
     // The fact predicate stays empty: the column is derived from the table,
     // and a third store of the same answer is what this rule refuses.
@@ -297,7 +297,7 @@ describe("the seed walks every persona to its state", () => {
     for (const story of SEEDED) {
       const { file } = await persona(story.key);
       const loaded = await loadLoanFile(file.id);
-      expect(loaded!.declaration, story.key).not.toBeNull();
+      expect(loaded!.borrowers[0]!.declaration, story.key).not.toBeNull();
       const outstanding = assessAll(loaded!)
         .filter((a) => a.applies === true && a.satisfaction.status !== "satisfied")
         .map((a) => a.requirement.id);
@@ -555,20 +555,25 @@ describe("the guard on which borrower sorts first", () => {
    *
    * The thing being guarded is that `borrowers[0]` on Priya's file is Priya:
    * the purpose token is minted for that party, so Dev sorting first would
-   * pull her credit under his authorization. Only a `createdAt` tie can cause
-   * it, and a tie needs both rows — so the guard has to stand AFTER the
-   * co-borrower is inserted. Asked before, one row is on the file, the answer
-   * is the primary by construction, and the guard passes forever.
+   * pull her credit under his authorization. The order is decided by
+   * `application_parties.borrower_ordinal`, so the guard has to stand after
+   * the membership that allocates Dev's — and after his row, which has to
+   * exist first. Asked before either, the answer is the primary by
+   * construction and the guard passes forever.
    */
-  it("stands after the row that could beat the primary, and before any pull", () => {
+  it("stands after the position that decides the order, and before any pull", () => {
     const source = seedSource();
     const create = source.indexOf("const dev = await w.tx.borrower.create({");
-    const guard = source.indexOf("the co-borrower sorts first");
-    const onward = source.indexOf(
+    const position = source.indexOf(
       'ensureApplicationParty(w.tx, w.applicationId, party.id, "CO_BORROWER")',
     );
+    const guard = source.indexOf("the co-borrower holds the lower borrower_ordinal");
+    const onward = source.indexOf(
+      'grantConsent(w.tx, w.loanFileId, dev.id, "verification_authorization")',
+    );
     expect(create).toBeGreaterThan(-1);
-    expect(guard).toBeGreaterThan(create);
+    expect(position).toBeGreaterThan(create);
+    expect(guard).toBeGreaterThan(position);
     expect(onward).toBeGreaterThan(guard);
   });
 

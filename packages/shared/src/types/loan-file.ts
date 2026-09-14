@@ -9,7 +9,6 @@
 
 import type { LoanTerms, ProductSelection, SubjectProperty } from "./loan.js";
 import type { Borrower, Consent } from "./borrower.js";
-import type { BorrowerDeclaration, BorrowerResidence } from "./declaration.js";
 import type {
   AssetReport,
   CreditReport,
@@ -103,20 +102,17 @@ export interface LoanFile {
 
   readonly application: ApplicationReceipt | null;
 
-  /**
-   * Section 5 and the residence history, as the primary borrower answered
-   * them. Null until they have been asked — which is a different fact from
-   * "they answered no to everything", and nothing may render them the same.
+  /*
+   * Section 5 and the residence history are NOT here.
    *
-   * Read by the engine and by the screen that shows the answers back before
-   * the signature. There is no derivation anywhere near either: the five
-   * declarations screen 4 used to build out of a credit report, a lien search
-   * and an asset report are gone, because absence of evidence is not a "no"
-   * on a document somebody signs.
+   * They were, as borrower 1's answers under a file-level name, and the engine
+   * read them for every borrower on the file: a co-borrower's declared
+   * bankruptcy was answered with the first borrower's "no", above a signature
+   * attesting to it. They live on `Borrower` — one set per person, because
+   * that is how many sets there are — and the evaluators and conditions that
+   * read them walk `borrowers`. There is no file-level copy to fall back to,
+   * which is the point: a field that exists gets read.
    */
-  readonly declaration: BorrowerDeclaration | null;
-  /** Empty until the same answers are given; one current row, at most one prior. */
-  readonly residences: readonly BorrowerResidence[];
 
   /**
    * Public record about the property, retrieved on screen 1 rather than asked.

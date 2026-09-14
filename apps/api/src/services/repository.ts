@@ -35,7 +35,8 @@ import { AppError } from "../middleware/error-handler.js";
 import { displayNameFrom, factMapsByParty, requireIdentity } from "./borrower-projection.js";
 import type { Db } from "./db.js";
 import { liveFactsByParty } from "./party.js";
-import { declarationOnFile } from "./declarations.js";
+import { declarationsOnFile } from "./declarations.js";
+import { borrowerOrdinals, documentOrder } from "./borrower-order.js";
 import { sixPieces } from "./evidence.js";
 import { toDomainState } from "./transition.js";
 
@@ -150,11 +151,17 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
   const row = await db.loanFile.findUnique({
     where: { id },
     include: {
-      // Ordered, because every route reads `borrowers[0]` and means "the
-      // person whose request this is". Two borrowers created in one
+      // Ordered by creation and then by id: two borrowers created in one
       // transaction can share a millisecond at TIMESTAMP(3), so the id breaks
       // the tie — an arbitrary rule, but a stable one, and an unordered
       // include would make which person a file is about depend on the planner.
+      //
+      // The real order is DOCUMENT order and it is applied below, once the
+      // ordinals have been read: DU conveys a borrower's position by where
+      // they sit in the submission, so `borrower_ordinal` is what says who
+      // Borrower 2 is. This clause is the fallback under it — what a file with
+      // no application, or a borrower not yet put on one, is ordered by
+      // instead.
       borrowers: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
       consents: true,
       links: true,
@@ -218,7 +225,16 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
   // than off the borrower row: the answers belong to THIS credit request, and
   // a later request asks them again. Null the whole way down until somebody
   // has been asked, which is not the same fact as an answer of no.
-  const answers = await declarationOnFile(id, db);
+  //
+  // Per person, because the questions are about the person answering. A file
+  // with two borrowers has two sets, and a screen that read one file-level
+  // copy showed borrower 1's answers back under borrower 2's name.
+  const answersByBorrower = await declarationsOnFile(id, db);
+
+  // Where each person sits in the submitted document. Read once for the file;
+  // absent for a file with no application and for a party who is on the file
+  // but not yet on the credit request.
+  const ordinals = await borrowerOrdinals(db, id, partyIds);
 
   const borrowers: Borrower[] = row.borrowers.map((b) => {
     const who = requireIdentity(b.id, factsByParty.get(b.partyId) ?? new Map());
@@ -255,8 +271,24 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       // Situational: what they pay NOW, on THIS file. Stays on the row.
       currentHousing: b.currentHousing as Borrower["currentHousing"],
       monthlyRent: num(b.monthlyRent) ?? undefined,
+      // Theirs, not the file's. Absent means nobody has put the questions to
+      // this person yet, which is why it reads null rather than a set of
+      // answers that all happen to be no.
+      declaration: answersByBorrower.get(b.id)?.declaration ?? null,
+      residences: answersByBorrower.get(b.id)?.residences ?? [],
     };
   });
+
+  // Document order, once every borrower has been built.
+  //
+  // A person appended after borrower 1 is a later `created_at`, so the include
+  // above already happens to put them second — but "happens to" is the whole
+  // problem: a borrower who was dropped and replaced fills the vacancy at
+  // their ordinal and is the NEWEST row on the file, and reading the position
+  // off the creation time would file them last. The ordinal is where the
+  // position lives, and `borrower-order.ts` is where that rule lives, because
+  // the screens that WRITE a borrower resolve Borrower 1 through the same one.
+  const inDocumentOrder = documentOrder(borrowers, ordinals);
 
   const consents: Consent[] = row.consents.map((c) => ({
     kind: c.kind as Consent["kind"],
@@ -353,13 +385,10 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
         }
       : null,
 
-    borrowers,
+    borrowers: inDocumentOrder,
     consents,
 
     application,
-
-    declaration: answers?.declaration ?? null,
-    residences: answers?.residences ?? [],
 
     propertyRecord: latest<PropertyRecord>("property_record"),
     valuation: latest<AvmEstimate>("valuation"),
@@ -666,15 +695,28 @@ export async function listAccessibleFiles(userId: string, db: Db = prisma) {
       valueOrPrice: true,
       propertyCity: true,
       propertyState: true,
-      // The name is a fact on the party, not a column on the row. Ordered the
-      // same way the projection orders them, so the list and the file it opens
-      // name the same person.
+      // The name is a fact on the party, not a column on the row. Everybody on
+      // the file, not the first of them: a joint application named after one of
+      // the two people on it is the list deciding which of them it is about.
+      // Ordered the same way the projection orders them, so the list and the
+      // file it opens name the same people in the same order.
       borrowers: {
-        take: 1,
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { partyId: true },
       },
-      application: { select: { id: true, status: true, statusEnteredAt: true } },
+      // The ordinals come along so the names can be put in DOCUMENT order,
+      // which is the order the file itself lists them in. Creation order is
+      // close but not the same thing — a borrower who filled a freed position
+      // is the newest row and not the last borrower — and two surfaces naming
+      // one file must not disagree about who its applicant is.
+      application: {
+        select: {
+          id: true,
+          status: true,
+          statusEnteredAt: true,
+          parties: { select: { partyId: true, borrowerOrdinal: true } },
+        },
+      },
       decisions: {
         orderBy: { computedAt: "desc" },
         take: 1,
@@ -700,8 +742,8 @@ export async function listAccessibleFiles(userId: string, db: Db = prisma) {
     ),
   );
 
-  // `borrowers[0].firstName` is the shape callers already read, so no caller
-  // changes.
+  // A list of `{ firstName, lastName }`, which is the shape callers already
+  // read — it is simply no longer capped at one of them.
   return rows.map(
     ({
       borrowers,
@@ -739,8 +781,16 @@ export async function listAccessibleFiles(userId: string, db: Db = prisma) {
           }
         : null,
       borrowers: borrowers
-        .map((b) => displayNameFrom(names.get(b.partyId)?.value))
-        .filter((n): n is { firstName: string; lastName: string } => n !== null),
+        .map((b) => ({
+          // A party on the file who is not on the credit request has no
+          // position, and sorts after everybody who has one.
+          ordinal:
+            application?.parties.find((p) => p.partyId === b.partyId)?.borrowerOrdinal ??
+            Number.MAX_SAFE_INTEGER,
+          name: displayNameFrom(names.get(b.partyId)?.value),
+        }))
+        .sort((a, b) => a.ordinal - b.ordinal)
+        .flatMap(({ name }) => (name ? [name] : [])),
     }),
   );
 }

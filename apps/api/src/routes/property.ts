@@ -26,7 +26,7 @@ import {
 import { AddressNotFoundError } from "@hm/connectors";
 import { connectors } from "../services/connectors.js";
 import { screenAndRecord } from "../services/screening.js";
-import { tokenFor } from "../services/authorization.js";
+import { primaryBorrower, tokenFor } from "../services/authorization.js";
 import { prisma } from "@hm/db";
 import { config } from "../config.js";
 
@@ -324,7 +324,7 @@ propertyFileRouter.post(
 
     const result = await connectors().liens.searchLiens(
       file,
-      await tokenFor(file, "public_record_liens"),
+      await tokenFor(primaryBorrower(file), "public_record_liens"),
       apn.data,
     );
     await recordSnapshot(

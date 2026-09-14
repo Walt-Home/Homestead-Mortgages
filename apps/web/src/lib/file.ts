@@ -79,14 +79,33 @@ export interface LoanFileView {
       status: "pending" | "verified" | "failed";
       verifiedAt?: string;
     } | null;
+    /**
+     * Section 5 and the residence history, as THIS person answered them on
+     * screen 3. Null until they have been asked — which the review screen says
+     * out loud rather than rendering as a set of clean answers.
+     *
+     * Per person, because the questions are about the person answering. The
+     * review screen showed one file-level copy under whichever name it was
+     * rendering, so a co-borrower's block would have read back the applicant's
+     * answers above a signature.
+     */
+    declaration: BorrowerDeclaration | null;
+    residences: BorrowerResidence[];
   }[];
-  /**
-   * Section 5 and the residence history, as the primary borrower answered
-   * them on screen 3. Null until they have been asked — which the review
-   * screen says out loud rather than rendering as a set of clean answers.
+  /*
+   * There is deliberately no file-level `declaration` or `residences` here,
+   * and there is none to leave out: Section 5 and the residence history sit on
+   * each borrower above, because there is one set of answers per person and
+   * the questions are about the person answering.
+   *
+   * `LoanFile` used to carry borrower 1's two values at the top as well, and
+   * the engine read them from there. A screen that shows answers back is
+   * always showing one person's, so that copy rendered under a second name was
+   * one borrower's statement attributed to another. It came off the domain
+   * type, off the projection and off the wire together, and the engine walks
+   * `borrowers` instead — so a reader that reached for the file-level copy
+   * today would not compile anywhere, not just here.
    */
-  declaration: BorrowerDeclaration | null;
-  residences: BorrowerResidence[];
   consents: { kind: string; grantedAt: string; revokedAt?: string }[];
   loan: {
     purpose: string;

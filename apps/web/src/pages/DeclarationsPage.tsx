@@ -26,6 +26,7 @@ import { api, ApiError } from "../lib/api.js";
 import { PERSONA_READ_ONLY } from "../lib/auth.js";
 import { SAMPLE_FILE_START_YOUR_OWN } from "../lib/home-copy.js";
 import { useLoanFile } from "../lib/file.js";
+import { primaryBorrower } from "../lib/borrowers.js";
 import { Why } from "../components/Why.js";
 import {
   BANKRUPTCY_CHAPTERS,
@@ -80,8 +81,13 @@ export function DeclarationsPage() {
   useEffect(() => {
     if (seeded.current || !file) return;
     seeded.current = true;
-    if (file.declaration || file.residences.length > 0) {
-      setForm(formFrom(file.declaration, file.residences));
+    // The applicant's own stored answers, not the file's. This screen posts
+    // without naming a borrower, which the route reads as Borrower 1 — so
+    // seeding from anybody else would put one person's answers into a form
+    // that saves as another's.
+    const me = primaryBorrower(file);
+    if (me && (me.declaration || me.residences.length > 0)) {
+      setForm(formFrom(me.declaration, me.residences));
     }
   }, [file]);
 

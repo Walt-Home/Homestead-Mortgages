@@ -1091,9 +1091,12 @@ model Application {
 
 /// Which parties are on an application, and in what capacity.
 ///
-/// Plural from the start. The prototype reads `borrowers[0]` in a dozen places,
-/// and every one of them is a co-borrower quietly ignored — which is also how
-/// one person's signature came to authorize a pull about somebody else.
+/// Plural from the start. The prototype read `borrowers[0]` in a dozen places,
+/// and every one of them was a co-borrower quietly ignored — which is also how
+/// one person's signature came to authorize a pull about somebody else. The
+/// engine and the minter no longer do: a requirement is asked of every borrower
+/// and a purpose token is minted for a named one. The screens read it in one
+/// named helper; the routes still read it where they stand.
 model ApplicationParty {
   id            String      @id @default(uuid()) @db.Uuid
   applicationId String      @map("application_id") @db.Uuid

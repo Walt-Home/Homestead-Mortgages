@@ -16,7 +16,7 @@ import { prisma } from "@hm/db";
 import type { ConnectorRegistry } from "@hm/connectors";
 import type { LoanFile, SanctionsScreening } from "@hm/shared";
 import { applicationForFile } from "./applications.js";
-import { subjectPartyId, tokenFor } from "./authorization.js";
+import { primaryBorrower, subjectPartyId, tokenFor } from "./authorization.js";
 import { ownsTransaction, type Db } from "./db.js";
 import { servicePrincipal } from "./party.js";
 import { recordEvent, recordSnapshot } from "./repository.js";
@@ -44,7 +44,7 @@ export async function screenAndRecord(
 ): Promise<ScreeningOutcome> {
   const result = await registry.screening.screenSanctions(
     file,
-    await tokenFor(file, "sanctions_screening", db),
+    await tokenFor(primaryBorrower(file), "sanctions_screening", db),
   );
 
   const write = async (tx: Db): Promise<ScreeningOutcome> => {

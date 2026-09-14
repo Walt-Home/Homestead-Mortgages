@@ -20,6 +20,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
 import { useLoanFile, type LoanFileView } from "../lib/file.js";
+import { primaryBorrower } from "../lib/borrowers.js";
 import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
 import { Why } from "../components/Why.js";
 import { clearDraft, readDraft, saveDraft } from "../lib/identity.js";
@@ -134,7 +135,10 @@ export function revisitFrom(file: Pick<LoanFileView, "borrowers"> | undefined): 
   citizenship: string;
   maritalStatus: string;
 } | null {
-  const who = file?.borrowers[0];
+  // The person signed in, never "whoever is first". Screen 2 is about the
+  // applicant, and a file that has since gained a co-borrower still resumes
+  // this screen for the person whose request it is.
+  const who = primaryBorrower(file);
   if (!who) return null;
   return {
     identity: {
@@ -158,7 +162,7 @@ export function revisitFrom(file: Pick<LoanFileView, "borrowers"> | undefined): 
  * revisit without one; a `required` attribute was all that stood in the way.
  */
 export function ssnRequired(file: Pick<LoanFileView, "borrowers"> | undefined): boolean {
-  return !file?.borrowers[0]?.ssn.last4;
+  return !primaryBorrower(file)?.ssn.last4;
 }
 
 export function IdentityPage() {
@@ -392,8 +396,12 @@ export function IdentityPage() {
         ...(statedIncome > 0 ? { statedMonthlyIncome: statedIncome } : {}),
       });
 
-      const file = await api.get<{ file: { borrowers: { id: string }[] } }>(`/files/${fileId}`);
-      const borrowerId = file.file.borrowers[0]?.id;
+      const file = await api.get<{ file: LoanFileView }>(`/files/${fileId}`);
+      // The authorization is the applicant's own. It is read back off the file
+      // rather than off this form because the row is the server's answer to
+      // the save above, and a co-borrower on the file is not who just signed
+      // this screen.
+      const borrowerId = primaryBorrower(file.file)?.id;
       if (borrowerId) {
         // Always posted, never skipped on what the file already shows.
         //

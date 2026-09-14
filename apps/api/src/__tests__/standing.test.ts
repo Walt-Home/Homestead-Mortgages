@@ -43,7 +43,7 @@ import { decisionRouter } from "../routes/decision.js";
 import { propertyFileRouter } from "../routes/property.js";
 import { documentRouter } from "../routes/documents.js";
 import { applicationForFile } from "../services/applications.js";
-import { tokenFor } from "../services/authorization.js";
+import { primaryBorrower, tokenFor } from "../services/authorization.js";
 import { connectors } from "../services/connectors.js";
 import type { Db } from "../services/db.js";
 import { decideApplication, recordDecision } from "../services/decide.js";
@@ -174,7 +174,10 @@ async function connectAs(
   const file = (await loadLoanFile(fileId))!;
 
   if (kind === "credit") {
-    const credit = await registry.credit.pullTriMerge(file, await tokenFor(file, "credit_report"));
+    const credit = await registry.credit.pullTriMerge(
+      file,
+      await tokenFor(primaryBorrower(file), "credit_report"),
+    );
     await recordSnapshot(
       fileId,
       "credit",
@@ -192,14 +195,18 @@ async function connectAs(
       ? await (async () => {
           const outcome = await registry.bank.fetchAssetReport(
             file,
-            await tokenFor(file, "bank_transactions"),
+            await tokenFor(primaryBorrower(file), "bank_transactions"),
             { sessionId: "s" },
             12,
           );
           if (outcome.status !== "ready") throw new Error("fixture must answer immediately");
           return outcome.result;
         })()
-      : await registry.payroll.fetchPayroll(file, await tokenFor(file, "payroll_income"), "s");
+      : await registry.payroll.fetchPayroll(
+          file,
+          await tokenFor(primaryBorrower(file), "payroll_income"),
+          "s",
+        );
 
   return prisma.$transaction(async (tx) => {
     const snapshot = await recordSnapshot(

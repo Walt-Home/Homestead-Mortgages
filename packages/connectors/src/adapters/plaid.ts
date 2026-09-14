@@ -47,7 +47,7 @@ import type {
   IncomeSource,
   LoanFile,
 } from "@hm/shared";
-import { requireCategory } from "../guard.js";
+import { requireCategory, requireSubject } from "../guard.js";
 import type {
   AssetReportResult,
   BankConnector,
@@ -258,6 +258,7 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
       // Rule 4. The permission is now the parameter rather than a line at the
       // top, so it cannot be moved to the wrong side of the network call.
       requireCategory(token, "bank_transactions");
+      requireSubject(token, file);
 
       if (!cra) {
         // Assets needs no user token and no permissible purpose: it is not a
@@ -337,6 +338,7 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
       monthsRequested: number,
     ): Promise<AssetReportResult> {
       requireCategory(token, "bank_transactions");
+      requireSubject(token, file);
 
       if (monthsRequested < 12) {
         // CRD-017's cash-flow assessment and CRD-018's rent history both need

@@ -71,13 +71,14 @@ three lists rather than trusting it after they change.
   a borrower typed still has nothing behind it.
 - **The verification report identifier** is stored, and snapshots now say whose
   report they are. Assets still read neither.
+- **More than one borrower.** Two are now real above the database: a route
+  appends one, the projection orders everybody by `borrower_ordinal`, Section 5
+  is answered and stored per person, and the review screen renders a block
+  apiece. What is missing is a screen that adds one, a bank a second borrower
+  can link, demographics asked of each of them, and the signature — item 5.
 
 ### Missing
 
-- **More than one borrower.** The ordinal exists and the database holds the
-  rules; what is missing is above it — no route appends a second borrower, no
-  screen renders one, and thirty-two `borrowers[0]` sites in TypeScript source
-  still assume there is only ever one. DU allows four.
 - **The compute boundary** — which figures we assert and which DU derives —
   still unrecorded, still two untyped JSON columns.
 - **The submission itself**: the serializer that emits MISMO 3.4 with its
@@ -104,7 +105,7 @@ which have a longer lead time than anything above.
 | —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                          |
 | 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none               |
 | 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                       |
-| 5   | Up to four borrowers                | Yellow | Ordinal and its rules landed; no route, no screen, 35 sites              |
+| 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                 |
 | 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                        |
 | —   | The submission                      | Red    | Serializer, preflight, transport, response. Nothing yet                  |
 
@@ -209,24 +210,88 @@ landed too, so a report on a two-person file says whose it is — required for
 person-keyed kinds, forbidden for address-keyed ones, and an unrecognized kind
 raises. Assets read neither yet.
 
-**Item 5 — up to four borrowers.** Half done, and the half that landed is the
-one the database owns. `application_parties.borrower_ordinal` exists, is
-constrained to one through four, admits exactly one Borrower 1, is required of
-a borrowing role and forbidden of a non-borrowing one, and existing rows were
-backfilled; `ensureApplicationParty` locks the application and allocates the
-smallest free position, so two concurrent appends cannot take the same one.
+**Item 5 — up to four borrowers.** The database half landed first.
+`application_parties.borrower_ordinal` exists, is constrained to one through
+four, admits exactly one Borrower 1, is required of a borrowing role and
+forbidden of a non-borrowing one, and existing rows were backfilled;
+`ensureApplicationParty` locks the application and allocates the smallest free
+position, so two concurrent appends cannot take the same one.
 
-What is missing is everything above it. `POST /api/files/:id/borrowers` still
-updates the first borrower or creates the only one — it cannot append. No
-co-borrower screen. `connector_links` is unique on `(loanFileId, kind)`, so a
-second borrower cannot link their own bank. And thirty-two `borrowers[0]`
-sites in TypeScript source still assume there is only ever one, of which the
-engine and the authorization boundary hold eleven and the screens seven.
-Thirty-three counting the one comment in `schema.prisma`, sixty-six counting
-tests and migrations — the figure moves a lot with the filter, so it is stated
-here with its filter attached. The `twenty-four` this page carried until now
-was not reachable under any of them, and was already wrong when it was
-written rather than having gone stale.
+Two borrowers are now real above it as well. `POST /api/files/:id/co-borrowers`
+appends a person — a PROVISIONAL party, since a co-borrower named by the
+applicant has never signed in and has asserted nothing themselves — and takes
+the smallest free position. The projection orders a file's borrowers by that
+position rather than by when the row was written, which is the same order DU
+reads them in. Section 5 and the residence history hang off the person, not the
+file: `POST /files/:id/declaration` takes a `borrowerId`, each borrower carries
+their own answers, and `borrowers.current_housing` reads NULL for a co-borrower
+who has not been asked. The review screen renders a block per person under
+their own name, and the file list names everybody on a joint application.
+
+Naming a borrower is not answering for them. The row is stamped with the
+principal of whoever sent the request, and `du_declarations_are_self_attested`
+admits the declaring borrower or a member of staff and nobody else — so an
+applicant posting a co-borrower's `borrowerId` is refused with a 403 rather
+than recording that person as having attested to a bankruptcy on a form they
+have never seen. A fifth append is refused too, as a 409 naming the ceiling
+rather than the 500 the ordinal allocator used to surface.
+
+The engine and the authorization boundary came off the subscript with it.
+`satisfaction.ts` puts its per-applicant requirements to everybody through
+`ofEveryBorrower` — satisfied only once every answer is in, unsatisfied naming
+whoever is still missing — and the three-valued ones through `ofAnyBorrower`,
+which stays `null` while anybody is silent rather than letting one person's
+answer settle a question about another. APP-005 and APP-012 read that
+borrower's own consent row rather than a file-level `some()`, which is what the
+only minter does: `tokenFor` takes a Borrower rather than a `LoanFile` and
+filters `authorizations` by that party, and `requireSubject` refuses inside the
+adapters a token naming somebody who is not on the file. So the party half of
+"nothing may be pulled before APP-005" is enforced where the pull happens, not
+at the route.
+
+Two answers are still settled by a co-borrower's silence, and they are the two
+the party projection supplies for free. `marital_status` is required of every
+party and `preferred_language` falls back to `en`, so APP-015 and APP-017 read
+back an answer for somebody nobody asked — the applicant stated both on the
+append, and neither has been put to the person it is about.
+
+Four more have no path to an answer for a second borrower at all, and that is a
+consequence already in the tree rather than work still ahead. APP-001 wants an
+identity verification, and the ID scan is a POST only a signed-in borrower can
+make; APP-005 and APP-012 want that person's own signature; APP-011 wants
+demographics, which the append takes as a nullable field and no screen goes
+back to ask. Asked of every borrower, they now sit outstanding on a joint file
+with nothing on any screen able to clear them — APP-011's screen is `identity`,
+and `branchesFor` renders a card for payroll, the IRS and documents and for
+nothing else. They reach a decided file as open conditions rather than parking
+it at "Needs you".
+
+What is still missing is narrower than it was, and none of it is structural:
+
+- **No screen adds one.** The route is there and nothing in `apps/web` posts to
+  it, so a second borrower can only arrive through the API.
+- **`connector_links` is unique on `(loanFileId, kind)`**, so a second borrower
+  cannot link their own bank.
+- **The demographics are asked once**, of the applicant. Regulation B wants
+  them requested of each applicant, and screen 5 asks its three questions of
+  the person signing.
+- **A co-borrower's Section 5 cannot be written at all** until they have a
+  session of their own or a member of staff takes the answers by phone, and
+  there is no staff route either. The refusal is the correct one — a
+  declaration is a statement the declaring borrower signs — but it means a
+  joint application is not completable by the applicant alone, and the
+  signature is still the applicant's own.
+- **Twelve `borrowers[0]` reads remain** in TypeScript source excluding tests
+  — sixteen lines counting the four comments that name it, sixty-six counting
+  tests, sixty-seven counting the one comment in `schema.prisma`. The
+  figure moves a lot with the filter, so it is stated here with its filter
+  attached. Eleven of the twelve are server-side: five in the connector routes,
+  two in `routes/application.ts`, one in `routes/esign.ts`, one in
+  `primaryBorrower`, one in the persona seed's ordering guard, and the one in
+  `conditions.ts` that says whose the file's single credit report is.
+  `satisfaction.ts` holds none of them any more. The twelfth is the screens'
+  own, in `apps/web/src/lib/borrowers.ts`, where `primaryBorrower` names the
+  intent the subscript used to stand for.
 
 **Item 6 — assets, liabilities and owned property.** Built, jointly owned from
 the first migration. `OWNED_PROPERTY` nests inside an asset through a composite
@@ -285,9 +350,11 @@ own answers and the signature attests to answers they gave.
 Dependency order, not importance. No time estimates — build a schedule from
 this with the people doing the work.
 
-1. **The second borrower.** An appending route, an ordinal column, a
-   co-borrower screen, and a deliberate choice at each `borrowers[0]` site. The
-   database is already shaped for it.
+1. **The second borrower.** The ordinal column, the appending route, per-person
+   declarations, an engine that judges each person on their own answers, and a
+   review screen that renders both are done. What is left is a screen that adds
+   one, a bank each of them can link, the demographics asked of each applicant,
+   and a signature apiece.
 2. **Write down the compute boundary** and type the two JSON columns.
 3. **Vesting and the non-borrower parties**, which every shipped sample carries
    and no submission can omit.

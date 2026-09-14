@@ -7,8 +7,13 @@
  * somebody's editor. `npm run du:verify` regenerates in memory and fails on
  * drift, so the committed copies cannot silently diverge from the spec.
  *
- * The spec files themselves are not in this repository and must not be. The
- * generator reads them from DU_SPEC_DIR and says so when it cannot.
+ * The MISMO schema chain the generator reads is vendored, in
+ * `packages/du-schema/xsd` — which is what lets `du:verify` re-derive every
+ * child sequence in `generated/order.ts` on a machine that has nothing else,
+ * and re-count from the eighteen vendored samples which arcs in
+ * `generated/arcroles.ts` a shipped DU document actually carries. Fannie Mae's
+ * workbook is not: the generator reads it from DU_SPEC_DIR and names what it
+ * could not check when that is unset.
  *
  * Nothing here is wired to a route or a screen. The generated tables are what
  * the serializer will emit against, and the serializer comes later; the writers
@@ -24,6 +29,12 @@ export {
   DU_ENUMERATIONS,
   LOCAL_ENUMERATIONS,
 } from "./generated/enums.js";
+export {
+  DU_ARCROLES,
+  DU_RELATIONSHIP_XPATH,
+  type DuArcRole,
+  type DuArcRoleEndpoint,
+} from "./generated/arcroles.js";
 export { DU_FORMATS, type DuFormat } from "./generated/lengths.js";
 export {
   DU_CARDINALITY,

@@ -83,28 +83,30 @@ three lists rather than trusting it after they change.
 - **The submission itself**: the serializer that emits MISMO 3.4 with its
   `RELATIONSHIP` arcs, the preflight that refuses to send a file DU would
   reject, the transport, and the inbound path for a findings report, a
-  recommendation and DU's casefile id.
+  recommendation and DU's casefile id. The arcs it has to write are at least
+  described now — `generated/arcroles.ts` holds all eleven, both ends of each,
+  and which nine a shipped sample carries — but nothing emits one.
 
 And one that is not code: **institution credentials and the agency agreement**,
 which have a longer lead time than anything above.
 
 ## At a glance
 
-| #   | Item                                | Status | One line                                                    |
-| --- | ----------------------------------- | ------ | ----------------------------------------------------------- |
-| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced          |
-| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked      |
-| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull           |
-| —   | The generators and `du:verify`      | Green  | Order from the schema, enums from DU's tab, drift fails CI  |
-| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once and waiting for a response     |
-| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate             |
-| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person |
-| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets             |
-| 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none  |
-| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it          |
-| 5   | Up to four borrowers                | Yellow | Ordinal and its rules landed; no route, no screen, 35 sites |
-| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary           |
-| —   | The submission                      | Red    | Serializer, preflight, transport, response. Nothing yet     |
+| #   | Item                                | Status | One line                                                            |
+| --- | ----------------------------------- | ------ | ------------------------------------------------------------------- |
+| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                  |
+| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked              |
+| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                   |
+| —   | The generators and `du:verify`      | Green  | Order and arcs from the corpus, enums from DU's tab, drift fails CI |
+| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once and waiting for a response             |
+| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                     |
+| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person         |
+| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                     |
+| 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none          |
+| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                  |
+| 5   | Up to four borrowers                | Yellow | Ordinal and its rules landed; no route, no screen, 35 sites         |
+| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                   |
+| —   | The submission                      | Red    | Serializer, preflight, transport, response. Nothing yet             |
 
 **The three that blocked any submission are closed.** Declarations, the current
 residence, and assets with liabilities and owned property were each a hard stop
@@ -123,9 +125,30 @@ Decided 2026-09-11.
 That decision is what makes the schema chain ours to satisfy, the compute
 boundary ours to draw, and the casefile a thing that has to round-trip. It is
 also why the specification corpus is a dependency rather than reference
-material — though the corpus itself is **not in this repository**, and that is
-deliberate: `scripts/build-du.mjs` reads it from `DU_SPEC_DIR` and commits only
-the TypeScript it derives.
+material, and the corpus now splits in two:
+
+- **The schema chain is vendored**, in `packages/du-schema` — nine XSDs, the
+  transitive closure of the DU wrapper's imports, plus Fannie's eighteen test
+  cases and a README naming where every file came from. It is a frozen 2016
+  MISMO publication and a dated Fannie release, it is what makes an emitted
+  document either legal or not, and having it in the tree is what lets
+  `du:verify` re-derive every child sequence in `generated/order.ts` on a
+  machine with nothing else, and re-count from the eighteen samples which arcs
+  in `generated/arcroles.ts` a shipped DU document actually carries. Its own
+  suite validates all eighteen samples against the chain on every `npm test`.
+- **The workbook is not**, and the reason is not size — it is 728K, against
+  10.4M for the chain. It is that the workbook is a document that moves, reissued
+  several times a year, and git keeps every copy. `scripts/build-du.mjs` reads it
+  from `DU_SPEC_DIR`, commits only the TypeScript it derives, and names what it
+  could not check when the variable is unset. Vendoring it too would cost about
+  707K and would close that gap in CI; nobody has decided to.
+
+Schema validity is a lint and not a gate, and `packages/du-schema/README.md` is
+where that is spelled out: a dangling `xlink:to`, a duplicate label, an invented
+arcrole, five borrowers, a deleted `RELATIONSHIPS` container and a document with
+no `<LOANS>` and no `<PARTY>` in it at all — nothing to underwrite and nobody to
+underwrite it — all validate. Its own tests assert every one of them passes, so
+nobody promotes `xmllint` to a gate later.
 
 ### What is still open, and it is not technical
 
@@ -135,10 +158,16 @@ submission goes in under a seller/servicer number, so:
 - **Whose institution credentials do we submit under, and what does the agency
   agreement permit?** Presumably Grander's, since they are the creditor — but
   that is a contract question, not one the code can decide.
-- **May MISMO's reference model and Fannie's schema chain be vendored into
-  this repository?** The EULA has a named answer in its header and somebody
-  with authority to accept it has to read it. Until then the build reads them
-  from a path, which works and is the design's own fallback.
+- **The schema chain is vendored under a decision, not under a signed
+  license.** The instruction is to build as though the EULA and the DU
+  integration agreement are in place, on the understanding that no real
+  borrower and no real loan goes through this system until they are. MISMO's
+  five files carry a copyright notice and point at the MISMO End User License
+  Agreement; Fannie's four and the eighteen samples carry no notice and sit
+  under the DU integration agreement; `xml.xsd` is the W3C's. Whose each file
+  is, is recorded in `packages/du-schema/README.md`, and a test fails if a
+  re-vendor brings in one nobody assigned. Somebody with authority to accept
+  the EULA still has to read it.
 - A smaller one of the same kind: the conditionality table is keyed by **85
   condition statements verbatim**. They are short functional predicates, they
   are what makes a parse failure legible, and they are Fannie's words. Swapping
@@ -281,11 +310,28 @@ the liability secured by it, and income items to employers as first-class
 entities. A DU submission is a **graph of `RELATIONSHIP` arcs**, not a nested
 document, and that is the fact the data model had to satisfy.
 
-**Two counts in the original audit are off, and this document repeated them.**
-The ArcRoles tab holds **23** arcs, not 82 — 82 was the sheet's row count,
-including a three-row header and trailing blanks. Eleven of the 23 appear
-across all eighteen shipped samples. The Cardinality tab holds **171** distinct
+**Two counts in the original audit are off, this document repeated them, and
+the first correction was wrong too.** The ArcRoles tab holds **11** arcs, not
+82 and not 23. The reason both readings overshoot is the tab's shape: it
+describes every arc **twice**, once in its "Establishing Endpoints in the
+Relationship" section and once as a `RELATIONSHIP` block, across 82 rows
+including headers, sub-headings and a blank line between blocks. No count of
+its rows is a count of its arcs. **Nine** of the eleven appear across the
+eighteen shipped samples; the two that do not are the two that compute an income
+figure, `UNDERWRITING_VERIFICATION_IsAssociatedWith_ASSET` and `..._EMPLOYER`.
+All of that is now `packages/du/src/generated/arcroles.ts`, generated rather
+than counted by hand, and `du:verify` re-counts the corpus column against the
+vendored samples on every run. The Cardinality tab holds **171** distinct
 container XPaths, not 174.
+
+**And the tab disagrees with itself at two ends.**
+`UNDERWRITING_VERIFICATION_IsAssociatedWith_ASSET` targets
+`OWNED_PROPERTY_DETAIL` in its endpoint XPath and its Target column, and `ASSET`
+in its `to` row and in the arcrole's own name; the EMPLOYER one targets
+`EMPLOYER` by XPath and by name, and `EMPLOYMENT` by column and by `to` row. The
+generated table carries all four names at each end and a `disputed` flag, and
+picks neither — the arcs are the two nothing has been seen to send, so there is
+no shipped example to break the tie, and it is a question for Fannie Mae.
 
 **And validating the XML proves much less than it looks like it does.** The XSD
 enforces almost nothing about the relationship graph: a dangling `xlink:to`, a

@@ -19,15 +19,19 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  ARCROLE_SECTIONS,
   ASSET_TYPE_SECTIONS,
   BLANK_ENUMERATION_CELLS,
   COLUMN_NAME_ALIASES,
   DU_DATA_POINT_FOR_ENUM,
   TAB_DISAGREEMENTS,
   UNPARSEABLE_STATEMENTS,
+  arcRoleColumnNamesFor,
+  arcRolesInCorpus,
   assetTypeListsInMigration,
   buildOrderTable,
   checkTabDisagreements,
+  deriveArcRoles,
   deriveAssetTypeSections,
   deriveEnumerations,
   diffAssetTypeChecks,
@@ -35,7 +39,9 @@ import {
   parseCardinality,
   parseConditionality,
   parseFormat,
+  parseGeneratedArcRoles,
   parseGeneratedAssetTypeSections,
+  parseGeneratedOrder,
   prismaEnums,
   resolveSpecFiles,
 } from "../../../../scripts/build-du.mjs";
@@ -96,11 +102,27 @@ describe("the spec directory", () => {
     );
   });
 
+  it("asks for the workbook and not for the vendored XSDs", () => {
+    // The variable named five files once. Four of them are now in
+    // packages/du-schema/xsd, and a message still demanding them would send
+    // somebody hunting for a corpus to satisfy a check that no longer reads it.
+    const message = (() => {
+      try {
+        resolveSpecFiles({});
+        return "";
+      } catch (error) {
+        return error.message;
+      }
+    })();
+    expect(message).toMatch(/DU_Specification v1\.9\.3\.xlsx/);
+    expect(message).not.toMatch(/\.xsd/);
+  });
+
   it("separates an unset variable from one pointing somewhere wrong", () => {
     // Two different events wearing one error class. Unset is a machine without
-    // the licensed corpus; set-but-wrong is somebody who asked for the check
-    // and typo'd the path, and reporting that as an absent spec is how a green
-    // build comes to have verified nothing.
+    // the licensed workbook; set-but-wrong is somebody who asked for the check
+    // and typo'd the path, and reporting that as an absent workbook is how a
+    // green build comes to have verified less than it looked like.
     expect(() => resolveSpecFiles({})).toThrow(expect.objectContaining({ unset: true }));
     expect(() => resolveSpecFiles({ DU_SPEC_DIR: "/nonexistent" })).toThrow(
       expect.objectContaining({ unset: false }),
@@ -108,11 +130,51 @@ describe("the spec directory", () => {
   });
 });
 
-describe("--verify without the spec", () => {
-  it("skips the regeneration half when DU_SPEC_DIR is unset", () => {
+describe("--verify without the workbook", () => {
+  it("still checks the vendored chain and the vendored samples, and says what it skipped", () => {
+    // The vendored corpus is what makes this more than a skip: element order
+    // comes back out of the XSDs and the arcs' corpus column out of the
+    // eighteen samples, both on a machine with no workbook at all. So the
+    // message names what did NOT get checked rather than calling the whole
+    // regeneration check skipped.
     const result = runScript(["--verify"], {});
-    expect(result.stdout).toMatch(/skipped the regeneration check: DU_SPEC_DIR is not set/);
+    expect(result.stdout).toMatch(/child sequences in order\.ts match the vendored MISMO chain/);
+    expect(result.stdout).toMatch(/arcroles in arcroles\.ts are exercised by the vendored samples/);
+    expect(result.stdout).toMatch(
+      /skipped the workbook check \(enums, lengths, cardinality, conditionality, and the arcroles' endpoints\): DU_SPEC_DIR is not set/,
+    );
     expect(result.status).toBe(0);
+  });
+
+  it("is described by the comment the deploy workflow runs it under", () => {
+    // That comment presents itself as the exhaustive list of what this step
+    // checks without the workbook, and it is what gets believed — the step's
+    // own output scrolls past in a CI log nobody reads twice. So the list is
+    // derived from the run rather than trusted beside it: every committed file
+    // the always-run checks name has to appear in the comment, and so does the
+    // tail of the skip line.
+    const workflow = readFileSync(resolve(ROOT, ".github/workflows/deploy.yml"), "utf8");
+    const lines = workflow.split("\n");
+    const step = lines.findIndex((line) => line.includes("name: DU tables match the spec"));
+    expect(step).toBeGreaterThan(-1);
+    let first = step;
+    while (first > 0 && /^\s*(#|$)/.test(lines[first - 1])) first -= 1;
+    const comment = lines.slice(first, step).join(" ").replace(/\s+/g, " ");
+
+    const result = runScript(["--verify"], {});
+    const checked = new Set(
+      result.stdout
+        .split("\n")
+        .filter((line) => line.startsWith("✓"))
+        .flatMap((line) => [...line.matchAll(/\b[a-z_]+\.(?:ts|prisma)\b/g)].map((m) => m[0])),
+    );
+    expect(checked.size).toBeGreaterThan(2);
+    for (const file of checked) {
+      expect(comment, `${file} is checked without the workbook and the comment omits it`).toContain(
+        file,
+      );
+    }
+    expect(comment).toContain("the arcroles' endpoints");
   });
 
   it("fails, and lists the files, when DU_SPEC_DIR points somewhere wrong", () => {
@@ -122,19 +184,41 @@ describe("--verify without the spec", () => {
     // The whole message, not its first line: the list of what is missing is
     // the only part that says what to do about it.
     expect(result.stderr).toMatch(/DU_Specification v1\.9\.3\.xlsx/);
-    expect(result.stderr).toMatch(/MISMO_3\.4\.0_B324\.xsd/);
     expect(result.stderr).toMatch(/unset DU_SPEC_DIR to skip/);
   });
 });
 
 describe("the workbook's own column list", () => {
-  it("names the one heading the two places spell differently", () => {
+  it("names the two headings the two places spell differently", () => {
     // An alias is a hole in the check that stops a renamed or reordered column
     // from being read as the column beside it, so the count is part of the
-    // promise: one heading needs it, and a second one arriving needs a reader.
+    // promise: two headings need one, and a third arriving needs a reader.
     expect(Object.entries(COLUMN_NAME_ALIASES)).toEqual([
       ["DU, Credit, Early Check Cardinality MIN:MAX", "DU, EC Cardinality MIN:MAX"],
+      ["ArcRole", "ArcRoles"],
     ]);
+  });
+
+  it("splits the ArcRoles tab's two column lists rather than concatenating them", () => {
+    // That tab is two tables under one heading. Read as one list, the second
+    // table's headings would be compared against the first table's columns, and
+    // the check that stops a reordered column would be checking nothing.
+    const description = [
+      { number: 1, cells: ["", "ArcRoles Tab", ""] },
+      { number: 2, cells: ["", "Establishing Endpoints in the Relationship", ""] },
+      { number: 3, cells: ["", "Column Name", "Column Definition"] },
+      { number: 4, cells: ["", "ArcRoles", "The name of the ArcRole."] },
+      { number: 5, cells: ["", "Source", "The source container."] },
+      { number: 6, cells: ["", "Relationships Container", ""] },
+      { number: 7, cells: ["", "Column Name", "Column Definition"] },
+      { number: 8, cells: ["", "Value", "The name of the ArcRole."] },
+      { number: 9, cells: ["", "DU Removals Tab*", ""] },
+      { number: 10, cells: ["", "Field ID", "The reference number."] },
+    ];
+    expect(arcRoleColumnNamesFor(description, ARCROLE_SECTIONS)).toEqual({
+      endpoints: ["ArcRoles", "Source"],
+      relationships: ["Value"],
+    });
   });
 });
 
@@ -489,6 +573,273 @@ describe("child order", () => {
 
   it("throws on a path that does not start at MESSAGE", () => {
     expect(() => buildOrderTable(schema, ["DEAL_SETS/DEAL_SET"])).toThrow(/does not start at/);
+  });
+});
+
+describe("reading the committed order table back", () => {
+  // The XPath list the schema-order check walks comes out of the committed
+  // file, because the workbook that named those XPaths is not on every machine.
+  // That is what makes the check runnable in CI, and parsing is where it can
+  // quietly stop working.
+  const source = readFileSync(resolve(ROOT, "packages/du/src/generated/order.ts"), "utf8");
+
+  it("recovers both tables from the file the script writes", () => {
+    const { childOrder, typeForPath } = parseGeneratedOrder(source);
+    expect(childOrder["ABOUT_VERSIONS"]).toEqual(["ABOUT_VERSION", "EXTENSION"]);
+    expect(typeForPath["MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL"]).toBe("DEAL");
+  });
+
+  it("stops rather than reading a hand-edited file as an empty table", () => {
+    // An empty table would make the diff vacuous, and a vacuous diff is a green
+    // tick over a file nobody checked.
+    expect(() => parseGeneratedOrder("export const CHILD_ORDER = {\n} as const;")).toThrow(
+      /no TYPE_FOR_PATH in the shape this script writes/,
+    );
+    expect(() => parseGeneratedOrder("// nothing")).toThrow(
+      /no CHILD_ORDER in the shape this script writes/,
+    );
+  });
+});
+
+describe("arc roles", () => {
+  /**
+   * One arc, described the way the ArcRoles tab describes every arc: once in
+   * the endpoints section and once as a RELATIONSHIP block. The helpers below
+   * bend one field at a time, which is the only way to tell the machinery from
+   * the facts the real tab happens to carry.
+   */
+  const NS = "urn:fdc:mismo.org:2009:residential";
+  const RELATIONSHIP = "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/RELATIONSHIPS/RELATIONSHIP";
+
+  function endpointRow(extra = {}) {
+    return {
+      rowNumber: 4,
+      arcRole: "ASSET is associated with LIABILITY",
+      fromXPath: "DEAL/ASSETS/ASSET",
+      source: "ASSET",
+      verbPhrase: "IsAssociatedWith",
+      toXPath: "DEAL/LIABILITIES/LIABILITY",
+      target: "LIABILITY",
+      ...extra,
+    };
+  }
+
+  function relationshipRows(extra = {}) {
+    const name = extra.name ?? "ASSET_IsAssociatedWith_LIABILITY";
+    const blank = { arcRole: "", xpath: "", attribute: "", label: "", value: "", notes: "" };
+    return [
+      { ...blank, rowNumber: 23, arcRole: "ASSET to LIABILITY", xpath: RELATIONSHIP, notes: "If." },
+      { ...blank, rowNumber: 24, attribute: "Sequence Number" },
+      {
+        ...blank,
+        rowNumber: 25,
+        label: extra.declaration ?? `arcrole="${NS}/${name}"`,
+        value: name,
+      },
+      { ...blank, rowNumber: 26, label: "from", value: extra.from ?? "ASSET" },
+      { ...blank, rowNumber: 27, label: "to", value: extra.to ?? "LIABILITY" },
+    ];
+  }
+
+  const sections = (endpoints, relationships) => ({ endpoints, relationships });
+  const corpus = (...uris) => new Map(uris.map((u) => [u, 1]));
+
+  it("joins the tab's two sections into one arc", () => {
+    const { table, relationshipXPath } = deriveArcRoles(
+      sections([endpointRow()], relationshipRows()),
+      corpus(`${NS}/ASSET_IsAssociatedWith_LIABILITY`),
+      { disagreements: [] },
+    );
+    expect(relationshipXPath).toBe(RELATIONSHIP);
+    expect(table.ASSET_IsAssociatedWith_LIABILITY).toEqual({
+      arcrole: `${NS}/ASSET_IsAssociatedWith_LIABILITY`,
+      name: "ASSET_IsAssociatedWith_LIABILITY",
+      verbPhrase: "IsAssociatedWith",
+      from: {
+        xpath: "DEAL/ASSETS/ASSET",
+        container: "ASSET",
+        relationshipEnd: "ASSET",
+        arcroleTerm: "ASSET",
+        disputed: false,
+      },
+      to: {
+        xpath: "DEAL/LIABILITIES/LIABILITY",
+        container: "LIABILITY",
+        relationshipEnd: "LIABILITY",
+        arcroleTerm: "LIABILITY",
+        disputed: false,
+      },
+      note: "If.",
+      exercised: true,
+    });
+  });
+
+  it("assembles the URI from the namespace whether the cell holds all of it or not", () => {
+    // Four of the eleven blocks type the namespace in the label cell and stop,
+    // leaving the name in the cell beside it; the other seven type the whole
+    // URI. A generator that copied the cell would emit four URIs ending at
+    // ":residential".
+    const short = deriveArcRoles(
+      sections([endpointRow()], relationshipRows({ declaration: `arcrole="${NS}` })),
+      corpus(),
+      { disagreements: [] },
+    );
+    expect(short.table.ASSET_IsAssociatedWith_LIABILITY.arcrole).toBe(
+      `${NS}/ASSET_IsAssociatedWith_LIABILITY`,
+    );
+    expect(() =>
+      deriveArcRoles(
+        sections([endpointRow()], relationshipRows({ declaration: 'arcrole="urn:example:2020' })),
+        corpus(),
+        { disagreements: [] },
+      ),
+    ).toThrow(/is neither/);
+  });
+
+  it("marks an arc no sample carries, and refuses one no sample could", () => {
+    // The corpus column is the half of this table that is checkable without the
+    // workbook, so both directions have to be real.
+    const unexercised = deriveArcRoles(sections([endpointRow()], relationshipRows()), corpus(), {
+      disagreements: [],
+    });
+    expect(unexercised.table.ASSET_IsAssociatedWith_LIABILITY.exercised).toBe(false);
+    expect(() =>
+      deriveArcRoles(
+        sections([endpointRow()], relationshipRows()),
+        corpus(`${NS}/INVENTED_IsAssociatedWith_ROLE`),
+        { disagreements: [] },
+      ),
+    ).toThrow(/The vendored samples carry .*INVENTED.*and the ArcRoles tab does not describe it/);
+  });
+
+  it("names an end the tab disagrees with itself about, and does not pick one", () => {
+    // The trap this table exists for. An emitter handed one name would arc to
+    // the wrong element and validate anyway, because nothing in the XSD checks
+    // where an arc lands.
+    const disputed = deriveArcRoles(
+      sections(
+        [endpointRow({ target: "OWNED_PROPERTY_DETAIL" })],
+        relationshipRows({ to: "LIABILITY" }),
+      ),
+      corpus(),
+      { disagreements: [{ arcrole: "ASSET_IsAssociatedWith_LIABILITY", end: "to" }] },
+    ).table.ASSET_IsAssociatedWith_LIABILITY;
+    expect(disputed.to).toEqual({
+      xpath: "DEAL/LIABILITIES/LIABILITY",
+      container: "OWNED_PROPERTY_DETAIL",
+      relationshipEnd: "LIABILITY",
+      arcroleTerm: "LIABILITY",
+      disputed: true,
+    });
+  });
+
+  it("stops on a disagreement nobody has read, and on one that healed", () => {
+    expect(() =>
+      deriveArcRoles(
+        sections([endpointRow({ target: "OWNED_PROPERTY_DETAIL" })], relationshipRows()),
+        corpus(),
+        { disagreements: [] },
+      ),
+    ).toThrow(/ASSET_IsAssociatedWith_LIABILITY to.*Do not pick one/s);
+    expect(() =>
+      deriveArcRoles(sections([endpointRow()], relationshipRows()), corpus(), {
+        disagreements: [{ arcrole: "ASSET_IsAssociatedWith_LIABILITY", end: "from" }],
+      }),
+    ).toThrow(/names ends the tab now agrees about/);
+  });
+
+  it("reads a prefix and a predicate as the element they name", () => {
+    // DU:UNDERWRITING_VERIFICATION and ROLE[PartyRoleType = "Borrower"] are the
+    // same elements the other three columns spell bare, and comparing them
+    // verbatim would report nine of the eleven arcs as disputed.
+    const arc = deriveArcRoles(
+      sections(
+        [
+          endpointRow({
+            arcRole: "LOAN is associated with ROLE",
+            fromXPath: 'DEAL/LOANS/LOAN[LoanRoleType="RelatedLoan"]',
+            source: "LOAN",
+            toXPath: 'DEAL/PARTIES/PARTY/ROLE[PartyRoleType = "NotePayTo"]',
+            target: "ROLE",
+          }),
+        ],
+        relationshipRows({ name: "LOAN_IsAssociatedWith_ROLE", from: "LOAN", to: "ROLE" }),
+      ),
+      corpus(),
+      { disagreements: [] },
+    ).table.LOAN_IsAssociatedWith_ROLE;
+    expect(arc.from.disputed).toBe(false);
+    expect(arc.to.disputed).toBe(false);
+    expect(arc.from.xpath).toBe('DEAL/LOANS/LOAN[LoanRoleType="RelatedLoan"]');
+  });
+
+  it("throws on a verb phrase, an attribute and a label it does not recognize", () => {
+    // The generator's rule, applied to this tab: an arc the spec grows a new
+    // vocabulary for stops the build rather than landing as a default.
+    expect(() =>
+      deriveArcRoles(
+        sections([endpointRow({ verbPhrase: "IsOwnedBy" })], relationshipRows()),
+        corpus(),
+        { disagreements: [] },
+      ),
+    ).toThrow(/unrecognized Verb Phrase "IsOwnedBy"/);
+    const withAttribute = relationshipRows();
+    withAttribute[1] = { ...withAttribute[1], attribute: "Label Number" };
+    expect(() =>
+      deriveArcRoles(sections([endpointRow()], withAttribute), corpus(), { disagreements: [] }),
+    ).toThrow(/unrecognized Attribute "Label Number"/);
+    const withLabel = relationshipRows();
+    withLabel[3] = { ...withLabel[3], label: "through" };
+    expect(() =>
+      deriveArcRoles(sections([endpointRow()], withLabel), corpus(), { disagreements: [] }),
+    ).toThrow(/unrecognized xLink:label row "through"/);
+  });
+
+  it("stops when the two sections do not cover the same arcs", () => {
+    // Either section can grow a row the other does not have, and each is a
+    // different kind of half-described arc. Neither may be dropped quietly.
+    expect(() =>
+      deriveArcRoles(sections([], relationshipRows()), corpus(), { disagreements: [] }),
+    ).toThrow(/has a RELATIONSHIP block and no endpoints row/);
+    expect(() =>
+      deriveArcRoles(
+        sections([endpointRow({ arcRole: "EXPENSE is associated with ROLE" })], relationshipRows()),
+        corpus(),
+        { disagreements: [] },
+      ),
+    ).toThrow(/describes the endpoints of EXPENSE_IsAssociatedWith_ROLE/);
+    const noTo = relationshipRows().slice(0, -1);
+    expect(() =>
+      deriveArcRoles(sections([endpointRow()], noTo), corpus(), { disagreements: [] }),
+    ).toThrow(/ASSET_IsAssociatedWith_LIABILITY has no to row/);
+  });
+
+  it("stops when the prose and the Verb Phrase column disagree", () => {
+    // The prose is what joins the two sections, and it is the only column that
+    // names the same element the arcrole URI does. Reading it loosely is how a
+    // row joins an arc that is not its own.
+    expect(() =>
+      deriveArcRoles(
+        sections([endpointRow({ arcRole: "ASSET belongs to LIABILITY" })], relationshipRows()),
+        corpus(),
+        { disagreements: [] },
+      ),
+    ).toThrow(/spells the verb phrase "belongsto"/);
+  });
+
+  it("recovers the committed table, and stops rather than reading a hand-edit as empty", () => {
+    const source = readFileSync(resolve(ROOT, "packages/du/src/generated/arcroles.ts"), "utf8");
+    const table = parseGeneratedArcRoles(source);
+    expect(table.ASSET_IsAssociatedWith_ROLE.arcrole).toBe(`${NS}/ASSET_IsAssociatedWith_ROLE`);
+    expect(() => parseGeneratedArcRoles("// nothing")).toThrow(
+      /no DU_ARCROLES in the shape this script writes/,
+    );
+  });
+
+  it("finds the arcroles the vendored samples carry", () => {
+    const counts = arcRolesInCorpus();
+    expect(counts.get(`${NS}/ASSET_IsAssociatedWith_ROLE`)).toBeGreaterThan(0);
+    expect(counts.has(`${NS}/UNDERWRITING_VERIFICATION_IsAssociatedWith_ASSET`)).toBe(false);
   });
 });
 

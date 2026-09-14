@@ -1,0 +1,6 @@
+# Vendored verbatim, and that includes the line endings. Fannie ships the
+# samples CRLF; a checkout that normalized them would change bytes this
+# repository copied in order not to change, and the README's provenance table
+# would stop being true of the files beside it.
+*.xsd -text
+*.xml -text

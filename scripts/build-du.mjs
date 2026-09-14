@@ -10,31 +10,45 @@
  * rather than landing as a silent default. A DU file that is silently wrong is
  * a file Fannie Mae rejects days later, with no local symptom at all.
  *
- * THE SOURCE FILES ARE NOT IN THIS REPOSITORY, AND MUST NOT BE. Fannie Mae's
- * workbook, Fannie Mae's XSDs and MISMO's reference model are licensed
- * artifacts whose redistribution is an open question that is not ours to
- * answer. So this script reads them from a directory named by DU_SPEC_DIR and
- * fails with instructions when that is unset or incomplete. What IS committed
- * is the TypeScript below — enum member names, element orders, lengths — which
- * is our derived work product, exactly as `packages/requirements/src/
- * generated.ts` is derived from Drew's sheet.
+ * The inputs arrive from two places now, and the split is the reason `--verify`
+ * has the shape it does.
  *
- * Because the inputs can be absent, `--verify` does two different jobs and says
- * which ones it did:
+ * The XSD chain is VENDORED, in `packages/du-schema/xsd/`. Nine files, the
+ * transitive closure of the DU wrapper's imports, with a README naming where
+ * each one came from. It is a frozen 2016 MISMO publication plus a dated Fannie
+ * release, and it is what makes an emitted document either legal or not — so
+ * everything derived from it, which is element order, is checkable on any
+ * machine that has this repository and nothing else.
+ *
+ * The workbook is NOT, and is read from a directory named by DU_SPEC_DIR. Not
+ * for its size — it is 728K — but because it is a moving document, reissued
+ * several times a year, and git keeps every copy forever. What IS committed
+ * from it is the TypeScript below — enum member names, lengths, cardinality,
+ * conditionality — which is our derived work product, exactly as
+ * `packages/requirements/src/generated.ts` is derived from Drew's sheet.
+ *
+ * So `--verify` does four jobs and says which ones it did:
  *
  *   - the Prisma enum diff always runs. It reads two committed files —
  *     `packages/db/prisma/schema.prisma` and the generated `enums.ts` — and
  *     needs no spec directory at all.
- *   - the regeneration diff runs only when DU_SPEC_DIR is set, and is what
- *     catches a generated file that no longer matches the spec it claims to
- *     come from. Unset it to skip that half; a DU_SPEC_DIR that does not hold
- *     the spec fails rather than skipping.
+ *   - the schema-order diff always runs too, against the vendored chain. It
+ *     re-derives every child sequence in `order.ts` from the XSDs and fails if
+ *     one moved, which catches both a hand-edited table and a re-vendored XSD.
+ *   - the arcrole corpus diff always runs, against the vendored samples. It
+ *     re-counts which arcs the eighteen shipped test cases carry and fails if
+ *     `arcroles.ts` says otherwise, or names an arcrole a sample uses and the
+ *     table does not describe.
+ *   - the workbook diff runs only when DU_SPEC_DIR is set, and is what catches
+ *     the generated files' workbook-derived halves drifting from the spec they
+ *     claim to come from. Unset it to skip that last one; a DU_SPEC_DIR that
+ *     does not hold the workbook fails rather than skipping.
  *
  *   node scripts/build-du.mjs            # write packages/du/src/generated/
  *   node scripts/build-du.mjs --verify   # fail if it would change
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
 import { inflateRawSync } from "node:zlib";
@@ -71,35 +85,61 @@ const TABS = {
   map: `DU Map v${SPEC_VERSION}`,
   enumerations: "DU Enumerations",
   cardinality: "Cardinality",
+  arcRoles: "ArcRoles",
 };
 
 /**
- * Where each input lives under DU_SPEC_DIR.
+ * Where the workbook lives under DU_SPEC_DIR.
  *
- * The MISMO reference model ships twice, and the path says `Combined` for a
- * reason: the split build's `MISMO_3.4.0_B324.xsd` declares no complex types
+ * One entry, and it stays a map because the shape of the error — "it must
+ * contain:", then a list — is what makes a missing file actionable, and a
+ * second licensed input that never gets vendored would join it here.
+ */
+const SPEC_FILES = {
+  workbook: `DU Specs/DU_Specification v${SPEC_VERSION}.xlsx`,
+};
+
+/**
+ * The four schema files the order table is derived from, vendored.
+ *
+ * They are named rather than globbed because the ORDER matters — see
+ * `parseSchemas` — and because `packages/du-schema/xsd/` holds nine files while
+ * only these four declare types this script reads. The other five arrive
+ * through imports that `xmllint` follows and this parser does not.
+ *
+ * The MISMO entry resolves to the `Combined/` build for a reason the README
+ * repeats: the split build's `MISMO_3.4.0_B324.xsd` declares no complex types
  * at all — all 3,228 of them arrive through an `xsd:include` — while the
  * `Combined/` build carries them inline. Nothing here follows an include, and
  * teaching it to would buy the same bytes by a longer route.
  */
-const SPEC_FILES = {
-  workbook: "DU Specs/DU_Specification v1.9.3.xlsx",
-  mismo:
-    "Mismo/V3.4_B324_CR_2016-01-28_PUBLICATION/ReferenceModel_v3.4.0_B324/Combined/MISMO_3.4.0_B324.xsd",
-  wrapper: "DU Specs/Fannie Mae DU Schema Files updated 080825/DU_Wrapper_3.4.0_B324.xsd",
-  duExtension: "DU Specs/Fannie Mae DU Schema Files updated 080825/DU_ExtensionV3_4.xsd",
-  uladExtension: "DU Specs/Fannie Mae DU Schema Files updated 080825/ULAD_ExtensionV3_4.xsd",
+const XSD_DIR = resolve(ROOT, "packages/du-schema/xsd");
+/**
+ * Fannie Mae's eighteen shipped test cases, vendored beside the chain.
+ *
+ * They are the only evidence in the repository about which arcs a real DU
+ * submission actually carries, which is why `arcroles.ts` records it: an arc
+ * the tab describes and no shipped case exercises is one whose endpoints
+ * nobody has ever seen a working document use, and a table that does not say
+ * so makes the two kinds look equally settled.
+ */
+const SAMPLES_DIR = resolve(ROOT, "packages/du-schema/samples");
+const XSD_FILES = {
+  mismo: resolve(XSD_DIR, "MISMO_3.4.0_B324.xsd"),
+  wrapper: resolve(XSD_DIR, "DU_Wrapper_3.4.0_B324.xsd"),
+  duExtension: resolve(XSD_DIR, "DU_ExtensionV3_4.xsd"),
+  uladExtension: resolve(XSD_DIR, "ULAD_ExtensionV3_4.xsd"),
 };
 
 /**
- * The spec is not here — and `unset` says which of the two reasons it is,
+ * The workbook is not here — and `unset` says which of the two reasons it is,
  * because they are not the same event.
  *
- * Leaving DU_SPEC_DIR unset is how a machine without the licensed corpus says
- * so, and `--verify` skips the regeneration half on it. Setting the variable is
+ * Leaving DU_SPEC_DIR unset is how a machine without the licensed workbook says
+ * so, and `--verify` skips the workbook third on it. Setting the variable is
  * the expression of intent to check, so a set-but-wrong path is a failure: a
- * typo'd or moved corpus that reported itself as "no spec on this machine"
- * would hand back a green build that verified nothing.
+ * typo'd or moved corpus that reported itself as "no workbook on this machine"
+ * would hand back a green build that verified less than it looked like.
  */
 export class SpecUnavailableError extends Error {
   constructor(message, { unset }) {
@@ -113,9 +153,10 @@ export function resolveSpecFiles(env = process.env) {
   if (!dir) {
     throw new SpecUnavailableError(
       "DU_SPEC_DIR is not set.\n" +
-        "  Fannie Mae's workbook and XSDs and MISMO's reference model are licensed and are\n" +
-        "  deliberately not in this repository. Point DU_SPEC_DIR at the directory holding\n" +
-        "  them, for example:\n" +
+        "  Fannie Mae's workbook is licensed, is reissued several times a year, and is\n" +
+        "  deliberately not in this repository — unlike the XSD chain, which is vendored\n" +
+        "  in packages/du-schema/xsd. Point DU_SPEC_DIR at the directory holding it, for\n" +
+        "  example:\n" +
         "    DU_SPEC_DIR='/path/to/DU Integration' npm run du:build\n" +
         "  It must contain:\n" +
         Object.values(SPEC_FILES)
@@ -135,7 +176,7 @@ export function resolveSpecFiles(env = process.env) {
     throw new SpecUnavailableError(
       `DU_SPEC_DIR is set to ${JSON.stringify(dir)} but these files are missing:\n` +
         missing.map((f) => `    ${f}\n`).join("") +
-        "  Check the directory, or unset DU_SPEC_DIR to skip the regeneration check.",
+        "  Check the directory, or unset DU_SPEC_DIR to skip the workbook check.",
       { unset: false },
     );
   }
@@ -324,13 +365,18 @@ const normalizeXPath = (value) => (value ?? "").replace(/\s+/g, "");
  * renamed column from being read as the column beside it — the failure mode
  * that produces a plausible-looking table of wrong values.
  *
- * One heading differs between the two places by more than whitespace and case.
- * It is named here rather than tolerated by a looser comparison.
+ * Two headings differ between the two places by more than whitespace and case.
+ * They are named here rather than tolerated by a looser comparison.
  */
 export const COLUMN_NAME_ALIASES = {
   // Cardinality tab. The tab abbreviates the three products; Column Description
   // spells them out.
   "DU, Credit, Early Check Cardinality MIN:MAX": "DU, EC Cardinality MIN:MAX",
+  // ArcRoles tab, endpoints section. Column Description pluralizes the first
+  // column; the tab does not. Its second section spells it the tab's way, so
+  // the alias folds both spellings onto one and neither section needs a
+  // looser comparison than the other.
+  ArcRole: "ArcRoles",
 };
 
 function columnNamesFor(columnDescription, tabHeading) {
@@ -355,6 +401,58 @@ function columnNamesFor(columnDescription, tabHeading) {
     throw new Error(`Column Description has no column list under ${JSON.stringify(tabHeading)}`);
   }
   return names;
+}
+
+/**
+ * The two column lists the ArcRoles tab needs, rather than the one every other
+ * tab needs.
+ *
+ * That tab is two tables stacked under one heading — "Establishing Endpoints in
+ * the Relationship" describes each arc's ends, "Relationships Container"
+ * describes the element that carries it — with their own header rows and no
+ * column in common. `columnNamesFor` would return the two lists concatenated,
+ * with the sub-headings mixed in as column names, and `assertColumns` would
+ * then compare the second table's headings against the first table's.
+ */
+export function arcRoleColumnNamesFor(columnDescription, sections) {
+  const wanted = new Set(Object.values(sections));
+  const names = new Map([...wanted].map((s) => [s, []]));
+  let current = null;
+  let inTab = false;
+  for (const row of columnDescription) {
+    const a = collapse(text(row, 0));
+    const b = collapse(text(row, 1));
+    const heading = / Tab\*?$/.test(a) ? a : / Tab\*?$/.test(b) ? b : null;
+    if (heading) {
+      inTab = heading.replace(/\*$/, "") === `${TABS.arcRoles} Tab`;
+      current = null;
+      continue;
+    }
+    if (!inTab || !b || b === "Column Name") continue;
+    // A sub-heading has no definition beside it; a column always does.
+    if (wanted.has(b) && !text(row, 2)) {
+      current = b;
+      continue;
+    }
+    if (!current) {
+      throw new Error(
+        `Column Description lists ${JSON.stringify(b)} under ${JSON.stringify(TABS.arcRoles)} ` +
+          "before naming a section.\n  The tab's sections were renamed. Re-read it.",
+      );
+    }
+    names.get(current).push(b);
+  }
+  for (const [section, list] of names) {
+    if (!list.length) {
+      throw new Error(
+        `Column Description has no column list under ${JSON.stringify(section)} on the ` +
+          `${JSON.stringify(TABS.arcRoles)} tab.`,
+      );
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(sections).map(([key, section]) => [key, names.get(section)]),
+  );
 }
 
 function assertColumns(tabName, headerRow, expected) {
@@ -432,7 +530,7 @@ const CONTENT_MODEL_TAGS = new Set([
   "xsd:extension",
 ]);
 
-function parseSchemas(paths) {
+function parseSchemas() {
   const types = new Map();
   const groups = new Map();
   let anonymous = 0;
@@ -470,10 +568,10 @@ function parseSchemas(paths) {
   // a redefinition replaces the type it names. Reading MISMO first and the
   // wrapper second is what makes the replacement happen.
   const order = [
-    ["", paths.mismo],
-    ["", paths.wrapper],
-    ["DU", paths.duExtension],
-    ["ULAD", paths.uladExtension],
+    ["", XSD_FILES.mismo],
+    ["", XSD_FILES.wrapper],
+    ["DU", XSD_FILES.duExtension],
+    ["ULAD", XSD_FILES.uladExtension],
   ];
   for (const [prefix, path] of order) {
     const schema = scanXml(readFileSync(path, "utf8")).children.find(
@@ -1306,6 +1404,338 @@ export function parseCardinality(cell, xpath) {
   return { min, max };
 }
 
+// ── Arc roles ──────────────────────────────────────────────────────────────
+
+/**
+ * The two sections of the ArcRoles tab, by the names Column Description gives
+ * them.
+ *
+ * They describe the same eleven arcs twice, from two directions: the first
+ * says where each end of an arc lives in the document, the second says what the
+ * `RELATIONSHIP` element carrying it looks like. Reading only one of them is
+ * how the disagreements below stay invisible.
+ */
+export const ARCROLE_SECTIONS = {
+  endpoints: "Establishing Endpoints in the Relationship",
+  relationships: "Relationships Container",
+};
+
+/**
+ * The URN every DU arcrole is built on.
+ *
+ * Four of the eleven blocks on the tab type the namespace in one cell and the
+ * arc's name in the next, and the other seven type the whole URI in one cell
+ * with the name repeated beside it. Both spellings are checked against this
+ * constant, so the emitted URI is assembled from one string rather than copied
+ * from whichever cell happened to be complete.
+ */
+const ARCROLE_NAMESPACE = "urn:fdc:mismo.org:2009:residential";
+
+/**
+ * The verb phrases the tab uses, which are two.
+ *
+ * Exhaustive on purpose, like every other mapping here: an arc named with a
+ * third verb cannot be split into its two endpoint terms by this script, and a
+ * split that guesses would file the wrong element at one end of a graph nobody
+ * can validate afterwards.
+ */
+export const ARCROLE_VERB_PHRASES = ["IsAssociatedWith", "SharesJointCreditReportWith"];
+
+/** The only value the Relationships Container section puts in its Attribute column. */
+const ARCROLE_ATTRIBUTES = ["Sequence Number"];
+
+/**
+ * The two ends where the tab contradicts itself about which element the arc
+ * touches.
+ *
+ * Each end is named four times over the two sections — by the endpoint XPath,
+ * by the Source/Target column, by the `from`/`to` row, and by the arcrole URI
+ * itself — and at these two ends those four do not agree. Nothing here picks a
+ * winner: the generated table carries all four names and a `disputed` flag, and
+ * whoever writes the emitter decides with Fannie Mae rather than with a
+ * coin-toss made in this script.
+ *
+ * The list is declared so that a third disagreement stops the build and a
+ * healed one does too. A tab that quietly grows one would otherwise land as a
+ * flag nobody reads.
+ */
+export const ARCROLE_ENDPOINT_DISAGREEMENTS = [
+  // The XPath and the Target column say OWNED_PROPERTY_DETAIL; the `to` row and
+  // the arcrole's own name say ASSET. OWNED_PROPERTY_DETAIL is a grandchild of
+  // ASSET, so these are not synonyms and the arc lands on one or the other.
+  { arcrole: "UNDERWRITING_VERIFICATION_IsAssociatedWith_ASSET", end: "to" },
+  // The XPath ends at EMPLOYER and the arcrole's name says EMPLOYER; the Target
+  // column and the `to` row both say EMPLOYMENT, which is not an element on the
+  // DU emission path at all.
+  { arcrole: "UNDERWRITING_VERIFICATION_IsAssociatedWith_EMPLOYER", end: "to" },
+];
+
+/**
+ * The element an endpoint XPath ends at.
+ *
+ * The last segment, less its namespace prefix and less any predicate: the tab
+ * writes `DEAL/LOANS/LOAN[LoanRoleType=”RelatedLoan”]` for one end and
+ * `DU:UNDERWRITING_VERIFICATION` for another, and both name an element the
+ * other columns spell bare.
+ */
+function endpointElement(xpath) {
+  const last = xpath.split("/").pop() ?? "";
+  return last.replace(/\[[^\]]*\]$/, "").replace(/^[^:]*:/, "");
+}
+
+/**
+ * The arc an endpoints row describes, read out of the prose in its first
+ * column: its name, and the element the name gives each end.
+ *
+ * The prose is the only column that names the same elements the arcrole URI
+ * does — "UNDERWRITING_VERIFICATION is associated with ASSET" beside a Target
+ * column reading OWNED_PROPERTY_DETAIL — so it is what joins the two sections
+ * and what the `arcroleTerm` of each end comes from. Building the name out of
+ * Source and Target instead would join those two rows to arcs that do not
+ * exist.
+ *
+ * The verb phrase comes from its own column rather than from the words between,
+ * and this asserts the two agree: "ROLE Shares Joint Credit Report With ROLE"
+ * has five words in the middle, and picking the first and last word without
+ * checking what lies between would make "ROLE owns ROLE" read as the same arc.
+ */
+function arcRoleFromProse(prose, verbPhrase, rowNumber) {
+  const words = collapse(prose).split(" ").filter(Boolean);
+  if (words.length < 3) {
+    throw new Error(
+      `${TABS.arcRoles} row ${rowNumber}: ${JSON.stringify(prose)} does not read as ` +
+        "<SOURCE> <verb phrase> <TARGET>.",
+    );
+  }
+  const middle = words.slice(1, -1).join("");
+  if (middle.toLowerCase() !== verbPhrase.toLowerCase()) {
+    throw new Error(
+      `${TABS.arcRoles} row ${rowNumber}: ${JSON.stringify(prose)} spells the verb phrase ` +
+        `${JSON.stringify(middle)}, and the Verb Phrase column says ${JSON.stringify(verbPhrase)}.`,
+    );
+  }
+  const source = words[0];
+  const target = words[words.length - 1];
+  return { name: `${source}_${verbPhrase}_${target}`, source, target };
+}
+
+/**
+ * Fold the Relationships Container section's rows into one block per arc.
+ *
+ * A block is a row carrying the arc's prose and the RELATIONSHIP XPath,
+ * followed by rows that carry nothing but one property each. Every key is
+ * recognized or the build stops: a row this loop skipped would be a property of
+ * the graph that silently never reached the table.
+ */
+function foldRelationshipBlocks(rows) {
+  const blocks = [];
+  let block = null;
+  for (const row of rows) {
+    if (row.arcRole) {
+      block = {
+        rowNumber: row.rowNumber,
+        prose: collapse(row.arcRole),
+        xpath: normalizeXPath(row.xpath),
+        notes: collapse(row.notes),
+        attributes: [],
+        declaration: null,
+        name: null,
+        ends: {},
+      };
+      blocks.push(block);
+    }
+    const attribute = collapse(row.attribute);
+    const label = collapse(row.label);
+    const value = collapse(row.value);
+    if (!attribute && !label && !value) continue;
+    if (!block) {
+      throw new Error(
+        `${TABS.arcRoles} row ${row.rowNumber} carries arc detail before any arc is named.`,
+      );
+    }
+    if (attribute) {
+      if (!ARCROLE_ATTRIBUTES.includes(attribute)) {
+        throw new Error(
+          `${TABS.arcRoles} row ${row.rowNumber}: unrecognized Attribute ` +
+            `${JSON.stringify(attribute)}. Expected one of ${ARCROLE_ATTRIBUTES.join(", ")}.`,
+        );
+      }
+      block.attributes.push(attribute);
+    }
+    if (!label) continue;
+    if (label.startsWith("arcrole=")) {
+      block.declaration = label;
+      block.name = value;
+    } else if (label === "from" || label === "to") {
+      block.ends[label] = value;
+    } else {
+      throw new Error(
+        `${TABS.arcRoles} row ${row.rowNumber}: unrecognized xLink:label row ` +
+          `${JSON.stringify(label)}. Expected an arcrole declaration, "from" or "to".`,
+      );
+    }
+  }
+  return blocks;
+}
+
+/**
+ * The arcrole URI a block declares, checked against the namespace both ways.
+ *
+ * The four short blocks declare `arcrole="urn:...:residential` with the name in
+ * the cell beside them; the seven long ones declare the whole URI and repeat
+ * the name. Either way the URI this returns is built from ARCROLE_NAMESPACE and
+ * the name, so a cell that trails off mid-URN cannot become one.
+ */
+function arcRoleUri(block) {
+  if (!block.name) {
+    throw new Error(
+      `${TABS.arcRoles} row ${block.rowNumber}: the arcrole declaration has no name.`,
+    );
+  }
+  const uri = `${ARCROLE_NAMESPACE}/${block.name}`;
+  const short = `arcrole="${ARCROLE_NAMESPACE}`;
+  const long = `arcrole="${uri}"`;
+  if (block.declaration !== short && block.declaration !== long) {
+    throw new Error(
+      `${TABS.arcRoles} row ${block.rowNumber}: ${JSON.stringify(block.declaration)} is neither ` +
+        `${JSON.stringify(short)} nor ${JSON.stringify(long)}.\n` +
+        "  The namespace moved, or the name and the URI disagree.",
+    );
+  }
+  return uri;
+}
+
+/**
+ * Every arcrole URI the vendored samples carry, and how many times.
+ *
+ * A regex over the bytes rather than an XML parse, because the question is
+ * which URIs appear and not where: an arcrole in a comment would be a sample
+ * Fannie Mae did not ship.
+ */
+export function arcRolesInCorpus(dir = SAMPLES_DIR) {
+  const counts = new Map();
+  for (const name of readdirSync(dir).sort()) {
+    if (!name.endsWith(".xml")) continue;
+    const xml = readFileSync(join(dir, name), "utf8");
+    for (const match of xml.matchAll(/\sxlink:arcrole="([^"]*)"/g)) {
+      counts.set(match[1], (counts.get(match[1]) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+/**
+ * The arc table: one entry per arc, both sections reconciled, each end carrying
+ * every name the tab gives it.
+ */
+export function deriveArcRoles(sections, corpus, options = {}) {
+  const disagreements = options.disagreements ?? ARCROLE_ENDPOINT_DISAGREEMENTS;
+  const blocks = new Map();
+  for (const block of foldRelationshipBlocks(sections.relationships)) {
+    const uri = arcRoleUri(block);
+    if (blocks.has(block.name)) {
+      throw new Error(`${TABS.arcRoles} row ${block.rowNumber}: ${block.name} is described twice.`);
+    }
+    for (const end of ["from", "to"]) {
+      if (!block.ends[end]) {
+        throw new Error(
+          `${TABS.arcRoles} row ${block.rowNumber}: ${block.name} has no ${end} row.`,
+        );
+      }
+    }
+    blocks.set(block.name, { ...block, uri });
+  }
+
+  const table = {};
+  const disputed = [];
+  const relationshipXPaths = new Set();
+  for (const row of sections.endpoints) {
+    const verbPhrase = collapse(row.verbPhrase);
+    if (!ARCROLE_VERB_PHRASES.includes(verbPhrase)) {
+      throw new Error(
+        `${TABS.arcRoles} row ${row.rowNumber}: unrecognized Verb Phrase ` +
+          `${JSON.stringify(verbPhrase)}. Expected one of ${ARCROLE_VERB_PHRASES.join(", ")}.`,
+      );
+    }
+    const { name, ...terms } = arcRoleFromProse(row.arcRole, verbPhrase, row.rowNumber);
+    const block = blocks.get(name);
+    if (!block) {
+      throw new Error(
+        `${TABS.arcRoles} row ${row.rowNumber} describes the endpoints of ${name}, and the ` +
+          `${JSON.stringify(ARCROLE_SECTIONS.relationships)} section does not carry it.`,
+      );
+    }
+    if (table[name]) {
+      throw new Error(`${TABS.arcRoles} row ${row.rowNumber}: ${name} has two endpoint rows.`);
+    }
+    blocks.delete(name);
+    relationshipXPaths.add(block.xpath);
+
+    const endpoint = (end, xpath, container, term) => {
+      const names = [endpointElement(xpath), container, block.ends[end], term];
+      const isDisputed = new Set(names).size > 1;
+      if (isDisputed) disputed.push({ arcrole: name, end });
+      return {
+        xpath,
+        container,
+        relationshipEnd: block.ends[end],
+        arcroleTerm: term,
+        disputed: isDisputed,
+      };
+    };
+
+    table[name] = {
+      arcrole: block.uri,
+      name,
+      verbPhrase,
+      from: endpoint("from", collapse(row.fromXPath), collapse(row.source), terms.source),
+      to: endpoint("to", collapse(row.toXPath), collapse(row.target), terms.target),
+      note: block.notes,
+      exercised: corpus.has(block.uri),
+    };
+  }
+
+  if (blocks.size) {
+    throw new Error(
+      `${TABS.arcRoles}: ${[...blocks.keys()].join(", ")} has a RELATIONSHIP block and no ` +
+        `endpoints row.`,
+    );
+  }
+  if (relationshipXPaths.size !== 1) {
+    throw new Error(
+      `${TABS.arcRoles}: the arcs name ${relationshipXPaths.size} different RELATIONSHIP ` +
+        `XPaths: ${[...relationshipXPaths].join(", ")}.`,
+    );
+  }
+  for (const uri of corpus.keys()) {
+    if (!Object.values(table).some((arc) => arc.arcrole === uri)) {
+      throw new Error(
+        `The vendored samples carry ${uri}, and the ${TABS.arcRoles} tab does not describe it.`,
+      );
+    }
+  }
+
+  const key = (d) => `${d.arcrole} ${d.end}`;
+  const found = new Set(disputed.map(key));
+  const declared = new Set(disagreements.map(key));
+  const surprises = [...found].filter((k) => !declared.has(k));
+  if (surprises.length) {
+    throw new Error(
+      `${TABS.arcRoles} names different elements at these ends: ${surprises.join(", ")}.\n` +
+        "  Read the tab, then add them to ARCROLE_ENDPOINT_DISAGREEMENTS. Do not pick one.",
+    );
+  }
+  const healed = [...declared].filter((k) => !found.has(k));
+  if (healed.length) {
+    throw new Error(
+      `ARCROLE_ENDPOINT_DISAGREEMENTS names ends the tab now agrees about: ${healed.join(", ")}.\n` +
+        "  Delete those entries.",
+    );
+  }
+
+  return { table, relationshipXPath: [...relationshipXPaths][0] };
+}
+
 // ── The Prisma enum diff ───────────────────────────────────────────────────
 
 export function prismaEnums(schemaText) {
@@ -1347,6 +1777,151 @@ export function parseGeneratedEnums(source) {
     enumerations: found,
     local: local ? [...local[1].matchAll(/"([^"]*)"/g)].map((m) => m[1]) : [],
   };
+}
+
+/**
+ * Read the two tables back out of the generated order.ts.
+ *
+ * Same reasoning as `parseGeneratedEnums`, and the same safety: this script
+ * wrote the file, and `render` writes both tables with `JSON.stringify`, so the
+ * literal between `=` and `as const;` is JSON and parses as JSON. A hand-edit
+ * that breaks that shape stops the check instead of being read as an empty
+ * table.
+ */
+export function parseGeneratedOrder(source) {
+  const read = (name) => {
+    const body = new RegExp(`export const ${name}[^=]*=\\s*(\\{[\\s\\S]*?\\n\\}) as const;`).exec(
+      source,
+    );
+    if (!body) {
+      throw new Error(
+        `packages/du/src/generated/order.ts has no ${name} in the shape this script writes.\n` +
+          "  Run: npm run du:build",
+      );
+    }
+    return JSON.parse(body[1]);
+  };
+  return { childOrder: read("CHILD_ORDER"), typeForPath: read("TYPE_FOR_PATH") };
+}
+
+/**
+ * Re-derive the order table from the vendored XSDs and diff it against the
+ * committed one.
+ *
+ * This is the half of the regeneration check that the vendored chain makes
+ * runnable everywhere, and it is worth having separately from the full rebuild:
+ * CI has no DU_SPEC_DIR, so without it every child sequence in `order.ts` would
+ * be unchecked on the only machine that gates a merge.
+ *
+ * The XPaths come from the committed `TYPE_FOR_PATH` rather than from the
+ * workbook, which is what lets it run at all — and it is also the limit of what
+ * it can see. An XPath the workbook ADDED is invisible here, because a table
+ * that never learned about it is self-consistent; that is the workbook's half
+ * and it stays there. What this catches is every child sequence moving under a
+ * re-vendored XSD, and every hand-edit of the committed table.
+ */
+function runSchemaOrderCheck() {
+  const source = readFileSync(resolve(OUT_DIR, "order.ts"), "utf8");
+  const committed = parseGeneratedOrder(source);
+  const xpaths = Object.keys(committed.typeForPath).sort();
+  const derived = buildOrderTable(parseSchemas(), xpaths);
+
+  const problems = [];
+  for (const [type, children] of derived.order) {
+    const was = committed.childOrder[type];
+    if (!was) problems.push(`${type} is in the schema chain and not in CHILD_ORDER`);
+    else if (was.join("|") !== children.join("|")) {
+      problems.push(`${type}: the schema chain now declares ${children.join(", ")}`);
+    }
+  }
+  for (const type of Object.keys(committed.childOrder)) {
+    if (!derived.order.has(type)) problems.push(`${type} is in CHILD_ORDER and not in the chain`);
+  }
+  for (const [xpath, type] of derived.typeForPath) {
+    if (committed.typeForPath[xpath] !== type) {
+      problems.push(`${xpath} now resolves to ${type}`);
+    }
+  }
+
+  if (problems.length) {
+    console.error("✗ packages/du/src/generated/order.ts and packages/du-schema/xsd disagree:");
+    for (const problem of problems) console.error(`    ${problem}`);
+    console.error("    Run: npm run du:build");
+    return false;
+  }
+  console.log(`✓ ${derived.order.size} child sequences in order.ts match the vendored MISMO chain`);
+  return true;
+}
+
+/**
+ * The committed arc table, read back.
+ *
+ * Same reasoning and the same safety as `parseGeneratedOrder`: `render` writes
+ * the literal with `JSON.stringify`, so what sits between `=` and `as const;`
+ * is JSON, and a hand-edit that breaks its shape stops the check rather than
+ * being read as an empty table.
+ */
+export function parseGeneratedArcRoles(source) {
+  const body = /export const DU_ARCROLES[^=]*=\s*(\{[\s\S]*?\n\}) as const;/.exec(source);
+  if (!body) {
+    throw new Error(
+      "packages/du/src/generated/arcroles.ts has no DU_ARCROLES in the shape this script " +
+        "writes.\n  Run: npm run du:build",
+    );
+  }
+  return JSON.parse(body[1]);
+}
+
+/**
+ * Diff the committed arc table's corpus column against the vendored samples.
+ *
+ * This is the arc table's half of what `runSchemaOrderCheck` does for element
+ * order: the endpoints come from the licensed workbook and are only checkable
+ * where it is, but which arcs a shipped DU document actually carries is a fact
+ * about eighteen files in this repository, so it is checkable everywhere and
+ * checked on the machine that gates a merge.
+ *
+ * What it does NOT see is everything the workbook is the authority on: an arc
+ * the tab added, and every endpoint on every arc. Those are the workbook diff's
+ * to catch, and with DU_SPEC_DIR unset the only thing standing over them is
+ * `generated.test.ts`, which writes both disputed ends out in full.
+ */
+function runArcRoleCorpusCheck() {
+  const committed = parseGeneratedArcRoles(readFileSync(resolve(OUT_DIR, "arcroles.ts"), "utf8"));
+  const corpus = arcRolesInCorpus();
+
+  const problems = [];
+  for (const [name, arc] of Object.entries(committed)) {
+    if (arc.arcrole !== `${ARCROLE_NAMESPACE}/${name}`) {
+      problems.push(`${name} carries the URI ${arc.arcrole}`);
+    }
+    const exercised = corpus.has(arc.arcrole);
+    if (arc.exercised !== exercised) {
+      problems.push(
+        exercised
+          ? `${name} is marked unexercised, and the samples carry it ${corpus.get(arc.arcrole)} times`
+          : `${name} is marked exercised, and no sample carries it`,
+      );
+    }
+  }
+  for (const uri of corpus.keys()) {
+    if (!Object.values(committed).some((arc) => arc.arcrole === uri)) {
+      problems.push(`the samples carry ${uri}, which DU_ARCROLES does not describe`);
+    }
+  }
+
+  if (problems.length) {
+    console.error("✗ packages/du/src/generated/arcroles.ts and the vendored samples disagree:");
+    for (const problem of problems) console.error(`    ${problem}`);
+    console.error("    Run: npm run du:build");
+    return false;
+  }
+  const exercised = Object.values(committed).filter((arc) => arc.exercised).length;
+  console.log(
+    `✓ ${exercised} of ${Object.keys(committed).length} arcroles in arcroles.ts are exercised ` +
+      "by the vendored samples, and no sample carries another",
+  );
+  return true;
 }
 
 /**
@@ -1406,7 +1981,80 @@ const ENUMERATION_COLUMNS = {
 
 const CARDINALITY_COLUMNS = { xpath: 0, container: 2, du: 3, fhaVa: 4 };
 
+const ARCROLE_ENDPOINT_COLUMNS = {
+  arcRole: 0,
+  fromXPath: 1,
+  source: 2,
+  verbPhrase: 3,
+  toXPath: 4,
+  target: 5,
+};
+
+const ARCROLE_RELATIONSHIP_COLUMNS = {
+  arcRole: 0,
+  xpath: 1,
+  attribute: 2,
+  label: 3,
+  value: 4,
+  notes: 5,
+};
+
 const HEADER_ROWS = { map: 3, enumerations: 3, cardinality: 2 };
+
+/**
+ * Cut the ArcRoles tab into its two sections and read each one's rows.
+ *
+ * The tab has no fixed header row: its two tables sit wherever the sub-headings
+ * put them, and a version that grows a note above one of them would move both.
+ * So the sub-headings are what this finds, and its own header row is the row
+ * under each — which is also the row `assertColumns` compares to Column
+ * Description, so a reordered column on either table still stops the build.
+ */
+export function readArcRoleSections(rows, columnDescription) {
+  const expected = arcRoleColumnNamesFor(columnDescription, ARCROLE_SECTIONS);
+  const headings = new Map(Object.entries(ARCROLE_SECTIONS).map(([key, name]) => [name, key]));
+  const bodies = {};
+  let current = null;
+  for (const row of rows) {
+    const key = headings.get(collapse(text(row, 1)));
+    if (key) {
+      current = { key, header: null, rows: [] };
+      bodies[key] = current;
+      continue;
+    }
+    if (!current) continue;
+    if (!current.header) {
+      current.header = row;
+      assertColumns(
+        `${TABS.arcRoles} (${ARCROLE_SECTIONS[current.key]})`,
+        row,
+        expected[current.key],
+      );
+      continue;
+    }
+    if (!row.cells.some((c) => (c ?? "").trim())) continue;
+    current.rows.push(row);
+  }
+  for (const key of Object.keys(ARCROLE_SECTIONS)) {
+    if (!bodies[key]?.rows.length) {
+      throw new Error(
+        `The ${JSON.stringify(TABS.arcRoles)} tab has no rows under ` +
+          `${JSON.stringify(ARCROLE_SECTIONS[key])}.`,
+      );
+    }
+  }
+
+  const read = (body, columns) =>
+    body.rows.map((row) => {
+      const out = { rowNumber: row.number };
+      for (const [name, index] of Object.entries(columns)) out[name] = text(row, index);
+      return out;
+    });
+  return {
+    endpoints: read(bodies.endpoints, ARCROLE_ENDPOINT_COLUMNS),
+    relationships: read(bodies.relationships, ARCROLE_RELATIONSHIP_COLUMNS),
+  };
+}
 
 function readSpec(paths) {
   const book = readWorkbook(paths.workbook);
@@ -1485,7 +2133,12 @@ function readSpec(paths) {
     });
   }
 
-  return { map, enumerations, cardinality };
+  return {
+    map,
+    enumerations,
+    cardinality,
+    arcRoles: readArcRoleSections(book.sheet(TABS.arcRoles), columnDescription),
+  };
 }
 
 // ── Building the five tables ───────────────────────────────────────────────
@@ -1670,11 +2323,16 @@ function buildCardinality(rows) {
   return table;
 }
 
+function buildArcRoles(sections) {
+  return deriveArcRoles(sections, arcRolesInCorpus());
+}
+
 // ── Emitting ───────────────────────────────────────────────────────────────
 
 const banner = (what) => `// GENERATED by scripts/build-du.mjs from the DU Spec ${SPEC_VERSION}
-// workbook and the MISMO v3.4 B324 schema chain, neither of which is in this
-// repository — see DU_SPEC_DIR in that script.
+// workbook, which is licensed and is not in this repository — see DU_SPEC_DIR
+// in that script — and the MISMO v3.4 B324 schema chain, which is vendored in
+// packages/du-schema/xsd.
 // Do not edit. Run \`npm run du:build\`; \`npm run du:verify\` fails on drift.
 //
 // ${what}`;
@@ -1791,6 +2449,63 @@ export const DU_CARDINALITY: Readonly<Record<string, DuContainerCardinality>> = 
   )} as const;
 `;
 
+  files["arcroles.ts"] = `${banner(
+    "The relationship graph: every arc the ArcRoles tab describes, its URI, the\n" +
+      "// container at each end, and whether any of Fannie Mae's eighteen shipped test\n" +
+      "// cases actually carries it. A DU submission is a graph and not a nested\n" +
+      "// document — containers carry an xlink:label and RELATIONSHIP elements arc\n" +
+      "// between them — and this is the graph's shape, known to the code rather than\n" +
+      "// transcribed into an emitter by hand.",
+  )}
+
+/**
+ * One end of an arc, under all four names the tab gives it.
+ *
+ * Four, and not one, because at two ends they do not agree — see \`disputed\`.
+ * Nothing in the generator picks a winner, and nothing downstream should pick
+ * one silently either: the choice is a question for Fannie Mae.
+ */
+export interface DuArcRoleEndpoint {
+  /** The endpoint XPath, verbatim, predicates and all. */
+  readonly xpath: string;
+  /** What the tab's Source or Target column calls the container there. */
+  readonly container: string;
+  /** What the RELATIONSHIP section's \`from\` or \`to\` row calls it. */
+  readonly relationshipEnd: string;
+  /** What the arcrole URI itself calls it. */
+  readonly arcroleTerm: string;
+  /** True when those four do not all name the same element. */
+  readonly disputed: boolean;
+}
+
+export interface DuArcRole {
+  /** The full URI, as it appears in an \`xlink:arcrole\` attribute. */
+  readonly arcrole: string;
+  /** The URI's last segment, and the key of this table. */
+  readonly name: string;
+  readonly verbPhrase: string;
+  readonly from: DuArcRoleEndpoint;
+  readonly to: DuArcRoleEndpoint;
+  /** The tab's Notes column: when DU requires the arc. Not parsed. */
+  readonly note: string;
+  /**
+   * True when at least one of the eighteen vendored samples carries this
+   * arcrole. False is not "wrong" — it is an arc nobody has seen a shipped DU
+   * document use, which is worth knowing before an emitter relies on it.
+   */
+  readonly exercised: boolean;
+}
+
+/** The container every arc lives in. One XPath, asserted by the generator. */
+export const DU_RELATIONSHIP_XPATH = ${JSON.stringify(spec.arcRoles.relationshipXPath)};
+
+export const DU_ARCROLES: Readonly<Record<string, DuArcRole>> = ${JSON.stringify(
+    Object.fromEntries(Object.entries(spec.arcRoles.table).sort(([a], [b]) => (a < b ? -1 : 1))),
+    null,
+    2,
+  )} as const;
+`;
+
   const statements = Object.fromEntries(
     [...spec.conditionality.statements].sort(([a], [b]) => (a < b ? -1 : 1)),
   );
@@ -1853,12 +2568,13 @@ export function buildFromSpec(paths) {
   for (const row of spec.cardinality) if (row.xpath) xpaths.add(row.xpath);
 
   return render({
-    order: buildOrderTable(parseSchemas(paths), [...xpaths].sort()),
+    order: buildOrderTable(parseSchemas(), [...xpaths].sort()),
     enumerations: deriveEnumerations(spec.enumerations),
     assetTypeSections: deriveAssetTypeSections(spec.enumerations),
     formats: buildFormats(spec.map),
     cardinality: buildCardinality(spec.cardinality),
     conditionality: buildConditionality(spec.map),
+    arcRoles: buildArcRoles(spec.arcRoles),
   });
 }
 
@@ -2014,6 +2730,8 @@ async function main() {
 
   if (verify) {
     let ok = runPrismaCheck();
+    if (!runSchemaOrderCheck()) ok = false;
+    if (!runArcRoleCorpusCheck()) ok = false;
     if (!runAssetShapeCheck()) ok = false;
     if (!(await runDatabaseObjectCheck())) ok = false;
     let files;
@@ -2021,12 +2739,20 @@ async function main() {
       files = buildFromSpec(resolveSpecFiles());
     } catch (error) {
       if (!(error instanceof SpecUnavailableError)) throw error;
-      // An unset DU_SPEC_DIR is the documented way to say the licensed corpus
+      // An unset DU_SPEC_DIR is the documented way to say the licensed workbook
       // is not on this machine, and skipping is the whole point of it. A set
       // one is somebody asking for the check, so a path that does not hold the
-      // spec fails rather than reporting itself as an absent spec.
+      // workbook fails rather than reporting itself as an absent one.
       if (!error.unset) throw error;
-      console.log("- skipped the regeneration check: DU_SPEC_DIR is not set");
+      // Named files, not "the regeneration check": order.ts was checked against
+      // the vendored chain a few lines up, and arcroles.ts had its corpus
+      // column checked against the vendored samples. A message that says a
+      // check was skipped when most of one ran is how somebody comes to
+      // re-point DU_SPEC_DIR at a corpus they did not need.
+      console.log(
+        "- skipped the workbook check (enums, lengths, cardinality, conditionality, and the " +
+          "arcroles' endpoints): DU_SPEC_DIR is not set",
+      );
       process.exit(ok ? 0 : 1);
     }
     for (const [name, contents] of Object.entries(files)) {

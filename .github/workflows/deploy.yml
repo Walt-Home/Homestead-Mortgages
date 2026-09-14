@@ -70,7 +70,7 @@ jobs:
         run: npm run brand:verify
 
       - name: TypeScript
-        run: npx tsc -b packages/shared packages/requirements packages/connectors packages/underwriting packages/du packages/db apps/api apps/web
+        run: npx tsc -b packages/shared packages/requirements packages/connectors packages/underwriting packages/du-schema packages/du packages/db apps/api apps/web
 
       # There was no eslint config in this repo until now — the dependencies
       # were installed and every workspace's `lint` script called eslint, but
@@ -85,18 +85,30 @@ jobs:
       - name: Test database
         run: npm run db:test:setup
 
-      # The DU tables are generated from Fannie Mae's specification, which is
-      # licensed and is deliberately not in this repository. With no
-      # DU_SPEC_DIR here, this runs the halves of the check that need no spec:
-      # every Du* enum in schema.prisma against the members the generator
-      # derived, and the two database objects holding the REO nesting that
-      # Prisma cannot model and so cannot miss. It says which half it skipped.
+      # The DU tables are generated from Fannie Mae's workbook, which is
+      # licensed, is reissued several times a year, and is deliberately not in
+      # this repository. With no DU_SPEC_DIR here, this runs everything that
+      # does not need it: every Du* enum in schema.prisma against the members
+      # the generator derived, every child sequence in order.ts against the
+      # MISMO chain vendored in packages/du-schema/xsd, every arc in
+      # arcroles.ts against the arcs the eighteen vendored samples actually
+      # carry, and the two database objects holding the REO nesting that Prisma
+      # cannot model and so cannot miss. It names what it could not check: the
+      # four workbook-derived tables and the arcroles' endpoints.
       #
       # After the test database, not before: the REO nesting half asks the
       # database the migrations built, and a check that skips because there is
       # nothing to ask is a green tick that means nothing.
       - name: DU tables match the spec
         run: npm run du:verify
+
+      # packages/du-schema validates the eighteen shipped DU samples against
+      # the vendored MISMO chain by shelling out to xmllint, rather than adding
+      # an XML schema validator to the dependency tree — see its README. It is
+      # on the runner image and on macOS; asserting it here means a runner that
+      # loses it says so in its own step instead of inside the suite.
+      - name: xmllint is available
+        run: xmllint --version
 
       - name: Test
         run: npm test

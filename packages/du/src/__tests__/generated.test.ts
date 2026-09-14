@@ -11,11 +11,13 @@
 import { describe, expect, it } from "vitest";
 import {
   CHILD_ORDER,
+  DU_ARCROLES,
   DU_CARDINALITY,
   DU_CONDITIONALITY,
   DU_CONDITION_STATEMENTS,
   DU_ENUMERATIONS,
   DU_FORMATS,
+  DU_RELATIONSHIP_XPATH,
   LOCAL_ENUMERATIONS,
   TYPE_FOR_PATH,
 } from "../index.js";
@@ -305,5 +307,100 @@ describe("conditionality", () => {
       if (entry.requirement === "conditional") expect(entry.condition, entry.name).not.toBeNull();
       else expect(entry.condition, entry.name).toBeNull();
     }
+  });
+});
+
+describe("the relationship graph", () => {
+  /**
+   * Eleven arcs, and the number is worth pinning because the tab makes it easy
+   * to get wrong. It describes every arc twice — once in its endpoints section
+   * and once as a RELATIONSHIP block — across 82 rows of headers, sub-headings
+   * and blank separators, so no count of its rows is a count of its arcs. Both
+   * 82 and 23 have been quoted as the arc count.
+   */
+  it("holds the eleven arcs the tab describes", () => {
+    expect(Object.keys(DU_ARCROLES)).toHaveLength(11);
+    for (const [name, arc] of Object.entries(DU_ARCROLES)) {
+      expect(arc.name).toBe(name);
+      expect(arc.arcrole).toBe(`urn:fdc:mismo.org:2009:residential/${name}`);
+    }
+  });
+
+  /**
+   * Nine of the eleven. The two nobody has seen sent are the two that compute
+   * an income figure -- rental against an owned property, employment against an
+   * employer -- and they are also the two whose endpoints the tab contradicts
+   * itself about. An emitter reaching for either has no shipped example to
+   * copy, and that is the fact this column exists to carry.
+   */
+  it("says which arcs the eighteen shipped samples actually carry", () => {
+    const exercised = Object.values(DU_ARCROLES)
+      .filter((arc) => arc.exercised)
+      .map((arc) => arc.name);
+    expect(exercised).toHaveLength(9);
+    expect(
+      Object.values(DU_ARCROLES)
+        .filter((arc) => !arc.exercised)
+        .map((arc) => arc.name),
+    ).toEqual([
+      "UNDERWRITING_VERIFICATION_IsAssociatedWith_ASSET",
+      "UNDERWRITING_VERIFICATION_IsAssociatedWith_EMPLOYER",
+    ]);
+  });
+
+  /**
+   * The trap, written out. At these two ends the tab names one element in its
+   * endpoint XPath and Source/Target column and a different one in its `to` row
+   * and in the arcrole URI, and no reading of the tab reconciles them. The
+   * generated table carries all four names rather than picking, because an
+   * emitter that arced to the wrong element would produce a document `xmllint`
+   * accepts and DU rejects days later.
+   */
+  it("keeps both readings of the two ends the tab contradicts itself about", () => {
+    const rentalIncome = DU_ARCROLES["UNDERWRITING_VERIFICATION_IsAssociatedWith_ASSET"]!.to;
+    expect(rentalIncome.disputed).toBe(true);
+    expect(rentalIncome.xpath).toBe("DEAL/ASSETS/ASSET/OWNED_PROPERTY/OWNED_PROPERTY_DETAIL");
+    expect(rentalIncome.container).toBe("OWNED_PROPERTY_DETAIL");
+    expect(rentalIncome.relationshipEnd).toBe("ASSET");
+    expect(rentalIncome.arcroleTerm).toBe("ASSET");
+
+    const employmentIncome = DU_ARCROLES["UNDERWRITING_VERIFICATION_IsAssociatedWith_EMPLOYER"]!.to;
+    expect(employmentIncome.disputed).toBe(true);
+    expect(employmentIncome.xpath).toBe(
+      "DEAL/PARTIES/PARTY/ROLES/ROLE/BORROWER/EMPLOYERS/EMPLOYER",
+    );
+    expect(employmentIncome.container).toBe("EMPLOYMENT");
+    expect(employmentIncome.relationshipEnd).toBe("EMPLOYMENT");
+    expect(employmentIncome.arcroleTerm).toBe("EMPLOYER");
+  });
+
+  it("disputes no other end", () => {
+    const disputed: string[] = [];
+    for (const arc of Object.values(DU_ARCROLES)) {
+      if (arc.from.disputed) disputed.push(`${arc.name} from`);
+      if (arc.to.disputed) disputed.push(`${arc.name} to`);
+    }
+    expect(disputed).toEqual([
+      "UNDERWRITING_VERIFICATION_IsAssociatedWith_ASSET to",
+      "UNDERWRITING_VERIFICATION_IsAssociatedWith_EMPLOYER to",
+    ]);
+  });
+
+  /**
+   * All eleven arcs live in one container, and it is the one container on the
+   * emission path that the other four tables say nothing about: DEAL declares
+   * RELATIONSHIPS as a child, and no XPath in the DU Map or the Cardinality tab
+   * reaches inside it. So the arc table is not a convenience over those — it is
+   * the only description of the graph the code has, which is why a serializer
+   * that only read `CHILD_ORDER` and `DU_CARDINALITY` would emit a document
+   * with no arcs at all and no local symptom.
+   */
+  it("describes the one container the other generated tables do not reach", () => {
+    expect(DU_RELATIONSHIP_XPATH).toBe(
+      "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/RELATIONSHIPS/RELATIONSHIP",
+    );
+    expect(CHILD_ORDER["DEAL"]).toContain("RELATIONSHIPS");
+    expect(Object.keys(TYPE_FOR_PATH).filter((p) => /RELATIONSHIP/.test(p))).toEqual([]);
+    expect(Object.keys(DU_CARDINALITY).filter((p) => /RELATIONSHIP/.test(p))).toEqual([]);
   });
 });

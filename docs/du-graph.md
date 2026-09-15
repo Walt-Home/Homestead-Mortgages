@@ -165,26 +165,45 @@ keeping — an owner on every emittable row, one party per borrower position, a
 joint-credit group that cannot contradict itself, an arc that cannot cross two
 applications.
 
-## What is not built
+## What is built, and what is not
 
-The model a submission is assembled from is built. **Assembling one has not
-been started.** There is no serializer, no emitter for any arcrole and no
-preflight.
+**Six of the eleven arcs are emitted.** `packages/du/src/assemble/relationships.ts`
+folds `du_asset_parties`, `du_liability_parties`, `du_expense_parties`,
+`du_liabilities.secured_by_owned_property_id`, `income_sources.employer_id` and
+`du_joint_credit_report_links` into one `RELATIONSHIPS` block, in that order,
+with `SequenceNumber` assigned over the whole fold. Every arcrole URI comes out
+of `generated/arcroles.ts` rather than out of a string in the emitter, so a
+specification change stops the build instead of producing a document that
+validates and means something else.
 
-The two ends of the exchange are. `DuConnector` takes an assembled submission
-and refuses it unless every borrower the submission DECLARES has authorized
-every category of data it declares about them, on a signature made on this
-application; `du_responses` and `du_response_messages` receive the findings
+**Both ends of the exchange exist too.** `DuConnector` takes an assembled
+submission and refuses it unless every borrower the submission DECLARES has
+authorized every category of data it declares about them, on a signature made on
+this application; `du_responses` and `du_response_messages` receive the findings
 report, the recommendation and DU's own casefile identifier, append-only, and
 none of it moves an application.
 
-The guard reads the manifest, not the bytes. `submission.document` is opaque to
-the connector package — it neither builds it nor parses it — so the check is
-against the assembler's account of who is in the casefile, and it is exactly as
-good as that account. An emitter that writes a second person into the document
-without adding them to `borrowers` transmits somebody nothing was checked for,
-and no code below the assembler can tell. Worth knowing before writing one.
+**The guard reads the manifest, not the bytes**, and now that an emitter exists
+that matters. `submission.document` is opaque to the connector package — it
+neither builds it nor parses it — so the check is against the assembler's account
+of who is in the casefile, and it is exactly as good as that account. An emitter
+that writes a second person into the document without adding them to `borrowers`
+transmits somebody nothing was checked for, and no code below the assembler can
+tell.
 
-What the generated arc table changes is that the graph is now known to the code.
-An emitter can be written against a table that fails the build when Fannie's
-specification moves, instead of against a shape somebody read once and typed in.
+What is still missing is the preflight that refuses to emit a document DU would
+reject, a transport that carries one anywhere, and
+`DU:UNDERWRITING_VERIFICATION`, which arrives with its selection rule.
+
+An arc whose endpoint has no label is DROPPED rather than written dangling — a
+dangling `xlink:to` validates against the whole nine-file chain and says
+nothing, which is the worse of the two failures.
+
+**`UNDERWRITING_VERIFICATION_IsAssociatedWith_ROLE` is not emitted yet**, and
+neither is `LOAN_IsAssociatedWith_ROLE`. The counseling arc has no table to come
+from and the two disputed arcs have no winner to pick.
+
+**Nothing refuses to emit, and nothing sends.** There is no preflight, no
+transport and no inbound path for a findings report, a recommendation or DU's
+own casefile identifier. The emitter can produce a document DU would reject;
+that is what the preflight is for, and it is the next commit.

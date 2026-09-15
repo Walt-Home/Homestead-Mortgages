@@ -9,14 +9,14 @@ believed. Line numbers move; treat them as pointers to a name.
 
 ## Where this stands
 
-**The model a submission is assembled from is built. Assembling one has not
-been started, and nothing is sent.**
+**The model a submission is assembled from is built, a submission is now
+assembled and emitted from it, and both ends of the exchange with DU exist.
+Nothing refuses to emit, and nothing sends.**
 
-Fourteen items are tracked below: eight done, four partial, two not. That is
-about two thirds by count, and the count still flatters us — the two that
-remain include the whole submission path, the serializer and the preflight and
-the transport, which is the largest single body of work left. What DU answers
-with now has somewhere to land.
+Fourteen items are tracked below: eight done, five partial, one not. The count
+still flatters us — what remains of the submission path is the preflight and a
+transport that actually carries a document somewhere, and until there is one,
+the port that would submit has nothing beneath it.
 
 What changed since the last measurement is that **all three of the gaps that
 blocked any submission are closed**. Declarations are asked and stored,
@@ -92,19 +92,21 @@ three lists rather than trusting it after they change.
 
 - **The compute boundary** — which figures we assert and which DU derives —
   still unrecorded, still two untyped JSON columns.
-- **The submission itself**: the serializer that emits MISMO 3.4 with its
-  `RELATIONSHIP` arcs, the preflight that refuses to send a file DU would
-  reject, and the assembly that decides what goes in one. The arcs it has to
-  write are at least described now — `generated/arcroles.ts` holds all eleven,
-  both ends of each, and which nine a shipped sample carries — but nothing
-  emits one.
+- **The rest of the submission path**: the preflight that refuses to send a
+  file DU would reject, and the transport itself. The serializer is built —
+  `packages/du` assembles an application into a MISMO 3.4 `MESSAGE` and emits
+  it, `RELATIONSHIP` arcs included, ordered by the generated child sequence and
+  checked against all eighteen vendored samples. It emits no `LOAN_IDENTIFIER`
+  and no submitting party, because both wait on an answer about the institution
+  we submit under, and no `DU:UNDERWRITING_VERIFICATION`, which arrives with its
+  selection rule.
 
-  The two ends of it are built. The `du` port takes an assembled submission and
-  answers with a recommendation, a findings report and DU's casefile id; the
-  guard inside it refuses unless EVERY borrower the submission DECLARES has
-  authorized every category of data it declares about them, on a signature made
-  on THIS application — which is why a two-borrower application cannot be
-  submitted until each of them can sign. And `du_responses` with
+  The two ends of the exchange are built. The `du` port takes an assembled
+  submission and answers with a recommendation, a findings report and DU's
+  casefile id; the guard inside it refuses unless EVERY borrower the submission
+  DECLARES has authorized every category of data it declares about them, on a
+  signature made on THIS application — which is why a two-borrower application
+  cannot be submitted until each of them can sign. And `du_responses` with
   `du_response_messages` receive what comes back, append-only, writing
   `applications.du_casefile_id` the once, refusing a status or a recommendation
   this system has never seen rather than defaulting either.
@@ -114,8 +116,7 @@ three lists rather than trusting it after they change.
   the emitted bytes are opaque to it, and the only thing asserted about them is
   that there are some. So the guard is exactly as good as the assembler's
   honesty about who is in the document — a person the emitter puts in and the
-  manifest leaves out is transmitted with nobody's permission checked. That is
-  a note for whoever writes the assembler, which is the next thing here.
+  manifest leaves out is transmitted with nobody's permission checked.
 
   **A recommendation is recorded and is not a decision.** Nothing in those
   tables moves an application: what DU returns is Fannie Mae's assessment of a
@@ -129,22 +130,23 @@ which have a longer lead time than anything above.
 
 ## At a glance
 
-| #   | Item                                | Status | One line                                                                               |
-| --- | ----------------------------------- | ------ | -------------------------------------------------------------------------------------- |
-| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                                     |
-| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked                                 |
-| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                                      |
-| —   | The generators and `du:verify`      | Green  | The whole corpus is vendored; all six tables rebuilt in CI, none skipped               |
-| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once, and a response is what writes it                         |
-| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                                        |
-| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person                            |
-| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                                        |
-| 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none                             |
-| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                                     |
-| 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                               |
-| —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet                          |
-| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                                      |
-| —   | The submission                      | Red    | Serializer, preflight and assembly missing; the port and the response tables are built |
+| #   | Item                                | Status | One line                                                                  |
+| --- | ----------------------------------- | ------ | ------------------------------------------------------------------------- |
+| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                        |
+| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked                    |
+| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                         |
+| —   | The generators and `du:verify`      | Green  | The whole corpus is vendored; all six tables rebuilt in CI, none skipped  |
+| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once, and a response is what writes it            |
+| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                           |
+| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person               |
+| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                           |
+| —   | The serializer                      | Green  | Assembles and emits MISMO 3.4, arcs included, round-tripped on eighteen   |
+| 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none                |
+| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                        |
+| 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                  |
+| —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet             |
+| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                         |
+| —   | The submission                      | Red    | Emitter and both ends built; no preflight, and nothing carries a document |
 
 **The three that blocked any submission are closed.** Declarations, the current
 residence, and assets with liabilities and owned property were each a hard stop
@@ -153,7 +155,8 @@ built and enforced at the database.
 
 What remains splits cleanly. The borrower count and the compute boundary limit
 _which_ loans we could submit and how confidently. The submission path is what
-makes submitting possible at all, and it has not been started.
+makes submitting possible at all, and it is now half built: an application
+becomes a document, and nothing yet decides whether that document should go.
 
 ## Decided: we submit
 

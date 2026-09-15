@@ -14,13 +14,40 @@
  * is no environment to set, no corpus to obtain, and no half of the check that
  * skips.
  *
- * Nothing here is wired to a route or a screen. The generated tables are what
- * the serializer will emit against, and the serializer comes later; the writers
- * below are how a DU row and its owner arcs reach Postgres at all, because the
- * database refuses a row that has no owner and only a transaction carrying both
- * can satisfy it. `identity.ts` is what lets a second pull recognize a row it
- * already wrote rather than inserting a twin beside it.
+ * Nothing here is wired to a route or a screen. `emitSubmission` below is the
+ * first thing in this repository that produces a DU submission, and nothing
+ * calls it: no route assembles one, nothing transports one, and no preflight
+ * refuses one yet — so it can emit a document DU would reject. `identity.ts`
+ * and the writers are how a DU row and its owner arcs reach Postgres at all,
+ * because the database refuses a row that has no owner and only a transaction
+ * carrying both can satisfy it.
+ *
+ * The pipeline is assemble -> preflight -> emit. Preflight is the next commit,
+ * and until it lands this is assemble -> emit; the inversion is deliberate and
+ * it is safe only because nothing sends anything.
  */
+
+import { emitDocument } from "./emit.js";
+import { assembleSubmission, type AssembleOptions, type DuReader } from "./assemble/index.js";
+
+/**
+ * One application, as the bytes a DU submission is.
+ *
+ * The assembled document is **never persisted, never logged and never
+ * snapshotted**. It is the one place in this system where up to four cleartext
+ * taxpayer identifiers exist at once, and the obvious wrong thing to build
+ * beside it is an append-only "what we submitted" archive: it would wear this
+ * repository's own append-only pattern and be a plaintext SSN store. Whether a
+ * submitted document is retained at all is a privacy question with an owner,
+ * and nothing here answers it by choosing a table.
+ */
+export async function emitSubmission(
+  db: DuReader,
+  applicationId: string,
+  options: AssembleOptions,
+): Promise<string> {
+  return emitDocument(await assembleSubmission(db, applicationId, options));
+}
 
 export { CHILD_ORDER, TYPE_FOR_PATH } from "./generated/order.js";
 export {
@@ -74,3 +101,32 @@ export {
   type WriteExpenseInput,
   type WriteLiabilityInput,
 } from "./writer.js";
+
+export { assembleSubmission, type AssembleOptions, type DuReader } from "./assemble/index.js";
+export type { TaxpayerIdentifierResolver } from "./assemble/parties.js";
+export { emitDocument } from "./emit.js";
+export {
+  attributesOnly,
+  compact,
+  container,
+  leaf,
+  type DuNode,
+  type MaybeNode,
+} from "./document.js";
+export {
+  assertNCName,
+  createLabelIndex,
+  createLabels,
+  employerKey,
+  type DuLabelIndex,
+  type DuLabelKind,
+  type DuLabels,
+} from "./labels.js";
+export {
+  renderAmount,
+  renderCount,
+  renderDate,
+  renderDateTime,
+  renderIndicator,
+  renderPercent,
+} from "./values.js";

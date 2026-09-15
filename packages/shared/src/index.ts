@@ -1,6 +1,7 @@
 export * from "./types/index.js";
 export * from "./facts.js";
 export * from "./authorization.js";
+export * from "./du-response.js";
 export * from "./application-machine.js";
 export * from "./loan-machine.js";
 export * from "./trid.js";

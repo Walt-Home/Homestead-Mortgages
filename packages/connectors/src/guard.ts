@@ -27,6 +27,27 @@
 
 import type { AuthorizationPurpose, DataCategory, LoanFile, PurposeToken } from "@hm/shared";
 
+/**
+ * The part of a submission this file is entitled to read: which file it is
+ * about, who is in it, and what was retrieved about each of them.
+ * `DuSubmission` in `ports/index.ts` is the whole of it, and the guard takes
+ * this narrower shape so that the check cannot come to depend on the document
+ * it is guarding.
+ */
+export interface DuSubmissionSubjects {
+  /**
+   * The loan file the application being submitted was born from —
+   * `applications.loan_file_id`, which is UNIQUE, so it names this application
+   * and no other. Every token has to have been minted on it.
+   */
+  readonly loanFileId: string;
+  readonly borrowers: readonly {
+    readonly partyId: string;
+    readonly borrowerOrdinal: number;
+    readonly dataCategories: readonly DataCategory[];
+  }[];
+}
+
 export class AuthorizationError extends Error {
   constructor(
     message: string,
@@ -101,4 +122,93 @@ export function requireSubject(token: PurposeToken, file: LoanFile): void {
 /** The party a token speaks for. Adapters use it to pick whose data to fetch. */
 export function subjectOf(token: PurposeToken): string {
   return token.partyId;
+}
+
+/**
+ * An adapter's own check that everybody in a submission authorized it.
+ *
+ * The three checks above are about one retrieval about one person. This one is
+ * about a document that carries up to four people at once, and the difference
+ * matters: `requireSubject` asks whether a token names somebody on the file,
+ * which a single token for the applicant satisfies on a file where the
+ * co-borrower has signed nothing. A submission has to satisfy the stronger
+ * thing — every borrower in it, for every category of data it drew on about
+ * them — because a co-borrower's data leaves the building here on whatever
+ * permission the applicant happened to hold.
+ *
+ * Refusing is the correct outcome and not an obstacle. A co-borrower cannot
+ * sign anything today, so an application with one cannot be submitted; the way
+ * out is a signature apiece.
+ *
+ * The other half is WHERE each signature was made. A grant belongs to the
+ * person and outlives the application it was signed on, so the same borrower
+ * with two applications has one permission that reads as covering both — which
+ * is how a co-borrower's federal tax transcripts came to be pulled onto a
+ * joint file they had signed nothing on. Every token therefore names the file
+ * it was minted on, and a token from a different one is refused here rather
+ * than left to the caller to have noticed.
+ *
+ * Nothing is named in a refusal but the borrower's POSITION in the document and
+ * the category. The caller assembled the submission, so the position tells it
+ * nothing it did not already know, and a party id in an error message is one
+ * more place a person's identifier travels for no reason.
+ */
+export function requireEveryBorrowerAuthorized(
+  submission: DuSubmissionSubjects,
+  tokens: readonly PurposeToken[],
+): void {
+  if (submission.borrowers.length === 0) {
+    throw new AuthorizationError(
+      "A submission with no borrower on it has nobody to authorize it and nobody to underwrite.",
+      "APP-005",
+    );
+  }
+
+  const onTheSubmission = new Set(submission.borrowers.map((b) => b.partyId));
+  for (const token of tokens) {
+    // Somebody this casefile is not about. Refused rather than ignored: a
+    // permission belonging to another loan's borrower has nothing to say about
+    // this one, and a set that silently drops it is a set the count below can
+    // be satisfied against.
+    if (!onTheSubmission.has(token.partyId)) {
+      throw new AuthorizationError(
+        "One of these authorizations is not for a borrower on this submission, " +
+          "so nothing may be transmitted under it.",
+        REQUIREMENT_FOR[token.dataCategory],
+      );
+    }
+    // The same person, two applications — which the check above cannot see,
+    // because it is the same party id both times. This is the one the ordinary
+    // case walks into: a borrower signs here, signs somewhere else, and the
+    // grant behind both signatures is one row.
+    if (token.fileId !== submission.loanFileId) {
+      throw new AuthorizationError(
+        "One of these authorizations was signed on a different application, " +
+          "so nothing may be transmitted under it here.",
+        REQUIREMENT_FOR[token.dataCategory],
+      );
+    }
+  }
+
+  for (const borrower of submission.borrowers) {
+    if (borrower.dataCategories.length === 0) {
+      throw new AuthorizationError(
+        `Borrower ${borrower.borrowerOrdinal} is on this submission with nothing retrieved ` +
+          "about them, which is an assembly error rather than a permission we can check.",
+        "APP-005",
+      );
+    }
+    for (const category of borrower.dataCategories) {
+      const covered = tokens.some(
+        (t) => t.partyId === borrower.partyId && t.dataCategory === category,
+      );
+      if (!covered) {
+        throw new AuthorizationError(
+          `Borrower ${borrower.borrowerOrdinal} has not authorized ${category} to be shared, ` +
+            "so this casefile may not be submitted.",
+          REQUIREMENT_FOR[category],
+        );
+      }
+    }
+  }
 }

@@ -34,6 +34,8 @@ function memoryStore(): VendorTokenStore & { map: Map<string, string> } {
 }
 
 const PARTY = "11111111-1111-1111-1111-111111111111";
+/** The file every token here is minted on. A token from another one is refused. */
+const FILE = "11111111-1111-1111-1111-111111111111";
 const GRANT: Grant = {
   id: "grant-app-005",
   partyId: PARTY,
@@ -50,6 +52,7 @@ function token(
 ): PurposeToken {
   const r = mintPurposeToken({
     partyId: PARTY,
+    fileId: FILE,
     purpose: "fcra_written_instruction",
     dataCategory: category,
     grants: [GRANT],
@@ -64,6 +67,7 @@ function strangerToken(): PurposeToken {
   const partyId = "99999999-9999-9999-9999-999999999999";
   const r = mintPurposeToken({
     partyId,
+    fileId: FILE,
     purpose: "fcra_written_instruction",
     dataCategory: "bank_transactions",
     grants: [{ ...GRANT, partyId }],
@@ -250,6 +254,7 @@ describe("plaid adapter — the guard", () => {
     connector(spy as unknown as typeof fetch);
     const r = mintPurposeToken({
       partyId: PARTY,
+      fileId: FILE,
       purpose: "fcra_written_instruction",
       dataCategory: "bank_transactions",
       grants: [],

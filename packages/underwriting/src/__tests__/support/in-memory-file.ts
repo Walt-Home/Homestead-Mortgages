@@ -23,6 +23,8 @@ import {
 export const REFERENCE = new Date("2026-06-15T12:00:00.000Z");
 
 const PARTY = "11111111-1111-1111-1111-111111111111";
+/** The file every token here is minted on. A token from another one is refused. */
+const FILE = "11111111-1111-1111-1111-111111111111";
 
 const GRANTS: Grant[] = [
   {
@@ -55,6 +57,7 @@ const GRANTS: Grant[] = [
 export function token(category: DataCategory): PurposeToken {
   const r = mintPurposeToken({
     partyId: PARTY,
+    fileId: FILE,
     purpose: PURPOSE_FOR[category],
     dataCategory: category,
     grants: GRANTS,

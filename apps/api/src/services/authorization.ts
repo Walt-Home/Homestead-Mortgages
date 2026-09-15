@@ -227,6 +227,14 @@ export function subjectPartyId(file: LoanFile): string {
  * what the engine reads too, so `evaluateSatisfaction` and this agree about
  * the same file rather than disagreeing out loud.
  *
+ * The file the second refusal was made against rides out on the token as
+ * `fileId`. One retrieval is one token and the route already knows which file
+ * it is on, so nothing here needs it back — but a submission gathers up to
+ * four tokens for up to four people, and `requireEveryBorrowerAuthorized`
+ * refuses one minted somewhere else. That check is only worth anything because
+ * this function is the only place a token is stamped with a file it has not
+ * just proved a signature on.
+ *
  * One borrower's grants can never mint another's token either: the party
  * filter is the subject's own id, and `mintPurposeToken` filters the rows
  * again. Two people on one file are two authorizations, and neither stands in
@@ -262,6 +270,7 @@ export async function tokenFor(
 
   const result = mintPurposeToken({
     partyId: subject.partyId,
+    fileId: file.id,
     purpose: PURPOSE_FOR[category],
     dataCategory: category,
     grants,

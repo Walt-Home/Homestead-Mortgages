@@ -18,6 +18,7 @@ import {
 
 const NOW = new Date("2026-09-04T12:00:00.000Z");
 const ALICE = "11111111-1111-1111-1111-111111111111";
+const FILE = "aaaaaaaa-0000-4000-8000-000000000001";
 const BOB = "22222222-2222-2222-2222-222222222222";
 
 function grant(over: Partial<Grant> = {}): Grant {
@@ -36,6 +37,7 @@ function grant(over: Partial<Grant> = {}): Grant {
 const ask = (over: Record<string, unknown> = {}) =>
   mintPurposeToken({
     partyId: ALICE,
+    fileId: FILE,
     purpose: "fcra_written_instruction",
     dataCategory: "credit_report",
     grants: [grant()],
@@ -58,6 +60,7 @@ describe("minting", () => {
     // borrower: on a two-borrower file, A's signature would pull B's credit.
     const r = mintPurposeToken({
       partyId: BOB,
+      fileId: FILE,
       purpose: "fcra_written_instruction",
       dataCategory: "credit_report",
       grants: [grant({ partyId: ALICE })],
@@ -126,6 +129,7 @@ describe("requirePurposeToken", () => {
     expect(() =>
       requirePurposeToken({
         partyId: BOB,
+        fileId: FILE,
         purpose: "fcra_written_instruction",
         dataCategory: "credit_report",
         grants: [grant()],
@@ -138,6 +142,7 @@ describe("requirePurposeToken", () => {
     try {
       requirePurposeToken({
         partyId: ALICE,
+        fileId: FILE,
         purpose: "irs_4506c",
         dataCategory: "tax_transcript",
         grants: [grant()],

@@ -226,9 +226,14 @@ describe("enumerations", () => {
     ]);
   });
 
-  it("declares the one enum that is ours and gives it no members", () => {
-    expect(LOCAL_ENUMERATIONS).toEqual(["DuAssetKind"]);
-    expect(DU_ENUMERATIONS.DuAssetKind).toBeUndefined();
+  it("declares the enums that are ours and gives them no members", () => {
+    // Named one by one rather than counted, so that calling an enum "ours" is
+    // a deliberate act. Two of the three are about what DU ANSWERS with, and
+    // the corpus has nothing to say about that: it specifies the casefile we
+    // send, `AutomatedUnderwritingRecommendationDescription` is free text in
+    // the schema chain, and the workbook names a recommendation only in prose.
+    expect(LOCAL_ENUMERATIONS).toEqual(["DuAssetKind", "DuResponseStatus", "DuRecommendation"]);
+    for (const name of LOCAL_ENUMERATIONS) expect(DU_ENUMERATIONS[name]).toBeUndefined();
   });
 
   it("derives a non-empty member list for every enum that is not ours", () => {

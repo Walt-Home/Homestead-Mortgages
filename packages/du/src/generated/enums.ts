@@ -32,7 +32,7 @@ export const DU_ENUMERATIONS: Readonly<Record<string, readonly string[]>> = {
 } as const;
 
 /** Enums that are ours, with no DU data point behind them and nothing to diff. */
-export const LOCAL_ENUMERATIONS: readonly string[] = ["DuAssetKind"] as const;
+export const LOCAL_ENUMERATIONS: readonly string[] = ["DuAssetKind", "DuResponseStatus", "DuRecommendation"] as const;
 
 /**
  * AssetType, split by the URLA section the DU Enumerations tab files each

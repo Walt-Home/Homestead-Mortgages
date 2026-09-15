@@ -72,6 +72,17 @@ declare const purposeTokenBrand: unique symbol;
 export interface PurposeToken {
   readonly [purposeTokenBrand]: true;
   readonly partyId: string;
+  /**
+   * The loan file this token was minted on, and the only one it speaks for.
+   *
+   * A grant belongs to the person and outlives the application it was signed
+   * on, so read by party alone it is one person's permission everywhere for
+   * 120 days. The minter already refuses a category with no signature on THIS
+   * file; carrying the file id forward is what lets a port that transmits
+   * several people's data at once ask the same question, instead of trusting
+   * that whoever gathered the tokens gathered them from one application.
+   */
+  readonly fileId: string;
   readonly purpose: AuthorizationPurpose;
   readonly dataCategory: DataCategory;
   readonly authorizationId: string;
@@ -112,15 +123,22 @@ function denied(reason: DenialReason): MintResult {
  * rows. `grants` may contain rows for other parties and purposes — filtering is
  * this function's job, because a caller that filters is a caller that can
  * filter wrongly.
+ *
+ * `fileId` is stamped rather than checked: the grants carry no loan file, so
+ * whether this party signed HERE is a question about rows this function was
+ * deliberately not given. `tokenFor` in the API asks it, and is the only minter
+ * there is — so the scope on the token is as good as that one caller, which is
+ * exactly as good as the party on it already was.
  */
 export function mintPurposeToken(args: {
   readonly partyId: string;
+  readonly fileId: string;
   readonly purpose: AuthorizationPurpose;
   readonly dataCategory: DataCategory;
   readonly grants: readonly Grant[];
   readonly now: Date;
 }): MintResult {
-  const { partyId, purpose, dataCategory, grants, now } = args;
+  const { partyId, fileId, purpose, dataCategory, grants, now } = args;
 
   const mine = grants.filter((g) => g.partyId === partyId && g.purpose === purpose);
   if (mine.length === 0) return denied("no_grant");
@@ -140,6 +158,7 @@ export function mintPurposeToken(args: {
     ok: true,
     token: {
       partyId,
+      fileId,
       purpose,
       dataCategory,
       authorizationId: covering.id,
@@ -167,6 +186,7 @@ export class AuthorizationDenied extends Error {
 /** Mint, or throw. For call sites that cannot carry on without the data. */
 export function requirePurposeToken(args: {
   readonly partyId: string;
+  readonly fileId: string;
   readonly purpose: AuthorizationPurpose;
   readonly dataCategory: DataCategory;
   readonly grants: readonly Grant[];

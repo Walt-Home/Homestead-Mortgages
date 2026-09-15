@@ -2,16 +2,18 @@
  * The connector ports.
  *
  * Every external data source the flow depends on is declared here as an
- * interface and nowhere else. V1 ships fixture adapters (`../adapters/`)
- * because no vendor contract exists yet; the point of the seam is that
- * swapping in Plaid, Argyle, a credit reseller or an IVES provider is a new
- * file in `adapters/` and one line in the registry, with no change above.
+ * interface and nowhere else, as is the one external party we SEND to. V1
+ * ships fixture adapters (`../adapters/`) because no vendor contract exists
+ * yet; the point of the seam is that swapping in Plaid, Argyle, a credit
+ * reseller or an IVES provider is a new file in `adapters/` and one line in
+ * the registry, with no change above.
  *
  * Two rules hold for every adapter, fixture or real:
  *
- *   1. Nothing may be pulled before APP-005. `guard.ts` enforces it, and the
- *      guard is not optional — it is in the port's own contract, not in each
- *      adapter's good intentions.
+ *   1. Nothing may be pulled before APP-005, and nothing may be transmitted
+ *      about somebody who did not authorize it. `guard.ts` enforces both, and
+ *      the guard is not optional — it is in the port's own contract, not in
+ *      each adapter's good intentions.
  *   2. An adapter returns domain types from `@hm/shared`, never vendor JSON.
  *      Vendor shapes stay inside the adapter so a vendor swap cannot ripple.
  */
@@ -24,6 +26,8 @@ import type {
   AvmEstimate,
   Consent,
   CreditReport,
+  DataCategory,
+  DuResponse,
   FloodDetermination,
   IdentityVerification,
   LienSearch,
@@ -270,6 +274,163 @@ export interface IdentityConnector {
   getVerification(verificationId: string): Promise<IdentityVerification | null>;
 }
 
+/**
+ * Sending a casefile to Desktop Underwriter, and reading what comes back.
+ *
+ * The one port that TRANSMITS. Every other connector in this file retrieves —
+ * it asks a third party for something about a borrower and brings it home. This
+ * one carries every borrower's name, date of birth, social security number,
+ * income, assets, liabilities and declarations out of this system to Fannie
+ * Mae, which is why the guard on it is the strictest in the package and why it
+ * takes a set of tokens rather than one.
+ *
+ * ── Whose authorization ───────────────────────────────────────────────────
+ *
+ * EVERY borrower's, and one borrower's will not do for another.
+ *
+ * A submission is a single document about up to four people. The applicant
+ * holds the only session on a joint file, so a guard keyed on "the file is
+ * authorized" — or on the primary borrower's token, which is what every
+ * connector route happens to mint — would transmit a co-borrower's tax and
+ * credit data on a signature they never gave. `requireSubject` exists because
+ * that had already happened once inside this package with a single-party pull;
+ * here the same mistake sends four people's data to an agency in one call.
+ *
+ * The consequence is deliberate and is not a gap to route around: a
+ * co-borrower cannot sign anything today, so a two-borrower application cannot
+ * be submitted today. Refusing is the correct behavior until each of them can
+ * sign, and the fix is a signature apiece rather than a looser guard.
+ *
+ * ── What a real adapter must do that the fixture does not ─────────────────
+ *
+ * The fixture answers. It does not transmit, and everything below is what the
+ * word "submit" actually costs:
+ *
+ *   - **Credentials.** A casefile goes in under a seller/servicer number, and
+ *     ours would be Grander's: they are the creditor and Supermortgage
+ *     administers as their agent. Whether the agency agreement permits it is a
+ *     contract question with a longer lead time than any code, which is why
+ *     `duConnector` takes the number as configuration and refuses to be
+ *     constructed without one.
+ *   - **A transport.** An endpoint, an authentication scheme and a message
+ *     envelope, none of which is in the vendored corpus — that corpus specifies
+ *     the casefile, not the conversation. A real adapter must not invent one.
+ *   - **Reading the answer.** DU's response format is a specification we do not
+ *     hold either. `parseDuRecommendation` is the half that can be written
+ *     today, and a real adapter must go through it rather than storing whatever
+ *     string arrived.
+ *   - **Retries that do not open a second case.** DU recognizes a resubmission
+ *     by `duCasefileId`, so a retry after a timeout has to carry the identifier
+ *     from the response it never saw. The fixture is deterministic and hides
+ *     this entirely.
+ *   - **Deciding what happens to the document.** Whether an emitted casefile is
+ *     retained anywhere is an open privacy question — it carries up to four
+ *     cleartext social security numbers — and nothing in this repository stores
+ *     one.
+ */
+export interface DuSubmissionBorrower {
+  readonly partyId: string;
+  /** DU Borrower 1 through 4, as the document orders them. */
+  readonly borrowerOrdinal: number;
+  /**
+   * Which retrievals this person's figures were drawn from.
+   *
+   * The guard is keyed on this rather than on a single blanket permission,
+   * because a figure may be transmitted only if the person it belongs to
+   * permitted the retrieval it came from — and those are several different
+   * permissions with different legal bases. Transcript income rides on a Form
+   * 4506-C and the rest on APP-005; a submission carrying both on an APP-005
+   * token alone is sending the IRS's answer under a permission that does not
+   * mention the IRS.
+   *
+   * Never empty. DU underwrites each borrower's credit, so a borrower on a
+   * casefile has had something retrieved about them; a borrower declaring none
+   * is an assembly bug, and the adapter refuses rather than transmitting a
+   * person nothing was checked for.
+   */
+  readonly dataCategories: readonly DataCategory[];
+}
+
+export interface DuSubmission {
+  readonly applicationId: string;
+  /**
+   * The loan file the application was born from — `applications.loan_file_id`,
+   * which is NOT NULL and UNIQUE, so it names this application and no other.
+   *
+   * Here because an authorization is scoped to a file rather than to an
+   * application: a grant belongs to the person and outlives the file it was
+   * signed on, so the guard has to be told which file's signatures these
+   * tokens are supposed to be. The assembler reads it off the same row it read
+   * `applicationId` from, and `recordDuResponse` checks the pair against
+   * Postgres when the answer comes back.
+   */
+  readonly loanFileId: string;
+  /**
+   * Ours, stable across every resubmission of this loan. It is a 36-character
+   * UUID, it fits neither DU identifier field, and it is never sent as one.
+   */
+  readonly ausCasefileId: string;
+  /** DU's own, on a resubmission. Null the first time DU sees this case. */
+  readonly duCasefileId: string | null;
+  readonly borrowers: readonly DuSubmissionBorrower[];
+  /**
+   * The emitted casefile, as the emitter produced it.
+   *
+   * Opaque here on purpose: this package neither builds it nor parses it, and
+   * an adapter that reads it has taken on a second copy of the serializer's
+   * assumptions. The only thing asserted about it is that there is one, by
+   * `requireDocument` below — an empty body reaches DU as a malformed casefile
+   * rather than as an error we could have caught.
+   */
+  readonly document: string;
+}
+
+/**
+ * Thrown when a submission carries no casefile to submit.
+ *
+ * Its own class rather than a plain `Error` because the one thing a caller has
+ * to be able to tell is that this is NOT `DuTransportNotWiredError`: "there is
+ * nowhere to send this" is an operator's problem and "there is nothing to
+ * send" is the assembler's, and the adapter that will one day have a transport
+ * can raise either.
+ */
+export class EmptyDuDocumentError extends Error {
+  constructor() {
+    super("A submission with an empty document transmits nothing. Refusing to send.");
+    this.name = "EmptyDuDocumentError";
+  }
+}
+
+/**
+ * The whole of what an adapter asserts about the emitted bytes.
+ *
+ * Shared by both adapters rather than written in each, because the one that
+ * matters is the one that can actually send, and an emptiness check that lives
+ * only in the fixture is a check on the path where nothing was going anywhere.
+ */
+export function requireDocument(submission: Pick<DuSubmission, "document">): void {
+  if (submission.document.trim() === "") throw new EmptyDuDocumentError();
+}
+
+export interface DuConnector {
+  readonly capabilities: ConnectorCapabilities;
+  /**
+   * `tokens` must cover every borrower on the submission, for every data
+   * category that borrower's figures came from, and each must have been minted
+   * on `loanFileId`. The check is inside the adapter, like every other
+   * person-keyed port, so a new route cannot forget it.
+   *
+   * Mint them with `tokenFor` in the API and nothing else. It is the only
+   * minter that asks whether this borrower's signature is on THIS file before
+   * it stamps the file id a submission is then checked against; a token built
+   * straight from `mintPurposeToken` carries whatever file its caller named.
+   */
+  submit(
+    submission: DuSubmission,
+    tokens: readonly PurposeToken[],
+  ): Promise<ConnectorResult<DuResponse>>;
+}
+
 export interface ConnectorRegistry {
   readonly identity: IdentityConnector;
   readonly credit: CreditConnector;
@@ -280,4 +441,5 @@ export interface ConnectorRegistry {
   readonly propertyData: PropertyDataConnector;
   readonly screening: ScreeningConnector;
   readonly liens: LienConnector;
+  readonly du: DuConnector;
 }

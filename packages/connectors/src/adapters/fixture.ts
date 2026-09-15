@@ -18,6 +18,8 @@ import type {
   AvmEstimate,
   Consent,
   CreditReport,
+  DuRecommendation,
+  DuResponse,
   FloodDetermination,
   LienSearch,
   LoanFile,
@@ -26,10 +28,12 @@ import type {
   SanctionsScreening,
   TaxTranscript,
 } from "@hm/shared";
-import { AddressNotFoundError } from "../ports/index.js";
+import { AddressNotFoundError, requireDocument } from "../ports/index.js";
 import type {
   AssetReportResult,
   BankConnector,
+  DuConnector,
+  DuSubmission,
   IdentityConnector,
   LinkHandoff,
   ConnectorRegistry,
@@ -43,7 +47,12 @@ import type {
   PropertyDataConnector,
   ScreeningConnector,
 } from "../ports/index.js";
-import { requireCategory, requireSubject, subjectOf } from "../guard.js";
+import {
+  requireCategory,
+  requireEveryBorrowerAuthorized,
+  requireSubject,
+  subjectOf,
+} from "../guard.js";
 import { PERSONAS, type PersonaId, DEFAULT_PERSONA } from "../fixtures/personas.js";
 import { ADDRESS_BOOK, OFAC_LISTS, PUBLIC_RECORDS } from "../fixtures/public-records.js";
 
@@ -61,6 +70,17 @@ export interface FixtureOptions {
    * flakiness.
    */
   readonly screening?: "clear" | "near_match";
+  /**
+   * What Desktop Underwriter answers. Defaults to "Approve/Eligible".
+   *
+   * `"error"` is the other shape a response comes in — DU could not evaluate
+   * the casefile and returned no recommendation at all — and it is a value
+   * rather than a thrown error because a rejected casefile is an answer worth
+   * recording, not a failed call. Asked for explicitly, for the reason
+   * `screening` is: a fixture that sometimes referred would make a hold look
+   * like flakiness.
+   */
+  readonly du?: DuRecommendation | "error";
 }
 
 interface Resolved {
@@ -68,6 +88,7 @@ interface Resolved {
   readonly latencyMs: number;
   readonly ref: Date;
   readonly screening: "clear" | "near_match";
+  readonly du: DuRecommendation | "error";
 }
 
 function resolve(options: FixtureOptions): Resolved {
@@ -76,6 +97,7 @@ function resolve(options: FixtureOptions): Resolved {
     latencyMs: options.latencyMs ?? 900,
     ref: options.referenceDate ?? new Date(),
     screening: options.screening ?? "clear",
+    du: options.du ?? "Approve/Eligible",
   };
 }
 
@@ -476,6 +498,108 @@ export function fixtureIdentityConnector(options: FixtureOptions = {}): Identity
   };
 }
 
+/* ── Desktop Underwriter ────────────────────────────────────────────────── */
+
+/**
+ * A casefile identifier in DU's shape, derived from ours.
+ *
+ * DU mints its own and we cannot guess what it would choose, so the fixture
+ * needs some rule and the rule has to be DETERMINISTIC: `applications.
+ * du_casefile_id` is write-once, and a fixture that answered a resubmission
+ * with a fresh identifier would make an ordinary retry raise. Derived from the
+ * casefile that is stable across resubmissions, so two answers about one loan
+ * agree.
+ *
+ * Ten digits, because that is the shape DU's identifiers have and because the
+ * column is a `VARCHAR(30)` that our own 36-character UUID does not fit.
+ */
+function fixtureCasefileId(ausCasefileId: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < ausCasefileId.length; i++) {
+    hash ^= ausCasefileId.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return String(hash >>> 0)
+    .padStart(10, "0")
+    .slice(0, 10);
+}
+
+/**
+ * The fixture that answers a submission without sending one.
+ *
+ * It runs the same guard a real adapter must, which is the part worth being
+ * careful about here more than anywhere else in this file: a fixture that
+ * transmitted on the applicant's token alone would train the codebase to
+ * assemble submissions nobody but the applicant had authorized, and the first
+ * real adapter would inherit an assembly path that has never once been asked
+ * for a co-borrower's signature.
+ *
+ * What it does NOT do is in `DuConnector`'s own comment. The shortest version:
+ * it sends nothing, so it needs no seller/servicer number, cannot time out, and
+ * has never seen the response format.
+ */
+export function fixtureDuConnector(options: FixtureOptions = {}): DuConnector {
+  const { latencyMs, du } = resolve(options);
+  return {
+    capabilities: {
+      provider: "fixture-du",
+      mode: "fixture",
+      // UW-001 is the submission and UW-002 the recommendation that comes back.
+      // UW-003 — every verification message turned into a trackable condition —
+      // is not this port's: the messages arrive here and something above has to
+      // do that with them.
+      satisfies: ["UW-001", "UW-002"],
+    },
+    async submit(
+      submission: DuSubmission,
+      tokens: readonly PurposeToken[],
+    ): Promise<ConnectorResult<DuResponse>> {
+      requireEveryBorrowerAuthorized(submission, tokens);
+      // An empty body reaches DU as a malformed casefile rather than as an
+      // error anybody can read, and an adapter is the last place that can tell
+      // the difference. Shared with the real one so it is not a courtesy the
+      // fixture happens to do.
+      requireDocument(submission);
+      await sleep(latencyMs);
+
+      const duCasefileId = submission.duCasefileId ?? fixtureCasefileId(submission.ausCasefileId);
+      const respondedAt = new Date().toISOString();
+      const response: DuResponse =
+        du === "error"
+          ? {
+              status: "errored",
+              // Null: DU refused the casefile before opening one, which is the
+              // state a resubmission has to be able to tell from a case that
+              // exists and came back Refer.
+              duCasefileId: null,
+              messages: [
+                {
+                  category: "Submission",
+                  code: "0001",
+                  text: "The casefile could not be evaluated.",
+                },
+              ],
+              respondedAt,
+            }
+          : {
+              status: "answered",
+              duCasefileId,
+              recommendation: du,
+              messages: [
+                {
+                  category: "Risk/Eligibility",
+                  code: "0021",
+                  text: `Desktop Underwriter recommendation: ${du}.`,
+                },
+              ],
+              respondedAt,
+            };
+
+      return result(response, "fixture-du", `du-${submission.ausCasefileId}`);
+    },
+  };
+}
+
 export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry {
   return {
     identity: fixtureIdentityConnector(options),
@@ -487,5 +611,6 @@ export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry
     propertyData: fixturePropertyDataConnector(options),
     screening: fixtureScreeningConnector(options),
     liens: fixtureLienConnector(options),
+    du: fixtureDuConnector(options),
   };
 }

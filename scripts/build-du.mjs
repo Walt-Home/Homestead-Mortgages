@@ -747,6 +747,22 @@ export const DU_DATA_POINT_FOR_ENUM = {
     exclude: ["Borrower", "PropertyOwner", "SubmittingParty", "Trust"],
   },
 
+  // what DU answers with
+  DuResponseStatus: {
+    // Ours. Whether DU evaluated the casefile or could not, which is a
+    // distinction about the exchange rather than a data point in it.
+    local: true,
+  },
+  DuRecommendation: {
+    // Ours to write down, and there is nothing here to diff it against. The
+    // corpus specifies the casefile we SEND:
+    // `AutomatedUnderwritingRecommendationDescription` is a free-text
+    // `MISMOString` in the schema chain, and the workbook names a
+    // recommendation only in an implementation note about retired ARM plans.
+    // The members are DU's published recommendations, spelled DU's way.
+    local: true,
+  },
+
   // DU:UNDERWRITING_VERIFICATION
   DuVerificationReportType: {
     // The only row that NAMES a blank form field rather than leaving the list

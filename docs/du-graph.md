@@ -167,10 +167,23 @@ applications.
 
 ## What is not built
 
-The model a submission is assembled from is built. **Assembling and sending one
-has not been started.** There is no serializer, no emitter for any arcrole, no
-preflight, no transport and no inbound path for a findings report, a
-recommendation or DU's own casefile identifier.
+The model a submission is assembled from is built. **Assembling one has not
+been started.** There is no serializer, no emitter for any arcrole and no
+preflight.
+
+The two ends of the exchange are. `DuConnector` takes an assembled submission
+and refuses it unless every borrower the submission DECLARES has authorized
+every category of data it declares about them, on a signature made on this
+application; `du_responses` and `du_response_messages` receive the findings
+report, the recommendation and DU's own casefile identifier, append-only, and
+none of it moves an application.
+
+The guard reads the manifest, not the bytes. `submission.document` is opaque to
+the connector package — it neither builds it nor parses it — so the check is
+against the assembler's account of who is in the casefile, and it is exactly as
+good as that account. An emitter that writes a second person into the document
+without adding them to `borrowers` transmits somebody nothing was checked for,
+and no code below the assembler can tell. Worth knowing before writing one.
 
 What the generated arc table changes is that the graph is now known to the code.
 An emitter can be written against a table that fails the build when Fannie's

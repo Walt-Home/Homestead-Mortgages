@@ -1083,6 +1083,9 @@ model Application {
   /// count against the same ten-party ceiling the borrowing parties do.
   vestings        DuVesting[]
   dealParties     DuDealParty[]
+  /// Every answer Desktop Underwriter has given about this request, oldest
+  /// first. Append-only, and none of them moves the application.
+  duResponses     DuResponse[]
   /// The mortgage this request became, if it funded. Not a cascade in either
   /// direction: the loan names the application, and survives it.
   loan            Loan?
@@ -2604,4 +2607,134 @@ model DuDealParty {
   /// stricter one.
   @@index([applicationId], map: "du_deal_parties_by_application")
   @@map("du_deal_parties")
+}
+
+// ─── WHAT DESKTOP UNDERWRITER ANSWERED ──────────────────────────────────────
+
+/// Whether DU evaluated the casefile, or could not.
+///
+/// Ours, with no DU data point behind it. A union rather than a nullable
+/// recommendation, for the reason the engine returns `refer` rather than
+/// `approve_eligible` when an input was blocked: "DU could not evaluate this"
+/// and "DU evaluated it" must not collapse into one shape a reader can mistake
+/// for the other. An errored response is still an answer and still gets a row —
+/// it is how a resubmission learns what to fix.
+enum DuResponseStatus {
+  ANSWERED
+  ERRORED
+}
+
+/// DU's own verdict, in DU's own spelling.
+///
+/// Stored verbatim — "Approve/Eligible", not `approve_eligible` — which is why
+/// every member carries an `@map`. The spelling is the point: our engine's
+/// `AusRecommendation` uses the lowercase form, the two sets overlap on three
+/// members, and a column holding either would let one be read as the other.
+/// They do not mean the same thing. DU's `Refer` means DU computed the whole
+/// case and a human must underwrite it; ours means we could not compute it at
+/// all.
+///
+/// Ours to declare, and nothing diffs it. The vendored corpus specifies the
+/// casefile we SEND and enumerates no response value:
+/// `AutomatedUnderwritingRecommendationDescription` is a free-text
+/// `MISMOString` in the schema chain, and the specification workbook names a
+/// recommendation only in prose. So the closed set is written from DU's
+/// published recommendations, and a value outside it cannot be stored at all —
+/// which is the refusal `parseDuRecommendation` makes at the boundary, kept
+/// here as well because a service is not what a second writer goes through.
+enum DuRecommendation {
+  APPROVE_ELIGIBLE   @map("Approve/Eligible")
+  APPROVE_INELIGIBLE @map("Approve/Ineligible")
+  REFER_ELIGIBLE     @map("Refer/Eligible")
+  REFER_INELIGIBLE   @map("Refer/Ineligible")
+  REFER_WITH_CAUTION @map("Refer with Caution")
+  OUT_OF_SCOPE       @map("Out of Scope")
+}
+
+/// One answer from Desktop Underwriter. Append-only.
+///
+/// A resubmission is a NEW ROW, never an overwrite, for the reason
+/// `connector_snapshots` and `decisions` are append-only: "your situation
+/// changed" is a diff between two responses, and you cannot diff against a row
+/// you overwrote. A trigger refuses an UPDATE rather than trusting the
+/// convention. DELETE is allowed, because these rows leave with the application
+/// when somebody's data is removed for good, and that promise outranks this one.
+///
+/// **A recommendation here is not a decision of ours.** What DU says is Fannie
+/// Mae's assessment of a loan they might buy; the creditor is Grander, and an
+/// extension of credit is theirs. So this table holds no outcome column, no
+/// adverse-action reasons, and no edge into `application_transitions`: recording
+/// one of these changes nothing about where the application stands. A move made
+/// BECAUSE of one is somebody's move, with their principal in
+/// `application_transitions.actor_principal_id` and this row's id in
+/// `caused_by` — which is also why DU never needs a principal of its own.
+///
+/// There is no `du_submissions` table beside it. The emitted casefile is not
+/// retained anywhere — whether it ever should be is open, and it carries up to
+/// four cleartext social security numbers — so the durable facts about a
+/// submission are the ones on the answer to it.
+model DuResponse {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  /// 1, 2, 3 … in the order the answers arrived on this application. What makes
+  /// "the latest response" and "the one before it" answerable without leaning
+  /// on a timestamp two deliveries can share.
+  seq Int
+
+  status         DuResponseStatus
+  /// Null exactly when DU returned no recommendation. A CHECK ties the two.
+  recommendation DuRecommendation?
+
+  /// `AutomatedUnderwritingCaseIdentifier` as this answer carried it. Null on an
+  /// error DU raised before opening a case. A trigger requires it to equal the
+  /// application's own — a response filed under a casefile the application does
+  /// not carry is either another loan's answer or a silent second case at
+  /// Fannie.
+  duCasefileId String? @map("du_casefile_id") @db.VarChar(30)
+
+  /// Ours, as the submission carried it. Copied rather than joined, because
+  /// this row is evidence of one exchange and a helpful read-through would
+  /// rewrite what every earlier row says about itself.
+  ausCasefileId String @map("aus_casefile_id")
+
+  /// Which adapter answered. "fixture-du" is not Desktop Underwriter, and a
+  /// findings report nobody can tell apart from a real one is worse than none.
+  provider String
+
+  submittedAt DateTime @map("submitted_at")
+  receivedAt  DateTime @map("received_at")
+  recordedAt  DateTime @default(now()) @map("recorded_at")
+
+  messages DuResponseMessage[]
+
+  @@unique([applicationId, seq])
+  @@index([applicationId, receivedAt])
+  @@map("du_responses")
+}
+
+/// The findings report, one message per row.
+///
+/// `category` is free text and deliberately not an enum, which is the opposite
+/// call from the recommendation beside it. We hold the submission specification
+/// and not the response one, so a closed set here would be built from the few
+/// category names somebody has happened to see, and the first real message filed
+/// under another would be refused at the door. The rule is to refuse a value we
+/// ACT on: we act on the recommendation, and we display these.
+model DuResponseMessage {
+  id         String     @id @default(uuid()) @db.Uuid
+  responseId String     @map("response_id") @db.Uuid
+  response   DuResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+
+  /// Position in the report as it arrived. The order is part of what was said.
+  ordinal Int
+
+  category String
+  /// DU's own message number, where the message carries one.
+  code     String?
+  text     String
+
+  @@unique([responseId, ordinal])
+  @@map("du_response_messages")
 }

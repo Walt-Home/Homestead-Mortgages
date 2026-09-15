@@ -9,14 +9,14 @@ believed. Line numbers move; treat them as pointers to a name.
 
 ## Where this stands
 
-**The model a submission is assembled from is built. Assembling and sending
-one has not been started.**
+**The model a submission is assembled from is built. Assembling one has not
+been started, and nothing is sent.**
 
 Fourteen items are tracked below: eight done, four partial, two not. That is
 about two thirds by count, and the count still flatters us — the two that
 remain include the whole submission path, the serializer and the preflight and
-the transport and the handling of what DU answers, which is the largest single
-body of work left.
+the transport, which is the largest single body of work left. What DU answers
+with now has somewhere to land.
 
 What changed since the last measurement is that **all three of the gaps that
 blocked any submission are closed**. Declarations are asked and stored,
@@ -25,7 +25,10 @@ liabilities, expenses and owned property exist as tables with real ownership,
 enforced by the database rather than intended by a service.
 
 Still true, and the sentence to keep at the front: **nothing in this system
-transmits anything to anyone.**
+transmits anything to anyone.** There is now a port that could — `du`, with a
+fixture that answers and a real adapter that refuses — and what stops it is
+that the real one has no seller/servicer number, no endpoint and no message
+envelope, none of which is code.
 
 Treat the fraction as a direction, not a measurement, and re-derive it from the
 three lists rather than trusting it after they change.
@@ -91,32 +94,57 @@ three lists rather than trusting it after they change.
   still unrecorded, still two untyped JSON columns.
 - **The submission itself**: the serializer that emits MISMO 3.4 with its
   `RELATIONSHIP` arcs, the preflight that refuses to send a file DU would
-  reject, the transport, and the inbound path for a findings report, a
-  recommendation and DU's casefile id. The arcs it has to write are at least
-  described now — `generated/arcroles.ts` holds all eleven, both ends of each,
-  and which nine a shipped sample carries — but nothing emits one.
+  reject, and the assembly that decides what goes in one. The arcs it has to
+  write are at least described now — `generated/arcroles.ts` holds all eleven,
+  both ends of each, and which nine a shipped sample carries — but nothing
+  emits one.
+
+  The two ends of it are built. The `du` port takes an assembled submission and
+  answers with a recommendation, a findings report and DU's casefile id; the
+  guard inside it refuses unless EVERY borrower the submission DECLARES has
+  authorized every category of data it declares about them, on a signature made
+  on THIS application — which is why a two-borrower application cannot be
+  submitted until each of them can sign. And `du_responses` with
+  `du_response_messages` receive what comes back, append-only, writing
+  `applications.du_casefile_id` the once, refusing a status or a recommendation
+  this system has never seen rather than defaulting either.
+
+  **The document itself is never inspected.** The guard reads the assembler's
+  manifest of who is in the casefile and what was retrieved about each of them;
+  the emitted bytes are opaque to it, and the only thing asserted about them is
+  that there are some. So the guard is exactly as good as the assembler's
+  honesty about who is in the document — a person the emitter puts in and the
+  manifest leaves out is transmitted with nobody's permission checked. That is
+  a note for whoever writes the assembler, which is the next thing here.
+
+  **A recommendation is recorded and is not a decision.** Nothing in those
+  tables moves an application: what DU returns is Fannie Mae's assessment of a
+  loan they might buy, the creditor is Grander, and every move in the
+  nineteen-state machine carries an actor principal DU has no row among. A file
+  that moves because of an answer moves by somebody's hand, with a ledger row
+  naming the response.
 
 And one that is not code: **institution credentials and the agency agreement**,
 which have a longer lead time than anything above.
 
 ## At a glance
 
-| #   | Item                                | Status | One line                                                                 |
-| --- | ----------------------------------- | ------ | ------------------------------------------------------------------------ |
-| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                       |
-| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked                   |
-| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                        |
-| —   | The generators and `du:verify`      | Green  | The whole corpus is vendored; all six tables rebuilt in CI, none skipped |
-| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once and waiting for a response                  |
-| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                          |
-| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person              |
-| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                          |
-| 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none               |
-| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                       |
-| 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                 |
-| —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet            |
-| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                        |
-| —   | The submission                      | Red    | Serializer, preflight, transport, response. Nothing yet                  |
+| #   | Item                                | Status | One line                                                                               |
+| --- | ----------------------------------- | ------ | -------------------------------------------------------------------------------------- |
+| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                                     |
+| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked                                 |
+| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                                      |
+| —   | The generators and `du:verify`      | Green  | The whole corpus is vendored; all six tables rebuilt in CI, none skipped               |
+| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once, and a response is what writes it                         |
+| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                                        |
+| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person                            |
+| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                                        |
+| 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none                             |
+| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                                     |
+| 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                               |
+| —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet                          |
+| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                                      |
+| —   | The submission                      | Red    | Serializer, preflight and assembly missing; the port and the response tables are built |
 
 **The three that blocked any submission are closed.** Declarations, the current
 residence, and assets with liabilities and owned property were each a hard stop
@@ -197,8 +225,10 @@ and UNIQUE, minted once at application birth; the decision route reads it
 rather than minting per underwrite. `applications.du_casefile_id` is DU's own,
 `VARCHAR(30)`, unique where not null, write-once by trigger — a rewrite of the
 same value is a no-op and a different value raises, so a correction cannot lock
-the application out of ever receiving one. Nothing populates it yet because
-nothing has asked DU for a casefile.
+the application out of ever receiving one. `recordDuResponse` is what populates
+it, and it is the only thing that does; a second trigger on `du_responses`
+refuses a response filed under any other casefile than the one the application
+carries, so the two tables cannot come to disagree about which case this is.
 
 **Item 2 — income and employment survive a re-pull.** Rows carry
 `first_seen_snapshot_id` / `last_seen_snapshot_id` / `retired_by_snapshot_id`.
@@ -475,8 +505,10 @@ this with the people doing the work.
    deliberately do not, derived from the corpus rather than hand-listed.
 5. **Assemble and emit**, then **preflight**, which refuses to send a file DU
    would reject for a reason schema validation cannot see.
-6. **The transport and the response**, which is where the credentials question
-   stops being deferrable.
+6. **The transport**, which is where the credentials question stops being
+   deferrable. The response it will carry already has tables and a port to
+   arrive through; what is missing is the endpoint, the envelope and the
+   seller/servicer number a casefile goes in under.
 
 Steps 1 through 4 wait on neither the EULA nor the credentials.
 

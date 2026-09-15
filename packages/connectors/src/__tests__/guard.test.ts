@@ -35,6 +35,8 @@ import {
 const PARTY = "11111111-1111-1111-1111-111111111111";
 /** A real person with real grants of their own, who is on no borrower row here. */
 const NOT_ON_THE_FILE = "99999999-9999-9999-9999-999999999999";
+/** The file every token here is minted on, and the one `file()` returns. */
+const FILE = "00000000-0000-0000-0000-000000000000";
 const NOW = new Date("2026-09-08T12:00:00.000Z");
 
 function borrower(id: string): Borrower {
@@ -64,7 +66,7 @@ function borrower(id: string): Borrower {
 
 function fileWith(borrowers: Borrower[]): LoanFile {
   return {
-    id: "00000000-0000-0000-0000-000000000000",
+    id: FILE,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     stage: "credit",
@@ -135,6 +137,7 @@ function token(category: DataCategory, grants: Grant[] = GRANTS): PurposeToken {
 function tokenFor(partyId: string, category: DataCategory, grants: Grant[] = GRANTS): PurposeToken {
   const r = mintPurposeToken({
     partyId,
+    fileId: FILE,
     purpose: PURPOSE_FOR[category],
     dataCategory: category,
     grants: grants.map((g) => ({ ...g, partyId })),
@@ -146,6 +149,18 @@ function tokenFor(partyId: string, category: DataCategory, grants: Grant[] = GRA
 
 const A = borrower("b1");
 const file = () => fileWith([A]);
+
+/**
+ * Every port that takes a `PurposeToken`, and every port that cannot.
+ *
+ * Two lists rather than one, because "unguarded" is a decision with reasons —
+ * the address / person split for the property lookups, and the two that are how
+ * an authorization gets signed and gets a name on it at all. Splitting them
+ * here is what lets the suite insist that a NEW port land in one or the other.
+ */
+const GUARDED_PORTS = ["credit", "bank", "payroll", "irs", "screening", "liens", "du"] as const;
+type GuardedPort = (typeof GUARDED_PORTS)[number];
+const UNGUARDED_PORTS = ["identity", "esign", "propertyData"] as const;
 
 describe("a token is for one kind of data", () => {
   it("refuses a token at the adapter when it is for something else", () => {
@@ -169,6 +184,7 @@ describe("a token is for one kind of data", () => {
   it("cannot be minted for transcripts on an APP-005 grant alone", () => {
     const r = mintPurposeToken({
       partyId: PARTY,
+      fileId: FILE,
       purpose: PURPOSE_FOR.tax_transcript,
       dataCategory: "tax_transcript",
       grants: GRANTS.filter((g) => g.purpose !== "irs_4506c"),
@@ -193,6 +209,7 @@ describe("the adapters, with and without a token", () => {
     // @ts-expect-error a PurposeToken cannot be constructed outside @hm/shared
     const forged: PurposeToken = {
       partyId: PARTY,
+      fileId: FILE,
       purpose: "fcra_written_instruction",
       dataCategory: "credit_report",
       authorizationId: "made-up",
@@ -243,14 +260,21 @@ describe("the adapters, with and without a token", () => {
     // file — not on any file — fetched this file's data from all six of these.
     // Rule 4 puts the guard in the adapters precisely so that a check the
     // routes merely happen to perform is not the check.
+    //
+    // Every port the registry has, `du` included. That one neither reads nor
+    // writes a person's data — it SENDS it — so leaving it out of the sweep
+    // would exempt the only adapter where a missing refusal is somebody's
+    // information arriving at Fannie Mae.
     const stranger = (category: DataCategory) => tokenFor(NOT_ON_THE_FILE, category);
-    const calls: readonly (readonly [string, () => Promise<unknown>])[] = [
-      ["credit", () => registry.credit.pullTriMerge(file(), stranger("credit_report"))],
+    const calls: readonly (readonly [GuardedPort, string, () => Promise<unknown>])[] = [
+      ["credit", "credit", () => registry.credit.pullTriMerge(file(), stranger("credit_report"))],
       [
+        "bank",
         "bank session",
         () => registry.bank.createLinkSession(file(), stranger("bank_transactions")),
       ],
       [
+        "bank",
         "asset report",
         () =>
           registry.bank.fetchAssetReport(
@@ -261,24 +285,70 @@ describe("the adapters, with and without a token", () => {
           ),
       ],
       [
+        "payroll",
         "payroll session",
         () => registry.payroll.createLinkSession(file(), stranger("payroll_income")),
       ],
-      ["payroll", () => registry.payroll.fetchPayroll(file(), stranger("payroll_income"), "s")],
-      ["transcripts", () => registry.irs.fetchTranscripts(file(), stranger("tax_transcript"), [])],
       [
+        "payroll",
+        "payroll",
+        () => registry.payroll.fetchPayroll(file(), stranger("payroll_income"), "s"),
+      ],
+      [
+        "irs",
+        "transcripts",
+        () => registry.irs.fetchTranscripts(file(), stranger("tax_transcript"), []),
+      ],
+      [
+        "screening",
         "screening",
         () => registry.screening.screenSanctions(file(), stranger("sanctions_screening")),
       ],
       [
         "liens",
+        "liens",
         () => registry.liens.searchLiens(file(), stranger("public_record_liens"), "0114230209"),
+      ],
+      [
+        "du",
+        "du submission",
+        () =>
+          registry.du.submit(
+            {
+              applicationId: "aaaaaaaa-0000-4000-8000-00000000000a",
+              loanFileId: FILE,
+              ausCasefileId: "aa1b2c3d-0000-4000-8000-000000000001",
+              duCasefileId: null,
+              borrowers: [
+                { partyId: PARTY, borrowerOrdinal: 1, dataCategories: ["credit_report"] },
+              ],
+              document: "<MESSAGE/>",
+            },
+            [stranger("credit_report")],
+          ),
       ],
     ];
 
-    for (const [name, call] of calls) {
+    // The list above is the claim; this is what keeps it whole. A port added to
+    // `GUARDED_PORTS` and not exercised here would otherwise be a name on a
+    // list nothing calls.
+    expect(new Set(calls.map(([port]) => port))).toEqual(new Set(GUARDED_PORTS));
+
+    for (const [, name, call] of calls) {
       await expect(call(), name).rejects.toBeInstanceOf(AuthorizationError);
     }
+  });
+
+  it("has an opinion about every port the registry offers", () => {
+    // Rule 4 says this file calls every adapter against an unauthorized file.
+    // That sentence stops being true the moment a port is added and nobody
+    // comes back here, and the failure is silent: the sweep above still passes
+    // over the ports it already knew. So a new port has to be classified
+    // before this suite goes green, and "it is deliberately unguarded" is an
+    // answer — stating it is the part that may not be skipped.
+    expect(new Set(Object.keys(registry))).toEqual(
+      new Set<string>([...GUARDED_PORTS, ...UNGUARDED_PORTS]),
+    );
   });
 
   it("refuses a lien search with no APN rather than reporting a clean result", async () => {

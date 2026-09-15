@@ -25,6 +25,8 @@ import { AuthorizationError, fixtureRegistry, PURPOSE_FOR } from "../index.js";
 
 const PARTY = "11111111-1111-1111-1111-111111111111";
 const CO_PARTY = "22222222-2222-2222-2222-222222222222";
+/** The file every token here is minted on. A token from another one is refused. */
+const FILE = "00000000-0000-0000-0000-000000000000";
 const NOW = new Date("2026-09-08T12:00:00.000Z");
 
 const grantFor = (partyId: string): Grant => ({
@@ -41,6 +43,7 @@ const grantFor = (partyId: string): Grant => ({
 function tokenFor(partyId: string, category: DataCategory): PurposeToken {
   const result = mintPurposeToken({
     partyId,
+    fileId: FILE,
     purpose: PURPOSE_FOR[category],
     dataCategory: category,
     grants: [grantFor(PARTY), grantFor(CO_PARTY)],

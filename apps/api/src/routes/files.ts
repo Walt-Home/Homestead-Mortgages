@@ -9,7 +9,6 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "@hm/db";
-import { config } from "../config.js";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import {
   assertFileAccess,
@@ -20,6 +19,8 @@ import {
   STAGE_TO_DOMAIN,
 } from "../services/repository.js";
 import { primaryBorrowerRow } from "../services/borrower-order.js";
+import { connectors } from "../services/connectors.js";
+import { quoteSubjectProduct } from "../services/pricing.js";
 import { advanceStage } from "../services/stage.js";
 import {
   assertFacts,
@@ -164,6 +165,12 @@ fileRouter.patch(
                 // again. Leaving the old flag set would assert APP-004 about a
                 // property nobody has looked up. An address that did not move
                 // keeps the match it already has.
+                //
+                // The unit count, the attachment and the estate type go with it,
+                // and they go in the database:
+                // `loan_files_building_follows_the_address` nulls whichever of
+                // the three this statement does not restate, so a second door
+                // onto the address cannot forget to.
                 ...(addressMoved ? { addressVerified: false } : {}),
               }
             : {}),
@@ -243,6 +250,26 @@ fileRouter.post(
   asyncRoute(async (req, res) => {
     const input = propertyLoanSchema.parse(req.body);
 
+    // Priced before the transaction opens, because a quote is a round trip to
+    // a vendor and a transaction held open across one holds row locks for as
+    // long as somebody else's server takes. It raises rather than falling back
+    // when no rate comes: a file written with a rate nobody quoted carries it
+    // into every ratio on the decision.
+    //
+    // Once, at creation. A later revision of screen 1 changes the price and
+    // the amount and does NOT re-quote, which is what happened before this
+    // port existed too — whether a borrower's rate may move under them when
+    // they fix a typo is a question with a disclosure attached, not a line of
+    // code.
+    const product = await quoteSubjectProduct(connectors().pricing, {
+      purpose: input.purpose,
+      occupancy: input.occupancy,
+      propertyType: input.propertyType,
+      state: input.address.state,
+      loanAmount: input.loanAmount,
+      propertyValue: input.valueOrPrice,
+    });
+
     // The file, the person asking, the income they stated and the credit
     // request itself, in one transaction: a screen-1 save records all of it or
     // none of it. A party is not gated on APP-005 — only PULLS are, and the
@@ -288,11 +315,16 @@ fileRouter.post(
           cashToBorrower: input.cashToBorrower ?? null,
           cashOutPurpose: input.cashOutPurpose ?? null,
           // The borrower does not choose a product in this flow, so we quote
-          // one. See config.defaultProduct for why a rate has to exist at all.
-          productCode: config.defaultProduct.code,
-          termMonths: config.defaultProduct.termMonths,
-          amortization: "fixed",
-          noteRate: config.defaultProduct.noteRate,
+          // one. Which product is `config.quotedProductCode`; everything else
+          // about it came off the quote above. The window and the lock column
+          // go down with the rate, so a figure read back later can be told
+          // apart from one quoted this morning.
+          productCode: product.productCode,
+          termMonths: product.termMonths,
+          noteRate: product.noteRate,
+          rateQuoteLockDays: product.lockDays,
+          rateQuotedAt: product.effectiveAt,
+          rateQuoteExpiresAt: product.expiresAt,
         },
       });
 

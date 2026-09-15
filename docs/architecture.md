@@ -19,7 +19,7 @@ backed by its own Cloud SQL Postgres, with Google sign-in for identity.
 Three things distinguish it from a CRUD app and shape every section below:
 
 - **The requirements engine is the product's spine.** Drew's V1 flow sheet
-  (`data/v1-build.csv`, 83 rows) is compiled into an executable registry. What a
+  (`data/v1-build.csv`, 84 rows) is compiled into an executable registry. What a
   borrower is asked, which branch they see, and what blocks a decision all fall
   out of evaluating that registry against one `LoanFile`.
 - **Authorization is structural, not procedural.** The rule that nothing may be
@@ -209,7 +209,7 @@ and Google Places.
 | Package                 | What it is                                                                                                                                                                                                                                 |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `packages/shared`       | The vocabulary. `LoanFile` is the object everything reads — nullable sections all the way down, because a file is legitimately half-empty for most of its life                                                                             |
-| `packages/requirements` | The 83 requirements, executable: 38 applicability predicates, 83 satisfaction evaluators, a dependency graph                                                                                                                               |
+| `packages/requirements` | The 84 requirements, executable: 38 applicability predicates, 84 satisfaction evaluators, a dependency graph                                                                                                                               |
 | `packages/underwriting` | The shadow AUS — ratios, reserves, compliance, pricing, each figure carrying its derivation                                                                                                                                                |
 | `packages/connectors`   | Nine ports, fixture adapters for all nine, three partial real ones, and the authorization guard                                                                                                                                            |
 | `packages/db`           | Prisma schema and migrations. Several guarantees are triggers and CHECK constraints, not application code                                                                                                                                  |
@@ -253,8 +253,8 @@ The UI was rebuilt from nine screens to four, and a fifth was added when
 somebody finally had to be asked URLA Section 5 and where they live. That one
 is a step rather than a branch because `branchesFor()` renders work the engine
 reports as outstanding, and the engine cannot report work that has no
-requirement: the questions are six rows in the sheet, so the engine tracks
-eleven `FlowStage` values and evaluates 83 requirements.
+requirement: the questions are seven rows in the sheet, so the engine tracks
+eleven `FlowStage` values and evaluates 84 requirements.
 
 `apps/web/src/lib/flow.ts` is where the translation is supposed to live:
 `SCREENS`, `STAGE_TO_SCREEN` and `branchesFor()`. ⚠ It is not the only copy —
@@ -308,7 +308,7 @@ The engine keeps three questions apart:
         ▼                            ▼                            ▼
   conditions.ts               satisfaction.ts                 graph.ts
   Does it apply?              Is the evidence in?             Workable yet?
-  38 predicates               83 evaluators                   edges from the
+  38 predicates               84 evaluators                   edges from the
   true / false / NULL         satisfied / unsatisfied         timing column
                               / blocked
         └────────────────────────────┼────────────────────────────┘
@@ -689,11 +689,11 @@ tamper-evident record of a breach we never had the means to avoid.
 - **The monitoring loop does not exist.** `persistentMonitoringEnabled` and
   `nextSyncDueAt` are indexed together for a scheduler nobody has written; the
   route answers `{scheduled: false}`.
-- **Six vendor decisions are outstanding** — credit tri-merge, payroll
-  aggregator, IRS IVES, e-sign, OFAC screening and the lien/O&E search.
-  (`docs/decisions.md` still lists only four; it predates the screening and liens
+- **Seven vendor decisions are outstanding** — credit tri-merge, payroll
+  aggregator, IRS IVES, e-sign, OFAC screening, the lien/O&E search, and
+  pricing. (`docs/decisions.md` lists five; it predates the screening and liens
   ports.) Plus the CLS-* closing sheet, a real tax/insurance source, the real
-  LLPA matrix, and an APOR feed.
+  LLPA matrix, a fee schedule, and an APOR feed.
 - **CI cannot authenticate to GCP** until this repository is added to the Workload
   Identity provider's attribute condition and to `hm-github-actions@`'s
   `workloadIdentityUser` binding — per `docs/decisions.md`, which is in tension
@@ -711,7 +711,8 @@ tamper-evident record of a breach we never had the means to avoid.
 
 ⚠ **`README.md` and parts of `docs/decisions.md` are stale and should not be
 cited as current.** The README says all five connectors are fixtures (three of
-nine ports now have real adapters) and lists five ports where there are nine.
+eleven ports now have real adapters) and lists five ports where there are
+eleven.
 `docs/decisions.md` says `allUsers` cannot be bound and that access means
 `gcloud run services proxy`, while the deploy binds `allUsers` and fails the
 build if it is absent; it also says `hm-run@` has accessor on "exactly two

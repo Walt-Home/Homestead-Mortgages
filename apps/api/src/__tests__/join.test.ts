@@ -143,9 +143,25 @@ describe("screen 1 makes a draft", () => {
     expect(scenario.downPaymentCents).toBe(8_300_000n);
     expect(scenario.valueEstimateCents).toBe(41_500_000n);
     expect(scenario.propertyAddress).toBe("88 Foster Lane, Austin, TX 78745");
-    // 6.25% quoted by config.defaultProduct, as basis points.
+    // 6.25% off the fixture rate sheet, through the pricing port, as basis
+    // points. No environment variable can move it any more.
     expect(scenario.noteRateBps).toBe(625);
     expect(scenario.termMonths).toBe(360);
+  });
+
+  it("writes down which sheet column the rate came off, and when it expires", async () => {
+    // A rate with no window beside it cannot be told apart from a current one,
+    // and these three arrive on the quote precisely so it can be. They were
+    // dropped at the call site for a while, which left the port's whole
+    // argument for carrying a window unreadable by anything downstream.
+    const { fileId } = await startFile();
+    const row = await prisma.loanFile.findUniqueOrThrow({
+      where: { id: fileId },
+      select: { rateQuoteLockDays: true, rateQuotedAt: true, rateQuoteExpiresAt: true },
+    });
+    expect(row.rateQuoteLockDays).toBe(30);
+    expect(row.rateQuotedAt).not.toBeNull();
+    expect(row.rateQuoteExpiresAt!.getTime()).toBeGreaterThan(row.rateQuotedAt!.getTime());
   });
 
   it("makes one person out of two saves that arrive at once", async () => {

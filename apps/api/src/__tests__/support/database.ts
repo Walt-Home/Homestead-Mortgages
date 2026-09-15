@@ -14,8 +14,16 @@
 
 import { prisma } from "@hm/db";
 
-/** Tables the reset must not touch. Prisma owns this one. */
-const PRESERVED = new Set(["_prisma_migrations"]);
+/**
+ * Tables the reset must not touch.
+ *
+ * Prisma owns the first. The second is a catalog rather than test state: the
+ * migration that created `loan_products` seeded the one product this system
+ * quotes, every loan file points at it, and truncating it turns every file a
+ * test creates into a foreign key violation naming a constraint the test has
+ * nothing to do with.
+ */
+const PRESERVED = new Set(["_prisma_migrations", "loan_products"]);
 
 let tables: string[] | null = null;
 

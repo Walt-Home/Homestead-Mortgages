@@ -88,6 +88,100 @@ enum LoanPurpose {
   CASH_OUT_REFINANCE
 }
 
+/// `MortgageType` at L3.1 — the mortgage type applied for.
+///
+/// Not `DuLiabilityMortgageType`, which is the type of a mortgage the borrower
+/// already owes and carries FHA alone.
+enum DuMortgageType {
+  Conventional
+  FHA
+  USDARuralDevelopment
+  VA
+}
+
+/// `PropertyEstateType` at L2.3 — the interest in land the loan is secured by.
+enum DuPropertyEstateType {
+  FeeSimple
+  Leasehold
+}
+
+/// `AttachmentType` — whether the dwelling shares a wall with another one.
+///
+/// Nothing asked for this enum. It is required the moment `FinancedUnitCount`
+/// is answered, and all eighteen shipped samples carry it — six `Attached`,
+/// twelve `Detached` — so a submission that states a unit count and no
+/// attachment is one Desktop Underwriter rejects.
+enum DuAttachmentType {
+  Attached
+  Detached
+}
+
+/// `AmortizationType` at L3.5 — how the loan amortizes.
+///
+/// Spelled MISMO's way rather than in two words of ours, because the column IS
+/// the value that goes on the wire. `loan_files.amortization` held `'fixed'`
+/// and the emitter kept a lookup table to translate it; a mapping that can be
+/// wrong is a mapping worth not having.
+enum DuAmortizationType {
+  AdjustableRate
+  Fixed
+  GEM
+  GPM
+  Other
+}
+
+/// A product this lender quotes, and what is true of it before anybody is
+/// quoted against it.
+///
+/// Every one of these seven columns answers a data point Desktop Underwriter
+/// requires on the loan being applied for with no condition in front of it, and
+/// not one of them is an answer a borrower gives: whether a loan is
+/// conventional, how it amortizes, and whether it builds, balloons, pays
+/// interest only or amortizes negatively, is true of `CONF-30-FIXED` itself.
+/// Before this table the product was three environment variables — a code, a
+/// term and a rate — and a code is a string, not a statement that the loan
+/// behind it amortizes.
+///
+/// `amortization` is the one that moved rather than arriving. It was a literal
+/// `"fixed"` the create route wrote onto every file, beside indicators that
+/// now come off this row — so a product whose `interestOnly` and `balloon` are
+/// true could be quoted onto a file still claiming to amortize fully, and the
+/// casefile would contradict itself and validate.
+///
+/// One of them had to be argued. A prepayment penalty is a term of the note
+/// rather than a family of product, so it reads as something that belongs
+/// beside the rate — but a lender offering one offers it as its own product at
+/// its own price, and Regulation Z makes that structural rather than stylistic:
+/// a penalty is permitted only on a fixed-rate qualified mortgage that is not
+/// higher-priced, it is capped, it expires, and the creditor has to offer an
+/// alternative loan WITHOUT one. That alternative is a second product, not a
+/// second checkbox on this one. So the indicator sits here, and a product that
+/// carries a penalty is another row.
+///
+/// The rate and the term stay out. They are quoted per file from a rate sheet
+/// keyed on product, FICO, LTV and lock period; what moved here is only what is
+/// true of the product whoever is being quoted.
+model LoanProduct {
+  /// The code a file is quoted under. Natural key, because the code is what
+  /// `config.defaultProduct` names and what a rate sheet is keyed on.
+  code String @id
+
+  mortgageType DuMortgageType     @map("mortgage_type")
+  amortization DuAmortizationType
+
+  constructionLoan     Boolean @map("construction_loan")
+  balloon              Boolean
+  interestOnly         Boolean @map("interest_only")
+  negativeAmortization Boolean @map("negative_amortization")
+  prepaymentPenalty    Boolean @map("prepayment_penalty")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  files LoanFile[]
+
+  @@map("loan_products")
+}
+
 model LoanFile {
   id    String    @id @default(uuid()) @db.Uuid
   stage FlowStage @default(PROPERTY_LOAN)
@@ -129,12 +223,73 @@ model LoanFile {
   addressVerified       Boolean  @default(false) @map("address_verified")
   financedPropertyCount Int      @default(1) @map("financed_property_count")
 
-  // Product
-  productCode  String?  @map("product_code")
-  termMonths   Int?     @map("term_months")
-  amortization String?
-  noteRate     Decimal? @map("note_rate") @db.Decimal(6, 4)
-  overlays     String[] @default([])
+  /// `FinancedUnitCount` — how many dwelling units the subject property has,
+  /// and not `financedPropertyCount`, which counts properties the borrower
+  /// finances elsewhere.
+  ///
+  /// All three of these describe one building, so a moved address forgets all
+  /// three: `loan_files_building_follows_the_address` nulls whichever of them
+  /// the same statement did not restate. A borrower who corrects a mistyped
+  /// address otherwise carries the old county record and the old estate under
+  /// the new one, with nothing null for the preflight to refuse.
+  ///
+  /// Retrieved rather than asked: it is a fact about a building, the county
+  /// holds it, and screen 1's assessor lookup already returns it. Nullable
+  /// because an address no property-data vendor answers for is a legitimate
+  /// file — it just has no unit count, and a submission for it is refused
+  /// rather than assembled around a 1.
+  financedUnitCount Int? @map("financed_unit_count")
+
+  /// `AttachmentType` — whether the dwelling shares a wall with another one.
+  ///
+  /// Retrieved beside the unit count, from the same assessor record and for
+  /// the same reason: it describes the building rather than the borrower, and
+  /// a self-reported substitute for a retrieved fact is exactly what screen 1
+  /// exists to avoid — which is why a borrower who disagrees with the county
+  /// writes a `FileEvent` instead of a column.
+  propertyAttachmentType DuAttachmentType? @map("property_attachment_type")
+
+  /// `PropertyEstateType` — fee simple, or a leasehold on land somebody else
+  /// owns.
+  ///
+  /// Asked, on screen 3, and one answer per file rather than one per borrower.
+  /// No assessor record, valuation or flood determination carries it, and the
+  /// document that settles it is the title commitment, which does not exist
+  /// when a casefile is submitted — so at submission the answer can only be the
+  /// borrower's, read off their contract or their deed.
+  propertyEstateType DuPropertyEstateType? @map("property_estate_type")
+
+  // Product. Nullable because a file exists before screen 1 is answered — but
+  // the code, the term and the rate are nullable TOGETHER:
+  // `loan_files_quote_a_whole_product_or_none` refuses a product code beside a
+  // NULL rate, and refuses a rate of zero. A rate that reads back as 0% does
+  // not read as missing anywhere downstream; it amortizes, and the engine
+  // records the payment instead of blocking. How the loan amortizes is not in
+  // the group and is not here at all — it labels the product, so it lives on
+  // `loan_products` with the other six things a submission says about it.
+  productCode String? @map("product_code")
+
+  /// The row that says what the code MEANS. Restricted in both directions: a
+  /// quoted file does not lose the product it was quoted under, and it does not
+  /// follow a renamed one either. A rewrite of the row itself is refused by a
+  /// trigger, for the reason `connector_snapshots` is append-only.
+  product LoanProduct? @relation(fields: [productCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
+
+  termMonths Int?     @map("term_months")
+  noteRate   Decimal? @map("note_rate") @db.Decimal(6, 4)
+  overlays   String[] @default([])
+
+  /// Which column of which sheet the rate above came off, and when the vendor
+  /// stops standing behind it.
+  ///
+  /// Recorded rather than enforced: nothing in this product locks a rate, so
+  /// no code refuses a file whose quote has expired. What these answer is the
+  /// question a file with a bare number on it cannot — whether the rate a
+  /// borrower is looking at is the one a vendor published this morning or one
+  /// published two weeks ago, and which lock period it was quoted for.
+  rateQuoteLockDays  Int?      @map("rate_quote_lock_days")
+  rateQuotedAt       DateTime? @map("rate_quoted_at")
+  rateQuoteExpiresAt DateTime? @map("rate_quote_expires_at")
 
   // The TRID application moment (APP-002) is not a column on this table. It is
   // the INTAKE_RECEIVED row on the application's ledger, stamped by the receipt

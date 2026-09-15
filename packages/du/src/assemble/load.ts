@@ -152,9 +152,26 @@ export function loadApplication(db: DuReader, applicationId: string) {
           propertyPostalCode: true,
           valueOrPrice: true,
           occupancy: true,
+          financedUnitCount: true,
+          propertyAttachmentType: true,
+          propertyEstateType: true,
           termMonths: true,
-          amortization: true,
           noteRate: true,
+          // The five indicators, the mortgage type and how the loan amortizes,
+          // all true of the product rather than of this file. Selected through
+          // the relation so the assembler reads a row somebody quoted rather
+          // than a constant somebody typed into the emitter.
+          product: {
+            select: {
+              mortgageType: true,
+              amortization: true,
+              constructionLoan: true,
+              balloon: true,
+              interestOnly: true,
+              negativeAmortization: true,
+              prepaymentPenalty: true,
+            },
+          },
         },
       },
       scenarios: {

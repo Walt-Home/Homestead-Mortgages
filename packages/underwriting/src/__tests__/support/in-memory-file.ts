@@ -91,6 +91,12 @@ export function afterIdentity(): LoanFile {
       address: { line1: "1 Example St", city: "Austin", state: "TX", postalCode: "78701" },
       deliverableAddressVerified: true,
       propertyType: "single_family",
+      // Null after screens 1 and 2, because screen 3 is what asks it. Nothing
+      // retrieved carries the estate — no assessor record, no valuation, no
+      // flood determination — so a file that has not reached the declarations
+      // has not been told, and a fixture that said FeeSimple here would make
+      // APP-028 satisfied on every borrower who never answered it.
+      estateType: null,
       occupancy: "primary_residence",
       valueOrPrice: 650_000,
       valuationSource: "attom_estimate",
@@ -107,7 +113,7 @@ export function afterIdentity(): LoanFile {
     product: {
       productCode: "CONF-30-FIXED",
       termMonths: 360,
-      amortization: "fixed",
+      amortization: "Fixed",
       noteRate: 6.25,
       overlays: [],
     },
@@ -199,6 +205,10 @@ export function afterIdentity(): LoanFile {
 export function afterDeclarations(file: LoanFile): LoanFile {
   return {
     ...file,
+    // One house, one estate, one answer — which is why it lands on the file and
+    // not on each borrower, and why it lands HERE: screen 3 is the screen that
+    // asks it.
+    property: file.property ? { ...file.property, estateType: "FeeSimple" } : null,
     borrowers: file.borrowers.map((b) => ({
       ...b,
       declaration: {

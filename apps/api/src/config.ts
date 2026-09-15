@@ -162,11 +162,15 @@ export const config = {
    * UW-010 (pricing) and APP-019 (net tangible benefit). Without one, screen 8
    * can compute LTV and nothing else, which is not a decision.
    *
-   * So the system quotes a product rather than asking for one. This is a
-   * placeholder rate, not a lock and not a quote: a real build reads it from a
-   * rate sheet keyed on product, FICO, LTV and lock period. It is an env var so
-   * the number is visible and adjustable rather than buried in a constructor.
+   * So the system quotes a product rather than asking for one, and this is the
+   * whole of what configuration decides about it: WHICH product we offer. The
+   * rate and the term come off the quote, through `quoteSubjectProduct`.
+   * `DEFAULT_NOTE_RATE` and `DEFAULT_TERM_MONTHS` used to sit here beside it,
+   * which meant one environment variable priced every borrower and a second
+   * one could disagree with the product's own term.
    */
+  quotedProductCode: process.env.QUOTED_PRODUCT_CODE ?? "CONF-30-FIXED",
+
   /**
    * Google OAuth client id. Public by design — it is embedded in every page
    * that offers Google sign-in — so it is a plain env var, not a secret.
@@ -195,10 +199,4 @@ export const config = {
   sessionSecret:
     process.env.SESSION_SECRET ??
     (process.env.NODE_ENV === "production" ? "" : "development-only-session-secret"),
-
-  defaultProduct: {
-    code: process.env.DEFAULT_PRODUCT_CODE ?? "CONF-30-FIXED",
-    termMonths: parseInt(process.env.DEFAULT_TERM_MONTHS ?? "360", 10),
-    noteRate: Number(process.env.DEFAULT_NOTE_RATE ?? "6.25"),
-  },
 } as const;

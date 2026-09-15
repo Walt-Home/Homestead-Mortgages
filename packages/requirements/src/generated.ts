@@ -637,6 +637,30 @@ export const REQUIREMENTS: readonly Requirement[] = [
     }
   },
   {
+    "id": "APP-028",
+    "family": "APP",
+    "screen": "declarations",
+    "screenOrdinal": 4,
+    "source": "borrower_input",
+    "statement": "Subject property estate type declared",
+    "fields": "property_estate_type: fee simple or leasehold",
+    "evidence": [
+      "URLA Section 4a",
+      "purchase contract",
+      "deed",
+      "ground lease"
+    ],
+    "condition": "universal",
+    "conditionProse": "Universal",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "at",
+      "event": "application",
+      "prose": "At application"
+    }
+  },
+  {
     "id": "AST-001",
     "family": "AST",
     "screen": "bank",

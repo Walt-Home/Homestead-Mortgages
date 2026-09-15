@@ -30,6 +30,7 @@ function file(overrides: Partial<LoanFile> = {}): LoanFile {
       address: { line1: "1 St", city: "C", state: "TX", postalCode: "1" },
       deliverableAddressVerified: true,
       propertyType: "single_family",
+      estateType: "FeeSimple",
       occupancy: "primary_residence",
       valueOrPrice: 400_000,
       valuationSource: "avm",
@@ -46,7 +47,7 @@ function file(overrides: Partial<LoanFile> = {}): LoanFile {
     product: {
       productCode: "P",
       termMonths: 360,
-      amortization: "fixed",
+      amortization: "Fixed",
       noteRate: 6,
       overlays: [],
     },

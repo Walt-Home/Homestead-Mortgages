@@ -187,6 +187,7 @@ describe("a file whose ordinal 1 was refilled", () => {
     await recordDeclaration(fileId, {
       declaration: DECLARED_BANKRUPTCY,
       residences: SETTLED,
+      propertyEstateType: "FeeSimple",
       assertedByPrincipalId: await staffPrincipal(prisma, `ops-${fileId}`),
     });
 
@@ -204,6 +205,7 @@ describe("a file whose ordinal 1 was refilled", () => {
     const written = await recordDeclaration(fileId, {
       declaration: DECLARED_BANKRUPTCY,
       residences: SETTLED,
+      propertyEstateType: "FeeSimple",
       assertedByPrincipalId: await staffPrincipal(prisma, `ops-${fileId}`),
     });
 

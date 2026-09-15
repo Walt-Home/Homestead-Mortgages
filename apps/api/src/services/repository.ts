@@ -217,6 +217,9 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       },
       decisions: { orderBy: { computedAt: "desc" }, take: 1 },
+      // What the code MEANS. The engine reads the rate and the term off the
+      // file, and everything else about the product off this row.
+      product: true,
       // One extra per kind is enough to build the current view; history stays
       // in the table for the diff the monitoring loop will need.
       snapshots: { orderBy: { retrievedAt: "desc" } },
@@ -380,6 +383,11 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
             },
             deliverableAddressVerified: row.addressVerified,
             propertyType: (row.propertyType ?? "single_family") as never,
+            // No `??` here, unlike the three below it. An unasked estate type
+            // is null all the way to the engine, which is what lets APP-028
+            // report that it has not been asked instead of reporting a fee
+            // simple nobody stated.
+            estateType: row.propertyEstateType,
             occupancy: (row.occupancy ?? "primary_residence") as never,
             valueOrPrice: numOr(row.valueOrPrice, 0),
             valuationSource: (row.valuationSource ?? "borrower_stated") as never,
@@ -409,15 +417,37 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
         }
       : null,
 
-    product: row.productCode
-      ? {
-          productCode: row.productCode,
-          termMonths: row.termMonths ?? 360,
-          amortization: (row.amortization ?? "fixed") as never,
-          noteRate: numOr(row.noteRate, 0),
-          overlays: row.overlays,
-        }
-      : null,
+    /**
+     * A product only when the row carries one whole.
+     *
+     * This read `numOr(row.noteRate, 0)` beside a `?? 360`, so a row with a
+     * product code and a NULL rate — an adapter that answered without the
+     * field, which is the ordinary vendor-mapping bug — came back as a product
+     * quoted at zero percent. Nothing downstream treats zero as missing:
+     * `housingPitia` amortizes it, records the payment as a derivation with a
+     * formula beside it, and the decision has no blocked input to refer on. A
+     * null product takes `UW-004`'s existing `log.blocked` path instead, which
+     * the decision screen already has copy for.
+     *
+     * The database refuses the row that would get here — the code, the term and
+     * the rate are present together or absent together — so this is the second
+     * half of one promise rather than the only half.
+     *
+     * How it amortizes comes off the product ROW rather than off a literal
+     * here. The foreign key means a quoted file always has one, so there is
+     * nothing to default, and `?? "fixed"` was the last place a product
+     * characteristic was a string in this file.
+     */
+    product:
+      row.product && row.noteRate !== null && row.termMonths !== null
+        ? {
+            productCode: row.product.code,
+            termMonths: row.termMonths,
+            amortization: row.product.amortization,
+            noteRate: Number(row.noteRate),
+            overlays: row.overlays,
+          }
+        : null,
 
     borrowers: inDocumentOrder,
     consents,

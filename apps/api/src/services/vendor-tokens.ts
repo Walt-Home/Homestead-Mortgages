@@ -61,7 +61,10 @@ export function decryptToken(stored: string, key: Buffer): string {
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
 
-export function vendorTokenStore(prisma: PrismaClient, rawKey: string | undefined): VendorTokenStore {
+export function vendorTokenStore(
+  prisma: PrismaClient,
+  rawKey: string | undefined,
+): VendorTokenStore {
   const key = loadKey(rawKey);
 
   return {

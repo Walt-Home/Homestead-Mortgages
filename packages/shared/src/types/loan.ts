@@ -1,5 +1,7 @@
 /** Loan terms, the subject property, and the product being underwritten. */
 
+import type { PropertyEstateType } from "./declaration.js";
+
 export type LoanPurpose = "purchase" | "rate_term_refinance" | "cash_out_refinance";
 export type OccupancyType = "primary_residence" | "second_home" | "investment";
 export type PropertyType =
@@ -22,6 +24,15 @@ export interface SubjectProperty {
   /** True once the address has been matched against public record (APP-004). */
   readonly deliverableAddressVerified: boolean;
   readonly propertyType: PropertyType;
+  /**
+   * Fee simple, or a leasehold on land somebody else owns.
+   *
+   * Null until screen 3 asks (APP-028). Nothing retrieves it — no assessor
+   * record, valuation or flood determination carries it, and the title
+   * commitment that settles it does not exist when a casefile is submitted —
+   * so the third state is "not asked yet" rather than "fee simple".
+   */
+  readonly estateType: PropertyEstateType | null;
   readonly occupancy: OccupancyType;
   /** Purchase price, or estimated value on a refinance. */
   readonly valueOrPrice: number;
@@ -61,10 +72,26 @@ export interface LoanTerms {
   readonly existingLoan?: ExistingLoan;
 }
 
+/**
+ * How the loan amortizes, spelled the way Desktop Underwriter spells it.
+ *
+ * The product row holds the DU enumeration itself rather than a word of ours,
+ * so there is nothing to translate between the column and the element. GEM and
+ * GPM are products this lender does not offer; the set is Fannie Mae's, and
+ * trimming it would go stale the day somebody quotes one.
+ */
+export type AmortizationType = "AdjustableRate" | "Fixed" | "GEM" | "GPM" | "Other";
+
 export interface ProductSelection {
   readonly productCode: string;
   readonly termMonths: number;
-  readonly amortization: "fixed" | "arm";
+  /**
+   * Read off the product, not off the file. A rate and a term are quoted per
+   * borrower; whether the loan amortizes at all is what the product IS, and the
+   * indicators beside it — balloon, interest-only, negative amortization — live
+   * on the same row so they cannot contradict it.
+   */
+  readonly amortization: AmortizationType;
   readonly noteRate: number;
   /** Lender/investor overlays beyond the agency guide. Empty means none apply. */
   readonly overlays: readonly string[];

@@ -110,7 +110,7 @@ describe("the onboarding flow", () => {
   });
 
   it("never lets the new questions move a mid-flight file backwards", async () => {
-    // Six always-applicable borrower-input rows landed in the registry with
+    // Seven always-applicable borrower-input rows landed in the registry with
     // the declarations screen, and `progress()` counts only what definitely
     // applies — so a file that was nearly done is exactly where a new row
     // shows up as lost ground. The walk below is a borrower who connected
@@ -144,11 +144,24 @@ describe("the onboarding flow", () => {
     const satisfied = assessAll(answered)
       .filter((a) => a.satisfaction.status === "satisfied")
       .map((a) => a.requirement.id);
-    expect(satisfied).toEqual(expect.arrayContaining(["APP-022", "APP-023", "APP-026"]));
+    // APP-028 is on the file rather than on each borrower — one house is held
+    // on one estate — and it is named here because screen 3 is the only place
+    // it can be answered: nothing retrieved carries it, so a walk that reached
+    // this point with it already satisfied would be a fixture answering for a
+    // borrower who was never asked.
+    expect(satisfied).toEqual(expect.arrayContaining(["APP-022", "APP-023", "APP-026", "APP-028"]));
     const stillOwed = assessAll(answered)
       .filter((a) => a.applies === true && a.satisfaction.status !== "satisfied")
       .map((a) => a.requirement.id);
-    for (const id of ["APP-022", "APP-023", "APP-024", "APP-025", "APP-026", "APP-027"]) {
+    for (const id of [
+      "APP-022",
+      "APP-023",
+      "APP-024",
+      "APP-025",
+      "APP-026",
+      "APP-027",
+      "APP-028",
+    ]) {
       expect(stillOwed, id).not.toContain(id);
     }
   });

@@ -11,42 +11,71 @@ believed. Line numbers move; treat them as pointers to a name.
 
 **The model a submission is assembled from is built, a submission is assembled
 and emitted from it, a preflight refuses to emit one Desktop Underwriter would
-reject, and both ends of the exchange with DU exist. Nothing sends, and nothing
-is currently emittable either — the gate names the eleven columns in the way,
-below.**
+reject, both ends of the exchange with DU exist, and a casefile with no job on
+it now comes out of the gate as bytes. Nothing sends, and a casefile carrying
+employment is still refused — three columns, below.**
 
-Fifteen items are tracked below: nine done, five partial, one not. The count
-still flatters us — what remains of the submission path is a transport that
-actually carries a document somewhere, and until there is one, the port that
-would submit has nothing beneath it.
+Fifteen items are tracked below: ten done, five partial. The count still
+flatters us — what remains of the submission path is a transport that actually
+carries a document somewhere, and until there is one, the port that would submit
+has nothing beneath it.
 
 **The gate found things, and they are in this page rather than in a comment.**
 
-**Eleven columns stand between this model and a casefile that could be sent,
-and no application it assembles is emittable until they exist.** Eight of them
-are on the loan being applied for and on the subject property —
-`MortgageType` and five product indicators (`ConstructionLoanIndicator`,
-`BalloonIndicator`, `InterestOnlyIndicator`, `NegativeAmortizationIndicator`,
-`PrepaymentPenaltyIndicator`), plus `FinancedUnitCount` and
-`PropertyEstateType`. The specification requires every one of them with no
-condition in front of it, all eighteen shipped samples carry all eight on their
-subject loan and subject property, and this repository holds none: `loan_files`
-has a free-text `product_code` and a `property_type`, which is not the same
-thing as saying a loan is conventional, amortizes without a balloon, and sits
-on a fee simple estate. **Nothing here guesses one.** A value invented to get
-past a gate is worse than the refusal, because the refusal is ours and the value
-would be Desktop Underwriter's.
+**Eight of the eleven columns that stood between this model and a sendable
+casefile are built.** Six are the PRODUCT's, and they are a table rather than
+six columns on a file: `loan_products` holds `MortgageType` and the four
+indicators — construction, balloon, interest-only, negative amortization — plus
+the prepayment penalty, because whether a loan builds or balloons is true of
+`CONF-30-FIXED` itself and identical on every file quoted against it. A
+prepayment penalty reads at first like a term of the note rather than a family
+of product; Regulation Z makes it structural, because a penalty is permitted
+only on a fixed-rate qualified mortgage that is not higher-priced and the
+creditor has to offer an alternative loan without one — which is a second
+product at a second price, not a second checkbox on this one.
+`loan_files.product_code` is now a foreign key to that table, so a file cannot
+be quoted against a product whose characteristics nobody holds.
 
-The other three are on a job: `EmploymentClassificationType`,
+**A seventh moved onto that table rather than arriving with it.**
+`AmortizationType` was `loan_files.amortization`, the literal string `'fixed'`
+written onto every file by the create route, and it is a product characteristic
+by exactly the test the five indicators are chosen by. Left on the file it could
+contradict them: a product whose `interest_only` and `balloon` are true, quoted
+onto a file still saying Fixed and fully amortizing, is a casefile that
+disagrees with itself and validates. The column holds the DU value now rather
+than a word of ours, so the emitter has no lookup table left to be wrong.
+
+The other two are the PROPERTY's, and they split on where an answer can come
+from. `financed_unit_count` is retrieved: the county holds it and screen 1's
+assessor lookup already returned it. `property_estate_type` is asked, on screen
+3, as APP-028 — no assessor record, valuation or flood determination carries it,
+and the title commitment that settles it does not exist when a casefile is
+submitted. Both are nullable and **nothing defaults**: an address no vendor
+answers for and a borrower who has not reached screen 3 each leave a null, the
+preflight refuses, and the refusal is ours instead of Desktop Underwriter's.
+
+**A ninth column came out of the gate rather than out of the audit.**
+`AttachmentType` is required the moment `FinancedUnitCount` exists — "Required
+IF FinancedUnitCount < 5" — and all eighteen shipped samples carry it, six
+`Attached` and twelve `Detached`. Answering one of the eight is what made it
+bite, and the preflight said so on the first run. It is retrieved beside the
+unit count off the same assessor record, because it describes the building and
+a borrower's word for a fact the county holds is what screen 1 exists to avoid.
+It is not derivable from `property_type`: a single-family house on a row is
+attached.
+
+Three columns remain, and they are on a job: `EmploymentClassificationType`,
 `EmploymentBorrowerSelfEmployedIndicator` and
 `SpecialBorrowerEmployerRelationshipIndicator` are required on an `EMPLOYMENT`
 whose status is Current, and `employments` has a column for none of them. That
 is item 7's third gap.
 
-All eleven are columns and screen questions rather than design problems, and
-the api suite names all eleven exactly — eight in one test and three in
-another — so the lists shorten in the commit that adds a column and cannot
-quietly grow.
+The api suite names what is left exactly, so the list shortens in the commit
+that adds a column and cannot quietly grow. The eight-column test now asserts an
+EMPTY finding list and emits through `emitSubmission`, with three tests beside
+it that withhold the product, the property facts and the attachment one at a
+time and name what goes missing — an empty list is only worth something if
+withholding something puts it back.
 
 What changed since the last measurement is that **all three of the gaps that
 blocked any submission are closed**. Declarations are asked and stored,
@@ -200,7 +229,7 @@ which have a longer lead time than anything above.
 | —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet               |
 | 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                           |
 | —   | The submission                      | Yellow | Emitter, gate and both ends built; nothing carries a document               |
-| —   | The product and the property        | Red    | Eight required columns missing, so no casefile is emittable at all          |
+| —   | The product and the property        | Green  | A product table, a retrieved building and one question on screen 3          |
 
 **The three that blocked any submission are closed.** Declarations, the current
 residence, and assets with liabilities and owned property were each a hard stop
@@ -209,15 +238,16 @@ built and enforced at the database.
 
 What remains splits cleanly. The borrower count and the compute boundary limit
 _which_ loans we could submit and how confidently. The submission path is what
-makes submitting possible at all, and an application now becomes a document that
-something is willing to refuse; what it does not become is a document anything
-carries anywhere — nor, today, one anything would let out, because the eight
-product and property columns above are not there to be emitted.
+makes submitting possible at all, and an application now becomes a document the
+gate is willing to let out — bytes, on a file with no job on it. What it does
+not become is a document anything carries anywhere.
 
 **The two new rows are the gate's own output and not a re-reading of the
 audit.** Neither the product columns nor the employment ones were visible
 before something evaluated the specification's required column against a
-casefile this repository built.
+casefile this repository built — and the same is true one layer down, of the
+attachment type nobody knew was missing until a unit count existed to trigger
+it.
 
 ## Decided: we submit
 
@@ -481,18 +511,78 @@ only the nulls — without that a row could carry a discriminator that lies, and
 no check catches those. `lien_upb_cents` is derived by triggers on both sides,
 so a second lien moves the total with nobody updating it.
 
-**The product and the property.** The subject loan and the subject property are
-assembled from `loan_files` and `loan_scenarios`, and eight data points the
-specification requires unconditionally are not in either table:
-`TERMS_OF_LOAN/MortgageType`, five `LOAN_DETAIL` product indicators —
+**The product and the property.** Built, in three places, because the eight
+data points the specification requires unconditionally on the subject loan and
+the subject property are three kinds of thing.
+
+`loan_products` is the first, keyed on the code a file is quoted under.
+`MortgageType` at `TERMS_OF_LOAN` and the five `LOAN_DETAIL` indicators —
 `ConstructionLoanIndicator`, `BalloonIndicator`, `InterestOnlyIndicator`,
-`NegativeAmortizationIndicator`, `PrepaymentPenaltyIndicator` — and
-`FinancedUnitCount` and `PropertyEstateType` on the subject property's
-`PROPERTY_DETAIL`. `product_code` is free text and `property_type` is free
-text, and neither is an answer to "is this loan conventional" or "how many units
-is this". So every casefile this model assembles is refused, and the refusal is
-the right answer: the alternative is eight invented values on a federal
-submission, which is the same trade the taxpayer identifier already refused.
+`NegativeAmortizationIndicator`, `PrepaymentPenaltyIndicator` — are all true of
+`CONF-30-FIXED` itself rather than of the person being quoted, and a code is a
+string, not a statement that the loan behind it amortizes. The rate and the term
+stayed on the file: those are quoted per borrower from a rate sheet keyed on
+product, FICO, LTV and lock period. The prepayment penalty is the one that had
+to be argued onto the table rather than beside the rate, and Regulation Z is the
+argument: a penalty is permitted only on a fixed-rate qualified mortgage that is
+not higher-priced, it is capped, it expires, and the creditor has to offer an
+alternative loan WITHOUT one — an alternative that is a second product at a
+second price. `amortization` is on this table too, spelled the way DU spells it
+— `Fixed`, `AdjustableRate` — because a loan that pays interest only or balloons
+is not one that amortizes fully, and two rows cannot disagree about one loan
+when there is only one row.
+
+A quoted file keeps the product it was quoted under, and keeps what that product
+SAID. `loan_files.product_code` is a foreign key, `ON DELETE RESTRICT` and `ON
+UPDATE RESTRICT`: a cascading rename would re-point every historical file at
+whatever the new code means, which is the same loss as the delete with a
+different spelling on it. Neither direction of the key stops the row being
+rewritten in place, so a trigger does — flipping `prepayment_penalty` on
+`CONF-30-FIXED` restates what every casefile ever sent under it told Desktop
+Underwriter, with nothing appended and nothing to diff against, which is the
+reason `connector_snapshots` and `decisions` are append-only in the first place.
+A product on different terms is another row, and that sentence is now a
+constraint rather than a note.
+
+`loan_files.financed_unit_count` and `loan_files.property_attachment_type` are
+the second, and both are RETRIEVED: they describe a building, the county holds
+them, and screen 1's assessor lookup already went and asked. `POST
+/files/:id/property-data` writes them off the connector result rather than off
+anything the client sent, because a column DU reads should not be a value a
+browser could have edited on its way past. A unit count outside one to four is
+kept out of the column rather than clipped into it — five units is a commercial
+loan, and a 4 standing in for a 12 is worse than a null.
+
+`loan_files.property_estate_type` is the third, and it is ASKED, on screen 3, as
+APP-028 with `source = borrower_input`. Nothing we retrieve carries it and the
+document that settles it is the title commitment, which does not exist when a
+casefile is submitted — so at submission the answer can only be the borrower's,
+read off their contract or their deed. The question is worded as "Do you own the
+land the home sits on?", because "fee simple or leasehold" is a question about
+vocabulary.
+
+All three columns are NULLABLE and nothing fills one in. A column with a
+plausible default is how `borrowers.current_housing` came to say every borrower
+rents, and undoing that took a migration, a route change and a screen. An
+unknown value is null, the preflight refuses, and the refusal is ours instead of
+Desktop Underwriter's.
+
+And all three describe ONE building, so a moved address forgets all three.
+`loan_files_building_follows_the_address` nulls whichever of them the same
+statement did not restate: a borrower who corrects a mistyped address after the
+lookup card rendered, or types a new-construction address no vendor holds a
+record for, would otherwise submit a unit count, an attachment and an estate
+that were true of the address they just left — none of them null, so nothing
+downstream could tell. It is a trigger rather than a route guard for the reason
+the unit-count CHECK is one: these arrive from a vendor as well as from a
+person, and the screen that moves an address today is not the only door there
+will ever be.
+
+`buildingFacts` also refuses an attachment nobody mapped instead of writing
+`undefined`, which Prisma reads as "leave this column alone". The fixture's two
+values hold today; the field is the one a real Places, Smarty or ATTOM adapter
+fills from parsed vendor JSON, and an unmapped string there would leave the
+column holding the previous building's answer.
 
 **Item 7 — employer as an entity.** Real, with a party FK and an identity key
 that survives the EIN promotion; `income_sources` and `employments` both carry

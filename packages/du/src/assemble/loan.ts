@@ -24,16 +24,22 @@
 
 import type { LienPosition, LoanPurpose } from "@hm/db";
 import { compact, container, leaf, type DuNode } from "../document.js";
-import { renderAmount, renderCount, renderPercent } from "../values.js";
+import { renderAmount, renderCount, renderIndicator, renderPercent } from "../values.js";
 import type { LoadedApplication } from "./load.js";
 
 /**
- * Three enums our tables spell one way and MISMO spells another, each
- * exhaustive and each throwing rather than defaulting.
+ * Two enums our tables spell one way and MISMO spells another. Both are
+ * exhaustive over the column's own type, so a value added to either column is a
+ * compile error here rather than a MISMO value invented at runtime.
  *
  * A cash-out refinance and a rate-and-term refinance are one `LoanPurposeType`
  * to DU; which one it is lives in the `REFINANCE` container, which this model
  * does not yet emit.
+ *
+ * `AmortizationType` used to be a third, and it needed a runtime throw because
+ * `loan_files.amortization` was a free-text column holding the word `'fixed'`.
+ * The product row holds the DU enumeration itself, so there is nothing left to
+ * translate and nothing left to guess.
  */
 const LOAN_PURPOSE: Readonly<Record<LoanPurpose, string>> = {
   PURCHASE: "Purchase",
@@ -49,23 +55,6 @@ const LIEN_PRIORITY: Readonly<Record<LienPosition, string>> = {
   SUBORDINATE_HELOC: "SecondLien",
 };
 
-const AMORTIZATION_TYPE: Readonly<Record<string, string>> = {
-  fixed: "Fixed",
-  arm: "AdjustableRate",
-};
-
-function amortizationType(amortization: string | null): string | null {
-  if (amortization === null) return null;
-  const mapped = AMORTIZATION_TYPE[amortization];
-  if (!mapped) {
-    throw new Error(
-      `${JSON.stringify(amortization)} is not an amortization this emitter can name. Add it to ` +
-        "AMORTIZATION_TYPE; do not guess a MISMO value.",
-    );
-  }
-  return mapped;
-}
-
 export function buildLoans(
   application: LoadedApplication,
   verifications: DuNode | null,
@@ -74,11 +63,15 @@ export function buildLoans(
   const scenario = application.scenarios[0];
   const termMonths = scenario?.termMonths ?? file.termMonths;
 
+  // Read off the product for the reason the four indicators below are: a loan
+  // that pays interest only or balloons is not one that amortizes fully, and
+  // two rows cannot disagree about one loan when there is only one row.
+  const product = file.product;
   const amortization = container("AMORTIZATION", [
     container(
       "AMORTIZATION_RULE",
       compact([
-        leaf("AmortizationType", amortizationType(file.amortization)),
+        product ? leaf("AmortizationType", product.amortization) : null,
         termMonths === null || termMonths === undefined
           ? null
           : leaf("LoanAmortizationPeriodCount", renderCount(termMonths)),
@@ -89,14 +82,32 @@ export function buildLoans(
     ),
   ]);
 
-  // Counted from `application_parties` and not from `borrowers`: the edges are
-  // what the document's ROLE elements are emitted from, so this is a count of
-  // what the file actually contains.
-  const loanDetail = container("LOAN_DETAIL", [
-    application.parties.length === 0
-      ? null
-      : leaf("BorrowerCount", renderCount(application.parties.length)),
-  ]);
+  // The borrower count is counted from `application_parties` and not from
+  // `borrowers`: the edges are what the document's ROLE elements are emitted
+  // from, so this is a count of what the file actually contains.
+  //
+  // The four indicators beside it are read off the PRODUCT. None of them is an
+  // answer a borrower gives — whether a loan builds, balloons, pays interest
+  // only or amortizes negatively is true of `CONF-30-FIXED` itself — so a file
+  // quoted against no product carries none of them and the gate refuses it,
+  // which is the whole reason the product became a row.
+  const loanDetail = container(
+    "LOAN_DETAIL",
+    compact([
+      product ? leaf("BalloonIndicator", renderIndicator(product.balloon)) : null,
+      application.parties.length === 0
+        ? null
+        : leaf("BorrowerCount", renderCount(application.parties.length)),
+      product ? leaf("ConstructionLoanIndicator", renderIndicator(product.constructionLoan)) : null,
+      product ? leaf("InterestOnlyIndicator", renderIndicator(product.interestOnly)) : null,
+      product
+        ? leaf("NegativeAmortizationIndicator", renderIndicator(product.negativeAmortization))
+        : null,
+      product
+        ? leaf("PrepaymentPenaltyIndicator", renderIndicator(product.prepaymentPenalty))
+        : null,
+    ]),
+  );
 
   const terms = container(
     "TERMS_OF_LOAN",
@@ -104,6 +115,11 @@ export function buildLoans(
       scenario ? leaf("BaseLoanAmount", renderAmount(scenario.loanAmountCents)) : null,
       scenario ? leaf("LienPriorityType", LIEN_PRIORITY[scenario.lienPosition]) : null,
       file.purpose ? leaf("LoanPurposeType", LOAN_PURPOSE[file.purpose]) : null,
+      // Conventional, FHA, VA or USDA. A family of product and not a borrower's
+      // circumstance, which is why it reads the same row the indicators do and
+      // not the two enum columns on `du_liabilities` that spell a mortgage the
+      // borrower already owes.
+      product ? leaf("MortgageType", product.mortgageType) : null,
       scenario?.noteRateBps == null
         ? null
         : leaf("NoteRatePercent", renderPercent(scenario.noteRateBps)),

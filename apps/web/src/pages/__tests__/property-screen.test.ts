@@ -76,12 +76,41 @@ describe("a sample file on screen 1", () => {
   });
 });
 
+describe("a down payment that leaves no loan", () => {
+  /**
+   * The gate cannot answer this, so the screen must not ask it.
+   *
+   * A down payment covering the price leaves a loan of nothing, the pricing
+   * port refuses to quote nothing, and `POST /property/affordability` answered
+   * a raw 500 that this screen rendered verbatim — "Internal server error", on
+   * the one screen whose job is to tell somebody their loan cannot work. The
+   * server refuses it as a request now; this is the half that answers before
+   * the round trip. Ordinary input on a refinance, where the field reads "How
+   * much equity are you keeping?" and an owner with no mortgage left types the
+   * whole value.
+   */
+  const submit = src.slice(src.indexOf("async function submit("));
+  const beforeGate = submit.slice(0, submit.indexOf("/property/affordability"));
+
+  it("is caught before the gate is called", () => {
+    expect(beforeGate).toContain("if (priceNum > 0 && downNum >= priceNum)");
+  });
+
+  it("says which of the two questions the borrower was answering", () => {
+    expect(beforeGate).toContain("there is no loan to check");
+    expect(beforeGate).toContain("That leaves no loan to refinance");
+  });
+});
+
 describe("coming back to screen 1 on a file that already exists", () => {
   /** A condo, taking cash out — the two shapes the screen could not restore. */
   const file = {
     property: {
       address: { line1: "12 Kestrel Ct", city: "Austin", state: "TX", postalCode: "78745" },
       propertyType: "condominium",
+      // Screen 1 neither shows nor sets this. It is here because the file type
+      // carries it, and screen 3 is what answers it.
+      estateType: null,
       occupancy: "second_home",
       valueOrPrice: 415_000,
     },

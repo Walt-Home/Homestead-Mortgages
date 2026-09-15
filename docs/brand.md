@@ -427,7 +427,12 @@ Principles:
    refinances" are advertising claims on a mortgage product. Before this copy
    ships, someone who knows the rules has to say what disclosures ride with
    it, and the system needs a disclosure style so they are not an
-   afterthought.
+   afterthought. Half of it is settled: the guarantee is off the page. This
+   product has no lock desk, no lock record and nothing that enforces a quote's
+   expiry, so a guaranteed rate was not an unreviewed claim but a false one,
+   and `RATE_COMMITMENT` in `copy-rules.ts` now fails the build over it. The
+   table above still records the prototype's line, because that is what the
+   prototype says. "Automatically refinances" is the half still open.
 7. **Metadata.** `<meta name="description">` still reads "built on Replit";
    there is no OG image. The street would make a good one.
 8. **Relationship to the Homestead tokens.** See below.

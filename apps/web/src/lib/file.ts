@@ -15,6 +15,7 @@ import type {
   BorrowerDeclaration,
   BorrowerResidence,
   DecisionOutcome,
+  PropertyEstateType,
   Ratios,
 } from "@hm/shared";
 import { api, ApiError } from "./api.js";
@@ -121,6 +122,8 @@ export interface LoanFileView {
   property: {
     address: { line1: string; city: string; state: string; postalCode: string };
     propertyType: string;
+    /** Null until screen 3 asks. Nothing we retrieve carries it. */
+    estateType: PropertyEstateType | null;
     occupancy: string;
     valueOrPrice: number;
   } | null;

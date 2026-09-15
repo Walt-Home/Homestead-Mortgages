@@ -21,7 +21,7 @@
 
 import type { Occupancy, Prisma } from "@hm/db";
 import { compact, container, leaf, type DuNode } from "../document.js";
-import { renderAmount } from "../values.js";
+import { renderAmount, renderCount } from "../values.js";
 import type { LoadedApplication } from "./load.js";
 
 /** The five lines an address is, in whatever container holds it. */
@@ -97,15 +97,27 @@ export function subjectAddressFields(application: LoadedApplication): AddressFie
 }
 
 export function buildCollaterals(application: LoadedApplication): DuNode | null {
+  const file = application.loanFile;
   const scenario = application.scenarios[0];
-  const estimatedValue =
-    scenario?.valueEstimateCents ?? centsFromDecimal(application.loanFile.valueOrPrice);
+  const estimatedValue = scenario?.valueEstimateCents ?? centsFromDecimal(file.valueOrPrice);
 
   const subject = container("SUBJECT_PROPERTY", [
     addressNode(subjectAddressFields(application)),
     container(
       "PROPERTY_DETAIL",
       compact([
+        // Three facts about the property, from two sources. The county holds
+        // the unit count and whether the dwelling is attached, and screen 1's
+        // lookup writes both; nothing we retrieve carries the estate type, so
+        // screen 3 asks it. Any of the three can be null on a legitimate
+        // file — an address no vendor answers for, or a borrower who has not
+        // reached screen 3 — and a null one is emitted as nothing at all
+        // rather than as a 1, a detached house and a fee simple.
+        leaf("AttachmentType", file.propertyAttachmentType),
+        file.financedUnitCount === null
+          ? null
+          : leaf("FinancedUnitCount", renderCount(file.financedUnitCount)),
+        leaf("PropertyEstateType", file.propertyEstateType),
         estimatedValue === null || estimatedValue === undefined
           ? null
           : leaf("PropertyEstimatedValueAmount", renderAmount(estimatedValue)),

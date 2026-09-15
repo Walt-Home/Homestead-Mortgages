@@ -21,6 +21,7 @@ import {
   BRITISH,
   DELIVERY_TIME,
   PROMISES,
+  RATE_COMMITMENT,
   REQ_ID,
   VENDOR_CLAIM,
   type ApplicationState,
@@ -68,6 +69,17 @@ describe("what a persona row says", () => {
   it("names no requirement", () => {
     for (const { key, text } of copy()) {
       expect(`${key}: ${text}`).not.toMatch(REQ_ID);
+    }
+  });
+
+  /**
+   * A story is read by somebody deciding whether to sign in as a sample
+   * borrower, and a line saying their rate is locked would be false about a
+   * product with no lock desk in it. The same rule the screens keep.
+   */
+  it("commits to no rate", () => {
+    for (const { key, text } of copy()) {
+      expect(`${key}: ${text}`).not.toMatch(RATE_COMMITMENT);
     }
   });
 

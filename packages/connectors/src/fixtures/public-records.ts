@@ -88,6 +88,7 @@ const cleanW2: PublicRecordFixture = {
     legalDescription: "LOT 14 BLK C TRAVIS HEIGHTS ANNEX",
     propertyType: "single_family",
     units: 1,
+    attachment: "detached",
     yearBuilt: 1962,
     squareFeet: 1_840,
     bedrooms: 3,
@@ -163,6 +164,9 @@ const thinFileRenter: PublicRecordFixture = {
     legalDescription: "UNIT 312 PONCE MIDTOWN CONDOMINIUM",
     propertyType: "condo",
     units: 1,
+    // Unit 312 of a midtown condominium, which is what a zero lot size is
+    // already saying.
+    attachment: "attached",
     yearBuilt: 2006,
     squareFeet: 1_120,
     bedrooms: 2,
@@ -236,6 +240,7 @@ const variableIncome: PublicRecordFixture = {
     legalDescription: "LOT 27 TRACT 1184 WILLOW GLEN MANOR",
     propertyType: "single_family",
     units: 1,
+    attachment: "detached",
     yearBuilt: 1962,
     squareFeet: 1_840,
     bedrooms: 3,

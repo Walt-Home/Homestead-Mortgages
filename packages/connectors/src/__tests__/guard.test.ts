@@ -30,6 +30,7 @@ import {
   fixtureEsignConnector,
   PURPOSE_FOR,
   requireCategory,
+  SHEET_LOCK_DAYS,
 } from "../index.js";
 
 const PARTY = "11111111-1111-1111-1111-111111111111";
@@ -150,6 +151,17 @@ function tokenFor(partyId: string, category: DataCategory, grants: Grant[] = GRA
 const A = borrower("b1");
 const file = () => fileWith([A]);
 
+/** A loan to price. It names no person, which is the point of the type. */
+const SCENARIO = {
+  purpose: "purchase",
+  occupancy: "primary_residence",
+  propertyType: "single_family",
+  state: "TX",
+  loanAmount: 332_000,
+  propertyValue: 415_000,
+  lockDays: SHEET_LOCK_DAYS,
+} as const;
+
 /**
  * Every port that takes a `PurposeToken`, and every port that cannot.
  *
@@ -158,7 +170,16 @@ const file = () => fileWith([A]);
  * an authorization gets signed and gets a name on it at all. Splitting them
  * here is what lets the suite insist that a NEW port land in one or the other.
  */
-const GUARDED_PORTS = ["credit", "bank", "payroll", "irs", "screening", "liens", "du"] as const;
+const GUARDED_PORTS = [
+  "credit",
+  "bank",
+  "payroll",
+  "irs",
+  "screening",
+  "liens",
+  "pricing",
+  "du",
+] as const;
 type GuardedPort = (typeof GUARDED_PORTS)[number];
 const UNGUARDED_PORTS = ["identity", "esign", "propertyData"] as const;
 
@@ -310,6 +331,11 @@ describe("the adapters, with and without a token", () => {
         () => registry.liens.searchLiens(file(), stranger("public_record_liens"), "0114230209"),
       ],
       [
+        "pricing",
+        "credit-priced quote",
+        () => registry.pricing.quoteForBorrower(file(), stranger("credit_report"), SCENARIO, 740),
+      ],
+      [
         "du",
         "du submission",
         () =>
@@ -385,6 +411,27 @@ describe("what is deliberately not guarded", () => {
     expect(record.data.ownerOfRecord).toBeTruthy();
     const suggestions = await registry.propertyData.suggestAddresses(address.line1);
     expect(suggestions.length).toBeGreaterThan(0);
+  });
+
+  it("does NOT guard the rate sheet, which screen 1 quotes from before any consent", async () => {
+    // The other half of the pricing port, and the reason it sits in
+    // GUARDED_PORTS above rather than here: `quoteForBorrower` sends a
+    // representative FICO to a vendor and is guarded, while `quoteProducts`
+    // asks what a loan of this size on this kind of property costs and names
+    // nobody. Screen 1 quotes a payment before APP-005 is signed, so guarding
+    // this one would make the flow unreachable from its own first step — the
+    // same trap the property lookups document.
+    const quotes = await registry.pricing.quoteProducts(SCENARIO);
+    expect(quotes.length).toBeGreaterThan(0);
+    // The `@ts-expect-error` is the real assertion and it holds at compile
+    // time. The runtime line beneath it used to be `expect(call).toBeDefined()`
+    // over an arrow function, which is true of every arrow function ever
+    // written — so if the type check were ever satisfied some other way, the
+    // test would have stayed green. Passing the token changes the answer not at
+    // all, and that is what is asserted now.
+    // @ts-expect-error the scenario names a loan, and a token cannot be given
+    const ignored = await registry.pricing.quoteProducts(SCENARIO, token("credit_report"));
+    expect(ignored.map((q) => q.productCode)).toEqual(quotes.map((q) => q.productCode));
   });
 
   it("does NOT guard the ID scan, which is how the authorization gets a name on it", async () => {

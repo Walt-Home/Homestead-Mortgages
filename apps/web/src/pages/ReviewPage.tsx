@@ -594,7 +594,14 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
         */}
         <Answers
           heading={SIGNING_COPY.heading}
-          lines={answerLines(declaration, primary?.residences ?? [])}
+          // The estate is on the signer's block alone: it is one answer about
+          // one house, given on this screen's own flow, and repeating it under
+          // a co-borrower's name would read as a second statement.
+          lines={answerLines(
+            declaration,
+            primary?.residences ?? [],
+            file?.property?.estateType ?? null,
+          )}
           unanswered={SIGNING_COPY.unanswered}
           to={`/f/${fileId}/declarations`}
         />

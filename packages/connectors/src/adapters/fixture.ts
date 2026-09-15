@@ -24,11 +24,18 @@ import type {
   LienSearch,
   LoanFile,
   PayrollData,
+  PriceQuote,
+  PricingScenario,
   PropertyRecord,
   SanctionsScreening,
   TaxTranscript,
 } from "@hm/shared";
-import { AddressNotFoundError, requireDocument } from "../ports/index.js";
+import {
+  AddressNotFoundError,
+  requireDocument,
+  requireQuotableScenario,
+  requireScorableFico,
+} from "../ports/index.js";
 import type {
   AssetReportResult,
   BankConnector,
@@ -44,6 +51,7 @@ import type {
   LienConnector,
   LinkSession,
   PayrollConnector,
+  PricingConnector,
   PropertyDataConnector,
   ScreeningConnector,
 } from "../ports/index.js";
@@ -55,6 +63,7 @@ import {
 } from "../guard.js";
 import { PERSONAS, type PersonaId, DEFAULT_PERSONA } from "../fixtures/personas.js";
 import { ADDRESS_BOOK, OFAC_LISTS, PUBLIC_RECORDS } from "../fixtures/public-records.js";
+import { RATE_SHEET, SHEET_LOCK_DAYS, sheetWindow } from "../fixtures/rate-sheet.js";
 
 export interface FixtureOptions {
   readonly persona?: PersonaId;
@@ -498,6 +507,89 @@ export function fixtureIdentityConnector(options: FixtureOptions = {}): Identity
   };
 }
 
+/* ── Pricing ────────────────────────────────────────────────────────────── */
+
+/**
+ * The rate sheet, served without a vendor.
+ *
+ * Two things about it are the point, and both are refusals.
+ *
+ * It applies NO adjustment — no FICO tier, no LTV band, no occupancy hit —
+ * and says so on every quote it returns, including the guarded one that was
+ * handed a score. `RATE_SHEET`'s header carries the argument: the matrices
+ * are published documents this repository does not hold, and the plausible
+ * invention is worse than the absence because it gets believed. So
+ * `quoteForBorrower` answers with the same base rate `quoteProducts` does and
+ * `creditTierApplied` is false in both, which is the sheet describing itself
+ * rather than a caller having to know.
+ *
+ * And it holds one lock column. A scenario asking for any other period gets an
+ * empty list, which the port defines as "nothing eligible" and which is the
+ * truthful answer — the alternative is a 60-day request answered off the
+ * 30-day column, which is a lock-extension spread invented at the moment
+ * somebody needed one.
+ */
+export function fixturePricingConnector(options: FixtureOptions = {}): PricingConnector {
+  const { latencyMs, ref } = resolve(options);
+
+  function sheet(scenario: PricingScenario): readonly PriceQuote[] {
+    if (scenario.lockDays !== SHEET_LOCK_DAYS) return [];
+    const { effectiveAt, expiresAt } = sheetWindow(ref);
+    return RATE_SHEET.map((product) => ({
+      basis: "borrower_rate" as const,
+      productCode: product.productCode,
+      productName: product.productName,
+      termMonths: product.termMonths,
+      amortization: product.amortization,
+      noteRate: product.baseRate,
+      // No price. This sheet quotes a rate and nothing about execution, and a
+      // par price asserted here would put "no discount points" into the
+      // points-and-fees total on the strength of a fixture.
+      pricePercentOfPar: null,
+      lockDays: scenario.lockDays,
+      effectiveAt,
+      expiresAt,
+      adjustments: [],
+      creditTierApplied: false,
+      // Nothing in this repository can lock a rate: no desk, no record, no
+      // expiry enforcement. A fixture that said otherwise would be the one
+      // claim on this port a borrower could act on and lose money over.
+      locked: false,
+    }));
+  }
+
+  return {
+    capabilities: {
+      provider: "fixture-pricing",
+      mode: "fixture",
+      // Nothing. UW-010 is the loan-level price adjustments, and a sheet that
+      // applies none does not satisfy it — claiming it here would put the
+      // requirement behind a base rate.
+      satisfies: [],
+    },
+
+    async quoteProducts(scenario: PricingScenario): Promise<readonly PriceQuote[]> {
+      requireQuotableScenario(scenario);
+      await sleep(latencyMs);
+      return sheet(scenario);
+    },
+
+    async quoteForBorrower(
+      file: LoanFile,
+      token: PurposeToken,
+      scenario: PricingScenario,
+      representativeFico: number,
+    ): Promise<readonly PriceQuote[]> {
+      requireCategory(token, "credit_report");
+      requireSubject(token, file);
+      requireQuotableScenario(scenario);
+      requireScorableFico(representativeFico);
+      await sleep(latencyMs);
+      return sheet(scenario);
+    },
+  };
+}
+
 /* ── Desktop Underwriter ────────────────────────────────────────────────── */
 
 /**
@@ -611,6 +703,7 @@ export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry
     propertyData: fixturePropertyDataConnector(options),
     screening: fixtureScreeningConnector(options),
     liens: fixtureLienConnector(options),
+    pricing: fixturePricingConnector(options),
     du: fixtureDuConnector(options),
   };
 }

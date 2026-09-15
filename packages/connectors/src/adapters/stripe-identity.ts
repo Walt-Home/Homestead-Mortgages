@@ -79,7 +79,9 @@ function toIsoDate(dob: NonNullable<StripeSession["verified_outputs"]>["dob"]): 
   return `${dob.year}-${pad(dob.month)}-${pad(dob.day)}`;
 }
 
-function toAddress(a: NonNullable<StripeSession["verified_outputs"]>["address"]): Address | undefined {
+function toAddress(
+  a: NonNullable<StripeSession["verified_outputs"]>["address"],
+): Address | undefined {
   // A partial address is worse than none: screen 2 prefills from this, and a
   // half-filled form is a form nobody proofreads.
   if (!a?.line1 || !a.city || !a.state || !a.postal_code) return undefined;

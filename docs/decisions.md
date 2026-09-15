@@ -406,6 +406,183 @@ opened: either the application is not taken, or the clock opens tolled with the
 reason recorded. A gap you can see is fine. Permanent evidence of a breach you
 never had the means to avoid is not.
 
+## Pricing is a port, and the vendor is still unpicked
+
+Every file in this product was quoted `DEFAULT_NOTE_RATE` — one number in the
+environment, the same for every borrower, and the only figure reaching a
+decision with no retrieval behind it. It is now the eleventh connector port.
+
+**The port is worth having before the vendor is, and the shape is what makes
+that true.** Two kinds of vendor are in play and they disagree about what an
+answer is. A **product and pricing engine** returns eligible products carrying
+a borrower-facing note rate with the adjustments applied. An **investor
+execution API** returns a price for a loan an investor would buy at a stated
+coupon — which is not a rate until a grid and a margin have been applied to it.
+A port shaped for the first would carry a `noteRate` the second never sends,
+and whoever wired it would fill the field in by inventing the margin. So
+`PriceQuote` is a union on `basis`, `InvestorPriceQuote` has no note rate to
+fill in, and `borrowerNoteRate` returns null for it. A caller holding null
+records `blocked`. **Choosing the margin and the grid is a pricing policy with
+fair-lending consequences — it decides what every borrower pays over what the
+loan is worth — and it is owned, documented and tested as one. It is not a
+default in an adapter.**
+
+**Only the ANSWER is a union. The REQUEST is a pricing engine's**, and the
+asymmetry is written down rather than left to be discovered. `PricingScenario`
+asks what a loan of this size on this kind of property costs. An execution API
+is asked for a coupon ladder against a delivery type, with servicing retained
+or released, and best execution means naming several investors and comparing
+them — four things this request cannot say, and `InvestorPriceQuote` carries no
+investor identity to answer with either. So wiring that vendor is a change to
+`@hm/shared/types/pricing.ts` BEFORE it is a new file in `adapters/`, which is
+the opposite of what the seam promises for the other ten ports. Said here and
+in the port's own header, because the alternative is somebody inventing the
+ladder's center, width and increment inside an adapter — the same invention the
+union exists to prevent, moved one layer down where nothing above can see it.
+
+**The port is half guarded, and the split is the FICO.** `quoteProducts` takes
+a `PricingScenario`, which names a loan and nobody: no party, no name, no
+score. It takes no `PurposeToken` and cannot be given one, which is the same
+device the property lookups use, and it is what lets screen 1 quote a payment
+before APP-005 exists. `quoteForBorrower` is guarded on `credit_report`,
+because a representative FICO is the credit report's number and sending it to a
+vendor is disclosing what a bureau said about somebody. Nothing calls the
+guarded half yet: there is no screen that re-quotes after the credit pull, and
+adding one means deciding what a borrower is told when the second quote is
+worse than the first.
+
+**The fixture is a rate sheet and applies no adjustment at all.** No FICO tier,
+no LTV band, no occupancy hit, no lock-extension spread — every one of those is
+a published matrix this repository does not hold, and the plausible invention
+is the wrong kind of wrong. Its 30-year fixed carries 6.25%, which is what
+`DEFAULT_NOTE_RATE` held, so replacing the variable with a port changed where
+the rate comes from and not what any file was quoted. `creditTierApplied` is
+false on every quote it returns, the guarded call included, because "we applied
+no adjustments to this borrower" and "we never looked at a borrower" are
+different statements and only one of them is a rate anybody may be shown.
+
+It holds ONE product, for the same reason. A 15-year row sat beside the 30-year
+at 5.50% for a while and nothing could say where that figure came from — a 75bp
+term spread nobody published, on a sheet whose other rate is accounted for to
+the basis point. It was reachable: `QUOTED_PRODUCT_CODE=CONF-15-FIXED` would
+have quoted every borrower on that deployment a number this repository made up.
+One product is enough to prove a port.
+
+**The engine's own adjustment grid is untouched, and it is the next thing to
+move.** `packages/underwriting/src/pricing.ts` answers UW-010 today from a FICO
+and LTV matrix its own header calls illustrative, and stamps the derivation
+`(ILLUSTRATIVE GRID)` so a reader of the log cannot miss it. That grid is the
+same invention this port refuses to carry, sitting one package over and already
+reaching a decision. Both adapters therefore claim `satisfies: []` — a base
+sheet with no adjustments on it does not answer UW-010 — and the port is where
+a vendor's adjustments arrive when somebody has one. Moving the requirement
+onto it is a change to what the engine decides, which is why it is not in this
+commit.
+
+**Nothing falls back, and a vendor's answer is checked before it is believed.**
+`quoteSubjectProduct` raises when no quote arrives and raises again when the
+quote is a price rather than a rate. It also raises on three answers that
+arrive looking fine:
+
+- **A stack under one product code.** A pricing engine returns the same 30-year
+  fixed several times over — 6.875 at 101.5, 6.25 at par, 5.75 at 98.25 — and
+  a `find` over that list takes whichever the vendor serialized first. That is
+  112 basis points of somebody's rate decided by array order, and choosing par
+  pricing over buying the rate down is exactly the pricing policy this port
+  says it does not own. So more than one match is refused with its own code
+  rather than resolved. The fixture returns one row per product; the first
+  vendor that returns a stack stops.
+- **The wrong lock column.** The scenario names a lock period so a figure taken
+  off the 30-day column cannot later be read as though it came off the 60-day
+  one, and nothing compared the answer to the question.
+- **A rate no vendor meant.** `requireQuotableQuote` is the answer-side twin of
+  `requireQuotableScenario`: a note rate that is not finite, not above zero or
+  outside a wide plausible band, a term that is not a positive number of
+  months, a window that is not a window. Zero is the case it exists for,
+  because zero is what an absent field becomes in most vendor mappings and
+  zero is the one bad rate that reads as a number all the way down — it
+  amortizes, and `housingPitia` records the payment as a derivation with a
+  formula beside it rather than blocking on it.
+
+Screen 1 fails rather than writing a rate nobody stood behind into
+`loan_files.note_rate`, where every ratio on the decision would compute from it
+and none of them would look wrong. That is `DerivationLog.blocked`'s rule
+applied one layer earlier.
+
+**And the row itself refuses a half-quoted product.**
+`loan_files_quote_a_whole_product_or_none` holds `product_code`, `term_months`
+and `note_rate` present together or absent together, with the rate above zero.
+The checks above are code the next writer can forget; this table had no CHECK
+constraint at all, and the promise the whole commit is about is a promise about
+what is in a row. `LoanFile.product` reads back null rather than zero percent
+when the rate is missing, which takes UW-004's existing `log.blocked` path —
+the one the decision screen already has copy for.
+
+**What the rate came off is recorded with it.** `rate_quote_lock_days`,
+`rate_quoted_at` and `rate_quote_expires_at` go down beside the rate, so a
+figure read back next week is readable as stale. Recorded and not enforced:
+nothing here refuses an expired quote, because nothing here locks a rate, and
+a check would refuse a fixture dated to a past reference day while changing
+nothing about a live file.
+
+**A screen may not say a rate is locked or guaranteed, and that is now a test.**
+It was a comment on `QuoteBase.locked` and nowhere a suite could read it, while
+the landing hero's sub ended "with lowest rates guaranteed" — false by this
+port's own standard, on the first page a borrower sees. `RATE_COMMITMENT` sits
+beside `PROMISES` in `copy-rules.ts`, `borrower-copy.test.ts` and
+`stories.test.ts` read it, and the hero is four words shorter.
+
+**A rate is quoted once, at creation, and a screen-1 revision does not
+re-quote.** That was true before the port and is still true. Whether a
+borrower's rate may move under them when they go back and fix the purchase
+price is a question with a disclosure attached rather than a line of code.
+
+### What this does NOT unblock, and why
+
+`compliance.ts` blocks UW-006, UW-007, UW-008, UW-009 and APP-019 on three
+inputs, and **a note rate is none of them**. This commit moves none of the five.
+
+| Input           | What it is                             | Where it comes from                       |
+| --------------- | -------------------------------------- | ----------------------------------------- |
+| APR             | The rate including the finance charges | This loan's fee schedule, plus the rate   |
+| APOR            | Average Prime Offer Rate for the week  | The FFIEC's published table               |
+| Points and fees | The QM total                           | The fee schedule behind the Loan Estimate |
+
+**APR is not the note rate and no pricing vendor can supply ours.** It is a
+function of this loan's finance charges under Reg Z, so an engine that reports
+"APR" reports it on the fee set the engine assumes. Putting that number in
+`MarketInputs.apr` would make the HOEPA and General QM determinations turn on
+somebody else's assumed fees, which is exactly the confidently wrong answer
+`compliance.ts`'s header refuses. The port therefore carries no APR field.
+
+**Pricing contributes one line of the fee schedule and not the schedule.** A
+quote below par implies discount points, which are part of the QM
+points-and-fees total — alongside origination, underwriting, and every other
+charge from a fee table this repository does not have. `pricePercentOfPar` is on
+the quote for whoever builds that table; it does not complete it, and the
+fixture leaves it null rather than asserting par.
+
+**APOR belongs in its own commit, and not in this one.** It comes from no
+pricing vendor: it is a weekly table the FFIEC publishes, and the work is a
+dated load with a lookup, not an adapter. Three things make it a commit of its
+own rather than a field here:
+
+- It is selected by the **rate-lock date** and by the product's term and type.
+  Nothing in this product locks a rate — `QUOTED_LOCK_DAYS` names a column of a
+  sheet and no more — so there is no date to select on yet, and picking "today"
+  silently backdates or forwards every determination made about an older file.
+- The table is **dated data that goes stale**, which makes it storage rather
+  than configuration: a HOEPA test run twice on one file has to give the same
+  answer, so the week's table has to be recorded with the determination rather
+  than read live.
+- A stale or mis-dated APOR produces a **confidently wrong** high-cost finding
+  in either direction, on a test whose failure severity in Drew's sheet is
+  "Regulatory violation". Blocked is the correct output until it is right.
+
+So the five tests stay blocked, and they now block on inputs whose sources
+are written down. What this commit ends is a rate that was one environment
+variable.
+
 ## Bank: Plaid, and CRA rather than Assets
 
 CRD-017 wants "a 12-month asset verification report from an authorized DU
@@ -1130,19 +1307,21 @@ than a table of personas because the persona IS a user.
 
 ## Still outstanding
 
-Four vendor decisions plus sandbox credentials, none obtainable from inside
+Five vendor decisions plus sandbox credentials, none obtainable from inside
 this repo. Email is settled — Resend — but not yet built, and the clocks above
 depend on it:
 
-| Connector                       | Constraint                                                |
-| ------------------------------- | --------------------------------------------------------- |
-| Credit (soft tri-merge)         | Reseller or bureau-direct; needs FCRA permissible purpose |
-| Payroll (consumer-permissioned) | Aggregator                                                |
-| IRS transcripts                 | IVES participant or a reseller                            |
-| E-sign                          | For APP-005, APP-012 and INC-008                          |
+| Connector                       | Constraint                                                 |
+| ------------------------------- | ---------------------------------------------------------- |
+| Credit (soft tri-merge)         | Reseller or bureau-direct; needs FCRA permissible purpose  |
+| Payroll (consumer-permissioned) | Aggregator                                                 |
+| IRS transcripts                 | IVES participant or a reseller                             |
+| E-sign                          | For APP-005, APP-012 and INC-008                           |
+| Pricing                         | Engine or investor execution; only the ANSWER takes either |
 
 Plus: the CLS-* closing-stage sheet, the requirements for the monitoring loop,
-a real tax/insurance source, the real LLPA matrix, and an APOR feed.
+a real tax/insurance source, the real LLPA matrix, a fee schedule, and an APOR
+feed.
 
 ## One-time infrastructure prerequisite
 

@@ -12,7 +12,8 @@
  * Nothing here reads the DOM or a token, so a test in any workspace can import
  * it.
  *
- * Two of these are honesty rules rather than style rules:
+ * Four of these are honesty rules rather than style rules. Three are listed
+ * here; `VENDOR_ACTION` is the other one and argues for itself further down:
  *
  * - `PROMISES` — there is no mailer in this repo. No Resend, no SMTP, nothing,
  *   and no SMS sender either. Copy that says we will email, write, text or
@@ -23,9 +24,13 @@
  *   is no calendar of federal holidays outside `add_business_days`, and
  *   nothing schedules anything, so "within three business days" commits the
  *   product to a deadline it has no mechanism for.
+ * - `RATE_COMMITMENT` — the same failure about a price. There is no lock desk
+ *   and no lock record, and every quote the pricing port returns says
+ *   `locked: false`, so copy that calls a rate locked or guaranteed is a
+ *   commitment nothing behind the screen can honor.
  *
  * Delete `PROMISES` and `DELIVERY_TIME` when a delivery record exists in the
- * schema, and not before.
+ * schema, and `RATE_COMMITMENT` when a lock does, and not before.
  */
 
 /**
@@ -69,6 +74,31 @@ export const DELIVERY_TIME =
 
 /** An internal identifier. Nothing in the borrower flow renders one. */
 export const REQ_ID = /\b(APP|CRD|INC|AST|UW|CLS)-\d{3}\b/;
+
+/**
+ * A rate this product commits to, on a product that cannot commit to one.
+ *
+ * The fourth honesty rule, and the one about money rather than about contact.
+ * There is no lock desk, no lock record and nothing that enforces an expiry:
+ * every quote the pricing port returns sets `locked: false`, and
+ * `QUOTED_LOCK_DAYS` names a column of a rate sheet rather than a period
+ * anybody has been held to. So a sentence saying a rate is locked, or
+ * guaranteed, is a claim no code here can keep — and unlike `PROMISES` it is
+ * one a borrower can act on and lose money over, which is why it is a rule
+ * rather than a note in a type.
+ *
+ * It was in a comment on `QuoteBase.locked` before it was here, and the page
+ * it was already false on was the first one a borrower sees: the landing
+ * hero's sub ended "with lowest rates guaranteed". A rule written where no
+ * test reads it is not a rule.
+ *
+ * Bare "your rate" is deliberately NOT in the alternation. A screen telling
+ * somebody what rate their file is quoted at, or a servicing page saying their
+ * rate did not change, is describing a rate rather than committing to one, and
+ * a rule that could not tell those apart is a rule people turn off.
+ */
+export const RATE_COMMITMENT =
+  /\b(?:rates? (?:are |is )?guaranteed|guarantee\w* (?:the |a |you )?(?:lowest |best |low )?rates?|guaranteed rates?|rate lock\w*|lock\w* (?:in )?(?:your|the|a|this) rate|locked in)\b/i;
 
 /**
  * House style, and not cosmetic: a borrower who connects payroll and is then

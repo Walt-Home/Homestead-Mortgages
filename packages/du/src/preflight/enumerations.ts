@@ -14,19 +14,29 @@
  * Keying on the data point alone would refuse every conventional casefile in
  * Fannie Mae's own corpus.
  *
- * **Three destinations are deliberately absent**, for the same reason a fourth
+ * **Two destinations are deliberately absent**, for the same reason a third
  * would be a bug:
  *
  * - `ROLE_DETAIL/PartyRoleType`. Its enum is the non-borrower subset — the
  *   borrower has a container of its own and a vesting carries a name rather
  *   than a person — so checking a role against it would refuse every borrower.
- * - `TERMS_OF_LOAN/MortgageType`. The enum behind that data point is the
- *   liability one, whose single supported value is `FHA`, and the loan being
- *   applied for is conventional in ten of the eighteen shipped samples.
  * - `ORIGINATION_FUND/FundsSourceType`. The specification's enumeration tab
  *   carries a `PropertySeller` value on rows whose form field is blank, and the
  *   rows the generated list is derived from are not those, so the list is
  *   twelve values where this destination can lawfully carry thirteen.
+ *
+ * `TERMS_OF_LOAN/MortgageType` was a third until `loan_products` gave the loan
+ * being applied for a mortgage type of its own. There was nothing to check it
+ * against: the only enum joined to that data point was the liability's, whose
+ * single supported value is `FHA`, and ten of the eighteen shipped samples are
+ * conventional. It is checked now, against `DuMortgageType`, which is the whole
+ * argument for the destination being part of the key.
+ *
+ * `AMORTIZATION_RULE/AmortizationType` arrived with the same row. While the
+ * word lived on the file it was `'fixed'` or `'arm'` and the emitter translated
+ * it, so what reached this gate was whatever that lookup produced; the column
+ * holds the DU value now, and this is what says the column cannot hold one DU
+ * does not support.
  */
 
 /** The destination, as `XPath#DataPointName`, and the enum its value must be in. */
@@ -44,6 +54,10 @@ export const DU_SUBSET_AT: Readonly<Record<string, string>> = {
     "DuIntendedPropertyUsage",
   "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/ASSETS/ASSET/OWNED_PROPERTY/PROPERTY/PROPERTY_DETAIL#PropertyUsageTypeOtherDescription":
     "DuPropertyUsageOtherDescription",
+  "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/COLLATERALS/COLLATERAL/SUBJECT_PROPERTY/PROPERTY_DETAIL#AttachmentType":
+    "DuAttachmentType",
+  "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/COLLATERALS/COLLATERAL/SUBJECT_PROPERTY/PROPERTY_DETAIL#PropertyEstateType":
+    "DuPropertyEstateType",
   "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/COLLATERALS/COLLATERAL/SUBJECT_PROPERTY/PROPERTY_DETAIL#PropertyUsageType":
     "DuIntendedPropertyUsage",
   "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/EXPENSES/EXPENSE#ExpenseType": "DuExpenseType",
@@ -51,6 +65,9 @@ export const DU_SUBSET_AT: Readonly<Record<string, string>> = {
     "DuLiabilityType",
   "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LIABILITIES/LIABILITY/LIABILITY_DETAIL#MortgageType":
     "DuLiabilityMortgageType",
+  "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN/AMORTIZATION/AMORTIZATION_RULE#AmortizationType":
+    "DuAmortizationType",
+  "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN/TERMS_OF_LOAN#MortgageType": "DuMortgageType",
   "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN/EXTENSION/OTHER/DU:LOAN_EXTENSION/DU:UNDERWRITING_VERIFICATIONS/DU:UNDERWRITING_VERIFICATION#DU:VerificationReportType":
     "DuVerificationReportType",
   "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/PARTIES/PARTY/ROLES/ROLE/BORROWER/BANKRUPTCIES/BANKRUPTCY/BANKRUPTCY_DETAIL#BankruptcyChapterType":
@@ -83,7 +100,6 @@ export const DU_SUBSET_AT: Readonly<Record<string, string>> = {
  * declares an enum that is ours as local rather than leaving it unmapped.
  */
 export const NOT_CHECKED_AGAINST_A_SUBSET: readonly string[] = [
-  "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN/TERMS_OF_LOAN#MortgageType",
   "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/PARTIES/PARTY/ROLES/ROLE/ROLE_DETAIL#PartyRoleType",
   "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN/ORIGINATION_FUNDS/ORIGINATION_FUND#FundsSourceType",
 ];

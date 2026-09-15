@@ -45,7 +45,9 @@ describe("google places autocomplete", () => {
       apiKey: "k",
       fallback,
       fetchImpl: stubFetch({
-        autocomplete: { suggestions: [{ placePrediction: { placeId: "p1", text: { text: "1247 Oak" } } }] },
+        autocomplete: {
+          suggestions: [{ placePrediction: { placeId: "p1", text: { text: "1247 Oak" } } }],
+        },
         details: COMPLETE,
       }),
     });
@@ -101,7 +103,11 @@ describe("google places autocomplete", () => {
   });
 
   it("returns nothing rather than throwing when Places is unreachable", async () => {
-    const c = googlePlacesConnector({ apiKey: "k", fallback, fetchImpl: stubFetch({ fail: true }) });
+    const c = googlePlacesConnector({
+      apiKey: "k",
+      fallback,
+      fetchImpl: stubFetch({ fail: true }),
+    });
     await expect(c.suggestAddresses("anything")).resolves.toEqual([]);
   });
 

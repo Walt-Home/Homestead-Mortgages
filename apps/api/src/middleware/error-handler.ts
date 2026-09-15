@@ -1,6 +1,11 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
-import { AuthorizationError, PlaidRequestError } from "@hm/connectors";
+import {
+  AuthorizationError,
+  PlaidRequestError,
+  PricingNotWiredError,
+  UnquotableScenarioError,
+} from "@hm/connectors";
 import { IllegalTransition } from "@hm/shared";
 import { ProjectionError } from "../services/borrower-projection.js";
 
@@ -46,6 +51,43 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
           ? "Your bank needs signing into again."
           : "We could not reach your bank just now.",
         code: relink ? "BANK_RELINK_REQUIRED" : "BANK_CONNECTION_FAILED",
+      },
+    });
+    return;
+  }
+  /**
+   * A pricing failure never answers a borrower with a stack-logged 500.
+   *
+   * Both of these come out of the pricing port, neither is an `AppError`, and
+   * without a branch here both fell to the generic handler — which is how
+   * screen 1's affordability gate came to answer "Internal server error" to a
+   * down payment that covered the price. The messages below are ours; the
+   * errors' own messages name a loan amount, an endpoint or a missing pricing
+   * policy and are written for whoever operates this, so they go to the log.
+   *
+   * They are two responses rather than one because they are two people's
+   * problems. An unquotable scenario is the request's — there is nothing here
+   * worth pricing, and sending it again unchanged gets the same answer. A
+   * pricing adapter with no vendor behind it is an operator's, and a borrower
+   * who tries later may well get through.
+   */
+  if (err instanceof UnquotableScenarioError) {
+    console.error(err);
+    res.status(422).json({
+      error: {
+        message: "There is not a loan here we can price, so there is nothing to check it against.",
+        code: "UNQUOTABLE_LOAN",
+      },
+    });
+    return;
+  }
+  if (err instanceof PricingNotWiredError) {
+    console.error(err);
+    res.status(503).json({
+      error: {
+        message:
+          "We could not get a rate for this loan just now, so there is nothing to quote it against.",
+        code: "NO_RATE_QUOTED",
       },
     });
     return;

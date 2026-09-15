@@ -27,6 +27,7 @@ import {
   INTENT_TO_OCCUPY,
   PRIOR_PROPERTY_TITLE,
   PRIOR_PROPERTY_USAGE,
+  PROPERTY_ESTATE_TYPE,
   QUESTIONS,
   answerLines,
   blankForm,
@@ -81,6 +82,7 @@ function filledIn(): DeclarationForm {
   for (const q of QUESTIONS) answers[q.field] = "no";
   return {
     ...form,
+    propertyEstateType: "FeeSimple",
     intentToOccupy: "yes",
     homeownerPastThreeYears: "yes",
     priorPropertyUsage: "PrimaryResidence",
@@ -242,6 +244,9 @@ describe("the form", () => {
     // all of them, because a borrower meeting that refusal one question at a
     // time is meeting it wrong.
     expect(empty).toContain(INTENT_TO_OCCUPY.prompt);
+    // The one question here that is about the house rather than the person,
+    // and the only answer on this screen no record we retrieve carries.
+    expect(empty).toContain(PROPERTY_ESTATE_TYPE);
     for (const q of QUESTIONS) expect(empty).toContain(q.prompt);
     expect(missingFrom(filledIn(), true)).toEqual([]);
   });

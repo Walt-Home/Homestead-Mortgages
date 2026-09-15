@@ -25,6 +25,7 @@ import type {
   BorrowerResidence,
   PriorPropertyTitle,
   PriorPropertyUsage,
+  PropertyEstateType,
   ResidencyBasis,
 } from "@hm/shared";
 import { RESIDENCE_HISTORY_MONTHS } from "@hm/shared";
@@ -73,6 +74,24 @@ export const HOMEOWNER_PAST_THREE_YEARS = "Have you owned a home in the past thr
 export const PRIOR_PROPERTY_USAGE = "How did you use that home?" as const;
 export const PRIOR_PROPERTY_TITLE = "How did you hold title to it?" as const;
 export const BORROWED_FUNDS_AMOUNT = "How much?" as const;
+
+/**
+ * The one question on this screen that is about the house rather than the
+ * person, and the only one the county cannot answer.
+ *
+ * Screen 1 asks the assessor how many units the building has and whether it is
+ * attached, and those two never reach a borrower. This one has no record to
+ * come from: what settles it is the title commitment, which does not exist
+ * yet. So it is put in the words of the thing the borrower has in front of
+ * them — a contract, or a deed — rather than as "fee simple or leasehold",
+ * which is a question about vocabulary.
+ */
+export const PROPERTY_ESTATE_TYPE = "Do you own the land the home sits on?" as const;
+
+export const ESTATE_LABELS: Readonly<Record<PropertyEstateType, string>> = {
+  FeeSimple: "Yes, the land comes with the home",
+  Leasehold: "No, the land is leased from somebody else",
+};
 export const BANKRUPTCY_CHAPTERS = "Which chapter, or chapters?" as const;
 
 export const USAGE_LABELS: Readonly<Record<PriorPropertyUsage, string>> = {
@@ -211,6 +230,8 @@ export interface ResidenceForm {
 
 export interface DeclarationForm {
   intentToOccupy: YesNo;
+  /** About the property rather than the person, and one answer for the file. */
+  propertyEstateType: PropertyEstateType | "";
   homeownerPastThreeYears: YesNo;
   priorPropertyUsage: PriorPropertyUsage | "";
   priorPropertyTitle: PriorPropertyTitle | "";
@@ -236,6 +257,7 @@ const BLANK_RESIDENCE: ResidenceForm = {
 export function blankForm(): DeclarationForm {
   return {
     intentToOccupy: "",
+    propertyEstateType: "",
     homeownerPastThreeYears: "",
     priorPropertyUsage: "",
     priorPropertyTitle: "",
@@ -261,9 +283,14 @@ const amount = (value: number | null): string => (value === null ? "" : String(v
 export function formFrom(
   declaration: BorrowerDeclaration | null,
   residences: readonly BorrowerResidence[],
+  estateType: PropertyEstateType | null = null,
 ): DeclarationForm {
   const form = blankForm();
-  if (!declaration && residences.length === 0) return form;
+  // The estate is on the file rather than on the declaration, so it can have
+  // been answered by a co-borrower before this person has answered anything.
+  if (!declaration && residences.length === 0) {
+    return estateType ? { ...form, propertyEstateType: estateType } : form;
+  }
 
   const answers = { ...form.answers };
   if (declaration) {
@@ -286,6 +313,7 @@ export function formFrom(
 
   return {
     ...form,
+    propertyEstateType: estateType ?? "",
     intentToOccupy: declaration ? (declaration.intentToOccupy === "Yes" ? "yes" : "no") : "",
     homeownerPastThreeYears:
       declaration?.homeownerPastThreeYears == null
@@ -325,6 +353,7 @@ export function asked(question: Question, purchase: boolean): boolean {
  */
 export function missingFrom(form: DeclarationForm, purchase: boolean): readonly string[] {
   const missing: string[] = [];
+  if (form.propertyEstateType === "") missing.push(PROPERTY_ESTATE_TYPE);
   if (form.intentToOccupy === "") missing.push(INTENT_TO_OCCUPY.prompt);
   if (form.intentToOccupy === "yes" && form.homeownerPastThreeYears === "") {
     missing.push(HOMEOWNER_PAST_THREE_YEARS);
@@ -394,6 +423,9 @@ export function bodyFrom(form: DeclarationForm, purchase: boolean) {
   }
 
   return {
+    // A sibling of the declaration and not a field in it: one house is held on
+    // one estate, and the route writes this to the file.
+    propertyEstateType: form.propertyEstateType as PropertyEstateType,
     declaration: {
       intentToOccupy: occupying ? "Yes" : "No",
       homeownerPastThreeYears: occupying
@@ -478,10 +510,17 @@ const months = (count: number): string => `${count} ${count === 1 ? "month" : "m
 export function answerLines(
   declaration: BorrowerDeclaration | null,
   residences: readonly BorrowerResidence[],
+  estateType: PropertyEstateType | null = null,
 ): readonly AnswerLine[] {
   const lines: AnswerLine[] = [];
   const current = residences.find((r) => r.residencyType === "Current");
   const prior = residences.find((r) => r.residencyType === "Prior");
+
+  // Read back like every other answer on this screen, because the signature
+  // attests to it too and the borrower is the only person who has stated it.
+  if (estateType) {
+    lines.push({ prompt: PROPERTY_ESTATE_TYPE, answer: ESTATE_LABELS[estateType] });
+  }
 
   if (current) {
     lines.push({

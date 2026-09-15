@@ -1,5 +1,5 @@
 /**
- * The six rows the declarations screen carries, and the three conditions that
+ * The seven rows the declarations screen carries, and the three conditions that
  * read an answer rather than a retrieval.
  *
  * Everywhere else in this registry a condition asks what a connector returned.
@@ -10,7 +10,11 @@
  *
  * Each predicate is three-valued, and `null` is the state that matters. An
  * unasked borrower is somebody we might still ask, not somebody with nothing
- * to declare — and the six rows are what make the engine able to say so.
+ * to declare — and the rows are what make the engine able to say so.
+ *
+ * Six of the seven are about the person answering. The seventh, APP-028, is
+ * about the house: whether the land comes with it is one answer for the file,
+ * and it is on this screen because nothing we retrieve carries it.
  */
 
 import { describe, expect, it } from "vitest";
@@ -147,7 +151,7 @@ describe("the conditions that read an answer", () => {
   });
 });
 
-describe("the six evaluators", () => {
+describe("the seven evaluators", () => {
   const status = (id: string, f: LoanFile) => EVALUATORS[id]!(f).status;
 
   it("is unsatisfied on a borrower nobody has asked", () => {
@@ -155,6 +159,35 @@ describe("the six evaluators", () => {
     for (const id of ["APP-022", "APP-023", "APP-024", "APP-025", "APP-026", "APP-027"]) {
       expect(status(id, unasked), id).toBe("unsatisfied");
     }
+  });
+
+  it("is unsatisfied while the estate is unanswered, on a file that has a property", () => {
+    // The seventh reads the FILE and not the borrower, so it needs a property
+    // to be unanswered ON — and null is what "not asked" looks like there. A
+    // column that defaulted to fee simple would report this satisfied on every
+    // file ever created, which is the shape `borrowers.current_housing` had.
+    const withProperty = (estateType: "FeeSimple" | "Leasehold" | null) =>
+      ({ ...file(DECLARED, [CURRENT]), property: { estateType } }) as unknown as LoanFile;
+    expect(status("APP-028", withProperty(null))).toBe("unsatisfied");
+    expect(EVALUATORS["APP-028"]!(withProperty("FeeSimple"))).toEqual({
+      status: "satisfied",
+      evidence: "fee simple",
+    });
+    expect(EVALUATORS["APP-028"]!(withProperty("Leasehold"))).toEqual({
+      status: "satisfied",
+      evidence: "leasehold",
+    });
+  });
+
+  it("does not become the co-borrower's question on a file with two people", () => {
+    // One house, one estate. Six of these seven ask each borrower separately,
+    // and answering this one twice would state two tenures for one property.
+    const both = {
+      ...household(who("Ada", "Lovelace", DECLARED, [CURRENT]), who("Dev", "Raman", null)),
+      property: { estateType: "FeeSimple" },
+    } as unknown as LoanFile;
+    expect(status("APP-022", both)).toBe("unsatisfied");
+    expect(EVALUATORS["APP-028"]!(both)).toEqual({ status: "satisfied", evidence: "fee simple" });
   });
 
   it("is satisfied by the answers, and by nothing else", () => {

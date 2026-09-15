@@ -414,6 +414,24 @@ export const EVALUATORS: Record<string, Evaluator> = {
       : ok(`${prior.addressLineText}, ${prior.cityName} ${prior.stateCode}`);
   }),
 
+  /**
+   * The only row on this screen that is not asked of every borrower.
+   *
+   * One property, one estate, one answer — two people buying one house do not
+   * hold it on two different tenures — so this reads the file rather than
+   * going through `ofEveryBorrower`, and a co-borrower's save restates the
+   * same fact rather than owing one of their own.
+   */
+  "APP-028": (f) => {
+    const estate = f.property?.estateType;
+    if (!estate) return no("whether the land comes with the house has not been stated");
+    // A ground lease is reported in the words the answer was given in. What
+    // happens to a leasehold file afterwards — the expiration date DU wants,
+    // the term the agencies require to outlast the loan — is not this row's
+    // question and is nowhere in this model yet.
+    return ok(estate === "FeeSimple" ? "fee simple" : "leasehold");
+  },
+
   /* ── Screen 5 · Bank ─────────────────────────────────────────────────── */
 
   "AST-001": (f) => {

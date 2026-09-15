@@ -2,7 +2,7 @@
  * The five screens, and the machinery for keeping eleven server stages behind
  * them.
  *
- * The engine still tracks eleven stages and 83 requirements. The borrower sees
+ * The engine still tracks eleven stages and 84 requirements. The borrower sees
  * five steps. This module is the whole of that translation, and it is the only
  * place in the web app that knows both vocabularies.
  *

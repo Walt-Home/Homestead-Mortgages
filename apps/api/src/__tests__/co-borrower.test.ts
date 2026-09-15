@@ -108,7 +108,7 @@ function declarationBody(
   residences: readonly ResidenceInput[],
   over: Record<string, unknown> = {},
 ) {
-  return { declaration: SECTION_FIVE, residences, ...over };
+  return { declaration: SECTION_FIVE, residences, propertyEstateType: "FeeSimple", ...over };
 }
 
 const RENTING = {
@@ -149,6 +149,7 @@ async function byPhone(
     declaration,
     residences,
     borrowerId,
+    propertyEstateType: "FeeSimple",
     assertedByPrincipalId: await staffPrincipal(prisma, `ops-${app.id}`),
   });
 }

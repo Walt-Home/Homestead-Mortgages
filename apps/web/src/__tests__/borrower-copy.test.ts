@@ -51,7 +51,15 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BRITISH, DAY_FIRST, DELIVERY_TIME, PROMISES, REQ_ID, VENDOR_CLAIM } from "@hm/shared";
+import {
+  BRITISH,
+  DAY_FIRST,
+  DELIVERY_TIME,
+  PROMISES,
+  RATE_COMMITMENT,
+  REQ_ID,
+  VENDOR_CLAIM,
+} from "@hm/shared";
 
 const SRC = new URL("..", import.meta.url).pathname;
 
@@ -253,6 +261,21 @@ describe("the screens keep the rules the catalog keeps", () => {
     expect(offenders(DELIVERY_TIME)).toEqual([]);
   });
 
+  /**
+   * The rule that was already broken when it was written down.
+   *
+   * It lived as a sentence in a comment on `QuoteBase.locked` — "a screen may
+   * not say 'locked', 'guaranteed' or 'your rate' while it is false" — and no
+   * suite read it, while the landing hero's sub ended "with lowest rates
+   * guaranteed" on a product with no lock desk, no lock record and nothing
+   * that enforces a quote's expiry. This is the first page a signed-out person
+   * sees, so it was the worst possible place for the one claim a borrower
+   * could act on and lose money over.
+   */
+  it("commits to no rate, on a product that cannot commit to one", () => {
+    expect(offenders(RATE_COMMITMENT)).toEqual([]);
+  });
+
   it("is written in American English", () => {
     expect(offenders(BRITISH)).toEqual([]);
   });
@@ -372,6 +395,14 @@ describe("the rules catch what they were written for", () => {
     // nothing revisits. Both named a person, neither named a channel, and the
     // first draft of the rule saw only the one that said "someone".
     expect("Tell us what is off. We will check it — you do not need to wait.").toMatch(PROMISES);
+    expect(
+      "Automatically refinances when interest rates drop, with lowest rates guaranteed.",
+    ).toMatch(RATE_COMMITMENT);
+    expect("We'll lock your rate for 45 days.").toMatch(RATE_COMMITMENT);
+    // The rate a file was quoted, described rather than committed to. A rule
+    // that could not tell these apart is a rule somebody turns off.
+    expect("We re-check your rate against the market every month.").not.toMatch(RATE_COMMITMENT);
+    expect("Your rate, your balance and your payment don't change.").not.toMatch(RATE_COMMITMENT);
     expect("It does not stop your application — we will just confirm the details later.").toMatch(
       PROMISES,
     );

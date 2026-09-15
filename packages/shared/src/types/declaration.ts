@@ -28,6 +28,17 @@ export type PriorPropertyTitle = "Sole" | "JointWithSpouse" | "JointWithOtherTha
 export type BankruptcyChapter =
   "ChapterSeven" | "ChapterEleven" | "ChapterTwelve" | "ChapterThirteen";
 
+/**
+ * What the loan is secured by: the land as well as the building, or a lease on
+ * somebody else's land.
+ *
+ * Here rather than in `loan.ts` because it is a `Du*` enum restated, like every
+ * other union in this file, and because screen 3 is where it is asked. It is
+ * not part of `BorrowerDeclaration`: one property is held on one estate, so the
+ * answer belongs to the file and not to each person answering.
+ */
+export type PropertyEstateType = "FeeSimple" | "Leasehold";
+
 export type ResidencyType = "Current" | "Prior";
 
 export type ResidencyBasis = "Own" | "Rent" | "LivingRentFree";

@@ -18,24 +18,27 @@ const ORIGIN = "https://example.test";
 function stub(body: unknown, ok = true) {
   return vi.fn(async () =>
     ok
-      ? new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } })
+      ? new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
       : new Response("", { status: 402 }),
   ) as unknown as typeof fetch;
 }
 
 describe("live-mode refusal", () => {
   it("refuses a live secret key", () => {
-    expect(() =>
-      stripeIdentityConnector({ secretKey: "sk_live_abc", origin: ORIGIN }),
-    ).toThrow(/Refusing a live Stripe key/);
+    expect(() => stripeIdentityConnector({ secretKey: "sk_live_abc", origin: ORIGIN })).toThrow(
+      /Refusing a live Stripe key/,
+    );
   });
 
   it("names biometric collection as the reason, not the cost", () => {
     // The next person to hit this needs to know why it is not about a few
     // dollars per verification.
-    expect(() =>
-      stripeIdentityConnector({ secretKey: "sk_live_abc", origin: ORIGIN }),
-    ).toThrow(/biometric|BIPA/i);
+    expect(() => stripeIdentityConnector({ secretKey: "sk_live_abc", origin: ORIGIN })).toThrow(
+      /biometric|BIPA/i,
+    );
   });
 
   it("allows live only on a deliberate opt-in", () => {
@@ -61,8 +64,14 @@ describe("sessions", () => {
     const c = stripeIdentityConnector({ secretKey: "sk_test_x", origin: ORIGIN, fetchImpl });
     const s = await c.createVerificationSession(file, "b1");
 
-    expect(s).toEqual({ verificationId: "vs_1", verificationUrl: "https://verify.stripe.test/vs_1" });
-    const body = String((fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]![1]!.body);
+    expect(s).toEqual({
+      verificationId: "vs_1",
+      verificationUrl: "https://verify.stripe.test/vs_1",
+    });
+    const body = String(
+      (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]![1]!
+        .body,
+    );
     // Without the selfie this verifies a document, not the person holding it.
     expect(body).toContain("require_matching_selfie");
     // The borrower comes back to a fresh page load, so the return URL has to
@@ -73,7 +82,9 @@ describe("sessions", () => {
 
   it("throws rather than returning a session Stripe did not create", async () => {
     const c = stripeIdentityConnector({
-      secretKey: "sk_test_x", origin: ORIGIN, fetchImpl: stub({}, false),
+      secretKey: "sk_test_x",
+      origin: ORIGIN,
+      fetchImpl: stub({}, false),
     });
     await expect(c.createVerificationSession(file, "b1")).rejects.toThrow(/did not return/);
   });
@@ -93,14 +104,20 @@ describe("reading a result", () => {
 
   it("maps a verified session, including the document address", async () => {
     const c = stripeIdentityConnector({
-      secretKey: "sk_test_x", origin: ORIGIN, fetchImpl: stub(verified),
+      secretKey: "sk_test_x",
+      origin: ORIGIN,
+      fetchImpl: stub(verified),
     });
     const r = await c.getVerification("vs_1");
     expect(r?.status).toBe("verified");
     expect(r?.documentName).toBe("Dana Whitfield");
     expect(r?.documentDateOfBirth).toBe("1988-04-12");
     expect(r?.documentAddress).toEqual({
-      line1: "9 Rent Rd", line2: undefined, city: "Austin", state: "TX", postalCode: "78704",
+      line1: "9 Rent Rd",
+      line2: undefined,
+      city: "Austin",
+      state: "TX",
+      postalCode: "78704",
     });
   });
 
@@ -116,14 +133,19 @@ describe("reading a result", () => {
     const c = stripeIdentityConnector({
       secretKey: "sk_test_x",
       origin: ORIGIN,
-      fetchImpl: stub({ ...verified, verified_outputs: { ...verified.verified_outputs, address: { city: "Austin" } } }),
+      fetchImpl: stub({
+        ...verified,
+        verified_outputs: { ...verified.verified_outputs, address: { city: "Austin" } },
+      }),
     });
     expect((await c.getVerification("vs_1"))?.documentAddress).toBeUndefined();
   });
 
   it("treats processing as pending, not as failure", async () => {
     const c = stripeIdentityConnector({
-      secretKey: "sk_test_x", origin: ORIGIN, fetchImpl: stub({ id: "vs_1", status: "processing" }),
+      secretKey: "sk_test_x",
+      origin: ORIGIN,
+      fetchImpl: stub({ id: "vs_1", status: "processing" }),
     });
     const r = await c.getVerification("vs_1");
     expect(r?.status).toBe("pending");
@@ -134,7 +156,11 @@ describe("reading a result", () => {
     const c = stripeIdentityConnector({
       secretKey: "sk_test_x",
       origin: ORIGIN,
-      fetchImpl: stub({ id: "vs_1", status: "canceled", last_error: { reason: "The document was expired." } }),
+      fetchImpl: stub({
+        id: "vs_1",
+        status: "canceled",
+        last_error: { reason: "The document was expired." },
+      }),
     });
     const r = await c.getVerification("vs_1");
     expect(r?.status).toBe("failed");

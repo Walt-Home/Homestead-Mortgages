@@ -67,6 +67,7 @@ async function applicationFile() {
 
 function declarationBody(residences: Record<string, unknown>[]) {
   return {
+    propertyEstateType: "FeeSimple",
     declaration: {
       intentToOccupy: "Yes",
       homeownerPastThreeYears: "No",

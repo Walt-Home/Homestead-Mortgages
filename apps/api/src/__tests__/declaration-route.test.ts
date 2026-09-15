@@ -64,9 +64,15 @@ async function applicationFile() {
   return { user, file, borrower };
 }
 
-/** Every answer No, the occupying branch taken, and one current residence. */
+/**
+ * Every answer No, the occupying branch taken, and one current residence.
+ *
+ * `propertyEstateType` sits beside the declaration rather than in it: it is one
+ * answer about one house, and the route writes it to the file.
+ */
 function body(overrides: Record<string, unknown> = {}) {
   return {
+    propertyEstateType: "FeeSimple",
     declaration: {
       intentToOccupy: "Yes",
       homeownerPastThreeYears: "No",

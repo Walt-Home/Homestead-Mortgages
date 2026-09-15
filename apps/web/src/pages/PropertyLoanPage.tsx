@@ -320,6 +320,20 @@ export function PropertyLoanPage() {
       setError("Tell us roughly what you earn a month — we can't check the loan works without it.");
       return;
     }
+    // Told here rather than after a round trip, because the answer cannot
+    // change on the way: a down payment that covers the price leaves no loan,
+    // and the gate has nothing to quote. Ordinary input on a refinance, where
+    // this field reads "How much equity are you keeping?" and an owner with no
+    // mortgage left types the whole value. The server refuses it too — this is
+    // the faster half of one rule, not the only half.
+    if (priceNum > 0 && downNum >= priceNum) {
+      setError(
+        purpose === "purchase"
+          ? "Your down payment covers the whole price, so there is no loan to check."
+          : "That leaves no loan to refinance. Keep less equity to see a payment.",
+      );
+      return;
+    }
     setSubmitting(true);
     setError(null);
     setGate(null);
@@ -332,6 +346,13 @@ export function PropertyLoanPage() {
         downPayment: downNum,
         statedMonthlyIncome: incomeNum,
         occupancy,
+        // The gate quotes the payment it stops somebody on, and a rate sheet
+        // is read on what the loan is as much as on how big it is. These three
+        // are already answered above; sending them is what keeps the gate's
+        // payment and the file's payment one number.
+        purpose,
+        propertyType,
+        state: address.state,
         ...(lookup ? { annualPropertyTax: lookup.record.annualPropertyTax } : {}),
         ...(lookup?.record.monthlyAssociationDues
           ? { monthlyAssociationDues: lookup.record.monthlyAssociationDues }

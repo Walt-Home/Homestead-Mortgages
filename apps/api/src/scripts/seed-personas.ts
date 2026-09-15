@@ -51,10 +51,15 @@
 import { fileURLToPath } from "node:url";
 import { prisma } from "@hm/db";
 import type { DuResidencyBasis, Prisma } from "@hm/db";
-import { fixtureRegistry, PUBLIC_RECORDS, type ConnectorRegistry } from "@hm/connectors";
+import {
+  fixtureRegistry,
+  PUBLIC_RECORDS,
+  type ConnectorRegistry,
+  type PricingConnector,
+} from "@hm/connectors";
 import type { Address, ApplicationState, LoanFile } from "@hm/shared";
+import { quoteSubjectProduct } from "../services/pricing.js";
 import { underwrite } from "@hm/underwriting";
-import { config } from "../config.js";
 import {
   isSeeded,
   PERSONA_STORIES,
@@ -244,10 +249,22 @@ async function screenOne(
   tx: Db,
   story: SeededPersona,
   userId: string,
+  pricing: PricingConnector,
 ): Promise<{ loanFileId: string; applicationId: string; partyId: string }> {
   const t = story.terms;
   const partyId = await partyForUser(tx, userId, { sourceFirstSeen: "persona_seed" });
   const principalId = await principalForParty(tx, partyId);
+  // Through the port the route uses, so a sample borrower is quoted the same
+  // way a real one is. A persona written with a rate this deployment's pricing
+  // would not have quoted is a sample of a product that does not exist.
+  const product = await quoteSubjectProduct(pricing, {
+    purpose: t.purpose,
+    occupancy: t.occupancy,
+    propertyType: t.propertyType,
+    state: t.address.state,
+    loanAmount: t.loanAmount,
+    propertyValue: t.valueOrPrice,
+  });
 
   const file = await tx.loanFile.create({
     data: {
@@ -272,10 +289,12 @@ async function screenOne(
       valueOrPrice: t.valueOrPrice,
       valuationSource: "borrower_stated",
       addressVerified: true,
-      productCode: config.defaultProduct.code,
-      termMonths: config.defaultProduct.termMonths,
-      amortization: "fixed",
-      noteRate: config.defaultProduct.noteRate,
+      productCode: product.productCode,
+      termMonths: product.termMonths,
+      noteRate: product.noteRate,
+      rateQuoteLockDays: product.lockDays,
+      rateQuotedAt: product.effectiveAt,
+      rateQuoteExpiresAt: product.expiresAt,
     },
   });
 
@@ -483,9 +502,17 @@ async function declarations(w: Walk): Promise<void> {
       : []),
   ];
 
+  // Every sample property is held outright, the condominium included: a
+  // condominium unit is owned fee simple with a share of the common elements,
+  // and none of the three stories is set on leased land.
   await recordDeclaration(
     w.loanFileId,
-    { assertedByPrincipalId, declaration: answers, residences },
+    {
+      assertedByPrincipalId,
+      declaration: answers,
+      residences,
+      propertyEstateType: "FeeSimple",
+    },
     w.tx,
   );
 
@@ -509,6 +536,7 @@ async function declarations(w: Walk): Promise<void> {
         borrowerId: other.id,
         declaration: answers,
         residences,
+        propertyEstateType: "FeeSimple",
       },
       w.tx,
     );
@@ -952,6 +980,12 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     // the screen would not add up.
     const price = w.story.terms.valueOrPrice;
     const offered = 412_250;
+    // The file's own quoted product, not a second reading of the sheet. A
+    // counteroffer changes the amount; nothing about it re-prices the loan,
+    // and a term or a rate fetched again here could differ from the one the
+    // borrower has been looking at all along.
+    const quoted = (await currentFile(w)).product;
+    if (!quoted) throw new Error(`persona ${w.story.key}: its own file carries no product`);
     await proposeScenario(
       w.applicationId,
       {
@@ -960,8 +994,8 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
         loanAmountCents: toCents(offered),
         downPaymentCents: toCents(price - offered),
         valueEstimateCents: toCents(price),
-        termMonths: config.defaultProduct.termMonths,
-        noteRateBps: Math.round(config.defaultProduct.noteRate * 100),
+        termMonths: quoted.termMonths,
+        noteRateBps: Math.round(quoted.noteRate * 100),
         propertyAddress: await activeAddress(w),
         origin: "COUNTEROFFER",
       },
@@ -1200,16 +1234,17 @@ async function seedPersona(story: SeededPersona): Promise<SeedReport> {
         select: { id: true },
       });
 
-      const one = await screenOne(tx, story, user.id);
+      const registry = fixtureRegistry({
+        persona: story.fixture,
+        latencyMs: 0,
+        ...(story.fixtureOptions?.screening ? { screening: story.fixtureOptions.screening } : {}),
+      });
+      const one = await screenOne(tx, story, user.id, registry.pricing);
       const two = await screenTwo(tx, story, one);
       const w: Walk = {
         tx,
         story,
-        registry: fixtureRegistry({
-          persona: story.fixture,
-          latencyMs: 0,
-          ...(story.fixtureOptions?.screening ? { screening: story.fixtureOptions.screening } : {}),
-        }),
+        registry,
         loanFileId: one.loanFileId,
         applicationId: one.applicationId,
         partyId: two.partyId,

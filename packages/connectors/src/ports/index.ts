@@ -33,6 +33,8 @@ import type {
   LienSearch,
   LoanFile,
   PayrollData,
+  PriceQuote,
+  PricingScenario,
   PropertyRecord,
   SanctionsScreening,
   TaxTranscript,
@@ -275,6 +277,201 @@ export interface IdentityConnector {
 }
 
 /**
+ * What this loan costs (UW-010).
+ *
+ * The port every file in this product went without: the note rate was
+ * `Number(process.env.DEFAULT_NOTE_RATE ?? "6.25")`, one number for every
+ * borrower, and the six requirements that need a rate to compute anything were
+ * all computing against it.
+ *
+ * ── Two methods, because credit is the line ───────────────────────────────
+ *
+ * `quoteProducts` takes a `PricingScenario`, which names a loan and nobody —
+ * no party, no name, no score — and it takes no `PurposeToken` and CANNOT be
+ * given one. That is the same split the property lookups draw, for the same
+ * reason and with the same limit on it: screen 1 quotes a payment before
+ * APP-005 is signed, so a guard here would make the flow unreachable from its
+ * own first step, and what makes that acceptable is that the request is a loan
+ * size, a property type and a state rather than a person.
+ *
+ * `quoteForBorrower` is guarded, on `credit_report`. A representative FICO is
+ * the credit report's number, and sending it to a pricing vendor is disclosing
+ * what a bureau said about somebody to a third party — which is the thing
+ * APP-005 permits, and the permission it rides on is the one that got the
+ * score in the first place.
+ *
+ * ── The answer, for two kinds of vendor ───────────────────────────────────
+ *
+ * `PriceQuote` in `@hm/shared` is a union: a product and pricing engine
+ * answers with a borrower-facing note rate, and an investor execution API
+ * answers with a price for a stated coupon, which is not a rate until a margin
+ * and a grid have been applied. Nothing below turns the second into the first.
+ * Read `borrowerNoteRate`, and record `blocked` when it returns null.
+ *
+ * **The request is not a union, and only one of the two vendors fits it.**
+ * `PricingScenario` asks a pricing engine's question. An execution API is
+ * asked for a coupon ladder against a delivery type with servicing retained or
+ * released, and best execution means naming several investors and comparing
+ * them — none of which this request can say and none of which
+ * `InvestorPriceQuote` can answer with an investor's name on it. So wiring one
+ * is a change to `@hm/shared/types/pricing.ts` before it is a new file in
+ * `adapters/`, which is the opposite of what the seam promises for the other
+ * ten ports, and is said here so nobody discovers it mid-adapter.
+ *
+ * ── A vendor's answer is checked before it is believed ────────────────────
+ *
+ * `requireQuotableQuote` is the twin of `requireQuotableScenario` and runs on
+ * the way out. A note rate of zero is the case worth naming: it is what an
+ * absent field deserializes to in most mappings, it looks like a number all
+ * the way down, and the engine records a payment computed from it instead of
+ * blocking.
+ *
+ * ── An empty list is an answer; a failure is not ──────────────────────────
+ *
+ * No eligible product is a real outcome — a loan size nothing covers, a lock
+ * period the sheet has no column for — and it comes back as an empty array.
+ * Anything that stopped the quote from being asked THROWS. A caller may read
+ * empty as "we offer nothing for this loan"; it may never read a failure that
+ * way, which is why the two are not both `[]`.
+ */
+export interface PricingConnector {
+  readonly capabilities: ConnectorCapabilities;
+  /** Products this loan is eligible for, at the sheet's base pricing. */
+  quoteProducts(scenario: PricingScenario): Promise<readonly PriceQuote[]>;
+  /**
+   * The same scenario with the borrower's credit priced into it.
+   *
+   * The score is a separate argument rather than a field on the scenario so
+   * that `PricingScenario` stays provably person-free and the unguarded call
+   * cannot be handed one.
+   */
+  quoteForBorrower(
+    file: LoanFile,
+    token: PurposeToken,
+    scenario: PricingScenario,
+    representativeFico: number,
+  ): Promise<readonly PriceQuote[]>;
+}
+
+/** Thrown when there is nothing here a vendor could price. */
+export class UnquotableScenarioError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnquotableScenarioError";
+  }
+}
+
+/**
+ * The whole of what an adapter asserts about a scenario before asking.
+ *
+ * Shared by both adapters for the reason `requireDocument` is: the check that
+ * matters is the one on the path that reaches a vendor, and a sanity check
+ * living only in the fixture is a check on the path where nothing was at
+ * stake. A pricing engine handed a zero loan amount does not refuse — it
+ * answers off the base sheet, and that answer becomes a note rate on a file.
+ *
+ * A FICO outside the scorable range is the same failure on the guarded call:
+ * 0 sits below every tier, and a vendor that floors rather than refuses prices
+ * the worst credit in the book.
+ */
+export function requireQuotableScenario(scenario: PricingScenario): void {
+  if (scenario.loanAmount <= 0) {
+    throw new UnquotableScenarioError("A loan of nothing prices at nothing. Refusing to quote.");
+  }
+  if (scenario.propertyValue <= 0) {
+    throw new UnquotableScenarioError(
+      "Pricing runs on LTV, and a property worth nothing has none. Refusing to quote.",
+    );
+  }
+  if (scenario.lockDays <= 0) {
+    throw new UnquotableScenarioError(
+      "A rate sheet is quoted per lock period, and no period names no column.",
+    );
+  }
+}
+
+/** The scorable range. Outside it, a score is a bug rather than bad credit. */
+export function requireScorableFico(fico: number): void {
+  if (!Number.isFinite(fico) || fico < 300 || fico > 850) {
+    throw new UnquotableScenarioError(
+      "A representative FICO outside 300-850 is not a credit tier. Refusing to quote.",
+    );
+  }
+}
+
+/**
+ * The plausible band for a first-lien note rate, in percent.
+ *
+ * Wide on purpose — it is not a business rule about what we would offer, and
+ * nothing may read it as one. It is the band outside which a number is a
+ * mapping bug rather than a price: a field read off the wrong key, a decimal
+ * read as a percent, a fraction read as a whole number. 30-year fixed rates
+ * have been under 3 and over 18 inside living memory, so a band narrow enough
+ * to be interesting would refuse a real market.
+ */
+const PLAUSIBLE_NOTE_RATE = { min: 0.5, max: 25 } as const;
+
+/** The longest amortization anybody writes, with room. 40 years is 480. */
+const MAX_TERM_MONTHS = 600;
+
+/**
+ * The answer-side twin of `requireQuotableScenario`, and the reason it exists.
+ *
+ * `requireScorableFico` asserts exactly this shape on the way IN, and for a
+ * while nothing asserted anything on the way OUT: a vendor answering with a
+ * note rate of 0, of -4.5, of 999, of NaN, or with the field simply absent —
+ * the ordinary mapping bug, a key the vendor did not send — was taken at its
+ * word and written to `loan_files.note_rate`. A zero is the worst of them,
+ * because it does not read as missing anywhere downstream: it amortizes, it
+ * produces a payment, and the engine RECORDS that payment as a derivation
+ * rather than blocking on it. A $332,000 loan at no interest, with a formula
+ * beside it.
+ *
+ * Here rather than in one adapter for the reason `requireQuotableScenario` is:
+ * the check that matters is the one on the path that reaches a vendor, and the
+ * fixture is the path where nothing was at stake.
+ */
+export function requireQuotableQuote(quote: PriceQuote): void {
+  if (!Number.isInteger(quote.termMonths) || quote.termMonths <= 0) {
+    throw new UnquotableScenarioError(
+      `A term of ${quote.termMonths} months is not a term. Refusing to quote ${quote.productCode}.`,
+    );
+  }
+  if (quote.termMonths > MAX_TERM_MONTHS) {
+    throw new UnquotableScenarioError(
+      `A term of ${quote.termMonths} months is longer than any loan is written for. ` +
+        `Refusing to quote ${quote.productCode}.`,
+    );
+  }
+  const effective = Date.parse(quote.effectiveAt);
+  const expires = Date.parse(quote.expiresAt);
+  if (!Number.isFinite(effective) || !Number.isFinite(expires) || expires <= effective) {
+    throw new UnquotableScenarioError(
+      `A quote whose window runs from ${quote.effectiveAt} to ${quote.expiresAt} has no window. ` +
+        `Refusing to quote ${quote.productCode}.`,
+    );
+  }
+  // Whether the window has PASSED is not asked here, and that is the gap
+  // rather than an oversight: nothing in this product enforces an expiry, so a
+  // check would refuse every quote a fixture dated to a past reference day
+  // while changing nothing about a live one. What is refused is a window that
+  // is not a window, which is the vendor-mapping failure.
+  //
+  // An execution API's arm has no borrower-facing rate by construction, and
+  // refusing its absence here would refuse the whole vendor kind. The caller
+  // reads `borrowerNoteRate` and records blocked; what is checked is the arm
+  // that DOES claim to carry one.
+  if (quote.basis !== "borrower_rate") return;
+  const rate = quote.noteRate;
+  if (!Number.isFinite(rate) || rate < PLAUSIBLE_NOTE_RATE.min || rate > PLAUSIBLE_NOTE_RATE.max) {
+    throw new UnquotableScenarioError(
+      `A note rate of ${rate} is not a rate any vendor meant. ` +
+        `Refusing to quote ${quote.productCode}.`,
+    );
+  }
+}
+
+/**
  * Sending a casefile to Desktop Underwriter, and reading what comes back.
  *
  * The one port that TRANSMITS. Every other connector in this file retrieves —
@@ -441,5 +638,6 @@ export interface ConnectorRegistry {
   readonly propertyData: PropertyDataConnector;
   readonly screening: ScreeningConnector;
   readonly liens: LienConnector;
+  readonly pricing: PricingConnector;
   readonly du: DuConnector;
 }

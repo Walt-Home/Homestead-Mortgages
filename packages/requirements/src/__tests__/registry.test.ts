@@ -23,11 +23,13 @@ import { EDGES, topologicalOrder } from "../graph.js";
 
 describe("registry", () => {
   it("carries every row of the V1 sheet", () => {
-    // 77 on the sheet Drew wrote, and six more for the declarations screen —
-    // Section 5a, Section 5b, the bankruptcy chapters, the prior property, and
-    // the two residences. They are rows rather than a check inside a route
-    // because the engine cannot report work that has no requirement.
-    expect(REQUIREMENTS.length).toBe(83);
+    // 77 on the sheet Drew wrote, and seven more for the declarations screen —
+    // Section 5a, Section 5b, the bankruptcy chapters, the prior property, the
+    // two residences, and the estate the property is held on. They are rows
+    // rather than a check inside a route because the engine cannot report work
+    // that has no requirement, and the seventh is there because a casefile DU
+    // would accept needs an answer no record we retrieve carries.
+    expect(REQUIREMENTS.length).toBe(84);
   });
 
   it("has a condition predicate for every requirement", () => {

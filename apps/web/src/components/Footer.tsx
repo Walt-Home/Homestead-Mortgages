@@ -74,9 +74,12 @@ export function Footer() {
         </div>
 
         {/*
-          `/` is public now, and the hero on it says "lowest rates
-          guaranteed" to anyone on the internet. That is an advertising claim
-          about a mortgage, so the page cannot be silent about what it is not.
+          `/` is public now, and the hero on it advertises a mortgage that
+          refinances itself to anyone on the internet. That is an advertising
+          claim about a mortgage, so the page cannot be silent about what it is
+          not. The hero's "lowest rates guaranteed" is gone — nothing here can
+          guarantee a rate, and `RATE_COMMITMENT` keeps it gone — but this
+          paragraph is not what it was there for and does not leave with it.
 
           This is the protective minimum, not a compliance sign-off: a real
           consumer mortgage footer also needs the lending entity's legal name,

@@ -50,6 +50,13 @@ export interface PropertyRecord {
   readonly legalDescription: string;
   readonly propertyType: PropertyType;
   readonly units: number;
+  /**
+   * Whether the dwelling shares a wall with another one. Not derivable from
+   * `propertyType`: a single-family house on a row is attached, and six of the
+   * eighteen shipped DU samples say `Attached` on files whose property type
+   * says nothing of the kind.
+   */
+  readonly attachment: "attached" | "detached";
   readonly yearBuilt: number;
   readonly squareFeet: number;
   readonly bedrooms: number;

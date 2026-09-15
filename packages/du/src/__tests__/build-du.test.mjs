@@ -1307,10 +1307,14 @@ describe("the modeled set, and the inventory derived from it", () => {
 
     expect(
       diffModeledHolders(
-        { [`${ROLE}/PROPERTY_OWNER`]: { held: ["du_nothing_will_ever_map_this"], children: ["x"] } },
+        {
+          [`${ROLE}/PROPERTY_OWNER`]: { held: ["du_nothing_will_ever_map_this"], children: ["x"] },
+        },
         tables,
       ),
-    ).toEqual([`${ROLE}/PROPERTY_OWNER is held by du_nothing_will_ever_map_this, which schema.prisma does not map`]);
+    ).toEqual([
+      `${ROLE}/PROPERTY_OWNER is held by du_nothing_will_ever_map_this, which schema.prisma does not map`,
+    ]);
     expect(diffModeledHolders({ "MESSAGE/X": { held: [], children: ["x"] } }, tables)).toEqual([
       "MESSAGE/X claims to be modeled and names nothing that holds it",
     ]);

@@ -23,7 +23,13 @@
  */
 
 import { prisma, type Prisma } from "@hm/db";
-import type { DuBankruptcyChapter, DuResidencyBasis, DuResidencyType, DuYesNo } from "@hm/db";
+import type {
+  DuBankruptcyChapter,
+  DuPropertyEstateType,
+  DuResidencyBasis,
+  DuResidencyType,
+  DuYesNo,
+} from "@hm/db";
 import type { BorrowerDeclaration, BorrowerResidence } from "@hm/shared";
 import { AppError } from "../middleware/error-handler.js";
 import { fromCents, toCents } from "./money.js";
@@ -231,6 +237,13 @@ export async function recordDeclaration(
     /** Who is answering. Absent is borrower 1, the person whose request this is. */
     borrowerId?: string;
     /**
+     * The estate the subject property is held on, which belongs to the FILE and
+     * not to the person answering. Written here because screen 3 is where it is
+     * asked; a co-borrower answering later restates the same fact about the
+     * same house.
+     */
+    propertyEstateType: DuPropertyEstateType;
+    /**
      * Who is ASSERTING it, which is whoever made the request and not whoever
      * it is about. The two are the same person on every borrower's own save
      * and differ the moment a `borrowerId` names somebody else, which is the
@@ -301,6 +314,16 @@ export async function recordDeclaration(
   // set without one and a DEFERRABLE constraint trigger refuses it again at
   // COMMIT. Writing the column only when one happened to be present is how the
   // derived copy outlives the row it is derived from.
+  // The one answer on this screen that is not the borrower's own. It is in this
+  // transaction rather than beside it because a borrower who reached the end of
+  // screen 3 answered all of it or none of it, and a declaration that committed
+  // without the estate type would leave the file looking asked and the casefile
+  // still refused.
+  await db.loanFile.update({
+    where: { id: loanFileId },
+    data: { propertyEstateType: input.propertyEstateType },
+  });
+
   const current = input.residences.find((r) => r.residencyType === "Current")!;
   await db.borrower.update({
     where: { id: borrower.id },

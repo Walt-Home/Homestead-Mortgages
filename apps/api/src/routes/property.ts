@@ -24,11 +24,13 @@ import {
   recordSnapshot,
 } from "../services/repository.js";
 import { AddressNotFoundError } from "@hm/connectors";
+import type { PropertyRecord } from "@hm/shared";
+import type { DuAttachmentType } from "@hm/db";
 import { connectors } from "../services/connectors.js";
+import { quoteSubjectProduct } from "../services/pricing.js";
 import { screenAndRecord } from "../services/screening.js";
 import { primaryBorrower, tokenFor } from "../services/authorization.js";
 import { prisma } from "@hm/db";
-import { config } from "../config.js";
 
 export const propertyRouter = Router();
 export const propertyFileRouter = Router();
@@ -40,6 +42,57 @@ const addressSchema = z.object({
   state: z.string().length(2),
   postalCode: z.string().min(5),
 });
+
+/**
+ * What the assessor record says about the building, in the two columns a DU
+ * submission reads.
+ *
+ * Both are retrieved rather than asked, because both describe a building and
+ * the county is who holds them. Neither is defaulted: an address no vendor
+ * answers for writes nothing here, the columns stay null, and the preflight
+ * refuses the casefile — which is a refusal we own, where a 1 and a `Detached`
+ * would be an invented fact on a federal submission.
+ *
+ * A unit count outside one to four is kept OUT of the column rather than
+ * clipped into it. Five units is a commercial loan this product does not
+ * underwrite, `loan_files_financed_unit_count_is_one_to_four` refuses the row,
+ * and a file left with no unit count is refused later by name — where a 4
+ * standing in for a 12 would not be.
+ */
+const ATTACHMENT: Readonly<Record<PropertyRecord["attachment"], DuAttachmentType>> = {
+  attached: "Attached",
+  detached: "Detached",
+};
+
+/**
+ * Exported because it is the only writer of two columns a federal submission
+ * carries, and the registry it would otherwise have to be reached through is a
+ * module singleton with no seam — a test that went the long way round would be
+ * testing which adapter is wired rather than what an unmapped value does.
+ */
+export function buildingFacts(record: PropertyRecord) {
+  // A vendor value nobody mapped stops the pull. The fixture's `attachment` is
+  // a union of two and the type holds, but the field is documented as the one a
+  // real Places, Smarty or ATTOM adapter fills from parsed vendor JSON — and an
+  // unmapped string there reads as `undefined`, which Prisma takes as "leave
+  // this column as it was". That is the one outcome worse than either answer:
+  // the column keeps somebody else's record and nothing downstream can tell.
+  //
+  // Annotated rather than inferred: the lookup is exhaustive over the TYPE, so
+  // a new member of the union is a compile error here, and the value itself
+  // still arrives from a vendor at runtime.
+  const attachment: DuAttachmentType | undefined = ATTACHMENT[record.attachment];
+  if (!attachment) {
+    throw new Error(
+      `${JSON.stringify(record.attachment)} is not an attachment this route can name. Add it ` +
+        "to ATTACHMENT; do not leave the column as it was.",
+    );
+  }
+  return {
+    financedUnitCount: record.units >= 1 && record.units <= 4 ? record.units : null,
+    propertyAttachmentType: attachment,
+  };
+}
 
 async function requireFile(id: string, userId: string) {
   await assertFileAccess(id, userId, "write");
@@ -111,7 +164,49 @@ const affordabilitySchema = z.object({
     .default("primary_residence"),
   annualPropertyTax: z.number().min(0).optional(),
   monthlyAssociationDues: z.number().min(0).optional(),
+  /**
+   * What the loan IS, which this gate did not ask for until it had to price
+   * one. A rate sheet is read on the purpose, the property type and the state
+   * as much as on the size, so a gate that quotes a payment has to say which
+   * loan it is quoting — the alternative is assuming a purchase of a
+   * single-family home in no state at all, and assuming it in the one place
+   * that tells somebody their loan cannot work.
+   */
+  purpose: z.enum(["purchase", "rate_term_refinance", "cash_out_refinance"]),
+  propertyType: z.enum([
+    "single_family",
+    "condo",
+    "townhouse",
+    "two_to_four_unit",
+    "manufactured",
+    "co_op",
+  ]),
+  state: z.string().trim().length(2),
 });
+
+/**
+ * There has to be a loan before there is a loan to check.
+ *
+ * `downPayment` was bounded only by `min(0)`, so a down payment equal to or
+ * above the price reached the gate, `loanAmount` came out zero, and the
+ * pricing port refused to quote nothing — correctly, and with an error the
+ * handler had no branch for, so the one screen whose job is to tell somebody
+ * their loan cannot work answered "Internal server error". It is ordinary
+ * input: an all-cash purchase, a typo in one field, or a refinance borrower
+ * answering "how much equity are you keeping?" with all of it.
+ *
+ * So it is refused as a request rather than priced. The message is the
+ * borrower's — this arrives on a field they are looking at — and it says what
+ * is true rather than what is wrong with them.
+ */
+const quotableAmount = affordabilitySchema.refine(
+  (input) => input.downPayment < input.valueOrPrice,
+  {
+    path: ["downPayment"],
+    message:
+      "That covers the whole price, so there is no loan here to check. Lower it to see a payment.",
+  },
+);
 
 /**
  * Screen 1's "before we spend money on a credit pull" check.
@@ -130,15 +225,24 @@ const affordabilitySchema = z.object({
 propertyRouter.post(
   "/affordability",
   asyncRoute(async (req, res) => {
-    const input = affordabilitySchema.parse(req.body);
-    const loanAmount = Math.max(0, input.valueOrPrice - input.downPayment);
-    const ltv = input.valueOrPrice === 0 ? 0 : (loanAmount / input.valueOrPrice) * 100;
+    const input = quotableAmount.parse(req.body);
+    const loanAmount = input.valueOrPrice - input.downPayment;
+    const ltv = (loanAmount / input.valueOrPrice) * 100;
 
-    const pi = monthlyPrincipalAndInterest(
+    // The same quote the file will be written with, from the same port. The
+    // gate used to read a rate out of the environment while the file it let
+    // through read the same variable a second time; one call means the payment
+    // somebody is stopped on and the payment on their file cannot disagree.
+    const product = await quoteSubjectProduct(connectors().pricing, {
+      purpose: input.purpose,
+      occupancy: input.occupancy,
+      propertyType: input.propertyType,
+      state: input.state,
       loanAmount,
-      config.defaultProduct.noteRate,
-      config.defaultProduct.termMonths,
-    );
+      propertyValue: input.valueOrPrice,
+    });
+
+    const pi = monthlyPrincipalAndInterest(loanAmount, product.noteRate, product.termMonths);
     const taxes =
       input.annualPropertyTax !== undefined
         ? input.annualPropertyTax / 12
@@ -265,6 +369,12 @@ propertyFileRouter.post(
       // a borrower to attribute it to, which is why it is unguarded at all.
       null,
     );
+    // The two building facts a submission has to carry, written from the
+    // record rather than from the client. Screen 1 already echoes a property
+    // type back to us on create; these are read straight off the connector
+    // result, because a column DU reads should not be a value a browser could
+    // have edited on its way past.
+    await prisma.loanFile.update({ where: { id }, data: buildingFacts(record.data) });
     await recordEvent(
       id,
       "connector_pull",

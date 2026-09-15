@@ -21,7 +21,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import type { BankruptcyChapter, PriorPropertyTitle, PriorPropertyUsage } from "@hm/shared";
+import type {
+  BankruptcyChapter,
+  PriorPropertyTitle,
+  PriorPropertyUsage,
+  PropertyEstateType,
+} from "@hm/shared";
 import { api, ApiError } from "../lib/api.js";
 import { PERSONA_READ_ONLY } from "../lib/auth.js";
 import { SAMPLE_FILE_START_YOUR_OWN } from "../lib/home-copy.js";
@@ -44,10 +49,12 @@ import {
   asked,
   blankForm,
   bodyFrom,
+  ESTATE_LABELS,
   EXPLAINABLE,
   formFrom,
   missingFrom,
   priorResidenceNeeded,
+  PROPERTY_ESTATE_TYPE,
   type BooleanField,
   type DeclarationForm,
   type Question,
@@ -86,8 +93,12 @@ export function DeclarationsPage() {
     // seeding from anybody else would put one person's answers into a form
     // that saves as another's.
     const me = primaryBorrower(file);
-    if (me && (me.declaration || me.residences.length > 0)) {
-      setForm(formFrom(me.declaration, me.residences));
+    // The estate comes off the FILE rather than off this person: it is one
+    // answer about one house, so a co-borrower who answered first has already
+    // given it and this form shows it back rather than asking again.
+    const estate = file.property?.estateType ?? null;
+    if (estate || (me && (me.declaration || me.residences.length > 0))) {
+      setForm(formFrom(me?.declaration ?? null, me?.residences ?? [], estate));
     }
   }, [file]);
 
@@ -229,6 +240,36 @@ export function DeclarationsPage() {
       {/* 2 — Section 5a, and the two follow-ups behind question A. */}
       <section className="mt-7 border-t border-rule-soft pt-6">
         <h2 className="font-display text-lg text-ink">About this property and this loan</h2>
+
+        {/*
+          The one question here that is not about the person answering, and the
+          only thing on this screen the county could not have told us. Most
+          homes come with their land; the ones that do not are a different loan
+          to underwrite, and nothing we can look up says which this is.
+        */}
+        <div className="mb-5">
+          <label className="super-label" htmlFor="estate-type">
+            {PROPERTY_ESTATE_TYPE}
+          </label>
+          <select
+            id="estate-type"
+            className="super-input"
+            value={form.propertyEstateType}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                propertyEstateType: e.target.value as PropertyEstateType,
+              }))
+            }
+          >
+            <option value="">Choose one</option>
+            {(Object.keys(ESTATE_LABELS) as PropertyEstateType[]).map((estate) => (
+              <option key={estate} value={estate}>
+                {ESTATE_LABELS[estate]}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <YesNoQuestion
           id="q-A"

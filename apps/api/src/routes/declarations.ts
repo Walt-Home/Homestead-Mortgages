@@ -157,6 +157,21 @@ const bodySchema = z
      * answered for by nobody.
      */
     borrowerId: z.string().uuid().optional(),
+    /**
+     * What the loan is secured by, which is the one answer on this screen that
+     * is not about the person answering.
+     *
+     * A sibling of `declaration` rather than a field inside it, because the
+     * declaration is a per-borrower row and an estate is a fact about one
+     * property: two people buying one house do not hold it on two tenures. It
+     * is written to `loan_files`, and a co-borrower's save restates it.
+     *
+     * Required, on the same rule as everything else here. Desktop Underwriter
+     * requires it with no condition in front of it, nothing we retrieve carries
+     * it, and there is no way to say "unanswered" on the wire — so a screen that
+     * let it through would be a casefile refused later with the borrower gone.
+     */
+    propertyEstateType: z.enum(["FeeSimple", "Leasehold"]),
   })
   .superRefine((body, ctx) => {
     const d = body.declaration;

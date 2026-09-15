@@ -25,10 +25,12 @@ function fakePrisma() {
   const rows = new Map<string, { ciphertext: string }>();
   const prisma = {
     vendorToken: {
-      findUnique: vi.fn(async ({ where }: { where: { loanFileId_key: { loanFileId: string; key: string } } }) => {
-        const { loanFileId, key: k } = where.loanFileId_key;
-        return rows.get(`${loanFileId}:${k}`) ?? null;
-      }),
+      findUnique: vi.fn(
+        async ({ where }: { where: { loanFileId_key: { loanFileId: string; key: string } } }) => {
+          const { loanFileId, key: k } = where.loanFileId_key;
+          return rows.get(`${loanFileId}:${k}`) ?? null;
+        },
+      ),
       upsert: vi.fn(
         async ({
           where,

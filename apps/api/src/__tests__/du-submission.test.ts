@@ -15,14 +15,16 @@
  * four shapes, the four gaps the model had before the emitter was specified,
  * and the two claims about labels that only a re-pull can make.
  *
- * **Those tests serialize through `@hm/du/test-support` and not through
- * `emitSubmission`, because no application this model can assemble is emittable
- * yet.** Eight data points the specification requires on the loan being applied
- * for and on the subject property have no column anywhere, so the gate refuses
- * every casefile and would leave "which row becomes which element" untestable
- * until those columns exist. The last test in this file names all eight and
- * asserts them exactly, so the list shortens when a column lands; the door is
- * out of the package's `exports` map so nothing shipped can take it.
+ * **Most of those tests serialize through `@hm/du/test-support` rather than
+ * through `emitSubmission`, and that door predates the gate being passable.**
+ * Eight data points the specification requires on the loan being applied for
+ * and on the subject property had no column anywhere, so every casefile was
+ * refused and "which row becomes which element" was untestable through the
+ * front door. The columns exist now and the gate's own test emits through
+ * `emitSubmission`; the rest keep the test door because a test about one
+ * element should fail on that element rather than on an unrelated gap in the
+ * fixture. The door stays out of the package's `exports` map, so nothing
+ * shipped can take it.
  */
 
 import { spawnSync } from "node:child_process";
@@ -105,6 +107,24 @@ function borrowerInput(first: string, last: string) {
  */
 type BorrowerAnswers = "standard" | "declarationOnly" | "none";
 
+/**
+ * What the file is quoted against and what is known about the building.
+ *
+ * `"quoted"` is the ordinary file: the seeded product, the unit count screen
+ * 1's assessor lookup writes, and the estate type screen 3 asks. The other two
+ * withhold one half each, and the tests that use them are about the refusal
+ * rather than about the document.
+ */
+type ProductAndProperty = "quoted" | "noProduct" | "noPropertyFacts";
+
+/**
+ * The product every file in this repository is quoted against, seeded by the
+ * migration that created the table. Named here rather than imported from
+ * `config` because a test that reads an environment variable is a test that
+ * passes or fails on somebody's shell.
+ */
+const PRODUCT_CODE = "CONF-30-FIXED";
+
 async function aDeclaration(applicationPartyId: string, partyId: string) {
   const principal = await prisma.principal.findFirstOrThrow({
     where: { partyId },
@@ -134,6 +154,7 @@ async function aDeclaration(applicationPartyId: string, partyId: string) {
 async function anApplication(
   roles: readonly ApplicationPartyRole[] = ["PRIMARY_BORROWER"],
   answers: BorrowerAnswers = "standard",
+  quoting: ProductAndProperty = "quoted",
 ): Promise<Application> {
   const user = await createUser();
   const file = await createLoanFile({ userId: user.id });
@@ -141,12 +162,25 @@ async function anApplication(
     where: { id: file.id },
     data: {
       purpose: "CASH_OUT_REFINANCE",
-      amortization: "fixed",
       propertyLine1: "1234 Ocean Pines",
       propertyLine2: "823",
       propertyCity: "Rehobeth",
       propertyState: "MD",
       propertyPostalCode: "21857",
+      // A whole quote or none of it: `loan_files_quote_a_whole_product_or_none`
+      // refuses a product code beside a null rate, so the fixture writes the
+      // term and the rate with the code rather than leaving a half-quoted row
+      // the database would not hold.
+      ...(quoting === "noProduct"
+        ? {}
+        : { productCode: PRODUCT_CODE, termMonths: 360, noteRate: 6.25 }),
+      ...(quoting === "noPropertyFacts"
+        ? {}
+        : {
+            financedUnitCount: 1,
+            propertyAttachmentType: "Detached" as const,
+            propertyEstateType: "FeeSimple" as const,
+          }),
     },
   });
   const app = await prisma.application.create({
@@ -460,7 +494,7 @@ describe("the four gaps the model had, now emitted", () => {
     );
   });
 
-  it("puts MortgageType on the liability and nowhere else", async () => {
+  it("puts one MortgageType on the liability and a different one on the loan", async () => {
     const app = await anApplication();
     await prisma.$transaction(async (tx) => {
       await writeLiability(tx, {
@@ -470,14 +504,20 @@ describe("the four gaps the model had, now emitted", () => {
     });
 
     const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
-    // One occurrence, inside LIABILITY_DETAIL. The TERMS_OF_LOAN MortgageType
-    // that DI-FHA02 also carries is a different statement about a different
-    // loan, and nothing in this model holds it.
-    expect(valuesOf(xml, "MortgageType")).toEqual(["FHA"]);
+    // Two occurrences of one element name, saying two different things. The
+    // FHA is the mortgage this borrower already owes, read off a liability;
+    // the Conventional is what they are applying for, read off the product the
+    // file is quoted against. DI-FHA02 carries both the same way. The columns
+    // behind them are two enums — `DuLiabilityMortgageType` carries FHA alone —
+    // and merging them would let a borrower's existing FHA loan answer for the
+    // one being underwritten.
+    expect(valuesOf(xml, "MortgageType")).toEqual(["FHA", "Conventional"]);
     expect(xml).toMatch(
       /<LIABILITY_DETAIL>[\s\S]*<MortgageType>FHA<\/MortgageType>[\s\S]*<\/LIABILITY_DETAIL>/,
     );
-    expect(xml).not.toMatch(/<TERMS_OF_LOAN>[\s\S]*?<MortgageType>/);
+    expect(xml).toMatch(
+      /<TERMS_OF_LOAN>[\s\S]*<MortgageType>Conventional<\/MortgageType>[\s\S]*<\/TERMS_OF_LOAN>/,
+    );
   });
 
   it("renders a negative net rental with its sign", async () => {
@@ -938,34 +978,156 @@ describe("the borrower's own block", () => {
 });
 
 describe("the gate, over rows rather than over bytes", () => {
-  it("names the eight columns between this model and a casefile it could send", async () => {
+  it("names nothing between this model and a casefile it could send", async () => {
     // Every shipped sample passes the preflight in `packages/du`, which proves
     // the checks are not wrong about Fannie Mae's files. This is what they say
     // about ours, and it is the whole answer rather than a sample of it: an
     // application answered as completely as this model allows — a borrower, a
     // co-borrower, a declaration, a current residence, a taxpayer identifier
-    // from the vault, an owned property and the company originating the
-    // loan — still carries none of these eight, because no column holds them.
+    // from the vault, an owned property, the company originating the loan, the
+    // product it is quoted against and the county's record of the building.
     //
-    // Asserted exactly, so the list shortens in the commit that adds a column
-    // and cannot quietly grow. `docs/du-readiness.md` carries the same eight.
+    // This list was eight long and is empty, and it is asserted as a list so
+    // that it shortens in the commit that adds a column and cannot quietly
+    // grow. `docs/du-readiness.md` carries the same answer. The three tests
+    // below are the other half of the same claim: each withholds one thing and
+    // names exactly what goes missing, so an empty list here means the columns
+    // are read rather than that the checks stopped running.
     const app = await anApplication(["PRIMARY_BORROWER", "CO_BORROWER"]);
     await aSubjectReo(app, app.borrowers);
     const report = await preflightSubmission(prisma, app.id, emitting());
-    expect(report.ok).toBe(false);
+    expect(report.findings).toEqual([]);
+    expect(report.ok).toBe(true);
+
+    // Bytes, from the gated door rather than the test one, because "emittable"
+    // is the claim and `emitSubmission` is what refuses.
+    const xml = await emitSubmission(prisma, app.id, emitting());
+    expect(valuesOf(xml, "MortgageType")).toEqual(["Conventional"]);
+    expect(valuesOf(xml, "AmortizationType")).toEqual(["Fixed"]);
+    expect(valuesOf(xml, "BalloonIndicator")).toEqual(["false"]);
+    expect(valuesOf(xml, "ConstructionLoanIndicator")).toEqual(["false"]);
+    expect(valuesOf(xml, "InterestOnlyIndicator")).toEqual(["false"]);
+    expect(valuesOf(xml, "NegativeAmortizationIndicator")).toEqual(["false"]);
+    expect(valuesOf(xml, "PrepaymentPenaltyIndicator")).toEqual(["false"]);
+    expect(valuesOf(xml, "FinancedUnitCount")).toEqual(["1"]);
+    expect(valuesOf(xml, "AttachmentType")).toEqual(["Detached"]);
+    expect(valuesOf(xml, "PropertyEstateType")).toEqual(["FeeSimple"]);
+    expect(xmllintErrors(xml)).toEqual([]);
+  });
+
+  it("reads the seven product answers off the row a file is quoted against", async () => {
+    // What stops the five indicators, the mortgage type and the amortization
+    // from being seven constants in the emitter. A second product is quoted,
+    // nothing else about the application moves, and every one of the seven
+    // changes — which is the shape a second product would need and the reason
+    // the table exists.
+    //
+    // The amortization is the one that shows why they belong on one row: a
+    // product that pays interest only and balloons does not amortize fully, and
+    // while `loan_files.amortization` held the literal `'fixed'` this exact
+    // casefile said Fixed beside InterestOnlyIndicator true, and validated.
+    //
+    // `loan_products` is a catalog rather than test state, so the reset
+    // preserves it and this upserts rather than creating: the row outlives the
+    // test that wrote it, the same way the seeded one outlives the migration.
+    await prisma.loanProduct.upsert({
+      where: { code: "FHA-30-IO-BALLOON" },
+      update: {},
+      create: {
+        code: "FHA-30-IO-BALLOON",
+        mortgageType: "FHA",
+        amortization: "AdjustableRate",
+        constructionLoan: true,
+        balloon: true,
+        interestOnly: true,
+        negativeAmortization: true,
+        prepaymentPenalty: true,
+      },
+    });
+    const app = await anApplication();
+    await prisma.loanFile.update({
+      where: { id: app.loanFileId },
+      data: { productCode: "FHA-30-IO-BALLOON" },
+    });
+
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+    expect(valuesOf(xml, "MortgageType")).toEqual(["FHA"]);
+    expect(valuesOf(xml, "AmortizationType")).toEqual(["AdjustableRate"]);
+    expect(valuesOf(xml, "BalloonIndicator")).toEqual(["true"]);
+    expect(valuesOf(xml, "ConstructionLoanIndicator")).toEqual(["true"]);
+    expect(valuesOf(xml, "InterestOnlyIndicator")).toEqual(["true"]);
+    expect(valuesOf(xml, "NegativeAmortizationIndicator")).toEqual(["true"]);
+    expect(valuesOf(xml, "PrepaymentPenaltyIndicator")).toEqual(["true"]);
+  });
+
+  it("refuses a file quoted against no product, and names the seven", async () => {
+    // Nothing about this borrower changed. What is missing is the row that
+    // says what `CONF-30-FIXED` IS, and seven data points DU requires on the
+    // loan being applied for go with it — which is the argument for the table:
+    // a product code is a string, and a string cannot say that the loan behind
+    // it amortizes.
+    const app = await anApplication(["PRIMARY_BORROWER"], "standard", "noProduct");
+    const report = await preflightSubmission(prisma, app.id, emitting());
     expect(report.findings.map((finding) => finding.where.split("#")[1]).sort()).toEqual([
+      "AmortizationType",
       "BalloonIndicator",
       "ConstructionLoanIndicator",
-      "FinancedUnitCount",
       "InterestOnlyIndicator",
       "MortgageType",
       "NegativeAmortizationIndicator",
       "PrepaymentPenaltyIndicator",
-      "PropertyEstateType",
     ]);
     expect(new Set(report.findings.map((finding) => finding.check))).toEqual(
       new Set(["required-data-point-absent"]),
     );
+    await expect(emitSubmission(prisma, app.id, emitting())).rejects.toBeInstanceOf(
+      DuPreflightRefusal,
+    );
+  });
+
+  it("refuses a file nobody has answered the property for, and names the two", async () => {
+    // An address no property-data vendor holds a record for, on a borrower who
+    // has not reached screen 3. Both columns are null and neither is invented,
+    // so the casefile stops here rather than stating that a building somebody
+    // may never have looked at has one unit on a fee simple estate.
+    //
+    // `AttachmentType` is absent from this list on purpose: it is required
+    // only once a unit count exists, and there is none.
+    const app = await anApplication(["PRIMARY_BORROWER"], "standard", "noPropertyFacts");
+    const report = await preflightSubmission(prisma, app.id, emitting());
+    expect(report.findings.map((finding) => finding.where.split("#")[1]).sort()).toEqual([
+      "FinancedUnitCount",
+      "PropertyEstateType",
+    ]);
+    await expect(emitSubmission(prisma, app.id, emitting())).rejects.toBeInstanceOf(
+      DuPreflightRefusal,
+    );
+  });
+
+  it("asks for the attachment the moment a unit count exists", async () => {
+    // The check the gate found on its own. Nothing in the readiness audit named
+    // `AttachmentType`; answering `FinancedUnitCount` is what makes "Required
+    // IF FinancedUnitCount < 5" start biting, and all eighteen shipped samples
+    // answer it. A unit count without it is a casefile DU rejects, so the two
+    // are retrieved from one assessor record and this is what happens when only
+    // one of them lands.
+    const app = await anApplication(["PRIMARY_BORROWER"], "standard", "noPropertyFacts");
+    await prisma.loanFile.update({
+      where: { id: app.loanFileId },
+      data: { financedUnitCount: 2, propertyEstateType: "FeeSimple" },
+    });
+
+    const report = await preflightSubmission(prisma, app.id, emitting());
+    expect(report.findings).toEqual([
+      {
+        check: "conditional-data-point-absent",
+        where:
+          "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/COLLATERALS/COLLATERAL/SUBJECT_PROPERTY" +
+          "/PROPERTY_DETAIL#AttachmentType",
+        message:
+          "Required here because IF FinancedUnitCount < 5, and this casefile does not carry it.",
+      },
+    ]);
   });
 
   it("refuses a live row the matcher could not tell from another", async () => {

@@ -31,7 +31,7 @@ Prisma against Postgres, Terraform for the GCP pieces this repo owns.
 
 ```
 data/v1-build.csv          source of truth for WHAT must be satisfied
-packages/requirements      the 83 requirements, executable
+packages/requirements      the 84 requirements, executable
 packages/underwriting      the shadow AUS
 packages/connectors        five ports, fixture adapters, the authorization guard
 packages/shared            domain types; LoanFile is the object everything reads
@@ -46,7 +46,7 @@ infra                      Terraform
 
 The UI was rebuilt from nine screens to four, and a fifth was added when
 somebody finally had to be asked URLA Section 5 and where they live. The engine
-tracks eleven `FlowStage` values and evaluates 83 requirements.
+tracks eleven `FlowStage` values and evaluates 84 requirements.
 
 ```
 1 Property   →  2 About you  →  3 A few questions  →  4 Your bank  →  5 Review
@@ -55,9 +55,12 @@ tracks eleven `FlowStage` values and evaluates 83 requirements.
 
 Screen 3 is a STEP and not a branch, and that is forced rather than chosen:
 `branchesFor()` renders work the engine reports as outstanding, and the engine
-cannot report work that has no requirement. So the questions are six rows in
+cannot report work that has no requirement. So the questions are seven rows in
 `data/v1-build.csv` with `source = borrower_input`, they have a `FlowStage` of
-their own, and a borrower who stops halfway resumes on them.
+their own, and a borrower who stops halfway resumes on them. The seventh is the
+odd one out: it asks about the property rather than the person, because whether
+the land comes with the house is the one thing on that screen the county cannot
+tell us and Desktop Underwriter requires anyway.
 
 `apps/web/src/lib/flow.ts` is the only place that knows both vocabularies. It
 holds `SCREENS` (five), `STAGE_TO_SCREEN` (eleven → five) and `branchesFor()`.

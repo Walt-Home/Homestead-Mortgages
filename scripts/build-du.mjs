@@ -717,6 +717,33 @@ export const DU_DATA_POINT_FOR_ENUM = {
     local: true,
   },
 
+  // the product and the subject property
+  DuMortgageType: {
+    // The mortgage type APPLIED FOR, at L3.1, which is a property of the
+    // product being quoted rather than of the borrower. Not the same enum as
+    // DuLiabilityMortgageType and not mergeable with it: 3a.12 is the type of a
+    // mortgage the borrower already owes and carries FHA alone, while this one
+    // carries all four.
+    dataPoints: [{ name: "MortgageType", formFields: ["L3.1"] }],
+  },
+  DuPropertyEstateType: {
+    dataPoints: [{ name: "PropertyEstateType", formFields: ["L2.3"] }],
+  },
+  DuAttachmentType: {
+    // The preflight's own find, and not something the audit named: the moment
+    // FinancedUnitCount exists, "Required IF FinancedUnitCount < 5" starts
+    // biting and every one of the eighteen shipped samples answers it.
+    dataPoints: [{ name: "AttachmentType", formFields: [] }],
+  },
+  DuAmortizationType: {
+    // The column holds the wire value, so this enum is what a `loan_products`
+    // row may say and what the emitter writes, with no lookup table in
+    // between. GEM and GPM are products this lender does not offer; they are
+    // members anyway, because the set is Fannie Mae's rather than ours and a
+    // trimmed one would go stale the day somebody adds a row.
+    dataPoints: [{ name: "AmortizationType", formFields: ["L3.5"] }],
+  },
+
   // vesting and the non-borrower parties
   DuPropertyOwnerStatus: {
     dataPoints: [{ name: "PropertyOwnerStatusType", formFields: ["L2.1", "L2.2"] }],
@@ -2094,7 +2121,13 @@ export const MODELED_CHILDREN = {
   },
   [`${DEAL_XPATH}/COLLATERALS/COLLATERAL/SUBJECT_PROPERTY/PROPERTY_DETAIL`]: {
     held: ["loan_files", "loan_scenarios"],
-    children: ["PropertyEstimatedValueAmount", "PropertyUsageType"],
+    children: [
+      "AttachmentType",
+      "FinancedUnitCount",
+      "PropertyEstateType",
+      "PropertyEstimatedValueAmount",
+      "PropertyUsageType",
+    ],
   },
 
   // `du_expenses` and `du_liabilities`.
@@ -2130,21 +2163,41 @@ export const MODELED_CHILDREN = {
   // The subject loan, and the LenderLoan identifier beside DU's own casefile.
   // The predicate is the whole of what separates these from the related loan
   // this model has nowhere to put; see PATH_PREDICATES.
+  // The period count is quoted per file; the type is the product's, by the same
+  // test the six below are chosen by -- fixed or adjustable is what a product
+  // IS, not something a borrower is asked.
   [`${SUBJECT_LOAN_XPATH}/AMORTIZATION/AMORTIZATION_RULE`]: {
-    held: ["loan_files", "loan_scenarios"],
+    held: ["loan_files", "loan_products", "loan_scenarios"],
     children: ["AmortizationType", "LoanAmortizationPeriodCount", "LoanAmortizationPeriodType"],
   },
+  // Five of these six are the product's, not the file's: a loan that builds,
+  // balloons, pays interest only or amortizes negatively is one `loan_products`
+  // row rather than a question anybody is asked. Only the borrower count is
+  // counted off this application.
   [`${SUBJECT_LOAN_XPATH}/LOAN_DETAIL`]: {
-    held: ["application_parties"],
-    children: ["BorrowerCount"],
+    held: ["application_parties", "loan_products"],
+    children: [
+      "BalloonIndicator",
+      "BorrowerCount",
+      "ConstructionLoanIndicator",
+      "InterestOnlyIndicator",
+      "NegativeAmortizationIndicator",
+      "PrepaymentPenaltyIndicator",
+    ],
   },
   [`${SUBJECT_LOAN_XPATH}/LOAN_IDENTIFIERS/LOAN_IDENTIFIER`]: {
     held: ["loan_files"],
     children: ["LoanIdentifier", "LoanIdentifierType"],
   },
   [`${SUBJECT_LOAN_XPATH}/TERMS_OF_LOAN`]: {
-    held: ["loan_files", "loan_scenarios"],
-    children: ["BaseLoanAmount", "LienPriorityType", "LoanPurposeType", "NoteRatePercent"],
+    held: ["loan_files", "loan_products", "loan_scenarios"],
+    children: [
+      "BaseLoanAmount",
+      "LienPriorityType",
+      "LoanPurposeType",
+      "MortgageType",
+      "NoteRatePercent",
+    ],
   },
 
   // `connector_snapshots`, as the vendor reports DU is told about.

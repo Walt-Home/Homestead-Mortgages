@@ -5,7 +5,7 @@ Screen,Rows,What happens,,,,,,,
 1 Property & loan,5,"Address, purchase or refi, price/value, down payment. Under 60s of typing.",,,,,,,
 2 Identity,7,"Name, DOB, SSN, contact, authorizations. Required before any pull.",,,,,,,
 3 Credit,10,Soft pull. Instant. First visible win — they see something happen.,,,,,,,
-4 Declarations,6,"Section 5 and where you live. The answers only the borrower can give.",,,,,,,
+4 Declarations,7,"Section 5 and where you live. The answers only the borrower can give.",,,,,,,
 5 Bank,10,12-month asset report. Assets + income + employment + cash flow + rent history. The one that matters.,,,,,,,
 6 Payroll,4,Consumer-permissioned. Precision on employment and variable income.,,,,,,,
 7 IRS transcript,3,"4506-C e-sign, filed W-2 income. Reconciliation source.",,,,,,,
@@ -46,6 +46,7 @@ APP-024,4 Declarations,Borrower input,Bankruptcy chapters identified,bankruptcy_
 APP-025,4 Declarations,Borrower input,Prior property usage declared,"prior_property_usage; prior_property_title where the borrower states it",URLA Section 5a,Borrower owned a home in the past 3 years,No,Rework / delay,At application
 APP-026,4 Declarations,Borrower input,Current residence stated,"residency_basis, duration_months, monthly_rent when the basis is rent",URLA Section 1a,Universal,No,Repurchase / unsaleable,At application
 APP-027,4 Declarations,Borrower input,Prior residence stated,"prior address, city, state, postal_code, residency_basis, duration_months",URLA Section 1a,Current residence under 24 months,No,Rework / delay,At application
+APP-028,4 Declarations,Borrower input,Subject property estate type declared,property_estate_type: fee simple or leasehold,"URLA Section 4a; purchase contract; deed; ground lease",Universal,No,Repurchase / unsaleable,At application
 ,,,,,,,,,
 AST-001,5 Bank,Connect: bank (12-mo asset report),Deposit accounts documented,"account_type, institution, balance, two_month_history per account",Bank statements; VOD; asset verification report,Universal,Yes - assets,Repurchase / unsaleable,Before UW-001
 AST-005,5 Bank,Connect: bank (12-mo asset report),Large deposit sourced,each deposit > 50% of monthly_income has source_type and evidence,Transfer records; sale documents; explanation letter,Deposit exceeds 50% of monthly income,No,Repurchase / unsaleable,Before UW-015

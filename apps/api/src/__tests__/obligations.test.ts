@@ -41,7 +41,7 @@ const branches = (file: LoanFile) => borrowerObligations(file).map((o) => o.bran
  * `ID|screen|source`, borrower-owned and known to apply — the assessment's
  * `actor: "borrower"` with `applicabilityKnown: true`.
  *
- * The three `declarations` rows are on every fixture because none of these
+ * The four `declarations` rows are on every fixture because none of these
  * files has answered screen 3, and they are the point of the second assertion:
  * work a borrower genuinely owns, on a screen that is a STEP, must never
  * become a branch card. `branchCanSatisfy` is what keeps them off the list —
@@ -64,6 +64,7 @@ const WIRE: readonly {
       "APP-022|declarations|borrower_input",
       "APP-023|declarations|borrower_input",
       "APP-026|declarations|borrower_input",
+      "APP-028|declarations|borrower_input",
       "CRD-002|credit|connect_credit",
       "CRD-016|credit|connect_credit",
       "INC-003|irs_transcript|connect_irs",
@@ -79,6 +80,7 @@ const WIRE: readonly {
       "APP-022|declarations|borrower_input",
       "APP-023|declarations|borrower_input",
       "APP-026|declarations|borrower_input",
+      "APP-028|declarations|borrower_input",
       "AST-005|bank|connect_bank",
       "AST-007|bank|connect_bank",
       "CRD-002|credit|connect_credit",
@@ -96,6 +98,7 @@ const WIRE: readonly {
       "APP-022|declarations|borrower_input",
       "APP-023|declarations|borrower_input",
       "APP-026|declarations|borrower_input",
+      "APP-028|declarations|borrower_input",
       "AST-006|upload_fallback|connect_bank",
       "CRD-002|credit|connect_credit",
       "CRD-008|upload_fallback|borrower_input",
@@ -116,6 +119,7 @@ const WIRE: readonly {
       "APP-022|declarations|borrower_input",
       "APP-023|declarations|borrower_input",
       "APP-026|declarations|borrower_input",
+      "APP-028|declarations|borrower_input",
       "AST-006|upload_fallback|connect_bank",
       "CRD-002|credit|connect_credit",
       "CRD-008|upload_fallback|borrower_input",

@@ -103,7 +103,10 @@ describe("the attempt record", () => {
     // A token that dies while the borrower is on their bank's login page
     // surfaces to them as the bank refusing them.
     const s = store();
-    writeAttempt(attempt({ expiresAt: new Date(NOW + LINK_TOKEN_GRACE_MS - 1000).toISOString() }), s);
+    writeAttempt(
+      attempt({ expiresAt: new Date(NOW + LINK_TOKEN_GRACE_MS - 1000).toISOString() }),
+      s,
+    );
     expect(readAttempt("file-1", s, NOW)).toBeNull();
     expect(s.map.size).toBe(0);
   });

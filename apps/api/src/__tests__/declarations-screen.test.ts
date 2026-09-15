@@ -51,6 +51,18 @@ const dana: BorrowerInput = {
 async function applicationFile(stage: "CREDIT" | "BANK" = "CREDIT") {
   const user = await createUser();
   const file = await createLoanFile({ userId: user.id, stage });
+  // The address screen 1 took, without which the projection has no property to
+  // hang an estate type on. Nobody reaches this screen without one, and the
+  // seventh requirement here is about the house rather than about Dana.
+  await prisma.loanFile.update({
+    where: { id: file.id },
+    data: {
+      propertyLine1: "1247 Oak Street",
+      propertyCity: "Austin",
+      propertyState: "TX",
+      propertyPostalCode: "78704",
+    },
+  });
   const borrower = await saveBorrower(file.id, dana);
   const app = await prisma.application.create({
     data: { loanFileId: file.id, ausCasefileId: randomUUID() },
@@ -64,10 +76,11 @@ async function applicationFile(stage: "CREDIT" | "BANK" = "CREDIT") {
  * Every question answered, and no two neighbors alike.
  *
  * The three conditional follow-ups are all taken, so this one body reaches all
- * six requirements: the homeowner branch, the bankruptcy chapters and the
- * previous address.
+ * seven requirements: the homeowner branch, the bankruptcy chapters, the
+ * previous address, and the estate the property is held on.
  */
 const EVERY_ANSWER = {
+  propertyEstateType: "FeeSimple",
   declaration: {
     intentToOccupy: "Yes",
     homeownerPastThreeYears: "Yes",
@@ -109,6 +122,7 @@ const EVERY_ANSWER = {
 
 /** A borrower with nothing to declare, which is the ordinary shape. */
 const NOTHING_TO_DECLARE = {
+  propertyEstateType: "FeeSimple",
   declaration: {
     intentToOccupy: "Yes",
     homeownerPastThreeYears: "No",
@@ -188,8 +202,8 @@ describe("what the screen posts", () => {
   });
 });
 
-describe("the six requirements this screen carries", () => {
-  it("retires all six when the borrower takes every branch", async () => {
+describe("the seven requirements this screen carries", () => {
+  it("retires all seven when the borrower takes every branch", async () => {
     const { user, file } = await applicationFile();
     const before = await loadLoanFile(file.id);
     expect(idsSatisfied(before)).not.toContain("APP-022");
@@ -198,7 +212,18 @@ describe("the six requirements this screen carries", () => {
     const after = await loadLoanFile(file.id);
 
     expect(idsSatisfied(after)).toEqual(
-      expect.arrayContaining(["APP-022", "APP-023", "APP-024", "APP-025", "APP-026", "APP-027"]),
+      expect.arrayContaining([
+        "APP-022",
+        "APP-023",
+        "APP-024",
+        "APP-025",
+        "APP-026",
+        "APP-027",
+        // The seventh is about the property rather than the person, and it is
+        // satisfied by the same post: `propertyEstateType` rides beside the
+        // declaration and is written to the file.
+        "APP-028",
+      ]),
     );
   });
 

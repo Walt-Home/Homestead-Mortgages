@@ -327,7 +327,11 @@ function birthDate(facts: PartyFacts | undefined): string | null {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    throw new Error(`date_of_birth ${JSON.stringify(value)} is not a date.`);
+    throw new Error(
+      "A date of birth is a date, and this party's is not one. The value is not repeated here: " +
+        "a birth date belongs in the same place a taxpayer identifier does, which is nowhere " +
+        "an exception message can be read.",
+    );
   }
   return renderDate(parsed);
 }

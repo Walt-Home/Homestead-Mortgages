@@ -2151,7 +2151,11 @@ export const MODELED_CHILDREN = {
   [`${SUBJECT_LOAN_XPATH}/EXTENSION/OTHER/DU:LOAN_EXTENSION/DU:UNDERWRITING_VERIFICATIONS/DU:UNDERWRITING_VERIFICATION`]:
     {
       held: ["connector_snapshots"],
-      children: ["DU:VerificationReportIdentifier", "DU:VerificationReportType"],
+      children: [
+        "DU:VerificationReportIdentifier",
+        "DU:VerificationReportSupplierType",
+        "DU:VerificationReportType",
+      ],
     },
 
   // The party blocks, which the corpus hangs under six kinds of role and this

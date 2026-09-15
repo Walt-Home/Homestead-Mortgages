@@ -24,6 +24,12 @@ import { buildLoans } from "./loan.js";
 import { buildParties, type TaxpayerIdentifierResolver } from "./parties.js";
 import { buildRelationships } from "./relationships.js";
 import {
+  buildVerifications,
+  selectVerifications,
+  standingReports,
+  VERIFICATION_KINDS,
+} from "./verifications.js";
+import {
   loadApplication,
   loadAssets,
   loadEmployments,
@@ -31,6 +37,8 @@ import {
   loadIncome,
   loadLiabilities,
   loadPartyFacts,
+  loadVerificationPayloads,
+  loadVerificationSnapshots,
   type DuReader,
 } from "./load.js";
 
@@ -87,7 +95,7 @@ export async function assembleSubmission(
   const application = await loadApplication(db, applicationId);
   if (!application) throw new Error(`No application ${applicationId} to assemble.`);
 
-  const [assets, liabilities, expenses, income, employments, facts] = await Promise.all([
+  const [assets, liabilities, expenses, income, employments, facts, snapshots] = await Promise.all([
     loadAssets(db, applicationId),
     loadLiabilities(db, applicationId),
     loadExpenses(db, applicationId),
@@ -97,7 +105,28 @@ export async function assembleSubmission(
       db,
       application.parties.map((party) => party.partyId),
     ),
+    loadVerificationSnapshots(
+      db,
+      application.loanFile.id,
+      application.parties.map((party) => party.partyId),
+      VERIFICATION_KINDS,
+    ),
   ]);
+  // Decided before anything is built, because the container hangs off the loan
+  // and the arcs are folded after the roles exist, and both have to be the same
+  // set of reports.
+  //
+  // Two reads and not one: the history above is unbounded — a re-pull a day for
+  // a year is hundreds of rows a borrower — and the payloads are wanted only for
+  // the handful that stand, which is at most one per report type per borrower.
+  const standing = standingReports(snapshots, application);
+  const verifications = selectVerifications(
+    standing,
+    await loadVerificationPayloads(
+      db,
+      standing.map((report) => report.snapshotId),
+    ),
+  );
 
   const labels = createLabels();
   const index = createLabelIndex();
@@ -109,7 +138,7 @@ export async function assembleSubmission(
   const collateralsNode = buildCollaterals(application);
   const expensesNode = buildExpenses(expenses, labels, index);
   const liabilitiesNode = buildLiabilities(liabilities, labels, index);
-  const loansNode = buildLoans(application);
+  const loansNode = buildLoans(application, buildVerifications(verifications, labels, index));
   const partiesNode = await buildParties({
     application,
     facts,
@@ -125,6 +154,7 @@ export async function assembleSubmission(
     liabilities,
     expenses,
     income,
+    verifications,
     index,
   });
 

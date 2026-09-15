@@ -54,16 +54,16 @@ flowchart LR
   LOAN -- "9" --> ROLE
   COUNSELING -. "6 · no table" .-> ROLE
   EXPENSE -- "2" --> ROLE
-  UWV -. "1 · container not modeled" .-> ROLE
+  UWV -- "1" --> ROLE
   UWV -. "0 · endpoints disagree" .-> ASSET
   UWV -. "0 · endpoints disagree" .-> EMPLOYER
 
   classDef held fill:#111,stroke:#ECECEC,color:#fff
   classDef hub fill:#241210,stroke:#FF3C2E,color:#fff
   classDef gap fill:#111,stroke:#FF8A8A,color:#fff
-  class ASSET,LIABILITY,EXPENSE,LOAN,INCOME,EMPLOYER held
+  class ASSET,LIABILITY,EXPENSE,LOAN,INCOME,EMPLOYER,UWV held
   class ROLE hub
-  class COUNSELING,UWV gap
+  class COUNSELING gap
 ```
 
 `ROLE` is the hub, and that is the shape of the domain rather than an accident
@@ -76,8 +76,8 @@ why it needs a table of its own rather than a column.
 
 ## What we can already answer
 
-**342 of the corpus's 349 arc instances are of kinds our database holds.** The
-seven that are not are six counseling events and one verification arc.
+**343 of the corpus's 349 arc instances are of kinds our database holds.** The
+six that are not are counseling events.
 
 | Arc                                                   | In corpus | Where it lives here                           |
 | ----------------------------------------------------- | --------: | --------------------------------------------- |
@@ -89,7 +89,7 @@ seven that are not are six counseling events and one verification arc.
 | `LOAN_IsAssociatedWith_ROLE`                          |         9 | `application_parties.borrower_ordinal`        |
 | `COUNSELING_EVENT_IsAssociatedWith_ROLE`              |         6 | **nothing**                                   |
 | `EXPENSE_IsAssociatedWith_ROLE`                       |         2 | `du_expense_parties`                          |
-| `UNDERWRITING_VERIFICATION_IsAssociatedWith_ROLE`     |         1 | `connector_snapshots.party_id`, **partly**    |
+| `UNDERWRITING_VERIFICATION_IsAssociatedWith_ROLE`     |         1 | `connector_snapshots.party_id`                |
 | `UNDERWRITING_VERIFICATION_IsAssociatedWith_ASSET`    |         0 | **nothing**                                   |
 | `UNDERWRITING_VERIFICATION_IsAssociatedWith_EMPLOYER` |         0 | **nothing**                                   |
 
@@ -113,6 +113,24 @@ employer, bound by a CHECK, so the indicator DU reads and the arc DU reads
 cannot disagree. See `docs/du-readiness.md` item 7 for the gap that remains: no
 port links an income item to one of several employments, so a borrower with two
 current employers gets wage income attached to neither.
+
+**The verification arc reads an append-only table non-exhaustively, and it is
+the only one that does.** A re-pull writes another `connector_snapshots` row, so
+the rows are a history; what DU wants is one report per type per borrower —
+which reports it may rely on now. Two borrowers resubmitted six times with bank,
+payroll and IRS re-pulled each round is thirty-six candidate elements, nine of
+them naming reports a later pull superseded, and a longer file crosses the
+container's maximum of fifty and is rejected on cardinality. So the emitter
+keeps the latest snapshot of each kind for each borrower and nothing else. The
+history stays in the table, which is where the monitoring loop's "your situation
+changed" diff needs it.
+
+Latest is the vendor's `retrieved_at` and then `connector_snapshots.write_seq`,
+the order the rows were written. The second column exists because the first one
+ties: two pulls can carry the same moment, and the only other candidate is a v4
+uuid, so the tie would fall to the larger random number rather than to the later
+report — on the question of which vendor report a federal submission tells DU to
+rely on.
 
 **Counseling is absent on purpose.** We provide no housing counseling, so there
 is no event to record. It becomes required rather than optional the day we offer
@@ -145,6 +163,10 @@ that is worth having. It is worth much less than it looks.
 - a dangling `xlink:to` pointing at a label the document does not contain
 - a duplicate `xlink:label`
 - an invented arcrole URI
+- an arc between two containers the arcrole says nothing about, and an arc from
+  a container to itself
+- a borrower with no date of birth, and a taxpayer identifier carrying only what
+  kind of number it is
 - five borrowers, where DU permits four
 - a deleted `RELATIONSHIPS` container — the entire graph removed
 - a document with no `LOANS` and no `PARTY`: nothing to underwrite and nobody to
@@ -167,10 +189,11 @@ applications.
 
 ## What is built, and what is not
 
-**Six of the eleven arcs are emitted.** `packages/du/src/assemble/relationships.ts`
+**Seven of the eleven arcs are emitted.** `packages/du/src/assemble/relationships.ts`
 folds `du_asset_parties`, `du_liability_parties`, `du_expense_parties`,
-`du_liabilities.secured_by_owned_property_id`, `income_sources.employer_id` and
-`du_joint_credit_report_links` into one `RELATIONSHIPS` block, in that order,
+`du_liabilities.secured_by_owned_property_id`, `income_sources.employer_id`,
+`du_joint_credit_report_links` and the verifications selected out of
+`connector_snapshots` into one `RELATIONSHIPS` block, in that order,
 with `SequenceNumber` assigned over the whole fold. Every arcrole URI comes out
 of `generated/arcroles.ts` rather than out of a string in the emitter, so a
 specification change stops the build instead of producing a document that
@@ -191,19 +214,42 @@ that writes a second person into the document without adding them to `borrowers`
 transmits somebody nothing was checked for, and no code below the assembler can
 tell.
 
-What is still missing is the preflight that refuses to emit a document DU would
-reject, a transport that carries one anywhere, and
-`DU:UNDERWRITING_VERIFICATION`, which arrives with its selection rule.
+**The gate is built too, and it is what the rest of this page argues for.**
+`packages/du/src/preflight` runs between assembling and emitting, and
+`emitSubmission` returns bytes or throws — every mutation
+"What schema validation does not buy you" lists as validating is a check there,
+and every check has a fixture built by mutating one of Fannie Mae's eighteen.
+All eighteen pass the gate unchanged, and `xmllint` accepts all but two of the
+fixtures: a fifty-first `DU:UNDERWRITING_VERIFICATION`, which the DU wrapper
+happens to bound itself, and a date of birth on a day February has never had,
+which `xs:date` catches — and which the obvious way to write that check does
+not, because parsing a date rolls an out-of-range day forward instead of
+refusing it.
+
+**An arc that resolves is not yet an arc that means anything**, and that is the
+second half of what "the graph" means here. An `ASSET_IsAssociatedWith_ROLE`
+pointing at a liability, or at the asset it left, resolves, carries one of the
+eleven arcroles and validates against the whole chain — and the asset still
+belongs to nobody. So both ends are checked against the container the arc table
+puts there, by element name rather than by path: the tab writes the role
+endpoints as `DEAL/PARTIES/PARTY/ROLE`, eliding the plural container every
+document carries, and anchoring that spelling would refuse all eighteen. The two
+disputed endpoints are skipped rather than decided, for the reason above.
+
+What is still missing is a transport that carries a document anywhere.
 
 An arc whose endpoint has no label is DROPPED rather than written dangling — a
 dangling `xlink:to` validates against the whole nine-file chain and says
 nothing, which is the worse of the two failures.
 
-**`UNDERWRITING_VERIFICATION_IsAssociatedWith_ROLE` is not emitted yet**, and
-neither is `LOAN_IsAssociatedWith_ROLE`. The counseling arc has no table to come
-from and the two disputed arcs have no winner to pick.
+**`LOAN_IsAssociatedWith_ROLE` is not emitted yet.** The counseling arc has no
+table to come from and the two disputed arcs have no winner to pick — the one
+function that turns an arcrole name into a URI throws on a disputed one, so the
+refusal holds for whatever folds an arc next rather than for the two files that
+fold them today. Both readings validate and one of them means the wrong thing.
 
-**Nothing refuses to emit, and nothing sends.** There is no preflight, no
-transport and no inbound path for a findings report, a recommendation or DU's
-own casefile identifier. The emitter can produce a document DU would reject;
-that is what the preflight is for, and it is the next commit.
+**Nothing sends.** There is no transport. What there is now is a refusal: a
+casefile that fails any check above produces no bytes at all, and the refusal
+goes to whoever asked for the document rather than to a borrower — it names an
+XPath, a label or a row id and never a value, so it is safe to log, which the
+casefile it is about is not.

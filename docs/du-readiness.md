@@ -9,14 +9,44 @@ believed. Line numbers move; treat them as pointers to a name.
 
 ## Where this stands
 
-**The model a submission is assembled from is built, a submission is now
-assembled and emitted from it, and both ends of the exchange with DU exist.
-Nothing refuses to emit, and nothing sends.**
+**The model a submission is assembled from is built, a submission is assembled
+and emitted from it, a preflight refuses to emit one Desktop Underwriter would
+reject, and both ends of the exchange with DU exist. Nothing sends, and nothing
+is currently emittable either — the gate names the eleven columns in the way,
+below.**
 
-Fourteen items are tracked below: eight done, five partial, one not. The count
-still flatters us — what remains of the submission path is the preflight and a
-transport that actually carries a document somewhere, and until there is one,
-the port that would submit has nothing beneath it.
+Fifteen items are tracked below: nine done, five partial, one not. The count
+still flatters us — what remains of the submission path is a transport that
+actually carries a document somewhere, and until there is one, the port that
+would submit has nothing beneath it.
+
+**The gate found things, and they are in this page rather than in a comment.**
+
+**Eleven columns stand between this model and a casefile that could be sent,
+and no application it assembles is emittable until they exist.** Eight of them
+are on the loan being applied for and on the subject property —
+`MortgageType` and five product indicators (`ConstructionLoanIndicator`,
+`BalloonIndicator`, `InterestOnlyIndicator`, `NegativeAmortizationIndicator`,
+`PrepaymentPenaltyIndicator`), plus `FinancedUnitCount` and
+`PropertyEstateType`. The specification requires every one of them with no
+condition in front of it, all eighteen shipped samples carry all eight on their
+subject loan and subject property, and this repository holds none: `loan_files`
+has a free-text `product_code` and a `property_type`, which is not the same
+thing as saying a loan is conventional, amortizes without a balloon, and sits
+on a fee simple estate. **Nothing here guesses one.** A value invented to get
+past a gate is worse than the refusal, because the refusal is ours and the value
+would be Desktop Underwriter's.
+
+The other three are on a job: `EmploymentClassificationType`,
+`EmploymentBorrowerSelfEmployedIndicator` and
+`SpecialBorrowerEmployerRelationshipIndicator` are required on an `EMPLOYMENT`
+whose status is Current, and `employments` has a column for none of them. That
+is item 7's third gap.
+
+All eleven are columns and screen questions rather than design problems, and
+the api suite names all eleven exactly — eight in one test and three in
+another — so the lists shorten in the commit that adds a column and cannot
+quietly grow.
 
 What changed since the last measurement is that **all three of the gaps that
 blocked any submission are closed**. Declarations are asked and stored,
@@ -72,8 +102,14 @@ three lists rather than trusting it after they change.
 
 - **Employer is a real entity** — but only a vendor pull creates one, so a job
   a borrower typed still has nothing behind it.
-- **The verification report identifier** is stored, and snapshots now say whose
-  report they are. Assets still read neither.
+- **The verification report identifier** is stored, snapshots say whose report
+  they are, and one `DU:UNDERWRITING_VERIFICATION` per report type per borrower
+  now reaches the wire with its arc to that borrower's `ROLE` — the latest pull
+  of each kind and never the history, because `connector_snapshots` is
+  append-only and six resubmissions on a two-borrower file would otherwise emit
+  thirty-six elements against a maximum of fifty. A vendor with no row in the
+  emitter's approved-supplier table emits nothing, which is where a change to
+  DU's list lands. Assets still read neither the identifier nor the snapshot.
 - **More than one borrower.** Two are now real above the database: a route
   appends one, the projection orders everybody by `borrower_ordinal`, Section 5
   is answered and stored per person, and the review screen renders a block
@@ -92,14 +128,31 @@ three lists rather than trusting it after they change.
 
 - **The compute boundary** — which figures we assert and which DU derives —
   still unrecorded, still two untyped JSON columns.
-- **The rest of the submission path**: the preflight that refuses to send a
-  file DU would reject, and the transport itself. The serializer is built —
-  `packages/du` assembles an application into a MISMO 3.4 `MESSAGE` and emits
-  it, `RELATIONSHIP` arcs included, ordered by the generated child sequence and
-  checked against all eighteen vendored samples. It emits no `LOAN_IDENTIFIER`
-  and no submitting party, because both wait on an answer about the institution
-  we submit under, and no `DU:UNDERWRITING_VERIFICATION`, which arrives with its
-  selection rule.
+- **The transport itself**, which is now the only piece of the submission path
+  that has nothing under it. The serializer is built — `packages/du` assembles
+  an application into a MISMO 3.4 `MESSAGE` and emits it, `RELATIONSHIP` arcs
+  included, ordered by the generated child sequence and checked against all
+  eighteen vendored samples. It emits no `LOAN_IDENTIFIER` and no submitting
+  party, because both wait on an answer about the institution we submit under.
+
+  **And the gate is built.** `packages/du/src/preflight` runs between assembling
+  and emitting: `emitSubmission` returns bytes or throws, and there is no
+  argument that turns it off. It checks the graph the schema cannot see — a
+  dangling arc, a duplicated label, an invented arcrole, an arc whose end lands
+  on the wrong kind of container, an asset nobody owns — the cardinality minima
+  SCOPED BY ROLE rather than read literally off the tab, forty-three data points
+  the specification requires with no statement in front of them, eighty-eight of
+  its conditional rules, every value's format and width at the destination it is
+  written to, the two figures a casefile states twice, and the live rows the
+  identity matcher refused to tell apart. All eighteen shipped samples pass it;
+  every check has a fixture built by mutating one of them, and `xmllint` accepts
+  all but two of those fixtures, which is the measurement behind the claim that
+  schema validity is not the same thing as a casefile DU will take.
+
+  Where a refusal goes: to whoever asked for the document, which is an operator
+  or a job. Nothing renders it to a borrower, and a finding names an XPath, a
+  label or a row id and never a value — so it is safe in a log, which the
+  document it is about is not.
 
   The two ends of the exchange are built. The `du` port takes an assembled
   submission and answers with a recommendation, a findings report and DU's
@@ -130,23 +183,24 @@ which have a longer lead time than anything above.
 
 ## At a glance
 
-| #   | Item                                | Status | One line                                                                  |
-| --- | ----------------------------------- | ------ | ------------------------------------------------------------------------- |
-| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                        |
-| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked                    |
-| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                         |
-| —   | The generators and `du:verify`      | Green  | The whole corpus is vendored; all six tables rebuilt in CI, none skipped  |
-| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once, and a response is what writes it            |
-| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                           |
-| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person               |
-| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                           |
-| —   | The serializer                      | Green  | Assembles and emits MISMO 3.4, arcs included, round-tripped on eighteen   |
-| 7   | Employer as an entity               | Yellow | Real entity, derivable arc; two current employers get none                |
-| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                        |
-| 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                  |
-| —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet             |
-| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                         |
-| —   | The submission                      | Red    | Emitter and both ends built; no preflight, and nothing carries a document |
+| #   | Item                                | Status | One line                                                                    |
+| --- | ----------------------------------- | ------ | --------------------------------------------------------------------------- |
+| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                          |
+| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked                      |
+| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                           |
+| —   | The generators and `du:verify`      | Green  | The whole corpus is vendored; all six tables rebuilt in CI, none skipped    |
+| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once, and a response is what writes it              |
+| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                             |
+| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person                 |
+| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                             |
+| —   | The serializer                      | Green  | Assembles and emits MISMO 3.4, arcs included, round-tripped on eighteen     |
+| 7   | Employer as an entity               | Yellow | Real entity, derivable arc; three required columns missing, so no job emits |
+| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                          |
+| 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                    |
+| —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet               |
+| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                           |
+| —   | The submission                      | Yellow | Emitter, gate and both ends built; nothing carries a document               |
+| —   | The product and the property        | Red    | Eight required columns missing, so no casefile is emittable at all          |
 
 **The three that blocked any submission are closed.** Declarations, the current
 residence, and assets with liabilities and owned property were each a hard stop
@@ -155,8 +209,15 @@ built and enforced at the database.
 
 What remains splits cleanly. The borrower count and the compute boundary limit
 _which_ loans we could submit and how confidently. The submission path is what
-makes submitting possible at all, and it is now half built: an application
-becomes a document, and nothing yet decides whether that document should go.
+makes submitting possible at all, and an application now becomes a document that
+something is willing to refuse; what it does not become is a document anything
+carries anywhere — nor, today, one anything would let out, because the eight
+product and property columns above are not there to be emitted.
+
+**The two new rows are the gate's own output and not a re-reading of the
+audit.** Neither the product columns nor the employment ones were visible
+before something evaluated the specification's required column against a
+casefile this repository built.
 
 ## Decided: we submit
 
@@ -420,6 +481,19 @@ only the nulls — without that a row could carry a discriminator that lies, and
 no check catches those. `lien_upb_cents` is derived by triggers on both sides,
 so a second lien moves the total with nobody updating it.
 
+**The product and the property.** The subject loan and the subject property are
+assembled from `loan_files` and `loan_scenarios`, and eight data points the
+specification requires unconditionally are not in either table:
+`TERMS_OF_LOAN/MortgageType`, five `LOAN_DETAIL` product indicators —
+`ConstructionLoanIndicator`, `BalloonIndicator`, `InterestOnlyIndicator`,
+`NegativeAmortizationIndicator`, `PrepaymentPenaltyIndicator` — and
+`FinancedUnitCount` and `PropertyEstateType` on the subject property's
+`PROPERTY_DETAIL`. `product_code` is free text and `property_type` is free
+text, and neither is an answer to "is this loan conventional" or "how many units
+is this". So every casefile this model assembles is refused, and the refusal is
+the right answer: the alternative is eight invented values on a federal
+submission, which is the same trade the taxpayer identifier already refused.
+
 **Item 7 — employer as an entity.** Real, with a party FK and an identity key
 that survives the EIN promotion; `income_sources` and `employments` both carry
 `employer_id`. `income_sources.employment_income` now makes
@@ -432,6 +506,15 @@ employer behind it. And no port links an income item to one of the employments
 beside it, so a borrower with TWO current employers gets wage income attached
 to neither, which the discriminator now turns into a wire-visible
 `EmploymentIncomeIndicator` of false — `DI-C04` is exactly that shape.
+
+A third gap is newer, and the preflight is what found it: an `EMPLOYMENT` whose
+status is Current must carry `EmploymentClassificationType`,
+`EmploymentBorrowerSelfEmployedIndicator` and
+`SpecialBorrowerEmployerRelationshipIndicator`, all three unconditional once the
+status is Current, and `employments` holds a name, a position, a start date and
+a status. Every shipped sample carries all three. So a casefile with a job on it
+assembles and is refused, which is the gate working and the model being short
+three columns.
 
 **Vesting and the non-borrower parties.** `DEAL/PARTIES/PARTY` is `1:10` with
 the note "Each Deal must have at least one party (non-Borrower)", and a
@@ -506,8 +589,10 @@ this with the people doing the work.
    a fixture.
 4. **The modeled set and the derived inventory** — what we emit, and what we
    deliberately do not, derived from the corpus rather than hand-listed.
-5. **Assemble and emit**, then **preflight**, which refuses to send a file DU
-   would reject for a reason schema validation cannot see.
+5. **The three employment columns**, which the preflight refuses without: a
+   classification, whether the borrower is self-employed, and whether they are
+   related to the employer. Until they exist no casefile carrying a job can be
+   emitted, which is every casefile with wage income in it.
 6. **The transport**, which is where the credentials question stops being
    deferrable. The response it will carry already has tables and a port to
    arrive through; what is missing is the endpoint, the envelope and the
@@ -551,7 +636,12 @@ in its `to` row and in the arcrole's own name; the EMPLOYER one targets
 `EMPLOYER` by XPath and by name, and `EMPLOYMENT` by column and by `to` row. The
 generated table carries all four names at each end and a `disputed` flag, and
 picks neither — the arcs are the two nothing has been seen to send, so there is
-no shipped example to break the tie, and it is a question for Fannie Mae.
+no shipped example to break the tie, and it is a question for Fannie Mae. The
+emitter builds only the `ROLE` variant, and it is not a convention that the
+others are left alone: every arc in the block gets its URI from one function,
+and that function throws on a name the table marks disputed. Each construction
+validates against the whole chain, so a guess would be accepted and misread
+rather than rejected.
 
 **And validating the XML proves much less than it looks like it does.** The XSD
 enforces almost nothing about the relationship graph: a dangling `xlink:to`, a

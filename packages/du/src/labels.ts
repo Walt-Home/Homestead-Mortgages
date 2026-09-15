@@ -97,11 +97,13 @@ export function createLabels(): DuLabels {
  * arc for an ownership share, an as-of date or a primary flag, which is why
  * none of those has a column — so the graph can only be written once both ends
  * have been minted. Every map here is keyed by the row the label was minted
- * for, except the last two: an owned property is reached through its asset,
+ * for, except the last three: an owned property is reached through its asset,
  * because `ASSET_IsAssociatedWith_LIABILITY` points at the ASSET and the
- * foreign key that carries it points at the `du_owned_properties` row; and an
+ * foreign key that carries it points at the `du_owned_properties` row; an
  * `EMPLOYER` element is one employment, so it is keyed by the party and the
- * employer together.
+ * employer together; and a verification is one report type for one borrower
+ * rather than one snapshot, so it is keyed by the pair it was selected for and
+ * not by the row it was read from.
  */
 export interface DuLabelIndex {
   readonly assetByRow: Map<string, string>;
@@ -111,6 +113,7 @@ export interface DuLabelIndex {
   readonly roleByApplicationParty: Map<string, string>;
   readonly incomeItemByRow: Map<string, string>;
   readonly employerByPartyAndEmployer: Map<string, string>;
+  readonly verificationByReportTypeAndParty: Map<string, string>;
 }
 
 export function createLabelIndex(): DuLabelIndex {
@@ -122,10 +125,23 @@ export function createLabelIndex(): DuLabelIndex {
     roleByApplicationParty: new Map(),
     incomeItemByRow: new Map(),
     employerByPartyAndEmployer: new Map(),
+    verificationByReportTypeAndParty: new Map(),
   };
 }
 
 /** The key an `EMPLOYER` label is filed under: one element per party per employer. */
 export function employerKey(partyId: string, employerId: string): string {
   return `${partyId}:${employerId}`;
+}
+
+/**
+ * The key a `DU:UNDERWRITING_VERIFICATION` label is filed under.
+ *
+ * The pair rather than the snapshot id, because the selection keeps one report
+ * per type per borrower out of an append-only history: the row that produced
+ * the element is not what the arc is about, and keying on it would make the
+ * label unfindable the moment a re-pull changed which row won.
+ */
+export function verificationKey(reportType: string, applicationPartyId: string): string {
+  return `${reportType}:${applicationPartyId}`;
 }

@@ -14,6 +14,12 @@
  * allocates a loan-number range, which is a contractual question and not a
  * format; the identifier and the submitting party that goes with it land
  * together, later, or not at all.
+ *
+ * The verifications hang off this container rather than off a borrower, which
+ * is the shape DU chose and not one this model picked: `DU:UNDERWRITING_VERIFICATION`
+ * sits in the subject loan's extension and reaches the borrower by an arc.
+ * Which reports stand is decided in `verifications.ts`; this writes what that
+ * hands it.
  */
 
 import type { LienPosition, LoanPurpose } from "@hm/db";
@@ -60,7 +66,10 @@ function amortizationType(amortization: string | null): string | null {
   return mapped;
 }
 
-export function buildLoans(application: LoadedApplication): DuNode | null {
+export function buildLoans(
+  application: LoadedApplication,
+  verifications: DuNode | null,
+): DuNode | null {
   const file = application.loanFile;
   const scenario = application.scenarios[0];
   const termMonths = scenario?.termMonths ?? file.termMonths;
@@ -101,7 +110,7 @@ export function buildLoans(application: LoadedApplication): DuNode | null {
     ]),
   );
 
-  const loan = container("LOAN", [amortization, loanDetail, terms], {
+  const loan = container("LOAN", [amortization, loanDetail, terms, verifications], {
     LoanRoleType: "SubjectLoan",
   });
 

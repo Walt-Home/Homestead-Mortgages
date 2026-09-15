@@ -21,6 +21,7 @@ export default defineConfig({
       "@hm/shared": resolve(packages, "shared/src/index.ts"),
       "@hm/requirements": resolve(packages, "requirements/src/index.ts"),
       "@hm/connectors": resolve(packages, "connectors/src/index.ts"),
+      "@hm/du/test-support": resolve(packages, "du/src/__tests__/support/ungated.ts"),
       "@hm/du": resolve(packages, "du/src/index.ts"),
       "@hm/underwriting/test-support": resolve(
         packages,

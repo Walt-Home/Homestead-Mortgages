@@ -13,7 +13,8 @@
         "../../packages/underwriting/src/__tests__/support/in-memory-file.ts"
       ],
       "@hm/db": ["../../packages/db/src/index.ts"],
-      "@hm/du": ["../../packages/du/src/index.ts"]
+      "@hm/du": ["../../packages/du/src/index.ts"],
+      "@hm/du/test-support": ["../../packages/du/src/__tests__/support/ungated.ts"]
     }
   },
   "include": ["src"],

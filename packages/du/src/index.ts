@@ -15,23 +15,33 @@
  * skips.
  *
  * Nothing here is wired to a route or a screen. `emitSubmission` below is the
- * first thing in this repository that produces a DU submission, and nothing
- * calls it: no route assembles one, nothing transports one, and no preflight
- * refuses one yet — so it can emit a document DU would reject. `identity.ts`
- * and the writers are how a DU row and its owner arcs reach Postgres at all,
- * because the database refuses a row that has no owner and only a transaction
- * carrying both can satisfy it.
+ * first thing in this repository that produces a DU submission, and nothing in
+ * the product calls it: no route assembles one and nothing transports one.
+ * `identity.ts` and the writers are how a DU row and its owner arcs reach
+ * Postgres at all, because the database refuses a row that has no owner and
+ * only a transaction carrying both can satisfy it.
  *
- * The pipeline is assemble -> preflight -> emit. Preflight is the next commit,
- * and until it lands this is assemble -> emit; the inversion is deliberate and
- * it is safe only because nothing sends anything.
+ * The pipeline is assemble -> preflight -> emit, and the middle step refuses:
+ * `emitSubmission` returns bytes or it throws, and there is no argument that
+ * turns the gate off. `preflightSubmission` is the same run without the bytes,
+ * for a caller that wants to know what is missing before it asks for them.
+ *
+ * **The serializer is not exported, and that is what makes the sentence above
+ * true of the module and not only of one function in it.** A caller holding
+ * both `assembleSubmission` and a serializer can compose them and get bytes no
+ * check ever saw, which makes the gate a report. So `emitDocument` stays
+ * inside: the only way out of here with bytes is through the refusal. A test
+ * that needs ungated bytes imports `./emit.js` by path, which nothing outside
+ * this package can do.
  */
 
 import { emitDocument } from "./emit.js";
 import { assembleSubmission, type AssembleOptions, type DuReader } from "./assemble/index.js";
+import { loadIdentityKeys } from "./assemble/load.js";
+import { DuPreflightRefusal, runPreflight, type DuPreflightReport } from "./preflight/index.js";
 
 /**
- * One application, as the bytes a DU submission is.
+ * One application, as the bytes a DU submission is, or a refusal.
  *
  * The assembled document is **never persisted, never logged and never
  * snapshotted**. It is the one place in this system where up to four cleartext
@@ -40,13 +50,41 @@ import { assembleSubmission, type AssembleOptions, type DuReader } from "./assem
  * repository's own append-only pattern and be a plaintext SSN store. Whether a
  * submitted document is retained at all is a privacy question with an owner,
  * and nothing here answers it by choosing a table.
+ *
+ * A casefile the preflight finds fault with raises `DuPreflightRefusal` and
+ * produces no bytes. The findings carry XPaths and row ids and no values, so
+ * the exception is safe to log — which the document itself would not be.
  */
 export async function emitSubmission(
   db: DuReader,
   applicationId: string,
   options: AssembleOptions,
 ): Promise<string> {
-  return emitDocument(await assembleSubmission(db, applicationId, options));
+  const document = await assembleSubmission(db, applicationId, options);
+  const report = runPreflight({
+    document,
+    identities: await loadIdentityKeys(db, applicationId),
+  });
+  if (!report.ok) throw new DuPreflightRefusal(report.findings);
+  return emitDocument(document);
+}
+
+/**
+ * What the gate would say, without asking for the bytes.
+ *
+ * The same run as the one inside `emitSubmission`: a caller that wants to know
+ * whether a casefile is emittable gets the answer from the same predicates that
+ * would refuse it, rather than from a second list that could drift.
+ */
+export async function preflightSubmission(
+  db: DuReader,
+  applicationId: string,
+  options: AssembleOptions,
+): Promise<DuPreflightReport> {
+  return runPreflight({
+    document: await assembleSubmission(db, applicationId, options),
+    identities: await loadIdentityKeys(db, applicationId),
+  });
 }
 
 export { CHILD_ORDER, TYPE_FOR_PATH } from "./generated/order.js";
@@ -102,9 +140,22 @@ export {
   type WriteLiabilityInput,
 } from "./writer.js";
 
+export {
+  CONDITIONAL_RULES,
+  DuPreflightRefusal,
+  DU_SUBSET_AT,
+  NOT_CHECKED_AGAINST_A_SUBSET,
+  REQUIRED_RULES,
+  runPreflight,
+  type DuIdentityRow,
+  type DuPreflightCheck,
+  type DuPreflightFinding,
+  type DuPreflightInput,
+  type DuPreflightReport,
+} from "./preflight/index.js";
+
 export { assembleSubmission, type AssembleOptions, type DuReader } from "./assemble/index.js";
 export type { TaxpayerIdentifierResolver } from "./assemble/parties.js";
-export { emitDocument } from "./emit.js";
 export {
   attributesOnly,
   compact,

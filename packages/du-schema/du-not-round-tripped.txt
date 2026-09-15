@@ -18,8 +18,8 @@
 # xlink labels that carry the submission's graph are counted nowhere here;
 # packages/du/src/generated/arcroles.ts is where the arcs are.
 #
-# 468 element paths occur across the eighteen samples. 208 are modeled; the
-# 260 below are not.
+# 468 element paths occur across the eighteen samples. 209 are modeled; the
+# 259 below are not.
 #
 # elements  files  element path
        5      5  MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/COLLATERALS/COLLATERAL/SUBJECT_PROPERTY/LOCATION_IDENTIFIER
@@ -122,7 +122,6 @@
        4      4  MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN[@LoanRoleType="SubjectLoan"]/DOCUMENT_SPECIFIC_DATA_SETS/DOCUMENT_SPECIFIC_DATA_SET/URLA/URLA_TOTAL/EXTENSION/OTHER
        4      4  MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN[@LoanRoleType="SubjectLoan"]/DOCUMENT_SPECIFIC_DATA_SETS/DOCUMENT_SPECIFIC_DATA_SET/URLA/URLA_TOTAL/EXTENSION/OTHER/ULAD:URLA_TOTAL_EXTENSION
        4      4  MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN[@LoanRoleType="SubjectLoan"]/DOCUMENT_SPECIFIC_DATA_SETS/DOCUMENT_SPECIFIC_DATA_SET/URLA/URLA_TOTAL/EXTENSION/OTHER/ULAD:URLA_TOTAL_EXTENSION/ULAD:URLATotalSellerCreditsAmount
-       1      1  MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN[@LoanRoleType="SubjectLoan"]/EXTENSION/OTHER/DU:LOAN_EXTENSION/DU:UNDERWRITING_VERIFICATIONS/DU:UNDERWRITING_VERIFICATION/DU:VerificationReportSupplierType
        8      8  MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN[@LoanRoleType="SubjectLoan"]/GOVERNMENT_LOAN
        4      4  MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN[@LoanRoleType="SubjectLoan"]/GOVERNMENT_LOAN/FHALoanLenderIdentifier
        1      1  MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN[@LoanRoleType="SubjectLoan"]/GOVERNMENT_LOAN/FHALoanSponsorIdentifier

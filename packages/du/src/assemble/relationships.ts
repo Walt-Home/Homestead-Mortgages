@@ -21,16 +21,18 @@
  * record an ownership share, an as-of date or a primary flag, which is why none
  * of those has a column.
  *
- * **`DU:UNDERWRITING_VERIFICATION` and its arc are not here.** One verification
- * per report type per party, taken from the latest non-retired snapshot, is a
- * selection rule with a cardinality maximum riding on it, and it lands with the
- * container it points at.
+ * **The verification arcs are the one source that is not a fold over rows.**
+ * `connector_snapshots` is append-only, so the rows are a history and the
+ * document wants one report per type per borrower; `verifications.ts` makes
+ * that selection and this arcs what it kept. Folding the table itself would
+ * arc at superseded reports and, on a resubmitted file, cross the container's
+ * maximum of fifty.
  */
 
 import { attributesOnly, container, type DuNode } from "../document.js";
 import { DU_ARCROLES } from "../generated/arcroles.js";
 import type { DuLabelIndex } from "../labels.js";
-import { employerKey } from "../labels.js";
+import { employerKey, verificationKey } from "../labels.js";
 import { renderCount } from "../values.js";
 import type {
   LoadedApplication,
@@ -39,6 +41,7 @@ import type {
   LoadedIncome,
   LoadedLiability,
 } from "./load.js";
+import type { SelectedVerification } from "./verifications.js";
 
 /** One arc, before it has a sequence number. */
 interface Arc {
@@ -47,9 +50,27 @@ interface Arc {
   readonly arcrole: string;
 }
 
-function arcrole(name: string): string {
+/**
+ * One arcrole URI, and the one gate every arc in this document passes through.
+ *
+ * **A disputed arcrole is refused here rather than avoided by everyone.** The
+ * generated table marks an endpoint `disputed` when the ArcRoles tab names one
+ * container in the endpoint row and a different one in the arcrole URI, and it
+ * picks no winner — so an emitter that builds one has guessed, and both guesses
+ * validate against the whole nine-file chain. A convention that the two
+ * disputed arcs simply are not built is kept by whoever remembers it; this is
+ * kept by the fold, which is the only way into the block, so a later assembler
+ * cannot route around it by being a file nobody thought to look at.
+ *
+ * Nothing legitimate is caught: every arc emitted today has both ends agreeing
+ * under all four of the tab's names.
+ */
+export function arcrole(name: string): string {
   const entry = DU_ARCROLES[name];
   if (!entry) throw new Error(`${name} is not an arcrole the generated table carries.`);
+  if (entry.from.disputed || entry.to.disputed) {
+    throw new Error(`${name} names two containers at one end and the table picks neither.`);
+  }
   return entry.arcrole;
 }
 
@@ -59,6 +80,7 @@ export interface RelationshipsInput {
   readonly liabilities: readonly LoadedLiability[];
   readonly expenses: readonly LoadedExpense[];
   readonly income: readonly LoadedIncome[];
+  readonly verifications: readonly SelectedVerification[];
   readonly index: DuLabelIndex;
 }
 
@@ -159,6 +181,19 @@ export function buildRelationships(input: RelationshipsInput): DuNode | null {
       index.roleByApplicationParty.get(link.fromApplicationPartyId),
       index.roleByApplicationParty.get(link.toApplicationPartyId),
       "ROLE_SharesJointCreditReportWith_ROLE",
+    );
+  }
+
+  // The selection is already one element per (report type, borrower) and
+  // already in the order the labels were minted in, so this is one arc per
+  // verification and the pair is what finds the label.
+  for (const verification of input.verifications) {
+    arc(
+      index.verificationByReportTypeAndParty.get(
+        verificationKey(verification.reportType, verification.applicationPartyId),
+      ),
+      index.roleByApplicationParty.get(verification.applicationPartyId),
+      "UNDERWRITING_VERIFICATION_IsAssociatedWith_ROLE",
     );
   }
 

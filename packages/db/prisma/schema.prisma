@@ -365,6 +365,13 @@ model ConnectorSnapshot {
   raw         Json?
   retrievedAt DateTime @map("retrieved_at")
 
+  /// The order this row was written in, which is the only thing on the table
+  /// that can say which of two pulls came last. `retrieved_at` is the vendor's
+  /// moment and two pulls can share it; the id is a random uuid, so breaking a
+  /// tie on it picks the larger number rather than the later report. Unique
+  /// because that is what makes it decisive.
+  writeSeq BigInt @unique @default(autoincrement()) @map("write_seq")
+
   employersFirstSeen  Employer[]     @relation("EmployerFirstSeen")
   incomeFirstSeen     IncomeSource[] @relation("IncomeFirstSeen")
   incomeLastSeen      IncomeSource[] @relation("IncomeLastSeen")

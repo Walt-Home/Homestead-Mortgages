@@ -14,6 +14,15 @@
  * shipped sample is a database state. That is what everything below is: the
  * four shapes, the four gaps the model had before the emitter was specified,
  * and the two claims about labels that only a re-pull can make.
+ *
+ * **Those tests serialize through `@hm/du/test-support` and not through
+ * `emitSubmission`, because no application this model can assemble is emittable
+ * yet.** Eight data points the specification requires on the loan being applied
+ * for and on the subject property have no column anywhere, so the gate refuses
+ * every casefile and would leave "which row becomes which element" untestable
+ * until those columns exist. The last test in this file names all eight and
+ * asserts them exactly, so the list shortens when a column lands; the door is
+ * out of the package's `exports` map so nothing shipped can take it.
  */
 
 import { spawnSync } from "node:child_process";
@@ -24,13 +33,38 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { Prisma, prisma, type ApplicationPartyRole } from "@hm/db";
-import { emitSubmission, writeAsset, writeExpense, writeLiability } from "@hm/du";
+import {
+  assembleSubmission,
+  DuPreflightRefusal,
+  emitSubmission,
+  preflightSubmission,
+  writeAsset,
+  writeExpense,
+  writeLiability,
+  type AssembleOptions,
+} from "@hm/du";
+import { emitDocument } from "@hm/du/test-support";
 import { ensureApplicationParty } from "../services/applications.js";
 import { recordBorrowerFacts } from "../services/party.js";
 import { createLoanFile, createParty, createUser } from "./support/factories.js";
 
 /** The moment the document was made, fixed so two emissions can be compared. */
 const MADE_AT = new Date("2026-02-01T09:00:00.000Z");
+
+/**
+ * What every test emits with.
+ *
+ * A taxpayer identifier is required on every borrower party and the preflight
+ * refuses a casefile without one, so a fixture that emits has to reach a vault
+ * that is not here. Nine zeros rather than something that looks like a number
+ * somebody has: this file is committed, and a plausible social security number
+ * in a committed fixture is the thing the vault exists to prevent.
+ */
+const emitting = (extra: Partial<AssembleOptions> = {}): AssembleOptions => ({
+  createdAt: MADE_AT,
+  taxpayerIdentifiers: async () => "000000000",
+  ...extra,
+});
 
 interface Application {
   readonly id: string;
@@ -61,8 +95,45 @@ function borrowerInput(first: string, last: string) {
   };
 }
 
+/**
+ * What every borrower has to have answered before a casefile is emittable.
+ *
+ * Section 5, and where they live now. The preflight refuses a borrower with
+ * neither, so a fixture that leaves them out is testing the gate rather than
+ * the thing it was written for — and the two tests that are ABOUT these two
+ * containers say so by asking for them not to be written.
+ */
+type BorrowerAnswers = "standard" | "declarationOnly" | "none";
+
+async function aDeclaration(applicationPartyId: string, partyId: string) {
+  const principal = await prisma.principal.findFirstOrThrow({
+    where: { partyId },
+    select: { id: true },
+  });
+  return prisma.duDeclaration.create({
+    data: {
+      applicationPartyId,
+      assertedByPrincipalId: principal.id,
+      intentToOccupy: "Yes",
+      homeownerPastThreeYears: "No",
+      undisclosedBorrowedFunds: false,
+      undisclosedMortgageApplication: false,
+      undisclosedCreditApplication: false,
+      propertyProposedCleanEnergyLien: false,
+      undisclosedComakerOfNote: false,
+      outstandingJudgments: false,
+      presentlyDelinquent: false,
+      priorPropertyDeedInLieuConveyed: false,
+      priorPropertyShortSaleCompleted: false,
+      priorPropertyForeclosureCompleted: false,
+      bankruptcy: false,
+    },
+  });
+}
+
 async function anApplication(
   roles: readonly ApplicationPartyRole[] = ["PRIMARY_BORROWER"],
+  answers: BorrowerAnswers = "standard",
 ): Promise<Application> {
   const user = await createUser();
   const file = await createLoanFile({ userId: user.id });
@@ -119,7 +190,22 @@ async function anApplication(
     const edge = await ensureApplicationParty(prisma, app.id, party.id, role);
     borrowers.push(edge.id);
     parties.push(party.id);
+    if (answers !== "none") await aDeclaration(edge.id, party.id);
+    if (answers === "standard") {
+      // A Current residence stores no address of its own: it reads the pinned
+      // `current_address` fact, and a CHECK says so.
+      await prisma.duResidence.create({
+        data: {
+          applicationPartyId: edge.id,
+          residencyType: "Current",
+          basis: "Rent",
+          durationMonths: 30,
+          monthlyRentCents: 185_000n,
+        },
+      });
+    }
   }
+  await anOriginationCompany(app.id);
   return { id: app.id, loanFileId: file.id, borrowers, parties };
 }
 
@@ -258,7 +344,6 @@ function valuesOf(xml: string, name: string): string[] {
 describe("the four shapes, assembled and emitted", () => {
   it("emits one asset with two owners, one property with two liens, and the arcs for both", async () => {
     const app = await anApplication(["PRIMARY_BORROWER", "CO_BORROWER"]);
-    await anOriginationCompany(app.id);
     const both = app.borrowers.map((applicationPartyId) => ({ applicationPartyId })) as [
       { applicationPartyId: string },
       ...{ applicationPartyId: string }[],
@@ -293,7 +378,7 @@ describe("the four shapes, assembled and emitted", () => {
       });
     });
 
-    const xml = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
 
     // SHAPE 4: the REO asset carries no ASSET_DETAIL and no AssetType.
     expect(valuesOf(xml, "AssetType")).toEqual(["CheckingAccount"]);
@@ -338,7 +423,7 @@ describe("the four shapes, assembled and emitted", () => {
       });
     });
 
-    const xml = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     expect(xml).toContain('<EXPENSE SequenceNumber="1" xlink:label="EXPENSE_1">');
     expect(valuesOf(xml, "ExpenseMonthlyPaymentAmount")).toEqual(["450.00"]);
     expect(xml).toContain(
@@ -351,7 +436,7 @@ describe("the four gaps the model had, now emitted", () => {
   it("renders the subject property's address into the REO twin, and an override instead of it", async () => {
     const app = await anApplication();
     const reo = await aSubjectReo(app, [app.borrowers[0]!]);
-    const borrowed = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const borrowed = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     // Two renderings, one function: the REO twin with no address of its own
     // reads back the subject property.
     expect(valuesOf(borrowed, "AddressLineText")).toContain("1234 Ocean Pines");
@@ -369,7 +454,7 @@ describe("the four gaps the model had, now emitted", () => {
         postalCode: "206001234",
       },
     });
-    const diverged = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const diverged = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     expect(valuesOf(diverged, "AddressLineText")).toEqual(
       expect.arrayContaining(["1234 Main St", "1234 Ocean Pines"]),
     );
@@ -384,7 +469,7 @@ describe("the four gaps the model had, now emitted", () => {
       });
     });
 
-    const xml = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     // One occurrence, inside LIABILITY_DETAIL. The TERMS_OF_LOAN MortgageType
     // that DI-FHA02 also carries is a different statement about a different
     // loan, and nothing in this model holds it.
@@ -398,7 +483,7 @@ describe("the four gaps the model had, now emitted", () => {
   it("renders a negative net rental with its sign", async () => {
     const app = await anApplication();
     await aSubjectReo(app, [app.borrowers[0]!], { rentalIncomeNetCents: -67_800n });
-    const xml = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     expect(valuesOf(xml, "OwnedPropertyRentalIncomeNetAmount")).toEqual(["-678.00"]);
   });
 
@@ -415,7 +500,7 @@ describe("the four gaps the model had, now emitted", () => {
         countryCode: "US",
       },
     });
-    const xml = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     expect(valuesOf(xml, "CountryCode")).toEqual(["US"]);
     // After CityName and before PostalCode, which is the ADDRESS sequence and
     // not alphabetical luck.
@@ -442,7 +527,7 @@ describe("amounts, and what two emissions of unchanged data are", () => {
       });
     });
 
-    const xml = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     expect(valuesOf(xml, "AssetCashOrMarketValueAmount")).toEqual(["0.05"]);
     expect(valuesOf(xml, "LiabilityUnpaidBalanceAmount")).toEqual(["1000.00"]);
     expect(valuesOf(xml, "LiabilityMonthlyPaymentAmount")).toEqual(["0.00"]);
@@ -452,7 +537,6 @@ describe("amounts, and what two emissions of unchanged data are", () => {
 
   it("is byte-identical when no row was created, retired or revived between them", async () => {
     const app = await anApplication(["PRIMARY_BORROWER", "CO_BORROWER"]);
-    await anOriginationCompany(app.id);
     await aSubjectReo(app, app.borrowers);
     await prisma.$transaction(async (tx) => {
       await writeAsset(tx, {
@@ -461,17 +545,21 @@ describe("amounts, and what two emissions of unchanged data are", () => {
       });
     });
 
-    const first = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
-    const second = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const first = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+    const second = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     expect(second).toBe(first);
 
     // And the moment really is the argument rather than a clock, which the
     // comparison above cannot show on its own: two emissions inside one second
     // are identical either way.
     const strip = (xml: string) => xml.replace(/<CreatedDatetime>[^<]*</, "<CreatedDatetime><");
-    const later = await emitSubmission(prisma, app.id, {
-      createdAt: new Date("2026-03-04T17:45:31.000Z"),
-    });
+    const later = emitDocument(
+      await assembleSubmission(
+        prisma,
+        app.id,
+        emitting({ createdAt: new Date("2026-03-04T17:45:31.000Z") }),
+      ),
+    );
     expect(later).toContain("<CreatedDatetime>2026-03-04T17:45:31Z</CreatedDatetime>");
     expect(strip(later)).toBe(strip(first));
   });
@@ -516,10 +604,10 @@ describe("labels across a re-pull", () => {
   it("leaves every label unchanged when a re-pull reports the same accounts", async () => {
     const app = await anApplication();
     await threeAccounts(app, await aSnapshot(app.loanFileId, app.parties[0]!));
-    const before = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const before = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
 
     await threeAccounts(app, await aSnapshot(app.loanFileId, app.parties[0]!));
-    const after = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const after = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
 
     expect(after).toBe(before);
     expect(before).toContain('xlink:label="ASSET_3"');
@@ -536,7 +624,7 @@ describe("labels across a re-pull", () => {
     });
     await prisma.duAsset.update({ where: { id: dropped.id }, data: { retiredAt: new Date() } });
 
-    const xml = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     expect(valuesOf(xml, "AssetAccountIdentifier")).toEqual(["1111", "2222"]);
     expect(xml).toContain('xlink:label="ASSET_1"');
     expect(xml).toContain('xlink:label="ASSET_2"');
@@ -552,44 +640,60 @@ describe("labels across a re-pull", () => {
 describe("the taxpayer identifier boundary", () => {
   it("writes the nine digits the resolver hands it, and nothing about them otherwise", async () => {
     const app = await anApplication();
-    const xml = await emitSubmission(prisma, app.id, {
-      createdAt: MADE_AT,
-      taxpayerIdentifiers: async () => "123456789",
-    });
+    const xml = emitDocument(
+      await assembleSubmission(
+        prisma,
+        app.id,
+        emitting({ taxpayerIdentifiers: async () => "123456789" }),
+      ),
+    );
     expect(xml).toContain("<TaxpayerIdentifierType>SocialSecurityNumber</TaxpayerIdentifierType>");
     expect(xml).toContain("<TaxpayerIdentifierValue>123456789</TaxpayerIdentifierValue>");
   });
 
-  it("omits the element entirely when the number cannot be reached", async () => {
+  it("omits the element entirely when the number cannot be reached, and refuses to send it", async () => {
     const app = await anApplication();
     // No resolver at all, and a resolver that has nothing, are the same answer:
     // DU wants nine digits and we have none. `ssn_last4` is display only, and
     // the alternative to omission is five fabricated digits on a federal
     // submission that nothing downstream could tell from a real number.
+    //
+    // So the assembler omits it and the preflight is what stops the casefile:
+    // omitting a required element is the honest shape of "we cannot reach the
+    // vault", and emitting one anyway is not.
     for (const options of [
       { createdAt: MADE_AT },
       { createdAt: MADE_AT, taxpayerIdentifiers: async () => null },
     ]) {
-      const xml = await emitSubmission(prisma, app.id, options);
+      const xml = emitDocument(await assembleSubmission(prisma, app.id, options));
       expect(xml).not.toContain("TAXPAYER_IDENTIFIER");
       expect(xml).not.toContain("TaxpayerIdentifierValue");
+
+      const refusal = await emitSubmission(prisma, app.id, options).catch((error) => error);
+      expect(refusal).toBeInstanceOf(DuPreflightRefusal);
+      expect(refusal.findings.map((finding: { where: string }) => finding.where)).toContain(
+        "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/PARTIES/PARTY -> " +
+          "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/PARTIES/PARTY/TAXPAYER_IDENTIFIERS/TAXPAYER_IDENTIFIER",
+      );
+      // The refusal is a string somebody pastes into a ticket, and it carries
+      // no part of what it is about.
+      expect(refusal.message).not.toContain("000000000");
     }
   });
 
   it("refuses a value that is not nine digits, without repeating it", async () => {
     const app = await anApplication();
     await expect(
-      emitSubmission(prisma, app.id, {
-        createdAt: MADE_AT,
-        taxpayerIdentifiers: async () => "123-45-6789",
-      }),
+      emitSubmission(prisma, app.id, emitting({ taxpayerIdentifiers: async () => "123-45-6789" })),
     ).rejects.toThrow(/nine digits/);
   });
 });
 
 describe("the borrower's own block", () => {
   it("emits the declaration, the residence and the income item with its employer arc", async () => {
-    const app = await anApplication();
+    // Its own answers rather than the fixture's, because this is the test that
+    // is about them.
+    const app = await anApplication(["PRIMARY_BORROWER"], "none");
     const principal = await prisma.principal.findFirstOrThrow({
       where: { partyId: app.parties[0]! },
       select: { id: true },
@@ -673,7 +777,13 @@ describe("the borrower's own block", () => {
       },
     });
 
-    const xml = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    // Assembled rather than emitted, because a borrower with a current
+    // employer is not an emittable casefile yet and the assertion below is what
+    // says so: three data points the specification requires on an EMPLOYMENT
+    // have no column anywhere, so the preflight refuses every file with a job
+    // on it. What this test can still prove is that every element the model
+    // DOES hold comes out where it belongs.
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
 
     expect(valuesOf(xml, "IntentToOccupyType")).toEqual(["No"]);
     expect(valuesOf(xml, "CitizenshipResidencyType")).toEqual(["USCitizen"]);
@@ -691,6 +801,24 @@ describe("the borrower's own block", () => {
     expect(xml).toContain(
       'xlink:from="CURRENT_INCOME_ITEM_1" xlink:to="EMPLOYER_1" xlink:arcrole="urn:fdc:mismo.org:2009:residential/CURRENT_INCOME_ITEM_IsAssociatedWith_EMPLOYER"',
     );
+
+    // And the gap this test is about, named: `employments` carries a name, a
+    // position, a start date and a status, and Desktop Underwriter wants three
+    // more things about a current job that no column holds. Read off the
+    // EMPLOYMENT container alone, because the eight columns the whole model is
+    // missing are the last test in this file's subject and would drown these.
+    const refusal = await emitSubmission(prisma, app.id, emitting()).catch((error) => error);
+    expect(refusal).toBeInstanceOf(DuPreflightRefusal);
+    expect(
+      refusal.findings
+        .filter((finding: { where: string }) => finding.where.includes("/EMPLOYMENT#"))
+        .map((finding: { where: string }) => finding.where.split("#")[1])
+        .sort(),
+    ).toEqual([
+      "EmploymentBorrowerSelfEmployedIndicator",
+      "EmploymentClassificationType",
+      "SpecialBorrowerEmployerRelationshipIndicator",
+    ]);
   });
 
   it("writes Current before Prior even when both the row age and the id say otherwise", async () => {
@@ -702,7 +830,7 @@ describe("the borrower's own block", () => {
     // one AND a lower id, so both halves of the usual tuple point the wrong
     // way. `residency_type` still decides, and the unique constraint below is
     // why it can decide alone.
-    const app = await anApplication();
+    const app = await anApplication(["PRIMARY_BORROWER"], "declarationOnly");
     const edge = app.borrowers[0]!;
     await prisma.$transaction(async (tx) => {
       await tx.duResidence.create({
@@ -732,7 +860,7 @@ describe("the borrower's own block", () => {
       });
     });
 
-    const xml = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     expect(valuesOf(xml, "BorrowerResidencyType")).toEqual(["Current", "Prior"]);
     expect(valuesOf(xml, "BorrowerResidencyDurationMonthsCount")).toEqual(["30", "48"]);
 
@@ -761,7 +889,7 @@ describe("the borrower's own block", () => {
         toApplicationPartyId: app.borrowers[0]!,
       },
     });
-    const xml = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     expect(xml).toContain(
       'xlink:from="BORROWER_2" xlink:to="BORROWER_1" xlink:arcrole="urn:fdc:mismo.org:2009:residential/ROLE_SharesJointCreditReportWith_ROLE"',
     );
@@ -773,7 +901,7 @@ describe("the borrower's own block", () => {
       "CO_BORROWER",
       "NON_OCCUPANT_CO_BORROWER",
     ]);
-    const xml = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     expect(valuesOf(xml, "BorrowerCount")).toEqual(["3"]);
     // `LenderLoan` is conditional on one existing, so a conventional submission
     // that carries none is legal — and minting one decides a contractual
@@ -785,7 +913,6 @@ describe("the borrower's own block", () => {
 
   it("emits the non-borrowing parties a submission cannot do without", async () => {
     const app = await anApplication();
-    await anOriginationCompany(app.id);
     await prisma.duVesting.create({
       data: {
         applicationId: app.id,
@@ -795,7 +922,7 @@ describe("the borrower's own block", () => {
       },
     });
 
-    const xml = await emitSubmission(prisma, app.id, { createdAt: MADE_AT });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     expect(valuesOf(xml, "PartyRoleType")).toEqual([
       "Borrower",
       "PropertyOwner",
@@ -807,5 +934,246 @@ describe("the borrower's own block", () => {
     expect(valuesOf(xml, "LicenseIdentifier")).toEqual(["123456789111"]);
     expect(xml).toContain('xlink:label="PROPERTY_OWNER_1"');
     expect(xml).toContain('xlink:label="LOAN_ORIGINATION_COMPANY_1"');
+  });
+});
+
+describe("the gate, over rows rather than over bytes", () => {
+  it("names the eight columns between this model and a casefile it could send", async () => {
+    // Every shipped sample passes the preflight in `packages/du`, which proves
+    // the checks are not wrong about Fannie Mae's files. This is what they say
+    // about ours, and it is the whole answer rather than a sample of it: an
+    // application answered as completely as this model allows — a borrower, a
+    // co-borrower, a declaration, a current residence, a taxpayer identifier
+    // from the vault, an owned property and the company originating the
+    // loan — still carries none of these eight, because no column holds them.
+    //
+    // Asserted exactly, so the list shortens in the commit that adds a column
+    // and cannot quietly grow. `docs/du-readiness.md` carries the same eight.
+    const app = await anApplication(["PRIMARY_BORROWER", "CO_BORROWER"]);
+    await aSubjectReo(app, app.borrowers);
+    const report = await preflightSubmission(prisma, app.id, emitting());
+    expect(report.ok).toBe(false);
+    expect(report.findings.map((finding) => finding.where.split("#")[1]).sort()).toEqual([
+      "BalloonIndicator",
+      "ConstructionLoanIndicator",
+      "FinancedUnitCount",
+      "InterestOnlyIndicator",
+      "MortgageType",
+      "NegativeAmortizationIndicator",
+      "PrepaymentPenaltyIndicator",
+      "PropertyEstateType",
+    ]);
+    expect(new Set(report.findings.map((finding) => finding.check))).toEqual(
+      new Set(["required-data-point-absent"]),
+    );
+  });
+
+  it("refuses a live row the matcher could not tell from another", async () => {
+    // The one check whose subject is not in the document. An ambiguous pair is
+    // written unmatchable rather than guessed at, and emitting both would state
+    // two accounts where there may be one — so the casefile stops here, with
+    // the row named, for somebody to resolve.
+    const app = await anApplication();
+    const id = randomUUID();
+    await prisma.$transaction(async (tx) => {
+      await writeAsset(tx, {
+        asset: assetFor(app.id, { id, identityKey: `unmatched:${id}` }),
+        owners: [{ applicationPartyId: app.borrowers[0]! }],
+      });
+    });
+
+    const report = await preflightSubmission(prisma, app.id, emitting());
+    expect(report.findings).toContainEqual({
+      check: "identity-unmatched",
+      where: `du_assets ${id}`,
+      message: expect.stringContaining("Emitting both would state two accounts"),
+    });
+    await expect(emitSubmission(prisma, app.id, emitting())).rejects.toBeInstanceOf(
+      DuPreflightRefusal,
+    );
+  });
+});
+
+/**
+ * One pull, appended.
+ *
+ * `connector_snapshots` is append-only and nothing here pretends otherwise: a
+ * re-pull is another row, and every row written by these tests stays in the
+ * table for the selection to be made over.
+ */
+function aPull(
+  app: Application,
+  partyIndex: number,
+  kind: "bank" | "payroll" | "irs",
+  retrievedAt: string,
+  overrides: { provider?: string; externalId?: string; payload?: unknown } = {},
+) {
+  return prisma.connectorSnapshot.create({
+    data: {
+      loanFileId: app.loanFileId,
+      partyId: app.parties[partyIndex]!,
+      kind,
+      provider: overrides.provider ?? `fixture-${kind}`,
+      externalId: overrides.externalId ?? `${kind}-${retrievedAt}`,
+      payload: (overrides.payload ?? {}) as Prisma.InputJsonValue,
+      retrievedAt: new Date(retrievedAt),
+    },
+    select: { id: true },
+  });
+}
+
+describe("the verification a submission may rely on", () => {
+  it("emits one verification and one arc for a report that stands", async () => {
+    const app = await anApplication();
+    await anOriginationCompany(app.id);
+    await aPull(app, 0, "bank", "2026-01-04T00:00:00.000Z", { externalId: "assets-0f3a" });
+
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+
+    expect(valuesOf(xml, "DU:VerificationReportType")).toEqual(["VOD"]);
+    expect(valuesOf(xml, "DU:VerificationReportIdentifier")).toEqual(["assets-0f3a"]);
+    // Required the moment an identifier exists, which is why a vendor with no
+    // name to write emits no verification at all.
+    expect(valuesOf(xml, "DU:VerificationReportSupplierType")).toEqual(["Fixture"]);
+    expect(xml).toContain(
+      '<DU:UNDERWRITING_VERIFICATION SequenceNumber="1" xlink:label="VERIFICATION_1">',
+    );
+    expect(xml).toContain(
+      'xlink:from="VERIFICATION_1" xlink:to="BORROWER_1" xlink:arcrole="urn:fdc:mismo.org:2009:residential/UNDERWRITING_VERIFICATION_IsAssociatedWith_ROLE"',
+    );
+    expect(xmllintErrors(xml)).toEqual([]);
+  });
+
+  it("emits one verification across six re-pulls, and it is the latest", async () => {
+    const app = await anApplication();
+    for (const day of [4, 5, 6, 7, 8, 9]) {
+      await aPull(app, 0, "bank", `2026-01-0${day}T00:00:00.000Z`, {
+        externalId: `assets-day-${day}`,
+      });
+    }
+
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+
+    // Six rows in the table, one element on the wire. A verification is what DU
+    // may rely on now, and the five superseded reports are history.
+    expect(await prisma.connectorSnapshot.count({ where: { loanFileId: app.loanFileId } })).toBe(6);
+    expect(valuesOf(xml, "DU:VerificationReportIdentifier")).toEqual(["assets-day-9"]);
+    expect(xml.match(/<DU:UNDERWRITING_VERIFICATION /g)).toHaveLength(1);
+  });
+
+  it("names the pull written second when the vendor stamped both with one moment", async () => {
+    const app = await anApplication();
+    // `retrieved_at` is the vendor's moment and two pulls can carry the same
+    // one. What settles it is `write_seq`, which the database hands out in the
+    // order rows arrive — so the answer is the later report rather than
+    // whichever of two random uuids sorts higher.
+    const first = await aPull(app, 0, "bank", "2026-01-04T00:00:00.000Z", {
+      externalId: "assets-written-first",
+    });
+    const second = await aPull(app, 0, "bank", "2026-01-04T00:00:00.000Z", {
+      externalId: "assets-written-second",
+    });
+
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+
+    const rows = await prisma.connectorSnapshot.findMany({
+      where: { id: { in: [first.id, second.id] } },
+      select: { id: true, retrievedAt: true, writeSeq: true },
+    });
+    // The tie is real rather than accidental: both rows carry the same moment,
+    // and the later write carries the larger sequence.
+    expect(new Set(rows.map((row) => row.retrievedAt.toISOString())).size).toBe(1);
+    const seqOf = new Map(rows.map((row) => [row.id, row.writeSeq]));
+    expect(seqOf.get(second.id)!).toBeGreaterThan(seqOf.get(first.id)!);
+    expect(valuesOf(xml, "DU:VerificationReportIdentifier")).toEqual(["assets-written-second"]);
+  });
+
+  it("emits six verifications and not thirty-six when two borrowers resubmit six times", async () => {
+    const app = await anApplication(["PRIMARY_BORROWER", "CO_BORROWER"]);
+    for (const round of [1, 2, 3, 4, 5, 6]) {
+      for (const partyIndex of [0, 1]) {
+        for (const kind of ["bank", "payroll", "irs"] as const) {
+          await aPull(app, partyIndex, kind, `2026-01-0${round}T00:00:00.000Z`, {
+            externalId: `${kind}-b${partyIndex + 1}-r${round}`,
+          });
+        }
+      }
+    }
+
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+
+    expect(await prisma.connectorSnapshot.count({ where: { loanFileId: app.loanFileId } })).toBe(
+      36,
+    );
+    // Report type, then the borrower's position on the file — the order the
+    // labels are minted in and the order the arcs are folded in.
+    expect(valuesOf(xml, "DU:VerificationReportIdentifier")).toEqual([
+      "irs-b1-r6",
+      "irs-b2-r6",
+      "bank-b1-r6",
+      "bank-b2-r6",
+      "payroll-b1-r6",
+      "payroll-b2-r6",
+    ]);
+    expect(valuesOf(xml, "DU:VerificationReportType")).toEqual([
+      "TAXTRANSCRIPT",
+      "TAXTRANSCRIPT",
+      "VOD",
+      "VOD",
+      "VOE",
+      "VOE",
+    ]);
+    expect(
+      [...xml.matchAll(/<RELATIONSHIP ([^>]*?)\s*\/>/g)]
+        .map((m) => m[1]!)
+        .filter((attributes) => attributes.includes("VERIFICATION")),
+    ).toEqual([
+      'SequenceNumber="1" xlink:from="VERIFICATION_1" xlink:to="BORROWER_1" xlink:arcrole="urn:fdc:mismo.org:2009:residential/UNDERWRITING_VERIFICATION_IsAssociatedWith_ROLE"',
+      'SequenceNumber="2" xlink:from="VERIFICATION_2" xlink:to="BORROWER_2" xlink:arcrole="urn:fdc:mismo.org:2009:residential/UNDERWRITING_VERIFICATION_IsAssociatedWith_ROLE"',
+      'SequenceNumber="3" xlink:from="VERIFICATION_3" xlink:to="BORROWER_1" xlink:arcrole="urn:fdc:mismo.org:2009:residential/UNDERWRITING_VERIFICATION_IsAssociatedWith_ROLE"',
+      'SequenceNumber="4" xlink:from="VERIFICATION_4" xlink:to="BORROWER_2" xlink:arcrole="urn:fdc:mismo.org:2009:residential/UNDERWRITING_VERIFICATION_IsAssociatedWith_ROLE"',
+      'SequenceNumber="5" xlink:from="VERIFICATION_5" xlink:to="BORROWER_1" xlink:arcrole="urn:fdc:mismo.org:2009:residential/UNDERWRITING_VERIFICATION_IsAssociatedWith_ROLE"',
+      'SequenceNumber="6" xlink:from="VERIFICATION_6" xlink:to="BORROWER_2" xlink:arcrole="urn:fdc:mismo.org:2009:residential/UNDERWRITING_VERIFICATION_IsAssociatedWith_ROLE"',
+    ]);
+  });
+
+  it("emits nothing for a vendor DU has not authorized", async () => {
+    const app = await anApplication();
+    // A report with nothing to say about its own standing, from a supplier the
+    // emitter has no name for. The gate is the vendor and nothing else here.
+    await aPull(app, 0, "payroll", "2026-01-04T00:00:00.000Z", {
+      provider: "streamline-voe (production)",
+      externalId: "voe-7781",
+    });
+
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+
+    expect(xml).not.toContain("UNDERWRITING_VERIFICATION");
+    expect(xml).not.toContain("voe-7781");
+  });
+
+  it("emits nothing when the latest report disclaims the authorization its vendor has", async () => {
+    const app = await anApplication();
+    // Plaid's assets product is this same client on the same account, and it
+    // says so in the report: an authorized vendor, an unauthorized report.
+    // An authorized vendor's own statement about THIS report. The older pull is
+    // not promoted in its place: the pair is closed by the newest row, so a
+    // borrower whose latest bank report is unauthorized has no verification
+    // rather than a superseded one dressed up as current.
+    await aPull(app, 0, "bank", "2026-01-04T00:00:00.000Z", {
+      provider: "plaid-cra (production)",
+      payload: { vendorAuthorizedForDu: true },
+      externalId: "cra-good",
+    });
+    await aPull(app, 0, "bank", "2026-01-05T00:00:00.000Z", {
+      provider: "plaid-cra (production)",
+      payload: { vendorAuthorizedForDu: false },
+      externalId: "cra-withdrawn",
+    });
+
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+
+    expect(xml).not.toContain("UNDERWRITING_VERIFICATION");
+    expect(xml).not.toContain("cra-good");
   });
 });

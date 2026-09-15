@@ -91,11 +91,11 @@ hand-edit and a submission built on it. On a clean checkout, with no environment
 variable set and nothing fetched:
 
 ```
-✓ 16 Du* enum(s) in schema.prisma match the DU Spec
+✓ 22 Du* enum(s) in schema.prisma match the DU Spec
 ✓ 227 child sequences in order.ts match the vendored MISMO chain
 ✓ 9 of 11 arcroles in arcroles.ts are exercised by the vendored samples, and no sample carries another
-✓ 271 of 468 element paths in the vendored samples are not modeled, and du-not-round-tripped.txt lists them under 34 named containers
-✓ 35 modeled blocks name the table or the constant that holds them
+✓ 259 of 468 element paths in the vendored samples are not modeled, and du-not-round-tripped.txt lists them under 31 named containers
+✓ 38 modeled blocks name the table or the constant that holds them
 ✓ 3 per-kind asset CHECK(s) admit exactly their section's 22 AssetType values
 ✓ du_owned_properties.asset_kind and du_owned_properties_attach_to_an_reo_asset still hold the REO nesting
 ✓ 6 generated files match the DU Spec 1.9.3
@@ -111,7 +111,7 @@ value of the line.
 Two of the checks above are worth calling out because they check something other
 than themselves.
 
-**The enum check reaches into `schema.prisma`.** Sixteen `Du*` enums are
+**The enum check reaches into `schema.prisma`.** Twenty-two `Du*` enums are
 hand-typed in the Prisma schema, and `du:verify` fails the build if any member
 has no row behind it in the specification. That is the check that catches a
 fabricated value sitting in a block whose comment claims it was generated.

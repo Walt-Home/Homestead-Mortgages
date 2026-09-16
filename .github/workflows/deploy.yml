@@ -386,14 +386,17 @@ jobs:
           # "Does not exist" and "could not ask" are different answers. A
           # permission error or a transient failure read as absence would leave
           # the scheduled job on an old image forever, with a warning that
-          # says something else. Only NOT_FOUND is absence.
+          # says something else. Only "not found" is absence — and gcloud spells
+          # it "Cannot find job [name]", which the first version of this
+          # pattern did not match, so the first deploy to reach this step
+          # called absence an error and stopped before the post-deploy checks.
           set +e
           ERR=$(gcloud run jobs describe "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --format="value(name)" 2>&1 >/dev/null)
           code=$?
           set -e
           if [ "$code" -eq 0 ]; then
             gcloud run jobs update "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$IMAGE" --quiet
-          elif grep -qiE "NOT_FOUND|not found|does not exist" <<< "$ERR"; then
+          elif grep -qiE "NOT_FOUND|not found|does not exist|cannot find" <<< "$ERR"; then
             echo "::warning::Cloud Run job $JOB does not exist yet; apply infra/ to schedule the APOR fetch. The deploy-time fetch above still ran."
           else
             echo "::error::could not describe Cloud Run job $JOB: $ERR"

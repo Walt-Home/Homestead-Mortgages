@@ -6,26 +6,40 @@
  * the failure it rules out is bigger by exactly that factor: an applicant's
  * signature carrying a co-borrower's tax and credit data to Fannie Mae.
  *
- * The check is asserted against the ADAPTERS — the fixture and the shape of the
- * real one — rather than against a route, because a route can be written
- * tomorrow by somebody who has not read this file. The last block is the one
- * that says so, and it asserts WHICH error each refusal is rather than that
- * there was one: the adapter that could transmit refuses an unauthorized
- * submission with an authorization error and a blank one with an emptiness
- * error, never with its "no transport yet" error. That is the whole of the
- * ordering claim, and a test content with "it threw" would keep passing on the
- * day the transport lands underneath.
+ * The check is asserted against the ADAPTERS — the fixture and the real one —
+ * rather than against a route, because a route can be written tomorrow by
+ * somebody who has not read this file. The last block is the one that says so,
+ * and it asserts WHICH error each refusal is rather than that there was one:
+ * the adapter that transmits refuses an unauthorized submission with an
+ * authorization error and a blank one with an emptiness error. A test content
+ * with "it threw" would have kept passing on the day the transport landed
+ * underneath.
+ *
+ * **And the transport has landed, so that block's `fetchImpl` now throws.** The
+ * ordering claim used to be made against an adapter that refused everything,
+ * which proved it against nothing. Every refusal there is now asserted against
+ * an adapter that would really send — the stub fails the test if it is reached
+ * — so the claim is about the order of two things that both work.
  */
 
 import { describe, expect, it } from "vitest";
-import { mintPurposeToken, type DataCategory, type Grant, type PurposeToken } from "@hm/shared";
+import {
+  mintPurposeToken,
+  type DataCategory,
+  type DuResponse,
+  type Grant,
+  type PurposeToken,
+} from "@hm/shared";
 import {
   AuthorizationError,
+  DuTransportError,
   DuTransportNotWiredError,
   EmptyDuDocumentError,
   duConnector,
   fixtureDuConnector,
   PURPOSE_FOR,
+  type DuOptions,
+  type DuResponseReader,
   type DuSubmission,
 } from "../index.js";
 
@@ -278,63 +292,121 @@ describe("an answer that is not a verdict", () => {
   });
 });
 
-describe("the adapter that could one day transmit", () => {
-  const real = () =>
+describe("the adapter that transmits", () => {
+  /**
+   * The whole point of this harness: a `fetchImpl` that FAILS the test if it is
+   * reached.
+   *
+   * These cases used to prove the ordering against an adapter with no transport
+   * at all, which proved it against nothing. Now every refusal below is
+   * asserted against an adapter that would send if it got that far — so a
+   * future edit that sends first and checks after fails here rather than
+   * passing.
+   */
+  const refusesToSend: typeof fetch = () => {
+    throw new Error("the adapter reached the wire before it finished checking");
+  };
+  const refusesToRead: DuResponseReader = () => {
+    throw new Error("the adapter read an answer it should never have asked for");
+  };
+
+  const real = (overrides: Partial<DuOptions> = {}) =>
     duConnector({
-      sellerServicerNumber: "0000000000",
+      sellerServicerNumber: "GRNDR1",
       environment: "test",
       endpoint: "https://example.invalid/du",
+      credential: { scheme: "bearer", token: "a-test-token" },
+      readResponse: refusesToRead,
+      fetchImpl: refusesToSend,
+      ...overrides,
     });
 
   it("refuses to be built without a seller/servicer number", () => {
     // A credential discovered at the first borrower's request is a credential
     // discovered in front of a borrower.
-    expect(() =>
-      duConnector({
-        sellerServicerNumber: "  ",
-        environment: "test",
-        endpoint: "https://example.invalid/du",
-      }),
-    ).toThrow(DuTransportNotWiredError);
+    expect(() => real({ sellerServicerNumber: "  " })).toThrow(DuTransportNotWiredError);
   });
 
-  it("runs the guard BEFORE anything else it does", async () => {
-    // The assertion that matters in this file. When the transport below it is
-    // finally written, the guard is already above it — an unauthorized
-    // submission fails on the permission, not on the missing endpoint, so there
-    // is no version of this adapter that sends first and checks after.
+  it("refuses to be built without a credential", () => {
+    expect(() => real({ credential: { scheme: "bearer", token: "  " } })).toThrow(
+      DuTransportNotWiredError,
+    );
+    expect(() =>
+      real({ credential: { scheme: "basic", username: "grander", password: "" } }),
+    ).toThrow(DuTransportNotWiredError);
+    expect(() => real({ credential: { scheme: "header", name: "", value: "x" } })).toThrow(
+      DuTransportNotWiredError,
+    );
+  });
+
+  it("refuses an endpoint that is not https", () => {
+    // The casefile carries up to four cleartext social security numbers. There
+    // is no development shortcut: a test stub gets a fetchImpl, never an http
+    // URL.
+    expect(() => real({ endpoint: "http://example.invalid/du" })).toThrow(
+      DuTransportNotWiredError,
+    );
+    expect(() => real({ endpoint: "not a url" })).toThrow(DuTransportNotWiredError);
+  });
+
+  it("refuses production unless somebody said production", () => {
+    expect(() => real({ environment: "production" })).toThrow(DuTransportNotWiredError);
+    expect(() => real({ environment: "production", allowProduction: true })).not.toThrow();
+  });
+
+  it("runs the guard BEFORE it reaches the wire", async () => {
+    // The assertion that matters in this file. An unauthorized submission fails
+    // on the permission and `refusesToSend` is never called, so there is no
+    // version of this adapter that sends first and checks after.
     await expect(real().submit(submission(), [])).rejects.toBeInstanceOf(AuthorizationError);
   });
 
-  it("refuses an authorized one too, because there is no transport", async () => {
-    await expect(
-      real().submit(submission(), [token(APPLICANT, "credit_report")]),
-    ).rejects.toBeInstanceOf(DuTransportNotWiredError);
+  it("sends an authorized one and hands back what the reader read", async () => {
+    const answered: DuResponse = {
+      status: "answered",
+      duCasefileId: "1234567890",
+      recommendation: "Approve/Eligible",
+      messages: [{ category: "Findings", code: "0001", text: "Eligible for delivery." }],
+      respondedAt: "2026-09-16T12:00:00.000Z",
+    };
+    const port = real({
+      fetchImpl: async () =>
+        new Response("<MESSAGE/>", {
+          status: 200,
+          headers: { "content-type": "application/xml" },
+        }),
+      readResponse: () => answered,
+    });
+    const result = await port.submit(submission(), [token(APPLICANT, "credit_report")]);
+    expect(result.data).toEqual(answered);
+    expect(result.provider).toBe("desktop-underwriter (test)");
+    expect(result.retrievedAt).toBe(answered.respondedAt);
+    expect(result.externalId).toBe("1234567890");
   });
 
-  it("refuses a blank casefile on the emptiness, not on the missing endpoint", async () => {
+  it("refuses a blank casefile on the emptiness, not on anything the wire said", async () => {
     // The same ordering argument as the guard, applied to the one check that
     // only matters in the adapter that can send. Asserting merely that it
-    // throws would pass on the transport refusal and keep passing after the
-    // transport is written — when a blank casefile would go to Fannie Mae as a
-    // malformed one instead of as an error anybody here could read.
+    // throws would pass on a transport refusal too — and a blank casefile
+    // reaching Fannie Mae arrives as a malformed one rather than as an error
+    // anybody here could read.
     const call = real().submit(submission({ document: "   " }), [
       token(APPLICANT, "credit_report"),
     ]);
     await expect(call).rejects.toBeInstanceOf(EmptyDuDocumentError);
-    await expect(call).rejects.not.toBeInstanceOf(DuTransportNotWiredError);
+    await expect(call).rejects.not.toBeInstanceOf(DuTransportError);
   });
 
   it("refuses a permission signed on a different application", async () => {
-    // And on the authorization rather than on the missing endpoint, for the
+    // And on the authorization rather than on anything the wire said, for the
     // same reason the case above is written this way.
     const call = real().submit(submission(), [token(APPLICANT, "credit_report", ANOTHER_FILE)]);
     await expect(call).rejects.toBeInstanceOf(AuthorizationError);
   });
 
   it("claims to satisfy nothing", async () => {
-    // UW-001 behind a call that always throws would read as a submission path
-    // this system has.
+    // UW-001 behind a POST to an endpoint nobody has ever answered would read
+    // as a submission path this system has.
     expect(real().capabilities.satisfies).toEqual([]);
   });
 });

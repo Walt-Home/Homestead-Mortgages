@@ -509,17 +509,28 @@ export function requireQuotableQuote(quote: PriceQuote): void {
  *     contract question with a longer lead time than any code, which is why
  *     `duConnector` takes the number as configuration and refuses to be
  *     constructed without one.
- *   - **A transport.** An endpoint, an authentication scheme and a message
- *     envelope, none of which is in the vendored corpus — that corpus specifies
- *     the casefile, not the conversation. A real adapter must not invent one.
+ *   - **A transport.** An endpoint, an authentication scheme and an HTTP
+ *     envelope — the media type, and whether a POST is answered synchronously
+ *     at all — none of which is in the vendored corpus. That corpus specifies
+ *     the casefile, not the conversation: the MESSAGE-level envelope IS built,
+ *     in `packages/du/src/assemble`, and `DU_Wrapper_3.4.0_B324.xsd` is an
+ *     `xsd:redefine` of the MISMO model rather than a wrapper around a message.
+ *     A real adapter must not invent the HTTP half, which is why `duConnector`
+ *     takes the endpoint, the credential scheme and the response reader as
+ *     configuration with no defaults.
  *   - **Reading the answer.** DU's response format is a specification we do not
  *     hold either. `parseDuRecommendation` is the half that can be written
  *     today, and a real adapter must go through it rather than storing whatever
- *     string arrived.
+ *     string arrived. `mismoAusResponseReader` does, against the one response
+ *     shape the schema chain declares, and is marked as the guess it is.
  *   - **Retries that do not open a second case.** DU recognizes a resubmission
  *     by `duCasefileId`, so a retry after a timeout has to carry the identifier
  *     from the response it never saw. The fixture is deterministic and hides
- *     this entirely.
+ *     this entirely. The emitter now writes it —
+ *     `LOAN/UNDERWRITING/AUTOMATED_UNDERWRITINGS/AUTOMATED_UNDERWRITING`, from
+ *     `applications.du_casefile_id`, absent on a first submission — and
+ *     `DuTransportError.mayHaveOpenedACase` is how the adapter says it cannot
+ *     know whether a timed-out send arrived.
  *   - **Deciding what happens to the document.** Whether an emitted casefile is
  *     retained anywhere is an open privacy question — it carries up to four
  *     cleartext social security numbers — and nothing in this repository stores

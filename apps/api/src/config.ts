@@ -75,6 +75,53 @@ export const config = {
      * job act on this — the API reads the table they write and never fetches.
      */
     aporSeries: process.env.APOR_PROVIDER ?? "fixture",
+    /**
+     * "fannie" builds the real Desktop Underwriter adapter; anything else
+     * serves the fixture that answers without transmitting. `connectors()`
+     * throws at boot when this is "fannie" and any of the five values below is
+     * missing, rather than discovering it at a borrower's submission.
+     */
+    du: process.env.DU_PROVIDER ?? "fixture",
+  },
+
+  /**
+   * Desktop Underwriter. Five values, none of them with a default.
+   *
+   * Every one of these is in the DU integration agreement rather than in the
+   * vendored specification, and each is one this repository cannot guess at
+   * safely. The endpoint especially: `adapters/du.ts` says it and it is worth
+   * repeating here, because a default belongs in a config file if it belongs
+   * anywhere — **a wrong endpoint that happens to answer is worse than none.**
+   *
+   * `sellerServicerNumber` is the one field that feeds BOTH the adapter, which
+   * submits under it, and `DuInstitution.submittingPartyIdentifier`, which the
+   * document states. Two config fields could disagree, and the adapter is
+   * forbidden from reading the document to find out; one cannot.
+   */
+  du: {
+    endpoint: process.env.DU_ENDPOINT,
+    sellerServicerNumber: process.env.DU_SELLER_SERVICER_NUMBER,
+    /**
+     * "bearer", "basic" or "header". Chosen rather than detected: Fannie's
+     * Technology Integration products vary, and nothing vendored says which one
+     * DU wants. An adapter that tried all three would leak a credential to
+     * whichever endpoint answered.
+     */
+    credentialScheme: process.env.DU_CREDENTIAL_SCHEME,
+    /**
+     * One opaque secret. For "basic" it is `username:password`; for "header" it
+     * is `Header-Name:value`. One variable rather than four so there is one
+     * thing to put in Secret Manager and one thing to rotate.
+     */
+    credential: process.env.DU_CREDENTIAL,
+    environment: (process.env.DU_ENV ?? "test") as "test" | "production",
+    /**
+     * Permit `DU_ENV=production`. The `STRIPE_ALLOW_LIVE_IDENTITY` pattern, and
+     * nothing in this repository or in `infra/` sets it: a production
+     * submission puts a real borrower's file in front of Fannie Mae under a
+     * real institution's number.
+     */
+    allowProduction: process.env.DU_ALLOW_PRODUCTION === "true",
   },
 
   /**

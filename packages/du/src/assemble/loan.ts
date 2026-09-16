@@ -15,6 +15,13 @@
  * holds and refuses outside development. Nothing here mints a number: the one
  * written is whatever the caller was given, and today that is the placeholder.
  *
+ * **`AutomatedUnderwritingCaseIdentifier` is what makes a resubmission a
+ * resubmission.** It is DU's own number for the case, it is null until a
+ * response has been recorded, and it is read off `applications.du_casefile_id`
+ * rather than passed in — so the document and the manifest the connector guard
+ * reads come off one row. Without it a retry reaches Fannie Mae as a new
+ * casefile and one loan acquires two cases.
+ *
  * The verifications hang off this container rather than off a borrower, which
  * is the shape DU chose and not one this model picked: `DU:UNDERWRITING_VERIFICATION`
  * sits in the subject loan's extension and reaches the borrower by an arc.
@@ -139,9 +146,30 @@ export function buildLoans(
     ]),
   ]);
 
-  const loan = container("LOAN", [amortization, loanDetail, identifiers, terms, verifications], {
-    LoanRoleType: "SubjectLoan",
-  });
+  // **The case DU minted, on a resubmission, and nothing at all the first
+  // time.** Desktop Underwriter recognizes a resubmission by this identifier; a
+  // second submission that omits it opens a SECOND case for one loan, which is
+  // the failure `applications.du_casefile_id` is write-once to detect after the
+  // fact. `container()` drops the whole subtree when the value is null, so a
+  // first submission needs no branch here and emits no `UNDERWRITING` element.
+  //
+  // The width is the specification's — `String 30` at this destination — and
+  // the preflight's format check reads it from the generated lengths table, so
+  // a value too long is refused before it is emitted rather than truncated on
+  // the wire.
+  const underwriting = container("UNDERWRITING", [
+    container("AUTOMATED_UNDERWRITINGS", [
+      container("AUTOMATED_UNDERWRITING", [
+        leaf("AutomatedUnderwritingCaseIdentifier", application.duCasefileId),
+      ]),
+    ]),
+  ]);
+
+  const loan = container(
+    "LOAN",
+    [amortization, loanDetail, identifiers, terms, underwriting, verifications],
+    { LoanRoleType: "SubjectLoan" },
+  );
 
   return container("LOANS", [loan]);
 }

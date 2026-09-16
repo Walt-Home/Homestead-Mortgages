@@ -14,14 +14,18 @@
  */
 
 import {
+  duConnector,
   fixtureRegistry,
   googlePlacesConnector,
+  mismoAusResponseReader,
   plaidConnector,
   stripeIdentityConnector,
   type ConnectorRegistry,
+  type DuCredential,
   type PersonaId,
 } from "@hm/connectors";
 import { prisma } from "@hm/db";
+import { PLACEHOLDER_INSTITUTION, placeholdersIn, type DuInstitution } from "@hm/du";
 import { ffiecAporSeriesConnector } from "@hm/connectors";
 import { config } from "../config.js";
 import { vendorTokenStore } from "./vendor-tokens.js";
@@ -64,6 +68,80 @@ export function providerMix(): ProviderMix {
 export function providerModes(): ProviderModes {
   connectors();
   return modes;
+}
+
+/**
+ * `DU_CREDENTIAL_SCHEME` and `DU_CREDENTIAL` as the credential the adapter
+ * takes.
+ *
+ * One secret rather than four variables, so there is one thing in Secret
+ * Manager and one thing to rotate. The scheme decides how it is read: a bearer
+ * token is the whole string, and the other two split at the FIRST colon —
+ * a password or a header value may carry colons of its own and the left half
+ * may not.
+ *
+ * The scheme is not guessed. Which one Desktop Underwriter wants is in the
+ * integration guide, and an adapter that tried all three would send the
+ * credential to whichever endpoint answered first.
+ */
+function duCredential(scheme: string, secret: string): DuCredential {
+  switch (scheme) {
+    case "bearer":
+      return { scheme: "bearer", token: secret };
+    case "basic": {
+      const colon = secret.indexOf(":");
+      if (colon === -1) {
+        throw new Error(
+          "DU_CREDENTIAL_SCHEME=basic expects DU_CREDENTIAL to be username:password.",
+        );
+      }
+      return {
+        scheme: "basic",
+        username: secret.slice(0, colon),
+        password: secret.slice(colon + 1),
+      };
+    }
+    case "header": {
+      const colon = secret.indexOf(":");
+      if (colon === -1) {
+        throw new Error(
+          "DU_CREDENTIAL_SCHEME=header expects DU_CREDENTIAL to be Header-Name:value.",
+        );
+      }
+      return { scheme: "header", name: secret.slice(0, colon), value: secret.slice(colon + 1) };
+    }
+    default:
+      throw new Error(
+        `DU_CREDENTIAL_SCHEME=${JSON.stringify(scheme)} is not one this system implements. ` +
+          "It is bearer, basic or header; mutual TLS is a client certificate rather than a " +
+          "header and has no seam here.",
+      );
+  }
+}
+
+/**
+ * The institution a casefile is assembled under, from the SAME field the
+ * adapter authenticates beside.
+ *
+ * This is the whole of how the seller/servicer number stops being held in two
+ * places that can disagree. `duConnector` takes `sellerServicerNumber` and the
+ * emitted document carries `PartyRoleIdentifier`, and the adapter is forbidden
+ * from reading the document to compare them — an adapter that parsed the
+ * casefile would have taken on a second copy of the serializer's assumptions.
+ * One `config.du.sellerServicerNumber` feeds both, so there is nothing to
+ * disagree.
+ *
+ * Unset, it is the placeholder, which `assertInstitutionEmittable` refuses when
+ * `NODE_ENV=production`. The lender loan number is still the placeholder in
+ * every case: nothing mints one and no column holds one, which is its own row
+ * in `docs/du-readiness.md`.
+ */
+export function duInstitutionFromConfig(): DuInstitution {
+  return {
+    lenderLoanIdentifier: PLACEHOLDER_INSTITUTION.lenderLoanIdentifier,
+    submittingPartyIdentifier:
+      config.du.sellerServicerNumber?.trim() || PLACEHOLDER_INSTITUTION.submittingPartyIdentifier,
+  };
 }
 
 export function connectors(): ConnectorRegistry {
@@ -148,7 +226,58 @@ export function connectors(): ConnectorRegistry {
     chosen.aporSeries = "ffiec-survey (files.ffiec.cfpb.gov)";
   }
 
-  registry = { ...fixtures, propertyData, identity, bank, aporSeries };
+  // Desktop Underwriter. The one branch where "fell back to the fixture"
+  // would be indistinguishable from working: the fixture answers
+  // Approve/Eligible in milliseconds and transmits nothing at all, so a
+  // deployment that asked for Fannie and got the fixture would look like a
+  // product that submits. Every missing value is therefore a boot failure
+  // naming the variable.
+  let du = fixtures.du;
+  if (config.providers.du === "fannie") {
+    const missing = (
+      [
+        ["DU_ENDPOINT", config.du.endpoint],
+        ["DU_SELLER_SERVICER_NUMBER", config.du.sellerServicerNumber],
+        ["DU_CREDENTIAL_SCHEME", config.du.credentialScheme],
+        ["DU_CREDENTIAL", config.du.credential],
+      ] as const
+    )
+      .filter(([, value]) => !value || value.trim() === "")
+      .map(([name]) => name);
+    if (missing.length > 0) {
+      throw new Error(`DU_PROVIDER=fannie but ${missing.join(", ")} is not set.`);
+    }
+    // The same refusal `assertInstitutionEmittable` makes about the document,
+    // made about the adapter, and for the same reason: a plausible-looking
+    // number is a submission Fannie Mae accepts against somebody else's
+    // institution. The document check would already stop a production
+    // assembly, but this is the one that can send, so it refuses too rather
+    // than relying on a check one package over.
+    if (
+      config.nodeEnv === "production" &&
+      placeholdersIn(duInstitutionFromConfig()).includes("submittingPartyIdentifier")
+    ) {
+      throw new Error(
+        "DU_PROVIDER=fannie with the placeholder seller/servicer number, in production. " +
+          "Nobody holds the number this casefile would be sent under, and a number that looks " +
+          "real is worse than none.",
+      );
+    }
+    du = duConnector({
+      endpoint: config.du.endpoint!,
+      sellerServicerNumber: config.du.sellerServicerNumber!,
+      credential: duCredential(config.du.credentialScheme!, config.du.credential!),
+      environment: config.du.environment,
+      allowProduction: config.du.allowProduction,
+      // Required, with no default, on the adapter's own argument: a deployment
+      // whose response format is not the one this reader guesses at must be
+      // handed a different function rather than half-reading this one.
+      readResponse: mismoAusResponseReader,
+    });
+    chosen.du = du.capabilities.provider;
+  }
+
+  registry = { ...fixtures, propertyData, identity, bank, aporSeries, du };
   mix = chosen;
   // Read off the registry that was just assembled, not off `config`. The
   // configuration is the intent and the registry is the outcome, and every

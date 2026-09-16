@@ -1513,3 +1513,61 @@ describe("the verification a submission may rely on", () => {
     expect(xml).not.toContain("cra-good");
   });
 });
+
+describe("the case Desktop Underwriter minted", () => {
+  it("emits nothing at all the first time a loan is submitted", async () => {
+    // `applications.du_casefile_id` is null until a response has been recorded,
+    // and `container()` drops a subtree whose only leaf is absent — so a first
+    // submission carries no UNDERWRITING element rather than an empty one. An
+    // empty container validates and says nothing, which at review is
+    // indistinguishable from one somebody meant to fill.
+    const app = await anApplication();
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+    expect(xml).not.toContain("<UNDERWRITING>");
+    expect(valuesOf(xml, "AutomatedUnderwritingCaseIdentifier")).toEqual([]);
+  });
+
+  it("carries the case back on a resubmission, so one loan is not two cases", async () => {
+    // The identifier DU recognizes a resubmission by. Without it a retry
+    // reaches Fannie Mae as a brand new casefile, and the loan acquires a
+    // second case nobody asked for — which is exactly what the write-once
+    // trigger on this column exists to detect after the fact.
+    const app = await anApplication();
+    await prisma.application.update({
+      where: { id: app.id },
+      data: { duCasefileId: "1234567890" },
+    });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+    expect(valuesOf(xml, "AutomatedUnderwritingCaseIdentifier")).toEqual(["1234567890"]);
+    // At the XPath the Map files it under, inside the subject loan. The
+    // document is indented for a reader, so the check closes the whitespace
+    // between tags rather than depending on how it was pretty-printed.
+    expect(xml.replace(/>\s+</g, "><")).toContain(
+      "<UNDERWRITING><AUTOMATED_UNDERWRITINGS><AUTOMATED_UNDERWRITING>" +
+        "<AutomatedUnderwritingCaseIdentifier>1234567890</AutomatedUnderwritingCaseIdentifier>",
+    );
+    expect(xmllintErrors(xml)).toEqual([]);
+  });
+
+  it("cannot hold a case identifier wider than the thirty the specification allows", async () => {
+    // The column is a VARCHAR(30) and DU_FORMATS says String 30, so a wider
+    // one never reaches the gate: Postgres refuses the write, and the gate's
+    // format check only ever sees a row the table could hold. What this pins
+    // is that the two widths agree — a case DU minted that the table can
+    // store is one the document can carry back, and there is no identifier
+    // recordable here that a resubmission would then have to refuse.
+    const app = await anApplication();
+    await expect(
+      prisma.$executeRaw`
+        UPDATE applications SET du_casefile_id = ${"9".repeat(31)} WHERE id = ${app.id}::uuid`,
+    ).rejects.toThrow(/character varying\(30\)/);
+
+    await prisma.application.update({
+      where: { id: app.id },
+      data: { duCasefileId: "9".repeat(30) },
+    });
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+    expect(valuesOf(xml, "AutomatedUnderwritingCaseIdentifier")).toEqual(["9".repeat(30)]);
+    expect(xmllintErrors(xml)).toEqual([]);
+  });
+});

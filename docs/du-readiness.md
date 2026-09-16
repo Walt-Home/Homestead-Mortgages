@@ -91,10 +91,15 @@ liabilities, expenses and owned property exist as tables with real ownership,
 enforced by the database rather than intended by a service.
 
 Still true, and the sentence to keep at the front: **nothing in this system
-transmits anything to anyone.** There is now a port that could — `du`, with a
-fixture that answers and a real adapter that refuses — and what stops it is
-that the real one has no seller/servicer number, no endpoint and no message
-envelope, none of which is code.
+transmits anything to anyone.** The port and the real adapter behind it are
+now built as far as code can take them — the HTTP exchange, a credential in
+one of three schemes, a response reader that refuses what it does not
+recognize rather than filing it, the case identifier that makes a
+resubmission a resubmission, and a production refusal of every placeholder —
+and every one of them is exercised against a stubbed server. What stops it is
+five values from the DU integration agreement: the endpoint, the seller/servicer
+number, the credential and its scheme, and the environment. None is code, and
+`DU_ENDPOINT` has no default on purpose.
 
 Treat the fraction as a direction, not a measurement, and re-derive it from the
 three lists rather than trusting it after they change.
@@ -168,8 +173,16 @@ three lists rather than trusting it after they change.
 
 - **The compute boundary** — which figures we assert and which DU derives —
   still unrecorded, still two untyped JSON columns.
-- **The transport itself**, which is now the only piece of the submission path
-  that has nothing under it. The serializer is built — `packages/du` assembles
+- **The transport's credentials.** The transport itself is built: `submit`
+  posts the emitted casefile to `DU_ENDPOINT` under the configured credential,
+  reads the answer through a `DuResponseReader` that refuses any shape it
+  cannot vouch for (a sign-in page, an unfamiliar verdict) rather than filing
+  it against the write-once casefile column, and emits DU's own
+  `AutomatedUnderwritingCaseIdentifier` on a resubmission so one loan does
+  not open two cases. The reader is written against the one response shape the
+  vendored chain declares, `AUTOMATED_UNDERWRITING_SYSTEM_RESPONSE`, and is
+  the only file that changes when a real payload is in hand. What is missing
+  is what the integration agreement supplies. The serializer is built — `packages/du` assembles
   an application into a MISMO 3.4 `MESSAGE` and emits it, `RELATIONSHIP` arcs
   included, ordered by the generated child sequence and checked against all
   eighteen vendored samples. It emits no `LOAN_IDENTIFIER` and no submitting
@@ -731,10 +744,12 @@ this with the people doing the work.
 5. ~~**The three employment columns.**~~ Done: the classification is derived
    and the two 1b answers are asked on the review screen (`APP-029`). A
    casefile carrying a job emits.
-6. **The transport**, which is where the credentials question stops being
-   deferrable. The response it will carry already has tables and a port to
-   arrive through; what is missing is the endpoint, the envelope and the
-   seller/servicer number a casefile goes in under.
+6. **The transport's credentials**, which is where the code stops. The
+   exchange, the reader, the resubmission identifier and the configuration are
+   built and tested against a stubbed server; what is missing is the endpoint,
+   the credential and the seller/servicer number from the DU integration
+   agreement — and a first real payload, which is what the reader is checked
+   against next.
 
 Steps 1 through 3 wait on neither the EULA nor the credentials.
 

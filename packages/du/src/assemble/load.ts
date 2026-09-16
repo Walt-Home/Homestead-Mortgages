@@ -141,6 +141,17 @@ export function loadApplication(db: DuReader, applicationId: string) {
     where: { id: applicationId },
     select: {
       id: true,
+      /**
+       * The case Desktop Underwriter minted, on a resubmission.
+       *
+       * Null until a response has been recorded, and write-once after. It is
+       * read here rather than passed in as an option so that the document and
+       * the guard's manifest come off the same row — a resubmission whose
+       * `AutomatedUnderwritingCaseIdentifier` disagreed with
+       * `applications.du_casefile_id` would open a second case for one loan and
+       * nothing would notice until the write-once trigger raised on the answer.
+       */
+      duCasefileId: true,
       loanFile: {
         select: {
           id: true,

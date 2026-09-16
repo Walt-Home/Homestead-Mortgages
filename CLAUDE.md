@@ -142,16 +142,18 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   the wrong name today. Wiring the ID scan to a persona means giving the
   fixtures eight people.
 
-- **A co-borrower's own half stops at screen 2.** Screen 2 names one, the
+- **A co-borrower has no bank of their own yet.** Screen 2 names one, the
   applicant sends them a link (Resend when `MAIL_PROVIDER=resend`; otherwise
   an in-memory outbox that only a test reads, and the route refuses in
   production rather than pretend), `/claim/:token` takes it after Google
   sign-in, and the claim is a merge — the trigger lets a PROVISIONAL party go
-  to `CLAIM_PENDING` or `MERGED` and nowhere else — after which the
-  co-borrower can read the file and save screen 2 about themselves. Screens
-  3–5 still resolve "the borrower" by position, so a co-borrower's
-  declarations, bank, demographics and signature are unbuilt; the file waits
-  on them meanwhile. `docs/states.md` has the shape.
+  to `CLAIM_PENDING` or `MERGED` and nowhere else. From there the co-borrower
+  walks their own half — screen 2, Section 5, demographics, one signature —
+  and every route resolves "the borrower" by the person asking, with
+  `assertFileAccess` mode `self`. The applicant's person is redacted from what
+  a co-borrower reads. `connector_links` is still unique per `(file, kind)`
+  and every report is read as the applicant's, so a co-borrower's half skips
+  the bank step; that is the next slice. `docs/states.md` has the shape.
 
 ## Five rules that are not style preferences
 

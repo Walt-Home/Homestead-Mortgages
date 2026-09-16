@@ -32,9 +32,11 @@ import {
   screenIndex,
   screenOwnsStanding,
   type ScreenPath,
+  resumeForCoBorrower,
 } from "./lib/flow.js";
 import { SignInPage } from "./pages/SignInPage.js";
 import { ClaimPage } from "./pages/ClaimPage.js";
+import { CoBorrowerReviewPage } from "./pages/CoBorrowerReviewPage.js";
 import { LandingPage } from "./pages/LandingPage.js";
 import { PrivacyPage } from "./pages/PrivacyPage.js";
 import { BrandPage } from "./pages/BrandPage.js";
@@ -179,6 +181,13 @@ function ResumeToStage() {
   if (isLoading) return <p className="text-sm text-ink-faint">Finding your place…</p>;
   const stage = data?.file.stage;
   if (!stage) return <Navigate to="/" replace />;
+  // A co-borrower resumes their own half, not the applicant's stage.
+  if (data && !data.owner) {
+    const you = data.you;
+    const invited = data.file.invitedBorrowers.some((b) => b.id === you);
+    const declared = data.file.borrowers.find((b) => b.id === you)?.declaration != null;
+    return <Navigate to={`/f/${fileId}/${resumeForCoBorrower({ invited, declared })}`} replace />;
+  }
   return <Navigate to={`/f/${fileId}/${STAGE_TO_SCREEN[stage]}`} replace />;
 }
 
@@ -196,6 +205,10 @@ function ReviewShim() {
     enabled: Boolean(fileId),
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
   });
+  const file = useLoanFile(fileId);
+  // A co-borrower reviews their own half: their answers, their signature,
+  // and nothing of the applicant's.
+  if (file.data && !file.data.owner) return <CoBorrowerReviewPage />;
   return <ReviewPage assessment={assessment.data} />;
 }
 

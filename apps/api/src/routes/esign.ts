@@ -65,7 +65,7 @@ esignRouter.post(
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const { kind } = startSchema.parse(req.body);
-    await assertFileAccess(id, req.user!.id, "write");
+    await assertFileAccess(id, req.user!.id, "self");
 
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
@@ -112,7 +112,7 @@ esignRouter.post(
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const { envelopeId } = completeSchema.parse(req.body);
-    await assertFileAccess(id, req.user!.id, "write");
+    await assertFileAccess(id, req.user!.id, "self");
 
     const consent = await connectors().esign.getCompletedConsent(envelopeId);
     if (!consent) {

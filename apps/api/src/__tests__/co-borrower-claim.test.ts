@@ -22,7 +22,11 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import type { FixtureMailConnector } from "@hm/connectors";
+import { applicationRouter } from "../routes/application.js";
 import { authRouter } from "../routes/auth.js";
+import { connectorRouter } from "../routes/connectors.js";
+import { decisionRouter } from "../routes/decision.js";
+import { declarationRouter } from "../routes/declarations.js";
 import { fileRouter } from "../routes/files.js";
 import { connectors } from "../services/connectors.js";
 import { loadLoanFile } from "../services/repository.js";
@@ -75,6 +79,26 @@ const THEO_HIMSELF = {
   isMilitary: false,
   demographics: null,
 };
+
+/** Section 5, all no, and a residence he owns. */
+const SECTION_FIVE = {
+  intentToOccupy: "Yes",
+  homeownerPastThreeYears: "No",
+  specialBorrowerSellerRelationship: false,
+  undisclosedBorrowedFunds: false,
+  undisclosedMortgageApplication: false,
+  undisclosedCreditApplication: false,
+  propertyProposedCleanEnergyLien: false,
+  undisclosedComakerOfNote: false,
+  outstandingJudgments: false,
+  presentlyDelinquent: false,
+  partyToLawsuit: false,
+  priorPropertyDeedInLieuConveyed: false,
+  priorPropertyShortSaleCompleted: false,
+  priorPropertyForeclosureCompleted: false,
+  bankruptcy: false,
+};
+const OWNING = { residencyType: "Current", basis: "Own", durationMonths: 90 };
 
 const outbox = () => (connectors().mail as FixtureMailConnector).outbox;
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -456,6 +480,125 @@ describe("once they have arrived", () => {
       select: { assertedBy: { select: { partyId: true } } },
     });
     expect(dob.assertedBy.partyId).toBe(theo.partyId);
+  });
+
+  it("answers Section 5 about themselves, without naming a row", async () => {
+    // Screen 3 posts no borrowerId. Read as Borrower 1 that put Theo's
+    // answers onto Dana's edge, which the principal rule then refused — so
+    // a co-borrower could not answer at all. The row is the person asking.
+    const h = await claimed();
+    await callAs(h.theo.id, [fileRouter], "POST", `/${h.fileId}/borrowers`, THEO_HIMSELF);
+
+    const res = await callAs(h.theo.id, [declarationRouter], "POST", `/${h.fileId}/declaration`, {
+      declaration: { ...SECTION_FIVE, bankruptcy: true, bankruptcyChapters: ["ChapterSeven"] },
+      residences: [OWNING],
+      propertyEstateType: "FeeSimple",
+    });
+
+    expect(res.status).toBe(201);
+    const file = (await loadLoanFile(h.fileId))!;
+    const theo = file.borrowers.find((b) => b.id === h.borrowerId)!;
+    expect(theo.declaration?.bankruptcy).toBe(true);
+    expect(theo.residences.map((r) => r.basis)).toEqual(["Own"]);
+    expect(file.borrowers[0]!.declaration).toBeNull();
+    // Attested by him: the row carries his own principal.
+    const stored = await prisma.duDeclaration.findFirstOrThrow({
+      where: { applicationParty: { partyId: theo.partyId } },
+      select: { assertedBy: { select: { partyId: true } } },
+    });
+    expect(stored.assertedBy.partyId).toBe(theo.partyId);
+    // And reads back as theirs, without naming a row either.
+    const read = await callAs<{ declaration: { declaration: { bankruptcy: boolean } } | null }>(
+      h.theo.id,
+      [declarationRouter],
+      "GET",
+      `/${h.fileId}/declaration`,
+    );
+    expect(read.body.declaration?.declaration.bankruptcy).toBe(true);
+  });
+
+  it("signs for themselves, and the file's own signature stays the applicant's", async () => {
+    const h = await claimed();
+    await callAs(h.theo.id, [fileRouter], "POST", `/${h.fileId}/borrowers`, {
+      ...THEO_HIMSELF,
+      demographics: { ethnicity: "declined", race: "declined", sex: "declined" },
+    });
+    for (const kind of ["verification_authorization", "econsent"]) {
+      const consent = await callAs(h.theo.id, [connectorRouter], "POST", `/${h.fileId}/consents`, {
+        kind,
+        borrowerId: h.borrowerId,
+      });
+      expect(consent.status, kind).toBe(201);
+    }
+
+    const signed = await callAs<{ signedBy: string; signed: string[] }>(
+      h.theo.id,
+      [applicationRouter],
+      "POST",
+      `/${h.fileId}/sign-application`,
+    );
+
+    expect(signed.status).toBe(201);
+    expect(signed.body.signedBy).toBe(h.borrowerId);
+    expect(signed.body.signed).toEqual(["form_4506c"]);
+    const row = await prisma.loanFile.findUniqueOrThrow({
+      where: { id: h.fileId },
+      select: { applicationSignedAt: true, stage: true },
+    });
+    expect(row.applicationSignedAt).toBeNull();
+    expect(row.stage).not.toBe("DECISION");
+    const his = await prisma.consent.findMany({
+      where: { loanFileId: h.fileId, borrowerId: h.borrowerId, revokedAt: null },
+      select: { kind: true },
+      orderBy: { kind: "asc" },
+    });
+    expect(his.map((c) => c.kind)).toEqual([
+      "application_signature",
+      "econsent",
+      "form_4506c",
+      "verification_authorization",
+    ]);
+    // Once: signing again adds no row.
+    await callAs(h.theo.id, [applicationRouter], "POST", `/${h.fileId}/sign-application`);
+    expect(
+      await prisma.consent.count({
+        where: { borrowerId: h.borrowerId, kind: "application_signature" },
+      }),
+    ).toBe(1);
+    // His signature reached the applicant's read as one line of his, and
+    // nothing else of his did.
+    const hers = await callAs<{ file: { consents: { kind: string; borrowerId: string }[] } }>(
+      h.user.id,
+      [fileRouter],
+      "GET",
+      `/${h.fileId}`,
+    );
+    expect(
+      hers.body.file.consents.some(
+        (c) => c.kind === "application_signature" && c.borrowerId === h.borrowerId,
+      ),
+    ).toBe(true);
+  });
+
+  it("is told it is not the owner, and may not decide or invite", async () => {
+    const h = await claimed();
+    const res = await callAs<{ owner: boolean }>(h.theo.id, [fileRouter], "GET", `/${h.fileId}`);
+    expect(res.body.owner).toBe(false);
+    const hers = await callAs<{ owner: boolean }>(h.user.id, [fileRouter], "GET", `/${h.fileId}`);
+    expect(hers.body.owner).toBe(true);
+    expect(
+      (await callAs(h.theo.id, [decisionRouter], "POST", `/${h.fileId}/decision`)).status,
+    ).toBe(404);
+    expect(
+      (
+        await callAs(
+          h.theo.id,
+          [fileRouter],
+          "POST",
+          `/${h.fileId}/co-borrowers/${h.borrowerId}/invitations`,
+        )
+      ).status,
+    ).toBe(404);
   });
 
   it("does not let the applicant's screen 2 land on the co-borrower", async () => {

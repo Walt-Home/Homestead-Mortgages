@@ -1826,6 +1826,21 @@ applicant typed is where the link went, not who may follow it, and a stricter
 rule would refuse a person whose Google account is not the address their
 partner had for them.
 
+**Each person signs for themselves, and a route means "the borrower" by
+who is asking.** A joint application has one signature per person: the
+applicant's is the file's `applicationSignedAt`, and a co-borrower's is a
+consent row of kind `application_signature` in their own name, written in
+the same act as their own 4506-C and never touching the column. The rule
+that made this possible is smaller than it sounds: every route that took an
+absent `borrowerId` to mean Borrower 1 now takes it to mean the person
+asking, by their own row on the file, and falls back to Borrower 1 only for a
+reader with no row. `assertFileAccess` gained the vocabulary — `read` for
+anyone on the file, `self` for a person's own screens, `write` and `own` for
+the applicant — and the co-borrower's read of the file is redacted to the
+household's half and their own, because "your private identity details and
+credentials stay private" is a promise kept in the response rather than in
+a screen.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

@@ -753,9 +753,13 @@ fileRouter.get(
       where: { id },
       select: { userId: true },
     });
+    const yours = owner.userId === req.user!.id;
     res.json({
-      file: owner.userId === req.user!.id ? file : memberView(file, yourRow),
+      file: yours ? file : memberView(file, yourRow),
       you: yourRow,
+      // Whether the reader is the applicant. A co-borrower is on the file
+      // and not its owner, and the screens they see are theirs alone.
+      owner: yours,
       applicationState: await applicationStanding(prisma, id),
     });
   }),

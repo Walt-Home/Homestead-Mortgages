@@ -169,11 +169,21 @@ applicationRouter.post(
  */
 const SIGNED_DOCUMENTS = ["form_4506c"] as const;
 
+/** The kind a co-borrower's own attestation is recorded under, per person. */
+export const APPLICATION_SIGNATURE = "application_signature";
+
 applicationRouter.post(
   "/:id/sign-application",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    await assertFileAccess(id, req.user!.id, "write");
+    // "self": every borrower on the file signs for themselves, and only for
+    // themselves. The applicant's signature is the file's — the column below
+    // — and a co-borrower's is a row of their own, because one person's
+    // signature on a joint application says nothing about the other's.
+    await assertFileAccess(id, req.user!.id, "self");
+    const owner =
+      (await prisma.loanFile.findUniqueOrThrow({ where: { id }, select: { userId: true } }))
+        .userId === req.user!.id;
 
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
@@ -247,8 +257,41 @@ applicationRouter.post(
     // deliberately NOT written: the decision the review screen asks for next
     // writes it, and one edge wants one writer.
     await prisma.$transaction(async (tx) => {
-      await tx.loanFile.update({ where: { id }, data: { applicationSignedAt: new Date() } });
-      await recordEvent(id, "application_signed", "borrower", { documents: signed }, undefined, tx);
+      if (owner) {
+        await tx.loanFile.update({ where: { id }, data: { applicationSignedAt: new Date() } });
+        await recordEvent(
+          id,
+          "application_signed",
+          "borrower",
+          { documents: signed },
+          undefined,
+          tx,
+        );
+      } else {
+        // A co-borrower's attestation to their own answers: a consent row in
+        // their name, once, and never the file's column. Their 4506-C went
+        // through the loop above in the same act.
+        if (!(await signedOn(id, borrower.partyId, APPLICATION_SIGNATURE, tx))) {
+          await tx.consent.create({
+            data: {
+              loanFileId: id,
+              borrowerId: borrower.id,
+              kind: APPLICATION_SIGNATURE,
+              grantedAt: new Date(),
+              ipAddress: req.ip ?? "unknown",
+              userAgent: req.get("user-agent") ?? "unknown",
+            },
+          });
+        }
+        await recordEvent(
+          id,
+          "co_borrower_signed",
+          "borrower",
+          { borrowerId: borrower.id, documents: signed },
+          undefined,
+          tx,
+        );
+      }
 
       const app = await applicationForFile(tx, id);
       if (app) {
@@ -298,7 +341,9 @@ applicationRouter.post(
       transcriptError = err instanceof Error ? err.message : "transcripts unavailable";
     }
 
-    await advanceStage(id, "DECISION");
+    // The stage is the applicant's: where THEIR flow resumes. A co-borrower
+    // finishing does not move it.
+    if (owner) await advanceStage(id, "DECISION");
     // WHOSE signature this was, because the request did not say: the route
     // resolves the signer itself, and a caller that was handed back only
     // `signed` could not tell which of two people it had just signed for.

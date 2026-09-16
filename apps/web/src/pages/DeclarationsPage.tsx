@@ -89,11 +89,12 @@ export function DeclarationsPage() {
   useEffect(() => {
     if (seeded.current || !file) return;
     seeded.current = true;
-    // The applicant's own stored answers, not the file's. This screen posts
-    // without naming a borrower, which the route reads as Borrower 1 — so
-    // seeding from anybody else would put one person's answers into a form
-    // that saves as another's.
-    const me = primaryBorrower(file);
+    // The reader's own stored answers, not the file's. This screen posts
+    // without naming a borrower, which the route reads as the person asking
+    // — the applicant, or a co-borrower on their own half — so seeding from
+    // anybody else would put one person's answers into a form that saves as
+    // another's.
+    const me = file.borrowers.find((b) => b.id === data?.you) ?? primaryBorrower(file);
     // The estate comes off the FILE rather than off this person: it is one
     // answer about one house, so a co-borrower who answered first has already
     // given it and this form shows it back rather than asking again.
@@ -101,7 +102,7 @@ export function DeclarationsPage() {
     if (estate || (me && (me.declaration || me.residences.length > 0))) {
       setForm(formFrom(me?.declaration ?? null, me?.residences ?? [], estate));
     }
-  }, [file]);
+  }, [file, data?.you]);
 
   const purchase = file?.loan?.purpose === "purchase";
   const missing = missingFrom(form, purchase);
@@ -135,6 +136,9 @@ export function DeclarationsPage() {
       await api.post(`/files/${fileId}/declaration`, bodyFrom(form, purchase));
       await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
       await queryClient.invalidateQueries({ queryKey: ["assessment"] });
+      // The next step for everybody. A co-borrower's bank is not theirs to
+      // link yet, and the bank screen is where that is said — a step nobody
+      // is sent to is a step nobody hears about.
       navigate(`/f/${fileId}/bank`);
     } catch (err) {
       if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {

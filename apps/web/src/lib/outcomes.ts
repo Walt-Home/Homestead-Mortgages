@@ -247,6 +247,29 @@ export const WAITING_COPY = {
  * nothing but a string, so it names two first names and a city and never a
  * file. Which way a dead link died is not said either, for the same reason.
  */
+/**
+ * The review screen, for a co-borrower.
+ *
+ * Their own answers, their own signature, and a plain statement of what the
+ * signature reaches: their tax records and nobody else's. Nothing of the
+ * applicant's is on this screen, because nothing of the applicant's is theirs
+ * to see — the same rule the applicant's screen keeps about them.
+ */
+export const CO_BORROWER_REVIEW_COPY = {
+  title: "Your part",
+  lead: (applicantFirstName: string) =>
+    `These are your own answers. ${applicantFirstName || "The applicant"} sees that you have finished, and not what you said.`,
+  panelTitle: "Your signature",
+  panelBody:
+    "Signing says your answers are true and complete, and lets us request your own tax records from the IRS. It does not sign anything for anybody else on this application.",
+  signButton: "Sign my part",
+  doneTitle: "You are done.",
+  doneBody: (applicantFirstName: string) =>
+    `Your part is signed. ${applicantFirstName || "The applicant"} finishes the rest, and we will let you both know where it stands.`,
+  bankNotice:
+    "The bank connection is the applicant's for now. Your own comes later; nothing here is waiting on you.",
+} as const;
+
 export const CLAIM_COPY = {
   looking: "One moment…",
   title: (coBorrowerFirstName: string) =>

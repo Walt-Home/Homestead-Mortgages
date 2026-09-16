@@ -98,6 +98,24 @@ export const STAGE_TO_SCREEN: Record<FlowStage, ScreenPath> = {
 };
 
 /**
+ * Where a co-borrower's own half resumes.
+ *
+ * The file's stage is the applicant's — where THEIR flow stands — and a
+ * person applying with them has a shorter road of their own: say who they
+ * are, answer Section 5 about themselves, sign. The bank is the applicant's
+ * connection for now, so it is not on it. Read off the person's own row
+ * rather than off any stage, because nothing stores one for them.
+ */
+export function resumeForCoBorrower(input: {
+  readonly invited: boolean;
+  readonly declared: boolean;
+}): ScreenPath {
+  if (input.invited) return "identity";
+  if (!input.declared) return "declarations";
+  return "review";
+}
+
+/**
  * Where a file goes when the person behind it will not project.
  *
  * Screen 2 is the only screen that writes identity facts, so it is the only

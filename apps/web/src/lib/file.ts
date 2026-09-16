@@ -343,6 +343,12 @@ export interface LoanFileResponse {
    * different people.
    */
   you: string | null;
+  /**
+   * Whether the reader is the applicant. False for a co-borrower, who sees
+   * the household's half of the file and their own, and whose screens are
+   * about themselves.
+   */
+  owner: boolean;
   /** Null for a file made before applications existed. Never a draft. */
   applicationState: ApplicationStandingView | null;
 }

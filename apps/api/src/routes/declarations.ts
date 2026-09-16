@@ -31,7 +31,7 @@ import { prisma } from "@hm/db";
 import { asyncRoute } from "../middleware/error-handler.js";
 import { assertFileAccess } from "../services/repository.js";
 import { loadDeclaration, recordDeclaration } from "../services/declarations.js";
-import { partyForUser, principalForParty } from "../services/party.js";
+import { partyForUser, partyOfUser, principalForParty } from "../services/party.js";
 import { advanceStage } from "../services/stage.js";
 
 export const declarationRouter = Router();
@@ -259,12 +259,24 @@ const bodySchema = z
     }
   });
 
+/** The borrower row this party holds on this file, if any. */
+async function ownRowOn(loanFileId: string, partyId: string): Promise<string | undefined> {
+  const own = await prisma.borrower.findFirst({
+    where: { loanFileId, partyId },
+    select: { id: true },
+  });
+  return own?.id;
+}
+
 declarationRouter.post(
   "/:id/declaration",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const input = bodySchema.parse(req.body);
-    await assertFileAccess(id, req.user!.id, "write");
+    // "self": the applicant, or a co-borrower on the file answering about
+    // themselves. Naming somebody else is refused below by the principal
+    // rule either way.
+    await assertFileAccess(id, req.user!.id, "self");
 
     // Who is asserting this, which is whoever sent the request and never
     // whoever it is about. Read here rather than inside the service because
@@ -274,7 +286,15 @@ declarationRouter.post(
     const partyId = await partyForUser(prisma, req.user!.id);
     const assertedByPrincipalId = await principalForParty(prisma, partyId);
 
-    const view = await recordDeclaration(id, { ...input, assertedByPrincipalId });
+    // Whose answers these are when the screen does not say: the person
+    // asking, by their own row on this file. Screen 3 posts no `borrowerId`,
+    // and read as Borrower 1 that put a co-borrower's answers onto the
+    // applicant's edge — which the principal rule then refused, so a
+    // co-borrower could not answer at all. Absent a row of their own — the
+    // applicant before screen 2, or staff — it is still Borrower 1.
+    const borrowerId = input.borrowerId ?? (await ownRowOn(id, partyId));
+
+    const view = await recordDeclaration(id, { ...input, borrowerId, assertedByPrincipalId });
     // The high-water mark, not a cursor: a borrower who comes back to correct
     // one answer after connecting their bank is not moved back to this screen.
     await advanceStage(id, "DECLARATIONS");
@@ -305,12 +325,14 @@ declarationRouter.post(
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const input = employmentDeclarationsSchema.parse(req.body);
-    await assertFileAccess(id, req.user!.id, "write");
+    await assertFileAccess(id, req.user!.id, "self");
     const partyId = await partyForUser(prisma, req.user!.id);
+    // The same default as Section 5: the person asking, by their own row.
+    const borrowerId = input.borrowerId ?? (await ownRowOn(id, partyId));
     const assertedByPrincipalId = await principalForParty(prisma, partyId);
     const declarations = await recordEmploymentDeclarations(id, {
       answers: input.answers,
-      borrowerId: input.borrowerId,
+      borrowerId,
       assertedByPrincipalId,
     });
     res.status(201).json({ declarations });
@@ -323,8 +345,11 @@ declarationRouter.get(
     const id = z.string().uuid().parse(req.params.id);
     await assertFileAccess(id, req.user!.id, "read");
 
-    // Absent is borrower 1, the same way the POST reads it.
-    const borrowerId = z.string().uuid().optional().parse(req.query.borrowerId);
+    // Absent is the person asking, the same way the POST reads it — and
+    // Borrower 1 for a reader with no row of their own.
+    const asked = z.string().uuid().optional().parse(req.query.borrowerId);
+    const partyId = await partyOfUser(prisma, req.user!.id);
+    const borrowerId = asked ?? (partyId ? await ownRowOn(id, partyId) : undefined);
 
     const view = await loadDeclaration(id, borrowerId);
     res.json({ declaration: view });

@@ -71,7 +71,11 @@ connectorRouter.post(
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const input = consentSchema.parse(req.body);
-    await requireFile(id, req.user!.id);
+    // "self", not the module's write helper: a consent is one person's
+    // signature about themselves, and a co-borrower on the file gives their
+    // own. The rule below that the borrower named must be the person
+    // sending is what keeps it theirs.
+    await assertFileAccess(id, req.user!.id, "self");
 
     // The borrower must be THIS file's, or the row would name a person the
     // caller has no file for — and the trigger mirrors the grant onto whoever

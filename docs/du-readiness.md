@@ -554,10 +554,17 @@ What is still missing is narrower than it was, and none of it is structural:
   Google, never an email match — merges the named party into the person's own:
   the borrower row and the membership move to the survivor, the two facts the
   applicant stated are restated on it, and the person is listed as `claimed`
-  until their own screen 2 states a number. A member may read the file and
-  save screen 2 about themselves (`assertFileAccess` mode `self`); screens 3
-  through 5 still resolve "the borrower" by position, so declarations, a
-  bank, a signature and demographics as a co-borrower are the next slice.
+  until their own screen 2 states a number. A member reads the household's
+  half of the file and their own — the applicant's person is redacted to a
+  name — and completes their own half in their own session: screen 2 about
+  themselves, Section 5 about themselves (the route resolves an unnamed
+  `borrowerId` to the person asking), the three demographic questions, and
+  one signature that is theirs alone — their 4506-C and an
+  `application_signature` consent in their name, never the file's
+  `applicationSignedAt`, which stays the applicant's. What is still not
+  theirs: a bank of their own, because `connector_links` is unique per
+  `(loanFileId, kind)` and every report on the file is read as the
+  applicant's. Their half skips the bank step and says so.
 - **`connector_links` is unique on `(loanFileId, kind)`**, so a second borrower
   cannot link their own bank.
 - **The demographics are asked once**, of the applicant. Regulation B wants

@@ -924,7 +924,7 @@ function TheirWork({ name, jobs }: { name: string; jobs: readonly FileEmployment
  * as whoever is signed in, so a link out of somebody else's block would take
  * the applicant to answer in their own name.
  */
-function Answers({
+export function Answers({
   heading,
   lines,
   unanswered,

@@ -3,6 +3,7 @@ import { prisma } from "@hm/db";
 import { REQUIREMENTS } from "@hm/requirements";
 import { SHADOW_ENGINE_VERSION } from "@hm/underwriting";
 import { config } from "../config.js";
+import { aporStatus } from "../services/apor.js";
 import { providerMix, providerModes } from "../services/connectors.js";
 
 export const healthRouter = Router();
@@ -30,6 +31,13 @@ healthRouter.get("/", async (_req, res) => {
     databaseError = err instanceof Error ? err.message.split("\n")[0] : "unknown";
   }
 
+  const apor =
+    database === "ok"
+      ? await aporStatus().catch((err: unknown) => ({
+          error: err instanceof Error ? err.message.split("\n")[0] : "unknown",
+        }))
+      : null;
+
   res.status(database === "ok" ? 200 : 503).json({
     status: database === "ok" ? "ok" : "degraded",
     service: "homestead-mortgages-api",
@@ -51,6 +59,12 @@ healthRouter.get("/", async (_req, res) => {
     // rather than merely set, because the one thing that must never happen to
     // this flag is that nobody notices it is on.
     personas: config.demoPersonasEnabled ? "enabled" : "disabled",
+    // Whether the average prime offer rate series reaches the current week.
+    // Three legal tests block without it and every decision ends `referred`,
+    // and nothing else on this page would say so: the database answers, the
+    // vendors answer, the borrower walks four screens and lands on "In review".
+    // The deploy workflow asserts `coversThisWeek` after every deploy.
+    apor,
     timestamp: new Date().toISOString(),
   });
 });

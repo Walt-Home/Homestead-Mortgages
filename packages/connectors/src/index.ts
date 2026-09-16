@@ -12,3 +12,4 @@ export { PUBLIC_RECORDS, ADDRESS_BOOK } from "./fixtures/public-records.js";
 export { RATE_SHEET, SHEET_LOCK_DAYS } from "./fixtures/rate-sheet.js";
 export type { RateSheetProduct } from "./fixtures/rate-sheet.js";
 export type { PublicRecordFixture, IdentityDocument } from "./fixtures/public-records.js";
+export * from "./adapters/ffiec.js";

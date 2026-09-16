@@ -327,3 +327,160 @@ resource "google_cloud_run_v2_service_iam_member" "invokers" {
   role     = "roles/run.invoker"
   member   = each.value
 }
+
+# ── The average prime offer rate is fetched, on a schedule ───────────────────
+#
+# General QM, HPML and HOEPA are all decided against the average prime offer
+# rate for the week the loan's rate was set. It is a weekly publication, so a
+# table nobody fetches is a table that was current on the day somebody last
+# typed it, and that is what this replaces. The job is the same image as the
+# service with a different entrypoint: `scripts/fetch-apor.ts` fetches the
+# CFPB's survey, computes the week's rates by their published method, and
+# appends them to `apor_weeks`. It exits non-zero when the series it leaves
+# behind does not cover the current week, which makes a failed run the alarm.
+#
+# The deploy workflow runs the same script once per deploy, against the same
+# database, so a deployment is never waiting on the first scheduled run.
+
+resource "google_service_account" "scheduler" {
+  account_id   = "hm-scheduler"
+  display_name = "Cloud Scheduler for Homestead Mortgages jobs"
+  description  = "Invokes Cloud Run jobs on a schedule. Holds run.invoker on those jobs and nothing else."
+}
+
+resource "google_cloud_run_v2_job" "apor_fetch" {
+  name     = "homestead-mortgages-${var.environment}-apor-fetch"
+  location = var.region
+
+  template {
+    template {
+      service_account = var.service_account_email
+      max_retries     = 1
+      timeout         = "300s"
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.homestead-mortgages.connection_name]
+        }
+      }
+
+      containers {
+        image   = var.image
+        command = ["node"]
+        args    = ["apps/api/dist/scripts/fetch-apor.js"]
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "512Mi"
+          }
+        }
+
+        env {
+          name  = "NODE_ENV"
+          value = "production"
+        }
+
+        # The live adapter. The service itself never fetches — it reads the
+        # table this job writes — so this is the one place the provider is set
+        # to anything but the fixture.
+        env {
+          name  = "APOR_PROVIDER"
+          value = "ffiec"
+        }
+
+        env {
+          name = "DATABASE_URL"
+          value_source {
+            secret_key_ref {
+              secret  = var.database_url_secret
+              version = "latest"
+            }
+          }
+        }
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      }
+    }
+  }
+
+  # The deploy workflow updates the image on every deploy, the same way it
+  # deploys the service; Terraform owns the shape and not the tag.
+  lifecycle {
+    ignore_changes = [template[0].template[0].containers[0].image]
+  }
+}
+
+resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_apor_fetch" {
+  project  = google_cloud_run_v2_job.apor_fetch.project
+  location = google_cloud_run_v2_job.apor_fetch.location
+  name     = google_cloud_run_v2_job.apor_fetch.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.scheduler.email}"
+}
+
+resource "google_cloud_scheduler_job" "apor_fetch" {
+  name        = "homestead-mortgages-${var.environment}-apor-fetch"
+  description = "Fetch the CFPB survey and append this week's average prime offer rates."
+  schedule    = var.apor_fetch_schedule
+  time_zone   = "Etc/UTC"
+  region      = var.region
+
+  retry_config {
+    retry_count = 2
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.apor_fetch.name}:run"
+
+    oauth_token {
+      service_account_email = google_service_account.scheduler.email
+    }
+  }
+
+  depends_on = [google_cloud_run_v2_job_iam_member.scheduler_runs_apor_fetch]
+}
+
+# A failed execution is the alarm, and an alarm nobody hears is a log line.
+# Scheduler's own retry_config retries the HTTP call that STARTS the job, not
+# the job; the :run endpoint answers 200 before the container has done
+# anything. So the failure the fetch script exits with is only visible here.
+resource "google_monitoring_notification_channel" "alerts" {
+  count        = var.alert_email == "" ? 0 : 1
+  display_name = "Homestead Mortgages alerts"
+  type         = "email"
+  labels = {
+    email_address = var.alert_email
+  }
+}
+
+resource "google_monitoring_alert_policy" "apor_fetch_failed" {
+  count        = var.alert_email == "" ? 0 : 1
+  display_name = "APOR fetch failed (${var.environment})"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "a scheduled fetch of the average prime offer rate exited non-zero"
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_job\" AND resource.labels.job_name = \"${google_cloud_run_v2_job.apor_fetch.name}\" AND metric.type = \"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result = \"failed\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      aggregations {
+        alignment_period   = "3600s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.alerts[0].id]
+
+  documentation {
+    content = "The scheduled fetch of the CFPB's average prime offer rate table failed. Until it succeeds, every decision computed in a week the stored series does not reach blocks UW-008 and ends referred. Read the job's logs; if the CFPB has published and the fetch still fails, the file has changed shape."
+  }
+}

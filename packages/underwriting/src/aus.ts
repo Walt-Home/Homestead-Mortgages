@@ -38,6 +38,7 @@ import {
   reserves,
   revolvingUtilization,
 } from "./calculations.js";
+import type { AporTable } from "./apor.js";
 import { runComplianceTests, type MarketInputs } from "./compliance.js";
 import { closingCosts, FEE_SCHEDULE } from "./fee-schedule.js";
 import { resolveMarketInputs, statedMarket } from "./market.js";
@@ -64,6 +65,17 @@ export interface UnderwriteOptions {
    */
   readonly estimatedFees?: number;
   readonly estimatedPrepaids?: number;
+  /**
+   * The average prime offer rate series to compare against, or null when the
+   * caller has none.
+   *
+   * Required rather than defaulted, and null rather than absent: a default
+   * table is a checked-in file standing in for a weekly publication, and the
+   * one thing this engine must never do is compare a loan against the week
+   * somebody last ran a command. The API passes what it fetched; the tests pass
+   * `APOR_TABLE`; a caller with nothing says so and UW-008 blocks.
+   */
+  readonly aporTable: AporTable | null;
   /** Deterministic id for the casefile. Supplied so results are reproducible. */
   readonly casefileId: string;
   readonly now: string;
@@ -241,7 +253,7 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
   // loan.
   const { inputs: market, pricedAgainst } = options.market
     ? statedMarket(options.market)
-    : resolveMarketInputs(file, log);
+    : resolveMarketInputs(file, log, options.aporTable);
 
   /* ── Assets and reserves ──────────────────────────────────────────────── */
   // The fee schedule is this lender's own, not a market input, so a caller who

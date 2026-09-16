@@ -17,7 +17,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@hm/db";
 import { assessAll } from "@hm/requirements";
 import type { SanctionsScreening } from "@hm/shared";
@@ -35,6 +35,15 @@ import { borrowerObligations } from "../services/obligations.js";
 import { loadLoanFile } from "../services/repository.js";
 import { principalForParty } from "../services/party.js";
 import { toDomainState, transition } from "../services/transition.js";
+import { ingestFixtureApor } from "./support/apor.js";
+
+// The deploy fetches the average prime offer rates before it seeds, because the
+// sample borrowers are decided against that table; the tests do the same. A
+// seed against an empty table refers every persona whose market is derived,
+// which is right for a real deployment and wrong for a test of the stories.
+beforeEach(async () => {
+  await ingestFixtureApor();
+});
 
 /** Everything the seed writes, counted, so a second run can be compared. */
 async function census() {

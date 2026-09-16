@@ -438,14 +438,16 @@ decision made against stale numbers is not identifiable after the fact. Several
 of those thresholds change every January.
 
 ⚠ APR, APOR and the fee totals are now derived from the file rather than
-accepted from a caller — a dated weekly table looked up by the week the rate was
-set, a versioned fee schedule, and Appendix J's actuarial solve — so the four
-compliance tests run on a file a borrower walked and `clear_to_close` is
-reachable. Two things still block by design: a rate set past the last week the
-checked-in APOR table holds, and the APR on any loan carrying mortgage
-insurance, whose premium this engine holds only an estimated rate card for.
-Both produce `referred`, which is the honest outcome. See `docs/decisions.md`,
-"APOR, a fee schedule, and an APR we are willing to defend".
+accepted from a caller — the average prime offer rate computed from the CFPB's
+weekly survey by the CFPB's published method and fetched into `apor_weeks` on
+a schedule, a versioned fee schedule, and Appendix J's actuarial solve — so the
+four compliance tests run on a file a borrower walked and `clear_to_close` is
+reachable. Two things still block by design: a week the fetched series does
+not reach (the fetch script and `/api/health` both say so before a borrower
+does), and the APR on any loan carrying mortgage insurance, whose premium this
+engine holds only an estimated rate card for. Both produce `referred`, which is
+the honest outcome. See `docs/decisions.md`, "APOR, a fee schedule, and an APR
+we are willing to defend".
 
 ⚠ `apps/web/src/pages/DecisionPage.tsx` — the only surface that ever rendered the
 derivation audit trail — is dead code, reachable from no route. The derivation
@@ -696,8 +698,10 @@ tamper-evident record of a breach we never had the means to avoid.
   aggregator, IRS IVES, e-sign, OFAC screening, the lien/O&E search, and
   pricing. (`docs/decisions.md` lists five; it predates the screening and liens
   ports.) Plus the CLS-* closing sheet, a real tax/insurance source, the real
-  LLPA matrix, a real fee table, and the FFIEC's own APOR series in place of the
-  fixture one.
+  LLPA matrix, a real fee table, and a mortgage-insurance rate card — the one
+  input that keeps every loan above 80% LTV at `referred`. The APOR is no longer
+  on this list: it is fetched from the CFPB and computed by their method, and
+  the computation is tested against their published figures.
 - **CI cannot authenticate to GCP** until this repository is added to the Workload
   Identity provider's attribute condition and to `hm-github-actions@`'s
   `workloadIdentityUser` binding — per `docs/decisions.md`, which is in tension

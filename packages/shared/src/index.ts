@@ -7,3 +7,4 @@ export * from "./loan-machine.js";
 export * from "./trid.js";
 export * from "./branches.js";
 export * from "./copy-rules.js";
+export { FFIEC_SURVEY, FFIEC_YIELD_TABLE_FIXED } from "./generated/ffiec-survey.js";

@@ -1,0 +1,7 @@
+{
+  "url": "https://files.ffiec.cfpb.gov/apor/YieldTableFixed.txt",
+  "retrievedAt": "2026-09-16T19:05:00.000Z",
+  "lastModified": "Thu, 10 Sep 2026 18:41:14 GMT",
+  "etag": "\"859d6afbe47016a08b5b627ff3efc13f\"",
+  "note": "Written by `npm run apor:vendor`, never by hand. The file beside it is the CFPB's published fixed-rate APOR table exactly as served — the table its own rate-spread calculator reads; `scripts/build-apor.mjs` embeds it into packages/shared/src/generated/ffiec-survey.ts."
+}

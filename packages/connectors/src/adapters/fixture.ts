@@ -30,6 +30,7 @@ import type {
   SanctionsScreening,
   TaxTranscript,
 } from "@hm/shared";
+import { FFIEC_SURVEY, FFIEC_YIELD_TABLE_FIXED } from "@hm/shared";
 import {
   AddressNotFoundError,
   requireDocument,
@@ -37,6 +38,7 @@ import {
   requireScorableFico,
 } from "../ports/index.js";
 import type {
+  AporSeriesConnector,
   AssetReportResult,
   BankConnector,
   DuConnector,
@@ -692,6 +694,68 @@ export function fixtureDuConnector(options: FixtureOptions = {}): DuConnector {
   };
 }
 
+/**
+ * The vendored survey, served as though fetched.
+ *
+ * `FFIEC_SURVEY` in `@hm/shared` is the CFPB's file as it stood the last time
+ * somebody ran `npm run apor:vendor`, with the ETag and Last-Modified the server
+ * sent for it. Answering "unchanged" to its own ETag is what lets the ingest
+ * script be run twice against a development database and do nothing the
+ * second time, exactly as it would against the live server.
+ */
+function serveVendored(
+  doc: { url: string; lastModified: string; etag: string },
+  body: string,
+  latencyMs: number,
+): AporSeriesConnector["fetchSurvey"] {
+  return async (opts = {}) => {
+    await sleep(latencyMs);
+    const unchanged =
+      (opts.ifNoneMatch !== undefined && opts.ifNoneMatch === doc.etag) ||
+      (opts.ifModifiedSince !== undefined && opts.ifModifiedSince === doc.lastModified);
+    if (unchanged) return { status: "unchanged", etag: doc.etag };
+    return {
+      status: "fetched",
+      document: {
+        csv: body,
+        url: doc.url,
+        retrievedAt: new Date().toISOString(),
+        lastModified: doc.lastModified,
+        etag: doc.etag,
+      },
+    };
+  };
+}
+
+export function fixtureAporSeriesConnector(options: FixtureOptions = {}): AporSeriesConnector {
+  const { latencyMs } = resolve(options);
+  return {
+    capabilities: {
+      provider: "fixture-ffiec-survey",
+      mode: "fixture",
+      satisfies: ["UW-008"],
+    },
+    fetchTable: serveVendored(FFIEC_YIELD_TABLE_FIXED, FFIEC_YIELD_TABLE_FIXED.body, latencyMs),
+    fetchSurvey: serveVendored(FFIEC_SURVEY, FFIEC_SURVEY.csv, latencyMs),
+    // A calculator that reads the vendored table, so the check always agrees
+    // with the table it is checking. Honest about what it is: offline, the
+    // fixture can answer from nothing else.
+    async rateSpreadCheck({ weekOf, termYears }) {
+      await sleep(latencyMs);
+      const [m, d, y] = [weekOf.slice(5, 7), weekOf.slice(8, 10), weekOf.slice(0, 4)];
+      const row = FFIEC_YIELD_TABLE_FIXED.body
+        .split(/\r?\n/)
+        .find((line) => line.startsWith(`${m}/${d}/${y}|`));
+      if (!row)
+        return { status: "unavailable", reason: `the vendored table has no week of ${weekOf}` };
+      const rate = Number(row.split("|")[termYears]);
+      return Number.isFinite(rate)
+        ? { status: "answered", apor: rate }
+        : { status: "unavailable", reason: `the vendored table has no ${termYears}-year column` };
+    },
+  };
+}
+
 export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry {
   return {
     identity: fixtureIdentityConnector(options),
@@ -705,5 +769,6 @@ export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry
     liens: fixtureLienConnector(options),
     pricing: fixturePricingConnector(options),
     du: fixtureDuConnector(options),
+    aporSeries: fixtureAporSeriesConnector(options),
   };
 }

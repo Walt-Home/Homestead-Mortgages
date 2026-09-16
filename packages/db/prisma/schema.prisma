@@ -808,6 +808,64 @@ model Decision {
   @@map("decisions")
 }
 
+/// One CFPB document served, verbatim, with the headers it sent — either the
+/// PUBLISHED fixed-rate APOR table (the figure in force) or the weekly survey
+/// it is computed from (the cross-check).
+///
+/// Append-only, and the trigger `apor_fetches_are_a_record` keeps it so.
+/// `sha256` is unique because the same bytes are the same publication: a
+/// re-fetch of an unchanged file inserts nothing, which is what lets the ingest
+/// run every day.
+model AporFetch {
+  id           String    @id @default(uuid()) @db.Uuid
+  /// "yield_table_fixed" or "survey".
+  kind         String
+  retrievedAt  DateTime  @map("retrieved_at")
+  /// Which adapter fetched it: "ffiec-survey" or "fixture-ffiec-survey".
+  provider     String
+  sourceUrl    String    @map("source_url")
+  lastModified DateTime? @map("last_modified")
+  etag         String?
+  /// Not unique: a restored earlier file is the publication in force again.
+  /// "Already held" is "same bytes as the newest fetch of this kind".
+  sha256       String
+  rowCount     Int       @map("row_count")
+  /// The document as served. The audit record of what the CFPB published is
+  /// worth more than the disk.
+  body         String
+  writeSeq     BigInt    @unique @default(autoincrement()) @map("write_seq")
+
+  weeks AporWeek[]
+
+  @@index([kind, sha256], map: "apor_fetches_kind_and_sha")
+  @@map("apor_fetches")
+}
+
+/// The published average prime offer rate: one rate per (week, term) per fetch
+/// of the published table, taken from the file and not computed. Beside it,
+/// when the survey reaches that week, the survey figures, what Appendix J makes
+/// of them, and the difference — zero on every week the CFPB followed its own
+/// method, and the announced exceptions otherwise. The highest `writeSeq` for a
+/// (week, term) is the rate in force.
+model AporWeek {
+  id            String    @id @default(uuid()) @db.Uuid
+  fetchId       String    @map("fetch_id") @db.Uuid
+  fetch         AporFetch @relation(fields: [fetchId], references: [id], onDelete: Cascade)
+  weekOf        DateTime  @map("week_of") @db.Date
+  termYears     Int       @map("term_years")
+  rate          Decimal   @db.Decimal(6, 3)
+  surveyDate    DateTime? @map("survey_date") @db.Date
+  surveyRate    Decimal?  @map("survey_rate") @db.Decimal(14, 10)
+  surveyPoints  Decimal?  @map("survey_points") @db.Decimal(14, 10)
+  computedRate  Decimal?  @map("computed_rate") @db.Decimal(6, 3)
+  divergenceBps Int?      @map("divergence_bps")
+  writeSeq      BigInt    @unique @default(autoincrement()) @map("write_seq")
+
+  @@unique([fetchId, weekOf, termYears], map: "apor_weeks_one_rate_per_week_and_term_per_fetch")
+  @@index([weekOf, termYears], map: "apor_weeks_week_and_term")
+  @@map("apor_weeks")
+}
+
 model LoanCondition {
   id         String   @id @default(uuid()) @db.Uuid
   loanFileId String   @map("loan_file_id") @db.Uuid

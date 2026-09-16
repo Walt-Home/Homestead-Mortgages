@@ -28,7 +28,7 @@
  */
 
 import type { LoanFile, PricedAgainst } from "@hm/shared";
-import { APOR_TABLE, lookupApor } from "./apor.js";
+import { lookupApor, type AporTable } from "./apor.js";
 import { annualPercentageRate, APR_OMITS } from "./apr.js";
 import type { MarketInputs } from "./compliance.js";
 import { DerivationLog, round } from "./derive.js";
@@ -81,7 +81,21 @@ export function statedMarket(market: MarketInputs): ResolvedMarket {
   };
 }
 
-export function resolveMarketInputs(file: LoanFile, log: DerivationLog): ResolvedMarket {
+/**
+ * `aporTable` is handed in rather than imported, and null is a real value.
+ *
+ * The engine used to read a checked-in constant. That constant is computed from
+ * a survey somebody vendored on some day, and a deployment reading it would be
+ * comparing every loan against the week that person last ran a command — a
+ * stale answer that looks exactly like a current one. So the API passes the
+ * table it fetched into the database, and passes null when it has fetched
+ * nothing, and null blocks UW-008 with words that say what to run.
+ */
+export function resolveMarketInputs(
+  file: LoanFile,
+  log: DerivationLog,
+  aporTable: AporTable | null,
+): ResolvedMarket {
   /* ── The fee schedule (UW-007, APP-019) ───────────────────────────────── */
   const loanAmount = file.loan?.loanAmount ?? 0;
   const costs = closingCosts(FEE_SCHEDULE, loanAmount);
@@ -108,13 +122,18 @@ export function resolveMarketInputs(file: LoanFile, log: DerivationLog): Resolve
   let apor: number | undefined;
   let aporWeekOf: string | null = null;
   let aporSource: string | null = null;
-  if (!file.product) {
+  if (aporTable === null) {
+    log.blocked("UW-008", "Average prime offer rate", [
+      "the FFIEC's average prime offer rate series, which this deployment has not fetched " +
+        "(run apor:fetch)",
+    ]);
+  } else if (!file.product) {
     log.blocked("UW-008", "Average prime offer rate", ["a quoted product"]);
   } else if (file.product.rateQuotedAt === null) {
     log.blocked("UW-008", "Average prime offer rate", ["the date this loan's rate was set"]);
   } else {
     const lookup = lookupApor(
-      APOR_TABLE,
+      aporTable,
       new Date(file.product.rateQuotedAt),
       file.product.termMonths,
       file.product.amortization,

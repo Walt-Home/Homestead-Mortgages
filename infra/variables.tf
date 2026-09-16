@@ -220,3 +220,34 @@ variable "plaid_redirect_uri" {
   type        = string
   default     = ""
 }
+
+# ── The average prime offer rate ─────────────────────────────────────────────
+
+variable "apor_fetch_schedule" {
+  description = <<-EOT
+    When the survey behind the average prime offer rate is fetched, as a cron
+    expression in UTC.
+
+    The CFPB posts a new survey on Thursdays; the APORs computed from it take
+    effect the following Monday. Daily at noon UTC is deliberately more often
+    than weekly: the fetch is idempotent — a document already held inserts
+    nothing — and a run that finds nothing new costs a conditional GET. What
+    the extra runs buy is a series that recovers on its own from a Thursday the
+    file server was down, instead of a week of every decision blocking on
+    UW-008 until somebody notices.
+  EOT
+  type        = string
+  default     = "0 12 * * *"
+}
+
+variable "alert_email" {
+  description = <<-EOT
+    Where a failed scheduled fetch is reported. Cloud Scheduler sees a 200 the
+    moment the job STARTS, so a run that exits non-zero — the series not
+    covering the current week — reaches nobody unless an execution failure is
+    itself alerted on. Empty disables the alert rather than creating a channel
+    to nowhere.
+  EOT
+  type        = string
+  default     = ""
+}

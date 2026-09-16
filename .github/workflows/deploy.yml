@@ -110,6 +110,13 @@ jobs:
       - name: DU tables match the spec
         run: npm run du:verify
 
+      # The CFPB survey the average prime offer rate is computed from is vendored
+      # in data/ and embedded into @hm/shared by scripts/build-apor.mjs. Same
+      # discipline as the other three: a survey refreshed but never re-embedded
+      # would ship a fixture that disagrees with the file beside it.
+      - name: The embedded APOR survey matches its vendored source
+        run: npm run apor:verify
+
       # packages/du-schema validates the eighteen shipped DU samples against
       # the vendored MISMO chain by shelling out to xmllint, rather than adding
       # an XML schema validator to the dependency tree — see its README. It is
@@ -237,6 +244,31 @@ jobs:
       # the whole log on the one failure this step exists to catch — the drift
       # line naming which persona and where it stood, and any stack trace from
       # a walk that broke mid-way. Print first, then decide.
+      # The average prime offer rate, fetched from the CFPB before anything is
+      # decided against it. Three legal tests are compared against this series
+      # for the week a loan's rate was set, and it is a weekly publication: the
+      # survey posts on Thursdays and the rates take effect the following
+      # Monday. The script appends what is new (nothing, when the document is
+      # unchanged) and exits non-zero if the series it leaves behind does not
+      # cover the current week — so a CFPB outage or a reshaped file stops the
+      # deploy here, with the reason printed, rather than shipping a service on
+      # which every decision quietly ends "In review". Before the seed, because
+      # the sample borrowers are decided against this table too.
+      - name: Fetch the average prime offer rates
+        run: |
+          set +e
+          OUT=$(docker run --rm --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e APOR_PROVIDER=ffiec \
+            "$IMAGE" node apps/api/dist/scripts/fetch-apor.js 2>&1)
+          code=$?
+          set -e
+          echo "$OUT"
+          test "$code" -eq 0
+          grep -q 'covers this week: true' <<< "$OUT"
+        env:
+          DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
+
       - name: Seed the sample borrowers
         run: |
           set +e
@@ -299,6 +331,9 @@ jobs:
           ENV_VARS="$ENV_VARS,BANK_PROVIDER=plaid,PLAID_ENV=sandbox,PLAID_PRODUCT=assets"
           ENV_VARS="$ENV_VARS,PLAID_CLIENT_ID=${{ vars.PLAID_CLIENT_ID }}"
           ENV_VARS="$ENV_VARS,IDENTITY_PROVIDER=stripe,PROPERTY_DATA_PROVIDER=google_places"
+          # Reported by /health; the service itself never fetches — the step
+          # above and the scheduled job write the table it reads.
+          ENV_VARS="$ENV_VARS,APOR_PROVIDER=ffiec"
           #
           # STRIPE_ALLOW_LIVE_IDENTITY is deliberately absent, and the secret
           # deliberately names the sandbox key. Live identity collects a real
@@ -332,6 +367,30 @@ jobs:
             --min-instances 0 \
             --max-instances 3 \
             --timeout 120
+
+      # The scheduled fetch runs the same image with a different entrypoint.
+      # Terraform owns the job's shape and ignores its image tag, so this is
+      # what keeps the job on the code that was just deployed. Skipped, with a
+      # warning, until `terraform apply` has created it.
+      - name: Point the scheduled APOR fetch at this image
+        run: |
+          JOB=${{ env.SERVICE }}-apor-fetch
+          # "Does not exist" and "could not ask" are different answers. A
+          # permission error or a transient failure read as absence would leave
+          # the scheduled job on an old image forever, with a warning that
+          # says something else. Only NOT_FOUND is absence.
+          set +e
+          ERR=$(gcloud run jobs describe "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --format="value(name)" 2>&1 >/dev/null)
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            gcloud run jobs update "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$IMAGE" --quiet
+          elif grep -qiE "NOT_FOUND|not found|does not exist" <<< "$ERR"; then
+            echo "::warning::Cloud Run job $JOB does not exist yet; apply infra/ to schedule the APOR fetch. The deploy-time fetch above still ran."
+          else
+            echo "::error::could not describe Cloud Run job $JOB: $ERR"
+            exit 1
+          fi
 
       # Belt and braces, and not redundant: --allow-unauthenticated fails
       # SILENTLY when the org policy blocks it. Asserting the binding
@@ -378,6 +437,13 @@ jobs:
           case "$PROVIDERS" in
             *'"personas":"enabled"'*) echo "ok: sample borrowers are mounted" ;;
             *) echo "::error::DEMO_PERSONAS did not reach the service"; exit 1 ;;
+          esac
+          # The average prime offer rate series reaches the current week. The
+          # fetch step above asserted this against the database; this asserts
+          # the deployed revision reads the same table and reports it.
+          case "$PROVIDERS" in
+            *'"coversThisWeek":true'*) echo "ok: the APOR series covers this week" ;;
+            *) echo "::error::the deployed service reports an APOR series that does not cover this week"; exit 1 ;;
           esac
 
       # Reachable is not the same as working. A malformed Cloud SQL socket path

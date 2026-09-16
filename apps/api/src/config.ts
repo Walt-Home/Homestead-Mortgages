@@ -69,6 +69,12 @@ export const config = {
     propertyData: process.env.PROPERTY_DATA_PROVIDER ?? "fixture",
     identity: process.env.IDENTITY_PROVIDER ?? "fixture",
     bank: process.env.BANK_PROVIDER ?? "fixture",
+    /**
+     * "ffiec" fetches the CFPB's survey from files.ffiec.cfpb.gov; anything
+     * else serves the vendored copy. Only the fetch script and the scheduled
+     * job act on this — the API reads the table they write and never fetches.
+     */
+    aporSeries: process.env.APOR_PROVIDER ?? "fixture",
   },
 
   /**

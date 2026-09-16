@@ -22,6 +22,7 @@ import {
   type PersonaId,
 } from "@hm/connectors";
 import { prisma } from "@hm/db";
+import { ffiecAporSeriesConnector } from "@hm/connectors";
 import { config } from "../config.js";
 import { vendorTokenStore } from "./vendor-tokens.js";
 
@@ -137,7 +138,17 @@ export function connectors(): ConnectorRegistry {
       : `${bank.capabilities.provider}, no OAuth banks`;
   }
 
-  registry = { ...fixtures, propertyData, identity, bank };
+  // The CFPB's survey. No credential and no fallback question: the live file
+  // is public, and a deployment that cannot reach it has nothing to fall back
+  // to that would be true — the vendored copy is the week somebody last ran
+  // `apor:vendor`. The fetch script fails loudly instead.
+  let aporSeries = fixtures.aporSeries;
+  if (config.providers.aporSeries === "ffiec") {
+    aporSeries = ffiecAporSeriesConnector();
+    chosen.aporSeries = "ffiec-survey (files.ffiec.cfpb.gov)";
+  }
+
+  registry = { ...fixtures, propertyData, identity, bank, aporSeries };
   mix = chosen;
   // Read off the registry that was just assembled, not off `config`. The
   // configuration is the intent and the registry is the outcome, and every

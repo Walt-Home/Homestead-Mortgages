@@ -58,6 +58,9 @@ export interface MarketInputs {
   readonly closingCostTotal?: number;
 }
 
+/** A rate in whole thousandths of a percentage point, so bright lines compare as integers. */
+const milli = (x: number): number => Math.round(x * 1000);
+
 export function runComplianceTests(
   file: LoanFile,
   market: MarketInputs,
@@ -155,15 +158,25 @@ export function runComplianceTests(
     // spread rounded to hundredths before the comparison lands 2.2501 on 2.25
     // and hands the §1026.43(e)(1) presumption of compliance to a loan outside
     // it. The rounding is for the screen; the test is not the screen.
-    const exact = market.apr - market.apor;
-    const spread = round(exact);
-    qmStatus = exact < cap ? "qm" : "non_qm";
+    // In whole thousandths of a point. An APR carries three places and an
+    // APOR two, so the spread is exact at three — and a raw double difference
+    // is not: 8.28 - 6.78 is 1.4999999999999991, which a bright line stated
+    // as 1.5 would miss.
+    const exactMilli = milli(market.apr) - milli(market.apor);
+    const spread = exactMilli / 1000;
+    qmStatus = exactMilli < milli(cap) ? "qm" : "non_qm";
     log.record(
       "UW-006",
       "QM status",
       qmStatus,
-      `General QM price test: apr - apor (${spread}) below the ${cap} point threshold for this loan size`,
-      { apr: market.apr, apor: market.apor, spread, threshold: cap, dti_back_considered: dtiBack },
+      `General QM price test: apr - apor (${round(spread)}) below the ${cap} point threshold for this loan size`,
+      {
+        apr: market.apr,
+        apor: market.apor,
+        spread: round(spread),
+        threshold: cap,
+        dti_back_considered: dtiBack,
+      },
     );
   }
 
@@ -242,13 +255,13 @@ export function runComplianceTests(
     // one. The HOEPA trigger below keeps its strict > because §1026.32(a)(1)(i)
     // is worded the other way, "more than 6.5 percentage points"; it reads the
     // same exact spread for the same reason.
-    exactSpread = market.apr - market.apor;
+    exactSpread = (milli(market.apr) - milli(market.apor)) / 1000;
     hpmlSpread = round(exactSpread);
     const threshold =
       loanAmount > GUIDELINES.hpml.conformingLoanLimit
         ? GUIDELINES.hpml.firstLienJumboSpread
         : GUIDELINES.hpml.firstLienSpread;
-    isHpml = exactSpread >= threshold;
+    isHpml = milli(exactSpread) >= milli(threshold);
     log.record(
       "UW-008",
       "HPML spread",
@@ -285,7 +298,7 @@ export function runComplianceTests(
   // spread, because a true 6.5004 rounded to 6.50 fails a strict > as surely as
   // an exact 1.5 failed one.
   const aprTrigger =
-    exactSpread === null ? null : exactSpread > GUIDELINES.hoepa.firstLienAprSpread;
+    exactSpread === null ? null : milli(exactSpread) > milli(GUIDELINES.hoepa.firstLienAprSpread);
   const feeTrigger =
     pointsAndFeesRatio === null ? null : pointsAndFeesRatio > GUIDELINES.hoepa.pointsAndFeesPercent;
   if (principalDwelling === false) {

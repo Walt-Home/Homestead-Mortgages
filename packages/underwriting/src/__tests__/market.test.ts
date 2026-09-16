@@ -9,8 +9,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { LoanFile } from "@hm/shared";
-import { APOR_TABLE, loadAporTable, lookupApor, type AporTable } from "../apor.js";
+import { FFIEC_SURVEY, FFIEC_YIELD_TABLE_FIXED, type LoanFile } from "@hm/shared";
+import { loadAporTable, lookupApor, type AporTable } from "../apor.js";
+import { effectiveMonday, parseSurveyCsv } from "../apor-survey.js";
+import { APOR_TABLE, parseYieldTable } from "../apor-yield.js";
 import { annualPercentageRate } from "../apr.js";
 import { runComplianceTests } from "../compliance.js";
 import { DerivationLog, round } from "../derive.js";
@@ -106,35 +108,31 @@ describe("the loader catches the edits a lookup cannot", () => {
   });
 
   /**
-   * The alarm, and the only test in this repository that is allowed to read the
-   * clock.
+   * Where the alarm went.
    *
-   * `apor.ts` says the shipped series "WILL stop answering, on the Monday after
-   * the last row below, and that is the alarm working". It was half true. The
-   * table does stop answering — but nothing rang. Every other test pins its
-   * quote to `APOR_TABLE.weeks.at(-1)` precisely so it does not inherit the
-   * clock, which is right for a test about application states and leaves the
-   * suite fully green on the day every real borrower's file starts blocking
-   * UW-008, failing all four compliance tests, and ending `referred` with no
-   * edge out of `in_underwriting`. That is the regression this whole commit
-   * exists to remove, reinstating itself on a timer, invisibly.
-   *
-   * So this one test reads `new Date()` on purpose. It fails on the first
-   * Monday the series does not reach, in CI, before a borrower finds out —
-   * which is the difference between an alarm and a comment claiming there is
-   * one. When it fails, the fix is to add the weeks the FFIEC has since
-   * published. It is NOT to extend the series forward with invented rows; a
-   * fabricated APOR answers a legal test confidently and wrongly, where a
-   * missing one only refuses.
+   * This used to be the one test allowed to read the clock: it failed the
+   * first Monday the checked-in table no longer covered today. That table is
+   * gone. The series a deployment compares against is fetched into the
+   * database by `scripts/fetch-apor.ts`, which exits non-zero when what it
+   * leaves behind does not cover the current week, and `/api/health` reports
+   * the same fact for the deploy workflow to assert. The alarm now rings in
+   * the environment where a borrower would have hit it, and this test asserts
+   * the deterministic thing instead: the fixture table is the vendored survey,
+   * through the same computation, ending the Monday after its last Thursday.
    */
-  it("still covers the week we are in, so the staleness alarm is a failing test and not a comment", () => {
-    const answer = lookupApor(APOR_TABLE, new Date(), 360, "Fixed");
-    expect(
-      answer,
-      `The shipped APOR series ends the week of ${APOR_TABLE.weeks[APOR_TABLE.weeks.length - 1]!.weekOf} ` +
-        "and no longer covers today, so every file quoted today blocks UW-008 and ends `referred`. " +
-        "Add the weeks the FFIEC has published since. Do not invent them.",
-    ).toMatchObject({ found: true });
+  it("is the vendored PUBLISHED table, ending on its last Monday", () => {
+    const rows = parseYieldTable(FFIEC_YIELD_TABLE_FIXED.body);
+    expect(APOR_TABLE.weeks[APOR_TABLE.weeks.length - 1]!.weekOf).toBe(
+      rows[rows.length - 1]!.weekOf,
+    );
+    expect(APOR_TABLE.source).toContain(FFIEC_YIELD_TABLE_FIXED.lastModified);
+    // And the survey's last Thursday is four days before it: the two documents
+    // are published together, and a fixture where they had drifted apart would
+    // cross-check the wrong weeks.
+    const survey = parseSurveyCsv(FFIEC_SURVEY.csv);
+    expect(effectiveMonday(survey[survey.length - 1]!.surveyDate)).toBe(
+      rows[rows.length - 1]!.weekOf,
+    );
   });
 });
 
@@ -461,6 +459,23 @@ describe("what the tests downstream do with those figures", () => {
     const hoepa = log.all().find((d) => d.label === "HOEPA high-cost test")!;
     expect(hoepa.blockedBy).toBeUndefined();
     expect(hoepa.value).toBe("out_of_scope");
+  });
+
+  it("compares bright lines in thousandths, so 8.28 against 6.78 is 1.5 and not 1.4999999999999991", () => {
+    // A raw double difference misses a threshold it equals. The APR is three
+    // places and the APOR two, so the spread is exact in thousandths.
+    const at = runComplianceTests(refinance(), { apr: 8.28, apor: 6.78 }, 30, new DerivationLog());
+    expect(at.hpmlSpread).toBe(1.5);
+    expect(at.isHpml).toBe(true);
+    const hoepa = runComplianceTests(
+      refinance(),
+      { apr: 13.28, apor: 6.78 },
+      30,
+      new DerivationLog(),
+    );
+    expect(hoepa.hpmlSpread).toBe(6.5);
+    // "more than 6.5" — exactly 6.5 is not high-cost on the rate trigger.
+    expect(hoepa.isHighCost === true && hoepa.pointsAndFeesRatio === null).toBe(false);
   });
 
   it("calls a spread of exactly 1.5 an HPML, because the rule says 'or more'", () => {

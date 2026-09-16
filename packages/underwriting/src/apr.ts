@@ -103,7 +103,19 @@ function presentValue(payment: number, i: number, n: number): number {
   return (payment * (1 - Math.pow(1 + i, -n))) / i;
 }
 
-export function annualPercentageRate(inputs: AprInputs): AprResult {
+/**
+ * The solve, unrounded.
+ *
+ * `annualPercentageRate` rounds this to three places for the decision. The
+ * average prime offer rate is published to two, and rounding a three-place
+ * figure to two is not the same as rounding the exact one: anything in
+ * [x.xx45, x.xx50) goes up twice. Nine of the 208 fixed-rate figures in one
+ * vendored year did, and every one landed a basis point above the CFPB's own
+ * table — in the direction that under-flags HPML and HOEPA and over-passes
+ * General QM at the line. So a caller that publishes at a different precision
+ * starts here and rounds once.
+ */
+export function solveAnnualPercentageRate(inputs: AprInputs): AprResult {
   const { loanAmount, noteRate, termMonths, prepaidFinanceCharges } = inputs;
 
   if (inputs.amortization !== "Fixed") {
@@ -180,8 +192,14 @@ export function annualPercentageRate(inputs: AprInputs): AprResult {
 
   return {
     computed: true,
-    apr: round(((lo + hi) / 2) * 12 * 100, 3),
+    apr: ((lo + hi) / 2) * 12 * 100,
     amountFinanced,
     monthlyPayment: round(monthlyPayment, 2),
   };
+}
+
+/** The annual percentage rate, in percent, to three places. */
+export function annualPercentageRate(inputs: AprInputs): AprResult {
+  const solved = solveAnnualPercentageRate(inputs);
+  return solved.computed ? { ...solved, apr: round(solved.apr, 3) } : solved;
 }

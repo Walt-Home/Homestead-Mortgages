@@ -17,6 +17,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { APOR_TABLE } from "../apor-yield.js";
 import type { LoanFile } from "@hm/shared";
 import { underwrite } from "../aus.js";
 import { REFERENCE, connectedThrough } from "./support/in-memory-file.js";
@@ -34,7 +35,7 @@ interface Options {
 }
 
 const decide = (file: LoanFile, options: Options = {}) =>
-  underwrite(file, { casefileId: "outcome-test", now, ...options });
+  underwrite(file, { aporTable: APOR_TABLE, casefileId: "outcome-test", now, ...options });
 
 const fullyConnected = () => connectedThrough("clean_w2", "irs");
 

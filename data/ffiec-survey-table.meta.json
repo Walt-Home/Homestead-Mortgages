@@ -1,0 +1,7 @@
+{
+  "url": "https://files.ffiec.cfpb.gov/apor/SurveyTable.csv",
+  "retrievedAt": "2026-09-16T15:12:00.000Z",
+  "lastModified": "Thu, 10 Sep 2026 18:41:13 GMT",
+  "etag": "\"33c83bb4db671600282049ba5f60a3f1\"",
+  "note": "Written by `npm run apor:vendor`, never by hand. The CSV beside it is the CFPB's survey exactly as served; `scripts/build-apor.mjs` embeds both into packages/shared/src/generated/ffiec-survey.ts."
+}

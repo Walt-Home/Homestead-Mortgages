@@ -181,7 +181,7 @@ const GUARDED_PORTS = [
   "du",
 ] as const;
 type GuardedPort = (typeof GUARDED_PORTS)[number];
-const UNGUARDED_PORTS = ["identity", "esign", "propertyData"] as const;
+const UNGUARDED_PORTS = ["identity", "esign", "propertyData", "aporSeries"] as const;
 
 describe("a token is for one kind of data", () => {
   it("refuses a token at the adapter when it is for something else", () => {
@@ -432,6 +432,30 @@ describe("what is deliberately not guarded", () => {
     // @ts-expect-error the scenario names a loan, and a token cannot be given
     const ignored = await registry.pricing.quoteProducts(SCENARIO, token("credit_report"));
     expect(ignored.map((q) => q.productCode)).toEqual(quotes.map((q) => q.productCode));
+  });
+
+  it("does NOT guard the CFPB survey, which is a publication and names nobody", async () => {
+    // The average prime offer rate is computed from a public weekly file that
+    // carries no borrower, no address and no loan. There is nothing an
+    // authorization could be FOR, so the call takes no token — and, as with the
+    // rate sheet, the type is the assertion: handing it one is a compile error.
+    const fetched = await registry.aporSeries.fetchSurvey();
+    expect(fetched.status).toBe("fetched");
+    if (fetched.status === "fetched") {
+      expect(fetched.document.csv.startsWith("Date,")).toBe(true);
+      expect(fetched.document.etag).toBeTruthy();
+    }
+    const table = await registry.aporSeries.fetchTable();
+    expect(table.status).toBe("fetched");
+    if (table.status === "fetched") {
+      expect(table.document.csv.startsWith("Term of Loan in Years|")).toBe(true);
+    }
+    expect(
+      await registry.aporSeries.rateSpreadCheck({ weekOf: "2026-09-14", termYears: 30 }),
+    ).toEqual({ status: "answered", apor: 6.84 });
+    // @ts-expect-error a survey is keyed on nothing, and a token cannot be given
+    const again = await registry.aporSeries.fetchSurvey(token("credit_report"));
+    expect(again.status).toBe("fetched");
   });
 
   it("does NOT guard the ID scan, which is how the authorization gets a name on it", async () => {

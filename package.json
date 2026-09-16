@@ -10,7 +10,7 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "test": "turbo test",
-    "check": "tsc -b && npm run requirements:verify && npm run brand:verify && npm run du:verify",
+    "check": "tsc -b && npm run requirements:verify && npm run brand:verify && npm run du:verify && npm run apor:verify",
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,css,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,css,md}\"",
     "requirements:build": "node scripts/build-requirements.mjs",
@@ -24,7 +24,11 @@
     "db:test:setup": "node scripts/setup-test-db.mjs",
     "db:studio": "npm run studio --workspace=@hm/db",
     "clean": "turbo clean && rm -rf node_modules",
-    "seed:personas": "tsx apps/api/src/scripts/seed-personas.ts"
+    "seed:personas": "tsx apps/api/src/scripts/seed-personas.ts",
+    "apor:build": "node scripts/build-apor.mjs",
+    "apor:verify": "node scripts/build-apor.mjs --verify",
+    "apor:fetch": "tsx apps/api/src/scripts/fetch-apor.ts",
+    "apor:vendor": "tsx apps/api/src/scripts/fetch-apor.ts --vendor && node scripts/build-apor.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

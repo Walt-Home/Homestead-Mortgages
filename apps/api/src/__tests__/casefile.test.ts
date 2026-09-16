@@ -22,7 +22,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
-import { underwrite } from "@hm/underwriting";
+import { underwrite, APOR_TABLE } from "@hm/underwriting";
 import { fileRouter } from "../routes/files.js";
 import { decisionRouter } from "../routes/decision.js";
 import { casefileIdForFile } from "../services/applications.js";
@@ -145,7 +145,11 @@ describe("a casefile survives a resubmission", () => {
     const { fileId } = await startedFile();
     const file = (await loadLoanFile(fileId))!;
     const handed = randomUUID();
-    const decision = underwrite(file, { casefileId: handed, now: new Date().toISOString() });
+    const decision = underwrite(file, {
+      aporTable: APOR_TABLE,
+      casefileId: handed,
+      now: new Date().toISOString(),
+    });
 
     await recordDecision(prisma, fileId, decision);
 

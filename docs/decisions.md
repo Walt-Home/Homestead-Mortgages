@@ -592,7 +592,9 @@ from a vendor.
 ### APOR is a dated series with a lookup, and it goes stale by refusing
 
 `packages/underwriting/src/apor.ts` holds the FFIEC's own shape — a header of
-terms, one row per week — with a loader and a lookup. The lookup takes the
+terms, one row per week — with a loader and a lookup. Where the rows come from
+is the section after this one; this one is about what a lookup may and may not
+answer, and it is unchanged by the source. The lookup takes the
 **week the rate was set**, which is what Regulation Z compares against, and
 reads the column for the loan's term. Three refusals rather than
 approximations: a term with no column, an adjustable-rate product (compared
@@ -626,10 +628,164 @@ closest recorded fact to the day the rate was set. Nothing here locks a rate,
 so there is no lock date; the two are the same day on every quote this flow
 writes, and whoever builds locking replaces the reading with the lock date.
 
-⚠ The rates in that table are fixture data, exactly as `RATE_SHEET`'s are. The
-FFIEC's published series is a document this repository does not hold. Every
-derivation that reads one records `apor_source`, so a stored decision says which
-table answered it and stays readable after a real feed arrives.
+### The APOR is the CFPB's published table, and the survey is the check on it
+
+The first version of this held thirty-eight weeks of rates typed into a source
+file and marked fixture data. It was fixture data, and it was also wrong by
+fifty-five basis points the week it was written: the real 30-year APOR for the
+week of 2026-09-14 is 6.84, and the file said 6.29. Every spread on staging was
+being measured against a number half a point low. A table nobody fetches is a
+table that was current on the day somebody last typed it.
+
+What replaced it starts from what an APOR actually is. **Nobody quotes it.** It
+is an APR the CFPB computes every week from a survey of what prime borrowers
+were offered — a contract rate and points for each of eight products — using
+Appendix J to Regulation Z with assumptions its methodology page lists: a fully
+amortizing loan, monthly compounding, equal payments to the fraction of a cent,
+thirty-day months, and no odd-days interest.
+
+The CFPB publishes three things, all on plain file servers with no credential:
+
+- **the table itself**, `https://files.ffiec.cfpb.gov/apor/YieldTableFixed.txt`
+  — one Monday per row since 2017, a column for every term from one to fifty
+  years, the file its own rate-spread calculator reads. **This is the figure in
+  force and it is the source of truth here.**
+- **the survey**, `SurveyTable.csv` — one Thursday per row, the rates and
+  points the table is computed from. Updated in the same second as the table.
+- **the calculator**, `POST https://ffiec.cfpb.gov/public/rateSpread` — a
+  spread against a given APR for a given week and term, so at an APR of 10.000
+  the APOR is ten minus the answer.
+
+The first draft of this change did not know about the first. It vendored the
+survey, computed the table from it with the same Appendix J solver the engine
+uses for a borrower's own APR, and pinned one week to the CFPB's published
+figures. A refuter pass found the published file, and then found — by
+comparing all 208 figures in the vendored year against it — that a
+computation from the survey is wrong for the weeks the CFPB deviates from its
+own method **by announcement**, which a computation cannot know:
+
+- **2025-12-29.** Christmas fell on the survey Thursday. Per the method's
+  footnote 2 the CFPB republished the prior week's figures. The survey file
+  nevertheless carries a 2025-12-25 row, which computes to numbers the CFPB
+  never put in force — seven basis points off on the 30-year.
+- **2026-01-05.** Two sets were published for the week, and the calculator took
+  the HIGHER figure per term: for the 30-year that was the revision, for the
+  20-, 15- and 10-year it was the first set. The pinned test asserted the
+  revised set on all four terms and was wrong on three.
+- **Nine other figures were a basis point high** through no fault of the
+  CFPB's: `annualPercentageRate` rounds to three places for a decision, and
+  rounding that to the two the CFPB publishes rounds anything in [x.xx45,
+  x.xx50) up twice. Every one landed in the direction that under-flags HPML
+  and HOEPA at the line.
+
+So the design inverted. **`apor-yield.ts` parses the published table, and
+`apor_weeks.rate` is taken from it and never computed.** The survey computation
+became the **cross-check**: for every week the survey reaches, Appendix J on
+the survey row is stored beside the published figure with the difference in
+basis points, and the fetch prints every divergence. On every week the CFPB
+followed its own method the two agree to the cent; a test sweeps the whole
+vendored year and asserts that the divergences are EXACTLY the seven (week,
+term) pairs above and nothing else, so a new deviation is a failing test and a
+question rather than a number nobody measured. A divergence is never a refusal:
+the published figure is in force whatever the arithmetic says. The rounding is
+fixed at the root — the solver now exposes its unrounded result and each
+consumer rounds once — and a test pins one of the nine boundary cases.
+
+The same pass caught a smaller thing in `compliance.ts` that the refuters'
+own arithmetic tripped over: `8.28 - 6.78` is `1.4999999999999991` in a
+double, so a spread that equals a bright line stated as 1.5 could miss a `>=`.
+An APR carries three places and an APOR two, so the spread is exact in
+thousandths, and the three price tests now compare integers.
+
+After every ingest the fetch also asks the calculator for the latest week on
+the two terms V1 quotes and compares the answer to the row it stored. An
+outage there is printed and is not a failure; an *answer* that disagrees is two
+CFPB sources contradicting each other, and the fetch exits non-zero for a
+person to look.
+
+Two corrections to the obvious question, which was "can we fetch the rate from
+Freddie or Fannie":
+
+- **Fannie publishes nothing here.**
+- **Freddie's survey stopped being the input in April 2023.** The survey data
+  are ICE Mortgage Technology's now, published through the CFPB. And the survey
+  was never the APOR even when it was Freddie's: the APOR is what the CFPB makes
+  of the survey, points included. A loan measured against the raw survey rate is
+  measured against a number nobody published as an APOR — the same error as a
+  note rate wearing an APR's name, one layer up.
+
+**The series is data, fetched on a schedule, and the engine never reaches for
+a file.** `scripts/fetch-apor.ts` fetches both documents through the
+`aporSeries` connector port (the fixture adapter serves the vendored copies;
+the `ffiec` adapter reads the live files, conditionally — the CFPB's server
+honors `If-Modified-Since` and ignores `If-None-Match`, measured, so both are
+sent), parses each with a parser that refuses what it cannot vouch for, and
+appends the published weeks to two tables with the cross-check beside them. `underwrite` takes the table as a
+required option and the API hands it what `apor_weeks` holds — or null, and a
+blocked UW-008 whose words say to run `apor:fetch`. There is no default table.
+A default would be the week somebody last ran a command, standing in for a
+weekly publication, in a legal test that would look current.
+
+Two append-only tables, in the shape of the thing they record:
+
+- `apor_fetches`: one row per document the CFPB served, of either kind,
+  verbatim, with the headers it sent and a hash. "Already held" is the same
+  bytes as the NEWEST fetch of that kind — not as any fetch ever, because the
+  CFPB can restore an earlier file and when it does that file is the
+  publication in force again. A daily re-fetch of an unchanged document
+  inserts nothing, which is what makes the schedule safe.
+- `apor_weeks`: one published rate per (week, term) per fetch of the table,
+  and beside it — when the survey reaches that week — the survey figures, what
+  Appendix J makes of them, and the difference. The database checks that a
+  week is a Monday, a survey a Thursday, the one four days after the other,
+  and that the recorded divergence is the recorded difference.
+
+**Revisions are why both are append-only and why the lookup takes the latest
+row.** The CFPB updates the published file in place and it holds the figure in
+force, so the latest fetch is the latest publication: a changed figure for a
+week already held is inserted beside the old, the old stays because a decision
+may cite it, and the highest `write_seq` is the rate in force. The ingest
+refuses a document that ends earlier, or was modified earlier, than the newest
+one held — a stale mirror, a cache, a developer's vendored copy — so the table
+cannot walk backwards; it refuses a fixture document in production outright,
+and beside a live one anywhere. A trigger refuses UPDATE and DELETE on both
+tables. Provenance travels per week: the published file is a rolling window,
+so a week can stay in force from a fetch a newer file no longer carries, and
+a decision on it cites the fetch that actually answered. Recovering what a
+year-old decision was measured against is a read, not a reconstruction.
+
+**The vendored copies are for tests and developers, and they are brought
+forward by one command.** `data/ffiec-yield-table-fixed.txt` and
+`data/ffiec-survey-table.csv` are the CFPB's files as served, the `.meta.json`
+beside each is what the server said, and `scripts/build-apor.mjs` embeds all
+of it into `@hm/shared` — `npm run apor:verify` fails CI if they disagree, the
+same discipline as the requirement registry, the brand tokens and the DU
+tables. `npm run apor:vendor` refreshes them. Nobody edits a row.
+
+### Where the staleness alarm rings now
+
+The previous section's alarm was a test that read the clock and failed the
+first Monday the typed table no longer covered today. That test is gone with
+the table. The alarm is in the environment where a borrower would have hit it:
+
+- **The fetch script exits non-zero** when the series it leaves behind does not
+  cover the current week. The deploy workflow runs it, from the live file,
+  before it seeds, and stops the deploy on a non-zero exit — a CFPB outage or a
+  reshaped file is a red build with the reason printed, not a service on which
+  every decision quietly ends "In review".
+- **`/api/health` reports `apor.coversThisWeek`**, and the deploy asserts it
+  against the deployed revision after the fetch has run.
+- **A Cloud Run job on a Cloud Scheduler cron** (`infra/main.tf`) runs the same
+  script daily at noon UTC. Daily rather than weekly because the fetch is
+  idempotent and a series that recovers on its own from a Thursday the file
+  server was down is worth a conditional GET a day. The job's image follows
+  each deploy; Terraform owns its shape and ignores the tag.
+
+⚠ The job and its schedule are declared and not yet applied — CI cannot
+authenticate to GCP until the Workload Identity binding exists, and
+`terraform apply` is run by hand. Until then the deploy-time fetch is what
+keeps staging current, which means staging goes stale between deploys that are
+more than a week apart. The deploy step warns when the job is absent.
 
 ### The fee schedule is one list and three totals
 
@@ -834,16 +990,10 @@ APR for a loan that carries mortgage insurance in fact.
 and that is the alarm working." Half true. It stops — but every test pins its
 quote to the last week in the table, exactly so it does not inherit the clock,
 which is right for a test about application states and left **the whole suite
-green on the day every real borrower's file starts referring.** One test now
-reads `new Date()` on purpose and fails in CI the first Monday the series does
-not reach. That is the difference between an alarm and a comment claiming there
-is one.
-
-⚠ **The consequence is operational: this table needs a weekly edit.** Until a
-real FFIEC feed replaces the fixture, someone adds the published weeks or the
-product stops deciding. The fix when that test fails is to add the weeks the
-FFIEC has actually published — never to extend the series forward with invented
-rows, which turns a blocked test into a confidently wrong one.
+green on the day every real borrower's file starts referring.** One test then
+read `new Date()` on purpose and failed in CI the first Monday the series did
+not reach. That held for one day: the typed table is gone, the series is
+fetched, and "Where the staleness alarm rings now" above is where it went.
 
 ### Known and open, in the same file
 

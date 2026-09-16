@@ -56,6 +56,7 @@ import { principalForParty, servicePrincipal } from "../services/party.js";
 import { applicationStanding, rawLedger, settleBorrowerAct } from "../services/standing.js";
 import { advanceIfLegal, moved, transition } from "../services/transition.js";
 import { consent, createUser } from "./support/factories.js";
+import { ingestFixtureApor } from "./support/apor.js";
 import { callAs } from "./support/http.js";
 
 /** Screen 1's body: a $415,000 house with a $332,000 loan. */
@@ -523,7 +524,11 @@ describe("the decision", () => {
    * it means instead of inheriting the clock.
    */
   async function quotedInAporWeek(fileId: string) {
-    const last = APOR_TABLE.weeks[APOR_TABLE.weeks.length - 1]!;
+    // The route reads the series from the database, which is empty between
+    // tests; ingest the vendored survey first, the way the deploy does before
+    // it seeds, and pin the quote to the last week of what that produced.
+    const table = await ingestFixtureApor();
+    const last = table.weeks[table.weeks.length - 1]!;
     await prisma.loanFile.update({
       where: { id: fileId },
       data: { rateQuotedAt: new Date(`${last.weekOf}T12:00:00.000Z`) },
@@ -713,6 +718,10 @@ describe("the decision", () => {
   it("changes nothing while the borrower still owes something", async () => {
     const { user, fileId, borrower } = await needingPayroll();
     await connectAs("variable_income", "payroll", fileId, borrower.partyId);
+    // A decision the engine CAN reach: with no series fetched it refers, and a
+    // referral is not a decision the machine would have applied anyway, so the
+    // held-decision event this asserts on would never be written.
+    await quotedInAporWeek(fileId);
     expect(await statusOf(fileId)).toBe("awaiting_borrower");
     const before = await ledgerOf(fileId);
 
@@ -890,7 +899,11 @@ describe("a sanctions hold", () => {
     expect(await statusOf(fileId)).toBe("in_processing");
 
     const file = (await loadLoanFile(fileId))!;
-    const decision = underwrite(file, { casefileId: randomUUID(), now: new Date().toISOString() });
+    const decision = underwrite(file, {
+      aporTable: APOR_TABLE,
+      casefileId: randomUUID(),
+      now: new Date().toISOString(),
+    });
     const before = await ledgerOf(fileId);
 
     const raced = prisma.$transaction(async (tx) => {

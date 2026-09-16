@@ -628,6 +628,78 @@ export interface DuConnector {
   ): Promise<ConnectorResult<DuResponse>>;
 }
 
+/**
+ * The CFPB's weekly mortgage-rate survey, which the average prime offer rate
+ * is computed from.
+ *
+ * A source and not a person: the file names no borrower, no address and no
+ * loan, so there is nothing an authorization could be for and the call takes
+ * no token. It is the one port in the registry that fetches a publication
+ * rather than a report, which is why it returns a document with the server's
+ * own headers on it and not a `ConnectorResult` — the provenance a decision
+ * records for an APOR is "which publication", and the publication's identity
+ * is its ETag and its Last-Modified, not an external id a vendor minted.
+ *
+ * Nothing on a request path calls this. `scripts/fetch-apor.ts` does, on a
+ * schedule, and writes what it gets into `apor_survey_fetches`; the API reads
+ * that table. A route that fetched on demand would put a decision's inputs at
+ * the mercy of a government file server at the moment a borrower clicked.
+ */
+export interface AporSurveyDocument {
+  /** The document exactly as served. Parsed in `@hm/underwriting`, never here. */
+  readonly csv: string;
+  readonly url: string;
+  readonly retrievedAt: string;
+  /** The server's Last-Modified header, verbatim, or null if it sent none. */
+  readonly lastModified: string | null;
+  /** The server's ETag, verbatim, or null if it sent none. */
+  readonly etag: string | null;
+}
+
+export type AporSurveyFetch =
+  | { readonly status: "fetched"; readonly document: AporSurveyDocument }
+  /** The server answered 304 to the headers it was given. Nothing to ingest. */
+  | { readonly status: "unchanged"; readonly etag: string | null };
+
+export interface AporSeriesConnector {
+  readonly capabilities: ConnectorCapabilities;
+  /**
+   * The PUBLISHED fixed-rate table — `YieldTableFixed.txt`, one Monday per
+   * row, the file the CFPB's own calculator reads. The figure in force, and
+   * the source of truth; the survey below is the cross-check. Same
+   * conditional-request contract as `fetchSurvey`.
+   */
+  fetchTable(options?: {
+    readonly ifNoneMatch?: string;
+    readonly ifModifiedSince?: string;
+  }): Promise<AporSurveyFetch>;
+  /**
+   * Fetch the survey, conditionally when the previous fetch's headers are
+   * given. Both are sent because the CFPB's file server honors
+   * `If-Modified-Since` and ignores `If-None-Match` — measured, not assumed —
+   * and a server that honors either is a 304 instead of eighteen kilobytes.
+   * Throws on any answer that is not the survey — a non-2xx status, or a body
+   * that does not begin with the survey's header row — rather than returning
+   * something a parser would then have to refuse.
+   */
+  fetchSurvey(options?: {
+    readonly ifNoneMatch?: string;
+    readonly ifModifiedSince?: string;
+  }): Promise<AporSurveyFetch>;
+  /**
+   * Ask the CFPB's own rate-spread calculator what it holds for a week and a
+   * term, as a check on what was just ingested. The calculator answers a
+   * spread against a given APR; at an APR of 10.000 the APOR is 10 minus the
+   * spread. "unavailable" is an outage, not a disagreement, and is reported
+   * rather than failed on; an ANSWER that disagrees with the stored row is a
+   * contradiction between two CFPB sources and is failed on.
+   */
+  rateSpreadCheck(input: {
+    readonly weekOf: string;
+    readonly termYears: number;
+  }): Promise<{ status: "answered"; apor: number } | { status: "unavailable"; reason: string }>;
+}
+
 export interface ConnectorRegistry {
   readonly identity: IdentityConnector;
   readonly credit: CreditConnector;
@@ -640,4 +712,5 @@ export interface ConnectorRegistry {
   readonly liens: LienConnector;
   readonly pricing: PricingConnector;
   readonly du: DuConnector;
+  readonly aporSeries: AporSeriesConnector;
 }

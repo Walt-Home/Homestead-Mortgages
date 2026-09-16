@@ -14,6 +14,7 @@ import { assertFileAccess, loadLoanFile, recordEvent } from "../services/reposit
 import { advanceStage } from "../services/stage.js";
 import { applicationForFile, casefileIdForFile } from "../services/applications.js";
 import { decideApplication, recordDecision } from "../services/decide.js";
+import { aporTableFromDatabase } from "../services/apor.js";
 import { applicationStanding } from "../services/standing.js";
 
 export const decisionRouter = Router();
@@ -46,6 +47,10 @@ decisionRouter.post(
     const decision = underwrite(file, {
       casefileId: await casefileIdForFile(id),
       now: new Date().toISOString(),
+      // The series this deployment has fetched, or null and a blocked UW-008.
+      // Never the checked-in table: that is the week somebody last ran a
+      // command, and a legal test compared against it would look current.
+      aporTable: await aporTableFromDatabase(),
     });
 
     // The decision is always appended; whether it MOVES the application is a

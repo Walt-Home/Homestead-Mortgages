@@ -50,6 +50,7 @@
 
 import { fileURLToPath } from "node:url";
 import { prisma } from "@hm/db";
+import { aporTableFromDatabase } from "../services/apor.js";
 import type { DuResidencyBasis, Prisma } from "@hm/db";
 import {
   fixtureRegistry,
@@ -862,6 +863,11 @@ async function decide(w: Walk): Promise<void> {
   const decision = underwrite(file, {
     casefileId: await casefileIdForFile(w.loanFileId, w.tx),
     now: new Date().toISOString(),
+    // The same table the route reads. The deploy fetches before it seeds, so a
+    // persona quoted today is compared against this week's published rate; a
+    // seed run against a database with nothing fetched refers the personas
+    // that derive their market, which is what a real file would do.
+    aporTable: await aporTableFromDatabase(w.tx),
     ...(w.story.market ? { market: w.story.market } : {}),
   });
   const { decisionId } = await recordDecision(w.tx, w.loanFileId, decision);

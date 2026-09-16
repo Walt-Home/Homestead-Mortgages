@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import { fixtureRegistry, PERSONAS } from "@hm/connectors";
 import type { LoanFile } from "@hm/shared";
 import { assessAll, outstanding, progress } from "@hm/requirements";
-import { underwrite } from "@hm/underwriting";
+import { underwrite, APOR_TABLE } from "@hm/underwriting";
 import {
   REFERENCE,
   afterDeclarations,
@@ -569,6 +569,7 @@ describe("the decision", () => {
 
   it("computes ratios from connected data", async () => {
     const decision = underwrite(await fullyConnected(), {
+      aporTable: APOR_TABLE,
       casefileId: "test-casefile",
       now: REFERENCE.toISOString(),
     });
@@ -582,6 +583,7 @@ describe("the decision", () => {
 
   it("records a derivation for every number it reports", async () => {
     const decision = underwrite(await fullyConnected(), {
+      aporTable: APOR_TABLE,
       casefileId: "test-casefile",
       now: REFERENCE.toISOString(),
     });
@@ -602,6 +604,7 @@ describe("the decision", () => {
   it("refers rather than approves when an input could not be computed", async () => {
     // Mortgage insurance, so there is no APR and the tests that need one block.
     const decision = underwrite(insured(await fullyConnected()), {
+      aporTable: APOR_TABLE,
       casefileId: "test-casefile",
       now: REFERENCE.toISOString(),
     });
@@ -617,6 +620,7 @@ describe("the decision", () => {
 
   it("stamps the engine so a shadow decision is never mistaken for an agency one", async () => {
     const decision = underwrite(await fullyConnected(), {
+      aporTable: APOR_TABLE,
       casefileId: "test-casefile",
       now: REFERENCE.toISOString(),
     });
@@ -629,6 +633,7 @@ describe("the decision", () => {
     // quoted, and the APR is solved from the two — which is what it takes for
     // a file a borrower actually walked to carry a QM determination.
     const decision = underwrite(await fullyConnected(), {
+      aporTable: APOR_TABLE,
       casefileId: "test-casefile",
       now: REFERENCE.toISOString(),
     });
@@ -641,6 +646,7 @@ describe("the decision", () => {
 
   it("blocks the tests that need an APR when it will not state one", async () => {
     const decision = underwrite(insured(await fullyConnected()), {
+      aporTable: APOR_TABLE,
       casefileId: "test-casefile",
       now: REFERENCE.toISOString(),
     });
@@ -656,6 +662,7 @@ describe("the decision", () => {
 
   it("still takes a market it is handed, which is the persona seed's privilege", async () => {
     const decision = underwrite(await fullyConnected(), {
+      aporTable: APOR_TABLE,
       casefileId: "test-casefile",
       now: REFERENCE.toISOString(),
       market: { apr: 6.44, apor: 6.1, pointsAndFeesAmount: 9_800, totalLoanAmount: 328_750 },

@@ -234,6 +234,20 @@ against a row you overwrote. Nothing in this repo updates a snapshot.
 SSN never lands in Postgres. `borrowers.ssn_vault_handle` is an opaque
 reference; `ssn_last4` is display only.
 
+**The average prime offer rate is fetched, never typed, and the engine never
+reads a checked-in one.** `apor_fetches` and `apor_weeks` are append-only like
+the two above; `scripts/fetch-apor.ts` fills them from the CFPB's PUBLISHED
+table (`YieldTableFixed.txt`, the figure in force — `apor-yield.ts`) and
+cross-checks every week against Appendix J on the CFPB's survey
+(`apor-survey.ts`), storing the difference beside the rate. The two agree to
+the cent except on the weeks the CFPB deviates by announcement, and a test
+asserts that set exactly. `underwrite` takes the table as a required option
+and the API hands it what the database holds, or null and a blocked UW-008. The deploy
+fetches before it seeds and fails if the series does not cover the current
+week; a Cloud Scheduler job (`infra/`) does the same daily. The vendored copy
+in `data/` is for tests and developers — `npm run apor:vendor` refreshes it,
+`npm run apor:verify` runs in CI, and nobody edits a row.
+
 ## Infrastructure
 
 Its own GCP project, `homestead-mortgages`. Own Cloud SQL instance, own
@@ -295,6 +309,8 @@ npm test                     # all workspaces
 npm run check                # tsc -b + registry verify
 npm run requirements:build   # after editing data/v1-build.csv
 npm run brand:build          # after editing packages/brand/tokens.mjs
+npm run apor:fetch           # ingest the vendored survey into DATABASE_URL (APOR_PROVIDER=ffiec for the live one)
+npm run apor:vendor          # refresh data/ffiec-survey-table.csv from the CFPB and re-embed it
 npm run db:migrate           # prisma migrate dev
 npm run db:test:setup        # create <db>_test and apply migrations to it
 npm run build && npm run seed:personas   # the eight sample borrowers

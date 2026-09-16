@@ -25,13 +25,16 @@
  * instead of confidently wrong. It also means this file WILL stop answering,
  * on the Monday after the last row below, and that is the alarm working.
  *
- * ⚠ **The rates below are FIXTURE DATA, in the sense `RATE_SHEET` is.** The
- * FFIEC's published series is a document this repository does not hold, and the
- * shape of the lookup is what is being built here. Wiring the real thing means
- * replacing the rows — the table is the FFIEC's own shape, a header of terms
- * and one row per week — and not the lookup. Every derivation that consumes a
- * rate from here records `apor_source`, so a stored decision says which table
- * answered it and an old decision stays readable after a real feed arrives.
+ * **Where the rows come from.** The CFPB publishes the survey it computes the
+ * APOR from, and its methodology; `apor-survey.ts` does that computation, and
+ * reproduces the CFPB's own published table to the two decimals they print.
+ * `APOR_TABLE` below is computed from the survey vendored in `@hm/shared` and
+ * exists for tests and for the fixture adapter. A deployment does not read it:
+ * the API reads `apor_weeks`, which `scripts/fetch-apor.ts` fills from the live
+ * survey, and a deployment with nothing fetched blocks rather than falling back
+ * to a checked-in file that was current the day somebody last ran
+ * `apor:vendor`. Every derivation that consumes a rate records `apor_source`,
+ * so a stored decision says which publication answered it.
  */
 
 /** One week of the series: the FFIEC's week begins on a Monday. */
@@ -40,6 +43,12 @@ export interface AporWeek {
   readonly weekOf: string;
   /** One rate per entry of `termYears`, in the same order, in percent. */
   readonly fixed: readonly number[];
+  /**
+   * Where THIS week's figures came from, when it differs from the table's
+   * source. A fetched series is a rolling window, so a week can stay in force
+   * from a publication a newer one no longer carries.
+   */
+  readonly source?: string;
 }
 
 export interface AporTable {
@@ -198,60 +207,6 @@ export function lookupApor(
     rate: match.fixed[column]!,
     weekOf: match.weekOf,
     termYears,
-    source: table.source,
+    source: match.source ?? table.source,
   };
 }
-
-/**
- * The series this deployment compares against.
- *
- * It ends at the last week that had been published, and it holds no week that
- * has not happened — which is why it will go stale rather than quietly cover
- * whatever date it is asked about. Extending it forward by inventing weeks the
- * FFIEC could not yet have averaged is the one edit to this file that would
- * turn a blocked test into a wrong one.
- */
-export const APOR_TABLE: AporTable = loadAporTable({
-  source: "fixture-ffiec-stand-in",
-  termYears: [30, 15],
-  weeks: [
-    { weekOf: "2025-12-29", fixed: [6.18, 5.41] },
-    { weekOf: "2026-01-05", fixed: [6.15, 5.39] },
-    { weekOf: "2026-01-12", fixed: [6.17, 5.4] },
-    { weekOf: "2026-01-19", fixed: [6.12, 5.36] },
-    { weekOf: "2026-01-26", fixed: [6.18, 5.41] },
-    { weekOf: "2026-02-02", fixed: [6.16, 5.4] },
-    { weekOf: "2026-02-09", fixed: [6.19, 5.42] },
-    { weekOf: "2026-02-16", fixed: [6.15, 5.39] },
-    { weekOf: "2026-02-23", fixed: [6.2, 5.43] },
-    { weekOf: "2026-03-02", fixed: [6.19, 5.41] },
-    { weekOf: "2026-03-09", fixed: [6.16, 5.39] },
-    { weekOf: "2026-03-16", fixed: [6.18, 5.42] },
-    { weekOf: "2026-03-23", fixed: [6.22, 5.45] },
-    { weekOf: "2026-03-30", fixed: [6.16, 5.4] },
-    { weekOf: "2026-04-06", fixed: [6.19, 5.42] },
-    { weekOf: "2026-04-13", fixed: [6.17, 5.41] },
-    { weekOf: "2026-04-20", fixed: [6.22, 5.45] },
-    { weekOf: "2026-04-27", fixed: [6.18, 5.42] },
-    { weekOf: "2026-05-04", fixed: [6.19, 5.44] },
-    { weekOf: "2026-05-11", fixed: [6.22, 5.46] },
-    { weekOf: "2026-05-18", fixed: [6.17, 5.42] },
-    { weekOf: "2026-05-25", fixed: [6.19, 5.43] },
-    { weekOf: "2026-06-01", fixed: [6.25, 5.48] },
-    { weekOf: "2026-06-08", fixed: [6.22, 5.46] },
-    { weekOf: "2026-06-15", fixed: [6.2, 5.43] },
-    { weekOf: "2026-06-22", fixed: [6.24, 5.46] },
-    { weekOf: "2026-06-29", fixed: [6.23, 5.45] },
-    { weekOf: "2026-07-06", fixed: [6.26, 5.47] },
-    { weekOf: "2026-07-13", fixed: [6.22, 5.44] },
-    { weekOf: "2026-07-20", fixed: [6.24, 5.47] },
-    { weekOf: "2026-07-27", fixed: [6.29, 5.51] },
-    { weekOf: "2026-08-03", fixed: [6.26, 5.49] },
-    { weekOf: "2026-08-10", fixed: [6.27, 5.51] },
-    { weekOf: "2026-08-17", fixed: [6.25, 5.5] },
-    { weekOf: "2026-08-24", fixed: [6.29, 5.53] },
-    { weekOf: "2026-08-31", fixed: [6.24, 5.49] },
-    { weekOf: "2026-09-07", fixed: [6.27, 5.51] },
-    { weekOf: "2026-09-14", fixed: [6.29, 5.52] },
-  ],
-});

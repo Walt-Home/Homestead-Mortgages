@@ -99,10 +99,42 @@ export interface ComplianceTests {
   readonly hpmlSpread: number | null;
   readonly isHpml: boolean | null;
   readonly isHighCost: boolean | null;
+  /**
+   * HOEPA's three triggers, carried rather than re-derived.
+   *
+   * §1026.32(a)(1) has three: the rate, the points and fees, and the
+   * prepayment penalty. `isHighCost` is their OR, and an OR loses which side
+   * was true — so `adverseActionReasonsFor` used to recompute them from
+   * `hpmlSpread` and `pointsAndFeesRatio`, both of which are ROUNDED for the
+   * screen. A ratio of 4.996 records as 5.00, and a Regulation B notice then
+   * told a borrower the fees were above a limit they were under. A notice that
+   * names the wrong reason is worse than one that names none.
+   *
+   * Three-valued for the same reason `isHighCost` is: `null` is a trigger that
+   * was not asked, and the prepayment-penalty one is null whenever the product
+   * carries a penalty, because a bare boolean cannot say whether it is
+   * chargeable past 36 months or above 2% of the amount prepaid.
+   *
+   * Optional only so a decision stored before this existed still parses.
+   */
+  readonly hoepaTriggers?: {
+    readonly apr: boolean | null;
+    readonly pointsAndFees: boolean | null;
+    readonly prepaymentPenalty: boolean | null;
+  };
   /** Refi only, where state or investor requires it (APP-019). */
   readonly netTangibleBenefit?: {
     readonly paymentDelta: number;
-    readonly rateDelta: number;
+    /**
+     * Old rate minus new, or null when nothing on file carries the old one.
+     *
+     * A credit bureau's mortgage tradeline has a balance and a payment and no
+     * interest rate. The credit pull wrote `0` into the column regardless, so
+     * this published −6.25 on every refinance that came off a real report — a
+     * figure with no derivation behind it, on a decision where every number is
+     * supposed to have one.
+     */
+    readonly rateDelta: number | null;
     /**
      * Months to recoup the closing costs out of the monthly saving, or null
      * when there is no saving to recoup them from.

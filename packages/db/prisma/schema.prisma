@@ -321,6 +321,7 @@ model LoanFile {
   existingBalance        Decimal? @map("existing_balance") @db.Decimal(14, 2)
   existingRate           Decimal? @map("existing_rate") @db.Decimal(6, 4)
   existingMonthlyPayment Decimal? @map("existing_monthly_payment") @db.Decimal(12, 2)
+  existingPaymentBasis   String?  @map("existing_payment_basis")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

@@ -27,7 +27,7 @@
  * written to end.
  */
 
-import type { LoanFile, PricedAgainst } from "@hm/shared";
+import { RATE_SET_TIME_ZONE, type LoanFile, type PricedAgainst } from "@hm/shared";
 import { lookupApor, type AporTable } from "./apor.js";
 import { annualPercentageRate, APR_OMITS } from "./apr.js";
 import type { MarketInputs } from "./compliance.js";
@@ -152,6 +152,10 @@ export function resolveMarketInputs(
         {
           week_of: lookup.weekOf,
           rate_quoted_at: file.product.rateQuotedAt,
+          // The instant above is stored in UTC; this is the calendar date the
+          // week was actually matched on, and the zone that made it that date.
+          rate_set_on: lookup.setOn,
+          rate_set_time_zone: RATE_SET_TIME_ZONE,
           term_years: lookup.termYears,
           apor_source: lookup.source,
         },

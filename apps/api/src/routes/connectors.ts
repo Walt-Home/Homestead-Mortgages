@@ -211,8 +211,18 @@ connectorRouter.post(
           existingServicer: mortgage.creditorName,
           existingLoanNumber: mortgage.id,
           existingBalance: mortgage.balance,
-          existingRate: 0,
+          // A bureau's mortgage tradeline carries neither a note rate nor an
+          // escrow split. It used to be written as 0, which is not an absence:
+          // APP-019 published a rate delta of (0 - 6.25) with no derivation
+          // behind it. Null is what we actually know.
+          existingRate: null,
           existingMonthlyPayment: mortgage.monthlyPayment,
+          // And what that payment IS. The bureau reports the SCHEDULED payment,
+          // which on an escrowed loan includes taxes and insurance; the recoup
+          // subtracts the new loan's P&I from it, so calling it P&I overstates
+          // the saving by the whole old escrow. APP-019 blocks on this basis
+          // until a statement or the borrower supplies the P&I.
+          existingPaymentBasis: "scheduled_payment",
         },
       });
     }

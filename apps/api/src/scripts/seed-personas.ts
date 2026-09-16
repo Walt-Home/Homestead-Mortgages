@@ -971,6 +971,11 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
         existingBalance: 298_400,
         existingRate: 7.25,
         existingMonthlyPayment: 2_037,
+        // P&I, not a scheduled payment: 2,037 is what 298,400 at 7.25% over 360
+        // months amortizes to (2,035.60), and the `stated_current_rate` fact
+        // above records where the rate came from. A credit bureau could supply
+        // neither, which is why the column exists and why this row says so.
+        existingPaymentBasis: "principal_and_interest",
       },
     });
     await recordEvent(

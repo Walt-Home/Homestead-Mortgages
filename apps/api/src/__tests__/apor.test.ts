@@ -390,18 +390,25 @@ describe("what the database refuses", () => {
 });
 
 describe("what the fetch script exits on", () => {
-  it("names the Monday of the FFIEC week a date falls in", () => {
+  it("names the Monday of the FFIEC week a date falls in, on the lender's calendar", () => {
+    // Midnight UTC on a Monday is still Sunday evening in New York, so it
+    // belongs to the week before; the week turns at 04:00Z (EDT) — which is
+    // exactly the four hours every Sunday evening that a UTC read spent
+    // calling a current series one week behind.
     expect(mondayOf(new Date("2026-09-16T15:00:00Z"))).toBe("2026-09-14");
-    expect(mondayOf(new Date("2026-09-14T00:00:00Z"))).toBe("2026-09-14");
-    expect(mondayOf(new Date("2026-09-20T23:59:59Z"))).toBe("2026-09-14");
-    expect(mondayOf(new Date("2026-09-21T00:00:00Z"))).toBe("2026-09-21");
+    expect(mondayOf(new Date("2026-09-14T00:00:00Z"))).toBe("2026-09-07");
+    expect(mondayOf(new Date("2026-09-14T04:00:00Z"))).toBe("2026-09-14");
+    expect(mondayOf(new Date("2026-09-21T03:59:59Z"))).toBe("2026-09-14");
+    expect(mondayOf(new Date("2026-09-21T04:00:00Z"))).toBe("2026-09-21");
   });
 
   it("covers this week exactly when the latest week is this week's Monday or later", async () => {
     const held = await ingestFixture();
     const last = held.weeks[held.weeks.length - 1]!.weekOf;
+    // Noon UTC, so both instants fall on the calendar day they name in New
+    // York as well as in Greenwich.
     const inside = new Date(`${last}T12:00:00Z`);
-    const after = new Date(new Date(`${last}T00:00:00Z`).getTime() + 7 * 86_400_000);
+    const after = new Date(inside.getTime() + 7 * 86_400_000);
     expect((await aporStatus(prisma, inside)).coversThisWeek).toBe(true);
     expect((await aporStatus(prisma, after)).coversThisWeek).toBe(false);
     expect(await aporStatus(prisma, inside)).toMatchObject({

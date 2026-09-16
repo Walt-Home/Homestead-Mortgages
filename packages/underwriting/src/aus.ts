@@ -454,20 +454,32 @@ function adverseActionReasonsFor(
 ): string[] {
   const reasons = findings.filter((f) => f.category === "eligibility").map((f) => f.message);
   if (compliance.isHighCost === true) {
-    // Which of the two triggers fired, named. "High-cost" alone is a
+    // Which trigger fired, READ rather than re-derived. "High-cost" alone is a
     // classification, not a reason, and a notice that gives one is not a
     // notice — the borrower cannot tell whether it was the rate or the fees.
-    const byRate =
-      compliance.hpmlSpread !== null && compliance.hpmlSpread > GUIDELINES.hoepa.firstLienAprSpread;
-    const byFees =
-      compliance.pointsAndFeesRatio !== null &&
-      compliance.pointsAndFeesRatio > GUIDELINES.hoepa.pointsAndFeesPercent;
+    //
+    // This used to recompute both from `hpmlSpread` and `pointsAndFeesRatio`,
+    // which are rounded to hundredths for the screen and are measured against
+    // thresholds that are no longer flat: a ratio of 4.996 records as 5.00 and
+    // read back as "the fees are above the limit" on a loan whose fees were
+    // under it. The engine already knows which side fired, so it says so.
+    const t = compliance.hoepaTriggers;
+    const fired = [
+      t?.apr === true ? "the rate" : null,
+      t?.pointsAndFees === true ? "the fees" : null,
+      t?.prepaymentPenalty === true ? "the prepayment penalty" : null,
+    ].filter((x): x is string => x !== null);
+    // A high-cost finding always has at least one trigger behind it — that is
+    // what made it true — so an empty list here would be a bug elsewhere, and
+    // the notice says the pricing rather than inventing a side.
     const trigger =
-      byRate && byFees
-        ? "the rate and the fees are both above the limit"
-        : byFees
-          ? "the fees are above the limit"
-          : "the rate is above the limit";
+      fired.length === 0
+        ? "the pricing is above the limit"
+        : fired.length === 1
+          ? `${fired[0]} is above the limit`
+          : fired.length === 2
+            ? `${fired[0]} and ${fired[1]} are both above the limit`
+            : `${fired.slice(0, -1).join(", ")} and ${fired.at(-1)} are all above the limit`;
     reasons.push(`HOEPA high-cost: ${trigger}`);
   }
   return reasons;

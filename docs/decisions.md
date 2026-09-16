@@ -995,28 +995,47 @@ read `new Date()` on purpose and failed in CI the first Monday the series did
 not reach. That held for one day: the typed table is gone, the series is
 fetched, and "Where the staleness alarm rings now" above is where it went.
 
-### Known and open, in the same file
+### The thresholds are a dated table, and two of the tiers were never percentages
 
-Recorded rather than fixed, because each is unreachable in V1's scope or needs a
-decision this change should not make on its own:
+A second pass over "Known and open" closed all five and found a sixth that
+was worse than any of them. §1026.43(e)(3)(i) has five points-and-fees tiers,
+and tiers (B) and (D) are **dollar caps** — $4,139 and $1,380 for 2026 — not
+percentages. The code held all five as percentages, so a $137,000 loan was
+allowed $5,343 of points and fees where the rule allows $4,139: a non-QM loan
+handed the §1026.43(e)(1) presumption. The permissive direction again.
 
-- **HOEPA's points-and-fees trigger is a flat 5%** where the rule tiers it for
-  small loans. It errs conservative at every reachable loan size — a wrongful
-  high-cost finding declines a loan rather than approving one — but that is
-  still a borrower denied on a threshold that does not apply to them.
-- **HOEPA's third trigger, the prepayment penalty, is not tested.**
-  `loan_products.prepayment_penalty` is a NOT NULL column and the DU assembler
-  already renders it, so the premise that no product carries one is held nowhere
-  but in the fixture sheet.
-- **General QM has no manufactured-home tier.** §1026.43(e)(2)(vi)(D) gives one
-  a 6.5-point threshold under $132,756; the table carries the three non-manufactured
-  tiers only. Errs restrictive.
-- **`existingRate` is written as `0`** by the credit pull for every refinance
-  whose report carries a mortgage tradeline, because the report has no rate — so
-  net tangible benefit publishes a `rateDelta` of −6.25 rather than an absence.
-- **The recoup's "monthly saving" subtracts the new loan's principal and
-  interest from the old loan's full escrowed payment**, which overstates the
-  saving by the old escrow.
+- **Every indexed figure now lives in `REGULATION_Z_THRESHOLDS`, by year**,
+  with the publication it came from recorded on every derivation, and a year
+  the table does not hold is a blocked derivation naming the years it does —
+  never the nearest year. The year is chosen by the rate-set date, which is
+  the nearest recorded fact to consummation and the date the APOR is already
+  keyed on, so a file's price tests are judged in one year.
+- **The six 2026 figures check each other.** The CFPB indexes all of them
+  from one multiplier over continuous statutory bases, so 137,958 × 3% must
+  equal 82,775 × 5% and 27,592 × 5% must equal 17,245 × 8%; they do, to the
+  dollar, and a test asserts the continuity rather than trusting a comment.
+  The two HOEPA figures were read from the CFPB's own §1026.32 commentary;
+  the QM four from a summary of the same rule and then checked against them.
+- **QM points and fees is a dollar limit compared in cents**, and HOEPA's fee
+  trigger is tiered — 5% at and above $27,592 of total loan amount, the lesser
+  of 8% and $1,380 below — instead of a flat 5%.
+- **The rate-set date is a calendar date in America/New_York.** The CFPB's
+  week is a US calendar and the file stored an instant; a Sunday-evening
+  Eastern quote was the next week in UTC. `calendarDateIn` reads the day in
+  the lender's zone and the derivation records both.
+- **A manufactured home under the top bound gets the 6.5-point General QM
+  threshold** §1026.43(e)(2)(vi)(D) sets, read off the property type.
+- **The prepayment penalty is HOEPA's third trigger.** `loan_products.
+  prepayment_penalty` reaches the engine as `ProductSelection.prepaymentPenalty`;
+  a product that can charge one blocks the test naming the term and the cap
+  the rule bounds, because the penalty's term is not modeled yet, and a
+  product that cannot settles the trigger false.
+- **The existing loan says what it knows.** The credit pull no longer writes
+  `existingRate: 0` — null is "the report does not carry a rate" — and
+  `existing_payment_basis` records whether the old payment is principal and
+  interest or a bureau's scheduled payment, which may carry escrow. Net
+  tangible benefit blocks rather than subtracting new P&I from an old escrowed
+  figure, and publishes no rate delta it cannot compute.
 
 ## A job is declared on, not derived from
 

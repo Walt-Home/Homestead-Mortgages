@@ -15,6 +15,7 @@ import { effectiveMonday, parseSurveyCsv } from "../apor-survey.js";
 import { APOR_TABLE, parseYieldTable } from "../apor-yield.js";
 import { annualPercentageRate } from "../apr.js";
 import { runComplianceTests } from "../compliance.js";
+import { resolveMarketInputs } from "../market.js";
 import { DerivationLog, round } from "../derive.js";
 import { closingCosts, FEE_SCHEDULE } from "../fee-schedule.js";
 
@@ -62,6 +63,80 @@ describe("the weekly table refuses what it cannot answer", () => {
     const stale = lookupApor(SERIES, on("2026-07-20"), 360, "Fixed");
     expect(stale.found).toBe(false);
     expect(stale).toMatchObject({ reason: expect.stringContaining("2026-06-15") });
+  });
+
+  /**
+   * The rate-set date is a CALENDAR date, and a calendar needs a zone.
+   *
+   * §1026.35(a)(1) compares against the APOR "as of the date the interest rate
+   * is set", and the table is published per Monday-to-Sunday week. Taking the
+   * UTC calendar date off the stored instant moves every quote made after 20:00
+   * Eastern into the following week — first a blocked test, then, once Monday's
+   * row lands, a comparison against a week the loan was not priced in, recorded
+   * on an append-only decision that names the week it used.
+   *
+   * The fixture rate sheet manufactures exactly that instant: `sheetWindow`
+   * floored to midnight, so a Sunday-evening quote was stamped Monday 00:00Z.
+   */
+  describe("the day the rate was set is the lender's day", () => {
+    it("reads 01:00Z on Monday as the Sunday before it, in June", () => {
+      // 2026-06-15T01:00Z is Sunday the 14th at 21:00 in New York (EDT, UTC-4),
+      // which is the last week the CFPB has published.
+      const answer = lookupApor(SERIES, new Date("2026-06-15T01:00:00.000Z"), 360, "Fixed");
+      expect(answer).toMatchObject({ found: true, weekOf: "2026-06-08", setOn: "2026-06-14" });
+    });
+
+    it("reads 04:30Z on Monday as Monday, which is the new week", () => {
+      const answer = lookupApor(SERIES, new Date("2026-06-15T04:30:00.000Z"), 360, "Fixed");
+      expect(answer).toMatchObject({ found: true, weekOf: "2026-06-15", setOn: "2026-06-15" });
+    });
+
+    it("moves that boundary an hour in winter, because the offset does", () => {
+      // The same two half-hours in January, when New York is EST (UTC-5): the
+      // day rolls at 05:00Z rather than 04:00Z. A fixed offset would get one of
+      // these two wrong for eight months of the year.
+      const winter: AporTable = loadAporTable({
+        source: "test",
+        termYears: [30],
+        weeks: [
+          { weekOf: "2026-01-05", fixed: [6.4] },
+          { weekOf: "2026-01-12", fixed: [6.37] },
+        ],
+      });
+      expect(lookupApor(winter, new Date("2026-01-12T04:30:00.000Z"), 360, "Fixed")).toMatchObject({
+        weekOf: "2026-01-05",
+        setOn: "2026-01-11",
+      });
+      expect(lookupApor(winter, new Date("2026-01-12T05:30:00.000Z"), 360, "Fixed")).toMatchObject({
+        weekOf: "2026-01-12",
+        setOn: "2026-01-12",
+      });
+    });
+
+    it("reports the same date in the reason as it matched on", () => {
+      // The refusal string used to be built from the UTC date while the match
+      // was made on the raw instant, so a stale lookup could name a day the
+      // comparison never used.
+      const stale = lookupApor(SERIES, new Date("2026-07-20T01:00:00.000Z"), 360, "Fixed");
+      expect(stale).toMatchObject({ found: false, reason: expect.stringContaining("2026-07-19") });
+    });
+
+    it("records the date and the zone on the derivation that reads it", () => {
+      const log = new DerivationLog();
+      const f = refinance();
+      resolveMarketInputs(
+        { ...f, product: { ...f.product!, rateQuotedAt: "2026-06-15T01:00:00.000Z" } },
+        log,
+        SERIES,
+      );
+      const entry = log.all().find((d) => d.label === "Average prime offer rate")!;
+      expect(entry.inputs).toMatchObject({
+        rate_quoted_at: "2026-06-15T01:00:00.000Z",
+        rate_set_on: "2026-06-14",
+        rate_set_time_zone: "America/New_York",
+        week_of: "2026-06-08",
+      });
+    });
   });
 
   it("refuses a rate set before the series begins", () => {
@@ -310,6 +385,7 @@ function refinance(): LoanFile {
         balance: 300_000,
         rate: 7.5,
         monthlyPayment: 2_200,
+        paymentBasis: "principal_and_interest",
       },
     },
     product: {
@@ -317,7 +393,9 @@ function refinance(): LoanFile {
       termMonths: 360,
       amortization: "Fixed",
       noteRate: 6.25,
-      rateQuotedAt: "2026-06-15T00:00:00.000Z",
+      // Noon: a midnight-UTC instant is Sunday the 14th in New York.
+      rateQuotedAt: "2026-06-15T12:00:00.000Z",
+      prepaymentPenalty: false,
       overlays: [],
     },
     borrowers: [],
@@ -522,6 +600,180 @@ describe("what the tests downstream do with those figures", () => {
 
     const below = runComplianceTests(priced(), { apr: 8.549, apor: 6.3 }, 30, new DerivationLog());
     expect(below.qmStatus).toBe("qm");
+  });
+
+  /**
+   * §1026.32(a)(1)(ii) tiers the fee trigger, and the flat 5% was a DENIAL.
+   *
+   * Below the indexed small-loan bound the rule is the LESSER of 8% of the
+   * total loan amount and a flat dollar cap, and that pair is always above 5%
+   * of the same total — so a flat 5% never under-flagged, it over-flagged. An
+   * over-flag is not the safe side: one high-cost finding is a denial ahead of
+   * every other branch in `determineOutcome`, and the borrower gets a
+   * Regulation B notice naming a rule that does not fire on their loan.
+   */
+  describe("HOEPA's fee trigger is tiered", () => {
+    const small = (loanAmount: number): LoanFile => {
+      const base = refinance();
+      return { ...base, loan: { ...base.loan!, loanAmount } };
+    };
+
+    it("does not fire on a small loan the flat 5% would have declined", () => {
+      // $1,300 of points and fees on an $18,700 total loan amount. The flat 5%
+      // allowed $935 and fired; the rule allows the lesser of 8% ($1,496) and
+      // $1,380, so $1,300 is under it and this loan is not high-cost.
+      const result = runComplianceTests(
+        small(20_000),
+        { apr: 7.2, apor: 6.1, pointsAndFeesAmount: 1_300, totalLoanAmount: 18_700 },
+        30,
+        new DerivationLog(),
+      );
+      expect(result.pointsAndFeesRatio).toBeGreaterThan(5);
+      expect(result.hoepaTriggers?.pointsAndFees).toBe(false);
+      expect(result.isHighCost).toBe(false);
+    });
+
+    it("still fires when the fees pass the dollar cap", () => {
+      // This lender's own schedule on a $25,000 loan: $1,715 against $1,380.
+      const priced = closingCosts(FEE_SCHEDULE, 25_000)!;
+      const result = runComplianceTests(
+        small(25_000),
+        {
+          apr: 7.2,
+          apor: 6.1,
+          pointsAndFeesAmount: priced.pointsAndFees,
+          totalLoanAmount: round(25_000 - priced.prepaidFinanceCharges, 2),
+        },
+        30,
+        new DerivationLog(),
+      );
+      expect(priced.pointsAndFees).toBe(1_715);
+      expect(result.hoepaTriggers?.pointsAndFees).toBe(true);
+      expect(result.isHighCost).toBe(true);
+    });
+
+    it("uses the 5% tier at the small-loan bound itself", () => {
+      // The tier is chosen by the §1026.43(b)(5) loan amount — the note
+      // principal — so a loan of exactly the bound is in the 5% tier whatever
+      // the fees did to the total it is measured against.
+      const log = new DerivationLog();
+      runComplianceTests(
+        small(27_592),
+        { apr: 7.2, apor: 6.1, pointsAndFeesAmount: 1_200, totalLoanAmount: 26_000 },
+        30,
+        log,
+      );
+      const entry = log.all().find((d) => d.label === "HOEPA high-cost")!;
+      expect(entry.inputs.fee_trigger_basis).toContain("§1026.32(a)(1)(ii)(A)");
+      expect(entry.inputs.fee_trigger_limit_dollars).toBe(1_300);
+    });
+  });
+
+  /**
+   * The third trigger, §1026.32(a)(1)(iii), which was simply not asked.
+   *
+   * `isHighCost: false` was asserted on two of three questions — the same
+   * asymmetry the two-trigger version of this file was written to end, one
+   * layer down. And a boolean can only answer half of it: no penalty proves the
+   * trigger false, a penalty proves nothing, because one inside 36 months and
+   * under 2% of the amount prepaid is lawful and not high-cost.
+   */
+  describe("the prepayment penalty is the third trigger", () => {
+    const withPenalty = (prepaymentPenalty: boolean): LoanFile => {
+      const base = refinance();
+      return { ...base, product: { ...base.product!, prepaymentPenalty } };
+    };
+    const clean = { apr: 7.2, apor: 6.1, pointsAndFeesAmount: 3_000, totalLoanAmount: 297_000 };
+
+    it("settles on false when the product cannot charge one", () => {
+      const result = runComplianceTests(withPenalty(false), clean, 30, new DerivationLog());
+      expect(result.hoepaTriggers).toEqual({
+        apr: false,
+        pointsAndFees: false,
+        prepaymentPenalty: false,
+      });
+      expect(result.isHighCost).toBe(false);
+    });
+
+    it("blocks on a product that can, naming the term and the cap", () => {
+      const log = new DerivationLog();
+      const result = runComplianceTests(withPenalty(true), clean, 30, log);
+      expect(result.isHighCost).toBeNull();
+      expect(result.hoepaTriggers?.prepaymentPenalty).toBeNull();
+      const blocked = log.all().find((d) => d.label === "HOEPA high-cost test")?.blockedBy ?? [];
+      expect(blocked.join(" ")).toContain("36 months after consummation");
+      expect(blocked.join(" ")).toContain("2% of the amount prepaid");
+    });
+
+    it("does not stop another trigger from settling it true", () => {
+      // One trigger is enough, and an unknown third does not un-fire a known
+      // first: a rate 7 points over APOR is high-cost whatever the penalty is.
+      const result = runComplianceTests(
+        withPenalty(true),
+        { ...clean, apr: 13.2 },
+        30,
+        new DerivationLog(),
+      );
+      expect(result.isHighCost).toBe(true);
+      expect(result.hoepaTriggers?.apr).toBe(true);
+    });
+  });
+
+  describe("what the existing loan does and does not know", () => {
+    const withExisting = (over: Partial<NonNullable<LoanFile["loan"]>["existingLoan"]>): LoanFile => {
+      const base = refinance();
+      return {
+        ...base,
+        loan: { ...base.loan!, existingLoan: { ...base.loan!.existingLoan!, ...over } },
+      };
+    };
+
+    it("publishes no rate delta when nothing on file carries the old rate", () => {
+      // A credit bureau's mortgage tradeline has no rate. The pull wrote 0, so
+      // this published (0 - 6.25) = -6.25 — a number with no derivation behind
+      // it, on a decision where that is the one thing a number may not be.
+      const result = runComplianceTests(
+        withExisting({ rate: null }),
+        { closingCostTotal: 6_000 },
+        30,
+        new DerivationLog(),
+      );
+      expect(result.netTangibleBenefit!.rateDelta).toBeNull();
+      // The recoup is a payment test and does not need the rate, so it still runs.
+      expect(result.netTangibleBenefit!.recoupMonths).toBeGreaterThan(0);
+    });
+
+    it("blocks the recoup when the old payment may carry escrow", () => {
+      const log = new DerivationLog();
+      const result = runComplianceTests(
+        withExisting({ paymentBasis: "scheduled_payment" }),
+        { closingCostTotal: 6_000 },
+        30,
+        log,
+      );
+      expect(result.netTangibleBenefit).toBeUndefined();
+      expect(log.all().find((d) => d.requirementId === "APP-019")?.blockedBy?.[0]).toContain(
+        "may include escrow",
+      );
+    });
+
+    it("refers a refinance whose existing loan is not on the file at all", () => {
+      // This used to run no test and record nothing, so a file missing the very
+      // thing APP-019 measures could still decide. Silence is not a pass.
+      const base = refinance();
+      const { existingLoan: _dropped, ...loan } = base.loan!;
+      const log = new DerivationLog();
+      const result = runComplianceTests(
+        { ...base, loan },
+        { closingCostTotal: 6_000 },
+        30,
+        log,
+      );
+      expect(result.netTangibleBenefit).toBeUndefined();
+      expect(log.all().find((d) => d.requirementId === "APP-019")?.blockedBy).toEqual([
+        "the existing loan (APP-018)",
+      ]);
+    });
   });
 
   it("reports a refinance that never recoups as null months, not a number JSON cannot carry", () => {

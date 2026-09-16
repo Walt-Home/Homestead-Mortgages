@@ -6,11 +6,32 @@
  * loss" in Drew's sheet. None of them may return a comfortable default when an
  * input is missing — a HOEPA test that answers "not high-cost" because it had
  * no APOR to compare against is worse than no test at all.
+ *
+ * **Every dated threshold these tests read is chosen by the rate-set date**, in
+ * the one named time zone `@hm/shared` holds, and refused rather than defaulted
+ * when this engine does not carry that year. Before that, a December file
+ * recomputed in January — decisions are append-only and a re-pull recomputes —
+ * was judged on next year's figures, and the two stored decisions would
+ * disagree about one loan for no reason on the file.
  */
 
-import type { ComplianceTests, LoanFile } from "@hm/shared";
+import {
+  calendarDateIn,
+  RATE_SET_TIME_ZONE,
+  type ComplianceTests,
+  type LoanFile,
+} from "@hm/shared";
 import { DerivationLog, round } from "./derive.js";
-import { generalQmSpreadCap, GUIDELINES, pointsAndFeesCap } from "./guidelines.js";
+import {
+  cents,
+  generalQmSpreadCap,
+  GUIDELINES,
+  hoepaPointsAndFeesLimit,
+  pointsAndFeesLimit,
+  thresholdsFor,
+  thresholdYearsHeld,
+  type RegulationZThresholds,
+} from "./guidelines.js";
 
 /**
  * The priced figures these tests are decided on, none of which a borrower
@@ -67,7 +88,44 @@ export function runComplianceTests(
   dtiBack: number | null,
   log: DerivationLog,
 ): ComplianceTests {
+  /**
+   * The §1026.43(b)(5) loan amount: the note principal.
+   *
+   * This is the figure that SELECTS a threshold tier — §1026.43(e)(3)(i) and
+   * (e)(2)(vi) and §1026.32(a)(1)(ii) all bound their tiers by "loan amount",
+   * and §1026.43(b)(5) is the only definition either section offers. What each
+   * percentage is then applied TO is the §1026.32(b)(4) total loan amount,
+   * which is a different and always smaller number.
+   */
   const loanAmount = file.loan?.loanAmount ?? 0;
+
+  /**
+   * Which year's indexed thresholds govern, and the date that says so.
+   *
+   * The rate-set date is read as a CALENDAR date in one named zone, the same
+   * one the APOR lookup uses, so a file's price tests are all judged in one
+   * year and against one week. A year this engine does not hold is a blocked
+   * derivation naming what is missing — never the newest year it has.
+   */
+  const rateSetOn =
+    file.product?.rateQuotedAt == null
+      ? null
+      : calendarDateIn(new Date(file.product.rateQuotedAt));
+  const thresholds = rateSetOn === null ? null : thresholdsFor(rateSetOn);
+  const thresholdBlockers = (): string[] =>
+    rateSetOn === null
+      ? ["the date this loan's rate was set, which decides which year's thresholds apply"]
+      : [
+          `the Regulation Z thresholds indexed for ${rateSetOn.slice(0, 4)} ` +
+            `(this engine holds ${thresholdYearsHeld().join(", ")})`,
+        ];
+  /** Stamped onto every derivation decided against a dated figure. */
+  const provenance = (t: RegulationZThresholds): Record<string, unknown> => ({
+    rate_set_on: rateSetOn,
+    rate_set_time_zone: RATE_SET_TIME_ZONE,
+    thresholds_year: t.year,
+    thresholds_source: t.source,
+  });
 
   /**
    * Whether the two price rules reach this loan at all.
@@ -133,15 +191,28 @@ export function runComplianceTests(
    * Deciding it from DTI produced a confidently wrong legal determination in
    * both directions, and without APR and APOR the honest answer is that we do
    * not know rather than a number derived from the wrong input.
+   *
+   * The property type is now one of the inputs, because §1026.43(e)(2)(vi)(D)
+   * gives a first-lien manufactured-home loan its own threshold. It was decided
+   * with no property on the file at all, which is how a manufactured home got
+   * measured against the tier for a house.
    */
   let qmStatus: ComplianceTests["qmStatus"] = null;
-  if (market.apr === undefined || market.apor === undefined) {
+  const propertyType = file.property?.propertyType ?? null;
+  if (
+    market.apr === undefined ||
+    market.apor === undefined ||
+    thresholds === null ||
+    propertyType === null
+  ) {
     log.blocked(
       "UW-006",
       "QM status",
       [
         market.apr === undefined ? "APR" : null,
         market.apor === undefined ? "APOR (FFIEC weekly table)" : null,
+        propertyType === null ? "the type of the property securing this loan" : null,
+        ...(thresholds === null ? thresholdBlockers() : []),
       ].filter((x): x is string => x !== null),
     );
   } else if (atrDetermination !== "documented") {
@@ -151,7 +222,7 @@ export function runComplianceTests(
       atr_determination: atrDetermination,
     });
   } else {
-    const cap = generalQmSpreadCap(loanAmount);
+    const cap = generalQmSpreadCap(loanAmount, propertyType, thresholds);
     // Decided on the exact spread, recorded as the rounded one. §1026.43(e)(2)(vi)
     // disqualifies a loan whose APR exceeds APOR "by 2.25 or more percentage
     // points", so the loan is General QM only strictly BELOW the cap — and a
@@ -164,30 +235,54 @@ export function runComplianceTests(
     // as 1.5 would miss.
     const exactMilli = milli(market.apr) - milli(market.apor);
     const spread = exactMilli / 1000;
-    qmStatus = exactMilli < milli(cap) ? "qm" : "non_qm";
+    qmStatus = exactMilli < milli(cap.points) ? "qm" : "non_qm";
     log.record(
       "UW-006",
       "QM status",
       qmStatus,
-      `General QM price test: apr - apor (${round(spread)}) below the ${cap} point threshold for this loan size`,
+      `General QM price test: apr - apor (${round(spread)}) below the ${cap.points} point ` +
+        `threshold ${cap.paragraph} sets for this loan`,
       {
         apr: market.apr,
         apor: market.apor,
         spread: round(spread),
-        threshold: cap,
+        threshold: cap.points,
+        threshold_paragraph: cap.paragraph,
+        manufactured_home: cap.manufacturedHome,
+        property_type: propertyType,
+        loan_amount: loanAmount,
         dti_back_considered: dtiBack,
+        ...provenance(thresholds),
       },
     );
   }
 
   /* ── Points and fees (UW-007) ─────────────────────────────────────────── */
+  /**
+   * The QM cap is a DOLLAR limit, and two of its five tiers are flat dollars.
+   *
+   * §1026.43(e)(3)(i)(B) and (D) state `$4,139` and `$1,380`, not a percentage;
+   * the table here encoded them as 3.9% and 6.6%, which are those dollars
+   * divided by the bottom of their own tiers. Right at one loan size and wrong
+   * everywhere else — at a $137,000 total loan amount 3.9% allows $5,343 where
+   * the rule allows $4,139, which hands the §1026.43(e)(1) presumption of
+   * compliance to a loan that is not a qualified mortgage.
+   *
+   * And the pass was decided on the ratio ROUNDED to hundredths, which is the
+   * same defect the HPML spread was fixed for: $6,000.40 against a $6,000 cap
+   * rounds to 3.00% and passes. The ratio is still computed and recorded — the
+   * screen shows it, and a CHECK on `decisions` reads it — but the test is an
+   * integer comparison in cents.
+   */
   let pointsAndFeesRatio: number | null = null;
   let pointsAndFeesPass: boolean | null = null;
+  let pointsAndFeesCents: number | null = null;
   if (
     market.pointsAndFeesAmount === undefined ||
     market.totalLoanAmount === undefined ||
     market.totalLoanAmount <= 0 ||
-    loanAmount === 0
+    loanAmount === 0 ||
+    thresholds === null
   ) {
     log.blocked(
       "UW-007",
@@ -197,26 +292,29 @@ export function runComplianceTests(
         market.totalLoanAmount === undefined || market.totalLoanAmount <= 0
           ? "the §1026.32(b)(4) total loan amount this ratio is measured against"
           : null,
+        loanAmount === 0 ? "the loan amount, which chooses the tier" : null,
+        ...(thresholds === null ? thresholdBlockers() : []),
       ].filter((x): x is string => x !== null),
     );
   } else {
-    // The cap tier is chosen by the total loan amount too: §1026.43(e)(3)(i)
-    // and §1026.32(b)(4) use the same figure, so a loan near a tier boundary
-    // must not be placed in one tier and measured in another.
-    const cap = pointsAndFeesCap(market.totalLoanAmount);
+    const limit = pointsAndFeesLimit(loanAmount, market.totalLoanAmount, thresholds);
+    pointsAndFeesCents = cents(market.pointsAndFeesAmount);
     pointsAndFeesRatio = round((market.pointsAndFeesAmount / market.totalLoanAmount) * 100);
-    pointsAndFeesPass = pointsAndFeesRatio <= cap;
+    pointsAndFeesPass = pointsAndFeesCents <= limit.limitCents;
     log.record(
       "UW-007",
       "Points and fees",
       pointsAndFeesRatio,
-      `points_and_fees / total_loan_amount (§1026.32(b)(4), not the note amount) ` +
-        `vs the ${cap}% cap for this loan size`,
+      `points_and_fees against the ${limit.basis}, compared in whole cents; the ratio ` +
+        `beside it is points_and_fees / total_loan_amount (§1026.32(b)(4), not the note amount)`,
       {
         points_and_fees: market.pointsAndFeesAmount,
         total_loan_amount: market.totalLoanAmount,
         loan_amount: loanAmount,
-        cap_percent: cap,
+        cap_dollars: round(limit.limitCents / 100, 2),
+        cap_basis: limit.basis,
+        cap_paragraph: limit.paragraph,
+        ...provenance(thresholds),
       },
     );
   }
@@ -257,40 +355,56 @@ export function runComplianceTests(
     // same exact spread for the same reason.
     exactSpread = (milli(market.apr) - milli(market.apor)) / 1000;
     hpmlSpread = round(exactSpread);
-    const threshold =
-      loanAmount > GUIDELINES.hpml.conformingLoanLimit
+    if (thresholds === null) {
+      // The spread is computable; which side of the jumbo line this loan sits
+      // on is not, because the conforming limit moves every year too.
+      log.blocked("UW-008", "HPML test", thresholdBlockers());
+    } else {
+      const jumbo = loanAmount > thresholds.conformingLoanLimit;
+      const threshold = jumbo
         ? GUIDELINES.hpml.firstLienJumboSpread
         : GUIDELINES.hpml.firstLienSpread;
-    isHpml = milli(exactSpread) >= milli(threshold);
-    log.record(
-      "UW-008",
-      "HPML spread",
-      hpmlSpread,
-      `apr - apor against the ${threshold} first-lien threshold, which §1026.35(a)(1)(i) ` +
-        `states as "or more"`,
-      {
-        apr: market.apr,
-        apor: market.apor,
-        threshold,
-        jumbo: loanAmount > GUIDELINES.hpml.conformingLoanLimit,
-      },
-    );
+      isHpml = milli(exactSpread) >= milli(threshold);
+      log.record(
+        "UW-008",
+        "HPML spread",
+        hpmlSpread,
+        `apr - apor against the ${threshold} first-lien threshold, which §1026.35(a)(1)(i) ` +
+          `states as "or more"`,
+        {
+          apr: market.apr,
+          apor: market.apor,
+          threshold,
+          jumbo,
+          conforming_loan_limit: thresholds.conformingLoanLimit,
+          ...provenance(thresholds),
+        },
+      );
+    }
   }
 
   /* ── HOEPA (UW-009) ───────────────────────────────────────────────────── */
   /**
-   * Two triggers, either of which makes the loan high-cost — so the two answers
-   * need different amounts of evidence and this is not a boolean over
+   * THREE triggers, any one of which makes the loan high-cost — so the two
+   * answers need different amounts of evidence and this is not a boolean over
    * `!== null`.
    *
    * ONE trigger firing settles it: a loan priced past the rate trigger is
    * high-cost whatever the fees did, so `true` is sound on one side alone.
-   * `false` is not. "Not high-cost" means neither trigger fired, and a side
-   * that was never tested did not fail to fire — it was not asked. With the fee
-   * schedule always priced and the APR blocked on a loan carrying mortgage
-   * insurance, a two-valued test returned exactly that: a confident "not
-   * high-cost" on a loan whose rate nobody had compared to anything, which is
-   * the failure this file's header opens with.
+   * `false` is not. "Not high-cost" means no trigger fired, and a side that was
+   * never tested did not fail to fire — it was not asked. With the fee schedule
+   * always priced and the APR blocked on a loan carrying mortgage insurance, a
+   * two-valued test returned exactly that: a confident "not high-cost" on a loan
+   * whose rate nobody had compared to anything, which is the failure this file's
+   * header opens with.
+   *
+   * The third trigger, §1026.32(a)(1)(iii), is the prepayment penalty, and it
+   * was simply not tested — `isHighCost: false` was asserted having asked two
+   * of three questions, which is the same asymmetry one layer up. A boolean on
+   * the product row can prove it FALSE (there is no penalty, so it cannot be
+   * charged past 36 months or above 2% of the amount prepaid) and can never
+   * prove it TRUE, because a penalty inside both bounds is not a trigger. So a
+   * product that carries one blocks, and says what it is waiting for.
    */
   let isHighCost: boolean | null = null;
   // §1026.32(a)(1)(i) says "more than 6.5 percentage points", so this keeps the
@@ -299,8 +413,18 @@ export function runComplianceTests(
   // an exact 1.5 failed one.
   const aprTrigger =
     exactSpread === null ? null : milli(exactSpread) > milli(GUIDELINES.hoepa.firstLienAprSpread);
+  const feeLimit =
+    thresholds === null || market.totalLoanAmount === undefined || market.totalLoanAmount <= 0
+      ? null
+      : hoepaPointsAndFeesLimit(loanAmount, market.totalLoanAmount, thresholds);
+  // "will exceed", so strictly over, and in whole cents for the same reason the
+  // spreads are in thousandths.
   const feeTrigger =
-    pointsAndFeesRatio === null ? null : pointsAndFeesRatio > GUIDELINES.hoepa.pointsAndFeesPercent;
+    pointsAndFeesCents === null || feeLimit === null
+      ? null
+      : pointsAndFeesCents > feeLimit.limitCents;
+  const penaltyTrigger = prepaymentPenaltyTrigger(file.product);
+  const triggers = { apr: aprTrigger, pointsAndFees: feeTrigger, prepaymentPenalty: penaltyTrigger };
   if (principalDwelling === false) {
     log.record(
       "UW-009",
@@ -310,10 +434,10 @@ export function runComplianceTests(
         `this one is secured by a ${occupancy}`,
       { occupancy, apr_spread: hpmlSpread, points_and_fees_percent: pointsAndFeesRatio },
     );
-  } else if (aprTrigger === false && feeTrigger === false) {
-    isHighCost = false;
-  } else if (aprTrigger === true || feeTrigger === true) {
+  } else if (aprTrigger === true || feeTrigger === true || penaltyTrigger === true) {
     isHighCost = true;
+  } else if (aprTrigger === false && feeTrigger === false && penaltyTrigger === false) {
+    isHighCost = false;
   }
   if (isHighCost === null) {
     log.blocked(
@@ -322,78 +446,154 @@ export function runComplianceTests(
       [
         aprTrigger === null ? "APR/APOR, for the rate trigger" : null,
         feeTrigger === null ? "fee schedule, for the points-and-fees trigger" : null,
+        penaltyTrigger === null
+          ? file.product
+            ? "the prepayment penalty's term and cap (§1026.32(a)(1)(iii): chargeable more " +
+              "than 36 months after consummation, or more than 2% of the amount prepaid), " +
+              "which the product row does not carry"
+            : "a quoted product, for the prepayment-penalty trigger"
+          : null,
+        ...(thresholds === null && feeTrigger === null ? thresholdBlockers() : []),
       ].filter((x): x is string => x !== null),
     );
   } else {
-    log.record("UW-009", "HOEPA high-cost", isHighCost, "APR spread OR points-and-fees trigger", {
-      apr_spread: hpmlSpread,
-      apr_trigger_threshold: GUIDELINES.hoepa.firstLienAprSpread,
-      points_and_fees_percent: pointsAndFeesRatio,
-      fee_trigger_threshold: GUIDELINES.hoepa.pointsAndFeesPercent,
-    });
+    log.record(
+      "UW-009",
+      "HOEPA high-cost",
+      isHighCost,
+      "APR spread OR points-and-fees OR prepayment-penalty trigger",
+      {
+        apr_spread: hpmlSpread,
+        apr_trigger_threshold: GUIDELINES.hoepa.firstLienAprSpread,
+        apr_trigger: aprTrigger,
+        points_and_fees_percent: pointsAndFeesRatio,
+        fee_trigger_limit_dollars: feeLimit === null ? null : round(feeLimit.limitCents / 100, 2),
+        fee_trigger_basis: feeLimit === null ? null : feeLimit.basis,
+        fee_trigger: feeTrigger,
+        prepayment_penalty: file.product?.prepaymentPenalty ?? null,
+        prepayment_penalty_trigger: penaltyTrigger,
+        ...(thresholds === null ? {} : provenance(thresholds)),
+      },
+    );
   }
 
   /* ── Net tangible benefit (APP-019) ───────────────────────────────────── */
   let netTangibleBenefit: ComplianceTests["netTangibleBenefit"];
   const existing = file.loan?.existingLoan;
-  if (file.loan && file.loan.purpose !== "purchase" && existing && file.product) {
-    const newPayment = estimateNewPayment(
-      file.loan.loanAmount,
-      file.product.noteRate,
-      file.product.termMonths,
-    );
-    const paymentDelta = round(existing.monthlyPayment - newPayment);
-    const rateDelta = round(existing.rate - file.product.noteRate);
-    // Recoup is EVERY closing cost divided by monthly saving, not the points
-    // and fees: a borrower recoups the appraisal, the title premium and the
-    // recording fees along with what the lender keeps. Without a fee total we
-    // cannot compute it, so it reports as unattainable rather than as zero.
-    const fees = market.closingCostTotal;
-    if (fees === undefined) {
-      log.blocked("APP-019", "Net tangible benefit", ["closing cost total"]);
-    } else if (paymentDelta <= 0) {
-      // Null, not Infinity. `decisions.compliance` is jsonb and JSON has no
-      // infinity: Prisma wrote the row and Postgres read it back as null, so a
-      // stored counteroffer said the benefit test failed and could not say by
-      // how much — "we could not compute this" and "it never recoups" collapsed
-      // into one value, silently, at write time. Null here is unambiguous
-      // because a test that did not run leaves `netTangibleBenefit` itself
-      // undefined, and a negative `paymentDelta` beside a null recoup says the
-      // payment went UP.
-      netTangibleBenefit = {
-        paymentDelta,
-        rateDelta,
-        recoupMonths: null,
-        thresholdMonths: GUIDELINES.netTangibleBenefit.defaultRecoupMonths,
-        satisfied: false,
-      };
-      log.record(
+  if (file.loan && file.loan.purpose !== "purchase") {
+    // A refinance with no existing loan used to run no test and record nothing,
+    // so a file missing the very thing APP-019 measures could still decide.
+    // Silence is not a pass: a test that did not run has to say so, which is
+    // what makes the decision `referred`.
+    if (!existing || !file.product) {
+      log.blocked(
         "APP-019",
         "Net tangible benefit",
-        false,
-        "new payment is not lower than the old",
-        {
-          old_payment: existing.monthlyPayment,
-          new_payment: round(newPayment),
-        },
+        [
+          !existing ? "the existing loan (APP-018)" : null,
+          !file.product ? "a quoted product" : null,
+        ].filter((x): x is string => x !== null),
       );
     } else {
-      const recoupMonths = round(fees / paymentDelta, 1);
-      const thresholdMonths = GUIDELINES.netTangibleBenefit.defaultRecoupMonths;
-      netTangibleBenefit = {
-        paymentDelta,
-        rateDelta,
-        recoupMonths,
-        thresholdMonths,
-        satisfied: recoupMonths <= thresholdMonths,
-      };
-      log.record(
-        "APP-019",
-        "Net tangible benefit",
-        recoupMonths,
-        `closing_costs / monthly_saving vs a ${thresholdMonths}-month threshold`,
-        { closing_costs: fees, monthly_saving: paymentDelta, rate_delta: rateDelta },
+      const newPayment = estimateNewPayment(
+        file.loan.loanAmount,
+        file.product.noteRate,
+        file.product.termMonths,
       );
+      /**
+       * The rate difference, or an honest absence.
+       *
+       * A credit bureau's mortgage tradeline carries no interest rate, and the
+       * credit pull wrote `0` into the column anyway — so a refinance off a
+       * real report published a `rateDelta` of −6.25 with no derivation behind
+       * it, which is the one thing a number on a decision may not be. Null is
+       * what "we were never told the old rate" looks like.
+       */
+      const rateDelta = existing.rate === null ? null : round(existing.rate - file.product.noteRate);
+      const rateDeltaSource =
+        existing.rate === null ? "unknown (no source on file carries the existing rate)" : "on file";
+      // Recoup is EVERY closing cost divided by monthly saving, not the points
+      // and fees: a borrower recoups the appraisal, the title premium and the
+      // recording fees along with what the lender keeps. Without a fee total we
+      // cannot compute it, so it reports as unattainable rather than as zero.
+      const fees = market.closingCostTotal;
+      /**
+       * The saving is P&I against P&I, so the old payment has to BE P&I.
+       *
+       * The one federal formulation of this test — 38 U.S.C. 3709(a), which is
+       * VA's and does not reach a conventional refinance — divides the fees by
+       * "the reduction in the monthly principal and interest payment", and
+       * `estimateNewPayment` computes P&I. A credit bureau reports the
+       * SCHEDULED payment, which on an escrowed loan includes taxes and
+       * insurance the new loan will also charge: subtracting P&I from it
+       * overstates the saving by the whole old escrow, understates the recoup,
+       * and passes a test the refinance fails. So an existing payment that does
+       * not know what it is blocks rather than being treated as P&I.
+       */
+      if (fees === undefined) {
+        log.blocked("APP-019", "Net tangible benefit", ["closing cost total"]);
+      } else if (existing.paymentBasis !== "principal_and_interest") {
+        log.blocked("APP-019", "Net tangible benefit", [
+          "the principal-and-interest portion of the existing payment (a credit report's " +
+            "scheduled payment may include escrow, and this one is " +
+            `${existing.paymentBasis ?? "of unrecorded basis"})`,
+        ]);
+      } else if (round(existing.monthlyPayment - newPayment) <= 0) {
+        // Null, not Infinity. `decisions.compliance` is jsonb and JSON has no
+        // infinity: Prisma wrote the row and Postgres read it back as null, so a
+        // stored counteroffer said the benefit test failed and could not say by
+        // how much — "we could not compute this" and "it never recoups" collapsed
+        // into one value, silently, at write time. Null here is unambiguous
+        // because a test that did not run leaves `netTangibleBenefit` itself
+        // undefined, and a negative `paymentDelta` beside a null recoup says the
+        // payment went UP.
+        const paymentDelta = round(existing.monthlyPayment - newPayment);
+        netTangibleBenefit = {
+          paymentDelta,
+          rateDelta,
+          recoupMonths: null,
+          thresholdMonths: GUIDELINES.netTangibleBenefit.defaultRecoupMonths,
+          satisfied: false,
+        };
+        log.record(
+          "APP-019",
+          "Net tangible benefit",
+          false,
+          "new payment is not lower than the old",
+          {
+            old_payment: existing.monthlyPayment,
+            old_payment_basis: existing.paymentBasis,
+            new_payment: round(newPayment),
+            rate_delta: rateDelta,
+            rate_delta_source: rateDeltaSource,
+          },
+        );
+      } else {
+        const paymentDelta = round(existing.monthlyPayment - newPayment);
+        const recoupMonths = round(fees / paymentDelta, 1);
+        const thresholdMonths = GUIDELINES.netTangibleBenefit.defaultRecoupMonths;
+        netTangibleBenefit = {
+          paymentDelta,
+          rateDelta,
+          recoupMonths,
+          thresholdMonths,
+          satisfied: recoupMonths <= thresholdMonths,
+        };
+        log.record(
+          "APP-019",
+          "Net tangible benefit",
+          recoupMonths,
+          `closing_costs / monthly_saving vs a ${thresholdMonths}-month threshold, both ` +
+            `payments principal-and-interest`,
+          {
+            closing_costs: fees,
+            monthly_saving: paymentDelta,
+            old_payment_basis: existing.paymentBasis,
+            rate_delta: rateDelta,
+            rate_delta_source: rateDeltaSource,
+          },
+        );
+      }
     }
   }
 
@@ -406,8 +606,33 @@ export function runComplianceTests(
     hpmlSpread,
     isHpml,
     isHighCost,
+    hoepaTriggers: triggers,
     netTangibleBenefit,
   };
+}
+
+/**
+ * HOEPA's third trigger, §1026.32(a)(1)(iii), as far as a boolean can carry it.
+ *
+ * A separate function rather than a ternary because the answer is three-valued
+ * and today's inputs can only produce two of the three: TypeScript narrows a
+ * `const` to what its initializer can be, so inlining this would type the
+ * trigger `false | null` and mark the `true` arm of the OR below as dead code.
+ * It is not dead — it is the arm a product row carrying the penalty's term and
+ * cap will take — and a type that forbids it would have to be widened by
+ * whoever adds that row, in the file where the mistake is hardest to see.
+ */
+function prepaymentPenaltyTrigger(product: LoanFile["product"]): boolean | null {
+  // No product is no answer: the trigger is a property of the loan's terms.
+  if (!product) return null;
+  // `false` settles it. A penalty that cannot be charged at all cannot be
+  // charged more than 36 months after consummation, and cannot exceed 2% of the
+  // amount prepaid.
+  if (product.prepaymentPenalty === false) return false;
+  // `true` on the boolean is NOT `true` on the trigger. A penalty inside both
+  // bounds is lawful and not high-cost, and the bounds are not on this row — so
+  // the honest answer is that we do not know, which blocks UW-009.
+  return null;
 }
 
 function estimateNewPayment(amount: number, annualRate: number, termMonths: number): number {

@@ -27,6 +27,7 @@
 import { createHash } from "node:crypto";
 import type { AporSurveyFetch } from "@hm/connectors";
 import { prisma } from "@hm/db";
+import { calendarDateIn } from "@hm/shared";
 import {
   aporTableFromYieldRows,
   crossCheck,
@@ -342,9 +343,17 @@ export interface AporStatus {
   readonly error?: string;
 }
 
-/** The Monday of the FFIEC week containing `now`, as an ISO date. */
+/**
+ * The Monday of the FFIEC week containing `now`, as an ISO date.
+ *
+ * On the lender's calendar, not UTC's — this is what `/health` reports
+ * `coversThisWeek` against, and reading it in UTC flipped the answer at 20:00
+ * on Sunday in New York (19:00 in winter). For four hours every Sunday evening
+ * a fully current series read as one week behind, which is an alarm that cries
+ * on a schedule.
+ */
 export function mondayOf(now: Date): string {
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const d = new Date(`${calendarDateIn(now)}T00:00:00.000Z`);
   d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
   return isoDate(d);
 }

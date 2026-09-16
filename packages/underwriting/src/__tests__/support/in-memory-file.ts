@@ -138,6 +138,7 @@ export function afterIdentity(): LoanFile {
       // A Monday the checked-in average prime offer table holds, so the
       // compliance tests this file reaches have a week to compare against.
       rateQuotedAt: REFERENCE.toISOString(),
+      prepaymentPenalty: false,
       overlays: [],
     },
     invitedBorrowers: [],

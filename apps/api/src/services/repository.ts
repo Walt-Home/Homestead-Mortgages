@@ -29,6 +29,7 @@ import type {
   SanctionsScreening,
   LienSearch,
   InvitedBorrower,
+  ExistingLoan,
 } from "@hm/shared";
 import { DECISION_OUTCOMES, TERMINAL } from "@hm/shared";
 import type { Prisma } from "@hm/db";
@@ -78,6 +79,19 @@ function readOutcome(stored: string): Decision["outcome"] | null {
 }
 
 /** Prisma returns Decimal; the domain uses number. One place to convert. */
+/**
+ * The two things `existing_monthly_payment` can be, mirrored from the CHECK.
+ *
+ * A column value outside this set reads back as null rather than as itself: an
+ * unrecognised basis is not a basis, and APP-019 blocks on null. The database
+ * refuses to store one, so this is the second half of one promise.
+ */
+const EXISTING_PAYMENT_BASIS = ["principal_and_interest", "scheduled_payment"] as const;
+
+function paymentBasisOf(value: string | null): ExistingLoan["paymentBasis"] {
+  return EXISTING_PAYMENT_BASIS.find((b) => b === value) ?? null;
+}
+
 function num(value: Prisma.Decimal | null): number | null {
   return value === null ? null : Number(value);
 }
@@ -466,8 +480,11 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
                 servicer: row.existingServicer,
                 loanNumber: row.existingLoanNumber ?? "",
                 balance: numOr(row.existingBalance, 0),
-                rate: numOr(row.existingRate, 0),
+                // Null, not zero. A zero rate is a claim; a null is the absence
+                // it actually is, and APP-019 publishes no rate delta for it.
+                rate: num(row.existingRate),
                 monthlyPayment: numOr(row.existingMonthlyPayment, 0),
+                paymentBasis: paymentBasisOf(row.existingPaymentBasis),
               }
             : undefined,
         }
@@ -506,6 +523,10 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
             // on a file quoted before the column existed, which blocks that
             // lookup rather than answering it off today's week.
             rateQuotedAt: row.rateQuotedAt?.toISOString() ?? null,
+            // HOEPA's third trigger (§1026.32(a)(1)(iii)). The column has always
+            // been on the product row and NOT NULL; it simply was not projected,
+            // so the engine asserted "not high-cost" having never asked.
+            prepaymentPenalty: row.product.prepaymentPenalty,
             overlays: row.overlays,
           }
         : null,

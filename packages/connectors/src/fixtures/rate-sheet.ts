@@ -23,6 +23,8 @@
  */
 
 /** One product on the sheet, before anything is adjusted. */
+import { calendarDateIn, endOfDayIn, startOfDayIn } from "@hm/shared";
+
 export interface RateSheetProduct {
   readonly productCode: string;
   readonly productName: string;
@@ -72,11 +74,24 @@ export const RATE_SHEET: readonly RateSheetProduct[] = [
  * and not a fortnight either side. Deriving both from the reference date is
  * what lets a fixture-served quote carry an expiry a screen could honor — and
  * what stops a quote read back a week later from still looking current.
+ *
+ * **The day is the lender's day, not UTC's.** `effectiveAt` is written onto
+ * `loan_files.rate_quoted_at`, which is the date Regulation Z's comparisons are
+ * keyed on. Flooring to UTC midnight manufactured the exact instant that reads
+ * as the wrong day: a quote at 20:00 on Sunday in New York floored to Monday
+ * 00:00Z, and the APOR lookup then matched the week the CFPB had not published
+ * yet. Both ends now come from `RATE_SET_TIME_ZONE`, which is the same zone the
+ * lookup reads them back in.
+ *
+ * ⚠ A local day is 23 or 25 hours twice a year. `expiresAt` is the last
+ * millisecond before the NEXT local midnight rather than 24 hours after this
+ * one, so a sheet published on a spring-forward Sunday expires at midnight like
+ * every other sheet.
  */
 export function sheetWindow(ref: Date): { effectiveAt: string; expiresAt: string } {
-  const start = new Date(
-    Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate(), 0, 0, 0, 0),
-  );
-  const end = new Date(start.getTime() + 24 * 60 * 60_000 - 1);
-  return { effectiveAt: start.toISOString(), expiresAt: end.toISOString() };
+  const day = calendarDateIn(ref);
+  return {
+    effectiveAt: startOfDayIn(day).toISOString(),
+    expiresAt: endOfDayIn(day).toISOString(),
+  };
 }

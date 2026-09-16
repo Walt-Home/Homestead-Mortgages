@@ -35,7 +35,18 @@
  * to a checked-in file that was current the day somebody last ran
  * `apor:vendor`. Every derivation that consumes a rate records `apor_source`,
  * so a stored decision says which publication answered it.
+ *
+ * **The date the rate was set is a calendar date, in a named zone.** The lookup
+ * took the UTC calendar date off the stored instant, which is a different day
+ * for eight hours out of every twenty-four: a quote at 21:00 Sunday in New York
+ * is `T01:00Z` on Monday, and UTC moved it into the following week — first a
+ * blocked test, then, once Monday's row landed, a comparison against the wrong
+ * week, recorded on an append-only decision that names the week it used. The
+ * zone is `RATE_SET_TIME_ZONE` in `@hm/shared`, the fixture rate sheet stamps
+ * its days in the same one, and every derivation records both.
  */
+
+import { calendarDateIn } from "@hm/shared";
 
 /** One week of the series: the FFIEC's week begins on a Monday. */
 export interface AporWeek {
@@ -72,6 +83,8 @@ export type AporLookup =
       readonly found: true;
       readonly rate: number;
       readonly weekOf: string;
+      /** The rate-set calendar date the week was matched on, in RATE_SET_TIME_ZONE. */
+      readonly setOn: string;
       readonly termYears: number;
       readonly source: string;
     }
@@ -162,10 +175,16 @@ export function lookupApor(
       reason: `an average prime offer rate for a ${amortization} product (this table holds fixed-rate columns only)`,
     };
   }
-  const at = rateSetOn.getTime();
-  if (!Number.isFinite(at)) {
+  if (!Number.isFinite(rateSetOn.getTime())) {
     return { found: false, reason: "the date this loan's rate was set" };
   }
+  // The calendar date FIRST, and every comparison below on that date's midnight
+  // — the week match and the staleness check alike. Comparing the raw instant
+  // against a Monday midnight in UTC while reporting a date read in another
+  // zone is two answers to one question, and the reason string would name a day
+  // the match did not use.
+  const setOn = calendarDateIn(rateSetOn);
+  const at = Date.parse(`${setOn}T00:00:00.000Z`);
   if (termMonths % 12 !== 0) {
     return {
       found: false,
@@ -188,7 +207,6 @@ export function lookupApor(
   }
   const first = table.weeks[0]!;
   const last = table.weeks[table.weeks.length - 1]!;
-  const setOn = new Date(at).toISOString().slice(0, 10);
   if (match === null) {
     return {
       found: false,
@@ -206,6 +224,7 @@ export function lookupApor(
     found: true,
     rate: match.fixed[column]!,
     weekOf: match.weekOf,
+    setOn,
     termYears,
     source: match.source ?? table.source,
   };

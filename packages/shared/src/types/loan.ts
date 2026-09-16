@@ -92,8 +92,30 @@ export interface ExistingLoan {
   readonly servicer: string;
   readonly loanNumber: string;
   readonly balance: number;
-  readonly rate: number;
+  /**
+   * The note rate on the loan being paid off, or null where nobody has said.
+   *
+   * Nullable because the source this is usually populated from cannot supply
+   * it: a credit bureau's mortgage tradeline reports a balance, a scheduled
+   * payment and a status, and no rate. Writing a zero there — which is what the
+   * credit route did — is not an absence, it is a claim that the borrower's
+   * existing mortgage is interest-free, and APP-019 published the difference.
+   */
+  readonly rate: number | null;
   readonly monthlyPayment: number;
+  /**
+   * What `monthlyPayment` IS, because the two sources mean different things.
+   *
+   * A borrower or a mortgage statement gives principal and interest. A credit
+   * bureau gives the SCHEDULED payment, which on an escrowed loan carries taxes
+   * and insurance as well. Net tangible benefit subtracts the new loan's P&I
+   * from this, so treating a scheduled payment as P&I overstates the monthly
+   * saving by the entire old escrow and understates the recoup — in the
+   * permissive direction, passing a refinance that fails.
+   *
+   * Null is unknown, and unknown blocks APP-019 rather than assuming either.
+   */
+  readonly paymentBasis: "principal_and_interest" | "scheduled_payment" | null;
 }
 
 export interface LoanTerms {
@@ -147,6 +169,21 @@ export interface ProductSelection {
    * lookup rather than a lookup against today.
    */
   readonly rateQuotedAt: string | null;
+  /**
+   * Whether this product can charge a prepayment penalty at all.
+   *
+   * On the product because it is what the product IS, beside the amortization
+   * and the term. §1026.32(a)(1)(iii) makes a loan high-cost when a penalty can
+   * be charged more than 36 months after consummation or can exceed 2% of the
+   * amount prepaid, and §1026.43(g) limits when one may be offered at all — so
+   * a HOEPA determination that never reads this has tested two of three
+   * triggers and called the answer `false`.
+   *
+   * `false` settles the trigger: no penalty cannot be charged past 36 months.
+   * `true` does not, because the term and the cap are not on this row, and the
+   * test blocks until some row carries them.
+   */
+  readonly prepaymentPenalty: boolean;
   /** Lender/investor overlays beyond the agency guide. Empty means none apply. */
   readonly overlays: readonly string[];
 }

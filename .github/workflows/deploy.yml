@@ -120,10 +120,18 @@ jobs:
       # packages/du-schema validates the eighteen shipped DU samples against
       # the vendored MISMO chain by shelling out to xmllint, rather than adding
       # an XML schema validator to the dependency tree — see its README. It is
-      # on the runner image and on macOS; asserting it here means a runner that
-      # loses it says so in its own step instead of inside the suite.
+      # on macOS and it is NOT on ubuntu-latest: the step below used to assert
+      # its presence on the assumption that it was, and failed every run for
+      # twelve commits — the check job never reached the tests, the deploy job
+      # never ran, and staging stayed where it was, with a failure that read
+      # like a service-container teardown. Installed, then asserted, so a
+      # runner image that changes again says so in its own step.
       - name: xmllint is available
-        run: xmllint --version
+        run: |
+          if ! command -v xmllint >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+          fi
+          xmllint --version
 
       - name: Test
         run: npm test

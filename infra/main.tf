@@ -42,6 +42,11 @@ resource "google_sql_database_instance" "homestead-mortgages" {
   region           = var.region
 
   settings {
+    # On, because the instance has it on. Surfaced by importing the instance
+    # into a fresh state: the provider knows the attribute, GCP defaults it to
+    # true, and a config silent about it planned to switch it off.
+    enable_dataplex_integration = true
+
     tier              = var.db_tier
     availability_type = "ZONAL"
     disk_size         = 10

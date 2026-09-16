@@ -1018,6 +1018,27 @@ decision this change should not make on its own:
   interest from the old loan's full escrowed payment**, which overstates the
   saving by the old escrow.
 
+## A job is declared on, not derived from
+
+Desktop Underwriter requires three things about every current employment:
+which of a borrower's jobs is the primary one, whether they are self-employed
+at it, and whether they are employed by a family member, the property seller,
+a real estate agent or another party to the transaction. The first is derived
+— the current job carrying the most employment income is primary — and nobody
+is asked. The other two are URLA 1b's questions, and they are asked, stored
+with who said them and when, and attested by the signature on the review
+screen, exactly as Section 5 is. A payroll pull knows what a job pays and
+cannot know whether the employer is the seller; a default of "no" would be an
+unrun question asserting a clean answer above a signature, which is the defect
+`buildDeclarations` was removed for.
+
+They are asked on the review screen rather than on screen 3 because jobs only
+exist after the bank or payroll pull. `APP-029` is the requirement, and its
+applicability is three-valued on purpose — unknown until a pull has looked for
+a job, false for a borrower with none — so the satisfied count cannot go
+backwards across the pull the way it once did. A job a later pull adds arrives
+unasked, and only that one is owed.
+
 ## Bank: Plaid, and CRA rather than Assets
 
 CRD-017 wants "a 12-month asset verification report from an authorized DU

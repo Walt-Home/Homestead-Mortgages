@@ -1955,6 +1955,27 @@ export const REQUIREMENTS: readonly Requirement[] = [
       ],
       "prose": "Before UW-017"
     }
+  },
+  {
+    "id": "APP-029",
+    "family": "APP",
+    "screen": "decision",
+    "screenOrdinal": 9,
+    "source": "borrower_input",
+    "statement": "Employment declarations answered by the borrower",
+    "fields": "self_employed, employed_by_party_to_transaction, one pair per current employment",
+    "evidence": [
+      "URLA Section 1b"
+    ],
+    "condition": "current_employment",
+    "conditionProse": "Current employment on file",
+    "dayOneCertainty": null,
+    "failureSeverity": "repurchase_unsaleable",
+    "timing": {
+      "kind": "at",
+      "event": "application",
+      "prose": "At application"
+    }
   }
 ] as const;
 

@@ -749,6 +749,40 @@ export const EVALUATORS: Record<string, Evaluator> = {
     );
   },
 
+  /**
+   * URLA 1b, per job. "Are you the business owner or self-employed" and "are
+   * you employed by a family member, property seller, real estate agent or
+   * other party to the transaction" are the borrower's statements about each
+   * current employment, the same class of answer as Section 5 and refused the
+   * same derivation: a payroll pull can say what a job pays and cannot say
+   * whether the employer is the seller. Null is unasked. A job that arrived on
+   * a later pull is unasked again, which is right — nobody answered for it.
+   *
+   * Asked of the person whose job it is. `f.employment` is file-wide, so it is
+   * filtered to the borrower being judged, and a co-borrower's unanswered jobs
+   * are theirs to answer rather than the applicant's to fail.
+   */
+  "APP-029": ofEveryBorrower((b, f) => {
+    const jobs = f.employment.filter((e) => e.partyId === b.partyId && e.status === "active");
+    if (jobs.length === 0) return ok("no current employment to declare on");
+    const unasked = jobs.filter((e) => e.declaration === null);
+    if (unasked.length > 0) {
+      return no(
+        `the Section 1b questions have not been asked about ${unasked
+          .map((e) => e.employerName)
+          .join(", ")}`,
+      );
+    }
+    const flagged = jobs.filter(
+      (e) => e.declaration!.selfEmployed || e.declaration!.employedByPartyToTransaction,
+    ).length;
+    return ok(
+      flagged === 0
+        ? `section 1b answered for ${jobs.length} job${jobs.length === 1 ? "" : "s"}, nothing flagged`
+        : `section 1b answered for ${jobs.length} job${jobs.length === 1 ? "" : "s"}, ${flagged} flagged`,
+    );
+  }),
+
   "AST-002": derived("AST-002", "funds to close"),
   "AST-003": derived("AST-003", "reserve requirement"),
 

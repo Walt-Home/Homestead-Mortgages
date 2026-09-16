@@ -29,7 +29,7 @@ describe("registry", () => {
     // rather than a check inside a route because the engine cannot report work
     // that has no requirement, and the seventh is there because a casefile DU
     // would accept needs an answer no record we retrieve carries.
-    expect(REQUIREMENTS.length).toBe(84);
+    expect(REQUIREMENTS.length).toBe(85);
   });
 
   it("has a condition predicate for every requirement", () => {

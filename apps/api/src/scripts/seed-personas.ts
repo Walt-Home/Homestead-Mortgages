@@ -79,6 +79,7 @@ import { primaryBorrower, tokenFor } from "../services/authorization.js";
 import type { Db } from "../services/db.js";
 import { decideApplication, recordDecision } from "../services/decide.js";
 import { recordDeclaration, type DeclarationInput } from "../services/declarations.js";
+import { recordEmploymentDeclarations } from "../services/employment-declarations.js";
 import { pinTridPieces, proposeScenario } from "../services/evidence.js";
 import {
   assertFacts,
@@ -788,7 +789,44 @@ async function uploadDocument(w: Walk, requirementId: string, filename: string):
  * The review screen's signature: one act covering the application and the
  * 4506-C, then the transcripts it licenses.
  */
+/**
+ * URLA 1b, per current job, answered on the review screen above the
+ * signature — so the seed answers them here, for everybody on the file, the
+ * way it answers Section 5 in `declarations`. Every sample borrower is a
+ * plain employee: not self-employed, not employed by a party to the
+ * transaction. A story that needs otherwise says so here, not in a default.
+ */
+async function employmentDeclarations(w: Walk): Promise<void> {
+  const file = await currentFile(w);
+  for (const borrower of file.borrowers) {
+    const jobs = file.employment.filter(
+      (e) => e.partyId === borrower.partyId && e.status === "active",
+    );
+    if (jobs.length === 0) continue;
+    const own = borrower.partyId === w.partyId;
+    await recordEmploymentDeclarations(
+      w.loanFileId,
+      {
+        // Their own principal for the walker; staff for anyone else, for the
+        // reason `declarations` gives — a co-borrower who has never signed in
+        // has no principal of their own to assert with.
+        assertedByPrincipalId: own
+          ? await principalForParty(w.tx, w.partyId)
+          : await staffPrincipal(w.tx, `ops-${w.applicationId}`),
+        ...(own ? {} : { borrowerId: borrower.id }),
+        answers: jobs.map((job) => ({
+          employmentId: job.id,
+          selfEmployed: false,
+          employedByPartyToTransaction: false,
+        })),
+      },
+      w.tx,
+    );
+  }
+}
+
 async function signApplication(w: Walk): Promise<void> {
+  await employmentDeclarations(w);
   await grantConsent(w.tx, w.loanFileId, w.borrowerId, "form_4506c");
 
   const file = await currentFile(w);

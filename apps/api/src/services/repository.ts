@@ -493,6 +493,9 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       .map((s) => reportSource(s.lastSeenSnapshotId)),
 
     employment: row.employments.map((e) => ({
+      id: e.id,
+      partyId: e.partyId,
+      employerId: e.employerId,
       employerName: e.employerName,
       employerEin: e.employerEin ?? undefined,
       position: e.position,
@@ -501,6 +504,16 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       status: e.status as never,
       isMilitary: e.isMilitary,
       verificationMethod: e.verificationMethod as never,
+      // Null is unasked. The CHECK holds the three columns together, so one
+      // answer present means all of them are.
+      declaration:
+        e.selfEmployed === null || e.employedByPartyToTransaction === null || e.declaredAt === null
+          ? null
+          : {
+              selfEmployed: e.selfEmployed,
+              employedByPartyToTransaction: e.employedByPartyToTransaction,
+              declaredAt: e.declaredAt.toISOString(),
+            },
     })),
 
     documents: row.documents.map((d) => ({

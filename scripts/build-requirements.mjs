@@ -157,6 +157,7 @@ const CONDITIONS = {
   "Borrower owned a home in the past 3 years": "declared_homeowner_past_three_years",
   "Borrower declared a bankruptcy": "declared_bankruptcy",
   "Current residence under 24 months": "current_residence_under_two_years",
+  "Current employment on file": "current_employment",
 };
 
 /**

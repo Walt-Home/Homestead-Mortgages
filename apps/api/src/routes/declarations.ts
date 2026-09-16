@@ -24,6 +24,7 @@
  * what the response is built from and not a second shape assembled here.
  */
 
+import { recordEmploymentDeclarations } from "../services/employment-declarations.js";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "@hm/db";
@@ -278,6 +279,41 @@ declarationRouter.post(
     // one answer after connecting their bank is not moved back to this screen.
     await advanceStage(id, "DECLARATIONS");
     res.status(201).json({ declaration: view });
+  }),
+);
+
+/**
+ * URLA 1b, per current job, answered on the review screen above the
+ * signature. The same shape as the declaration POST: whole set or nothing,
+ * about the borrower being answered for, asserted by whoever sent it.
+ */
+const employmentDeclarationsSchema = z.object({
+  borrowerId: z.string().uuid().optional(),
+  answers: z
+    .array(
+      z.object({
+        employmentId: z.string().uuid(),
+        selfEmployed: z.boolean(),
+        employedByPartyToTransaction: z.boolean(),
+      }),
+    )
+    .max(20),
+});
+
+declarationRouter.post(
+  "/:id/employment-declarations",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    const input = employmentDeclarationsSchema.parse(req.body);
+    await assertFileAccess(id, req.user!.id, "write");
+    const partyId = await partyForUser(prisma, req.user!.id);
+    const assertedByPrincipalId = await principalForParty(prisma, partyId);
+    const declarations = await recordEmploymentDeclarations(id, {
+      answers: input.answers,
+      borrowerId: input.borrowerId,
+      assertedByPrincipalId,
+    });
+    res.status(201).json({ declarations });
   }),
 );
 

@@ -15,6 +15,7 @@ import type {
   BorrowerDeclaration,
   BorrowerResidence,
   DecisionOutcome,
+  FileEmployment,
   PropertyEstateType,
   Ratios,
 } from "@hm/shared";
@@ -61,6 +62,11 @@ export interface LoanFileView {
   isDemo: boolean;
   borrowers: {
     id: string;
+    /**
+     * Who this person IS, across files — the key `employment` rows are keyed
+     * on. `id` is this borrower row on this file; a job names its party.
+     */
+    partyId: string;
     firstName: string;
     lastName: string;
     email: string;
@@ -149,6 +155,16 @@ export interface LoanFileView {
    * the rows.
    */
   qualifyingIncomeReportedBy?: ("bank" | "payroll" | null)[];
+  /**
+   * Every live employment on the file, across borrowers; `partyId` says whose.
+   *
+   * Not a connector snapshot and not per borrower: a job is reconciled from
+   * whichever pull last reported it, so the file carries one list and a reader
+   * asks it who a row belongs to. `declaration` on a row is URLA 1b, and null
+   * there means UNASKED — a job a later pull adds is unasked again, which is
+   * the whole reason it is three-valued rather than two booleans.
+   */
+  employment: FileEmployment[];
   transcripts: unknown[];
   documents: { id: string; filename: string; satisfiesRequirementId: string; bytes: number }[];
   links: { kind: string; provider: string; persistentMonitoringEnabled: boolean }[];

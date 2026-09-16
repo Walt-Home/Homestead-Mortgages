@@ -702,6 +702,17 @@ model Employment {
   isMilitary         Boolean   @default(false) @map("is_military")
   verificationMethod String    @map("verification_method")
 
+  /// URLA 1b.9 and 1b.8, the borrower's own answers about this job — asked,
+  /// never derived, the same treatment Section 5 gets. Null is unasked. The
+  /// two answers and `declaredAt` come together, held by
+  /// `employments_a_declaration_is_whole`; the principal is swept on account
+  /// deletion and the answers stand.
+  selfEmployed                 Boolean?   @map("self_employed")
+  employedByPartyToTransaction Boolean?   @map("employed_by_party_to_transaction")
+  declaredByPrincipalId        String?    @map("declared_by_principal_id") @db.Uuid
+  declaredBy                   Principal? @relation("EmploymentDeclaredBy", fields: [declaredByPrincipalId], references: [id], onDelete: SetNull)
+  declaredAt                   DateTime?  @map("declared_at")
+
   firstSeenSnapshotId String?            @map("first_seen_snapshot_id") @db.Uuid
   firstSeenSnapshot   ConnectorSnapshot? @relation("EmploymentFirstSeen", fields: [firstSeenSnapshotId], references: [id], onDelete: SetNull)
   lastSeenSnapshotId  String?            @map("last_seen_snapshot_id") @db.Uuid
@@ -718,6 +729,7 @@ model Employment {
   @@index([loanFileId])
   @@index([partyId], map: "employments_party")
   @@index([employerId], map: "employments_employer")
+  @@index([declaredByPrincipalId], map: "employments_declared_by")
   @@map("employments")
 }
 
@@ -1060,11 +1072,12 @@ model Principal {
   deprovisionedAt DateTime? @map("deprovisioned_at")
   createdAt       DateTime  @default(now()) @map("created_at")
 
-  assertedFacts         Fact[]                  @relation("FactAssertedBy")
-  assertedDeclarations  DuDeclaration[]         @relation("DeclarationAssertedBy")
-  revokedAuthorizations Authorization[]         @relation("AuthorizationRevokedBy")
-  transitionsCaused     ApplicationTransition[] @relation("TransitionActor")
-  loanMovesCaused       LoanTransition[]        @relation("LoanTransitionActor")
+  assertedFacts          Fact[]                  @relation("FactAssertedBy")
+  assertedDeclarations   DuDeclaration[]         @relation("DeclarationAssertedBy")
+  revokedAuthorizations  Authorization[]         @relation("AuthorizationRevokedBy")
+  transitionsCaused      ApplicationTransition[] @relation("TransitionActor")
+  loanMovesCaused        LoanTransition[]        @relation("LoanTransitionActor")
+  employmentDeclarations Employment[]            @relation("EmploymentDeclaredBy")
 
   @@unique([kind, subject])
   @@index([partyId])

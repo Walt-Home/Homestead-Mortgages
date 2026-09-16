@@ -12,12 +12,12 @@ import type { Borrower, Consent } from "./borrower.js";
 import type {
   AssetReport,
   CreditReport,
-  EmploymentRecord,
   IncomeReportSource,
   IncomeSource,
   PayrollData,
   TaxTranscript,
   UploadedDocument,
+  FileEmployment,
 } from "./verification.js";
 import type { Decision, DisclosureRecord } from "./decision.js";
 import type {
@@ -169,7 +169,8 @@ export interface LoanFile {
    * still qualify on exactly one of them.
    */
   readonly incomeSources: readonly IncomeSource[];
-  readonly employment: readonly EmploymentRecord[];
+  /** Every live employment on the file, across borrowers; `partyId` says whose. */
+  readonly employment: readonly FileEmployment[];
 
   /**
    * Which retrieval last wrote each of the income rows the engine SUMS — the

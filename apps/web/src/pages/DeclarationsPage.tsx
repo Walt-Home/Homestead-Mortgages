@@ -33,6 +33,7 @@ import { SAMPLE_FILE_START_YOUR_OWN } from "../lib/home-copy.js";
 import { useLoanFile } from "../lib/file.js";
 import { primaryBorrower } from "../lib/borrowers.js";
 import { Why } from "../components/Why.js";
+import { YesNoQuestion } from "../components/YesNoQuestion.js";
 import {
   BANKRUPTCY_CHAPTERS,
   BASIS_LABELS,
@@ -391,48 +392,6 @@ export function DeclarationsPage() {
         {saving ? "Saving…" : "Continue"}
       </button>
     </form>
-  );
-}
-
-/**
- * One question, two answers, and whatever the yes reveals.
- *
- * Radios rather than a checkbox: a checkbox has no unanswered state, and an
- * unticked box reading as "no" is how a borrower is recorded as denying
- * something nobody asked them.
- */
-function YesNoQuestion({
-  id,
-  prompt,
-  value,
-  onChange,
-  children,
-}: {
-  id: string;
-  prompt: string;
-  value: YesNo;
-  onChange: (value: YesNo) => void;
-  children?: React.ReactNode;
-}) {
-  return (
-    <fieldset className="mt-5">
-      <legend className="text-base text-ink-soft">{prompt}</legend>
-      <div className="mt-2 flex gap-5">
-        {(["yes", "no"] as const).map((option) => (
-          <label key={option} className="flex items-center gap-2 text-base text-ink-soft">
-            <input
-              type="radio"
-              name={id}
-              value={option}
-              checked={value === option}
-              onChange={() => onChange(option)}
-            />
-            <span>{option === "yes" ? "Yes" : "No"}</span>
-          </label>
-        ))}
-      </div>
-      {children}
-    </fieldset>
   );
 }
 

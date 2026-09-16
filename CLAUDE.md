@@ -31,7 +31,7 @@ Prisma against Postgres, Terraform for the GCP pieces this repo owns.
 
 ```
 data/v1-build.csv          source of truth for WHAT must be satisfied
-packages/requirements      the 84 requirements, executable
+packages/requirements      the 85 requirements, executable
 packages/underwriting      the shadow AUS
 packages/connectors        five ports, fixture adapters, the authorization guard
 packages/shared            domain types; LoanFile is the object everything reads
@@ -46,7 +46,7 @@ infra                      Terraform
 
 The UI was rebuilt from nine screens to four, and a fifth was added when
 somebody finally had to be asked URLA Section 5 and where they live. The engine
-tracks eleven `FlowStage` values and evaluates 84 requirements.
+tracks eleven `FlowStage` values and evaluates 85 requirements.
 
 ```
 1 Property   →  2 About you  →  3 A few questions  →  4 Your bank  →  5 Review
@@ -106,7 +106,10 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   the engine reads.
 - **Screen 5's single signature covers the application AND the 4506-C**, then
   pulls transcripts and recomputes. Disclosed in the signing panel. It also
-  attests to the Section 5 answers, which is why that screen shows them back:
+  attests to the Section 5 answers and to the URLA 1b answers about each
+  current job (self-employed; employed by a party to the transaction), which
+  are asked on that screen because jobs exist only after the bank or payroll
+  pull. Both are shown back there:
   it used to DERIVE five declarations from a credit report, a lien search, an
   asset report and a county record, so an unrun pull read as the borrower
   declaring themselves clean. `buildDeclarations` is gone and a test keeps it

@@ -107,3 +107,4 @@ UW-015,9 Decision,Derived internally,Conditions cleared and documented,open_cond
 UW-016,9 Decision,Derived internally,Adverse action or counteroffer issued,Borrower notified with specific principal reasons,Adverse action notice with timestamp,Denial or counteroffer,No,Regulatory violation,Within 30 days of complete application
 UW-017,9 Decision,Derived internally,Clear to Close issued,All conditions cleared; loan authorized to proceed to closing,CTC record,Universal,No,Rework / delay,After UW-015
 UW-018,9 Decision,Derived internally,Fraud and red flag review completed,alert_count by severity; adjudication_status per alert,Fraud report; red flag checklist,Universal,No,Repurchase / unsaleable,Before UW-017
+APP-029,9 Decision,Borrower input,Employment declarations answered by the borrower,"self_employed, employed_by_party_to_transaction, one pair per current employment",URLA Section 1b,Current employment on file,No,Repurchase / unsaleable,At application

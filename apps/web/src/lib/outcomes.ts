@@ -143,11 +143,49 @@ export const SIGNING_COPY = {
   answerThem: "Answer them now",
   panelTitle: "Your application",
   panelBody:
-    "This is the application itself — the property, the loan, your details and the answers above. It also includes IRS Form 4506-C, which lets us request your own tax records directly rather than asking you to find them.",
+    "This is the application itself — the property, the loan, your details, the answers above and what you told us about your work. It also includes IRS Form 4506-C, which lets us request your own tax records directly rather than asking you to find them.",
   /** Scoped for the same reason `lead` is: "the answers above" is two people's. */
   panelTerms:
-    "Signing submits it, and says your own answers above are true and complete. It does not commit you to borrowing anything, and it is not an agreement to any particular rate or terms.",
+    "Signing submits it, and says your own answers above, and what you told us about your work, are true and complete. It does not commit you to borrowing anything, and it is not an agreement to any particular rate or terms.",
   signButton: "Sign and submit",
+} as const;
+
+/**
+ * URLA 1b, per current job, in the words a borrower is asked them in.
+ *
+ * Two questions the form puts about every job somebody holds now, and the
+ * reason they are on screen 5 rather than on screen 3 is that there is no job
+ * to ask about until screen 4 has run. A payroll or a bank connection reports
+ * the employer, the position and the dates; neither can report whether the
+ * borrower owns the business or whether the employer is the seller of the
+ * house. So the pull says WHICH jobs, and the person says what the pull cannot
+ * know — the same split as every other answer above the signature, and the
+ * same one the derived declarations got wrong in the other direction.
+ *
+ * The answers are read back in the words of the thing answered rather than as
+ * "Yes" and "No" under a repeated question: a job's line has to be legible on
+ * its own, because a co-borrower's jobs are shown back without the questions
+ * beside them.
+ *
+ * Nothing here promises that anybody will check an answer, and nothing names a
+ * vendor. Which connector reported the job is not this block's business, and a
+ * sentence that named one would be true on a deployment and false on the next.
+ */
+export const WORK_COPY = {
+  heading: "Your work",
+  lead: "A payroll or bank connection tells us where you work. These two it cannot tell us, so they are yours to answer — both of them, about each job you have now.",
+  /** URLA 1b.9, in plain words rather than the form's. */
+  selfEmployed: "Are you the business owner or self-employed here?",
+  /** URLA 1b.8, with the list kept because each name on it is a different risk. */
+  partyToTransaction:
+    "Are you employed by a family member, the property seller, a real estate agent, or another party to this transaction?",
+  /** Under a button that is refusing to be pressed, saying why. */
+  unanswered: "Answer both questions about each of your jobs to continue.",
+  /** The four halves an answered job is read back with. */
+  isSelfEmployed: "the business owner or self-employed",
+  notSelfEmployed: "not self-employed",
+  isPartyToTransaction: "employed by a party to this transaction",
+  notPartyToTransaction: "not employed by a party to this transaction",
 } as const;
 
 /**
@@ -177,6 +215,23 @@ export const CO_BORROWER_COPY = {
   /** Said in the co-borrower's own block, where their answers would be. */
   theirs: (name: string) =>
     `${name} has not answered these yet. They are questions about ${name}, so nothing you answer here answers them.`,
+  /**
+   * The heading over one person's job answers, and the sentence where they
+   * would be.
+   *
+   * URLA 1b is per job and a job belongs to one person, so a co-borrower's
+   * jobs are theirs to answer the same way Section 5 is — and this screen
+   * renders them without controls for exactly the reason it renders their
+   * declarations without a link: the POST asserts as whoever is signed in, so
+   * a control here would record the applicant's answer about somebody else's
+   * employer.
+   *
+   * It says "yet" and stops there. Nothing in this repo invites a co-borrower
+   * to answer anything, and a line saying somebody will ask them is the
+   * promise the rule above is for.
+   */
+  workOf: (name: string) => `What ${name} told us about their work`,
+  noWorkAnswers: (name: string) => `${name} has not answered about their work yet.`,
   /**
    * What a co-borrower is asked to do, said on the one screen where both
    * people on a file are visible. There is no screen that adds one yet, so

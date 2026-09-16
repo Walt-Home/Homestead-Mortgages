@@ -146,6 +146,17 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
     });
   },
 
+  /**
+   * Three-valued on purpose. A file with no employment and no income has had
+   * no pull that could have found a job, so the answer is "cannot know yet"
+   * rather than "no" — the Section 1b questions apply to a job, and counting
+   * them satisfied on a file that has not looked for one is how the satisfied
+   * count went backwards across the payroll connection once already.
+   */
+  current_employment: (f) =>
+    f.employment.length === 0 && f.incomeSources.length === 0
+      ? null
+      : f.employment.some((e) => e.status === "active"),
   wage_earner: (f) =>
     f.employment.length === 0 && f.incomeSources.length === 0
       ? null

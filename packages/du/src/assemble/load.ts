@@ -389,6 +389,8 @@ export function loadEmployments(db: DuReader, loanFileId: string) {
       position: true,
       startDate: true,
       status: true,
+      selfEmployed: true,
+      employedByPartyToTransaction: true,
     },
   });
 }

@@ -20,6 +20,7 @@ import {
   REFERRED_COPY,
   SIGNING_COPY,
   SIGN_LEAD,
+  WORK_COPY,
 } from "../outcomes.js";
 
 /** A name to render the co-borrower lines with, since two of them take one. */
@@ -32,6 +33,11 @@ const COPY = [
   ...Object.values(COUNTEROFFER_COPY),
   ...Object.values(ENDING_COPY),
   ...Object.values(SIGNING_COPY),
+  // The URLA 1b questions and the words their answers are read back in. They
+  // sit beside the signing panel's own copy because the same signature
+  // attests to them, and a catalog the rules below do not walk is a catalog
+  // that stops being held to them.
+  ...Object.values(WORK_COPY),
   // Two of these are functions of a name, so they are rendered rather than
   // walked: a line that only exists once a name is in it is still a line a
   // borrower reads, and skipping it is how the rules stop seeing half a module.

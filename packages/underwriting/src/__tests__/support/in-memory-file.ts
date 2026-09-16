@@ -18,6 +18,8 @@ import {
   type Grant,
   type LoanFile,
   type PurposeToken,
+  type EmploymentRecord,
+  type FileEmployment,
 } from "@hm/shared";
 
 export const REFERENCE = new Date("2026-06-15T12:00:00.000Z");
@@ -76,6 +78,24 @@ export const consent = (kind: Consent["kind"]): Consent => ({
 });
 
 /** Screens 1 and 2 — everything the borrower types. */
+/**
+ * A report's employments as they would sit on the file: owned by a party,
+ * unasked. A payroll or bank report names nobody and carries no declaration;
+ * the file does both.
+ */
+export function asFileEmployment(
+  records: readonly EmploymentRecord[],
+  partyId: string,
+): FileEmployment[] {
+  return records.map((record, i) => ({
+    ...record,
+    id: `employment-${partyId}-${i + 1}`,
+    partyId,
+    employerId: null,
+    declaration: null,
+  }));
+}
+
 export function afterIdentity(): LoanFile {
   return {
     id: "11111111-1111-1111-1111-111111111111",
@@ -285,7 +305,7 @@ export async function connectedThrough(persona: PersonaId, through: Connected): 
     ...file,
     assets: outcome.result.data,
     incomeSources: outcome.result.data.incomeSources,
-    employment: outcome.result.data.employments,
+    employment: asFileEmployment(outcome.result.data.employments, file.borrowers[0]!.partyId),
   };
   if (through === "bank") return file;
 
@@ -294,7 +314,7 @@ export async function connectedThrough(persona: PersonaId, through: Connected): 
     ...file,
     payroll: payroll.data,
     incomeSources: payroll.data.incomeSources,
-    employment: payroll.data.employments,
+    employment: asFileEmployment(payroll.data.employments, file.borrowers[0]!.partyId),
   };
   if (through === "payroll") return file;
 

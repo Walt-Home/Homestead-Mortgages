@@ -117,10 +117,15 @@ describe("the words above the signature", () => {
       // take, which is the whole of what the gate now refuses.
       answerThem: "Answer them now",
       panelTitle: "Your application",
+      // The work answers are named in both, because the same signature
+      // attests to them and they are asked on this screen rather than on
+      // screen 3 — a panel listing what it covers and leaving out the one
+      // block the borrower answered directly above it is the panel being
+      // wrong about its own subject.
       panelBody:
-        "This is the application itself — the property, the loan, your details and the answers above. It also includes IRS Form 4506-C, which lets us request your own tax records directly rather than asking you to find them.",
+        "This is the application itself — the property, the loan, your details, the answers above and what you told us about your work. It also includes IRS Form 4506-C, which lets us request your own tax records directly rather than asking you to find them.",
       panelTerms:
-        "Signing submits it, and says your own answers above are true and complete. It does not commit you to borrowing anything, and it is not an agreement to any particular rate or terms.",
+        "Signing submits it, and says your own answers above, and what you told us about your work, are true and complete. It does not commit you to borrowing anything, and it is not an agreement to any particular rate or terms.",
       signButton: "Sign and submit",
     });
   });

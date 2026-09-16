@@ -32,7 +32,7 @@
  * violation — so the occupancy check is a compliance control, not tidiness.
  */
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
@@ -42,6 +42,7 @@ import {
   DemographicQuestions,
   type DemographicAnswers,
 } from "../components/DemographicQuestions.js";
+import { YesNoQuestion } from "../components/YesNoQuestion.js";
 import { ApplicationStanding } from "../components/ApplicationStanding.js";
 import { ApplicationTimeline } from "../components/ApplicationTimeline.js";
 import { Branches } from "../components/Branches.js";
@@ -58,10 +59,21 @@ import {
   REFERRED_COPY,
   SIGNING_COPY,
   SIGN_LEAD,
+  WORK_COPY,
 } from "../lib/outcomes.js";
-import { answerLines, type AnswerLine } from "../lib/declarations.js";
+import { answerLines, type AnswerLine, type YesNo } from "../lib/declarations.js";
+import {
+  answerFor,
+  currentJobsFor,
+  jobHeading,
+  workAnswered,
+  workBody,
+  workLines,
+  type WorkForm,
+} from "../lib/work.js";
 import { borrowerName, coBorrowers, primaryBorrower } from "../lib/borrowers.js";
 import type { Assessment } from "../lib/api.js";
+import type { FileEmployment } from "@hm/shared";
 
 /**
  * The one refusal this screen re-words rather than passing through.
@@ -96,6 +108,18 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     sex: "",
     visualObservationNoted: false,
   });
+  /*
+   * URLA 1b, held as the CHANGES rather than as the whole form.
+   *
+   * The effective answer for a job is what has been picked here over what is
+   * already stored on it — `answerFor` — so a borrower coming back to a file
+   * they have already answered meets their own answers on the first render
+   * rather than on the render after an effect copied them in. Everything else
+   * on this screen is a fresh question; these are the only ones with a stored
+   * answer to show back, and they are shown back as the controls themselves,
+   * because this screen is the only place they can be changed.
+   */
+  const [work, setWork] = useState<WorkForm>({});
   const [saving, setSaving] = useState(false);
   const [readyToSign, setReadyToSign] = useState(false);
   const [finishing, setFinishing] = useState(false);
@@ -145,6 +169,21 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   // have would make one person's progress wait on another's, and who signs
   // what is not this screen's to change.
   const declared = declaration != null;
+  /*
+   * The signer's current jobs, and whether they have been answered about.
+   *
+   * Asked here and not on screen 3 because there was nothing to ask about
+   * then: a job arrives with the bank or payroll pull on screen 4, so the
+   * questions cannot exist until the connector has said which employers there
+   * are. The same signature covers them — see `SIGNING_COPY.panelTerms`.
+   *
+   * A borrower with no current job on file is asked nothing and renders
+   * nothing. That is not the same as a borrower with no job: it is a file
+   * whose pulls reported none, and inventing a block for it would ask
+   * somebody to attest about an employer that does not exist.
+   */
+  const myJobs = currentJobsFor(file, primary?.partyId);
+  const workComplete = workAnswered(myJobs, work);
   const decision = file?.decision;
   const ratios = decision?.ratios;
   const payrollLinked = file?.payroll != null;
@@ -195,6 +234,10 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     // above are true and complete — so an unanswered file must not be able to
     // reach it by any route, including a stale render.
     if (!declared) return;
+    // The same refusal for the same reason. The panel's words say what the
+    // borrower told us about their work is true, and a job nobody answered
+    // about has nothing for them to have told us.
+    if (!workComplete) return;
     if (!fileId || !primary) return;
     setSaving(true);
     setError(null);
@@ -203,6 +246,24 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     // it re-sends the person it asked and never a co-borrower it did not.
     const b = primary;
     try {
+      /*
+       * The jobs first, and only when there are any.
+       *
+       * Before the borrower POST because that one is what the screen has
+       * always done last and what `setReadyToSign` follows: a failure here has
+       * to stop the panel from opening, and a refusal arriving after the
+       * demographics were saved would leave the file half-written with the
+       * signature already on offer. The route takes the whole set at once and
+       * refuses a partial one with a 422 naming the job left out, which is a
+       * sentence a person can read — so it goes through `setError` unchanged
+       * rather than being re-worded here.
+       *
+       * No `borrowerId`: this screen answers for the signer, and the route
+       * reads an absent one as Borrower 1.
+       */
+      if (myJobs.length > 0) {
+        await api.post(`/files/${fileId}/employment-declarations`, workBody(myJobs, work));
+      }
       await api.post(`/files/${fileId}/borrowers`, {
         firstName: b.firstName,
         lastName: b.lastName,
@@ -605,14 +666,26 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
           unanswered={SIGNING_COPY.unanswered}
           to={`/f/${fileId}/declarations`}
         />
+        {/*
+          The signer's own jobs, with the controls on them.
+
+          Directly under their Section 5 answers and above everybody else's,
+          because it is the same person's block of work and the same
+          signature's subject. A borrower with no current job on the file gets
+          nothing at all here — not an empty heading, not "no jobs on file".
+        */}
+        <MyWork jobs={myJobs} form={work} onChange={setWork} />
         {others.map((who) => (
-          <Answers
-            key={who.id}
-            heading={CO_BORROWER_COPY.answersOf(borrowerName(who))}
-            lines={answerLines(who.declaration, who.residences)}
-            unanswered={CO_BORROWER_COPY.theirs(borrowerName(who))}
-            to={null}
-          />
+          <Fragment key={who.id}>
+            <Answers
+              heading={CO_BORROWER_COPY.answersOf(borrowerName(who))}
+              lines={answerLines(who.declaration, who.residences)}
+              unanswered={CO_BORROWER_COPY.theirs(borrowerName(who))}
+              to={null}
+            />
+            {/* Theirs to answer, so theirs to be shown without controls. */}
+            <TheirWork name={borrowerName(who)} jobs={currentJobsFor(file, who.partyId)} />
+          </Fragment>
         ))}
         {others.length > 0 && (
           /* What a co-borrower is actually for, once there is one to explain.
@@ -660,7 +733,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
               <button
                 className="super-btn super-btn-primary"
                 onClick={() => void saveAndContinue()}
-                disabled={!declared || !demographicsAnswered || saving || readOnly}
+                disabled={!declared || !workComplete || !demographicsAnswered || saving || readOnly}
               >
                 {saving ? "Saving…" : "Continue to sign"}
               </button>
@@ -672,6 +745,11 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
               */}
               {!declared ? (
                 <p className="mt-2 text-xs text-ink-faint">{SIGNING_COPY.unanswered}</p>
+              ) : !workComplete ? (
+                /* Second, because it is the one a borrower CAN fix here: the
+                   controls are a few lines up, and the sentence is what says
+                   which disabled button they belong to. */
+                <p className="mt-2 text-xs text-ink-faint">{WORK_COPY.unanswered}</p>
               ) : (
                 !demographicsAnswered && (
                   <p className="mt-2 text-xs text-ink-faint">
@@ -720,6 +798,93 @@ function Reasons({
       ) : (
         <p className="text-base text-ink-soft">{none}</p>
       )}
+    </div>
+  );
+}
+
+/**
+ * The signer's current jobs, and URLA 1b about each of them.
+ *
+ * Nothing at all when there are none. A borrower whose pulls reported no
+ * current employment is not a borrower with something left to say about their
+ * work, and a heading over an empty list is the screen asking a question it
+ * has no subject for.
+ *
+ * The controls stay on the screen after the answers are stored, prefilled,
+ * rather than collapsing into a read-back with a link somewhere else. Section
+ * 5 can do that because screen 3 exists to go back to; there is no screen for
+ * these, so the control IS the answer read back and the way to change it. A
+ * separate list above them would print the same statement twice.
+ */
+function MyWork({
+  jobs,
+  form,
+  onChange,
+}: {
+  jobs: readonly FileEmployment[];
+  form: WorkForm;
+  onChange: (next: (current: WorkForm) => WorkForm) => void;
+}) {
+  if (jobs.length === 0) return null;
+  const set = (id: string, patch: Partial<{ selfEmployed: YesNo; partyToTransaction: YesNo }>) =>
+    onChange((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
+
+  return (
+    <div className="mt-7 border-t border-rule-soft pt-5">
+      <p className="font-display text-base text-ink">{WORK_COPY.heading}</p>
+      <p className="mt-2 text-base text-ink-soft">{WORK_COPY.lead}</p>
+      {jobs.map((job) => {
+        const answer = answerFor(job, form);
+        return (
+          <section key={job.id} className="mt-5 border-l border-rule-soft pl-4">
+            <p className="text-base font-medium text-ink">{jobHeading(job)}</p>
+            <YesNoQuestion
+              id={`work-self-${job.id}`}
+              prompt={WORK_COPY.selfEmployed}
+              value={answer.selfEmployed}
+              onChange={(value) => set(job.id, { selfEmployed: value })}
+            />
+            <YesNoQuestion
+              id={`work-party-${job.id}`}
+              prompt={WORK_COPY.partyToTransaction}
+              value={answer.partyToTransaction}
+              onChange={(value) => set(job.id, { partyToTransaction: value })}
+            />
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * A co-borrower's jobs, read back and nothing more.
+ *
+ * No controls, for the reason their declarations carry no link: the POST
+ * asserts as whoever is signed in, so an answer given here would be recorded
+ * as the applicant speaking about somebody else's employer. A co-borrower
+ * answers when they sign in.
+ *
+ * An unanswered set says so rather than rendering nothing, because the
+ * applicant is reading a page that is about to be signed and a silently
+ * missing block reads as a finished one.
+ */
+function TheirWork({ name, jobs }: { name: string; jobs: readonly FileEmployment[] }) {
+  if (jobs.length === 0) return null;
+  const lines = workLines(jobs);
+  if (lines.length === 0) {
+    return <p className="mt-4 text-base text-ink-soft">{CO_BORROWER_COPY.noWorkAnswers(name)}</p>;
+  }
+  return (
+    <div className="mt-4">
+      <p className="text-sm text-ink-muted">{CO_BORROWER_COPY.workOf(name)}</p>
+      <ul className="mt-2 flex flex-col gap-1">
+        {lines.map((line) => (
+          <li key={line} className="text-base text-ink-soft">
+            {line}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

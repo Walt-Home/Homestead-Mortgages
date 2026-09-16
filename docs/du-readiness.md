@@ -13,9 +13,9 @@ believed. Line numbers move; treat them as pointers to a name.
 and emitted from it, a preflight refuses to emit one Desktop Underwriter would
 reject, both ends of the exchange with DU exist, and a casefile with no job on
 it now comes out of the gate as bytes. Nothing sends, and a casefile carrying
-employment is still refused — three columns, below.**
+employment now emits.**
 
-Fifteen items are tracked below: ten done, five partial. The count still
+Fifteen items are tracked below: eleven done, four partial. The count still
 flatters us — what remains of the submission path is a transport that actually
 carries a document somewhere, and until there is one, the port that would submit
 has nothing beneath it.
@@ -64,11 +64,18 @@ a borrower's word for a fact the county holds is what screen 1 exists to avoid.
 It is not derivable from `property_type`: a single-family house on a row is
 attached.
 
-Three columns remain, and they are on a job: `EmploymentClassificationType`,
-`EmploymentBorrowerSelfEmployedIndicator` and
-`SpecialBorrowerEmployerRelationshipIndicator` are required on an `EMPLOYMENT`
-whose status is Current, and `employments` has a column for none of them. That
-is item 7's third gap.
+The three columns on a job are closed. `EmploymentClassificationType` is
+derived — the current job carrying the most employment income is Primary, the
+rest Secondary, and nobody is asked — and the other two are asked:
+`EmploymentBorrowerSelfEmployedIndicator` (URLA 1b.9) and
+`SpecialBorrowerEmployerRelationshipIndicator` (1b.8) are the borrower's own
+statements about each current job, the same class of answer as Section 5 and
+refused the same derivation. They are asked on the review screen, once the
+pulls have said which jobs there are, stored on `employments` with who said
+them and when, held whole by a CHECK, and attested by the signature beneath.
+`APP-029` is the requirement, three-valued until a pull has looked for a job.
+A casefile with a job on it now emits; `du-submission.test.ts` proves it both
+ways, and the scoreboard carries a job.
 
 The api suite names what is left exactly, so the list shortens in the commit
 that adds a column and cannot quietly grow. The eight-column test now asserts an
@@ -223,7 +230,7 @@ which have a longer lead time than anything above.
 | —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person                 |
 | —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                             |
 | —   | The serializer                      | Green  | Assembles and emits MISMO 3.4, arcs included, round-tripped on eighteen     |
-| 7   | Employer as an entity               | Yellow | Real entity, derivable arc; three required columns missing, so no job emits |
+| 7   | Employer as an entity               | Green  | Real entity, derivable arc, classification derived, the two 1b answers asked |
 | 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                          |
 | 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                    |
 | —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet               |
@@ -715,10 +722,9 @@ this with the people doing the work.
    a fixture.
 4. **The modeled set and the derived inventory** — what we emit, and what we
    deliberately do not, derived from the corpus rather than hand-listed.
-5. **The three employment columns**, which the preflight refuses without: a
-   classification, whether the borrower is self-employed, and whether they are
-   related to the employer. Until they exist no casefile carrying a job can be
-   emitted, which is every casefile with wage income in it.
+5. ~~**The three employment columns.**~~ Done: the classification is derived
+   and the two 1b answers are asked on the review screen (`APP-029`). A
+   casefile carrying a job emits.
 6. **The transport**, which is where the credentials question stops being
    deferrable. The response it will carry already has tables and a port to
    arrive through; what is missing is the endpoint, the envelope and the

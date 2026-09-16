@@ -88,7 +88,8 @@ export type ConditionKey =
   | "denial_or_counteroffer"
   | "declared_homeowner_past_three_years"
   | "declared_bankruptcy"
-  | "current_residence_under_two_years";
+  | "current_residence_under_two_years"
+  | "current_employment";
 
 /** Named moments the flow can be timed against, independent of any requirement. */
 export type TimingEvent =

@@ -4,7 +4,7 @@ Onboard a homebuyer, retrieve almost everything underwriting needs from
 connected accounts rather than uploads, and give them a decision that explains
 itself.
 
-Built against Drew's V1 flow sheet (`data/v1-build.csv`) — 84 requirements
+Built against Drew's V1 flow sheet (`data/v1-build.csv`) — 85 requirements
 across ten screens, with the dependency graph and applicability conditions
 made executable rather than left as prose.
 
@@ -25,7 +25,7 @@ API on `:8080`, web on `:5173`.
 
 | Package                 | What it is                                                                                                                                                       |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/requirements` | The 84 requirements as a typed registry, with a condition predicate and a satisfaction evaluator for each, plus the dependency graph hiding in the timing column |
+| `packages/requirements` | The 85 requirements as a typed registry, with a condition predicate and a satisfaction evaluator for each, plus the dependency graph hiding in the timing column |
 | `packages/underwriting` | The shadow AUS — ratios, reserves, compliance tests and pricing, every number carrying its own derivation                                                        |
 | `packages/connectors`   | Ports for credit, bank, payroll, IRS and e-sign, with fixture adapters and the authorization guard                                                               |
 | `packages/shared`       | Domain types. `LoanFile` is the object everything reads                                                                                                          |
@@ -36,7 +36,7 @@ API on `:8080`, web on `:5173`.
 ## The borrower sees five screens
 
 Property → About you → A few questions → Your bank → Review. The engine
-evaluates all 84 requirements across its own ten screens; it simply stopped
+evaluates all 85 requirements across its own ten screens; it simply stopped
 rendering most of them to the borrower. "A few questions" is the URLA
 Section 5 declarations and where the borrower lives — a step rather than a
 branch, because the engine can only report work that has a requirement.

@@ -181,6 +181,37 @@ export interface EmploymentRecord {
   readonly verificationMethod: "voe" | "paystub_w2" | "payroll_connector" | "bank_inference";
 }
 
+/**
+ * What the borrower said about one of their jobs, on the review screen,
+ * above the signature that attests to it. URLA 1b.9 and 1b.8.
+ *
+ * Asked, never derived: a payroll pull knows what a job pays and cannot know
+ * whether the employer is the property seller. Null on the employment means
+ * unasked, and a job that a later pull adds is unasked again.
+ */
+export interface EmploymentDeclaration {
+  /** Business owner or self-employed at this job. */
+  readonly selfEmployed: boolean;
+  /**
+   * Employed by a family member, the property seller, a real estate agent or
+   * another party to the transaction.
+   */
+  readonly employedByPartyToTransaction: boolean;
+  readonly declaredAt: string;
+}
+
+/**
+ * An employment as it sits on a loan file: the vendor's record, plus who it
+ * belongs to and what they have said about it. `EmploymentRecord` alone is
+ * what a payroll or bank report carries and names nobody.
+ */
+export interface FileEmployment extends EmploymentRecord {
+  readonly id: string;
+  readonly partyId: string;
+  readonly employerId: string | null;
+  readonly declaration: EmploymentDeclaration | null;
+}
+
 export interface EmploymentGap {
   readonly startDate: string;
   readonly endDate: string;

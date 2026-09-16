@@ -290,6 +290,7 @@ async function borrowerParty(party: LoadedParty, input: PartiesInput): Promise<D
     declaration(party, facts),
     buildEmployers(
       input.employments.filter((row) => row.partyId === party.partyId),
+      input.income.filter((row) => row.partyId === party.partyId),
       input.labels,
       input.index,
     ),

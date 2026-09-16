@@ -19,7 +19,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { prisma } from "@hm/db";
-import type { EmploymentRecord } from "@hm/shared";
+import type { EmploymentRecord, FileEmployment } from "@hm/shared";
 
 // Same reason as `standing.test.ts`: the deployed bank provider hands the
 // borrower to a widget and answers 202, so the branch of the route that writes
@@ -128,6 +128,22 @@ const rowsFor = (loanFileId: string) =>
     orderBy: { identityKey: "asc" },
   });
 
+/**
+ * The file's employment carries what a report cannot — whose it is, and what
+ * the borrower has said about it. Strip that to compare with what the adapter
+ * returned; the invariant is about the vendor's fields.
+ */
+const asRecords = (employment: readonly FileEmployment[]) =>
+  employment.map(
+    ({
+      id: _id,
+      partyId: _partyId,
+      employerId: _employerId,
+      declaration: _declaration,
+      ...record
+    }) => record,
+  );
+
 describe("what every consumer above the projection sees", () => {
   it("is what the adapter returned, before and after a second pull", async () => {
     // The invariant this commit must not move. `loadLoanFile` drops the
@@ -141,17 +157,17 @@ describe("what every consumer above the projection sees", () => {
     const first = await pull(user.id, fileId, "bank");
     const afterFirst = (await loadLoanFile(fileId))!;
     expect(byKey(afterFirst.incomeSources)).toEqual(byKey(first.incomeSources));
-    expect(byKey(afterFirst.employment)).toEqual(byKey(first.employments));
+    expect(byKey(asRecords(afterFirst.employment))).toEqual(byKey(first.employments));
 
     const second = await pull(user.id, fileId, "bank");
     const afterSecond = (await loadLoanFile(fileId))!;
     expect(byKey(afterSecond.incomeSources)).toEqual(byKey(second.incomeSources));
-    expect(byKey(afterSecond.employment)).toEqual(byKey(second.employments));
+    expect(byKey(asRecords(afterSecond.employment))).toEqual(byKey(second.employments));
 
     const payroll = await pull(user.id, fileId, "payroll");
     const afterPayroll = (await loadLoanFile(fileId))!;
     expect(byKey(afterPayroll.incomeSources)).toEqual(byKey(payroll.incomeSources));
-    expect(byKey(afterPayroll.employment)).toEqual(byKey(payroll.employments));
+    expect(byKey(asRecords(afterPayroll.employment))).toEqual(byKey(payroll.employments));
   });
 });
 

@@ -122,7 +122,7 @@ export interface DeclarationView {
  * review screen then showed the bankruptcy under somebody else's name and told
  * the person who declared it that they had not answered yet.
  */
-async function borrowerEdge(db: Db, loanFileId: string, borrowerId?: string) {
+export async function borrowerEdge(db: Db, loanFileId: string, borrowerId?: string) {
   const application = await db.application.findUnique({
     where: { loanFileId },
     select: { id: true },
@@ -170,7 +170,7 @@ async function borrowerEdge(db: Db, loanFileId: string, borrowerId?: string) {
  * for somebody who has never signed in — and recorded them as having
  * personally attested to a bankruptcy on a screen they have never seen.
  */
-async function assertMaySpeakFor(
+export async function assertMaySpeakFor(
   db: Db,
   principalId: string,
   declaringPartyId: string,

@@ -19,7 +19,7 @@ backed by its own Cloud SQL Postgres, with Google sign-in for identity.
 Three things distinguish it from a CRUD app and shape every section below:
 
 - **The requirements engine is the product's spine.** Drew's V1 flow sheet
-  (`data/v1-build.csv`, 84 rows) is compiled into an executable registry. What a
+  (`data/v1-build.csv`, 85 rows) is compiled into an executable registry. What a
   borrower is asked, which branch they see, and what blocks a decision all fall
   out of evaluating that registry against one `LoanFile`.
 - **Authorization is structural, not procedural.** The rule that nothing may be
@@ -209,7 +209,7 @@ and Google Places.
 | Package                 | What it is                                                                                                                                                                                                                                 |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `packages/shared`       | The vocabulary. `LoanFile` is the object everything reads — nullable sections all the way down, because a file is legitimately half-empty for most of its life                                                                             |
-| `packages/requirements` | The 84 requirements, executable: 38 applicability predicates, 84 satisfaction evaluators, a dependency graph                                                                                                                               |
+| `packages/requirements` | The 85 requirements, executable: 39 applicability predicates, 85 satisfaction evaluators, a dependency graph                                                                                                                               |
 | `packages/underwriting` | The shadow AUS — ratios, reserves, compliance, pricing, each figure carrying its derivation                                                                                                                                                |
 | `packages/connectors`   | Nine ports, fixture adapters for all nine, three partial real ones, and the authorization guard                                                                                                                                            |
 | `packages/db`           | Prisma schema and migrations. Several guarantees are triggers and CHECK constraints, not application code                                                                                                                                  |
@@ -254,7 +254,7 @@ somebody finally had to be asked URLA Section 5 and where they live. That one
 is a step rather than a branch because `branchesFor()` renders work the engine
 reports as outstanding, and the engine cannot report work that has no
 requirement: the questions are seven rows in the sheet, so the engine tracks
-eleven `FlowStage` values and evaluates 84 requirements.
+eleven `FlowStage` values and evaluates 85 requirements.
 
 `apps/web/src/lib/flow.ts` is where the translation is supposed to live:
 `SCREENS`, `STAGE_TO_SCREEN` and `branchesFor()`. ⚠ It is not the only copy —

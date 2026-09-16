@@ -829,13 +829,48 @@ describe("the borrower's own block", () => {
       },
     });
 
-    // Assembled rather than emitted, because a borrower with a current
-    // employer is not an emittable casefile yet and the assertion below is what
-    // says so: three data points the specification requires on an EMPLOYMENT
-    // have no column anywhere, so the preflight refuses every file with a job
-    // on it. What this test can still prove is that every element the model
-    // DOES hold comes out where it belongs.
-    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+    // Unanswered first: a job the borrower has not declared on is not an
+    // emittable casefile, and the gate says which two questions are open — the
+    // third data point, the classification, is derived and is there already.
+    const refusal = await emitSubmission(prisma, app.id, emitting()).catch((error) => error);
+    expect(refusal).toBeInstanceOf(DuPreflightRefusal);
+    expect(
+      refusal.findings
+        .filter((finding: { where: string }) => finding.where.includes("/EMPLOYMENT#"))
+        .map((finding: { where: string }) => finding.where.split("#")[1])
+        .sort(),
+    ).toEqual([
+      "EmploymentBorrowerSelfEmployedIndicator",
+      "SpecialBorrowerEmployerRelationshipIndicator",
+    ]);
+
+    // Answered — by the borrower, on the review screen, through the service
+    // the route calls — it emits, and all three come out on the EMPLOYMENT.
+    // Answered directly, the way `aDeclaration` writes Section 5 here: this
+    // fixture builds people at the party layer and never a `borrowers` row, so
+    // the route's service — which resolves "whose job" through that row —
+    // has nothing to resolve. The service and the route are covered on a real
+    // file in `employment-declarations.test.ts`; what this proves is that the
+    // three come out on the wire once the answers exist.
+    const [job] = await prisma.employment.findMany({ where: { loanFileId: app.loanFileId } });
+    const declarant = await prisma.principal.findFirstOrThrow({
+      where: { partyId: app.parties[0]! },
+      select: { id: true },
+    });
+    await prisma.employment.update({
+      where: { id: job!.id },
+      data: {
+        selfEmployed: false,
+        employedByPartyToTransaction: false,
+        declaredByPrincipalId: declarant.id,
+        declaredAt: new Date(),
+      },
+    });
+    const xml = await emitSubmission(prisma, app.id, emitting());
+    expect(valuesOf(xml, "EmploymentClassificationType")).toEqual(["Primary"]);
+    expect(valuesOf(xml, "EmploymentBorrowerSelfEmployedIndicator")).toEqual(["false"]);
+    expect(valuesOf(xml, "SpecialBorrowerEmployerRelationshipIndicator")).toEqual(["false"]);
+    expect(xmllintErrors(xml)).toEqual([]);
 
     expect(valuesOf(xml, "IntentToOccupyType")).toEqual(["No"]);
     expect(valuesOf(xml, "CitizenshipResidencyType")).toEqual(["USCitizen"]);
@@ -853,24 +888,62 @@ describe("the borrower's own block", () => {
     expect(xml).toContain(
       'xlink:from="CURRENT_INCOME_ITEM_1" xlink:to="EMPLOYER_1" xlink:arcrole="urn:fdc:mismo.org:2009:residential/CURRENT_INCOME_ITEM_IsAssociatedWith_EMPLOYER"',
     );
+  });
 
-    // And the gap this test is about, named: `employments` carries a name, a
-    // position, a start date and a status, and Desktop Underwriter wants three
-    // more things about a current job that no column holds. Read off the
-    // EMPLOYMENT container alone, because the eight columns the whole model is
-    // missing are the last test in this file's subject and would drown these.
-    const refusal = await emitSubmission(prisma, app.id, emitting()).catch((error) => error);
-    expect(refusal).toBeInstanceOf(DuPreflightRefusal);
-    expect(
-      refusal.findings
-        .filter((finding: { where: string }) => finding.where.includes("/EMPLOYMENT#"))
-        .map((finding: { where: string }) => finding.where.split("#")[1])
-        .sort(),
-    ).toEqual([
-      "EmploymentBorrowerSelfEmployedIndicator",
-      "EmploymentClassificationType",
-      "SpecialBorrowerEmployerRelationshipIndicator",
-    ]);
+  it("classifies the current job that pays the most as primary and the rest as secondary", async () => {
+    // Nobody is asked which job is primary: URLA 1b is the one that carries
+    // the most employment income and 1c the others, and the income items
+    // beside the employers already say which that is.
+    const app = await anApplication(["PRIMARY_BORROWER"], "standard");
+    const party = app.parties[0]!;
+    const aJob = async (name: string, monthly: string, startDate: string) => {
+      const employer = await prisma.employer.create({
+        data: {
+          partyId: party,
+          identityKey: `name:${name}`,
+          derivedFrom: "name",
+          nameKey: `name:${name}`,
+          displayName: name,
+        },
+        select: { id: true },
+      });
+      const employment = await prisma.employment.create({
+        data: {
+          loanFileId: app.loanFileId,
+          partyId: party,
+          employerId: employer.id,
+          employerName: name,
+          position: "Staff",
+          startDate: new Date(startDate),
+          status: "active",
+          verificationMethod: "payroll",
+          selfEmployed: false,
+          employedByPartyToTransaction: false,
+          declaredAt: new Date(),
+        },
+        select: { id: true },
+      });
+      await prisma.incomeSource.create({
+        data: {
+          loanFileId: app.loanFileId,
+          partyId: party,
+          employerId: employer.id,
+          employmentIncome: true,
+          identityKey: `base_wage:${name}`,
+          type: "base_wage",
+          monthlyAmount: new Prisma.Decimal(monthly),
+          historyMonths: 24,
+        },
+      });
+      return employment.id;
+    };
+    await aJob("Smaller Co", "2100.00", "2015-01-01T00:00:00.000Z");
+    await aJob("Bigger Co", "6250.00", "2021-06-01T00:00:00.000Z");
+    const xml = await emitSubmission(prisma, app.id, emitting());
+    // Document order is row order; the older, smaller job is emitted first
+    // and is Secondary.
+    expect(valuesOf(xml, "EmploymentClassificationType")).toEqual(["Secondary", "Primary"]);
+    expect(xmllintErrors(xml)).toEqual([]);
   });
 
   it("writes Current before Prior even when both the row age and the id say otherwise", async () => {
@@ -1056,6 +1129,45 @@ describe("the gate, over rows rather than over bytes", () => {
     // are read rather than that the checks stopped running.
     const app = await anApplication(["PRIMARY_BORROWER", "CO_BORROWER"]);
     await aSubjectReo(app, app.borrowers);
+    // And a job, declared on — the last of the eleven columns, which every
+    // casefile with wage income carries.
+    const employer = await prisma.employer.create({
+      data: {
+        partyId: app.parties[0]!,
+        identityKey: "name:acme",
+        derivedFrom: "name",
+        nameKey: "name:acme",
+        displayName: "Acme",
+      },
+      select: { id: true },
+    });
+    await prisma.employment.create({
+      data: {
+        loanFileId: app.loanFileId,
+        partyId: app.parties[0]!,
+        employerId: employer.id,
+        employerName: "Acme",
+        position: "Engineer",
+        startDate: new Date("2020-01-01T00:00:00.000Z"),
+        status: "active",
+        verificationMethod: "payroll",
+        selfEmployed: false,
+        employedByPartyToTransaction: false,
+        declaredAt: new Date(),
+      },
+    });
+    await prisma.incomeSource.create({
+      data: {
+        loanFileId: app.loanFileId,
+        partyId: app.parties[0]!,
+        employerId: employer.id,
+        employmentIncome: true,
+        identityKey: "base_wage:1",
+        type: "base_wage",
+        monthlyAmount: new Prisma.Decimal("8000.00"),
+        historyMonths: 24,
+      },
+    });
     const report = await preflightSubmission(prisma, app.id, emitting());
     expect(report.findings).toEqual([]);
     expect(report.ok).toBe(true);
@@ -1073,6 +1185,7 @@ describe("the gate, over rows rather than over bytes", () => {
     expect(valuesOf(xml, "FinancedUnitCount")).toEqual(["1"]);
     expect(valuesOf(xml, "AttachmentType")).toEqual(["Detached"]);
     expect(valuesOf(xml, "PropertyEstateType")).toEqual(["FeeSimple"]);
+    expect(valuesOf(xml, "EmploymentClassificationType")).toEqual(["Primary"]);
     expect(xmllintErrors(xml)).toEqual([]);
   });
 

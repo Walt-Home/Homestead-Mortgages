@@ -21,6 +21,7 @@ import {
   afterIdentity,
   consent,
   token,
+  asFileEmployment,
 } from "./support/in-memory-file.js";
 
 const registry = fixtureRegistry({ latencyMs: 0, persona: "clean_w2", referenceDate: REFERENCE });
@@ -53,7 +54,7 @@ describe("the onboarding flow", () => {
       ...file,
       payroll: payroll.data,
       incomeSources: payroll.data.incomeSources,
-      employment: payroll.data.employments,
+      employment: asFileEmployment(payroll.data.employments, file.borrowers[0]!.partyId),
     };
     const afterPayroll = progress(file);
 
@@ -95,7 +96,7 @@ describe("the onboarding flow", () => {
       ...file,
       payroll: payroll.data,
       incomeSources: payroll.data.incomeSources,
-      employment: payroll.data.employments,
+      employment: asFileEmployment(payroll.data.employments, file.borrowers[0]!.partyId),
     };
     counts.push(progress(file).satisfied);
 
@@ -186,7 +187,7 @@ describe("the onboarding flow", () => {
       ...file,
       payroll: payroll.data,
       incomeSources: payroll.data.incomeSources,
-      employment: payroll.data.employments,
+      employment: asFileEmployment(payroll.data.employments, file.borrowers[0]!.partyId),
     };
 
     // "We might still ask" must actually get smaller. If it did not, the
@@ -278,7 +279,7 @@ describe("the onboarding flow", () => {
       ...file,
       payroll: payroll.data,
       incomeSources: payroll.data.incomeSources,
-      employment: payroll.data.employments,
+      employment: asFileEmployment(payroll.data.employments, file.borrowers[0]!.partyId),
     };
     counts.push(progress(file).satisfied);
 
@@ -547,7 +548,7 @@ describe("the decision", () => {
       ...file,
       payroll: payroll.data,
       incomeSources: payroll.data.incomeSources,
-      employment: payroll.data.employments,
+      employment: asFileEmployment(payroll.data.employments, file.borrowers[0]!.partyId),
       consents: [...file.consents, consent("form_4506c")],
     };
     const irs = await registry.irs.fetchTranscripts(file, token("tax_transcript"), []);

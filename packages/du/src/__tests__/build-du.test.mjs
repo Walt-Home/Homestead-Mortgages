@@ -29,6 +29,7 @@ import {
   DEAL_XPATH,
   DU_DATA_POINT_FOR_ENUM,
   MODELED_CHILDREN,
+  TABLES_OFF_THE_WIRE,
   TAB_DISAGREEMENTS,
   UNPARSEABLE_STATEMENTS,
   arcRoleColumnNamesFor,
@@ -43,6 +44,7 @@ import {
   diffAssetTypeChecks,
   diffModeledHolders,
   diffPrismaEnums,
+  diffTableClaims,
   elementPathsInCorpus,
   modeledElementPaths,
   notModeledContainers,
@@ -1168,6 +1170,7 @@ describe("the modeled set, and the inventory derived from it", () => {
   const NOT_ROUND_TRIPPED = resolve(ROOT, "packages/du-schema/du-not-round-tripped.txt");
   const PROSE = resolve(ROOT, "docs/du-generation.md");
   const SAMPLES = resolve(ROOT, "packages/du-schema/samples");
+  const SCHEMA = resolve(ROOT, "packages/db/prisma/schema.prisma");
   const SUBJECT_LOAN = `${DEAL_XPATH}/LOANS/LOAN[@LoanRoleType="SubjectLoan"]`;
   const RELATED_LOAN = `${DEAL_XPATH}/LOANS/LOAN[@LoanRoleType="RelatedLoan"]`;
   const ROLE = `${DEAL_XPATH}/PARTIES/PARTY/ROLES/ROLE`;
@@ -1176,6 +1179,10 @@ describe("the modeled set, and the inventory derived from it", () => {
   const corpus = elementPathsInCorpus();
   const modeled = modeledElementPaths();
   const entries = deriveNotRoundTripped(corpus, modeled);
+
+  /** The two sides the holder check is measured between, read once. */
+  const tables = prismaTableNames(readFileSync(SCHEMA, "utf8"));
+  const containersShort = new Set(notModeledContainers(entries, modeled).map((root) => root.short));
 
   it("is exactly what the committed artifact holds", () => {
     // The promise the file makes. A container that becomes modeled shrinks it,
@@ -1294,9 +1301,6 @@ describe("the modeled set, and the inventory derived from it", () => {
     // declared modeled while `schema.prisma` held none of them. Naming a table
     // is what makes the claim answerable, and a table the schema does not map
     // is not an answer.
-    const tables = prismaTableNames(
-      readFileSync(resolve(ROOT, "packages/db/prisma/schema.prisma"), "utf8"),
-    );
     expect(tables.has("du_assets")).toBe(true);
     // Deliberately a name no schema will ever map, rather than a table that
     // does not exist YET: `du_vestings` was this fixture's example until the
@@ -1375,6 +1379,175 @@ describe("the modeled set, and the inventory derived from it", () => {
       expect(result.stderr).toContain("du-not-round-tripped.txt is not what the samples minus");
     } finally {
       writeFileSync(NOT_ROUND_TRIPPED, original);
+    }
+  });
+
+  it("accounts for every table schema.prisma maps, from one side or the other", () => {
+    // The reverse of the holder check, and the direction a new table arrives
+    // from. Vesting is the worked example: two tables landed holding a
+    // property owner, no block was told about them, and eleven element paths
+    // stayed in the inventory as held by nothing while the database held them
+    // — on a green build, because the only list anything walked was the
+    // declaration.
+    expect(diffTableClaims(MODELED_CHILDREN, tables, TABLES_OFF_THE_WIRE, containersShort)).toEqual(
+      [],
+    );
+
+    // Asserted here as well, because an empty problem list is also what a
+    // check that quietly stopped looking returns. The two lists PARTITION the
+    // schema: together they are every table, and they share none.
+    const claimed = Object.values(MODELED_CHILDREN)
+      .flatMap((block) => block.held)
+      .filter((name) => name !== "constant");
+    const excused = Object.keys(TABLES_OFF_THE_WIRE);
+    expect([...new Set([...claimed, ...excused])].sort()).toEqual([...tables].sort());
+    expect(excused.filter((table) => claimed.includes(table))).toEqual([]);
+  });
+
+  it("refuses a table nothing claims and nothing excuses", () => {
+    // The same fixture name the holder test uses, and for the same reason: a
+    // name no schema will ever map cannot be overtaken by a migration, which a
+    // table that merely does not exist yet can.
+    expect(tables.has("du_nothing_will_ever_map_this")).toBe(false);
+    expect(
+      diffTableClaims(
+        MODELED_CHILDREN,
+        new Set([...tables, "du_nothing_will_ever_map_this"]),
+        TABLES_OFF_THE_WIRE,
+        containersShort,
+      ),
+    ).toEqual([
+      "du_nothing_will_ever_map_this is mapped by schema.prisma, no modeled block names it, and " +
+        "TABLES_OFF_THE_WIRE does not say why",
+    ]);
+  });
+
+  it("refuses a table that is both held and excused", () => {
+    // Held and excused is not a redundancy, it is a contradiction: one of the
+    // two sentences is out of date, and which one decides whether an inventory
+    // line is honest.
+    expect(
+      diffTableClaims(
+        MODELED_CHILDREN,
+        tables,
+        { ...TABLES_OFF_THE_WIRE, du_assets: { why: "x" } },
+        containersShort,
+      ),
+    ).toEqual([
+      "du_assets is held by a modeled block and excused by TABLES_OFF_THE_WIRE, and it cannot " +
+        "be both",
+    ]);
+  });
+
+  it("refuses an excuse for a table the schema does not map", () => {
+    // An excuse outliving its table reads as coverage and is not: the list
+    // would carry a reason nobody can check against a row nobody has.
+    expect(
+      diffTableClaims(
+        MODELED_CHILDREN,
+        tables,
+        { ...TABLES_OFF_THE_WIRE, du_nothing_will_ever_map_this: { why: "x" } },
+        containersShort,
+      ),
+    ).toEqual([
+      "TABLES_OFF_THE_WIRE excuses du_nothing_will_ever_map_this, which schema.prisma does not map",
+    ]);
+  });
+
+  it("expires an excuse that waits on a container the model now claims", () => {
+    // `waitsOn` is the only kind of excuse with an end date, and the end is
+    // the container being modeled. PROPERTY_OWNER is the one to write it
+    // against: it is modeled now, and it is what the tables that went
+    // unclaimed were holding.
+    const owner = `${ROLE}/PROPERTY_OWNER`;
+    expect(modeled.has(owner)).toBe(true);
+    expect(containersShort.has(shortElementPath(owner))).toBe(false);
+    expect(
+      diffTableClaims(
+        MODELED_CHILDREN,
+        new Set([...tables, "du_nothing_will_ever_map_this"]),
+        {
+          ...TABLES_OFF_THE_WIRE,
+          du_nothing_will_ever_map_this: { why: "x", waitsOn: shortElementPath(owner) },
+        },
+        containersShort,
+      ),
+    ).toEqual([
+      `du_nothing_will_ever_map_this waits on ${shortElementPath(owner)}, which is modeled now ` +
+        "or is not a container the inventory stops at; claim the table or say what it still " +
+        "waits on",
+    ]);
+
+    // And every real one points at a container that is still in the
+    // subtraction AND still explained on the page — an excuse may only defer
+    // to a gap a reader can go and read about.
+    const named = new Set(proseNotModeledContainers(readFileSync(PROSE, "utf8")));
+    const waiting = Object.values(TABLES_OFF_THE_WIRE)
+      .map((excuse) => excuse.waitsOn)
+      .filter((short) => short !== undefined);
+    expect(waiting.length).toBeGreaterThan(0);
+    for (const short of waiting) {
+      expect(
+        containersShort.has(short),
+        `${short} is no longer a container the model stops at`,
+      ).toBe(true);
+      expect(named.has(short), `${short} is waited on and docs/du-generation.md omits it`).toBe(
+        true,
+      );
+    }
+  });
+
+  it("reads table names out of models only, never out of a mapped enum", () => {
+    // A Prisma enum takes `@@map` too, and the set this returns is now the
+    // thing BOTH directions of the holder check are measured against. Read
+    // loosely, a mapped enum would arrive as a table nobody claimed and fail a
+    // build for a row that does not exist.
+    const schema = [
+      "model Kept {",
+      '  @@map("kept_rows")',
+      "}",
+      "",
+      "enum Mapped {",
+      "  A",
+      '  @@map("not_a_table")',
+      "}",
+      "",
+    ].join("\n");
+    expect([...prismaTableNames(schema)]).toEqual(["kept_rows"]);
+  });
+
+  it("checks the tables on the same --verify run that checks the holders", () => {
+    // Both halves on one run, and both saying how many they asked, so a check
+    // dropped out of the verify path takes its own line with it.
+    const result = runScript(["--verify"], {});
+    expect(result.stdout).toContain(
+      `✓ ${tables.size} tables in schema.prisma are each held by a modeled block or excused by ` +
+        `name, and ${Object.keys(TABLES_OFF_THE_WIRE).length} are excused`,
+    );
+    expect(result.stdout).toContain(
+      `✓ ${Object.keys(MODELED_CHILDREN).length} modeled blocks name the table or the constant ` +
+        "that holds them",
+    );
+  });
+
+  it("fails --verify on a table added to schema.prisma that nobody placed", () => {
+    // The check as CI meets it, driven the way a migration would drive it: a
+    // model lands, nobody says whether it holds a container or stays off the
+    // wire, and the build stops until somebody does. Appended at the very end
+    // so a run killed mid-test leaves something obvious behind.
+    const original = readFileSync(SCHEMA, "utf8");
+    try {
+      writeFileSync(
+        SCHEMA,
+        `${original}\nmodel NothingWillEverMapThis {\n  id String @id\n\n  @@map("du_nothing_will_ever_map_this")\n}\n`,
+      );
+      const result = runScript(["--verify"], {});
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        "du_nothing_will_ever_map_this is mapped by schema.prisma, no modeled block names it",
+      );
+    } finally {
+      writeFileSync(SCHEMA, original);
     }
   });
 });

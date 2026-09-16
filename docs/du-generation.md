@@ -91,11 +91,12 @@ hand-edit and a submission built on it. On a clean checkout, with no environment
 variable set and nothing fetched:
 
 ```
-✓ 22 Du* enum(s) in schema.prisma match the DU Spec
+✓ 26 Du* enum(s) in schema.prisma match the DU Spec
 ✓ 227 child sequences in order.ts match the vendored MISMO chain
 ✓ 9 of 11 arcroles in arcroles.ts are exercised by the vendored samples, and no sample carries another
-✓ 259 of 468 element paths in the vendored samples are not modeled, and du-not-round-tripped.txt lists them under 31 named containers
+✓ 250 of 468 element paths in the vendored samples are not modeled, and du-not-round-tripped.txt lists them under 31 named containers
 ✓ 38 modeled blocks name the table or the constant that holds them
+✓ 47 tables in schema.prisma are each held by a modeled block or excused by name, and 26 are excused
 ✓ 3 per-kind asset CHECK(s) admit exactly their section's 22 AssetType values
 ✓ du_owned_properties.asset_kind and du_owned_properties_attach_to_an_reo_asset still hold the REO nesting
 ✓ 6 generated files match the DU Spec 1.9.3
@@ -155,7 +156,7 @@ over the modeled set, against this inventory, and an element in neither fails
 it. That last clause is what stops the inventory from becoming an excuse list,
 and it is only enforceable because the inventory is now measured.
 
-**Two things are measured now, not one.** A path in `MODELED_CHILDREN` has to
+**Three things are measured now, not one.** A path in `MODELED_CHILDREN` has to
 occur in the corpus, which is what stops a claim about a shape nobody ships;
 and it has to name what holds it — a table `schema.prisma` maps, or the literal
 `constant` for bytes we assert about ourselves. The second half is newer than
@@ -163,6 +164,31 @@ the first, and it is the half that found vesting, an originator's license and a
 counseling agency's role identifier all being declared as modeled by a database
 holding none of them. Those three are bullets below now rather than silent
 absences.
+
+**The third is the same question asked backwards, and it is the direction the
+vesting tables slipped through.** Every table `schema.prisma` maps has to be
+either named by a modeled block or excused by name in `TABLES_OFF_THE_WIRE`
+with a reason; a table in both lists fails the build and so does a table in
+neither. Without it the check only ever walked the declaration, so two tables
+could arrive holding a property owner's vesting and a license number, go
+unmentioned in `MODELED_CHILDREN`, and leave eleven element paths sitting in
+the inventory as held by nothing while the database held them — green build,
+and a page overstating what we cannot emit.
+
+**An excuse can expire.** An entry may carry a `waitsOn` naming one of the
+containers below, which says the table is off the wire only until that
+container is modeled; model it, and the excuse fails, because the table it
+excuses has become the answer to what holds the new block. `borrowers` waits on
+`GOVERNMENT_MONITORING`, `documents` on `DOCUMENT_SETS`, and the two average
+prime offer rate tables on `HMDA_LOAN`. The rest are ours and are never
+submitted — a sign-in, an authorization, our own ledgers, the shadow AUS, the
+loan a mortgage becomes after closing, and DU's own answer travelling the other
+way.
+
+**The practical consequence is that a migration adding a table stops this
+build.** That is the point of the check rather than a side effect of it: the
+new table has to be placed in a block's `held` or given a reason in
+`TABLES_OFF_THE_WIRE`, and a reason is a sentence somebody has to mean.
 
 **A path is a path, not an instance.** `PARTY/ADDRESSES/ADDRESS`,
 `PARTY/INDIVIDUAL/NAME` and `TAXPAYER_IDENTIFIERS` are claimed from both sides

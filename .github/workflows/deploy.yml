@@ -99,10 +99,12 @@ jobs:
       # arcroles.ts against the arcs the eighteen samples actually carry,
       # du-not-round-tripped.txt and the containers docs/du-generation.md names
       # against the samples minus the modeled set — and every block of that
-      # modeled set against the table or the constant it says holds it — the
-      # per-kind asset CHECKs a migration wrote against the sections enums.ts
-      # records, and the two database objects holding the REO nesting that
-      # Prisma cannot model and so cannot miss.
+      # modeled set against the table or the constant it says holds it, and
+      # every table schema.prisma maps against the block that claims it or the
+      # reason it stays off the wire — the per-kind asset CHECKs a migration
+      # wrote against the sections enums.ts records, and the two database
+      # objects holding the REO nesting that Prisma cannot model and so cannot
+      # miss.
       #
       # After the test database, not before: the REO nesting half asks the
       # database the migrations built, and a check that skips because there is

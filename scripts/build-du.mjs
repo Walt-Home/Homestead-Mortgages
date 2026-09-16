@@ -28,7 +28,7 @@
  * Drew's sheet. The tables are what type-checks; the workbook is what they are
  * answerable to.
  *
- * `--verify` does six jobs. Five of them read nothing but files in this
+ * `--verify` does seven jobs. Six of them read nothing but files in this
  * repository, so they run anywhere it is checked out:
  *
  *   - the Prisma enum diff reads two committed files —
@@ -39,6 +39,14 @@
  *   - the arcrole corpus diff re-counts which arcs the eighteen shipped test
  *     cases carry and fails if `arcroles.ts` says otherwise, or names an
  *     arcrole a sample uses and the table does not describe.
+ *   - the not-round-tripped diff is three halves of one claim, so it is one
+ *     job: the committed inventory and the containers `docs/du-generation.md`
+ *     explains, against the eighteen samples minus the modeled set; every
+ *     modeled block against the table or the constant it says holds it; and
+ *     every table `packages/db/prisma/schema.prisma` maps against the block
+ *     that claims it or the reason it stays off the wire. The last of those is
+ *     the direction a new table arrives from, and without it a table can hold
+ *     a container the inventory still says nothing holds.
  *   - the asset-shape diff reads the per-kind CHECKs a migration wrote, which
  *     nothing else here would notice being widened.
  *   - the rebuild regenerates all six tables and fails on any difference,
@@ -46,7 +54,7 @@
  *     cardinality, conditionality and the arcroles' endpoints — drifting from
  *     the spec they claim to come from.
  *
- * The sixth is the REO nesting, and it asks a database rather than a file,
+ * The seventh is the REO nesting, and it asks a database rather than a file,
  * because a foreign key and a generated column are not in any file here.
  *
  *   node scripts/build-du.mjs            # write packages/du/src/generated/
@@ -2371,6 +2379,139 @@ export const MODELED_CHILDREN = {
   },
 };
 
+/**
+ * Every table `schema.prisma` maps that no modeled block names, and why.
+ *
+ * The other half of the holder check, and the half that was missing. Naming
+ * what holds a block proves the model has somewhere to put what it claims; it
+ * proves nothing at all about a table that holds something and is claimed by
+ * nobody. That is the direction vesting went: two tables arrived carrying a
+ * property owner's vesting, an originator's license number and a counseling
+ * agency's role identifier, the list above was not touched, and eleven element
+ * paths sat in the inventory as held by nothing while the database held them.
+ * The build stayed green, because nothing walked the schema.
+ *
+ * So every table is in exactly one of two places — held by a block, or excused
+ * here by name — and `diffTableClaims` fails on a table in both or in neither.
+ * `why` is the reason, and the reason is the point: a bare list of names is the
+ * hand-written inventory again, and that was wrong in both directions at once.
+ *
+ * **`waitsOn` is an excuse with an expiry date.** It is for a table that is off
+ * the wire only until a container the inventory stops at is modeled, and it
+ * names that container in the short form the prose uses. Model the container
+ * and the excuse fails, because the table it excuses has become the answer to
+ * what holds the new block. An entry with no `waitsOn` says the table is ours
+ * and a submission is never where it goes.
+ *
+ * **This checks membership, not bytes.** Two entries below say what an
+ * assembler READS rather than what a column is: `applications` is a spine the
+ * loader takes an id and relations off, and `parties` lends its id while
+ * `facts` carries the person. A later select on either makes the excuse untrue
+ * and nothing here would notice, so a change to
+ * `packages/du/src/assemble/load.ts` is the change that has to revisit them.
+ */
+export const TABLES_OFF_THE_WIRE = {
+  // Sign-in and authority: who is acting, and what they were allowed to do.
+  // Never what is submitted.
+  users: {
+    why: "A sign-in and the subject claim Google asserted for it; a casefile says who the borrower is and never how they authenticated.",
+  },
+  principals: {
+    why: "Which actor asserted a thing — a person, a scheduled job, a partner system or an AI agent — which is provenance for our own records and not a data point in the spec.",
+  },
+  authorizations: {
+    why: "A scoped, expiring grant by one party, which is what lets a pull happen at all; the submission carries what was pulled and not the permission behind it.",
+  },
+  consents: {
+    why: "The per-file consent an authorization replaces, kept for the evidence on it — an address, a user agent, a signing envelope — none of which DU asks for.",
+  },
+  vendor_tokens: {
+    why: "An encrypted bearer credential a vendor handed back, which is the single worst row in this schema to put on a wire.",
+  },
+  connector_links: {
+    why: "Which source is linked, when it last synced and whether monitoring is on; what a link produced is a snapshot, and the snapshot is what reaches the wire.",
+  },
+
+  // The application's own bookkeeping. A credit request is what we send DU;
+  // where it stands, what it owes the borrower and what we made of it are ours.
+  applications: {
+    why: "A spine rather than a source: the loader selects its id and its relations and no column of its own, so every element hanging off it comes from another table.",
+  },
+  application_transitions: {
+    why: "Every move a credit request made, appended, which is our ledger and the clock it starts; DU is handed the request and forms its own view.",
+  },
+  application_evidence_links: {
+    why: "Which facts were borrowed into this request under which authorization; the facts themselves are what get emitted, and this is the record that they could be.",
+  },
+  regulatory_clocks: {
+    why: "Disclosure deadlines with the statute behind each one, which run against the borrower and not against Fannie Mae.",
+  },
+  file_events: {
+    why: "The append-only trail of what happened on a file, written so somebody can read it back.",
+  },
+  loan_conditions: {
+    why: "Conditions we issue and clear ourselves; DU returns its own findings, and du_responses is where those land.",
+  },
+  disclosures: {
+    why: "Proof that a disclosure was delivered on time, which is a record about an obligation of ours.",
+  },
+  decisions: {
+    why: "The shadow AUS, appended per recomputation; DU produces its own recommendation and du_responses receives it.",
+  },
+
+  // The person. Both rows are about a party rather than being one, and the
+  // PARTY block is written from somewhere else.
+  parties: {
+    why: "A PARTY block is written from facts, which is the holder named for it; the party row lends its id through application_parties and nothing else.",
+  },
+  borrowers: {
+    why: "A per-application record about a party that identifies nobody: ssn_last4 is display only, the identity verification and the non-borrowing spouse are bookkeeping for this request, the housing columns are copies of a du_residences row, and demographics is untyped JSON.",
+    waitsOn: "DEAL/PARTIES/PARTY/ROLES/ROLE/BORROWER/GOVERNMENT_MONITORING",
+  },
+
+  // Off the wire until a container the inventory stops at is modeled.
+  documents: {
+    why: "Uploaded bytes and the requirement each one answers; what a submission carries is the e-signed application itself, which is a document story rather than a column.",
+    waitsOn: "MESSAGE/DOCUMENT_SETS",
+  },
+  apor_fetches: {
+    why: "The CFPB document the average prime offer rate is read out of, served verbatim and kept as the record of what was published.",
+    waitsOn: 'DEAL/LOANS/LOAN[@LoanRoleType="SubjectLoan"]/HMDA_LOAN',
+  },
+  apor_weeks: {
+    why: "One published rate per week and term, which is the benchmark a rate spread is measured against rather than a figure about this loan.",
+    waitsOn: 'DEAL/LOANS/LOAN[@LoanRoleType="SubjectLoan"]/HMDA_LOAN',
+  },
+
+  // The loan after closing. A DU casefile is an application; the loan model
+  // begins where the application ends.
+  servicers: {
+    why: "Who services a mortgage and how deeply we are wired to them, which is a connection detail about a loan that already exists.",
+  },
+  loans: {
+    why: "A mortgage somebody is paying, which is one state past the request DU is asked about.",
+  },
+  loan_parties: {
+    why: "Who is on a mortgage and in what capacity, which is the loan model's own join rather than the application's.",
+  },
+  loan_transitions: {
+    why: "Every move a mortgage made, appended, which is the same ledger discipline a state later than any submission.",
+  },
+
+  // DU's answer, which travels the other way.
+  du_responses: {
+    why: "What comes back, appended per delivery; nothing on it is sent.",
+  },
+  du_response_messages: {
+    why: "The findings report as it arrived, one message per row, and the direction of travel is the whole of why it is off the wire.",
+  },
+
+  // And one the modeled set structurally cannot claim.
+  du_bankruptcy_filings: {
+    why: "Holds BankruptcyChapterType for BANKRUPTCY_DETAIL, which none of the eighteen samples carries, so no block may name it — deriveNotRoundTripped refuses a modeled path no sample exercises. The loader reads the chapters and no assembler writes them, which a corpus-derived model has no way to see.",
+  },
+};
+
 /** Every modeled path, leaves and the ancestors they imply, as one flat set. */
 export function modeledElementPaths(children = MODELED_CHILDREN) {
   const paths = new Set();
@@ -2387,9 +2528,28 @@ export function modeledElementPaths(children = MODELED_CHILDREN) {
   return paths;
 }
 
-/** Every table `schema.prisma` maps, which is what a `held` name has to be. */
+/**
+ * Every table `schema.prisma` maps, which is what a `held` name has to be.
+ *
+ * Read from inside `model` blocks rather than from anywhere an `@@map` occurs,
+ * because a Prisma enum takes one too and an enum is not a table. Nothing in
+ * the schema maps an enum today, so the looser read agreed with this one — but
+ * it is the set both directions of the holder check are measured against now,
+ * and a mapped enum would arrive as a table nobody claimed rather than as
+ * nothing at all.
+ */
 export function prismaTableNames(schemaText) {
-  return new Set([...schemaText.matchAll(/^\s*@@map\("([^"]+)"\)/gm)].map((row) => row[1]));
+  const tables = new Set();
+  let inModel = false;
+  for (const line of schemaText.split("\n")) {
+    if (/^model\s+\w+\s*\{/.test(line)) inModel = true;
+    else if (/^\}/.test(line)) inModel = false;
+    else if (inModel) {
+      const mapped = line.match(/^\s*@@map\("([^"]+)"\)/);
+      if (mapped) tables.add(mapped[1]);
+    }
+  }
+  return tables;
 }
 
 /**
@@ -2412,6 +2572,60 @@ export function diffModeledHolders(children, tables) {
       if (name !== CONSTANT && !tables.has(name)) {
         problems.push(`${parent} is held by ${name}, which schema.prisma does not map`);
       }
+    }
+  }
+  return problems;
+}
+
+/**
+ * Every table the model neither claims nor excuses, and every excuse that has
+ * stopped being one.
+ *
+ * `diffModeledHolders` walks the declaration and asks whether the database can
+ * answer for it. This walks the DATABASE, which is the direction a new table
+ * arrives from: a table that holds a container the inventory stops at leaves
+ * the page overstating what we cannot emit, and the only symptom is an
+ * inventory line nobody rereads. A partition is what closes it — claimed or
+ * excused, exactly one — so a table added to the schema stops the build until
+ * somebody says which it is.
+ *
+ * `containersShort` is the DERIVED set of containers this model stops at, not
+ * the prose beside it, so a `waitsOn` is answerable to the subtraction rather
+ * than to a bullet somebody could have left behind. An excuse pointing at a
+ * container that is now modeled has been overtaken by the work it was waiting
+ * for, and an excuse pointing at a path that was never a container the
+ * inventory stops at never named anything.
+ */
+export function diffTableClaims(children, tables, excused, containersShort) {
+  const problems = [];
+  const claimed = new Set(
+    Object.values(children)
+      .flatMap((block) => block.held ?? [])
+      .filter((name) => name !== CONSTANT),
+  );
+  for (const table of [...tables].sort()) {
+    if (claimed.has(table) && table in excused) {
+      problems.push(
+        `${table} is held by a modeled block and excused by TABLES_OFF_THE_WIRE, and it cannot ` +
+          "be both",
+      );
+    } else if (!claimed.has(table) && !(table in excused)) {
+      problems.push(
+        `${table} is mapped by schema.prisma, no modeled block names it, and ` +
+          "TABLES_OFF_THE_WIRE does not say why",
+      );
+    }
+  }
+  for (const [table, excuse] of Object.entries(excused)) {
+    if (!tables.has(table)) {
+      problems.push(`TABLES_OFF_THE_WIRE excuses ${table}, which schema.prisma does not map`);
+      continue;
+    }
+    if (excuse.waitsOn && !containersShort.has(excuse.waitsOn)) {
+      problems.push(
+        `${table} waits on ${excuse.waitsOn}, which is modeled now or is not a container the ` +
+          "inventory stops at; claim the table or say what it still waits on",
+      );
     }
   }
   return problems;
@@ -2631,9 +2845,15 @@ function runNotRoundTrippedCheck() {
     return false;
   }
 
-  const problems = diffModeledHolders(
-    MODELED_CHILDREN,
-    prismaTableNames(readFileSync(PRISMA_SCHEMA, "utf8")),
+  const tables = prismaTableNames(readFileSync(PRISMA_SCHEMA, "utf8"));
+  const problems = diffModeledHolders(MODELED_CHILDREN, tables);
+  problems.push(
+    ...diffTableClaims(
+      MODELED_CHILDREN,
+      tables,
+      TABLES_OFF_THE_WIRE,
+      new Set(containers.map((root) => root.short)),
+    ),
   );
   let committed = null;
   try {
@@ -2675,6 +2895,10 @@ function runNotRoundTrippedCheck() {
   console.log(
     `✓ ${Object.keys(MODELED_CHILDREN).length} modeled blocks name the table or the constant ` +
       "that holds them",
+  );
+  console.log(
+    `✓ ${tables.size} tables in schema.prisma are each held by a modeled block or excused by ` +
+      `name, and ${Object.keys(TABLES_OFF_THE_WIRE).length} are excused`,
   );
   return true;
 }

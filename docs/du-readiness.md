@@ -126,7 +126,11 @@ three lists rather than trusting it after they change.
   the schema rather than sorted, enumerations from DU's own tab rather than the
   wider XSD, and `du:verify` failing the build on a `Du*` enum member with no
   row behind it — the check that would have caught a fabricated value sitting
-  in a block labelled "generated".
+  in a block labelled "generated". What a submission carries and this model
+  does not is derived from the corpus rather than hand-listed, and every table
+  in the schema is now either claimed by the modeled set or excused by name
+  with a reason, so a new table cannot leave the inventory overstating what we
+  cannot emit.
 - **One casefile per loan, in both shapes.** Ours, stable across
   resubmissions; and `du_casefile_id`, DU's own, write-once by trigger. Nothing
   populates the second yet, because nothing has asked DU for one.
@@ -224,7 +228,7 @@ which have a longer lead time than anything above.
 | 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                          |
 | —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked                      |
 | 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                           |
-| —   | The generators and `du:verify`      | Green  | The whole corpus is vendored; all six tables rebuilt in CI, none skipped    |
+| —   | The generators and `du:verify`      | Green  | Corpus vendored, six tables rebuilt in CI, holder check runs both ways      |
 | 1   | One casefile per loan               | Green  | Ours stable; DU's write-once, and a response is what writes it              |
 | 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                             |
 | —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person                 |
@@ -720,8 +724,10 @@ this with the people doing the work.
    ten-party ceiling landed; what is missing is anything that fills them — a
    vesting on the review screen, and our own NMLS numbers somewhere other than
    a fixture.
-4. **The modeled set and the derived inventory** — what we emit, and what we
-   deliberately do not, derived from the corpus rather than hand-listed.
+4. ~~**The modeled set and the derived inventory.**~~ Done: every table the
+   corpus names is either on the wire or in `TABLES_OFF_THE_WIRE` with a
+   reason, and `npm run du:verify` fails when the inventory and the code
+   disagree.
 5. ~~**The three employment columns.**~~ Done: the classification is derived
    and the two 1b answers are asked on the review screen (`APP-029`). A
    casefile carrying a job emits.
@@ -730,7 +736,7 @@ this with the people doing the work.
    arrive through; what is missing is the endpoint, the envelope and the
    seller/servicer number a casefile goes in under.
 
-Steps 1 through 4 wait on neither the EULA nor the credentials.
+Steps 1 through 3 wait on neither the EULA nor the credentials.
 
 ## How to check this
 

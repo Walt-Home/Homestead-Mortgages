@@ -150,6 +150,12 @@ imports it and nothing type-checks it. `docs/du-generation.md` says why each
 container it stops at is stopped at, and the same check holds that page and this
 file to each other.
 
+That check runs in the other direction too, over the schema rather than over the
+declaration: every table `schema.prisma` maps is either named by a modeled block
+or excused by name with a reason it stays off the wire. So a table that could
+hold one of the containers this file stops at cannot sit unclaimed behind a line
+of it that still says nothing holds that container.
+
 ## The assembly traps
 
 Three, in the order somebody hits them.

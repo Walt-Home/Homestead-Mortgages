@@ -730,6 +730,18 @@ export const EVALUATORS: Record<string, Evaluator> = {
   "APP-019": (f) => {
     const ntb = f.decision?.compliance.netTangibleBenefit;
     if (!ntb) return wait("the decision has not run the NTB test");
+    // A null recoup is a refinance with no monthly saving to recoup out of, and
+    // it needs its own words: this string is read by a borrower and is the kind
+    // of engine text an adverse-action reason is built from, so "recoup of null
+    // months" — or the "recoup of Infinity months" it used to say — is not a
+    // sentence anybody may send.
+    if (ntb.recoupMonths === null) {
+      return check(
+        ntb.satisfied,
+        "the new payment is lower than the old",
+        "the new payment is not lower than the old, so the closing costs are never recouped",
+      );
+    }
     return check(
       ntb.satisfied,
       `recoup in ${ntb.recoupMonths} months against a ${ntb.thresholdMonths}-month threshold`,

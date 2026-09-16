@@ -86,10 +86,13 @@ interface PersonaBase<K extends PersonaKey> {
 /**
  * A persona the seed can actually walk to a state.
  *
- * `market` is recorded in the derivation log when the decision runs. It is the
- * APR, APOR and fee total the flow does not collect, supplied here rather than
- * invented by the engine — which is why a real-flow file ends `referred` and
- * these do not.
+ * `market` states the APR, APOR and fee total instead of letting the engine
+ * derive them, and a seed is the only caller that may. Two reasons, and both
+ * are about a sample borrower having to stand where the picker says they
+ * stand: a high-cost decline needs an APR six and a half points over the
+ * market and no rate sheet in this repository quotes one, and the average
+ * prime offer table covers the weeks that have been published, so a seed run
+ * next month would refer the borrowers it walked today.
  */
 export interface SeededPersona extends PersonaBase<SeededKey> {
   readonly target: ApplicationState;
@@ -223,9 +226,9 @@ export const PERSONA_STORIES: readonly PersonaStory[] = [
       propertyType: "single_family",
       address: SAN_JOSE,
     },
-    // Two percent of the loan, which is what the points-and-fees test needs
-    // and the flow never collects.
-    market: { apr: 6.625, apor: 6.2, pointsAndFeesAmount: 6_720 },
+    // Two percent of the loan, stated rather than priced off the schedule, so
+    // that this row reads the same whenever the seed is run.
+    market: { apr: 6.625, apor: 6.2, pointsAndFeesAmount: 6_720, totalLoanAmount: 332_730 },
     expectedOutcome: "approved_with_conditions",
   },
   {
@@ -269,7 +272,7 @@ export const PERSONA_STORIES: readonly PersonaStory[] = [
     },
     // An APR 7.05 points over the average prime offer rate, which is what
     // makes this loan high-cost under HOEPA.
-    market: { apr: 13.6, apor: 6.55, pointsAndFeesAmount: 2_840.5 },
+    market: { apr: 13.6, apor: 6.55, pointsAndFeesAmount: 2_840.5, totalLoanAmount: 281_039.75 },
     expectedOutcome: "denied",
   },
   {
@@ -340,7 +343,7 @@ export const PERSONA_STORIES: readonly PersonaStory[] = [
       propertyType: "single_family",
       address: AUSTIN,
     },
-    market: { apr: 6.625, apor: 6.2, pointsAndFeesAmount: 6_640 },
+    market: { apr: 6.625, apor: 6.2, pointsAndFeesAmount: 6_640, totalLoanAmount: 328_750 },
     expectedOutcome: "clear_to_close",
   },
   {

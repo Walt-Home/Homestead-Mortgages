@@ -39,13 +39,29 @@ import {
   revolvingUtilization,
 } from "./calculations.js";
 import { runComplianceTests, type MarketInputs } from "./compliance.js";
+import { closingCosts, FEE_SCHEDULE } from "./fee-schedule.js";
+import { resolveMarketInputs, statedMarket } from "./market.js";
 import { priceLoan } from "./pricing.js";
 
 export const SHADOW_ENGINE_VERSION = "0.1.0";
 
 export interface UnderwriteOptions {
+  /**
+   * Priced figures stated rather than derived, which is a seed's privilege and
+   * nobody else's.
+   *
+   * `resolveMarketInputs` derives all four from the file whenever this is
+   * absent, which is every path a borrower or a route can reach. What is left
+   * is the persona seed, which stands a sample borrower at an outcome the
+   * fixture rate sheet cannot produce — a HOEPA high-cost decline needs a rate
+   * six and a half points over the market, and no sheet in this repository
+   * quotes one.
+   */
   readonly market?: MarketInputs;
-  /** Estimated closing fees, until a real fee schedule exists. */
+  /**
+   * Closing fees stated rather than priced. Absent, the dated fee schedule is
+   * what funds-to-close is computed from.
+   */
   readonly estimatedFees?: number;
   readonly estimatedPrepaids?: number;
   /** Deterministic id for the casefile. Supplied so results are reproducible. */
@@ -218,8 +234,26 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
     });
   }
 
+  /* ── What the loan is priced at ───────────────────────────────────────── */
+  // Before assets, because funds to close is computed from the same schedule
+  // the compliance tests are: a file whose closing costs are in one number on
+  // the decision screen and another in the QM ratio is two answers about one
+  // loan.
+  const { inputs: market, pricedAgainst } = options.market
+    ? statedMarket(options.market)
+    : resolveMarketInputs(file, log);
+
   /* ── Assets and reserves ──────────────────────────────────────────────── */
-  const fees = options.estimatedFees ?? 0;
+  // The fee schedule is this lender's own, not a market input, so a caller who
+  // states an APOR has not un-charged it. Without this fallback a stated market
+  // priced funds to close at zero — the seeded sample borrowers were told they
+  // needed nothing at closing beyond the down payment, on a file whose own
+  // decision screen listed the fees.
+  const fees =
+    options.estimatedFees ??
+    market.closingCostTotal ??
+    closingCosts(FEE_SCHEDULE, file.loan?.loanAmount ?? 0)?.total ??
+    0;
   const prepaids = options.estimatedPrepaids ?? 0;
   const funds = fundsToClose(file, fees, prepaids, log);
   const reserveResult = reserves(file, dti.pitia, funds, log);
@@ -265,7 +299,7 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
   }
 
   /* ── Compliance and pricing ───────────────────────────────────────────── */
-  const compliance = runComplianceTests(file, options.market ?? {}, dti.back, log);
+  const compliance = runComplianceTests(file, market, dti.back, log);
   const pricing = priceLoan(file, fico, ltv.ltv, log);
 
   if (compliance.isHighCost === true) {
@@ -381,6 +415,7 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
     compliance,
     pricing,
     conditions,
+    pricedAgainst,
     derivations: log.all(),
     adverseActionReasons:
       outcome === "denied" || outcome === "counteroffer"

@@ -437,12 +437,15 @@ date-stamp every result **is never read** — no `Decision` carries it, so a
 decision made against stale numbers is not identifiable after the fact. Several
 of those thresholds change every January.
 
-⚠ APR and APOR are never computed, only accepted, so with the five screens as
-built **every compliance test that needs APR, APOR or a fee total blocks** — QM
-status, points and fees, HPML and HOEPA — **and no file reaches
-`clear_to_close`**. (The ATR determination still records a value, and net
-tangible benefit is not run at all on a purchase.) That is the honest outcome for
-a product that has generated no disclosures.
+⚠ APR, APOR and the fee totals are now derived from the file rather than
+accepted from a caller — a dated weekly table looked up by the week the rate was
+set, a versioned fee schedule, and Appendix J's actuarial solve — so the four
+compliance tests run on a file a borrower walked and `clear_to_close` is
+reachable. Two things still block by design: a rate set past the last week the
+checked-in APOR table holds, and the APR on any loan carrying mortgage
+insurance, whose premium this engine holds only an estimated rate card for.
+Both produce `referred`, which is the honest outcome. See `docs/decisions.md`,
+"APOR, a fee schedule, and an APR we are willing to defend".
 
 ⚠ `apps/web/src/pages/DecisionPage.tsx` — the only surface that ever rendered the
 derivation audit trail — is dead code, reachable from no route. The derivation
@@ -693,7 +696,8 @@ tamper-evident record of a breach we never had the means to avoid.
   aggregator, IRS IVES, e-sign, OFAC screening, the lien/O&E search, and
   pricing. (`docs/decisions.md` lists five; it predates the screening and liens
   ports.) Plus the CLS-* closing sheet, a real tax/insurance source, the real
-  LLPA matrix, a fee schedule, and an APOR feed.
+  LLPA matrix, a real fee table, and the FFIEC's own APOR series in place of the
+  fixture one.
 - **CI cannot authenticate to GCP** until this repository is added to the Workload
   Identity provider's attribute condition and to `hm-github-actions@`'s
   `workloadIdentityUser` binding — per `docs/decisions.md`, which is in tension

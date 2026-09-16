@@ -61,6 +61,15 @@ export async function recordDecision(
       compliance: decision.compliance as unknown as Prisma.InputJsonValue,
       pricing: decision.pricing as unknown as Prisma.InputJsonValue,
       derivations: decision.derivations as unknown as Prisma.InputJsonValue,
+      // What the priced tests were measured against. The database refuses a
+      // row carrying an APR spread that names no source, so these are not
+      // decoration: they are the half of the audit record that cannot be
+      // recovered by recomputing, because both of them move.
+      aporWeekOf: decision.pricedAgainst.aporWeekOf
+        ? new Date(`${decision.pricedAgainst.aporWeekOf}T00:00:00.000Z`)
+        : null,
+      aporSource: decision.pricedAgainst.aporSource,
+      feeScheduleVersion: decision.pricedAgainst.feeScheduleVersion,
       adverseActionReasons: [...(decision.adverseActionReasons ?? [])],
     },
     select: { id: true },

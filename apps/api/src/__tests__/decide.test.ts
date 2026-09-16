@@ -20,7 +20,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { prisma } from "@hm/db";
+import { prisma, type Prisma } from "@hm/db";
 import { AUS_RECOMMENDATIONS, DECISION_OUTCOMES } from "@hm/shared";
 import type { Db } from "../services/db.js";
 import { listAccessibleFiles } from "../services/repository.js";
@@ -75,6 +75,91 @@ describe("the database holds the same words the code does", () => {
         },
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe("a stored spread names what it was measured against", () => {
+  /** One row, with whatever compliance verdicts and provenance the caller wants. */
+  const store = (
+    loanFileId: string,
+    compliance: Prisma.InputJsonObject,
+    provenance: {
+      aporWeekOf?: Date;
+      aporSource?: string;
+      feeScheduleVersion?: string;
+    } = {},
+  ) =>
+    prisma.decision.create({
+      data: {
+        loanFileId,
+        outcome: "referred",
+        computedAt: new Date(),
+        ausEngine: "shadow",
+        ausEngineVersion: "0.1.0",
+        ausCasefileId: "c1",
+        ausRecommendation: "refer",
+        ausFindings: [],
+        ratios: {},
+        reserves: {},
+        compliance,
+        pricing: {},
+        derivations: [],
+        ...provenance,
+      },
+      select: { id: true },
+    });
+
+  const fileFor = async () => {
+    const user = await createUser();
+    return (
+      await prisma.loanFile.create({
+        data: { userId: user.id, purpose: "PURCHASE" },
+        select: { id: true },
+      })
+    ).id;
+  };
+
+  it("refuses an APR spread with no APOR source behind it", async () => {
+    // The row this constraint exists for. A recomputation a year from now runs
+    // against a different week of the FFIEC's table and answers differently,
+    // and without this there is nothing on the old row to say which week it
+    // meant — so two rows disagreeing about one loan look like the loan
+    // changed.
+    await expect(store(await fileFor(), { hpmlSpread: 0.13, isHpml: false })).rejects.toThrow(
+      /decisions_a_spread_names_its_week/,
+    );
+  });
+
+  it("refuses a points-and-fees ratio with no schedule behind it", async () => {
+    await expect(
+      store(await fileFor(), { pointsAndFeesRatio: 0.81, pointsAndFeesPass: true }),
+    ).rejects.toThrow(/decisions_a_fee_ratio_names_its_schedule/);
+  });
+
+  it("refuses a week that does not say which series it came off", async () => {
+    await expect(
+      store(await fileFor(), {}, { aporWeekOf: new Date("2026-06-15T00:00:00.000Z") }),
+    ).rejects.toThrow(/decisions_a_week_has_a_source/);
+  });
+
+  it("takes a computation that did not run, which has nothing to name", async () => {
+    // Every decision recorded before the engine derived these carries null
+    // verdicts, and those rows are truthful records of tests that were blocked.
+    // The constraint is an implication rather than a NOT NULL so they stay
+    // insertable and stay unbackfilled.
+    await expect(
+      store(await fileFor(), { hpmlSpread: null, pointsAndFeesRatio: null }),
+    ).resolves.toBeDefined();
+  });
+
+  it("takes a spread a caller stated, as long as it says so", async () => {
+    await expect(
+      store(
+        await fileFor(),
+        { hpmlSpread: 7.05, pointsAndFeesRatio: 1 },
+        { aporSource: "stated", feeScheduleVersion: "stated" },
+      ),
+    ).resolves.toBeDefined();
   });
 });
 

@@ -24,6 +24,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { prisma } from "@hm/db";
 import { fixtureRegistry, type PersonaId } from "@hm/connectors";
+import { APOR_TABLE } from "@hm/underwriting";
 import { TERMINAL, TRANSITION_REASONS, eventsFrom, type ApplicationState } from "@hm/shared";
 import { underwrite } from "@hm/underwriting";
 
@@ -86,24 +87,6 @@ const SCREEN_TWO = {
 
 /** Answered on the review screen, and required before anything may be signed. */
 const DEMOGRAPHICS = { ethnicity: "declined", race: "declined", sex: "declined" };
-
-/** Market figures that let the compliance tests run at all. */
-const MARKET = {
-  apr: 6.44,
-  apor: 6.1,
-  pointsAndFeesAmount: 9_800,
-  estimatedFees: 9_800,
-  estimatedPrepaids: 4_200,
-};
-
-/** The same figures on a loan priced past every HOEPA threshold. */
-const HIGH_COST = {
-  apr: 12.5,
-  apor: 6.1,
-  pointsAndFeesAmount: 60_000,
-  estimatedFees: 60_000,
-  estimatedPrepaids: 4_200,
-};
 
 /** The reasons whose actor is the person, because the person did it. */
 const BORROWER_REASONS = [
@@ -524,24 +507,73 @@ describe("the decision", () => {
       );
       expect(res.status).toBe(201);
     }
+    await quotedInAporWeek(started.fileId);
     return started;
   }
 
-  const decide = (userId: string, fileId: string, market: Record<string, number> = {}) =>
+  /**
+   * Date the file's quote into a week the average prime offer table holds.
+   *
+   * That table ends at the last week the FFIEC had published and holds no week
+   * that has not happened, so it goes stale on purpose: a rate set past its
+   * last row blocks the compliance tests rather than being compared against an
+   * older week. A file made by a test is quoted off a sheet dated today, which
+   * is inside the table this week and outside it later — so a test that is
+   * about an application's states rather than about staleness says which week
+   * it means instead of inheriting the clock.
+   */
+  async function quotedInAporWeek(fileId: string) {
+    const last = APOR_TABLE.weeks[APOR_TABLE.weeks.length - 1]!;
+    await prisma.loanFile.update({
+      where: { id: fileId },
+      data: { rateQuotedAt: new Date(`${last.weekOf}T12:00:00.000Z`) },
+    });
+  }
+
+  /**
+   * The same file on a loan the engine will not state an APR for.
+   *
+   * 94.7% of value, which is mortgage insurance, which is a finance charge
+   * this engine holds only an estimated rate card for. UW-006 and UW-008 block
+   * on the APR, and 94.7% is inside every eligibility limit — so what comes
+   * back is an engine that could not compute, and not a loan it turned down.
+   */
+  const carryingMortgageInsurance = (userId: string, fileId: string) =>
+    callAs(userId, [fileRouter], "PATCH", `/${fileId}`, {
+      loanAmount: 393_000,
+      downPayment: 22_000,
+    });
+
+  /**
+   * A loan small enough that this lender's own fees are 5.8% of it.
+   *
+   * HOEPA's points-and-fees trigger is why small loans are priced the way they
+   * are: an underwriting fee that is a rounding error on a $332,000 loan is
+   * most of a $30,000 one. Nothing about the schedule changes — the loan does.
+   */
+  const smallEnoughToBeHighCost = (userId: string, fileId: string) =>
+    callAs(userId, [fileRouter], "PATCH", `/${fileId}`, {
+      loanAmount: 30_000,
+      downPayment: 385_000,
+    });
+
+  const decide = (userId: string, fileId: string) =>
     callAs<{ applicationState: { status: string } }>(
       userId,
       [decisionRouter],
       "POST",
       `/${fileId}/decision`,
-      market,
+      {},
     );
 
   it("asks the engine, and refuses to call a refer an approval", async () => {
-    // No APR, no APOR and no fee schedule, so the compliance tests are blocked
-    // and the recommendation is `refer`. The outcome is `referred`, which has
-    // no edge out of underwriting — moving the file on it would tell a
-    // borrower something was decided by a calculation nobody made.
+    // A loan carrying mortgage insurance, so there is no APR to compare and
+    // the QM, HPML and HOEPA tests are blocked. The recommendation is `refer`
+    // and the outcome is `referred`, which has no edge out of underwriting —
+    // moving the file on it would tell a borrower something was decided by a
+    // calculation nobody made.
     const { user, fileId } = await connected();
+    await carryingMortgageInsurance(user.id, fileId);
     const res = await decide(user.id, fileId);
     expect(res.status).toBe(201);
     expect(res.body.applicationState.status).toBe("in_underwriting");
@@ -564,7 +596,7 @@ describe("the decision", () => {
 
   it("approves when every test ran and passed", async () => {
     const { user, fileId } = await connected();
-    const res = await decide(user.id, fileId, MARKET);
+    const res = await decide(user.id, fileId);
     expect(res.body.applicationState.status).toBe("approved");
     expect((await ledgerOf(fileId)).at(-1)).toEqual(["decided_approved", "engine_clean"]);
 
@@ -583,7 +615,7 @@ describe("the decision", () => {
       loanAmount: 406_285,
       downPayment: 8_715,
     });
-    const res = await decide(user.id, fileId, MARKET);
+    const res = await decide(user.id, fileId);
     expect(res.body.applicationState.status).toBe("counteroffer_outstanding");
     expect((await ledgerOf(fileId)).at(-1)).toEqual(["decided_counteroffer", "engine_ineligible"]);
   });
@@ -613,9 +645,33 @@ describe("the decision", () => {
     expect(await eventCount(fileId, "decision_not_applied")).toBe(1);
   });
 
+  it("ignores a market posted with the request", async () => {
+    // The only session on a file belongs to the borrower whose loan is being
+    // tested. While the route took these off the body, that borrower could
+    // state the average prime offer rate their own HOEPA question was decided
+    // against — an APOR of 20 turns this decline into an approval. All four
+    // figures are derived from the file now, so the body changes nothing.
+    const { user, fileId } = await connected();
+    await smallEnoughToBeHighCost(user.id, fileId);
+    const res = await callAs<{
+      decision: { compliance: { isHighCost: boolean | null } };
+      applicationState: { status: string };
+    }>(user.id, [decisionRouter], "POST", `/${fileId}/decision`, {
+      apr: 1,
+      apor: 20,
+      pointsAndFeesAmount: 1,
+      estimatedFees: 0,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.decision.compliance.isHighCost).toBe(true);
+    expect(res.body.applicationState.status).toBe("adverse_action_pending");
+  });
+
   it("declines a high-cost loan, and the database opens the notice clock", async () => {
     const { user, fileId } = await connected();
-    const res = await decide(user.id, fileId, HIGH_COST);
+    await smallEnoughToBeHighCost(user.id, fileId);
+    const res = await decide(user.id, fileId);
     expect(res.body.applicationState.status).toBe("adverse_action_pending");
     expect((await ledgerOf(fileId)).at(-1)).toEqual(["decided_decline", "engine_high_cost"]);
 
@@ -630,22 +686,26 @@ describe("the decision", () => {
 
   it("declines a conditionally approved file, and refuses to re-approve one", async () => {
     const { user, fileId } = await connected();
+    // A bigger house and a bigger loan at the same 80% of value, so the debt
+    // ratio raises a finding and nothing raises mortgage insurance.
     await callAs(user.id, [fileRouter], "PATCH", `/${fileId}`, {
-      loanAmount: 380_000,
-      downPayment: 35_000,
+      valueOrPrice: 550_000,
+      loanAmount: 440_000,
+      downPayment: 110_000,
     });
-    expect((await decide(user.id, fileId, MARKET)).body.applicationState.status).toBe(
+    expect((await decide(user.id, fileId)).body.applicationState.status).toBe(
       "conditionally_approved",
     );
 
     // The machine has no edge back to an approval word, so the second run of
     // the same outcome writes nothing and says so.
-    await decide(user.id, fileId, MARKET);
+    await decide(user.id, fileId);
     expect(await statusOf(fileId)).toBe("conditionally_approved");
     expect(await eventCount(fileId, "decision_not_applied")).toBe(1);
 
     // A decline from there is an edge the machine does have.
-    expect((await decide(user.id, fileId, HIGH_COST)).body.applicationState.status).toBe(
+    await smallEnoughToBeHighCost(user.id, fileId);
+    expect((await decide(user.id, fileId)).body.applicationState.status).toBe(
       "adverse_action_pending",
     );
   });
@@ -659,7 +719,7 @@ describe("the decision", () => {
     // The engine can decide this one — but `underwriting_began` is not an edge
     // out of "needs you", and neither is the outcome. The decision is recorded
     // and the file stays where it is.
-    await decide(user.id, fileId, MARKET);
+    await decide(user.id, fileId);
     expect(await statusOf(fileId)).toBe("awaiting_borrower");
     expect(await ledgerOf(fileId)).toEqual(before);
     expect(await prisma.decision.count({ where: { loanFileId: fileId } })).toBe(1);
@@ -674,6 +734,11 @@ describe("the decision", () => {
     // Repeated, because a lost race is a race that sometimes runs cleanly.
     for (let round = 0; round < 3; round += 1) {
       const { user, fileId } = await connected();
+      // On a loan with no APR to compute, so the three decisions land on
+      // `referred` — which has no edge out of underwriting, and is what makes
+      // the ledger length below a statement about the race rather than about
+      // the outcome.
+      await carryingMortgageInsurance(user.id, fileId);
       const results = await Promise.all([
         decide(user.id, fileId),
         decide(user.id, fileId),
@@ -951,7 +1016,7 @@ describe("a sanctions hold", () => {
       }),
     );
     expect(
-      (await callAs(user.id, [decisionRouter], "POST", `/${fileId}/decision`, MARKET)).status,
+      (await callAs(user.id, [decisionRouter], "POST", `/${fileId}/decision`, {})).status,
     ).toBe(201);
 
     expect(await statusOf(fileId)).toBe("suspended");
@@ -969,7 +1034,7 @@ describe("what every row says", () => {
       contentType: "application/pdf",
       bytes: 512,
     });
-    await callAs(user.id, [decisionRouter], "POST", `/${fileId}/decision`, MARKET);
+    await callAs(user.id, [decisionRouter], "POST", `/${fileId}/decision`, {});
 
     const standing = await applicationStanding(prisma, fileId);
     expect(standing!.ledger.length).toBeGreaterThan(6);

@@ -49,6 +49,7 @@ function file(overrides: Partial<LoanFile> = {}): LoanFile {
       termMonths: 360,
       amortization: "Fixed",
       noteRate: 6,
+      rateQuotedAt: "2026-06-15T00:00:00.000Z",
       overlays: [],
     },
     borrowers: [],

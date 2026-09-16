@@ -579,9 +579,294 @@ own rather than a field here:
   in either direction, on a test whose failure severity in Drew's sheet is
   "Regulatory violation". Blocked is the correct output until it is right.
 
-So the five tests stay blocked, and they now block on inputs whose sources
-are written down. What this commit ends is a rate that was one environment
-variable.
+So the five tests stayed blocked at the end of that commit, blocking on inputs
+whose sources were written down. What it ended is a rate that was one
+environment variable. The section below is what happened to the three inputs.
+
+## APOR, a fee schedule, and an APR we are willing to defend
+
+Four of the five tests above now run on a file a borrower walked, and the fifth
+is a refinance test that runs on a refinance. None of the three inputs came
+from a vendor.
+
+### APOR is a dated series with a lookup, and it goes stale by refusing
+
+`packages/underwriting/src/apor.ts` holds the FFIEC's own shape — a header of
+terms, one row per week — with a loader and a lookup. The lookup takes the
+**week the rate was set**, which is what Regulation Z compares against, and
+reads the column for the loan's term. Three refusals rather than
+approximations: a term with no column, an adjustable-rate product (compared
+against a different series), and a rate set more than six days after the last
+row.
+
+That last one is the whole design. The nearest week a stale table holds is the
+wrong answer arriving as a right-looking one — the HPML test still returns a
+boolean and the HOEPA test still says "not high-cost". So the table stops
+answering instead, the tests block, and the decision is `referred`. **The
+shipped table therefore holds no week that has not happened, and will go stale
+on its own.** Extending it forward by inventing weeks the FFIEC could not yet
+have averaged is the one edit that would turn a blocked test into a wrong one.
+
+The loader refuses a series with a hole in it, and that check is load-bearing
+rather than tidiness: from inside the lookup a missing week and the end of the
+series look identical, so a gap would silently answer the week before it for
+every rate set inside it.
+
+**Reproducibility does not need the table copied into a row.** The earlier
+section argued that dated data going stale makes APOR storage rather than
+configuration, because a test run twice on one file has to answer the same way.
+What makes that true here is that the lookup is keyed on a date recorded on the
+file — `loan_files.rate_quoted_at`, already written with every quote — and the
+derivation records the week, the term and the source it answered from. A
+replacement table containing the same week gives the same answer; one that does
+not reach that week blocks. Neither is a different answer to the same question.
+
+`rate_quoted_at` is the day the vendor published the sheet, which is the
+closest recorded fact to the day the rate was set. Nothing here locks a rate,
+so there is no lock date; the two are the same day on every quote this flow
+writes, and whoever builds locking replaces the reading with the lock date.
+
+⚠ The rates in that table are fixture data, exactly as `RATE_SHEET`'s are. The
+FFIEC's published series is a document this repository does not hold. Every
+derivation that reads one records `apor_source`, so a stored decision says which
+table answered it and stays readable after a real feed arrives.
+
+### The fee schedule is one list and three totals
+
+`packages/underwriting/src/fee-schedule.ts` is versioned and dated because the
+numbers it produces land in legal tests, and a decision recomputed a year later
+against a newer schedule would quietly answer the QM question on fees that loan
+was never charged.
+
+It is a list of lines rather than three constants because the three totals are
+**different subsets of the same fees** and nothing about a dollar figure says
+which subsets it belongs to. An appraisal is a closing cost, is not points and
+fees, and is not a finance charge. Origination is all three. So each line
+carries its own §1026.4 and §1026.32(b)(1) flags with the reason beside it, and
+the payee is on the line because an appraisal ordered from an affiliate is
+inside both subsets.
+
+That split fixed a real error: net tangible benefit was recouping
+`pointsAndFeesAmount`, which is roughly half of what a borrower actually pays
+at closing. It takes `closingCostTotal` now, and `MarketInputs` carries both.
+
+⚠ Nothing in the schedule varies by state or by property. Transfer and mortgage
+recording taxes are set per state and county and title premiums are filed rates
+in most states; none can be a lender-wide constant, so they are absent and the
+derivation says the total is this lender's own charges rather than a Loan
+Estimate.
+
+### APR is computed, and refused on the loans where it would be a guess
+
+`packages/underwriting/src/apr.ts` solves Appendix J's regular-period case: the
+monthly rate that discounts the payment stream back to the amount financed,
+times twelve. Measured against this schedule on a 30-year loan, it comes out 7
+basis points above the note rate at $806,500, 9 at $400,000, 15 at $150,000, 32
+at $60,000 and 71 at $25,000 — close enough on the loan sizes anybody would
+think to check that substituting one for the other would pass, and two thirds of
+a point out on a small loan, which is exactly the loan the HOEPA fee trigger is
+about.
+
+It refuses two kinds of loan rather than estimating:
+
+- **Anything that does not amortize that way.** An adjustable rate needs the
+  composite-rate rules and a balloon is a different stream.
+- **Any loan carrying mortgage insurance.** MI premiums are finance charges
+  under §1026.4(b)(5), they are in the payment stream, and they stop at 78% of
+  original value — so an APR without them is understated and one with them is
+  only as good as the premium. `GUIDELINES.mortgageInsurance` says of itself
+  that it is an estimate. §1026.22(a)(2) allows a disclosed APR an eighth of a
+  point — 12.5 basis points — and the error in that estimate alone is measured
+  at **37 basis points at 95% LTV, 39 at 98% and 22 at 90%** for a fifth's
+  error in the premium, solving the full stream with the premium ending at 78%
+  of original value. Three times the whole allowance, exactly where mortgage
+  insurance matters. (It drops inside tolerance around 85% LTV and below, which
+  is not the case this is about.)
+
+So **a loan above 80% LTV still refers**, on the APR alone, and that is the
+shape of file that keeps `referred` reachable through the real flow.
+
+⚠ **Read that as a product fact, not a footnote.** Six of the eight sample
+borrowers sit at or below 80% LTV and decide; the two who do not — 95% and
+97.9% — refer. A first-time buyer putting 5% down is the core case for this
+product and is precisely the file that cannot be given an APR today. It is a
+vendor gap of exactly the same kind as Grander's seller/servicer number: **a
+real mortgage-insurance rate card closes it and nothing else will**, and until
+one arrives the honest answer for that borrower is "a person is looking at
+this". The alternative is a rate card we made up deciding their HPML status.
+
+What it leaves out is interest from disbursement to the first payment period,
+because no file here carries a disbursement date. That is omitted rather than
+assumed, and the omission is bounded: a full month of it — the most there can
+ever be — moves the APR by less than half the eighth-point tolerance above, in
+the direction that understates. A test pins the bound and the derivation records
+the omission beside the figure.
+
+### The HOEPA test is three-valued, because its two triggers are not symmetric
+
+Either trigger makes a loan high-cost, so `true` is sound on one trigger alone.
+`false` is not: "not high-cost" means neither fired, and a trigger that was
+never tested did not fail to fire. With the fee schedule always priced and the
+APR blocked on a loan carrying mortgage insurance, the old two-valued OR
+returned exactly that — a clean HOEPA determination on a loan whose rate nobody
+had compared to anything.
+
+### The decision route no longer takes any of this off the request
+
+It used to parse `apor`, `apr`, `pointsAndFeesAmount`, `estimatedFees` and
+`estimatedPrepaids` from the POST body. The only session on a file belongs to
+the borrower whose loan is being tested, so a posted `{"apor": 20}` turned a
+high-cost decline into an approval. Nobody was exploiting it — both screens
+posted an empty body, which is precisely why every walked file ended "In
+review" — but four regulatory tests were reachable from outside the engine, and
+validation is not the fix for that. The body is ignored.
+
+`UnderwriteOptions.market` survives for the persona seed alone, and it has to:
+a high-cost sample borrower needs an APR six and a half points over the market,
+and no sheet in this repository quotes one. A seed also cannot depend on a
+weekly table covering the day it happens to run.
+
+### The database refuses a stored spread that names nothing
+
+`decisions` is the audit record and is append-only, so a row saying
+`"isHighCost": false` outlives the table and the schedule that produced it —
+and both of those move. `decisions_a_spread_names_its_week` and
+`decisions_a_fee_ratio_names_its_schedule` refuse a row reporting one of those
+verdicts without an `apor_source` or a `fee_schedule_version` beside it. The
+engine writes both from `Decision.pricedAgainst`, and `"stated"` is what a
+caller-supplied market records, for the reason `aus_engine` holds `"shadow"`:
+no stored decision may be ambiguous about what produced it.
+
+The facts are already in the derivation log, and a CHECK cannot read a JSON
+array — Postgres forbids the subquery that would take — so they are promoted to
+columns. The constraints are implications rather than NOT NULLs, and they are
+added **NOT VALID**, which is the correction below.
+
+### What a refuter pass changed before any of this landed
+
+Six independent reviews were run against the change above while it was still
+uncommitted, each told to break it rather than approve it. Nineteen claims were
+raised and thirteen were refuted. What survived is recorded here because most of
+it was wrong in the permissive direction — the direction the brief for this work
+said must not happen.
+
+**The migration would have stopped the deploy.** Its own comment asserted that
+every pre-existing decision "was computed with no APR and no APOR at all". True
+of every file a borrower walked, false of the one caller that has always stated
+market figures: the persona seed. Three sample borrowers carry a non-null
+`hpmlSpread`, so on staging — and on any developer database where
+`seed:personas` has run — a validated `ADD CONSTRAINT` fails and
+`prisma migrate deploy` aborts. Reproduced against a database holding one such
+row, then fixed with `NOT VALID`: unchecked against the rows already there,
+enforced for every row written from now on, which for an insert-only table is
+every decision this engine will ever record. Deleting them was not available
+(append-only) and neither was backfilling — `"stated"` would have been exactly
+true of them, but an `UPDATE` against `decisions` is the thing nothing here
+does.
+
+**Points and fees was measured against the wrong denominator.**
+§1026.32(b)(4) defines the *total loan amount* the QM cap and the HOEPA fee
+trigger are both measured against: the loan less what is paid at closing for the
+credit itself — the same figure Appendix J already discounts against. The code
+divided by the note amount. The error is the fees' own share of the loan, so it
+is invisible at $400,000 and decisive below about $40,000, always understating.
+A $36,000 loan on this schedule reported 4.92% and passed the 5% trigger where
+the statutory ratio is 5.17% and does not: **a high-cost mortgage originated,
+with a stored decision asserting it passed.** `MarketInputs.totalLoanAmount` now
+carries the denominator and the ratio blocks without it, because a ratio is a
+pair of numbers and only one of them was present.
+
+**HOEPA and HPML were applied to loans they do not reach.** Both rules open on
+credit secured by the consumer's *principal dwelling*; a loan to buy an
+investment property is business-purpose credit §1026.3(a)(1) exempts from
+Regulation Z outright. Nothing read occupancy. This lender's flat fees are 5.8%
+of a $30,000 loan, so a small second-home purchase fired the fee trigger, and
+one high-cost finding is a denial ahead of every other branch — a borrower
+declined, and sent an adverse-action notice naming the reason, on a rule that
+does not reach their property. Out-of-scope is now **recorded rather than
+blocked**: blocking means "we could not compute this" and forces `refer`, and
+this is the opposite — we know the rule does not apply.
+
+**Two bright lines were tested on the wrong side, and on a rounded input.**
+§1026.35(a)(1)(i) makes a loan higher-priced at "1.5 **or more** percentage
+points" over APOR, and §1026.43(e)(2)(vi) disqualifies General QM at "2.25 **or
+more**" — both floors, both tested with operators that excluded the boundary.
+Worse, the spread was rounded to hundredths *before* the comparison, so every
+true spread in [1.500, 1.505) collapsed onto 1.50 and failed a strict `>`. The
+tests now decide on the exact spread and record the rounded one. §1026.32(a)(1)(i)
+keeps its strict `>` — that rule says "**more than** 6.5" — but reads the exact
+spread too, because a true 6.5004 rounded to 6.50 failed it the same way.
+
+**The APR solver could return a number it had not found.** Bisection against a
+bracket that excludes the root does not fail; it converges on the bound. The
+ceiling was a flat 100% a month, asserted as one "no mortgage reaches" — but a
+$1,600 loan carrying $1,598 of prepaid finance charges has a true unit-period
+root near 492%, and the engine recorded a computed APR of exactly 1200.000%.
+A fabricated figure with a derivation behind it is the one thing no number on a
+decision may be. The bracket is now found by doubling, and refuses if it cannot
+straddle the root.
+
+**`Infinity` is not a number JSON can carry.** A refinance with no monthly
+saving set `recoupMonths: Number.POSITIVE_INFINITY`, typed `number`, which
+Postgres read back as `null` — so a stored counteroffer said the benefit test
+failed and could not say by how much, collapsing "never recoups" into "never
+computed" at write time, silently. It is `number | null` now, unambiguous
+because a test that did not run leaves `netTangibleBenefit` undefined entirely.
+The borrower-facing string said "recoup of Infinity months"; it now says the
+new payment is not lower than the old.
+
+**A stated market priced closing costs at zero.** `options.market` short-circuits
+the whole derivation, and no caller states a `closingCostTotal` — so funds to
+close silently dropped the entire fee schedule for every seeded sample borrower,
+on a file whose own decision screen listed those fees. The schedule is this
+lender's own, not a market input, so it is priced regardless of who stated the
+rest. An empty stated market (`{}`, which is truthy) now throws rather than
+turning off all four derivations.
+
+**The mortgage-insurance refusal did not implement its own contract.** `apr.ts`
+says it refuses any loan above 80% LTV; the gate read a premium off a band table
+whose lowest row starts at 80.01, so the open interval (80, 80.01) got a stated
+APR for a loan that carries mortgage insurance in fact.
+
+### The staleness alarm was a comment, not an alarm
+
+`apor.ts` said the table "WILL stop answering, on the Monday after the last row,
+and that is the alarm working." Half true. It stops — but every test pins its
+quote to the last week in the table, exactly so it does not inherit the clock,
+which is right for a test about application states and left **the whole suite
+green on the day every real borrower's file starts referring.** One test now
+reads `new Date()` on purpose and fails in CI the first Monday the series does
+not reach. That is the difference between an alarm and a comment claiming there
+is one.
+
+⚠ **The consequence is operational: this table needs a weekly edit.** Until a
+real FFIEC feed replaces the fixture, someone adds the published weeks or the
+product stops deciding. The fix when that test fails is to add the weeks the
+FFIEC has actually published — never to extend the series forward with invented
+rows, which turns a blocked test into a confidently wrong one.
+
+### Known and open, in the same file
+
+Recorded rather than fixed, because each is unreachable in V1's scope or needs a
+decision this change should not make on its own:
+
+- **HOEPA's points-and-fees trigger is a flat 5%** where the rule tiers it for
+  small loans. It errs conservative at every reachable loan size — a wrongful
+  high-cost finding declines a loan rather than approving one — but that is
+  still a borrower denied on a threshold that does not apply to them.
+- **HOEPA's third trigger, the prepayment penalty, is not tested.**
+  `loan_products.prepayment_penalty` is a NOT NULL column and the DU assembler
+  already renders it, so the premise that no product carries one is held nowhere
+  but in the fixture sheet.
+- **General QM has no manufactured-home tier.** §1026.43(e)(2)(vi)(D) gives one
+  a 6.5-point threshold under $132,756; the table carries the three non-manufactured
+  tiers only. Errs restrictive.
+- **`existingRate` is written as `0`** by the credit pull for every refinance
+  whose report carries a mortgage tradeline, because the report has no rate — so
+  net tangible benefit publishes a `rateDelta` of −6.25 rather than an absence.
+- **The recoup's "monthly saving" subtracts the new loan's principal and
+  interest from the old loan's full escrowed payment**, which overstates the
+  saving by the old escrow.
 
 ## Bank: Plaid, and CRA rather than Assets
 
@@ -1320,8 +1605,8 @@ depend on it:
 | Pricing                         | Engine or investor execution; only the ANSWER takes either |
 
 Plus: the CLS-* closing-stage sheet, the requirements for the monitoring loop,
-a real tax/insurance source, the real LLPA matrix, a fee schedule, and an APOR
-feed.
+a real tax/insurance source, the real LLPA matrix, a real fee table, and the
+FFIEC's own APOR series in place of the fixture one.
 
 ## One-time infrastructure prerequisite
 

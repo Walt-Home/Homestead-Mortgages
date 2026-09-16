@@ -103,7 +103,18 @@ export interface ComplianceTests {
   readonly netTangibleBenefit?: {
     readonly paymentDelta: number;
     readonly rateDelta: number;
-    readonly recoupMonths: number;
+    /**
+     * Months to recoup the closing costs out of the monthly saving, or null
+     * when there is no saving to recoup them from.
+     *
+     * Null rather than Infinity because this object is stored as jsonb and JSON
+     * cannot carry an infinity — it arrived back from Postgres as null anyway,
+     * having claimed to be a number the whole way. A null here is not "we did
+     * not compute it": a test that did not run leaves `netTangibleBenefit`
+     * undefined entirely, and a null recoup always sits beside a `paymentDelta`
+     * at or below zero.
+     */
+    readonly recoupMonths: number | null;
     readonly thresholdMonths: number;
     readonly satisfied: boolean;
   };
@@ -135,6 +146,35 @@ export const DECISION_OUTCOMES = [
 
 export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
 
+/**
+ * What the priced tests were measured against.
+ *
+ * A stored decision saying "not high-cost" that cannot name the week it
+ * compared a rate to, or the schedule it priced the fees off, is an audit
+ * record of a legal determination with the determination's inputs missing.
+ * Both of those move — the FFIEC publishes a new week every Monday and a fee
+ * schedule is replaced rather than edited — so recomputing a year later would
+ * answer the same question differently and nothing on the old row would say
+ * why.
+ *
+ * `aporSource` is `"stated"` when a caller supplied the rate instead of the
+ * engine looking one up, which is the persona seed and nothing else. It is a
+ * value rather than a null for the reason `AusResult.engine` is: no stored
+ * decision may be ambiguous about what produced it.
+ *
+ * The database holds this as a CHECK: a decision carrying an APR spread must
+ * name an APOR source, and one carrying a points-and-fees ratio must name a
+ * fee schedule.
+ */
+export interface PricedAgainst {
+  /** The FFIEC week the APOR was read from, as an ISO date. */
+  readonly aporWeekOf: string | null;
+  /** Which table answered, or "stated". Null when no APOR was obtained. */
+  readonly aporSource: string | null;
+  /** Which fee schedule priced the totals, or "stated". */
+  readonly feeScheduleVersion: string | null;
+}
+
 export interface Decision {
   readonly outcome: DecisionOutcome;
   readonly computedAt: string;
@@ -147,6 +187,8 @@ export interface Decision {
     readonly adjustments: readonly { reason: string; bps: number }[];
   };
   readonly conditions: readonly LoanCondition[];
+  /** Where the APR spread and the fee ratio above were measured from. */
+  readonly pricedAgainst: PricedAgainst;
   /** The full audit trail behind every number above. */
   readonly derivations: readonly Derivation[];
   /** Principal reasons, required on a denial or counteroffer (UW-016). */

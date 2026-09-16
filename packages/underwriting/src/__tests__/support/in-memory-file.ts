@@ -115,6 +115,9 @@ export function afterIdentity(): LoanFile {
       termMonths: 360,
       amortization: "Fixed",
       noteRate: 6.25,
+      // A Monday the checked-in average prime offer table holds, so the
+      // compliance tests this file reaches have a week to compare against.
+      rateQuotedAt: REFERENCE.toISOString(),
       overlays: [],
     },
     borrowers: [

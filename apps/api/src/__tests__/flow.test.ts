@@ -554,6 +554,19 @@ describe("the decision", () => {
     return { ...file, transcripts: irs.data };
   }
 
+  /**
+   * The same borrower on a loan the engine will not state an APR for.
+   *
+   * 92.3% of value, which is mortgage insurance, which is a finance charge
+   * this engine holds only an estimated rate card for. It is inside every
+   * eligibility limit, so what the engine reports is that it could not compute
+   * — not that it turned the loan down.
+   */
+  const insured = (file: LoanFile): LoanFile => ({
+    ...file,
+    loan: { ...file.loan!, loanAmount: 600_000, downPayment: 50_000 },
+  });
+
   it("computes ratios from connected data", async () => {
     const decision = underwrite(await fullyConnected(), {
       casefileId: "test-casefile",
@@ -587,8 +600,8 @@ describe("the decision", () => {
   });
 
   it("refers rather than approves when an input could not be computed", async () => {
-    // No APR, no APOR and no fee schedule, so the compliance tests are blocked.
-    const decision = underwrite(await fullyConnected(), {
+    // Mortgage insurance, so there is no APR and the tests that need one block.
+    const decision = underwrite(insured(await fullyConnected()), {
       casefileId: "test-casefile",
       now: REFERENCE.toISOString(),
     });
@@ -610,20 +623,42 @@ describe("the decision", () => {
     expect(decision.aus?.engine).toBe("shadow");
   });
 
-  it("blocks the compliance tests it has no market data for", async () => {
+  it("runs the compliance tests on nothing but the file", async () => {
+    // Nobody is handed a market. The fee schedule is priced against the loan,
+    // the average prime offer rate comes off the week this file's rate was
+    // quoted, and the APR is solved from the two — which is what it takes for
+    // a file a borrower actually walked to carry a QM determination.
     const decision = underwrite(await fullyConnected(), {
       casefileId: "test-casefile",
       now: REFERENCE.toISOString(),
     });
-    expect(decision.compliance.isHpml).toBeNull();
-    expect(decision.compliance.pointsAndFeesPass).toBeNull();
+
+    expect(decision.compliance.qmStatus).toBe("qm");
+    expect(decision.compliance.isHpml).toBe(false);
+    expect(decision.compliance.pointsAndFeesPass).toBe(true);
+    expect(decision.compliance.isHighCost).toBe(false);
   });
 
-  it("runs the compliance tests once market data is supplied", async () => {
+  it("blocks the tests that need an APR when it will not state one", async () => {
+    const decision = underwrite(insured(await fullyConnected()), {
+      casefileId: "test-casefile",
+      now: REFERENCE.toISOString(),
+    });
+    // The fee schedule still prices, so the points-and-fees test still runs.
+    // What stops is everything that compares a rate to the market — including
+    // HOEPA, which may not answer "not high-cost" off the fee trigger while
+    // its rate trigger was never tested.
+    expect(decision.compliance.pointsAndFeesPass).toBe(true);
+    expect(decision.compliance.qmStatus).toBeNull();
+    expect(decision.compliance.isHpml).toBeNull();
+    expect(decision.compliance.isHighCost).toBeNull();
+  });
+
+  it("still takes a market it is handed, which is the persona seed's privilege", async () => {
     const decision = underwrite(await fullyConnected(), {
       casefileId: "test-casefile",
       now: REFERENCE.toISOString(),
-      market: { apr: 6.44, apor: 6.1, pointsAndFeesAmount: 9_800 },
+      market: { apr: 6.44, apor: 6.1, pointsAndFeesAmount: 9_800, totalLoanAmount: 328_750 },
       estimatedFees: 9_800,
       estimatedPrepaids: 4_200,
     });

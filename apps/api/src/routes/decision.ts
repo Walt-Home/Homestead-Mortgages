@@ -18,21 +18,23 @@ import { applicationStanding } from "../services/standing.js";
 
 export const decisionRouter = Router();
 
-const marketSchema = z
-  .object({
-    apor: z.number().optional(),
-    apr: z.number().optional(),
-    pointsAndFeesAmount: z.number().optional(),
-    estimatedFees: z.number().optional(),
-    estimatedPrepaids: z.number().optional(),
-  })
-  .default({});
-
+/**
+ * The body is ignored, and that is the point.
+ *
+ * This route used to take the APR, the APOR and the fee total off the request
+ * and hand them to the engine. The person holding the session on a file is the
+ * borrower whose loan is being tested, so a posted `{"apor": 20}` turned a
+ * HOEPA high-cost decline into an approval, and a posted fee total moved the
+ * QM points-and-fees ratio. Nobody was exploiting it — both screens posted an
+ * empty body, which is why every walked file ended "In review" — but the four
+ * regulatory tests were reachable from outside the engine, and the fix for that
+ * is not validation. The engine derives all four from the file now, so there is
+ * nothing here to send.
+ */
 decisionRouter.post(
   "/:id/decision",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    const market = marketSchema.parse(req.body ?? {});
 
     await assertFileAccess(id, req.user!.id, "write");
     const file = await loadLoanFile(id);
@@ -44,13 +46,6 @@ decisionRouter.post(
     const decision = underwrite(file, {
       casefileId: await casefileIdForFile(id),
       now: new Date().toISOString(),
-      market: {
-        apor: market.apor,
-        apr: market.apr,
-        pointsAndFeesAmount: market.pointsAndFeesAmount,
-      },
-      estimatedFees: market.estimatedFees,
-      estimatedPrepaids: market.estimatedPrepaids,
     });
 
     // The decision is always appended; whether it MOVES the application is a

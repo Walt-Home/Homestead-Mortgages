@@ -57,12 +57,13 @@ names a stage and a screen path directly.
   `refer_with_caution`, which is findings we DID compute. `referred` is not a
   credit decision: `OUTCOME_EVENT` gives it no edge, so the application stays
   in `in_underwriting` where a person can pick it up, no adverse action is
-  owed, and `denial_or_counteroffer` answers `null` rather than `false`. This
-  is what a real-flow file reaches on staging today, because the web posts an
-  empty body to `POST /files/:id/decision` and all four compliance tests block
-  without an APR, an APOR and a fee schedule. A clean pass is reachable in
-  principle — `approve_eligible` carries no findings, so it has no open
-  conditions and lands on `clear_to_close` — but not without market data.
+  owed, and `denial_or_counteroffer` answers `null` rather than `false`. The
+  four compliance tests no longer block for want of market data — the engine
+  derives the APR, the APOR and the fee totals from the file — so a clean pass
+  is reachable in fact and not only in principle. What still reaches `referred`
+  is a loan the engine will not state an APR for: anything carrying mortgage
+  insurance, and anything whose rate was set past the last week the checked-in
+  APOR table holds.
 - **Anything after funding.** Not on these five fields. `Loan` now exists as an
   object and has eleven states of its own (`docs/loan-lifecycle.md`), but
   nothing a borrower does creates one. And a `loan_file` still cannot be held

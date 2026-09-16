@@ -24,7 +24,7 @@ import { REFERENCE, connectedThrough } from "./support/in-memory-file.js";
 const now = REFERENCE.toISOString();
 
 /** Enough market data that all four compliance tests compute. */
-const MARKET = { apr: 6.44, apor: 6.1, pointsAndFeesAmount: 9_800 };
+const MARKET = { apr: 6.44, apor: 6.1, pointsAndFeesAmount: 9_800, totalLoanAmount: 328_750 };
 const FEES = { estimatedFees: 9_800, estimatedPrepaids: 4_200 };
 
 interface Options {
@@ -46,12 +46,28 @@ function borrowing(file: LoanFile, loanAmount: number): LoanFile {
   };
 }
 
+/**
+ * The same borrower on a loan the engine will not state an APR for.
+ *
+ * 92.3% of value, which is mortgage insurance, which is a finance charge this
+ * engine holds only an estimated rate card for — so `apr.ts` refuses rather
+ * than states one, and UW-006 and UW-008 block on it. It is the shape of file
+ * that still refers now that the fee schedule and the average prime offer table
+ * are derived, and it is a real loan rather than a fixture with a field
+ * removed: 92% LTV is inside every eligibility limit this engine checks.
+ */
+const insured = (file: LoanFile) => borrowing(file, 600_000);
+
 describe("a refer is referred", () => {
   it("gives an input it could not compute its own word", async () => {
-    const decision = decide(await fullyConnected());
+    const decision = decide(insured(await fullyConnected()));
 
-    // No APR, no APOR, no fee schedule: the four compliance tests block.
-    expect(decision.derivations.some((d) => d.blockedBy?.length)).toBe(true);
+    // No APR, so the QM and HPML tests block and HOEPA cannot answer on the
+    // fee trigger alone.
+    const blocked = decision.derivations.filter((d) => d.blockedBy?.length);
+    expect(blocked.map((d) => d.label)).toContain("Annual percentage rate");
+    expect(decision.compliance.qmStatus).toBeNull();
+    expect(decision.compliance.isHpml).toBeNull();
     expect(decision.aus?.recommendation).toBe("refer");
     expect(decision.outcome).toBe("referred");
   });
@@ -59,7 +75,7 @@ describe("a refer is referred", () => {
   it("still lists the conditions the findings it DID compute produced", async () => {
     // A referral is not a reason to stop reporting work. The DTI finding on
     // this borrower computed from real inputs and is still owed to them.
-    const decision = decide(await fullyConnected());
+    const decision = decide(insured(await fullyConnected()));
     expect(decision.aus!.findings.length).toBeGreaterThan(0);
     expect(decision.conditions).toHaveLength(decision.aus!.findings.length);
   });
@@ -68,7 +84,7 @@ describe("a refer is referred", () => {
     // Nothing was decided, so nobody is owed a notice. An empty list here
     // would be a decline with no reasons; a populated one would be a decline
     // nobody made.
-    const decision = decide(await fullyConnected());
+    const decision = decide(insured(await fullyConnected()));
     expect(decision.adverseActionReasons).toBeUndefined();
   });
 
@@ -120,7 +136,7 @@ describe("what still outranks a referral", () => {
     // `isHighCost` is true only when HOEPA actually ran. A failure we found
     // beats an input we could not reach.
     const decision = decide(await fullyConnected(), {
-      market: { apr: 13.6, apor: 6.55, pointsAndFeesAmount: 5_200 },
+      market: { apr: 13.6, apor: 6.55, pointsAndFeesAmount: 5_200, totalLoanAmount: 328_750 },
       ...FEES,
     });
 
@@ -154,8 +170,12 @@ describe("the invariant", () => {
     const file = await fullyConnected();
     const cases = [
       decide(file),
+      decide(insured(file)),
       decide(borrowing(file, 636_350)),
-      decide(file, { market: { apr: 13.6, apor: 6.55, pointsAndFeesAmount: 5_200 }, ...FEES }),
+      decide(file, {
+        market: { apr: 13.6, apor: 6.55, pointsAndFeesAmount: 5_200, totalLoanAmount: 328_750 },
+        ...FEES,
+      }),
       decide(borrowing(file, 380_000), { market: MARKET, ...FEES }),
       decide(borrowing(file, 340_000), { market: MARKET, ...FEES }),
     ];
@@ -168,7 +188,7 @@ describe("the invariant", () => {
 
   it("has a case that would fail it", async () => {
     // A test whose precondition is never met passes for the wrong reason.
-    const blocked = decide(await fullyConnected());
+    const blocked = decide(insured(await fullyConnected()));
     expect(blocked.derivations.some((d) => d.blockedBy?.length)).toBe(true);
   });
 });

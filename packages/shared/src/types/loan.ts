@@ -133,6 +133,20 @@ export interface ProductSelection {
    */
   readonly amortization: AmortizationType;
   readonly noteRate: number;
+  /**
+   * When the vendor published the sheet this rate came off.
+   *
+   * It is on the product rather than beside it because it is what dates the
+   * rate: Regulation Z compares a loan's APR against the average prime offer
+   * rate for the week the rate was SET, so an undated note rate cannot be
+   * compared against anything. Nothing here locks a rate, so the day the sheet
+   * was published is the closest recorded fact to the day the rate was set,
+   * and the two are the same day on every quote this flow writes.
+   *
+   * Null on a file quoted before the column existed, which is a blocked APOR
+   * lookup rather than a lookup against today.
+   */
+  readonly rateQuotedAt: string | null;
   /** Lender/investor overlays beyond the agency guide. Empty means none apply. */
   readonly overlays: readonly string[];
 }

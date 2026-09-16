@@ -787,6 +787,23 @@ model Decision {
   derivations          Json
   adverseActionReasons String[] @default([]) @map("adverse_action_reasons")
 
+  /// What the priced tests above were measured against.
+  ///
+  /// Both of these move — the FFIEC publishes a new average prime offer rate
+  /// every Monday and a fee schedule is replaced rather than edited — so a
+  /// recomputation a year from now answers the same question differently and
+  /// nothing on the old row would say why. `decisions_a_spread_names_its_week`
+  /// and `decisions_a_fee_ratio_names_its_schedule` refuse a row that reports
+  /// one of those verdicts without naming what produced it.
+  ///
+  /// `apor_source` is "stated" when a caller supplied the rate rather than the
+  /// engine looking one up, which is the persona seed and nothing else. A
+  /// value rather than a null, for the reason `aus_engine` is one: no stored
+  /// decision may be ambiguous about what produced it.
+  aporWeekOf         DateTime? @map("apor_week_of") @db.Date
+  aporSource         String?   @map("apor_source")
+  feeScheduleVersion String?   @map("fee_schedule_version")
+
   @@index([loanFileId, computedAt])
   @@map("decisions")
 }

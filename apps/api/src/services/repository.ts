@@ -355,6 +355,11 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
         compliance: decisionRow.compliance as never,
         pricing: decisionRow.pricing as never,
         conditions: [],
+        pricedAgainst: {
+          aporWeekOf: decisionRow.aporWeekOf?.toISOString().slice(0, 10) ?? null,
+          aporSource: decisionRow.aporSource,
+          feeScheduleVersion: decisionRow.feeScheduleVersion,
+        },
         derivations: decisionRow.derivations as never,
         adverseActionReasons: decisionRow.adverseActionReasons.length
           ? decisionRow.adverseActionReasons
@@ -445,6 +450,11 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
             termMonths: row.termMonths,
             amortization: row.product.amortization,
             noteRate: Number(row.noteRate),
+            // What dates the rate, and therefore which week of the average
+            // prime offer table the compliance tests compare it against. Null
+            // on a file quoted before the column existed, which blocks that
+            // lookup rather than answering it off today's week.
+            rateQuotedAt: row.rateQuotedAt?.toISOString() ?? null,
             overlays: row.overlays,
           }
         : null,

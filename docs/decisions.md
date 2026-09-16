@@ -20,6 +20,19 @@ about what produced it. The UI states it plainly. This is also what makes
 "show the reasoning, not just a verdict" possible at all — a real DU
 submission returns a verdict we could not decompose for a borrower.
 
+**The shadow figures never leave the building.** Every figure in a decision's
+`ratios` and `reserves` — the two DTIs, the three LTVs, the housing payment,
+the debt total, the qualifying income, the reserve months — is one Desktop
+Underwriter derives for itself from the inputs we send. MISMO defines an
+element for most of them; the DU Map lists none, and none of Fannie's eighteen
+samples carries one. So the assembler sends the inputs and never the figures,
+`DU_DERIVED_FIGURES` records the boundary figure by figure, and a test in
+`packages/du` fails the build the day a workbook upgrade lists one — which is
+the day somebody has to decide whether to assert it, rather than the day it
+starts going out by accident. The columns that hold the figures are typed at
+the writer, the reader and the table (see "A ratio is eight figures, or
+nothing", below).
+
 **Scope is onboarding through decision.** Screens 1–9 against the 77
 requirements. The monitoring loop is modelled but not built: `ConnectorLink`
 carries `persistentMonitoringEnabled` and `nextSyncDueAt`, decisions and
@@ -881,6 +894,21 @@ validation is not the fix for that. The body is ignored.
 a high-cost sample borrower needs an APR six and a half points over the market,
 and no sheet in this repository quotes one. A seed also cannot depend on a
 weekly table covering the day it happens to run.
+
+### A ratio is eight figures, or nothing
+
+`decisions.ratios` and `decisions.reserves` were bare `Json`, written through
+a cast and read through another. Three test fixtures wrote `{}`, and a reader
+could not tell that from a decision. Now `recordDecision` parses both through
+the zod schemas in `@hm/shared/decision-figures` before the row exists —
+strict, every key present, each a finite number or null — `loadLoanFile` and
+the history endpoint parse them on the way out, and two CHECKs hold the same
+rule in Postgres, so a row nothing here wrote is still a row of this shape.
+Two JSON columns rather than twelve typed ones because each block is written
+as one object, appended as one, and diffed as one. The CHECKs are `NOT VALID`:
+a constraint that refused an old row on staging would abort the deploy that
+carried it, and validating once every deployment's rows have been read back
+through the parser is the safer order.
 
 ### The database refuses a stored spread that names nothing
 

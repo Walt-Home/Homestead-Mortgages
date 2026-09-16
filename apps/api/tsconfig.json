@@ -14,7 +14,8 @@
       ],
       "@hm/db": ["../../packages/db/src/index.ts"],
       "@hm/du": ["../../packages/du/src/index.ts"],
-      "@hm/du/test-support": ["../../packages/du/src/__tests__/support/ungated.ts"]
+      "@hm/du/test-support": ["../../packages/du/src/__tests__/support/ungated.ts"],
+      "@hm/shared/decision-figures": ["../../packages/shared/src/decision-figures.ts"]
     }
   },
   "include": ["src"],

@@ -25,6 +25,7 @@ import { servicePrincipal } from "./party.js";
 import { reconcileObligations } from "./obligations.js";
 import { recordEvent } from "./repository.js";
 import type { Db } from "./db.js";
+import { RatiosSchema, ReserveAssessmentSchema } from "@hm/shared/decision-figures";
 
 const REASON_FOR_OUTCOME: Record<DecisionOutcome, TransitionReason | undefined> = {
   pending: undefined,
@@ -56,8 +57,10 @@ export async function recordDecision(
       ausCasefileId: decision.aus!.casefileId,
       ausRecommendation: decision.aus!.recommendation,
       ausFindings: decision.aus!.findings as unknown as Prisma.InputJsonValue,
-      ratios: decision.ratios as unknown as Prisma.InputJsonValue,
-      reserves: decision.reserves as unknown as Prisma.InputJsonValue,
+      // Parsed before the row exists: the writer is where a shape is kept,
+      // and the cast that follows only satisfies Prisma's input type.
+      ratios: RatiosSchema.parse(decision.ratios) as Prisma.InputJsonObject,
+      reserves: ReserveAssessmentSchema.parse(decision.reserves) as Prisma.InputJsonObject,
       compliance: decision.compliance as unknown as Prisma.InputJsonValue,
       pricing: decision.pricing as unknown as Prisma.InputJsonValue,
       derivations: decision.derivations as unknown as Prisma.InputJsonValue,

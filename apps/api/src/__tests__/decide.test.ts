@@ -21,7 +21,12 @@
 
 import { describe, expect, it } from "vitest";
 import { prisma, type Prisma } from "@hm/db";
-import { AUS_RECOMMENDATIONS, DECISION_OUTCOMES } from "@hm/shared";
+import {
+  AUS_RECOMMENDATIONS,
+  DECISION_OUTCOMES,
+  UNCOMPUTED_RATIOS,
+  UNCOMPUTED_RESERVES,
+} from "@hm/shared";
 import type { Db } from "../services/db.js";
 import { listAccessibleFiles } from "../services/repository.js";
 import { createLoanFile, createUser } from "./support/factories.js";
@@ -67,8 +72,8 @@ describe("the database holds the same words the code does", () => {
           ausCasefileId: "c1",
           ausRecommendation: "refer",
           ausFindings: [],
-          ratios: {},
-          reserves: {},
+          ratios: { ...UNCOMPUTED_RATIOS },
+          reserves: { ...UNCOMPUTED_RESERVES },
           compliance: {},
           pricing: {},
           derivations: [],
@@ -99,8 +104,8 @@ describe("a stored spread names what it was measured against", () => {
         ausCasefileId: "c1",
         ausRecommendation: "refer",
         ausFindings: [],
-        ratios: {},
-        reserves: {},
+        ratios: { ...UNCOMPUTED_RATIOS },
+        reserves: { ...UNCOMPUTED_RESERVES },
         compliance,
         pricing: {},
         derivations: [],
@@ -175,8 +180,8 @@ const storeDecision = (loanFileId: string, outcome: string, db: Db = prisma) =>
       ausCasefileId: "c1",
       ausRecommendation: "refer",
       ausFindings: [],
-      ratios: {},
-      reserves: {},
+      ratios: { ...UNCOMPUTED_RATIOS },
+      reserves: { ...UNCOMPUTED_RESERVES },
       compliance: {},
       pricing: {},
       derivations: [],

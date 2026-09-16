@@ -7,7 +7,7 @@
  * is worse than no DTI, because it looks like an answer.
  */
 
-import type { LoanFile } from "@hm/shared";
+import type { LoanFile, ReserveAssessment } from "@hm/shared";
 import { DerivationLog, round } from "./derive.js";
 import { GUIDELINES, mortgageInsuranceRate } from "./guidelines.js";
 
@@ -310,19 +310,12 @@ export function fundsToClose(
   );
 }
 
-export interface ReserveResult {
-  readonly requiredMonths: number | null;
-  readonly actualMonths: number | null;
-  readonly eligiblePostCloseAssets: number | null;
-  readonly satisfied: boolean | null;
-}
-
 export function reserves(
   file: LoanFile,
   pitia: number | null,
   fundsNeeded: number | null,
   log: DerivationLog,
-): ReserveResult {
+): ReserveAssessment {
   if (!file.property) {
     log.blocked("AST-003", "Reserve requirement", ["property"]);
     return {

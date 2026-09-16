@@ -795,7 +795,13 @@ model Decision {
   ausRecommendation String @map("aus_recommendation")
   ausFindings       Json   @map("aus_findings")
 
+  /// The shadow AUS's ratios: eight figures, each a number or null, held by
+  /// `decisions_ratios_are_the_eight_figures` and parsed by the writer and
+  /// the reader through `@hm/shared/decision-figures`. DU derives every one
+  /// of them itself; none is asserted to it.
   ratios               Json
+  /// The same for the reserve assessment: four figures, held by
+  /// `decisions_reserves_are_the_four_figures`.
   reserves             Json
   compliance           Json
   pricing              Json

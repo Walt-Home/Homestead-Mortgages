@@ -17,6 +17,7 @@ import { decideApplication, recordDecision } from "../services/decide.js";
 import { aporTableFromDatabase } from "../services/apor.js";
 import { coBorrowerNeedsToFinish } from "../services/co-borrowers.js";
 import { applicationStanding } from "../services/standing.js";
+import { RatiosSchema } from "@hm/shared/decision-figures";
 
 export const decisionRouter = Router();
 
@@ -167,6 +168,9 @@ decisionRouter.get(
         ratios: true,
       },
     });
-    res.json({ decisions });
+    // The history never relays an unparsed column.
+    res.json({
+      decisions: decisions.map((d) => ({ ...d, ratios: RatiosSchema.parse(d.ratios) })),
+    });
   }),
 );

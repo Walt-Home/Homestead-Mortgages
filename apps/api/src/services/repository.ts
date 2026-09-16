@@ -46,6 +46,7 @@ import { declarationsOnFile } from "./declarations.js";
 import { borrowerOrdinals, documentOrder } from "./borrower-order.js";
 import { piecesByParty, sixPieces } from "./evidence.js";
 import { toDomainState } from "./transition.js";
+import { RatiosSchema, ReserveAssessmentSchema } from "@hm/shared/decision-figures";
 
 /**
  * The stored outcome, parsed rather than asserted.
@@ -415,8 +416,10 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
           engine: decisionRow.ausEngine as never,
           engineVersion: decisionRow.ausEngineVersion,
         },
-        ratios: decisionRow.ratios as never,
-        reserves: decisionRow.reserves as never,
+        // Parsed on the way out, the same rule as `parseOutcome` beside it:
+        // a single-file read throws on a row that is not the shape.
+        ratios: RatiosSchema.parse(decisionRow.ratios),
+        reserves: ReserveAssessmentSchema.parse(decisionRow.reserves),
         compliance: decisionRow.compliance as never,
         pricing: decisionRow.pricing as never,
         conditions: [],

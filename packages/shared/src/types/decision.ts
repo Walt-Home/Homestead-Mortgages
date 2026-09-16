@@ -54,6 +54,18 @@ export interface Derivation {
   readonly blockedBy?: readonly string[];
 }
 
+/**
+ * The shadow AUS's ratios.
+ *
+ * Every figure here is one Desktop Underwriter derives for itself from the
+ * inputs we send — the loan amount, the note rate, the value, each liability's
+ * payment and balance, each asset's value, each income item — and none has a
+ * destination in the DU Map: the schema admits the MISMO elements, the Map
+ * lists none of them, and no sample carries one. So these are ours to show a
+ * borrower where they stand and never ours to assert to DU. `DU_DERIVED_FIGURES`
+ * below is that boundary as data, and a test in `packages/du` holds the Map to
+ * it. Null is "could not compute"; the derivation log says what was missing.
+ */
 export interface Ratios {
   readonly dtiFront: number | null;
   readonly dtiBack: number | null;
@@ -71,6 +83,89 @@ export interface ReserveAssessment {
   readonly eligiblePostCloseAssets: number | null;
   readonly satisfied: boolean | null;
 }
+
+/** What the engine writes when nothing could be computed: every figure null. */
+export const UNCOMPUTED_RATIOS: Ratios = {
+  dtiFront: null,
+  dtiBack: null,
+  ltv: null,
+  cltv: null,
+  hcltv: null,
+  housingPitia: null,
+  totalMonthlyDebt: null,
+  totalQualifyingIncome: null,
+};
+
+export const UNCOMPUTED_RESERVES: ReserveAssessment = {
+  requiredMonths: null,
+  actualMonths: null,
+  eligiblePostCloseAssets: null,
+  satisfied: null,
+};
+
+/**
+ * The compute boundary, figure by figure.
+ *
+ * `mismo` is the element MISMO defines for the figure — the one Desktop
+ * Underwriter would have to list in its Map for us to assert it, and does
+ * not; null where MISMO has no single element for it. `from` names the data
+ * points in the Map that DU derives it from, which is what the assembler
+ * sends instead. `packages/du/src/__tests__/boundary.test.ts` checks both
+ * columns against the generated Map: none of the `mismo` names is listed, and
+ * every `from` name is.
+ *
+ * What is NOT here has no DU counterpart of any kind: the compliance block,
+ * the pricing, the outcome, the adverse-action reasons and the derivations
+ * are ours alone. And none of it is a `DERIVED` fact: a decision is an
+ * append-only snapshot with its own provenance columns, and `decisions` is
+ * where derived figures live; `FactSourceKind.DERIVED` stays unused on
+ * purpose.
+ */
+export const DU_DERIVED_FIGURES: Readonly<
+  Record<
+    keyof Ratios | keyof ReserveAssessment,
+    { readonly mismo: string | null; readonly from: readonly string[] }
+  >
+> = {
+  dtiFront: {
+    mismo: "HousingExpenseRatioPercent",
+    from: ["CurrentIncomeMonthlyTotalAmount", "BaseLoanAmount", "NoteRatePercent"],
+  },
+  dtiBack: {
+    mismo: "TotalDebtExpenseRatioPercent",
+    from: ["CurrentIncomeMonthlyTotalAmount", "LiabilityMonthlyPaymentAmount", "BaseLoanAmount"],
+  },
+  ltv: { mismo: "LTVRatioPercent", from: ["BaseLoanAmount", "PropertyEstimatedValueAmount"] },
+  cltv: {
+    mismo: "CombinedLTVRatioPercent",
+    from: ["BaseLoanAmount", "LiabilityUnpaidBalanceAmount", "PropertyEstimatedValueAmount"],
+  },
+  hcltv: {
+    mismo: "HomeEquityCombinedLTVRatioPercent",
+    from: ["BaseLoanAmount", "HELOCMaximumBalanceAmount", "PropertyEstimatedValueAmount"],
+  },
+  // The proposed housing payment. MISMO carries it as HOUSING_EXPENSE rows
+  // by component rather than as one figure, and those rows are the lender's
+  // to state (docs/du-readiness.md, the tables not yet modeled).
+  housingPitia: { mismo: null, from: ["BaseLoanAmount", "NoteRatePercent"] },
+  totalMonthlyDebt: {
+    mismo: "TotalLiabilitiesMonthlyPaymentAmount",
+    from: ["LiabilityMonthlyPaymentAmount"],
+  },
+  // Ours narrows the sum by continuance (INC-026); the assembler sends every
+  // income item unfiltered and DU applies its own.
+  totalQualifyingIncome: {
+    mismo: "BorrowerQualifyingIncomeAmount",
+    from: ["CurrentIncomeMonthlyTotalAmount"],
+  },
+  requiredMonths: { mismo: "BorrowerReservesMonthlyPaymentCount", from: ["BaseLoanAmount"] },
+  actualMonths: {
+    mismo: "BorrowerReservesMonthlyPaymentCount",
+    from: ["AssetCashOrMarketValueAmount", "BaseLoanAmount", "NoteRatePercent"],
+  },
+  eligiblePostCloseAssets: { mismo: null, from: ["AssetCashOrMarketValueAmount"] },
+  satisfied: { mismo: null, from: ["AssetCashOrMarketValueAmount", "BaseLoanAmount"] },
+};
 
 export type ConditionStatus = "open" | "submitted" | "cleared" | "waived";
 

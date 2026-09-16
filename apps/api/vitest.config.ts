@@ -18,6 +18,7 @@ export default defineConfig({
       // a bare "@hm/shared" listed above this one would rewrite the subpath to
       // a path inside index.ts and fail with ENOTDIR.
       "@hm/shared/portfolio": resolve(packages, "shared/src/portfolio.ts"),
+      "@hm/shared/decision-figures": resolve(packages, "shared/src/decision-figures.ts"),
       "@hm/shared": resolve(packages, "shared/src/index.ts"),
       "@hm/requirements": resolve(packages, "requirements/src/index.ts"),
       "@hm/connectors": resolve(packages, "connectors/src/index.ts"),

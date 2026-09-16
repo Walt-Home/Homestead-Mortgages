@@ -15,7 +15,7 @@ reject, both ends of the exchange with DU exist, and a casefile with no job on
 it now comes out of the gate as bytes. Nothing sends, and a casefile carrying
 employment now emits.**
 
-Fifteen items are tracked below: eleven done, four partial. The count still
+Fifteen items are tracked below: twelve done, three partial. The count still
 flatters us — what remains of the submission path is a transport that actually
 carries a document somewhere, and until there is one, the port that would submit
 has nothing beneath it.
@@ -175,8 +175,6 @@ three lists rather than trusting it after they change.
 
 ### Missing
 
-- **The compute boundary** — which figures we assert and which DU derives —
-  still unrecorded, still two untyped JSON columns.
 - **The transport's credentials.** The transport itself is built: `submit`
   posts the emitted casefile to `DU_ENDPOINT` under the configured credential,
   reads the answer through a `DuResponseReader` that refuses any shape it
@@ -255,7 +253,7 @@ which have a longer lead time than anything above.
 | 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                           |
 | 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                     |
 | —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet                |
-| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                            |
+| 8   | What we compute vs what DU does     | Green  | Boundary written, both columns typed and CHECKed, a corpus test holds it     |
 | —   | The submission                      | Yellow | Emitter, gate and both ends built; nothing carries a document                |
 | —   | The product and the property        | Green  | A product table, a retrieved building and one question on screen 3           |
 | —   | Who we submit under                 | Red    | Both elements emitted, both PLACEHOLDERS, refused outside development        |
@@ -265,8 +263,9 @@ residence, and assets with liabilities and owned property were each a hard stop
 — a file missing any of them is malformed rather than thin — and each is now
 built and enforced at the database.
 
-What remains splits cleanly. The borrower count and the compute boundary limit
-_which_ loans we could submit and how confidently. The submission path is what
+What remains splits cleanly. The borrower count limits _which_ loans we could
+submit; the compute boundary is written, and every figure we compute is one DU
+derives for itself. The submission path is what
 makes submitting possible at all, and an application now becomes a document the
 gate is willing to let out — bytes, on a file with no job on it. What it does
 not become is a document anything carries anywhere.
@@ -733,11 +732,53 @@ corpus are institutions and DU's individual slot there is an unparsed
 `NAME/FullName` the parsed columns cannot express, so a seller carryback or a
 private second cannot be recorded until that column exists.
 
-**Item 8 — what we compute versus what DU computes.** Not started.
-`decisions.ratios` and `decisions.reserves` are bare `Json`, written through a
-cast and read back through another, and nothing records which figures are ours
-to assert and which are DU's to derive. `FactSourceKind.DERIVED` exists and no
-code writes one.
+**Item 8 — what we compute versus what DU computes.** Written down, typed, and
+held by a test. The boundary has three tiers, and each claim is a file or a
+corpus fact:
+
+- **DU derives, we shadow.** Every one of the eight `Ratios` keys and the four
+  `ReserveAssessment` keys. MISMO defines an element for most of them —
+  `LTVRatioPercent`, `CombinedLTVRatioPercent`,
+  `HomeEquityCombinedLTVRatioPercent`, `TotalDebtExpenseRatioPercent`,
+  `HousingExpenseRatioPercent`, `TotalLiabilitiesMonthlyPaymentAmount`,
+  `BorrowerQualifyingIncomeAmount`, `BorrowerReservesMonthlyPaymentCount` —
+  and `DU_FORMATS` lists none of them, and none of the eighteen samples
+  carries one. The `totalQualifyingIncome` continuance filter (INC-026) is
+  ours; `buildCurrentIncome` sends every income item unfiltered and DU applies
+  its own. The representative score, seasoning and the recommendation are
+  shadow too: there is no credit data point in the Map at all, because DU
+  pulls credit itself. `DU_DERIVED_FIGURES` in
+  `packages/shared/src/types/decision.ts` is this tier as data, figure by
+  figure, naming the Map data points DU derives each from, and
+  `packages/du/src/__tests__/boundary.test.ts` fails the build the day a
+  workbook upgrade lists one of the elements or drops one of the inputs.
+- **We assert, DU consumes.** The inputs: `BaseLoanAmount`, `NoteRatePercent`,
+  `PropertyEstimatedValueAmount`, each liability's payment and balance, each
+  asset's value, each income item — all emitted today — and four
+  lender-computed inputs the Map lists and the model does not yet emit, all in
+  `du-not-round-tripped.txt`: the proposed `HOUSING_EXPENSE` rows (the
+  components of `housingPitia`, estimated), `CashFromBorrowerAtClosingAmount`
+  (`fundsToClose`), `HMDARateSpreadPercent` (`compliance.hpmlSpread`) and
+  `QualifyingRatePercent`. Those four are item 4's to model.
+- **Ours alone.** The compliance block, the pricing, the outcome, the
+  adverse-action reasons and the derivations have no DU counterpart of any
+  kind.
+
+The two columns are typed at both ends and at the table. `recordDecision`
+parses `ratios` and `reserves` through `@hm/shared/decision-figures` before the
+row exists, `loadLoanFile` and the decision history parse them on the way out,
+and `decisions_ratios_are_the_eight_figures` and
+`decisions_reserves_are_the_four_figures` hold the same rule in Postgres —
+exactly those keys, each a number or null (`satisfied` a boolean or null),
+added `NOT VALID` so an old row cannot abort a deploy, to be validated once
+every deployment's rows have been read back through the parser. `ReserveResult`
+is gone; the engine returns `ReserveAssessment` itself, so there is one shape
+with one owner.
+
+Derived figures live on `decisions`, not as `DERIVED` facts. A decision is an
+append-only snapshot with its own provenance columns — engine, version, inputs
+by snapshot id — and a fact is an assertion about one subject. `FactSourceKind.DERIVED`
+stays unused on purpose.
 
 **The delivery boundary.** No submit, export, package or deliver route in any
 mounted router; no MISMO, XML or SOAP dependency in any package.json; no
@@ -772,7 +813,8 @@ this with the people doing the work.
    renders both, and a screen that names one and waits on them are done. What
    is left is the invitation and the claim, a bank each of them can link, the
    demographics asked of each applicant, and a signature apiece.
-2. **Write down the compute boundary** and type the two JSON columns.
+2. ~~**Write down the compute boundary** and type the two JSON columns.~~ Done:
+   item 8 above, `DU_DERIVED_FIGURES`, the two CHECKs and the corpus test.
 3. **Writers for vesting and the non-borrower parties.** The tables and the
    ten-party ceiling landed; what is missing is anything that fills them — a
    vesting on the review screen, and our own NMLS numbers somewhere other than

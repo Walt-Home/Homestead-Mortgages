@@ -4,13 +4,17 @@
     "outDir": "dist",
     "rootDir": "src",
     "paths": {
-      "@hm/db": ["../db/src/index.ts"]
+      "@hm/db": ["../db/src/index.ts"],
+      "@hm/shared": ["../shared/src/index.ts"]
     }
   },
   "include": ["src"],
   "references": [
     {
       "path": "../db"
+    },
+    {
+      "path": "../shared"
     }
   ]
 }

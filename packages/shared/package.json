@@ -15,6 +15,11 @@
       "types": "./dist/portfolio.d.ts",
       "import": "./dist/portfolio.js",
       "default": "./dist/portfolio.js"
+    },
+    "./decision-figures": {
+      "types": "./dist/decision-figures.d.ts",
+      "import": "./dist/decision-figures.js",
+      "default": "./dist/decision-figures.js"
     }
   },
   "scripts": {

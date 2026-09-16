@@ -28,6 +28,7 @@ import type { PropertyRecord } from "@hm/shared";
 import type { DuAttachmentType } from "@hm/db";
 import { connectors } from "../services/connectors.js";
 import { quoteSubjectProduct } from "../services/pricing.js";
+import { assertPurposeInScope } from "../services/scope.js";
 import { screenAndRecord } from "../services/screening.js";
 import { primaryBorrower, tokenFor } from "../services/authorization.js";
 import { prisma } from "@hm/db";
@@ -226,6 +227,10 @@ propertyRouter.post(
   "/affordability",
   asyncRoute(async (req, res) => {
     const input = quotableAmount.parse(req.body);
+    // The gate quotes a payment, and quoting one on a loan V1 does not take
+    // would tell somebody their cash-out refinance works. It is the same
+    // refusal `POST /files` makes, a screen earlier.
+    assertPurposeInScope(input.purpose);
     const loanAmount = input.valueOrPrice - input.downPayment;
     const ltv = (loanAmount / input.valueOrPrice) * 100;
 

@@ -543,8 +543,7 @@ describe("withdrawing is the borrower's act", () => {
   it("refuses a borrower who is on this application in someone else's role", async () => {
     // Being on the application is not the same as being the person whose
     // credit request it is. A non-borrowing spouse signs to say they know
-    // about the lien; ending the request is not theirs to do, and neither is
-    // it a guarantor's.
+    // about the lien; ending the request is not theirs to do.
     const spouse = await borrower();
     const app = await application();
     await ensureApplicationParty(prisma, app.id, spouse.partyId, "NON_BORROWING_SPOUSE");
@@ -599,8 +598,10 @@ describe("the borrowing roles agree", () => {
     for (const role of BORROWING_ROLES) {
       expect(src[0]?.src, role).toContain(`'${role}'`);
     }
+    // And the one role that is on an application without the request being
+    // theirs. It is the only non-borrowing role there is: a co-signer signs
+    // the note and is a NON_OCCUPANT_CO_BORROWER, which is in the list above.
     expect(src[0]?.src).not.toContain("NON_BORROWING_SPOUSE");
-    expect(src[0]?.src).not.toContain("GUARANTOR");
   });
 });
 

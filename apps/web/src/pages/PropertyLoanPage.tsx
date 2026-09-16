@@ -18,6 +18,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { CASH_OUT_NOT_YET, V1_LOAN_PURPOSES, type LoanPurpose } from "@hm/shared";
 import { api, ApiError } from "../lib/api.js";
 import { useLoanFile, type LoanFileView } from "../lib/file.js";
 import { INCOME_WORKED_OUT_FROM_BANK, money } from "../lib/figures.js";
@@ -69,6 +70,22 @@ interface Affordability {
   housingRatio: number;
   reasons: string[];
 }
+
+/**
+ * The purposes, and the word for each.
+ *
+ * All three, and only two are offered: `V1_LOAN_PURPOSES` decides which
+ * options the select renders, so widening the scope adds an option here and
+ * nothing else. The third label exists for a file that is ALREADY a cash-out
+ * refinance — that borrower's purpose is not rewritten behind their back, so
+ * the select has to be able to say what their file says, as a choice nobody
+ * can make.
+ */
+const PURPOSE_LABEL: Record<LoanPurpose, string> = {
+  purchase: "Buying",
+  rate_term_refinance: "Refinancing",
+  cash_out_refinance: "Refinancing and taking cash out",
+};
 
 const TYPE_LABEL: Record<string, string> = {
   single_family: "Single family",
@@ -131,11 +148,15 @@ export function lookupMissFor(err: unknown): "refused" | "no_record" {
  *
  * Every field the payload sends, because the payload sends all of them on
  * every save and a field this does not restore is a field the save overwrites
- * with whatever the screen started at. Two of them could only be wrong that
- * way: the property type has no control unless the county lookup missed, so a
- * condo came back as `single_family` with nothing on screen to say so and the
- * LTV ceiling and reserve tier moved with it; and the cash-out figure rendered
- * as an empty box that `Number(cashOut) || 0` then sent as zero.
+ * with whatever the screen started at. The property type is the one that could
+ * only be wrong that way: it has no control unless the county lookup missed,
+ * so a condo came back as `single_family` with nothing on screen to say so and
+ * the LTV ceiling and reserve tier moved with it.
+ *
+ * The cash-out figure was here for the same reason and is not any more. V1
+ * takes no cash-out refinance, so no control collects one and the payload
+ * sends none — restoring a number into a field that does not exist would be
+ * this function claiming a control the screen no longer has.
  *
  * A function rather than the body of the effect so the correspondence between
  * what is sent and what is restored is something a test can hold.
@@ -148,7 +169,6 @@ export function prefillFrom(file: Pick<LoanFileView, "loan" | "property"> | unde
   propertyType: string;
   price: string;
   down: string;
-  cashOut: string;
 } | null {
   if (!file?.property) return null;
   return {
@@ -159,7 +179,6 @@ export function prefillFrom(file: Pick<LoanFileView, "loan" | "property"> | unde
     propertyType: file.property.propertyType,
     price: String(file.property.valueOrPrice || ""),
     down: String(file.loan?.downPayment ?? ""),
-    cashOut: String(file.loan?.cashToBorrower || ""),
   };
 }
 
@@ -201,7 +220,6 @@ export function PropertyLoanPage() {
   const [price, setPrice] = useState("");
   const [down, setDown] = useState("");
   const [income, setIncome] = useState("");
-  const [cashOut, setCashOut] = useState("");
 
   const [correction, setCorrection] = useState<{
     note: string;
@@ -212,6 +230,10 @@ export function PropertyLoanPage() {
   const [error, setError] = useState<string | null>(null);
 
   const refinancing = purpose !== "purchase";
+  // True only on a file opened before V1's scope was settled. Nothing on this
+  // screen can put somebody into this state; it is what a returning borrower
+  // finds, and it is what stops the save.
+  const outOfScope = !V1_LOAN_PURPOSES.includes(purpose as LoanPurpose);
 
   // Prefill when returning to edit. The address is already confirmed, so the
   // card comes back with it rather than making somebody re-search.
@@ -225,7 +247,6 @@ export function PropertyLoanPage() {
     setPropertyType(filled.propertyType);
     setPrice(filled.price);
     setDown(filled.down);
-    setCashOut(filled.cashOut);
   }, [data?.file]);
 
   /* ── Autocomplete ─────────────────────────────────────────────────────── */
@@ -308,6 +329,14 @@ export function PropertyLoanPage() {
       setError("Enter the property address so we know what we are lending against.");
       return;
     }
+    // A file opened before V1's scope was settled. The select shows that
+    // purpose as a choice nobody can make, so the way out is to pick one of
+    // the two we do take — and until they do, this is what a save says. The
+    // route refuses it as well; this is the faster half of one rule.
+    if (outOfScope) {
+      setError(CASH_OUT_NOT_YET);
+      return;
+    }
     const priceNum = Number(price) || 0;
     const downNum = Number(down) || 0;
     const incomeNum = Number(income) || 0;
@@ -375,7 +404,6 @@ export function PropertyLoanPage() {
         loanAmount: Math.max(0, priceNum - downNum),
         downPayment: downNum,
         statedMonthlyIncome: incomeNum,
-        ...(purpose === "cash_out_refinance" ? { cashToBorrower: Number(cashOut) || 0 } : {}),
       };
 
       const id = editing
@@ -615,10 +643,18 @@ export function PropertyLoanPage() {
           value={purpose}
           onChange={(e) => setPurpose(e.target.value)}
         >
-          <option value="purchase">Buying</option>
-          <option value="rate_term_refinance">Refinancing</option>
-          <option value="cash_out_refinance">Refinancing and taking cash out</option>
+          {V1_LOAN_PURPOSES.map((value) => (
+            <option key={value} value={value}>
+              {PURPOSE_LABEL[value]}
+            </option>
+          ))}
+          {outOfScope && (
+            <option value={purpose} disabled>
+              {PURPOSE_LABEL[purpose as LoanPurpose]}
+            </option>
+          )}
         </select>
+        {outOfScope && <p className="mt-1.5 text-xs text-ink-muted">{CASH_OUT_NOT_YET}</p>}
       </Field>
 
       {/* 3 — Occupancy */}
@@ -670,18 +706,6 @@ export function PropertyLoanPage() {
           onChange={(e) => setDown(e.target.value.replace(/[^\d]/g, ""))}
         />
       </Field>
-
-      {purpose === "cash_out_refinance" && (
-        <Field className="mt-5" label="How much cash do you want to take out?" htmlFor="cashout">
-          <input
-            id="cashout"
-            className="super-input"
-            inputMode="numeric"
-            value={cashOut}
-            onChange={(e) => setCashOut(e.target.value.replace(/[^\d]/g, ""))}
-          />
-        </Field>
-      )}
 
       {/* 6 — Income */}
       <Field className="mt-5" label="Roughly, what do you earn a month?" htmlFor="income">

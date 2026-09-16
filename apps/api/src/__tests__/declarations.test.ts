@@ -422,9 +422,9 @@ describe("a declaration belongs to a borrowing party", () => {
     await expect(
       prisma.applicationParty.update({
         where: { id: edge.id },
-        data: { role: "GUARANTOR" },
+        data: { role: "NON_BORROWING_SPOUSE" },
       }),
-    ).rejects.toThrow(/carries DU borrower rows and cannot become GUARANTOR/);
+    ).rejects.toThrow(/carries DU borrower rows and cannot become NON_BORROWING_SPOUSE/);
   });
 });
 

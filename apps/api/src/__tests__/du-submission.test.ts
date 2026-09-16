@@ -39,6 +39,7 @@ import {
   assembleSubmission,
   DuPreflightRefusal,
   emitSubmission,
+  PLACEHOLDER_INSTITUTION,
   preflightSubmission,
   writeAsset,
   writeExpense,
@@ -61,9 +62,14 @@ const MADE_AT = new Date("2026-02-01T09:00:00.000Z");
  * that is not here. Nine zeros rather than something that looks like a number
  * somebody has: this file is committed, and a plausible social security number
  * in a committed fixture is the thing the vault exists to prevent.
+ *
+ * The institution is the placeholder pair for the same reason one commit
+ * further on: nobody holds the seller/servicer number, and a made-up one in a
+ * committed fixture is a number somebody would later copy.
  */
 const emitting = (extra: Partial<AssembleOptions> = {}): AssembleOptions => ({
   createdAt: MADE_AT,
+  institution: PLACEHOLDER_INSTITUTION,
   taxpayerIdentifiers: async () => "000000000",
   ...extra,
 });
@@ -161,7 +167,13 @@ async function anApplication(
   await prisma.loanFile.update({
     where: { id: file.id },
     data: {
-      purpose: "CASH_OUT_REFINANCE",
+      // A refinance, because a refinance exercises more of the model than a
+      // purchase does — and a rate-and-term one, because that is what V1
+      // takes and `loan_files_v1_scope` refuses the other. The document is the
+      // same either way: DU spells both `LoanPurposeType` Refinance, and which
+      // of the two it is lives in the REFINANCE container this model does not
+      // emit.
+      purpose: "RATE_TERM_REFINANCE",
       propertyLine1: "1234 Ocean Pines",
       propertyLine2: "823",
       propertyCity: "Rehobeth",
@@ -191,7 +203,7 @@ async function anApplication(
     data: {
       applicationId: app.id,
       seq: 1,
-      objective: "CASH_OUT_REFINANCE",
+      objective: "RATE_TERM_REFINANCE",
       occupancy: "SECOND_HOME",
       loanAmountCents: 30_000_000n,
       termMonths: 360,
@@ -702,8 +714,8 @@ describe("the taxpayer identifier boundary", () => {
     // omitting a required element is the honest shape of "we cannot reach the
     // vault", and emitting one anyway is not.
     for (const options of [
-      { createdAt: MADE_AT },
-      { createdAt: MADE_AT, taxpayerIdentifiers: async () => null },
+      emitting({ taxpayerIdentifiers: undefined }),
+      emitting({ taxpayerIdentifiers: async () => null }),
     ]) {
       const xml = emitDocument(await assembleSubmission(prisma, app.id, options));
       expect(xml).not.toContain("TAXPAYER_IDENTIFIER");
@@ -935,7 +947,7 @@ describe("the borrower's own block", () => {
     );
   });
 
-  it("emits BorrowerCount from the edges, and no LOAN_IDENTIFIER", async () => {
+  it("emits BorrowerCount from the edges", async () => {
     const app = await anApplication([
       "PRIMARY_BORROWER",
       "CO_BORROWER",
@@ -943,12 +955,57 @@ describe("the borrower's own block", () => {
     ]);
     const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
     expect(valuesOf(xml, "BorrowerCount")).toEqual(["3"]);
-    // `LenderLoan` is conditional on one existing, so a conventional submission
-    // that carries none is legal — and minting one decides a contractual
-    // question by choosing a format.
-    expect(xml).not.toContain("LOAN_IDENTIFIER");
-    // Nor a submitting party, which is the other half of the same question.
-    expect(xml).not.toContain("SubmittingParty");
+  });
+
+  it("states the institution in both places, and states that it is a placeholder", async () => {
+    // The two elements a submission carries the sending institution in. Both
+    // were absent, because nobody holds the seller/servicer number; both are
+    // here now, and what makes them safe is that the VALUE says what it is.
+    // An absent element is a casefile Fannie Mae rejects; a plausible number
+    // is one it accepts against somebody else's institution.
+    const app = await anApplication();
+    const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+
+    expect(valuesOf(xml, "LoanIdentifier")).toEqual([PLACEHOLDER_INSTITUTION.lenderLoanIdentifier]);
+    expect(valuesOf(xml, "LoanIdentifierType")).toEqual(["LenderLoan"]);
+    expect(valuesOf(xml, "PartyRoleIdentifier")).toEqual([
+      PLACEHOLDER_INSTITUTION.submittingPartyIdentifier,
+    ]);
+    expect(valuesOf(xml, "PartyRoleType")).toContain("SubmittingParty");
+
+    // Outside the DEAL, which is where the Map files it: `DEAL_SETS/PARTIES`
+    // is a sibling of `DEAL_SET` and not a party on the deal, so a submitting
+    // party assembled with the borrowers would be at the wrong XPath and read
+    // as an eleventh person on the loan.
+    const parties = xml.indexOf("<PARTIES>", xml.indexOf("</DEAL_SET>"));
+    expect(parties).toBeGreaterThan(-1);
+    expect(xml.indexOf("SubmittingParty")).toBeGreaterThan(parties);
+  });
+
+  it("refuses a lender loan number the specification would not carry", async () => {
+    // `String 15`, and Fannie Mae's note forbids six characters in it. A
+    // sixteenth character or an ampersand is a document that validates and
+    // states a number nobody typed, so the refusal is here rather than at the
+    // wire.
+    const app = await anApplication();
+    await expect(
+      assembleSubmission(
+        prisma,
+        app.id,
+        emitting({
+          institution: { ...PLACEHOLDER_INSTITUTION, lenderLoanIdentifier: "0123456789012345" },
+        }),
+      ),
+    ).rejects.toThrow(/16 characters at a destination that takes 15/);
+    await expect(
+      assembleSubmission(
+        prisma,
+        app.id,
+        emitting({
+          institution: { ...PLACEHOLDER_INSTITUTION, lenderLoanIdentifier: "HM&2026-000001" },
+        }),
+      ),
+    ).rejects.toThrow(/carries a character Fannie Mae's note forbids/);
   });
 
   it("emits the non-borrowing parties a submission cannot do without", async () => {
@@ -963,10 +1020,14 @@ describe("the borrower's own block", () => {
     });
 
     const xml = emitDocument(await assembleSubmission(prisma, app.id, emitting()));
+    // The three on the deal, then the one outside it. `SubmittingParty` is at
+    // the end because `DEAL_SETS/PARTIES` follows `DEAL_SET`, which is the
+    // order the schema sequence puts them in rather than one this chose.
     expect(valuesOf(xml, "PartyRoleType")).toEqual([
       "Borrower",
       "PropertyOwner",
       "LoanOriginationCompany",
+      "SubmittingParty",
     ]);
     expect(valuesOf(xml, "RelationshipVestingType")).toEqual([
       "JointTenantsWithRightOfSurvivorship",

@@ -82,6 +82,12 @@ enum FlowStage {
   COMPLETE
 }
 
+/// What the borrower is asking for.
+///
+/// V1 takes the first two. `CASH_OUT_REFINANCE` is kept because cash-out is a
+/// later version rather than a never, and a member removed is a shape somebody
+/// has to rebuild — but `loan_files_v1_scope` refuses a file that arrives in it
+/// or moves into it, so nothing new can be one.
 enum LoanPurpose {
   PURCHASE
   RATE_TERM_REFINANCE
@@ -201,6 +207,11 @@ model LoanFile {
 
   // Screen 1. Nullable because a file exists the moment somebody starts, and
   // the whole point of the flow is that it is useful before it is complete.
+  //
+  // `cashToBorrower` and `cashOutPurpose` are the cash-out pair, and they stay
+  // nullable and unused: V1 does not offer a cash-out refinance, the trigger
+  // `loan_files_v1_scope` refuses one, and dropping the columns would lose the
+  // shape a later version needs.
   purpose                      LoanPurpose?
   loanAmount                   Decimal?     @map("loan_amount") @db.Decimal(14, 2)
   downPayment                  Decimal?     @map("down_payment") @db.Decimal(14, 2)
@@ -1176,12 +1187,19 @@ enum ApplicationState {
   EXPIRED
 }
 
+/// What a person is to a credit request.
+///
+/// There is no GUARANTOR. Desktop Underwriter's eight party roles do not
+/// include one and neither does the MISMO chain — its only `Guarantor` is a
+/// value of `ExecutionBase`, which is how an investor bought a loan — so a
+/// guarantor could not be conveyed in a submission at all. What people call a
+/// co-signer on an agency conventional loan signs the note and reaches DU as a
+/// Borrower, which is `NON_OCCUPANT_CO_BORROWER`.
 enum ApplicationPartyRole {
   PRIMARY_BORROWER
   CO_BORROWER
   NON_OCCUPANT_CO_BORROWER
   NON_BORROWING_SPOUSE
-  GUARANTOR
 }
 
 /// A credit request. Transient — it starts, it ends, and it is never reopened.
@@ -1278,9 +1296,9 @@ model ApplicationParty {
   /// DU Borrower 1 through 4. A POSITION in one submitted document, not an
   /// identity — `id` is the identity — because DU conveys the position by
   /// document order and label ordinal and states it in no element. Null for a
-  /// non-borrowing spouse or a guarantor, who emit no `BORROWER` at all, and a
-  /// CHECK ties the two directions together: a borrowing role without a number
-  /// is a borrower with no position in the document.
+  /// non-borrowing spouse, who emits no `BORROWER` at all, and a CHECK ties the
+  /// two directions together: a borrowing role without a number is a borrower
+  /// with no position in the document.
   ///
   /// Allocated by `ensureApplicationParty` as the SMALLEST UNUSED number, under
   /// a lock on the application row. A freed ordinal is refilled and the

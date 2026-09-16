@@ -3,6 +3,46 @@
 import type { PropertyEstateType } from "./declaration.js";
 
 export type LoanPurpose = "purchase" | "rate_term_refinance" | "cash_out_refinance";
+
+/**
+ * The two purposes V1 takes, and the reason the third is still in the type.
+ *
+ * V1 is conventional Fannie: a purchase, or a refinance that changes the rate
+ * or the term and hands the borrower nothing. Cash-out is a later version and
+ * not a never — the column, the enum member, the `cash_to_borrower` and
+ * `cash_out_purpose` fields and AST-012 all stay, because dropping them loses
+ * the shape somebody has to rebuild. What goes is the OFFER: screen 1 does not
+ * put it in front of anybody, the routes refuse it, and a trigger refuses a
+ * `loan_files` row that arrives in it however it got there.
+ *
+ * Exported from here rather than restated in each of those places, because
+ * three copies of the scope is three chances for one of them to be the lenient
+ * one — the same argument `copy-rules.ts` makes about a regex.
+ */
+export const V1_LOAN_PURPOSES: readonly LoanPurpose[] = ["purchase", "rate_term_refinance"];
+
+/** Whether this is a loan V1 underwrites. */
+export function isV1LoanPurpose(purpose: LoanPurpose): boolean {
+  return V1_LOAN_PURPOSES.includes(purpose);
+}
+
+/**
+ * What somebody who wanted cash out is told, in one place.
+ *
+ * Screen 1 shows it and the route answers with it, which is why a sentence
+ * lives here at all: copy is not only a web concern, and a second copy of it in
+ * the handler is one chance for the kinder wording to drift from the true one.
+ *
+ * It says what we DO take as well as what we do not, because a borrower whose
+ * loan we cannot write still has to decide what to do next, and "no" on its own
+ * gives them nothing to decide with. It offers nothing further, because there
+ * is nothing further to offer: there is no mailer here and no list to be put
+ * on.
+ */
+export const CASH_OUT_NOT_YET =
+  "We do not do cash-out refinances yet. What we take is a purchase, or a refinance that " +
+  "changes your rate or your term without paying you anything out of the property.";
+
 export type OccupancyType = "primary_residence" | "second_home" | "investment";
 export type PropertyType =
   "single_family" | "condo" | "townhouse" | "two_to_four_unit" | "manufactured" | "co_op";

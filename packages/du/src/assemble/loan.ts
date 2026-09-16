@@ -8,12 +8,12 @@
  * name — which is why it is in the modeled path and why the related loan, which
  * nothing here holds, is in the inventory rather than silently absent.
  *
- * **No `LOAN_IDENTIFIER`.** `LenderLoan` is DU-Conditional on one existing and
- * Required only for EarlyCheck, so a conventional submission that carries none
- * is legal. Minting one means deciding whether the institution we submit under
- * allocates a loan-number range, which is a contractual question and not a
- * format; the identifier and the submitting party that goes with it land
- * together, later, or not at all.
+ * **The `LOAN_IDENTIFIER` is a placeholder and says so in the value.**
+ * `LenderLoan` is DU-Conditional on one existing, so a submission carrying
+ * none is legal — and a submission is not assembled at all until somebody has
+ * decided which institution it goes under, which is what `institution.ts`
+ * holds and refuses outside development. Nothing here mints a number: the one
+ * written is whatever the caller was given, and today that is the placeholder.
  *
  * The verifications hang off this container rather than off a borrower, which
  * is the shape DU chose and not one this model picked: `DU:UNDERWRITING_VERIFICATION`
@@ -24,6 +24,7 @@
 
 import type { LienPosition, LoanPurpose } from "@hm/db";
 import { compact, container, leaf, type DuNode } from "../document.js";
+import type { DuInstitution } from "../institution.js";
 import { renderAmount, renderCount, renderIndicator, renderPercent } from "../values.js";
 import type { LoadedApplication } from "./load.js";
 
@@ -58,6 +59,7 @@ const LIEN_PRIORITY: Readonly<Record<LienPosition, string>> = {
 export function buildLoans(
   application: LoadedApplication,
   verifications: DuNode | null,
+  institution: DuInstitution,
 ): DuNode | null {
   const file = application.loanFile;
   const scenario = application.scenarios[0];
@@ -126,7 +128,18 @@ export function buildLoans(
     ]),
   );
 
-  const loan = container("LOAN", [amortization, loanDetail, terms, verifications], {
+  // The type is written beside the number rather than assumed from it: the
+  // same element carries the lender's number at fifteen characters, an agency
+  // case number at thirty and a universal loan identifier at forty-five, and
+  // which one it is decides what DU reads it as.
+  const identifiers = container("LOAN_IDENTIFIERS", [
+    container("LOAN_IDENTIFIER", [
+      leaf("LoanIdentifier", institution.lenderLoanIdentifier),
+      leaf("LoanIdentifierType", "LenderLoan"),
+    ]),
+  ]);
+
+  const loan = container("LOAN", [amortization, loanDetail, identifiers, terms, verifications], {
     LoanRoleType: "SubjectLoan",
   });
 

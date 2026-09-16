@@ -230,6 +230,7 @@ which have a longer lead time than anything above.
 | 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                           |
 | —   | The submission                      | Yellow | Emitter, gate and both ends built; nothing carries a document               |
 | —   | The product and the property        | Green  | A product table, a retrieved building and one question on screen 3          |
+| —   | Who we submit under                 | Red    | Both elements emitted, both PLACEHOLDERS, refused outside development       |
 
 **The three that blocked any submission are closed.** Declarations, the current
 residence, and assets with liabilities and owned property were each a hard stop
@@ -241,6 +242,19 @@ _which_ loans we could submit and how confidently. The submission path is what
 makes submitting possible at all, and an application now becomes a document the
 gate is willing to let out — bytes, on a file with no job on it. What it does
 not become is a document anything carries anywhere.
+
+**What V1 will submit is narrower than what the model can hold, and that is a
+decision rather than a gap.** Conventional Fannie purchase and simple
+rate-and-term refinance, with up to four borrowers including co-signers. Out:
+cash-out refinance, HELOCs, seconds, VA, FHA, USDA, Ginnie. Two of those are
+enforced rather than merely intended, because the product could otherwise take
+a borrower somewhere nobody underwrites: `loan_files_v1_scope` refuses a file
+that arrives in or moves into `CASH_OUT_REFINANCE`, and `ApplicationPartyRole`
+has no `GUARANTOR` — Desktop Underwriter's eight party roles carry no
+guarantor and neither does the MISMO chain, so a co-signer is a
+`NON_OCCUPANT_CO_BORROWER`, who signs the note and emits a `BORROWER`. The
+enum member and the two cash-out columns stay: cash-out is a later version, and
+the tables that would carry it are the shape a later version needs.
 
 **The two new rows are the gate's own output and not a re-reading of the
 audit.** Neither the product columns nor the employment ones were visible
@@ -294,6 +308,28 @@ submission goes in under a seller/servicer number, so:
 - **Whose institution credentials do we submit under, and what does the agency
   agreement permit?** Presumably Grander's, since they are the creditor — but
   that is a contract question, not one the code can decide.
+
+  **A submission now carries both elements, and both are placeholders that
+  must be replaced before any of this is real.** They were absent, which made
+  the question invisible in the document; they are present now so that what is
+  missing is a value somebody supplies rather than a block somebody has to
+  remember to build.
+
+  | Element                                                                                                    | Placeholder       | What it has to become                                                             |
+  | ---------------------------------------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------- |
+  | `LOAN/LOAN_IDENTIFIERS/LOAN_IDENTIFIER` with `LoanIdentifierType` `LenderLoan`, `String 15`                | `PLACEHOLDER-DEV` | The lender's own number for this loan. Nothing mints one and no column holds one. |
+  | `MESSAGE/DEAL_SETS/PARTIES` party with `PartyRoleType` `SubmittingParty`, `PartyRoleIdentifier` `String 6` | `PLCHLD`          | The seller/servicer number — the Map files it as "Institution ID".                |
+
+  Both live in `packages/du/src/institution.ts`, which is also what refuses
+  them: `assembleSubmission` calls `assertInstitutionEmittable` before it reads
+  a row, and that throws when either value is still the placeholder and
+  `NODE_ENV` is `production`. **The values say what they are**, which is the
+  point — an empty element is a casefile Fannie Mae rejects, and a
+  plausible-looking number is one it accepts against somebody else's
+  institution. The submitting party is not in `MODELED_CHILDREN`, and cannot
+  be: none of the eighteen shipped samples carries one, and that list has to
+  partition the corpus.
+
 - **The corpus is vendored under a decision, not under a signed license.** The
   instruction is to build as though the EULA and the DU integration agreement
   are in place, on the understanding that no real borrower and no real loan

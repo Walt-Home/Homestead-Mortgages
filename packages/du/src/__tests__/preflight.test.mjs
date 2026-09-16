@@ -677,15 +677,16 @@ describe("what the gate keeps, counted", () => {
   it("accounts for every destination the corpus can carry an enumerated value at", () => {
     // The direction that rots: a data point the specification files at a second
     // destination would otherwise go unchecked and nothing would say so.
-    // Destinations outside the DEAL are not this gate's — the message-level
-    // parties block is neither emitted nor checked here.
+    // Every destination, not only the ones under the DEAL: the message-level
+    // parties block is emitted now, it carries `PartyRoleType`, and scoping
+    // this to the deal would have let that one arrive unaccounted for.
     const unaccounted = [];
     for (const [enumName, entry] of Object.entries(DU_DATA_POINT_FOR_ENUM)) {
       if (entry.local) continue;
       for (const dataPoint of entry.dataPoints) {
         for (const key of Object.keys(DU_FORMATS)) {
           const [xpath, name] = key.split("#");
-          if (name !== dataPoint.name || !xpath.startsWith(`${DEAL}/`)) continue;
+          if (name !== dataPoint.name) continue;
           const destination = `${xpath}#${name}`;
           if (DU_SUBSET_AT[destination] || NOT_CHECKED_AGAINST_A_SUBSET.includes(destination)) {
             continue;

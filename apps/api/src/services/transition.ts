@@ -63,10 +63,10 @@ export const toDomainState = (s: string) => s.toLowerCase() as ApplicationState;
 /**
  * The roles whose holder is a person asking for this credit.
  *
- * A non-borrowing spouse or a guarantor is on the application without the
- * request being theirs, so ending it is not theirs either. The same list is a
- * literal in the trigger that refuses it at the database, which is why this is
- * exported: a test reads the function's source and holds the two together.
+ * A non-borrowing spouse is on the application without the request being
+ * theirs, so ending it is not theirs either. The same list is a literal in the
+ * trigger that refuses it at the database, which is why this is exported: a
+ * test reads the function's source and holds the two together.
  */
 export const BORROWING_ROLES: ApplicationPartyRole[] = [
   "PRIMARY_BORROWER",

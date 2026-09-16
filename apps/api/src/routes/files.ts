@@ -19,6 +19,7 @@ import {
   STAGE_TO_DOMAIN,
 } from "../services/repository.js";
 import { primaryBorrowerRow } from "../services/borrower-order.js";
+import { assertPurposeInScope } from "../services/scope.js";
 import { connectors } from "../services/connectors.js";
 import { quoteSubjectProduct } from "../services/pricing.js";
 import { advanceStage } from "../services/stage.js";
@@ -79,10 +80,12 @@ const propertyLoanSchema = z.object({
   financedPropertyCount: z.number().int().min(1).default(1),
   interestedPartyContributions: z.number().min(0).default(0),
   /**
-   * Cash-out only. AST-012 wants the proceeds purpose documented, and the
-   * flow offered "Taking cash out" without ever asking for either field — so
-   * choosing it produced a file that could not satisfy a requirement it had
-   * just made applicable.
+   * Cash-out only, and V1 takes no cash-out, so nothing sends either of these
+   * today. They stay in the shape for the reason the columns stay in the
+   * table: AST-012 wants the proceeds purpose documented, that requirement is
+   * still in the sheet, and a later version needs somewhere to put both
+   * answers. `assertPurposeInScope` is what stops the loan; these are what it
+   * would be asked about when it stops being stopped.
    */
   cashToBorrower: z.number().min(0).optional(),
   cashOutPurpose: z.string().min(1).optional(),
@@ -101,6 +104,11 @@ fileRouter.patch(
     const id = z.string().uuid().parse(req.params.id);
     const input = propertyLoanSchema.partial().parse(req.body);
     await assertFileAccess(id, req.user!.id, "write");
+    // Before the transaction, so a purpose we do not underwrite never retires
+    // a scenario or mints a version on the way to being refused. A file that
+    // ALREADY says cash-out is not rewritten here: it keeps what the borrower
+    // asked for, and this is what it takes to save it again.
+    if (input.purpose !== undefined) assertPurposeInScope(input.purpose);
 
     // The row and the terms it implies move together. A scenario is immutable,
     // so an edit that changes the address or the amount RETIRES the active
@@ -249,6 +257,9 @@ fileRouter.post(
   "/",
   asyncRoute(async (req, res) => {
     const input = propertyLoanSchema.parse(req.body);
+    // Before the quote, because asking a pricing vendor for a rate on a loan
+    // we will not take is a round trip spent to reach a refusal.
+    assertPurposeInScope(input.purpose);
 
     // Priced before the transaction opens, because a quote is a round trip to
     // a vendor and a transaction held open across one holds row locks for as

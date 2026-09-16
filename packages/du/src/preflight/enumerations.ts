@@ -14,12 +14,16 @@
  * Keying on the data point alone would refuse every conventional casefile in
  * Fannie Mae's own corpus.
  *
- * **Two destinations are deliberately absent**, for the same reason a third
- * would be a bug:
+ * **Two data points are deliberately unchecked, at three destinations between
+ * them**, for the same reason a fourth would be a bug:
  *
- * - `ROLE_DETAIL/PartyRoleType`. Its enum is the non-borrower subset — the
- *   borrower has a container of its own and a vesting carries a name rather
- *   than a person — so checking a role against it would refuse every borrower.
+ * - `ROLE_DETAIL/PartyRoleType`, at both destinations the casefile carries it.
+ *   Its enum is the non-borrower subset — the borrower has a container of its
+ *   own and a vesting carries a name rather than a person — so checking a role
+ *   against it would refuse every borrower. The message-level one is worse
+ *   still: the only value it ever holds is `SubmittingParty`, which the
+ *   generator excludes from that enum by construction, so the check would
+ *   refuse the one casefile shape it could see.
  * - `ORIGINATION_FUND/FundsSourceType`. The specification's enumeration tab
  *   carries a `PropertySeller` value on rows whose form field is blank, and the
  *   rows the generated list is derived from are not those, so the list is
@@ -101,5 +105,6 @@ export const DU_SUBSET_AT: Readonly<Record<string, string>> = {
  */
 export const NOT_CHECKED_AGAINST_A_SUBSET: readonly string[] = [
   "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/PARTIES/PARTY/ROLES/ROLE/ROLE_DETAIL#PartyRoleType",
+  "MESSAGE/DEAL_SETS/PARTIES/PARTY/ROLES/ROLE/ROLE_DETAIL#PartyRoleType",
   "MESSAGE/DEAL_SETS/DEAL_SET/DEALS/DEAL/LOANS/LOAN/ORIGINATION_FUNDS/ORIGINATION_FUND#FundsSourceType",
 ];

@@ -760,7 +760,10 @@ export const DU_DATA_POINT_FOR_ENUM = {
     //   PropertyOwner  carries a vesting string rather than a person, so it is
     //                  `du_vestings` and not a party at all.
     //   SubmittingParty is the tab's only "Institution ID" row and sits outside
-    //                  the DEAL; who we are to Fannie is still an open question.
+    //                  the DEAL, so it is not a deal party at all: the emitter
+    //                  writes it from packages/du/src/institution.ts, where the
+    //                  number is still a placeholder because who we are to
+    //                  Fannie is still an open question.
     //   Trust          is not modeled. No sample carries one, and a community
     //                  land trust is a real product, so this exclusion is the
     //                  place it stays visible -- and it is checked back against
@@ -2185,8 +2188,14 @@ export const MODELED_CHILDREN = {
       "PrepaymentPenaltyIndicator",
     ],
   },
+  // The lender's own number for this loan. A constant and not a column:
+  // nothing in this system mints one, no table has a field for it, and what
+  // the emitter writes is the placeholder in packages/du/src/institution.ts
+  // until somebody holds a real one. It said `loan_files` while nothing
+  // emitted the element at all, which is the shape of claim this list exists
+  // to stop.
   [`${SUBJECT_LOAN_XPATH}/LOAN_IDENTIFIERS/LOAN_IDENTIFIER`]: {
-    held: ["loan_files"],
+    held: [CONSTANT],
     children: ["LoanIdentifier", "LoanIdentifierType"],
   },
   [`${SUBJECT_LOAN_XPATH}/TERMS_OF_LOAN`]: {

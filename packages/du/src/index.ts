@@ -155,6 +155,14 @@ export {
 } from "./preflight/index.js";
 
 export { assembleSubmission, type AssembleOptions, type DuReader } from "./assemble/index.js";
+export {
+  assertInstitutionEmittable,
+  placeholdersIn,
+  LENDER_LOAN_IDENTIFIER_FORMAT,
+  PLACEHOLDER_INSTITUTION,
+  SUBMITTING_PARTY_IDENTIFIER_FORMAT,
+  type DuInstitution,
+} from "./institution.js";
 export type { TaxpayerIdentifierResolver } from "./assemble/parties.js";
 export {
   attributesOnly,

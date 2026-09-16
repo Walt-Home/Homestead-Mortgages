@@ -15,6 +15,7 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { CASH_OUT_NOT_YET } from "@hm/shared";
 import { ApiError } from "../../lib/api.js";
 import { lookupMissFor, prefillFrom } from "../PropertyLoanPage.js";
 
@@ -102,8 +103,50 @@ describe("a down payment that leaves no loan", () => {
   });
 });
 
+describe("the purposes screen 1 offers", () => {
+  /**
+   * V1 is a conventional purchase or a simple rate-and-term refinance.
+   *
+   * The screen used to offer "Refinancing and taking cash out", and a borrower
+   * who chose it was carried the whole way through a flow nobody intends to
+   * underwrite. Read out of the source for the reason the rest of this file
+   * is: the options are JSX, and rendering this screen needs a router, a query
+   * client and a server.
+   */
+  const select = src.slice(src.indexOf('id="purpose"'));
+  const control = select.slice(0, select.indexOf("</Field>"));
+
+  it("does not put a cash-out refinance in front of anybody", () => {
+    // The option list is `V1_LOAN_PURPOSES` and not three literals, so
+    // widening the scope is one entry in `@hm/shared` rather than a literal
+    // somebody has to find here.
+    expect(control).toContain("V1_LOAN_PURPOSES.map");
+    expect(control).not.toContain('<option value="cash_out_refinance">');
+  });
+
+  it("names it only on a file that is already one, and as a choice nobody can make", () => {
+    expect(control).toContain("{outOfScope && (");
+    const named = control.slice(control.indexOf("{outOfScope && ("));
+    expect(named).toContain("disabled");
+    expect(named).toContain("CASH_OUT_NOT_YET");
+  });
+
+  it("tells that borrower what we do take, in the words the route answers with", () => {
+    // One sentence, in `@hm/shared`, so the screen and the 422 cannot drift.
+    expect(CASH_OUT_NOT_YET).toContain("We do not do cash-out refinances yet");
+    expect(CASH_OUT_NOT_YET).toContain("purchase");
+  });
+
+  it("stops the save rather than letting the route be the only refusal", () => {
+    const submit = src.slice(src.indexOf("async function submit("));
+    const before = submit.slice(0, submit.indexOf("/property/affordability"));
+    expect(before).toContain("if (outOfScope)");
+    expect(before).toContain("setError(CASH_OUT_NOT_YET)");
+  });
+});
+
 describe("coming back to screen 1 on a file that already exists", () => {
-  /** A condo, taking cash out — the two shapes the screen could not restore. */
+  /** A condo, opened as a cash-out refinance before V1's scope was settled. */
   const file = {
     property: {
       address: { line1: "12 Kestrel Ct", city: "Austin", state: "TX", postalCode: "78745" },
@@ -135,19 +178,18 @@ describe("coming back to screen 1 on a file that already exists", () => {
     expect(prefillFrom(file)?.propertyType).toBe("condominium");
   });
 
-  it("brings back the cash the borrower asked for", () => {
-    // `purpose` IS restored, so the cash-out field is on screen. Blank, the
-    // payload sends `Number(cashOut) || 0` and zeroes the figure.
-    expect(prefillFrom(file)?.cashOut).toBe("40000");
-  });
-
-  it("leaves the cash box empty on a file with no cash-out figure", () => {
-    expect(
-      prefillFrom({ ...file, loan: { ...file.loan, cashToBorrower: undefined } })?.cashOut,
-    ).toBe("");
+  it("restores nothing for a control the screen no longer has", () => {
+    // The cash-out box is gone with the option that reached it, so there is
+    // no field for a figure to be put back into. A prefill that still carried
+    // one would be restoring state onto a screen that cannot show it.
+    expect(prefillFrom(file)).not.toHaveProperty("cashOut");
+    expect(src).not.toContain("cashToBorrower");
   });
 
   it("still brings back everything it used to", () => {
+    // The purpose included, unchanged. A file that says cash-out is what that
+    // borrower asked us for, and the screen does not quietly rewrite it into
+    // a loan they did not request.
     const filled = prefillFrom(file)!;
     expect(filled.address.line1).toBe("12 Kestrel Ct");
     expect(filled.query).toBe("12 Kestrel Ct, Austin");

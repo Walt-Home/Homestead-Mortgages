@@ -119,10 +119,8 @@ describe("the allocator", () => {
     const app = await anApplication();
     await append(app.id, "PRIMARY_BORROWER");
     const spouse = await append(app.id, "NON_BORROWING_SPOUSE");
-    const guarantor = await append(app.id, "GUARANTOR");
     expect(spouse.borrowerOrdinal).toBeNull();
-    expect(guarantor.borrowerOrdinal).toBeNull();
-    expect(await ordinals(app.id)).toEqual([1, null, null]);
+    expect(await ordinals(app.id)).toEqual([1, null]);
   });
 
   it("fills a freed position rather than counting past it", async () => {
@@ -258,11 +256,11 @@ describe("the database, not the writer", () => {
   });
 
   it("refuses a non-borrowing role that holds one", async () => {
-    // The other half. A guarantor emits no BORROWER element, so a position
-    // reserved for one is a position missing from the document.
+    // The other half. A non-borrowing spouse emits no BORROWER element, so a
+    // position reserved for one is a position missing from the document.
     const app = await anApplication();
     const party = await createParty();
-    await expect(edge(app.id, party.id, "GUARANTOR", 2)).rejects.toThrow(
+    await expect(edge(app.id, party.id, "NON_BORROWING_SPOUSE", 2)).rejects.toThrow(
       /application_parties_borrowers_are_numbered/,
     );
   });
@@ -375,11 +373,7 @@ describe("the backfill", () => {
     let numbered: { role: string; borrowerOrdinal: number | null }[] = [];
 
     await rehearse(async (tx) => {
-      await edgesWithNoOrdinal(tx, app.id, [
-        "PRIMARY_BORROWER",
-        "NON_BORROWING_SPOUSE",
-        "GUARANTOR",
-      ]);
+      await edgesWithNoOrdinal(tx, app.id, ["PRIMARY_BORROWER", "NON_BORROWING_SPOUSE"]);
       await tx.$executeRawUnsafe(BACKFILL());
       numbered = await tx.applicationParty.findMany({
         where: { applicationId: app.id },
@@ -391,7 +385,6 @@ describe("the backfill", () => {
     expect(numbered).toEqual([
       { role: "PRIMARY_BORROWER", borrowerOrdinal: 1 },
       { role: "NON_BORROWING_SPOUSE", borrowerOrdinal: null },
-      { role: "GUARANTOR", borrowerOrdinal: null },
     ]);
   });
 

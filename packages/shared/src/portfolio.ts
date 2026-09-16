@@ -62,6 +62,16 @@ export type ImportedName = z.infer<typeof ImportedNameSchema>;
 export const ImportedPartySchema = z
   .object({
     sourcePartyKey: z.string().min(1),
+    /** What the servicer says this person is on a loan somebody else wrote.
+     *  NOT `ApplicationPartyRole`, and `GUARANTOR` is where the two part
+     *  company: that enum has no guarantor, because no party role in the MISMO
+     *  chain is one and a Desktop Underwriter submission could not name them.
+     *  A loan already on a servicer's books can perfectly well have one, and
+     *  narrowing this would reject a record a partner is right to send. So it
+     *  stays, and the importer that maps this feed onto rows has to decide what
+     *  a guarantor becomes — which is the decision the other enum not carrying
+     *  the value forces, rather than letting one land as a party nothing can
+     *  submit. */
     role: z.enum(["PRIMARY_BORROWER", "CO_BORROWER", "NON_BORROWING_SPOUSE", "GUARANTOR"]),
     /** Structured, not one string. Proving somebody is who a servicer says
      *  they are compares a surname and a first given name, and splitting

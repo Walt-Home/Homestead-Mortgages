@@ -162,13 +162,15 @@ describe("an owner is a borrowing party on this application", () => {
     expect(await prisma.duAsset.count()).toBe(0);
   });
 
-  it("refuses an arc to a non-borrowing spouse or a guarantor", async () => {
-    // Neither becomes a DU Borrower element, so an arc pointing at one points
-    // at a ROLE the document never emits.
-    const app = await anApplication(["PRIMARY_BORROWER", "NON_BORROWING_SPOUSE", "GUARANTOR"]);
-    const [, spouse, guarantor] = app.borrowers;
+  it("refuses an arc to a non-borrowing spouse", async () => {
+    // A non-borrowing spouse does not become a DU Borrower element, so an arc
+    // pointing at one points at a ROLE the document never emits. They are the
+    // only non-borrowing role left: a co-signer is a NON_OCCUPANT_CO_BORROWER,
+    // and no party role in the MISMO chain is a guarantor.
+    const app = await anApplication(["PRIMARY_BORROWER", "NON_BORROWING_SPOUSE"]);
+    const [, spouse] = app.borrowers;
     await expect(ownedAsset(app, [spouse!])).rejects.toThrow(/is not a DU Borrower/);
-    await expect(owedLiability(app, [guarantor!])).rejects.toThrow(/is not a DU Borrower/);
+    await expect(owedLiability(app, [spouse!])).rejects.toThrow(/is not a DU Borrower/);
     await expect(paidExpense(app, [spouse!])).rejects.toThrow(/is not a DU Borrower/);
   });
 

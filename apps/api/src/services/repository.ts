@@ -28,11 +28,17 @@ import type {
   FloodDetermination,
   SanctionsScreening,
   LienSearch,
+  InvitedBorrower,
 } from "@hm/shared";
 import { DECISION_OUTCOMES, TERMINAL } from "@hm/shared";
 import type { Prisma } from "@hm/db";
 import { AppError } from "../middleware/error-handler.js";
-import { displayNameFrom, factMapsByParty, requireIdentity } from "./borrower-projection.js";
+import {
+  displayNameFrom,
+  factMapsByParty,
+  identityMissing,
+  requireIdentity,
+} from "./borrower-projection.js";
 import type { Db } from "./db.js";
 import { liveFactsByParty } from "./party.js";
 import { declarationsOnFile } from "./declarations.js";
@@ -196,7 +202,10 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       // Borrower 2 is. This clause is the fallback under it — what a file with
       // no application, or a borrower not yet put on one, is ordered by
       // instead.
-      borrowers: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+      borrowers: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        include: { party: { select: { claimStatus: true } } },
+      },
       consents: true,
       links: true,
       documents: true,
@@ -273,7 +282,40 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
   // but not yet on the credit request.
   const ordinals = await borrowerOrdinals(db, id, partyIds);
 
-  const borrowers: Borrower[] = row.borrowers.map((b) => {
+  // Who has arrived and who has only been named. A co-borrower the applicant
+  // named holds a name and an email under an unclaimed party and nothing
+  // else; they are listed as invited rather than read as a person with no
+  // date of birth. A CLAIMED party with a hole in it is what it always was —
+  // an invariant violation `requireIdentity` throws on by name.
+  const roleByParty = new Map(
+    (
+      await db.applicationParty.findMany({
+        where: { application: { loanFileId: id }, partyId: { in: partyIds } },
+        select: { partyId: true, role: true },
+      })
+    ).map((r) => [r.partyId, r.role] as const),
+  );
+  const invitedBorrowers: InvitedBorrower[] = [];
+  const arrived = row.borrowers.filter((b) => {
+    const facts = factsByParty.get(b.partyId) ?? new Map();
+    const missing = identityMissing(facts);
+    const unclaimed =
+      b.party.claimStatus === "PROVISIONAL" || b.party.claimStatus === "CLAIM_PENDING";
+    if (missing.length === 0 || !unclaimed) return true;
+    const name = (facts.get("legal_name") ?? {}) as { first?: string; last?: string };
+    invitedBorrowers.push({
+      id: b.id,
+      partyId: b.partyId,
+      firstName: name.first ?? "",
+      lastName: name.last ?? "",
+      email: String(facts.get("email") ?? ""),
+      occupiesProperty: roleByParty.get(b.partyId) !== "NON_OCCUPANT_CO_BORROWER",
+      status: b.party.claimStatus === "CLAIM_PENDING" ? "invited" : "named",
+    });
+    return false;
+  });
+
+  const borrowers: Borrower[] = arrived.map((b) => {
     const who = requireIdentity(b.id, factsByParty.get(b.partyId) ?? new Map());
     return {
       id: b.id,
@@ -281,7 +323,9 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       firstName: who.firstName,
       lastName: who.lastName,
       dateOfBirth: who.dateOfBirth,
-      ssn: { last4: b.ssnLast4, vaultHandle: who.ssnVaultHandle },
+      // Non-null for anyone `requireIdentity` accepted: a person with a vault
+      // handle stated their number, and the last four came with it.
+      ssn: { last4: b.ssnLast4 ?? "", vaultHandle: who.ssnVaultHandle },
       email: who.email,
       phone: who.phone,
       currentAddress: who.currentAddress,
@@ -460,6 +504,7 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
         : null,
 
     borrowers: inDocumentOrder,
+    invitedBorrowers,
     consents,
 
     application,

@@ -60,6 +60,31 @@ export interface Identity {
   readonly firstTimeHomebuyer: boolean | null;
 }
 
+/** The predicates a complete identity needs, in the order the screen asks them. */
+const REQUIRED_PREDICATES = [
+  "legal_name",
+  "date_of_birth",
+  "ssn_token",
+  "email",
+  "phone",
+  "current_address",
+  "marital_status",
+  "citizenship",
+] as const;
+
+/**
+ * Which required predicates a party has not stated yet.
+ *
+ * Empty for a person who has completed their profile. A co-borrower the
+ * applicant has named holds a name and an email and nothing else, and the
+ * projection lists them as invited rather than reading them through
+ * `requireIdentity` — which is the right reader for an arrived person and the
+ * wrong one for somebody who has not answered.
+ */
+export function identityMissing(facts: FactMap): string[] {
+  return REQUIRED_PREDICATES.filter((predicate) => facts.get(predicate) == null);
+}
+
 /** The identity the party asserts, or a loud failure naming what is missing. */
 export function requireIdentity(borrowerId: string, facts: FactMap): Identity {
   const need = (predicate: string, detail: string): never => {

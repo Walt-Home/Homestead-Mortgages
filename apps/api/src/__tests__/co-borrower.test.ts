@@ -18,6 +18,12 @@
  * The housing basis is the same rule seen from underneath. `current_housing` is
  * derived from the borrower's own CURRENT residence, so a co-borrower who has
  * not answered reads NULL — not `"rent"`, and not the applicant's answer.
+ *
+ * The writer here is `appendCoBorrowerWithFacts`: a whole identity stated by
+ * the applicant, the way a paper joint URLA is filled in or a second person is
+ * taken by phone. No screen offers it. `POST /files/:id/co-borrowers` names a
+ * person by name and email and nothing else — they complete their own profile
+ * in their own session — and `co-borrower-invite.test.ts` is its test.
  */
 
 import { describe, expect, it } from "vitest";
@@ -31,6 +37,8 @@ import {
   type ResidenceInput,
 } from "../services/declarations.js";
 import { staffPrincipal } from "../services/party.js";
+import { appendCoBorrowerWithFacts, type StatedCoBorrower } from "../services/co-borrowers.js";
+import { AppError } from "../middleware/error-handler.js";
 import { evaluateCondition, evaluateSatisfaction, REQUIREMENTS } from "@hm/requirements";
 import { createLoanFile, createUser } from "./support/factories.js";
 import { callAs } from "./support/http.js";
@@ -169,12 +177,26 @@ async function anApplication() {
 const requirement = (id: string) => REQUIREMENTS.find((r) => r.id === id)!;
 
 type Appended = { borrowerId: string; borrowerOrdinal: number | null };
+type Outcome = { status: number; body: Appended & { error?: { code?: string } } };
 
-async function append(userId: string, fileId: string, over: Record<string, unknown> = {}) {
-  return callAs<Appended>(userId, [fileRouter], "POST", `/${fileId}/co-borrowers`, {
-    ...CO_BORROWER,
-    ...over,
-  });
+/**
+ * The paper joint URLA: everything about the second person, stated by the
+ * applicant. Shaped like a response so the assertions read the way the
+ * route's did before the route stopped taking an identity.
+ */
+async function append(fileId: string, over: Record<string, unknown> = {}): Promise<Outcome> {
+  try {
+    const body = await appendCoBorrowerWithFacts(fileId, {
+      ...CO_BORROWER,
+      ...over,
+    } as StatedCoBorrower);
+    return { status: 201, body };
+  } catch (error) {
+    if (error instanceof AppError) {
+      return { status: error.statusCode, body: { error: { code: error.code } } as never };
+    }
+    throw error;
+  }
 }
 
 /** Every borrowing position on this file's application, in order. */
@@ -189,8 +211,8 @@ async function ordinals(fileId: string): Promise<(number | null)[]> {
 
 describe("appending a co-borrower", () => {
   it("puts them at the smallest free position", async () => {
-    const { user, fileId } = await anApplication();
-    const res = await append(user.id, fileId);
+    const { fileId } = await anApplication();
+    const res = await append(fileId);
 
     expect(res.status).toBe(201);
     expect(res.body.borrowerOrdinal).toBe(2);
@@ -201,8 +223,8 @@ describe("appending a co-borrower", () => {
     // Appending is not the operation that corrects Borrower 1, and a route
     // that could do both would let a co-borrower's details land on the person
     // whose request this is.
-    const { user, fileId } = await anApplication();
-    await append(user.id, fileId);
+    const { fileId } = await anApplication();
+    await append(fileId);
 
     const file = await loadLoanFile(fileId);
     expect(file!.borrowers[0]!.firstName).toBe("Dana");
@@ -210,8 +232,8 @@ describe("appending a co-borrower", () => {
   });
 
   it("lists both people on the file, in document order", async () => {
-    const { user, fileId } = await anApplication();
-    await append(user.id, fileId);
+    const { fileId } = await anApplication();
+    await append(fileId);
 
     const file = await loadLoanFile(fileId);
     expect(file!.borrowers.map((b) => `${b.firstName} ${b.lastName}`)).toEqual([
@@ -225,9 +247,9 @@ describe("appending a co-borrower", () => {
     // a resubmission frees their position, the allocator refills it, and the
     // replacement is the NEWEST row on the file — so creation order files them
     // last while the submission puts them second.
-    const { user, fileId } = await anApplication();
-    const leaving = await append(user.id, fileId, { ssnVaultHandle: "vault:leaving:1" });
-    const third = await append(user.id, fileId, {
+    const { fileId } = await anApplication();
+    const leaving = await append(fileId, { ssnVaultHandle: "vault:leaving:1" });
+    const third = await append(fileId, {
       firstName: "Marisol",
       lastName: "Vega",
       email: "marisol@example.test",
@@ -246,7 +268,7 @@ describe("appending a co-borrower", () => {
     await prisma.applicationParty.deleteMany({
       where: { application: { loanFileId: fileId }, partyId: dropped.partyId },
     });
-    const replacement = await append(user.id, fileId, {
+    const replacement = await append(fileId, {
       firstName: "Noor",
       lastName: "Haddad",
       email: "noor@example.test",
@@ -264,8 +286,8 @@ describe("appending a co-borrower", () => {
     // A CLAIMED party would say somebody agreed to be on this application, and
     // a fact stamped with their own principal would say they stated their own
     // date of birth on a screen they have never seen.
-    const { user, fileId } = await anApplication();
-    const res = await append(user.id, fileId);
+    const { fileId } = await anApplication();
+    const res = await append(fileId);
 
     const row = await prisma.borrower.findUniqueOrThrow({
       where: { id: res.body.borrowerId },
@@ -303,7 +325,7 @@ describe("appending a co-borrower", () => {
     // problem.
     const user = await createUser();
     const created = await callAs<{ id: string }>(user.id, [fileRouter], "POST", "/", SCREEN_ONE);
-    const res = await append(user.id, created.body.id);
+    const res = await append(created.body.id);
 
     expect(res.status).toBe(409);
     expect(res.body).toMatchObject({ error: { code: "NO_BORROWER" } });
@@ -315,7 +337,7 @@ describe("appending a co-borrower", () => {
     // for a membership to hang off, so there is no position to allocate.
     const user = await createUser();
     const file = await createLoanFile({ userId: user.id });
-    const res = await append(user.id, file.id);
+    const res = await append(file.id);
 
     expect(res.status).toBe(409);
     expect(await prisma.borrower.count({ where: { loanFileId: file.id } })).toBe(0);
@@ -327,7 +349,7 @@ describe("appending a co-borrower", () => {
     // shape that agreed by accident. A joint application named after whichever
     // of the two people sorts first is the list deciding whose file it is.
     const { user, fileId } = await anApplication();
-    await append(user.id, fileId);
+    await append(fileId);
 
     const res = await callAs<{ files: { id: string; borrowers: unknown[] }[] }>(
       user.id,
@@ -347,13 +369,13 @@ describe("appending a co-borrower", () => {
     // holds, and the allocator ran out of positions and threw a bare `Error` —
     // written for a seed script's stack trace, and reaching a client as
     // `INTERNAL_ERROR` at 500. A full household is a refusal, not a fault.
-    const { user, fileId } = await anApplication();
+    const { fileId } = await anApplication();
     for (const [n, first] of [
       [2, "Theo"],
       [3, "Marisol"],
       [4, "Noor"],
     ] as const) {
-      const res = await append(user.id, fileId, {
+      const res = await append(fileId, {
         firstName: first,
         email: `${first.toLowerCase()}@example.test`,
         ssnVaultHandle: `vault:${first.toLowerCase()}:1`,
@@ -363,7 +385,7 @@ describe("appending a co-borrower", () => {
       expect(res.body.borrowerOrdinal).toBe(n);
     }
 
-    const fifth = await append(user.id, fileId, {
+    const fifth = await append(fileId, {
       firstName: "Kenji",
       email: "kenji@example.test",
       ssnVaultHandle: "vault:kenji:1",
@@ -373,18 +395,6 @@ describe("appending a co-borrower", () => {
     expect(fifth.status).toBe(409);
     expect(fifth.body).toMatchObject({ error: { code: "BORROWER_LIMIT" } });
     expect(await prisma.borrower.count({ where: { loanFileId: fileId } })).toBe(4);
-  });
-
-  it("requires the SSN it lets a revisit leave out", async () => {
-    // Optional on screen 2 only because going back to fix a phone number must
-    // not ask for it again. Every call here is a first save for the person it
-    // is about, so there is no revisit to spare.
-    const { user, fileId } = await anApplication();
-    const { ssnVaultHandle: _handle, ssnLast4: _last4, ...withoutSsn } = CO_BORROWER;
-    const res = await callAs(user.id, [fileRouter], "POST", `/${fileId}/co-borrowers`, withoutSsn);
-
-    expect(res.status).toBe(400);
-    expect(await prisma.borrower.count({ where: { loanFileId: fileId } })).toBe(1);
   });
 });
 
@@ -399,7 +409,7 @@ describe("appending a co-borrower", () => {
 describe("Section 5, per person", () => {
   async function bothAnswered() {
     const { user, fileId } = await anApplication();
-    const appended = await append(user.id, fileId);
+    const appended = await append(fileId);
 
     // The applicant rents and has declared no bankruptcy; the co-borrower owns
     // and has. Two answers that cannot be confused for one another.
@@ -475,7 +485,7 @@ describe("Section 5, per person", () => {
     // is the derivation this whole path was rebuilt to end, with the person
     // swapped in for the credit report.
     const { user, fileId } = await anApplication();
-    const appended = await append(user.id, fileId);
+    const appended = await append(fileId);
     await callAs(
       user.id,
       [declarationRouter],
@@ -499,7 +509,7 @@ describe("Section 5, per person", () => {
     // this case could never fire. The database would then say a person who has
     // never signed in personally attested to a bankruptcy.
     const { user, fileId } = await anApplication();
-    const appended = await append(user.id, fileId);
+    const appended = await append(fileId);
 
     const res = await callAs(
       user.id,
@@ -524,7 +534,7 @@ describe("Section 5, per person", () => {
     // principal for a provisional party, so a person who has never agreed to be
     // here acquired an identity the ledger can attribute statements to.
     const { user, fileId } = await anApplication();
-    const appended = await append(user.id, fileId);
+    const appended = await append(fileId);
     const row = await prisma.borrower.findUniqueOrThrow({
       where: { id: appended.body.borrowerId },
       select: { partyId: true },
@@ -546,8 +556,8 @@ describe("Section 5, per person", () => {
     // STAFF principal is what the trigger admits, and it is what an
     // application with a co-borrower on it has to go through until that person
     // has a session of their own.
-    const { user, fileId } = await anApplication();
-    const appended = await append(user.id, fileId);
+    const { fileId } = await anApplication();
+    const appended = await append(fileId);
 
     const row = await prisma.borrower.findUniqueOrThrow({
       where: { id: appended.body.borrowerId },
@@ -568,7 +578,7 @@ describe("Section 5, per person", () => {
     // have a declaration written onto it by a request that cannot reach it.
     const mine = await anApplication();
     const theirs = await anApplication();
-    const elsewhere = await append(theirs.user.id, theirs.fileId);
+    const elsewhere = await append(theirs.fileId);
 
     const res = await callAs(
       mine.user.id,
@@ -597,8 +607,8 @@ describe("Section 5, per person", () => {
  */
 describe("what a co-borrower pays for where they live", () => {
   it("reads NULL until they have answered", async () => {
-    const { user, fileId } = await anApplication();
-    const appended = await append(user.id, fileId);
+    const { fileId } = await anApplication();
+    const appended = await append(fileId);
 
     const row = await prisma.borrower.findUniqueOrThrow({
       where: { id: appended.body.borrowerId },
@@ -610,7 +620,7 @@ describe("what a co-borrower pays for where they live", () => {
 
   it("is not filled in by the applicant answering", async () => {
     const { user, fileId } = await anApplication();
-    const appended = await append(user.id, fileId);
+    const appended = await append(fileId);
     await callAs(
       user.id,
       [declarationRouter],
@@ -628,7 +638,7 @@ describe("what a co-borrower pays for where they live", () => {
 
   it("reads back what that borrower answered, and leaves the applicant's alone", async () => {
     const { user, fileId } = await anApplication();
-    const appended = await append(user.id, fileId);
+    const appended = await append(fileId);
     const post = (body: Record<string, unknown>) =>
       callAs(user.id, [declarationRouter], "POST", `/${fileId}/declaration`, body);
 

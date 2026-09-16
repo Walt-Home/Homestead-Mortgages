@@ -209,6 +209,37 @@ export const WORK_COPY = {
  * What these say is what is true today: the questions are about them, and an
  * applicant cannot answer them on their behalf.
  */
+/**
+ * A co-borrower who has been named and has not finished.
+ *
+ * The applicant names them by name and email on screen 2; they complete
+ * their own profile in their own session. Until they have, the file is
+ * theirs to wait on, and these are the words for it — the product's own,
+ * because "your co-borrower needs to finish" is what the server says too and
+ * a screen that re-worded it would be two products.
+ */
+export const WAITING_COPY = {
+  /** The question on screen 2, above the three fields. */
+  applyingWith: "Applying with someone?",
+  applyingWithHelp:
+    "Add a co-borrower by name and email. They complete their own profile and give their own permissions — you will not be asked for their details.",
+  /** The one thing asked about them that is not a name or an email. */
+  livesHere: "They will live in the home",
+  /** Read back on a revisit, in place of the question. */
+  applyingWithNamed: (names: readonly string[]) => `Applying with ${names.join(" and ")}`,
+  /** The box is ticked and the fields are not filled. */
+  incomplete: "Tell us your co-borrower's name and email, or untick the box.",
+  /** In place of the signing panel, while somebody named has not arrived. */
+  title: "Your co-borrower needs to finish.",
+  body: (names: readonly string[]) =>
+    names.length === 1
+      ? `${names[0]} has been added to this application and has not completed their part yet. Once they have, you can review everything together and sign.`
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} have been added to this application and have not completed their part yet. Once they have, you can review everything together and sign.`,
+  /** What has to be true before an email exists to say it. */
+  noEmailYet:
+    "We do not send them an email yet, so let them know yourself. Their invitation is on its way in a later release.",
+} as const;
+
 export const CO_BORROWER_COPY = {
   /** The heading over one person's answers, once a file carries more than one. */
   answersOf: (name: string) => `What ${name} told us`,

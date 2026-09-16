@@ -97,6 +97,7 @@ const file: LoanFile = {
   loan: null,
   product: null,
   borrowers: [OMAR],
+  invitedBorrowers: [],
   consents: [],
   application: null,
   propertyRecord: null,

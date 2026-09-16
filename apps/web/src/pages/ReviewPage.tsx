@@ -59,6 +59,7 @@ import {
   REFERRED_COPY,
   SIGNING_COPY,
   SIGN_LEAD,
+  WAITING_COPY,
   WORK_COPY,
 } from "../lib/outcomes.js";
 import { answerLines, type AnswerLine, type YesNo } from "../lib/declarations.js";
@@ -138,6 +139,11 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   // one borrower's statement attributed to another.
   const primary = primaryBorrower(file);
   const others = coBorrowers(file);
+  // Who has been named and has not arrived. The server refuses the signature
+  // while this is non-empty, in the same words this screen uses, so the
+  // panel below says it first rather than letting a button say it as an
+  // error.
+  const invited = file?.invitedBorrowers ?? [];
   /*
    * Who on this file still owes their own Form 4506-C, by name.
    *
@@ -703,7 +709,18 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
         {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
         <div className="mt-7 border-t border-rule-soft pt-6">
-          {readyToSign ? (
+          {invited.length > 0 ? (
+            /* Waiting, by name. Not a disabled button with a footnote: the
+               thing the applicant can do next is not on this screen, and
+               the screen should not look as if it were. */
+            <div className="super-notice">
+              <p className="font-display text-base text-ink">{WAITING_COPY.title}</p>
+              <p className="mt-2 text-base text-ink-soft">
+                {WAITING_COPY.body(invited.map((who) => `${who.firstName} ${who.lastName}`))}
+              </p>
+              <p className="mt-2 text-sm text-ink-muted">{WAITING_COPY.noEmailYet}</p>
+            </div>
+          ) : readyToSign ? (
             <div className="super-notice">
               <p className="font-display text-base text-ink">{SIGNING_COPY.panelTitle}</p>
               <p className="mt-2 text-base text-ink-soft">{SIGNING_COPY.panelBody}</p>

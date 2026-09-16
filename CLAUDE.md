@@ -142,6 +142,14 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   the wrong name today. Wiring the ID scan to a persona means giving the
   fixtures eight people.
 
+- **A named co-borrower gets no email.** Screen 2 names one by name and email
+  and the review screen waits on them — `invitedBorrowers` on the file, a 409
+  `CO_BORROWER_PENDING` from signing and deciding, a refusal by name from the
+  assembler — but nothing sends the invitation and there is no claim route,
+  so the named person cannot yet reach their own half. The claim is a merge,
+  not a flip: the trigger lets a PROVISIONAL party go to `CLAIM_PENDING` or
+  `MERGED` and nowhere else. `docs/states.md` has the shape.
+
 ## Five rules that are not style preferences
 
 **1. `data/v1-build.csv` is the source of truth, and the generator refuses to

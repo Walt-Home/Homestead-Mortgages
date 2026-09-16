@@ -33,6 +33,7 @@ import { namedBorrower, signerOn, tokenFor } from "../services/authorization.js"
 import { signedOn } from "../services/signature.js";
 import { advanceStage } from "../services/stage.js";
 import { applicationForFile } from "../services/applications.js";
+import { coBorrowerNeedsToFinish } from "../services/co-borrowers.js";
 import { settleBorrowerAct } from "../services/standing.js";
 
 export const applicationRouter = Router();
@@ -177,6 +178,17 @@ applicationRouter.post(
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
     if (file.borrowers.length === 0) throw new AppError(409, "Nothing to sign yet.", "NO_BORROWER");
+    // Everyone named on the application has to have arrived before it can be
+    // signed: a signature attests to an application, and one with a person on
+    // it who has not stated who they are is not finished. The product's words
+    // are the ones a borrower sees.
+    if (file.invitedBorrowers.length > 0) {
+      throw new AppError(
+        409,
+        coBorrowerNeedsToFinish(file.invitedBorrowers),
+        "CO_BORROWER_PENDING",
+      );
+    }
     // The signer is the person signed in, resolved by party rather than by
     // position. On an ordinary file that is Borrower 1; on one whose Borrower 1
     // has been replaced it is still the person signing, and the subscript would

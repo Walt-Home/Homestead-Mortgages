@@ -83,7 +83,7 @@ interface Household {
  * insists on.
  *
  * `coOnApplication` is which of two real states the second person is in.
- * `POST /files/:id/co-borrowers` appends them to the file AND puts them on the
+ * `appendCoBorrowerWithFacts` appends them to the file AND puts them on the
  * credit request in one transaction, which is the default here. Being on the
  * file without being on the request is the other, and `borrowerOrdinals` says
  * so in its own words — it is the state a borrower is in before anything has

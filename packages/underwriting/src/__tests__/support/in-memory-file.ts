@@ -140,6 +140,7 @@ export function afterIdentity(): LoanFile {
       rateQuotedAt: REFERENCE.toISOString(),
       overlays: [],
     },
+    invitedBorrowers: [],
     borrowers: [
       {
         id: "b1",

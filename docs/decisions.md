@@ -699,7 +699,7 @@ thousandths, and the three price tests now compare integers.
 
 After every ingest the fetch also asks the calculator for the latest week on
 the two terms V1 quotes and compares the answer to the row it stored. An
-outage there is printed and is not a failure; an *answer* that disagrees is two
+outage there is printed and is not a failure; an _answer_ that disagrees is two
 CFPB sources contradicting each other, and the fetch exits non-zero for a
 person to look.
 
@@ -921,7 +921,7 @@ true of them, but an `UPDATE` against `decisions` is the thing nothing here
 does.
 
 **Points and fees was measured against the wrong denominator.**
-§1026.32(b)(4) defines the *total loan amount* the QM cap and the HOEPA fee
+§1026.32(b)(4) defines the _total loan amount_ the QM cap and the HOEPA fee
 trigger are both measured against: the loan less what is paid at closing for the
 credit itself — the same figure Appendix J already discounts against. The code
 divided by the note amount. The error is the fees' own share of the loan, so it
@@ -933,7 +933,7 @@ carries the denominator and the ratio blocks without it, because a ratio is a
 pair of numbers and only one of them was present.
 
 **HOEPA and HPML were applied to loans they do not reach.** Both rules open on
-credit secured by the consumer's *principal dwelling*; a loan to buy an
+credit secured by the consumer's _principal dwelling_; a loan to buy an
 investment property is business-purpose credit §1026.3(a)(1) exempts from
 Regulation Z outright. Nothing read occupancy. This lender's flat fees are 5.8%
 of a $30,000 loan, so a small second-home purchase fired the fee trigger, and
@@ -947,7 +947,7 @@ this is the opposite — we know the rule does not apply.
 §1026.35(a)(1)(i) makes a loan higher-priced at "1.5 **or more** percentage
 points" over APOR, and §1026.43(e)(2)(vi) disqualifies General QM at "2.25 **or
 more**" — both floors, both tested with operators that excluded the boundary.
-Worse, the spread was rounded to hundredths *before* the comparison, so every
+Worse, the spread was rounded to hundredths _before_ the comparison, so every
 true spread in [1.500, 1.505) collapsed onto 1.50 and failed a strict `>`. The
 tests now decide on the exact spread and record the rounded one. §1026.32(a)(1)(i)
 keeps its strict `>` — that rule says "**more than** 6.5" — but reads the exact
@@ -1760,6 +1760,33 @@ cannot:
 The persona `users` row is keyed on `persona_key`, which is what makes the
 seed idempotent and what both refusals read. It is a column on `users` rather
 than a table of personas because the persona IS a user.
+
+## A co-borrower is named, not described
+
+The applicant names the person they are applying with — first name, last
+name, email, and whether they will live in the home — and nothing else. The
+co-borrower states everything else about themselves in their own session: a
+separate, private application, where their date of birth, their address and
+their Social Security number are theirs to give. That is the design the
+product was built to, and it is why `POST /files/:id/co-borrowers` refuses an
+identity rather than stripping it to the name inside: an applicant typing
+somebody else's number is the shape the route exists to end.
+
+A named person is a PROVISIONAL party holding two facts under the applicant's
+principal, a borrower row with no `ssn_last4`, and a membership at the next
+position — listed on the file as `invitedBorrowers`, never among `borrowers`,
+because a person with no date of birth is not one the engine can evaluate and
+`requireIdentity` would rightly throw on them. The file waits instead. Three
+gates say so in the product's own words, "Your co-borrower needs to finish.":
+signing and deciding refuse with `CO_BORROWER_PENDING`, and the assembler
+refuses the party by name before a generic "no date of birth" could say it
+worse. Removing a named person is the applicant's to do only until the person
+has arrived; a party that has claimed or merged is somebody who agreed to be
+here, and leaving is theirs.
+
+The whole-identity writer survives as `appendCoBorrowerWithFacts`, the paper
+joint URLA, because the seed and the tests build complete households with it
+and a phone-taken application is a real shape. No screen offers it.
 
 ## Still outstanding
 

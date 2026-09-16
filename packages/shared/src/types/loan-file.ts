@@ -8,7 +8,7 @@
  */
 
 import type { LoanTerms, ProductSelection, SubjectProperty } from "./loan.js";
-import type { Borrower, Consent } from "./borrower.js";
+import type { Borrower, Consent, InvitedBorrower } from "./borrower.js";
 import type {
   AssetReport,
   CreditReport,
@@ -129,6 +129,11 @@ export interface LoanFile {
   readonly loan: LoanTerms | null;
   readonly product: ProductSelection | null;
   readonly borrowers: readonly Borrower[];
+  /**
+   * People named on the application who have not completed their own profile.
+   * Empty on every file that can be signed. See `InvitedBorrower`.
+   */
+  readonly invitedBorrowers: readonly InvitedBorrower[];
   readonly consents: readonly Consent[];
 
   readonly application: ApplicationReceipt | null;

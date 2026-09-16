@@ -34,6 +34,7 @@ import { loadDeclaration, recordDeclaration } from "../services/declarations.js"
 import { primaryBorrowerRow } from "../services/borrower-order.js";
 import { principalForParty, staffPrincipal } from "../services/party.js";
 import { ensureApplicationParty } from "../services/applications.js";
+import { appendCoBorrowerWithFacts } from "../services/co-borrowers.js";
 import { createLoanFile, createUser } from "./support/factories.js";
 import { callAs } from "./support/http.js";
 
@@ -147,9 +148,7 @@ async function replacedApplicant() {
   expect((await callAs(user.id, [fileRouter], "POST", `/${fileId}/borrowers`, PRIYA)).status).toBe(
     201,
   );
-  expect((await callAs(user.id, [fileRouter], "POST", `/${fileId}/co-borrowers`, DEV)).status).toBe(
-    201,
-  );
+  await appendCoBorrowerWithFacts(fileId, DEV);
 
   const rows = await prisma.borrower.findMany({
     where: { loanFileId: fileId },
@@ -236,18 +235,11 @@ describe("a file whose ordinal 1 was refilled", () => {
   });
 
   it("names an appended co-borrower under Borrower 1's principal", async () => {
-    const { user, fileId, her, him } = await replacedApplicant();
-    const appended = await callAs<{ borrowerId: string }>(
-      user.id,
-      [fileRouter],
-      "POST",
-      `/${fileId}/co-borrowers`,
-      NOOR,
-    );
-    expect(appended.status).toBe(201);
+    const { fileId, her, him } = await replacedApplicant();
+    const appended = await appendCoBorrowerWithFacts(fileId, NOOR);
 
     const row = await prisma.borrower.findUniqueOrThrow({
-      where: { id: appended.body.borrowerId },
+      where: { id: appended.borrowerId },
       select: { partyId: true },
     });
     const stated = await prisma.fact.findFirstOrThrow({

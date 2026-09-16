@@ -28,6 +28,7 @@ import { calendarDate } from "../lib/ledger.js";
 import { SAMPLE_FILE_START_YOUR_OWN } from "../lib/home-copy.js";
 import { Working } from "../components/Working.js";
 import { creditCheckCopy, identityCheckCopy, modeOf, ssnDisclosure } from "../lib/disclosures.js";
+import { WAITING_COPY } from "../lib/outcomes.js";
 
 interface DocumentRead {
   requiresRedirect?: boolean;
@@ -201,6 +202,21 @@ export function IdentityPage() {
   /** Only used when the vendor's verified outputs carry no date of birth. */
   const [dobInput, setDobInput] = useState("");
 
+  /*
+   * The person they are applying with, if there is one: a name, an email and
+   * whether they will live in the home. Nothing else is asked about them
+   * here, because nothing else is the applicant's to say — the co-borrower
+   * completes their own profile in their own session. Somebody already named
+   * is read back off the file instead of being asked for again.
+   */
+  const [withSomeone, setWithSomeone] = useState(false);
+  const [coFirstName, setCoFirstName] = useState("");
+  const [coLastName, setCoLastName] = useState("");
+  const [coEmail, setCoEmail] = useState("");
+  const [coLivesHere, setCoLivesHere] = useState(true);
+  const named = data?.file.invitedBorrowers ?? [];
+  const coBorrowerFilled = Boolean(coFirstName.trim() && coLastName.trim() && coEmail.trim());
+
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -341,6 +357,10 @@ export function IdentityPage() {
       setError("We need your date of birth — your ID did not carry one.");
       return;
     }
+    if (withSomeone && named.length === 0 && !coBorrowerFilled) {
+      setError(WAITING_COPY.incomplete);
+      return;
+    }
     setRunning(true);
     setError(null);
 
@@ -395,6 +415,18 @@ export function IdentityPage() {
         // nothing, and the figure screen 1 recorded stands.
         ...(statedIncome > 0 ? { statedMonthlyIncome: statedIncome } : {}),
       });
+
+      // The person they are applying with, named and nothing more. Once: a
+      // revisit with somebody already named reads them back above instead of
+      // naming them again, and the box is not offered.
+      if (withSomeone && named.length === 0 && coBorrowerFilled) {
+        await api.post(`/files/${fileId}/co-borrowers`, {
+          firstName: coFirstName.trim(),
+          lastName: coLastName.trim(),
+          email: coEmail.trim(),
+          occupiesProperty: coLivesHere,
+        });
+      }
 
       const file = await api.get<{ file: LoanFileView }>(`/files/${fileId}`);
       // The authorization is the applicant's own. It is read back off the file
@@ -504,6 +536,17 @@ export function IdentityPage() {
       }
     } finally {
       setRunning(false);
+    }
+  }
+
+  /** Take a named person off, while that is still the applicant's to do. */
+  async function removeNamed(borrowerId: string) {
+    setError(null);
+    try {
+      await api.del(`/files/${fileId}/co-borrowers/${borrowerId}`);
+      await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not remove them. Try again.");
     }
   }
 
@@ -687,6 +730,93 @@ export function IdentityPage() {
       </div>
 
       {/* 6 & 7 — The two consents */}
+      {/* 4 — Applying with someone? A name and an email, and the file waits
+          on them. Their date of birth, their address and their number are
+          theirs to state, on a screen of their own. */}
+      <div className="mt-7 border-t border-rule-soft pt-6">
+        {named.length > 0 ? (
+          <>
+            <p className="text-base text-ink">
+              {WAITING_COPY.applyingWithNamed(
+                named.map((who) => `${who.firstName} ${who.lastName}`),
+              )}
+            </p>
+            {named.map((who) => (
+              <p key={who.id} className="mt-1 text-sm text-ink-soft">
+                {who.email}
+                {" · "}
+                <button
+                  type="button"
+                  className="super-link-quiet"
+                  onClick={() => void removeNamed(who.id)}
+                  disabled={readOnly || running}
+                >
+                  Remove
+                </button>
+              </p>
+            ))}
+            <p className="mt-2 text-xs text-ink-faint">{WAITING_COPY.noEmailYet}</p>
+          </>
+        ) : (
+          <>
+            <label className="flex items-start gap-3 text-base text-ink-soft">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={withSomeone}
+                onChange={(e) => setWithSomeone(e.target.checked)}
+                disabled={readOnly}
+              />
+              <span>{WAITING_COPY.applyingWith}</span>
+            </label>
+            {withSomeone && (
+              <div className="mt-3 flex flex-col gap-3">
+                <p className="text-sm text-ink-muted">{WAITING_COPY.applyingWithHelp}</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block text-sm text-ink-soft">
+                    Their first name
+                    <input
+                      className="super-input mt-1"
+                      autoComplete="off"
+                      value={coFirstName}
+                      onChange={(e) => setCoFirstName(e.target.value)}
+                    />
+                  </label>
+                  <label className="block text-sm text-ink-soft">
+                    Their last name
+                    <input
+                      className="super-input mt-1"
+                      autoComplete="off"
+                      value={coLastName}
+                      onChange={(e) => setCoLastName(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <label className="block text-sm text-ink-soft">
+                  Their email
+                  <input
+                    className="super-input mt-1"
+                    type="email"
+                    autoComplete="off"
+                    value={coEmail}
+                    onChange={(e) => setCoEmail(e.target.value)}
+                  />
+                </label>
+                <label className="flex items-start gap-3 text-base text-ink-soft">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={coLivesHere}
+                    onChange={(e) => setCoLivesHere(e.target.checked)}
+                  />
+                  <span>{WAITING_COPY.livesHere}</span>
+                </label>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
       <div className="mt-7 flex flex-col gap-3 border-t border-rule-soft pt-6">
         <label className="flex items-start gap-3 text-base text-ink-soft">
           <input

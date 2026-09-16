@@ -159,9 +159,13 @@ three lists rather than trusting it after they change.
   appends one, the projection orders everybody by `borrower_ordinal`, Section 5
   is answered and stored per person, and the review screen renders a block
   apiece, and a signature is one person's — their own authorization, their own
-  4506-C, and nobody may make either on their behalf. What is missing is a
-  screen that adds one, any surface a co-borrower can sign on at all, a bank a
-  second borrower can link, and demographics asked of each of them — item 5.
+  4506-C, and nobody may make either on their behalf. Screen 2 names one — a
+  name, an email, whether they will live in the home — and the file waits on
+  them: signing, deciding and assembling all refuse while somebody named has
+  not completed their own profile. What is missing is the invitation itself
+  and the claim that turns a named person into a signed-in one, any surface a
+  co-borrower can sign on at all, a bank a second borrower can link, and
+  demographics asked of each of them — item 1.
 - **Vesting and the non-borrower parties** have tables. `du_vestings` holds the
   sentence that will read on title, `du_deal_parties` holds the origination
   company, the originator, the note holder and the counseling agency, and a
@@ -410,12 +414,24 @@ forbidden of a non-borrowing one, and existing rows were backfilled;
 `ensureApplicationParty` locks the application and allocates the smallest free
 position, so two concurrent appends cannot take the same one.
 
-Two borrowers are now real above it as well. `POST /api/files/:id/co-borrowers`
-appends a person — a PROVISIONAL party, since a co-borrower named by the
-applicant has never signed in and has asserted nothing themselves — and takes
-the smallest free position. The projection orders a file's borrowers by that
-position rather than by when the row was written, which is the same order DU
-reads them in. Section 5 and the residence history hang off the person, not the
+Two borrowers are now real above it as well, and the second arrives in two
+steps that are two different people's. `POST /api/files/:id/co-borrowers`
+NAMES a person — first name, last name, email and whether they will live in
+the home — as a PROVISIONAL party holding those two facts under the
+applicant's principal and nothing else, a borrower row whose `ssn_last4` is
+NULL, and a membership at the smallest free position in the role the
+occupancy answer gives them. The schema is strict: an identity posted there is
+refused, not stripped to the name inside it, because the applicant has no
+business stating somebody else's date of birth. The projection lists such a
+person as `invitedBorrowers` rather than among `borrowers`, since a person
+with no date of birth is not a borrower the engine can evaluate, and
+`identityMissing` is what tells the two apart — a CLAIMED party with a hole in
+it is still the invariant violation `requireIdentity` throws on by name.
+`appendCoBorrowerWithFacts` is the whole-identity writer, the paper joint URLA;
+no screen offers it, and the tests and the persona seed build complete
+households with it. The projection orders a file's borrowers by position
+rather than by when the row was written, which is the same order DU reads
+them in. Section 5 and the residence history hang off the person, not the
 file: `POST /files/:id/declaration` takes a `borrowerId`, each borrower carries
 their own answers, and `borrowers.current_housing` reads NULL for a co-borrower
 who has not been asked. The review screen renders a block per person under
@@ -504,11 +520,17 @@ applicant leaves — a SECOND applicant at ordinal 2, because the index that say
 there is one Borrower 1 is over the position and not the role; and the receipt
 counts any primary's pieces, so their three would have started the clock.
 
-Two answers are still settled by a co-borrower's silence, and they are the two
-the party projection supplies for free. `marital_status` is required of every
-party and `preferred_language` falls back to `en`, so APP-015 and APP-017 read
-back an answer for somebody nobody asked — the applicant stated both on the
-append, and neither has been put to the person it is about.
+Two answers are still settled by a co-borrower's silence on a household
+stated in full, and they are the two the party projection supplies for free.
+`marital_status` is required of every party and `preferred_language` falls
+back to `en`, so APP-015 and APP-017 read back an answer for somebody nobody
+asked — whoever stated the household on paper stated both, and neither has
+been put to the person it is about. A NAMED co-borrower is not in `borrowers`
+at all until they arrive, so nothing is asked of them and nothing is answered
+for them; the file waits instead, and three gates say so in the same words —
+`POST /sign-application` and `POST /decision` with a 409 `CO_BORROWER_PENDING`,
+and the assembler by refusing the party by name before a generic "no date of
+birth" could say it worse.
 
 Four more have no path to an answer for a second borrower at all, and that is a
 consequence already in the tree rather than work still ahead. APP-001 wants an
@@ -523,8 +545,14 @@ it at "Needs you".
 
 What is still missing is narrower than it was, and none of it is structural:
 
-- **No screen adds one.** The route is there and nothing in `apps/web` posts to
-  it, so a second borrower can only arrive through the API.
+- **Nobody tells them.** Screen 2 names a co-borrower and the review screen
+  waits on them by name, but no email goes out and there is no claim path, so
+  a named person cannot yet sign in to their own half and a joint application
+  waits until that exists. The shape the claim will take is already fixed by
+  the trigger, which admits a PROVISIONAL party to `CLAIM_PENDING` or `MERGED`
+  and nowhere else: the named party merges into the party the person's own
+  sign-in creates, on a signed single-use token delivered by email — the
+  Grander shape, never an email match at sign-in.
 - **`connector_links` is unique on `(loanFileId, kind)`**, so a second borrower
   cannot link their own bank.
 - **The demographics are asked once**, of the applicant. Regulation B wants
@@ -727,11 +755,11 @@ own answers and the signature attests to answers they gave.
 Dependency order, not importance. No time estimates — build a schedule from
 this with the people doing the work.
 
-1. **The second borrower.** The ordinal column, the appending route, per-person
-   declarations, an engine that judges each person on their own answers, and a
-   review screen that renders both are done. What is left is a screen that adds
-   one, a bank each of them can link, the demographics asked of each applicant,
-   and a signature apiece.
+1. **The second borrower.** The ordinal column, per-person declarations, an
+   engine that judges each person on their own answers, a review screen that
+   renders both, and a screen that names one and waits on them are done. What
+   is left is the invitation and the claim, a bank each of them can link, the
+   demographics asked of each applicant, and a signature apiece.
 2. **Write down the compute boundary** and type the two JSON columns.
 3. **Writers for vesting and the non-borrower parties.** The tables and the
    ten-party ceiling landed; what is missing is anything that fills them — a

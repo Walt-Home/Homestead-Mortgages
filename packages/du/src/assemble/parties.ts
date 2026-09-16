@@ -271,6 +271,19 @@ export interface PartiesInput {
 
 async function borrowerParty(party: LoadedParty, input: PartiesInput): Promise<DuNode> {
   const facts = input.facts.get(party.partyId);
+  // A person the applicant named who has not completed their own profile has
+  // a name and nothing a casefile could carry about them. Refused by name,
+  // here, before a generic "no date of birth" could say it worse: the
+  // application is waiting on them, and a submission that left them out
+  // would be a different loan.
+  if (readString(facts, "date_of_birth") === null && readString(facts, "ssn_token") === null) {
+    const name = readObject(facts, "legal_name");
+    const who = `${name.first ?? ""} ${name.last ?? ""}`.trim() || party.partyId;
+    throw new Error(
+      `${who} is named on this application and has not completed their profile; ` +
+        "a casefile cannot carry a person who has not stated who they are.",
+    );
+  }
   const label = input.labels.next("borrowerRole");
   input.index.roleByApplicationParty.set(party.id, label);
 

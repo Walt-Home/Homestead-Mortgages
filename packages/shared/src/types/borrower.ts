@@ -55,6 +55,39 @@ export interface Demographics {
   readonly visualObservationNoted: boolean;
 }
 
+/**
+ * A person the applicant has named on the application who has not arrived.
+ *
+ * The applicant names a co-borrower by name and email and nothing else; the
+ * co-borrower completes their own profile, in their own session, with their
+ * own permissions — a separate, private application. Until they do, this is
+ * all the file holds about them, and it is deliberately not a `Borrower`: a
+ * `Borrower` carries an identity the engine and the casefile assembler read,
+ * and a half-empty one would be read as a person with no date of birth rather
+ * than as a person who has not answered yet.
+ *
+ * So a named co-borrower is listed here and not in `borrowers`, every
+ * per-borrower evaluator judges the people who have arrived, and the file
+ * cannot be signed, decided or submitted while this list is non-empty — the
+ * product's "waiting for your co-borrower".
+ */
+export interface InvitedBorrower {
+  /** The `borrowers` row that will become theirs when they arrive. */
+  readonly id: string;
+  readonly partyId: string;
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly email: string;
+  /** Whether they will live in the home; a co-signer does not. */
+  readonly occupiesProperty: boolean;
+  /**
+   * Where they are. `named`: the applicant has named them and nothing has been
+   * sent. `invited`: an invitation is live. Neither means they can sign in;
+   * the day they claim, the row leaves this list.
+   */
+  readonly status: "named" | "invited";
+}
+
 export interface Borrower {
   readonly id: string;
   /**

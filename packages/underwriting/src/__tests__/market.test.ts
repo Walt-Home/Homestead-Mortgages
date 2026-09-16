@@ -321,6 +321,7 @@ function refinance(): LoanFile {
       overlays: [],
     },
     borrowers: [],
+    invitedBorrowers: [],
     consents: [],
     application: null,
     credit: null,

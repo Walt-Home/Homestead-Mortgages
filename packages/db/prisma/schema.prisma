@@ -386,7 +386,10 @@ model Borrower {
   /// SSA-89 and the 4506-C exchange for the number — is the `ssn_token` fact.
   /// A migration that adds a plaintext SSN column to this table is the single
   /// change most likely to turn a prototype into a breach.
-  ssnLast4 String @map("ssn_last4") @db.VarChar(4)
+  /// Display only. Null for a co-borrower named by the applicant who has not
+  /// completed their own profile yet; the projection reads that as "not yet
+  /// stated" for an unclaimed party and as a violation for a claimed one.
+  ssnLast4 String? @map("ssn_last4") @db.VarChar(4)
 
   /// Identity verified against a government document, rather than typed.
   /// Per vendor session, so per application. Null means never attempted.

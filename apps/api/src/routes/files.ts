@@ -19,6 +19,7 @@ import {
   STAGE_TO_DOMAIN,
 } from "../services/repository.js";
 import { primaryBorrowerRow } from "../services/borrower-order.js";
+import { nameCoBorrower, removeNamedCoBorrower } from "../services/co-borrowers.js";
 import { assertPurposeInScope } from "../services/scope.js";
 import { connectors } from "../services/connectors.js";
 import { quoteSubjectProduct } from "../services/pricing.js";
@@ -570,91 +571,55 @@ fileRouter.post(
 );
 
 /**
- * A second person on this application.
+ * A second person on this application, named by the applicant.
  *
- * The same fields screen 2 collects, about somebody else. Three of screen 2's
- * are deliberately not here:
+ * Name, email and whether they will live in the home. Nothing else: the
+ * co-borrower completes their own profile and gives their own permissions in
+ * their own session — a separate, private application — and the applicant
+ * never types their date of birth or their Social Security number. Until they
+ * arrive the file lists them as invited and cannot be signed, decided or
+ * submitted; "your co-borrower needs to finish."
  *
- * - `statedMonthlyIncome`, because TRID's six pieces are the APPLICANT's, and
- *   an income posted here would supersede the figure screen 1 recorded and
- *   then be counted as one of them.
- * - `currentHousing` and `monthlyRent`, because `du_residences` is where a
- *   housing basis comes from and this route asks nobody. A co-borrower who has
- *   not answered reads NULL, which is the same three-valued rule screen 2 now
- *   keeps.
- *
- * The SSN is required. It is optional on screen 2 only because a revisit must
- * not make somebody type it again, and there is no revisit here: this route
- * only ever appends, so every call is a first save for the person it is about.
- *
- * Create-only, and it never touches borrower 1. Appending is not the operation
- * that corrects the applicant, and a route that could do both would let a
- * co-borrower's details land on the person whose request this is.
+ * Create-only, and it never touches borrower 1. Up to four people in all, which
+ * the ordinal allocator enforces under a lock on the application row.
  */
-const coBorrowerSchema = identitySchema
-  .omit({ statedMonthlyIncome: true, currentHousing: true, monthlyRent: true })
-  .extend({
-    ssnVaultHandle: z.string().min(1),
-    ssnLast4: z.string().length(4),
-  });
+const namedCoBorrowerSchema = z
+  .object({
+    firstName: z.string().trim().min(1).max(80),
+    lastName: z.string().trim().min(1).max(80),
+    email: z.string().trim().email().max(254),
+    occupiesProperty: z.boolean(),
+  })
+  // Strict, so an identity posted here is refused rather than stripped to
+  // the two fields inside it that the applicant may state. A client still
+  // sending a date of birth and a Social Security number about somebody else
+  // is the shape this route exists to end, and it should hear so.
+  .strict();
 
 fileRouter.post(
   "/:id/co-borrowers",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    const input = coBorrowerSchema.parse(req.body);
+    const input = namedCoBorrowerSchema.parse(req.body);
     await assertFileAccess(id, req.user!.id, "write");
-
-    // Whose request this is — Borrower 1 by ordinal, the same person the other
-    // two writers and every reader resolve to. Their principal is what stamps
-    // the appended party's facts, so resolving it by creation order would
-    // record this person's name and date of birth as asserted by somebody who
-    // is not the applicant. A file with nobody on it has no applicant for a
-    // co-borrower to be second to, and appending onto one would make this
-    // person Borrower 1 by accident.
-    const primary = await primaryBorrowerRow(prisma, id);
-    if (!primary) throw new AppError(409, "Tell us who you are first.", "NO_BORROWER");
-
-    const appended = await prisma.$transaction(async (tx) => {
-      const app = await applicationForFile(tx, id);
-      if (!app) throw new AppError(409, "This file is not an application yet.", "NO_APPLICATION");
-
-      const partyId = await recordBorrowerFacts(tx, {
-        loanFileId: id,
-        existingPartyId: null,
-        input,
-        namedBy: {
-          principalId: await principalForParty(tx, primary.partyId),
-          sourceFirstSeen: "co_borrower_named_by_applicant",
-        },
-      });
-      const borrower = await tx.borrower.create({
-        data: {
-          loanFileId: id,
-          partyId,
-          ssnLast4: input.ssnLast4,
-          nonBorrowingSpouseName: input.nonBorrowingSpouseName ?? null,
-          nonBorrowingSpouseSignatureRequired:
-            input.maritalStatus === "married" && Boolean(input.nonBorrowingSpouseName),
-          demographics: input.demographics ?? undefined,
-        },
-        select: { id: true },
-      });
-
-      // The position in the submitted document, allocated as the smallest free
-      // one under a lock on the application row. Not `max + 1`: a borrower
-      // dropped before a resubmission leaves a vacancy, and counting past it
-      // hands the replacement a 5 on an application holding three.
-      const edge = await ensureApplicationParty(tx, app.id, partyId, "CO_BORROWER");
-      return { borrowerId: borrower.id, borrowerOrdinal: edge.borrowerOrdinal };
-    });
-
-    // Not `screen_completed`: there is no co-borrower screen, and an event
-    // claiming one would put a screen nobody has built into the file's own
-    // history. What happened is that a person was added, and where.
-    await recordEvent(id, "co_borrower_added", "borrower", appended);
-
+    const appended = await nameCoBorrower(id, input);
     res.status(201).json(appended);
+  }),
+);
+
+/**
+ * Take a named person off the application, while that is still the
+ * applicant's to do — refused for the applicant, and refused once the person
+ * has signed in.
+ */
+fileRouter.delete(
+  "/:id/co-borrowers/:borrowerId",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    const borrowerId = z.string().uuid().parse(req.params.borrowerId);
+    await assertFileAccess(id, req.user!.id, "write");
+    await removeNamedCoBorrower(id, borrowerId);
+    res.status(204).end();
   }),
 );
 

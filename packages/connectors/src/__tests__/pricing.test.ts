@@ -93,6 +93,7 @@ const FILE_ROW = {
   loan: null,
   product: null,
   borrowers: [BORROWER],
+  invitedBorrowers: [],
   consents: [],
   application: null,
   propertyRecord: null,

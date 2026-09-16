@@ -56,10 +56,31 @@ export interface DecisionView {
   adverseActionReasons?: string[];
 }
 
+/**
+ * A person the applicant named on the application who has not arrived.
+ *
+ * A name and an email, said by the applicant, and nothing else: the
+ * co-borrower states everything else about themselves in their own session.
+ * Until they do the file is waiting on them, and this list is what the review
+ * screen reads to say so.
+ */
+export interface InvitedBorrowerView {
+  id: string;
+  partyId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  occupiesProperty: boolean;
+  /** Named by the applicant; invited once the email has gone out. */
+  status: "named" | "invited";
+}
+
 export interface LoanFileView {
   id: string;
   stage: FlowStage;
   isDemo: boolean;
+  /** Everybody who has stated who they are, in document order. */
+  invitedBorrowers: InvitedBorrowerView[];
   borrowers: {
     id: string;
     /**

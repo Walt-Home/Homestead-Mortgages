@@ -15,6 +15,7 @@ import { advanceStage } from "../services/stage.js";
 import { applicationForFile, casefileIdForFile } from "../services/applications.js";
 import { decideApplication, recordDecision } from "../services/decide.js";
 import { aporTableFromDatabase } from "../services/apor.js";
+import { coBorrowerNeedsToFinish } from "../services/co-borrowers.js";
 import { applicationStanding } from "../services/standing.js";
 
 export const decisionRouter = Router();
@@ -40,6 +41,15 @@ decisionRouter.post(
     await assertFileAccess(id, req.user!.id, "write");
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
+    // A decision on an application with a person named on it who has not
+    // arrived would be a decision about a household it cannot see. Wait.
+    if (file.invitedBorrowers.length > 0) {
+      throw new AppError(
+        409,
+        coBorrowerNeedsToFinish(file.invitedBorrowers),
+        "CO_BORROWER_PENDING",
+      );
+    }
 
     // The application's own identifier, not a fresh one: Desktop Underwriter
     // reads a casefile it has seen before as a resubmission of that case, and

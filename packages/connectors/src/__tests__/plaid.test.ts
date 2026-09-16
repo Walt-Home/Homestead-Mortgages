@@ -89,6 +89,7 @@ function file(authorized = true): LoanFile {
     // The consent below names b1. The guard now refuses a consent from a
     // borrower who is not on the file, so the fixture has to hold one — the
     // old fixture was dangling and nothing could tell.
+    invitedBorrowers: [],
     borrowers: [
       {
         id: "b1",

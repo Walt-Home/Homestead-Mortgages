@@ -99,10 +99,17 @@ describe("the social security number", () => {
 });
 
 describe("where the screen gets what it knows", () => {
-  it("seeds itself from the file", () => {
+  it("seeds itself from the file, for the person signed in", () => {
+    // `you` is the server's answer to which borrower is reading the screen.
+    // Seeded from the first row instead, a co-borrower's revisit would show
+    // them the applicant's details and save their corrections onto her.
     const effect = src.slice(src.indexOf("const seeded = useRef(false);"));
     const body = effect.slice(0, effect.indexOf("}, [data?.file]);"));
-    expect(body).toContain("revisitFrom(data?.file)");
+    expect(body).toContain("revisitFrom(data?.file, data?.you ?? null)");
+    // And nothing at all for a co-borrower who has claimed their invitation
+    // and not yet said who they are: the file holds the applicant's details,
+    // and there is nobody else's to seed from.
+    expect(body).toContain("if (meInvited) return;");
     expect(body).toContain("setIdentity(known.identity)");
     expect(body).toContain("setPhone(");
     expect(body).toContain("setCitizenship(known.citizenship)");

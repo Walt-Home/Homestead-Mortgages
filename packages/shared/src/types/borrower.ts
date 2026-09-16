@@ -85,7 +85,13 @@ export interface InvitedBorrower {
    * sent. `invited`: an invitation is live. Neither means they can sign in;
    * the day they claim, the row leaves this list.
    */
-  readonly status: "named" | "invited";
+  /**
+   * Named by the applicant; invited once the email has gone out; claimed
+   * once they have signed in and taken the invitation — and still here,
+   * because they have not yet stated who they are. Every status on this
+   * list is a person the file is waiting on.
+   */
+  readonly status: "named" | "invited" | "claimed";
 }
 
 export interface Borrower {

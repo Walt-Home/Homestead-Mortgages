@@ -20,6 +20,8 @@ import {
 } from "../services/repository.js";
 import { primaryBorrowerRow } from "../services/borrower-order.js";
 import { nameCoBorrower, removeNamedCoBorrower } from "../services/co-borrowers.js";
+import { inviteCoBorrower } from "../services/invitations.js";
+import { memberView } from "../services/member-view.js";
 import { assertPurposeInScope } from "../services/scope.js";
 import { connectors } from "../services/connectors.js";
 import { quoteSubjectProduct } from "../services/pricing.js";
@@ -104,7 +106,7 @@ fileRouter.patch(
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const input = propertyLoanSchema.partial().parse(req.body);
-    await assertFileAccess(id, req.user!.id, "write");
+    await assertFileAccess(id, req.user!.id, "own");
     // Before the transaction, so a purpose we do not underwrite never retires
     // a scenario or mints a version on the way to being refused. A file that
     // ALREADY says cash-out is not rewritten here: it keeps what the borrower
@@ -441,7 +443,7 @@ fileRouter.post(
     const id = z.string().uuid().parse(req.params.id);
     const input = identitySchema.parse(req.body);
 
-    await assertFileAccess(id, req.user!.id, "write");
+    await assertFileAccess(id, req.user!.id, "self");
     // No projection before the write: assertFileAccess already answered 404,
     // and a party whose facts will not project must be repairable by saving
     // this screen again. The projection runs once, after the write.
@@ -455,9 +457,30 @@ fileRouter.post(
     // fixed the planner and not the question: on a file whose ordinal 1 was
     // refilled it names the person the replacement took over from, so the
     // screen showed one borrower's details and saved them onto another's row.
-    const existingBorrower = await primaryBorrowerRow(prisma, id);
+    //
+    // Unless the person asking is somebody else on the file. A co-borrower
+    // who claimed their invitation holds a borrower row of their own — the
+    // merge moved it onto the party their sign-in created — and this screen
+    // is theirs about themselves: their row, their facts, their membership
+    // in the role they already hold. Resolved by party first, so the
+    // applicant's revisit and the co-borrower's first save are the same
+    // question with two answers rather than two questions.
+    const primary = await primaryBorrowerRow(prisma, id);
+    const asking = await partyOfUser(prisma, req.user!.id);
+    const own =
+      asking && primary?.partyId !== asking
+        ? await prisma.borrower.findFirst({
+            where: { loanFileId: id, partyId: asking },
+            select: { id: true, partyId: true, ssnLast4: true },
+          })
+        : null;
+    const existingBorrower = own ?? primary;
+    const aboutTheApplicant = own === null;
 
-    if (!existingBorrower && (!input.ssnVaultHandle || !input.ssnLast4)) {
+    // A first save is the first time a NUMBER is stated: a named co-borrower
+    // has a row before they have typed anything, and `ssn_last4` is what
+    // says whether they have.
+    if (!existingBorrower?.ssnLast4 && (!input.ssnVaultHandle || !input.ssnLast4)) {
       throw new AppError(400, "An SSN is required the first time.", "SSN_REQUIRED");
     }
 
@@ -467,7 +490,9 @@ fileRouter.post(
     // an income for, and saying it is a dollar would not change that. The
     // screen carries the field for exactly this case, so asking is a question
     // the borrower can answer rather than a dead end.
-    if (!existingBorrower && input.statedMonthlyIncome === undefined) {
+    // The applicant's rule. A co-borrower never saw screen 1, and their
+    // income is asked where their own half asks it.
+    if (aboutTheApplicant && !existingBorrower && input.statedMonthlyIncome === undefined) {
       const onFile = req.user!.partyId
         ? await liveFact(prisma, req.user!.partyId, "monthly_income")
         : null;
@@ -545,13 +570,21 @@ fileRouter.post(
       // that file owes next just as much as this one does.
       const app = await applicationForFile(tx, id);
       if (app) {
-        await ensureApplicationParty(tx, app.id, partyId, "PRIMARY_BORROWER");
+        // The applicant is Borrower 1. A co-borrower already holds their
+        // place, in the role the applicant's answer about occupancy gave
+        // them, and saving their own details does not change it.
+        if (aboutTheApplicant) {
+          await ensureApplicationParty(tx, app.id, partyId, "PRIMARY_BORROWER");
+        }
         await settleReconciledEvidence(tx, { partyId, causedBy: "screen:identity" });
       }
     });
-    await recordEvent(id, existingBorrower ? "screen_revised" : "screen_completed", "borrower", {
-      screen: "identity",
-    });
+    await recordEvent(
+      id,
+      existingBorrower?.ssnLast4 ? "screen_revised" : "screen_completed",
+      "borrower",
+      { screen: "identity", borrowerId: existingBorrower?.id ?? null },
+    );
 
     await advanceStage(id, "CREDIT");
 
@@ -601,9 +634,27 @@ fileRouter.post(
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const input = namedCoBorrowerSchema.parse(req.body);
-    await assertFileAccess(id, req.user!.id, "write");
+    await assertFileAccess(id, req.user!.id, "own");
     const appended = await nameCoBorrower(id, input);
     res.status(201).json(appended);
+  }),
+);
+
+/**
+ * Send a named person their link. The applicant's to do, and a re-send
+ * revokes the last one. The token is in the email and nowhere else; the
+ * response says where it went and until when, and — only where developer
+ * sign-in is available, which is the one environment with no inbox — the
+ * link itself.
+ */
+fileRouter.post(
+  "/:id/co-borrowers/:borrowerId/invitations",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    const borrowerId = z.string().uuid().parse(req.params.borrowerId);
+    await assertFileAccess(id, req.user!.id, "own");
+    const invited = await inviteCoBorrower(id, borrowerId, connectors().mail);
+    res.status(201).json(invited);
   }),
 );
 
@@ -617,7 +668,7 @@ fileRouter.delete(
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const borrowerId = z.string().uuid().parse(req.params.borrowerId);
-    await assertFileAccess(id, req.user!.id, "write");
+    await assertFileAccess(id, req.user!.id, "own");
     await removeNamedCoBorrower(id, borrowerId);
     res.status(204).end();
   }),
@@ -656,7 +707,7 @@ fileRouter.delete(
     const id = z.string().uuid().parse(req.params.id);
     // "write" is what refuses demo files here, which is right: a shared
     // fixture is not any one person's to delete.
-    await assertFileAccess(id, req.user!.id, "write");
+    await assertFileAccess(id, req.user!.id, "own");
     // The refusal and the delete in one transaction: something moves an
     // application now, so a file that was a draft when it was read must not be
     // deleted after it stopped being one.
@@ -689,9 +740,22 @@ fileRouter.get(
     // demo file is: the sample borrowers are readable by everybody and are
     // nobody else's own.
     const you = await partyOfUser(prisma, req.user!.id);
+    const yourRow =
+      file.borrowers.find((b) => b.partyId === you)?.id ??
+      // A co-borrower who has claimed their invitation and not yet said who
+      // they are: on the file, in their own session, with a row that is
+      // theirs — and screen 2 is what they are here to fill in.
+      file.invitedBorrowers.find((b) => b.partyId === you)?.id ??
+      null;
+    // The owner reads the whole file. A member — a co-borrower on it — reads
+    // the household's half and their own, and nobody else's person.
+    const owner = await prisma.loanFile.findUniqueOrThrow({
+      where: { id },
+      select: { userId: true },
+    });
     res.json({
-      file,
-      you: file.borrowers.find((b) => b.partyId === you)?.id ?? null,
+      file: owner.userId === req.user!.id ? file : memberView(file, yourRow),
+      you: yourRow,
       applicationState: await applicationStanding(prisma, id),
     });
   }),

@@ -26,7 +26,7 @@ import {
 } from "@hm/connectors";
 import { prisma } from "@hm/db";
 import { PLACEHOLDER_INSTITUTION, placeholdersIn, type DuInstitution } from "@hm/du";
-import { ffiecAporSeriesConnector } from "@hm/connectors";
+import { ffiecAporSeriesConnector, resendMailConnector } from "@hm/connectors";
 import { config } from "../config.js";
 import { vendorTokenStore } from "./vendor-tokens.js";
 
@@ -277,7 +277,16 @@ export function connectors(): ConnectorRegistry {
     chosen.du = du.capabilities.provider;
   }
 
-  registry = { ...fixtures, propertyData, identity, bank, aporSeries, du };
+  // Outbound mail. The adapter refuses to be built without a key and a
+  // sender rather than falling back to the fixture, because "we invited them"
+  // has to be true when the API says it.
+  let mail = fixtures.mail;
+  if (config.providers.mail === "resend") {
+    mail = resendMailConnector({ apiKey: config.mail.resendApiKey, from: config.mail.from });
+    chosen.mail = "resend";
+  }
+
+  registry = { ...fixtures, propertyData, identity, bank, aporSeries, du, mail };
   mix = chosen;
   // Read off the registry that was just assembled, not off `config`. The
   // configuration is the intent and the registry is the outcome, and every

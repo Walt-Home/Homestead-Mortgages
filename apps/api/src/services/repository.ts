@@ -40,7 +40,7 @@ import {
   requireIdentity,
 } from "./borrower-projection.js";
 import type { Db } from "./db.js";
-import { liveFactsByParty } from "./party.js";
+import { liveFactsByParty, partyOfUser } from "./party.js";
 import { declarationsOnFile } from "./declarations.js";
 import { borrowerOrdinals, documentOrder } from "./borrower-order.js";
 import { piecesByParty, sixPieces } from "./evidence.js";
@@ -282,11 +282,15 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
   // but not yet on the credit request.
   const ordinals = await borrowerOrdinals(db, id, partyIds);
 
-  // Who has arrived and who has only been named. A co-borrower the applicant
-  // named holds a name and an email under an unclaimed party and nothing
-  // else; they are listed as invited rather than read as a person with no
-  // date of birth. A CLAIMED party with a hole in it is what it always was —
-  // an invariant violation `requireIdentity` throws on by name.
+  // Who has finished and who has only been named. A co-borrower the applicant
+  // named holds a name and an email and nothing else, and has stated no
+  // number — `ssn_last4` is NULL until THEY save screen 2, whichever party
+  // the row points at by then, since claiming is a merge and the survivor is
+  // CLAIMED before they have typed anything. So the test is the row, not the
+  // party: no number stated and an identity with holes is a person still to
+  // arrive, listed as invited; a number stated and an identity with holes is
+  // what it always was, an invariant violation `requireIdentity` throws on
+  // by name.
   const roleByParty = new Map(
     (
       await db.applicationParty.findMany({
@@ -299,9 +303,7 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
   const arrived = row.borrowers.filter((b) => {
     const facts = factsByParty.get(b.partyId) ?? new Map();
     const missing = identityMissing(facts);
-    const unclaimed =
-      b.party.claimStatus === "PROVISIONAL" || b.party.claimStatus === "CLAIM_PENDING";
-    if (missing.length === 0 || !unclaimed) return true;
+    if (missing.length === 0 || b.ssnLast4 !== null) return true;
     const name = (facts.get("legal_name") ?? {}) as { first?: string; last?: string };
     invitedBorrowers.push({
       id: b.id,
@@ -310,7 +312,12 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       lastName: name.last ?? "",
       email: String(facts.get("email") ?? ""),
       occupiesProperty: roleByParty.get(b.partyId) !== "NON_OCCUPANT_CO_BORROWER",
-      status: b.party.claimStatus === "CLAIM_PENDING" ? "invited" : "named",
+      status:
+        b.party.claimStatus === "CLAIM_PENDING"
+          ? "invited"
+          : b.party.claimStatus === "PROVISIONAL"
+            ? "named"
+            : "claimed",
     });
     return false;
   });
@@ -681,10 +688,27 @@ export async function recordSnapshot(
  * exist so the team has a shared artifact to critique without anybody's real
  * file becoming shared — a data model that would have to be unwound later.
  */
+export type FileAccess = "read" | "self" | "write" | "own";
+
+/**
+ * Who may do what to a file.
+ *
+ * Four modes, three kinds of person. The OWNER — whose file it is — may do
+ * anything. A MEMBER — a person who signed in and whose own party holds a
+ * borrower row on the file, which is what a claimed co-borrower is — may
+ * read it, and may write what is theirs to write: `self` is screen 2 about
+ * themselves and nothing else yet. Everybody else gets a 404, not a 403,
+ * because a 403 confirms the id exists. Demo files are readable by all and
+ * writable by none.
+ *
+ * `write` stays the applicant's. The routes behind it resolve "the borrower"
+ * by position or by file, and until each of them resolves by the person
+ * asking, a member's write would land on the applicant.
+ */
 export async function assertFileAccess(
   loanFileId: string,
   userId: string,
-  mode: "read" | "write",
+  mode: FileAccess,
 ): Promise<void> {
   const file = await prisma.loanFile.findUnique({
     where: { id: loanFileId },
@@ -702,7 +726,18 @@ export async function assertFileAccess(
     );
   }
 
-  if (file.userId !== userId) throw new AppError(404, "Loan file not found", "NOT_FOUND");
+  if (file.userId === userId) return;
+  if (mode === "read" || mode === "self") {
+    const partyId = await partyOfUser(prisma, userId);
+    const member = partyId
+      ? await prisma.borrower.findFirst({
+          where: { loanFileId, partyId },
+          select: { id: true },
+        })
+      : null;
+    if (member) return;
+  }
+  throw new AppError(404, "Loan file not found", "NOT_FOUND");
 }
 
 /**

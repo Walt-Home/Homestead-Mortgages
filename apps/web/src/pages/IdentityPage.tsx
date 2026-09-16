@@ -130,16 +130,21 @@ export function repairMessage(predicate: string | undefined): string {
  * The facts come off the file rather than the scan because they are what the
  * scan already established and what the file already holds.
  */
-export function revisitFrom(file: Pick<LoanFileView, "borrowers"> | undefined): {
+export function revisitFrom(
+  file: Pick<LoanFileView, "borrowers"> | undefined,
+  you: string | null = null,
+): {
   identity: Identity;
   phone: string;
   citizenship: string;
   maritalStatus: string;
 } | null {
-  // The person signed in, never "whoever is first". Screen 2 is about the
-  // applicant, and a file that has since gained a co-borrower still resumes
-  // this screen for the person whose request it is.
-  const who = primaryBorrower(file);
+  // The person signed in, never "whoever is first". Screen 2 is about
+  // whoever is filling it in: the applicant on their own file, and a
+  // co-borrower who claimed their invitation on theirs. `you` is the
+  // server's answer to which of them that is; absent, before anybody has
+  // saved this screen, it is the applicant.
+  const who = (you && file?.borrowers.find((b) => b.id === you)) || primaryBorrower(file);
   if (!who) return null;
   return {
     identity: {
@@ -216,6 +221,14 @@ export function IdentityPage() {
   const [coLivesHere, setCoLivesHere] = useState(true);
   const named = data?.file.invitedBorrowers ?? [];
   const coBorrowerFilled = Boolean(coFirstName.trim() && coLastName.trim() && coEmail.trim());
+  /*
+   * Which side of the invitation this session is on. A co-borrower who took
+   * their link is on the file and not yet a borrower — `you` names their
+   * invited row — and this screen is theirs about themselves: no question
+   * about applying with somebody, no prefill from the applicant's details,
+   * and the name the applicant typed for them shown back as a start.
+   */
+  const meInvited = named.find((who) => who.id === data?.you) ?? null;
 
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -234,7 +247,12 @@ export function IdentityPage() {
   const seeded = useRef(false);
   useEffect(() => {
     if (seeded.current || draft) return;
-    const known = revisitFrom(data?.file);
+    // A co-borrower who has claimed and not yet said who they are seeds
+    // nothing from the file: the file holds the applicant's details, and
+    // seeding those here would put one person's date of birth in another's
+    // form. Their name is read back from the invitation instead.
+    if (meInvited) return;
+    const known = revisitFrom(data?.file, data?.you ?? null);
     if (!known) return;
     seeded.current = true;
     setIdentity(known.identity);
@@ -554,7 +572,9 @@ export function IdentityPage() {
 
   return (
     <form onSubmit={submit} className="super-card">
-      <h1 className="font-display text-2xl text-ink sm:text-3xl">Now, about you</h1>
+      <h1 className="font-display text-2xl text-ink sm:text-3xl">
+        {meInvited ? `${meInvited.firstName}, about you` : "Now, about you"}
+      </h1>
       <p className="mt-2 text-base text-ink-soft">
         Your ID gives us your name, date of birth and address, so you do not have to type them.
       </p>
@@ -733,89 +753,91 @@ export function IdentityPage() {
       {/* 4 — Applying with someone? A name and an email, and the file waits
           on them. Their date of birth, their address and their number are
           theirs to state, on a screen of their own. */}
-      <div className="mt-7 border-t border-rule-soft pt-6">
-        {named.length > 0 ? (
-          <>
-            <p className="text-base text-ink">
-              {WAITING_COPY.applyingWithNamed(
-                named.map((who) => `${who.firstName} ${who.lastName}`),
-              )}
-            </p>
-            {named.map((who) => (
-              <p key={who.id} className="mt-1 text-sm text-ink-soft">
-                {who.email}
-                {" · "}
-                <button
-                  type="button"
-                  className="super-link-quiet"
-                  onClick={() => void removeNamed(who.id)}
-                  disabled={readOnly || running}
-                >
-                  Remove
-                </button>
+      {meInvited === null && (
+        <div className="mt-7 border-t border-rule-soft pt-6">
+          {named.length > 0 ? (
+            <>
+              <p className="text-base text-ink">
+                {WAITING_COPY.applyingWithNamed(
+                  named.map((who) => `${who.firstName} ${who.lastName}`),
+                )}
               </p>
-            ))}
-            <p className="mt-2 text-xs text-ink-faint">{WAITING_COPY.noEmailYet}</p>
-          </>
-        ) : (
-          <>
-            <label className="flex items-start gap-3 text-base text-ink-soft">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={withSomeone}
-                onChange={(e) => setWithSomeone(e.target.checked)}
-                disabled={readOnly}
-              />
-              <span>{WAITING_COPY.applyingWith}</span>
-            </label>
-            {withSomeone && (
-              <div className="mt-3 flex flex-col gap-3">
-                <p className="text-sm text-ink-muted">{WAITING_COPY.applyingWithHelp}</p>
-                <div className="grid gap-3 sm:grid-cols-2">
+              {named.map((who) => (
+                <p key={who.id} className="mt-1 text-sm text-ink-soft">
+                  {who.email}
+                  {" · "}
+                  <button
+                    type="button"
+                    className="super-link-quiet"
+                    onClick={() => void removeNamed(who.id)}
+                    disabled={readOnly || running}
+                  >
+                    Remove
+                  </button>
+                </p>
+              ))}
+              <p className="mt-2 text-xs text-ink-faint">{WAITING_COPY.noEmailYet}</p>
+            </>
+          ) : (
+            <>
+              <label className="flex items-start gap-3 text-base text-ink-soft">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={withSomeone}
+                  onChange={(e) => setWithSomeone(e.target.checked)}
+                  disabled={readOnly}
+                />
+                <span>{WAITING_COPY.applyingWith}</span>
+              </label>
+              {withSomeone && (
+                <div className="mt-3 flex flex-col gap-3">
+                  <p className="text-sm text-ink-muted">{WAITING_COPY.applyingWithHelp}</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block text-sm text-ink-soft">
+                      Their first name
+                      <input
+                        className="super-input mt-1"
+                        autoComplete="off"
+                        value={coFirstName}
+                        onChange={(e) => setCoFirstName(e.target.value)}
+                      />
+                    </label>
+                    <label className="block text-sm text-ink-soft">
+                      Their last name
+                      <input
+                        className="super-input mt-1"
+                        autoComplete="off"
+                        value={coLastName}
+                        onChange={(e) => setCoLastName(e.target.value)}
+                      />
+                    </label>
+                  </div>
                   <label className="block text-sm text-ink-soft">
-                    Their first name
+                    Their email
                     <input
                       className="super-input mt-1"
+                      type="email"
                       autoComplete="off"
-                      value={coFirstName}
-                      onChange={(e) => setCoFirstName(e.target.value)}
+                      value={coEmail}
+                      onChange={(e) => setCoEmail(e.target.value)}
                     />
                   </label>
-                  <label className="block text-sm text-ink-soft">
-                    Their last name
+                  <label className="flex items-start gap-3 text-base text-ink-soft">
                     <input
-                      className="super-input mt-1"
-                      autoComplete="off"
-                      value={coLastName}
-                      onChange={(e) => setCoLastName(e.target.value)}
+                      type="checkbox"
+                      className="mt-1"
+                      checked={coLivesHere}
+                      onChange={(e) => setCoLivesHere(e.target.checked)}
                     />
+                    <span>{WAITING_COPY.livesHere}</span>
                   </label>
                 </div>
-                <label className="block text-sm text-ink-soft">
-                  Their email
-                  <input
-                    className="super-input mt-1"
-                    type="email"
-                    autoComplete="off"
-                    value={coEmail}
-                    onChange={(e) => setCoEmail(e.target.value)}
-                  />
-                </label>
-                <label className="flex items-start gap-3 text-base text-ink-soft">
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={coLivesHere}
-                    onChange={(e) => setCoLivesHere(e.target.checked)}
-                  />
-                  <span>{WAITING_COPY.livesHere}</span>
-                </label>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div className="mt-7 flex flex-col gap-3 border-t border-rule-soft pt-6">
         <label className="flex items-start gap-3 text-base text-ink-soft">

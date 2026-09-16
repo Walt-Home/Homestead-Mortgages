@@ -1788,11 +1788,31 @@ The whole-identity writer survives as `appendCoBorrowerWithFacts`, the paper
 joint URLA, because the seed and the tests build complete households with it
 and a phone-taken application is a real shape. No screen offers it.
 
+**Arriving is a merge, and the link is the whole of the trust.** The named
+person is a PROVISIONAL party, and `parties_claim_status_moves_forward` lets
+such a party go to `CLAIM_PENDING` or `MERGED` and nowhere else — there is no
+edge to CLAIMED, on purpose, because "claimed" means a person came to us and
+a row the applicant typed never did. So the invitation moves the party to
+`CLAIM_PENDING`, and accepting it — signed in with Google, the only way in —
+finds or mints the person's OWN party, CLAIMED, and folds the named one into
+it: `mergePartyInto` now moves the borrower row and the membership as well
+as the loan parties, and the two facts the applicant stated are restated on
+the survivor under the applicant's principal, so the name does not vanish
+behind the merge pointer. The token is 32 random bytes in the emailed URL and
+its SHA-256 in `co_borrower_invitations`, seven days, one live per person; a
+re-send revokes the last. It is never logged, never returned — except where
+developer sign-in is available, the one environment with no inbox, under
+exactly that gate. And never an email match at sign-in: the address the
+applicant typed is where the link went, not who may follow it, and a stricter
+rule would refuse a person whose Google account is not the address their
+partner had for them.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside
-this repo. Email is settled — Resend — but not yet built, and the clocks above
-depend on it:
+this repo. Email is settled — Resend — and the co-borrower invitation is the
+first thing sent through it; the clocks above still wait on their own
+messages:
 
 | Connector                       | Constraint                                                 |
 | ------------------------------- | ---------------------------------------------------------- |

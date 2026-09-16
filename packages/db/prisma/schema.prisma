@@ -345,18 +345,19 @@ model LoanFile {
   /// files never had one.
   application Application?
 
-  borrowers     Borrower[]
-  consents      Consent[]
-  links         ConnectorLink[]
-  vendorTokens  VendorToken[]
-  snapshots     ConnectorSnapshot[]
-  documents     Document[]
-  disclosures   Disclosure[]
-  decisions     Decision[]
-  conditions    LoanCondition[]
-  events        FileEvent[]
-  incomeSources IncomeSource[]
-  employments   Employment[]
+  borrowers             Borrower[]
+  consents              Consent[]
+  links                 ConnectorLink[]
+  vendorTokens          VendorToken[]
+  snapshots             ConnectorSnapshot[]
+  documents             Document[]
+  disclosures           Disclosure[]
+  decisions             Decision[]
+  conditions            LoanCondition[]
+  events                FileEvent[]
+  incomeSources         IncomeSource[]
+  employments           Employment[]
+  coBorrowerInvitations CoBorrowerInvitation[]
 
   @@index([stage])
   @@index([createdAt])
@@ -426,7 +427,8 @@ model Borrower {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  consents Consent[]
+  consents    Consent[]
+  invitations CoBorrowerInvitation[]
 
   @@index([loanFileId])
   @@index([partyId])
@@ -1035,17 +1037,19 @@ model Party {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  facts              Fact[]
-  principals         Principal[]
-  authorizations     Authorization[]
-  applications       ApplicationParty[]
-  loans              LoanParty[]
-  users              User[]              @relation("UserParty")
-  borrowerRows       Borrower[]          @relation("BorrowerParty")
-  employers          Employer[]
-  incomeSources      IncomeSource[]
-  employments        Employment[]
-  connectorSnapshots ConnectorSnapshot[]
+  facts               Fact[]
+  principals          Principal[]
+  authorizations      Authorization[]
+  applications        ApplicationParty[]
+  loans               LoanParty[]
+  users               User[]                 @relation("UserParty")
+  borrowerRows        Borrower[]             @relation("BorrowerParty")
+  employers           Employer[]
+  incomeSources       IncomeSource[]
+  employments         Employment[]
+  connectorSnapshots  ConnectorSnapshot[]
+  invitationsAsNamed  CoBorrowerInvitation[] @relation("InvitationNamedParty")
+  invitationsAccepted CoBorrowerInvitation[] @relation("InvitationAcceptedBy")
 
   @@index([claimStatus])
   @@index([mergedIntoPartyId])
@@ -1081,6 +1085,7 @@ model Principal {
   transitionsCaused      ApplicationTransition[] @relation("TransitionActor")
   loanMovesCaused        LoanTransition[]        @relation("LoanTransitionActor")
   employmentDeclarations Employment[]            @relation("EmploymentDeclaredBy")
+  coBorrowerInvitations  CoBorrowerInvitation[]
 
   @@unique([kind, subject])
   @@index([partyId])
@@ -3008,4 +3013,40 @@ model DuResponseMessage {
 
   @@unique([responseId, ordinal])
   @@map("du_response_messages")
+}
+
+/// An invitation is a hash and a deadline.
+///
+/// How a co-borrower the applicant named is reached. The token exists only in
+/// the emailed link; this row holds its SHA-256, the address it went to, and
+/// when it stops being good. Accepting is a merge — the named PROVISIONAL
+/// party folds into the party the person's own sign-in created — and
+/// `acceptedByPartyId` names the survivor. A re-send revokes the live one and
+/// mints another; a partial unique index keeps it to one live invitation per
+/// named person.
+model CoBorrowerInvitation {
+  id         String   @id @default(uuid()) @db.Uuid
+  loanFileId String   @map("loan_file_id") @db.Uuid
+  loanFile   LoanFile @relation(fields: [loanFileId], references: [id], onDelete: Cascade)
+  borrowerId String   @map("borrower_id") @db.Uuid
+  borrower   Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+  partyId    String   @map("party_id") @db.Uuid
+  party      Party    @relation("InvitationNamedParty", fields: [partyId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 of the token, hex. The token itself is nowhere but the link.
+  tokenHash   String @unique @map("token_hash")
+  sentToEmail String @map("sent_to_email")
+
+  invitedByPrincipalId String?    @map("invited_by_principal_id") @db.Uuid
+  invitedBy            Principal? @relation(fields: [invitedByPrincipalId], references: [id], onDelete: SetNull)
+
+  createdAt         DateTime  @default(now()) @map("created_at")
+  expiresAt         DateTime  @map("expires_at")
+  acceptedAt        DateTime? @map("accepted_at")
+  acceptedByPartyId String?   @map("accepted_by_party_id") @db.Uuid
+  acceptedBy        Party?    @relation("InvitationAcceptedBy", fields: [acceptedByPartyId], references: [id], onDelete: SetNull)
+  revokedAt         DateTime? @map("revoked_at")
+
+  @@index([loanFileId], map: "co_borrower_invitations_loan_file")
+  @@map("co_borrower_invitations")
 }

@@ -8,6 +8,7 @@ import { requireAuth } from "../middleware/require-auth.js";
 import { signInAsLocalDeveloper, signInAsPersona, signInWithGoogle } from "../services/auth.js";
 import { isSeeded, NOT_SEEDED_HERE, PERSONA_STORIES } from "../personas/stories.js";
 import { toDomainState } from "../services/transition.js";
+import { acceptClaim, previewClaim } from "../services/invitations.js";
 
 export const authRouter = Router();
 
@@ -259,3 +260,34 @@ function publicUser(user: {
     persona: user.personaKey ? { key: user.personaKey, name: user.name } : null,
   };
 }
+
+/**
+ * A link from an invitation email, looked at and then taken.
+ *
+ * The lookup is public: it is what a stranger holding a link sees before
+ * signing in, and it says only what the email already said — two first
+ * names, a city, a date. Every way a link can be bad answers the same 404,
+ * because which way it was bad is a fact about a file the holder has not
+ * proven anything about. Taking it requires a session, the same Google
+ * sign-in as everything else, and never an email match: the address the
+ * applicant typed is where the link went, not who may follow it.
+ */
+authRouter.get(
+  "/claims/:token",
+  asyncRoute(async (req, res) => {
+    const token = z.string().min(20).max(200).parse(req.params.token);
+    const preview = await previewClaim(token);
+    if (!preview) throw new AppError(404, "That link is not good any more.", "NOT_FOUND");
+    res.json(preview);
+  }),
+);
+
+authRouter.post(
+  "/claims/:token/accept",
+  requireAuth,
+  asyncRoute(async (req, res) => {
+    const token = z.string().min(20).max(200).parse(req.params.token);
+    const claimed = await acceptClaim(token, req.user!.id);
+    res.status(201).json(claimed);
+  }),
+);

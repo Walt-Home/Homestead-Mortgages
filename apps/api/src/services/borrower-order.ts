@@ -82,11 +82,14 @@ export function documentOrder<T extends { readonly partyId: string }>(
 export async function primaryBorrowerRow(
   db: Db,
   loanFileId: string,
-): Promise<{ id: string; partyId: string } | null> {
+): Promise<{ id: string; partyId: string; ssnLast4: string | null } | null> {
   const rows = await db.borrower.findMany({
     where: { loanFileId },
     orderBy: CREATION_ORDER,
-    select: { id: true, partyId: true },
+    // The last four ride along because "has this person said who they are"
+    // is answered by them: a named co-borrower has a row before they have
+    // stated a number, and screen 2 keys its first-save rule on that.
+    select: { id: true, partyId: true, ssnLast4: true },
   });
   if (rows.length === 0) return null;
   const ordinals = await borrowerOrdinals(

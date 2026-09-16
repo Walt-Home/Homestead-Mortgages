@@ -182,7 +182,7 @@ const GUARDED_PORTS = [
   "du",
 ] as const;
 type GuardedPort = (typeof GUARDED_PORTS)[number];
-const UNGUARDED_PORTS = ["identity", "esign", "propertyData", "aporSeries"] as const;
+const UNGUARDED_PORTS = ["identity", "esign", "propertyData", "aporSeries", "mail"] as const;
 
 describe("a token is for one kind of data", () => {
   it("refuses a token at the adapter when it is for something else", () => {

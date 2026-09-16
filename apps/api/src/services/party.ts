@@ -616,6 +616,21 @@ export async function mergePartyInto(
     where: { partyId: fromPartyId },
     data: { partyId: intoPartyId },
   });
+  // The same for a co-borrower the applicant named: their borrower row and
+  // their place on the credit request were minted against the provisional
+  // party, and the person who just signed in is the one they were minted
+  // for. The declarations and consents hang off the membership's own id, so
+  // they come along with it. The unique indexes refuse the move if the
+  // survivor is somehow already on the same file, which is the right answer
+  // for the same reason as above.
+  await tx.borrower.updateMany({
+    where: { partyId: fromPartyId },
+    data: { partyId: intoPartyId },
+  });
+  await tx.applicationParty.updateMany({
+    where: { partyId: fromPartyId },
+    data: { partyId: intoPartyId },
+  });
   // One UPDATE, and it has to be. A statement that set MERGED and left the
   // pointer to a second one would be refused by
   // `parties_claim_status_moves_forward` for naming nobody, and the second one

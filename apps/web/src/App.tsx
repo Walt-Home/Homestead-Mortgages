@@ -34,6 +34,7 @@ import {
   type ScreenPath,
 } from "./lib/flow.js";
 import { SignInPage } from "./pages/SignInPage.js";
+import { ClaimPage } from "./pages/ClaimPage.js";
 import { LandingPage } from "./pages/LandingPage.js";
 import { PrivacyPage } from "./pages/PrivacyPage.js";
 import { BrandPage } from "./pages/BrandPage.js";
@@ -78,6 +79,12 @@ export function App() {
           <Route path="privacy" element={<PrivacyPage />} />
           <Route path="brand" element={<BrandPage />} />
         </Route>
+        {/*
+          The invitation link is public on purpose: it is the one page a
+          person reaches before they have an account, and it is in both
+          trees so that signing in on it lands them back on it.
+        */}
+        <Route path="/claim/:token" element={<ClaimPage />} />
         <Route path="*" element={<SignInPage />} />
       </Routes>
     );
@@ -85,6 +92,7 @@ export function App() {
 
   return (
     <Routes>
+      <Route path="/claim/:token" element={<ClaimPage />} />
       <Route path="/" element={<Chrome />}>
         <Route index element={<HomePage />} />
         <Route path="privacy" element={<PrivacyPage />} />

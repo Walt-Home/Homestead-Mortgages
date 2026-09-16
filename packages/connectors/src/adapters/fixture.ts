@@ -46,6 +46,9 @@ import type {
   IdentityConnector,
   LinkHandoff,
   ConnectorRegistry,
+  MailConnector,
+  MailMessage,
+  MailOutcome,
   ConnectorResult,
   CreditConnector,
   EsignConnector,
@@ -756,6 +759,37 @@ export function fixtureAporSeriesConnector(options: FixtureOptions = {}): AporSe
   };
 }
 
+/**
+ * Mail that goes nowhere and remembers everything.
+ *
+ * The outbox is what a test reads to see that an invitation went to the
+ * right address with a link in it — and it is the ONLY place the token can
+ * be read back from, which is what makes a test of "the token is never
+ * stored" possible: the test holds the link, the database holds the hash,
+ * and nothing else holds either.
+ */
+export interface FixtureMailConnector extends MailConnector {
+  readonly outbox: MailMessage[];
+}
+
+export function fixtureMailConnector(options: FixtureOptions = {}): FixtureMailConnector {
+  const { latencyMs } = resolve(options);
+  const outbox: MailMessage[] = [];
+  return {
+    capabilities: { provider: "fixture-mail", mode: "fixture", satisfies: [] },
+    outbox,
+    async send(message: MailMessage): Promise<MailOutcome> {
+      await sleep(latencyMs);
+      outbox.push(message);
+      return {
+        status: "sent",
+        externalId: `fixture-mail-${outbox.length}`,
+        provider: "fixture-mail",
+      };
+    },
+  };
+}
+
 export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry {
   return {
     identity: fixtureIdentityConnector(options),
@@ -770,5 +804,6 @@ export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry
     pricing: fixturePricingConnector(options),
     du: fixtureDuConnector(options),
     aporSeries: fixtureAporSeriesConnector(options),
+    mail: fixtureMailConnector(options),
   };
 }

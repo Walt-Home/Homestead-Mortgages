@@ -14,3 +14,4 @@ export { RATE_SHEET, SHEET_LOCK_DAYS } from "./fixtures/rate-sheet.js";
 export type { RateSheetProduct } from "./fixtures/rate-sheet.js";
 export type { PublicRecordFixture, IdentityDocument } from "./fixtures/public-records.js";
 export * from "./adapters/ffiec.js";
+export * from "./adapters/resend.js";

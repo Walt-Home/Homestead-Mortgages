@@ -71,8 +71,11 @@ export interface InvitedBorrowerView {
   lastName: string;
   email: string;
   occupiesProperty: boolean;
-  /** Named by the applicant; invited once the email has gone out. */
-  status: "named" | "invited";
+  /**
+   * Named by the applicant; invited once the email has gone out; claimed once
+   * they have signed in and not yet said who they are.
+   */
+  status: "named" | "invited" | "claimed";
 }
 
 export interface LoanFileView {

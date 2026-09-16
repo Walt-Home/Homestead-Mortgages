@@ -240,25 +240,25 @@ which have a longer lead time than anything above.
 
 ## At a glance
 
-| #   | Item                                | Status | One line                                                                    |
-| --- | ----------------------------------- | ------ | --------------------------------------------------------------------------- |
-| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                          |
-| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked                      |
-| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                           |
-| —   | The generators and `du:verify`      | Green  | Corpus vendored, six tables rebuilt in CI, holder check runs both ways      |
-| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once, and a response is what writes it              |
-| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                             |
-| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person                 |
-| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                             |
-| —   | The serializer                      | Green  | Assembles and emits MISMO 3.4, arcs included, round-tripped on eighteen     |
+| #   | Item                                | Status | One line                                                                     |
+| --- | ----------------------------------- | ------ | ---------------------------------------------------------------------------- |
+| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                           |
+| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked                       |
+| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                            |
+| —   | The generators and `du:verify`      | Green  | Corpus vendored, six tables rebuilt in CI, holder check runs both ways       |
+| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once, and a response is what writes it               |
+| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                              |
+| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person                  |
+| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                              |
+| —   | The serializer                      | Green  | Assembles and emits MISMO 3.4, arcs included, round-tripped on eighteen      |
 | 7   | Employer as an entity               | Green  | Real entity, derivable arc, classification derived, the two 1b answers asked |
-| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                          |
-| 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                    |
-| —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet               |
-| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                           |
-| —   | The submission                      | Yellow | Emitter, gate and both ends built; nothing carries a document               |
-| —   | The product and the property        | Green  | A product table, a retrieved building and one question on screen 3          |
-| —   | Who we submit under                 | Red    | Both elements emitted, both PLACEHOLDERS, refused outside development       |
+| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                           |
+| 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                     |
+| —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet                |
+| 8   | What we compute vs what DU does     | Red    | Two untyped JSON columns and no recorded boundary                            |
+| —   | The submission                      | Yellow | Emitter, gate and both ends built; nothing carries a document                |
+| —   | The product and the property        | Green  | A product table, a retrieved building and one question on screen 3           |
+| —   | Who we submit under                 | Red    | Both elements emitted, both PLACEHOLDERS, refused outside development        |
 
 **The three that blocked any submission are closed.** Declarations, the current
 residence, and assets with liabilities and owned property were each a hard stop
@@ -545,14 +545,19 @@ it at "Needs you".
 
 What is still missing is narrower than it was, and none of it is structural:
 
-- **Nobody tells them.** Screen 2 names a co-borrower and the review screen
-  waits on them by name, but no email goes out and there is no claim path, so
-  a named person cannot yet sign in to their own half and a joint application
-  waits until that exists. The shape the claim will take is already fixed by
-  the trigger, which admits a PROVISIONAL party to `CLAIM_PENDING` or `MERGED`
-  and nowhere else: the named party merges into the party the person's own
-  sign-in creates, on a signed single-use token delivered by email — the
-  Grander shape, never an email match at sign-in.
+- **A co-borrower's own half stops at screen 2.** The invitation and the
+  claim are built: `POST /files/:id/co-borrowers/:borrowerId/invitations`
+  emails a link whose token exists nowhere but the email (the table holds its
+  SHA-256; seven days; a re-send kills the last one), `GET /auth/claims/:token`
+  shows a stranger what the email already said and answers every bad link
+  with the same 404, and `POST /auth/claims/:token/accept` — signed in with
+  Google, never an email match — merges the named party into the person's own:
+  the borrower row and the membership move to the survivor, the two facts the
+  applicant stated are restated on it, and the person is listed as `claimed`
+  until their own screen 2 states a number. A member may read the file and
+  save screen 2 about themselves (`assertFileAccess` mode `self`); screens 3
+  through 5 still resolve "the borrower" by position, so declarations, a
+  bank, a signature and demographics as a co-borrower are the next slice.
 - **`connector_links` is unique on `(loanFileId, kind)`**, so a second borrower
   cannot link their own bank.
 - **The demographics are asked once**, of the applicant. Regulation B wants

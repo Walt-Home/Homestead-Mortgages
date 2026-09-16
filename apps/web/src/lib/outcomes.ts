@@ -240,6 +240,32 @@ export const WAITING_COPY = {
     "We do not send them an email yet, so let them know yourself. Their invitation is on its way in a later release.",
 } as const;
 
+/**
+ * The invitation link, opened.
+ *
+ * Says what the email said and no more: a stranger can reach this page with
+ * nothing but a string, so it names two first names and a city and never a
+ * file. Which way a dead link died is not said either, for the same reason.
+ */
+export const CLAIM_COPY = {
+  looking: "One moment…",
+  title: (coBorrowerFirstName: string) =>
+    coBorrowerFirstName
+      ? `${coBorrowerFirstName}, you have been named on a mortgage application`
+      : "You have been named on a mortgage application",
+  body: (applicantFirstName: string, propertyCity: string | null) =>
+    `${applicantFirstName || "Your co-applicant"} is applying for a mortgage${propertyCity ? ` on a home in ${propertyCity}` : ""} and named you as a co-borrower.`,
+  yours:
+    "You complete your own part. Your details and your permissions stay yours, and they are not shown to anybody else on the application.",
+  signIn:
+    "Sign in with Google to continue. Any Google account works — it does not have to be the address the invitation went to.",
+  taking: "Taking you to your application…",
+  couldNotTake: "That did not work. Try the link again.",
+  deadTitle: "That link is not good any more.",
+  deadBody:
+    "Invitation links work once and for seven days. Ask the person who invited you to send a new one.",
+} as const;
+
 export const CO_BORROWER_COPY = {
   /** The heading over one person's answers, once a file carries more than one. */
   answersOf: (name: string) => `What ${name} told us`,

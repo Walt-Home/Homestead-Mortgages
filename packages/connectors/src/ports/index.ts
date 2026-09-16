@@ -711,6 +711,32 @@ export interface AporSeriesConnector {
   }): Promise<{ status: "answered"; apor: number } | { status: "unavailable"; reason: string }>;
 }
 
+/**
+ * Outbound mail. The one port keyed on neither an address nor a person: a
+ * message goes to whoever the caller names, and what the caller may say to
+ * them is the caller's rule — so, like e-sign, it is unguarded, and the guard
+ * test lists it as such.
+ *
+ * Deliberately small. A co-borrower's invitation is one recipient, a
+ * subject and plain text with one link in it, and the link is the whole of
+ * the message's authority; nothing here needs templates, attachments or
+ * HTML. `not_delivered` is an answer rather than a throw because the caller
+ * has to record that the invitation exists and was not sent, which is a
+ * different thing from an invitation that does not exist.
+ */
+export interface MailMessage {
+  readonly to: string;
+  readonly subject: string;
+  readonly text: string;
+}
+export type MailOutcome =
+  | { readonly status: "sent"; readonly externalId: string; readonly provider: string }
+  | { readonly status: "not_delivered"; readonly reason: string };
+export interface MailConnector {
+  readonly capabilities: ConnectorCapabilities;
+  send(message: MailMessage): Promise<MailOutcome>;
+}
+
 export interface ConnectorRegistry {
   readonly identity: IdentityConnector;
   readonly credit: CreditConnector;
@@ -724,4 +750,5 @@ export interface ConnectorRegistry {
   readonly pricing: PricingConnector;
   readonly du: DuConnector;
   readonly aporSeries: AporSeriesConnector;
+  readonly mail: MailConnector;
 }

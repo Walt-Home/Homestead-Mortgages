@@ -218,20 +218,26 @@ describe("a file whose ordinal 1 was refilled", () => {
     expect(edge.borrowerOrdinal).toBe(1);
   });
 
-  it("corrects the borrower screen 2 is showing", async () => {
+  it("corrects the person asking, whatever position they hold", async () => {
+    // Screen 2 is about whoever is filling it in. The session is Priya's and
+    // her party holds a row on the file, so her save edits HER — not the
+    // person at ordinal 1, who is Dev, and who has a session of his own for
+    // his. Resolved by position, a save from her session would have written
+    // her corrections onto his identity; that was the rule until a
+    // co-borrower could sign in, and it is not the rule now.
     const { user, fileId, her, him } = await replacedApplicant();
     const revisit = await callAs(user.id, [fileRouter], "POST", `/${fileId}/borrowers`, {
-      ...DEV,
+      ...PRIYA,
       lastName: "Ramanathan",
     });
     expect(revisit.status).toBe(201);
 
     const file = (await loadLoanFile(fileId))!;
-    expect(file.borrowers.find((b) => b.id === him.id)!.lastName).toBe("Ramanathan");
-    // And the person he replaced is untouched. A save that renamed her would
-    // have been one borrower's identity written over another's.
-    expect(file.borrowers.find((b) => b.id === her.id)!.firstName).toBe("Priya");
-    expect(file.borrowers.find((b) => b.id === her.id)!.lastName).toBe("Raman");
+    expect(file.borrowers.find((b) => b.id === her.id)!.lastName).toBe("Ramanathan");
+    // And the person who replaced her is untouched. A save that renamed him
+    // would have been one borrower's identity written over another's.
+    expect(file.borrowers.find((b) => b.id === him.id)!.firstName).toBe("Dev");
+    expect(file.borrowers.find((b) => b.id === him.id)!.lastName).toBe("Raman");
   });
 
   it("names an appended co-borrower under Borrower 1's principal", async () => {

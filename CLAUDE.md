@@ -142,13 +142,16 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   the wrong name today. Wiring the ID scan to a persona means giving the
   fixtures eight people.
 
-- **A named co-borrower gets no email.** Screen 2 names one by name and email
-  and the review screen waits on them — `invitedBorrowers` on the file, a 409
-  `CO_BORROWER_PENDING` from signing and deciding, a refusal by name from the
-  assembler — but nothing sends the invitation and there is no claim route,
-  so the named person cannot yet reach their own half. The claim is a merge,
-  not a flip: the trigger lets a PROVISIONAL party go to `CLAIM_PENDING` or
-  `MERGED` and nowhere else. `docs/states.md` has the shape.
+- **A co-borrower's own half stops at screen 2.** Screen 2 names one, the
+  applicant sends them a link (Resend when `MAIL_PROVIDER=resend`; otherwise
+  an in-memory outbox that only a test reads, and the route refuses in
+  production rather than pretend), `/claim/:token` takes it after Google
+  sign-in, and the claim is a merge — the trigger lets a PROVISIONAL party go
+  to `CLAIM_PENDING` or `MERGED` and nowhere else — after which the
+  co-borrower can read the file and save screen 2 about themselves. Screens
+  3–5 still resolve "the borrower" by position, so a co-borrower's
+  declarations, bank, demographics and signature are unbuilt; the file waits
+  on them meanwhile. `docs/states.md` has the shape.
 
 ## Five rules that are not style preferences
 

@@ -2428,6 +2428,9 @@ export const TABLES_OFF_THE_WIRE = {
   vendor_tokens: {
     why: "An encrypted bearer credential a vendor handed back, which is the single worst row in this schema to put on a wire.",
   },
+  co_borrower_invitations: {
+    why: "The hash of a link a named co-borrower was emailed and when it stops being good; how a person reached their own half of the application, never anything about them.",
+  },
   connector_links: {
     why: "Which source is linked, when it last synced and whether monitoring is on; what a link produced is a snapshot, and the snapshot is what reaches the wire.",
   },

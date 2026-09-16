@@ -82,6 +82,14 @@ export const config = {
      * missing, rather than discovering it at a borrower's submission.
      */
     du: process.env.DU_PROVIDER ?? "fixture",
+    /**
+     * "resend" sends through Resend; anything else keeps every message in an
+     * in-memory outbox that nothing reads outside a test. A deployment that
+     * names a co-borrower on "fixture" tells the applicant somebody was
+     * invited who was not, which is why `inviteCoBorrower` refuses on the
+     * fixture in production rather than pretending.
+     */
+    mail: process.env.MAIL_PROVIDER ?? "fixture",
   },
 
   /**
@@ -122,6 +130,13 @@ export const config = {
      * real institution's number.
      */
     allowProduction: process.env.DU_ALLOW_PRODUCTION === "true",
+  },
+
+  /** Outbound mail. Only read when MAIL_PROVIDER=resend. */
+  mail: {
+    resendApiKey: process.env.RESEND_API_KEY ?? "",
+    /** A verified sender on the Resend account, "Name <address>". */
+    from: process.env.MAIL_FROM ?? "",
   },
 
   /**

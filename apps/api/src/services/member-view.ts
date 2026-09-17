@@ -61,7 +61,9 @@ export function memberView(file: LoanFile, you: string | null, own: OwnReports):
     assets: own.assets,
     payroll: own.payroll,
     transcripts: own.transcripts,
-    incomeSources: file.incomeSources.filter((i) => i.partyId === mine),
+    // Income sources carry no party today; a member reads none rather than
+    // the applicant's.
+    incomeSources: [],
     employment: file.employment.filter((e) => e.partyId === mine),
     qualifyingIncomeReportedBy: undefined,
     documents: [],

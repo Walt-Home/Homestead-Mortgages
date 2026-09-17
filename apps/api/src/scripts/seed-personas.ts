@@ -98,6 +98,7 @@ import {
 } from "../services/standing.js";
 import { toCents } from "../services/money.js";
 import { toDomainState, transition } from "../services/transition.js";
+import { recordVesting } from "../services/vesting.js";
 
 /** The one staff actor this script may act as. Named in the ledger. */
 const SEED_STAFF = "staff:persona_seed";
@@ -825,6 +826,25 @@ async function employmentDeclarations(w: Walk): Promise<void> {
   }
 }
 
+/**
+ * How title will read, stated the way the review screen would: every borrower's
+ * name, joined, and no manner of holding when one name is on it.
+ */
+async function vesting(w: Walk): Promise<void> {
+  const file = await currentFile(w);
+  const names = file.borrowers.map((b) => `${b.firstName} ${b.lastName}`);
+  await recordVesting(
+    w.loanFileId,
+    {
+      proposed: {
+        fullName: names.join(" and "),
+        vestingType: names.length > 1 ? "JointTenantsWithRightOfSurvivorship" : null,
+      },
+    },
+    w.tx,
+  );
+}
+
 async function signApplication(w: Walk): Promise<void> {
   await employmentDeclarations(w);
   await grantConsent(w.tx, w.loanFileId, w.borrowerId, "form_4506c");
@@ -1009,6 +1029,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await bank(w);
     await payroll(w);
     await uploadDocument(w, "CRD-008", "letter-of-explanation.pdf");
+    await vesting(w);
     await signApplication(w);
     await decide(w);
   },
@@ -1021,6 +1042,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await liens(w);
     await declarations(w);
     await bank(w);
+    await vesting(w);
     await signApplication(w);
     await decide(w);
     // "Not that loan, but here is one we can do." A new scenario at seq 2
@@ -1060,6 +1082,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await liens(w);
     await declarations(w);
     await bank(w);
+    await vesting(w);
     await signApplication(w);
     await decide(w);
   },
@@ -1095,6 +1118,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await liens(w);
     await declarations(w);
     await bank(w);
+    await vesting(w);
     await signApplication(w);
     await decide(w);
     await w.tx.loanFile.update({

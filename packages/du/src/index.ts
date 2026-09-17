@@ -163,6 +163,19 @@ export {
   SUBMITTING_PARTY_IDENTIFIER_FORMAT,
   type DuInstitution,
 } from "./institution.js";
+export {
+  assertDealPartiesEmittable,
+  assertOriginatorEmittable,
+  originatorPlaceholdersIn,
+  PLACEHOLDER_ORIGINATOR,
+  COMPANY_NAME_FORMAT,
+  COMPANY_NMLS_FORMAT,
+  ORIGINATOR_FIRST_NAME_FORMAT,
+  ORIGINATOR_LAST_NAME_FORMAT,
+  ORIGINATOR_NMLS_FORMAT,
+  widthOf,
+  type DuOriginator,
+} from "./originator.js";
 export type { TaxpayerIdentifierResolver } from "./assemble/parties.js";
 export {
   attributesOnly,

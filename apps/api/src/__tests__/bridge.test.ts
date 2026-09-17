@@ -411,7 +411,6 @@ describe("a signature is judged by the file's row and the party's grant together
     });
     await consent(file.id, row.id, "form_4506c", new Date(Date.now() - 121 * DAY));
     await expect(tokenOn(file.id, "tax_transcript")).rejects.toThrow(/expired/);
-
     const res = await callAs<{ signed: string[]; transcriptError: string | null }>(
       user.id,
       routers,

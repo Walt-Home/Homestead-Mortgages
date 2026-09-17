@@ -142,6 +142,7 @@ export function afterIdentity(): LoanFile {
       overlays: [],
     },
     invitedBorrowers: [],
+    vestings: [],
     borrowers: [
       {
         id: "b1",

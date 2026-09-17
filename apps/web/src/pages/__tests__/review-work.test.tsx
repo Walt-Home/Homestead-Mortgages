@@ -358,7 +358,19 @@ describe("what gets posted, and when", () => {
 
 describe("a co-borrower's jobs are theirs", () => {
   const joint = (over: Record<string, unknown> = {}) =>
-    response({ borrowers: [borrower(), them()], ...over });
+    // Two names on title need a manner of holding before the signature is
+    // offered, so the household states one.
+    response({
+      borrowers: [borrower(), them()],
+      vestings: [
+        {
+          status: "Proposed",
+          fullName: "Dana Whitfield and Theo Okafor",
+          vestingType: "JointTenantsWithRightOfSurvivorship",
+        },
+      ],
+      ...over,
+    });
 
   it("shows their answered jobs back, without controls", () => {
     const markup = render(

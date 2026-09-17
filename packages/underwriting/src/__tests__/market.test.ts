@@ -400,6 +400,7 @@ function refinance(): LoanFile {
     },
     borrowers: [],
     invitedBorrowers: [],
+    vestings: [],
     consents: [],
     application: null,
     credit: null,

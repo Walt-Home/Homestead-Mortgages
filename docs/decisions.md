@@ -20,6 +20,23 @@ about what produced it. The UI states it plainly. This is also what makes
 "show the reasoning, not just a verdict" possible at all — a real DU
 submission returns a verdict we could not decompose for a borrower.
 
+**Title is a sentence the applicant states, and the originator is a row the
+application is born with.** URLA L2.1 asks what will read on title and L2.4
+how it will be held; both are facts about the deal, so they live on the
+application as `du_vestings` rows and on the file beside `estateType`, asked
+on the review screen above the signature and refused at signing when absent.
+The origination company and the loan originator (Section 9) are two
+`du_deal_parties` rows written inside `createDraftApplication`, because a
+casefile with a borrower-only `PARTIES` is one the preflight refuses and the
+numbers do not change from one application to the next. They come from five
+plain variables — public identifiers printed on every disclosure, not secrets
+— and where those are unset the placeholders in `packages/du` stand in, with
+the same three rules as the seller/servicer number: they say what they are,
+`assertDealPartiesEmittable` refuses a row carrying one in production, and the
+widths come out of the generated Map. The refusal is at assembly rather than
+at birth so a development database may hold applications born under
+placeholders and a document may not.
+
 **The shadow figures never leave the building.** Every figure in a decision's
 `ratios` and `reserves` — the two DTIs, the three LTVs, the housing payment,
 the debt total, the qualifying income, the reserve months — is one Desktop
@@ -1054,7 +1071,7 @@ handed the §1026.43(e)(1) presumption. The permissive direction again.
 - **A manufactured home under the top bound gets the 6.5-point General QM
   threshold** §1026.43(e)(2)(vi)(D) sets, read off the property type.
 - **The prepayment penalty is HOEPA's third trigger.** `loan_products.
-  prepayment_penalty` reaches the engine as `ProductSelection.prepaymentPenalty`;
+prepayment_penalty` reaches the engine as `ProductSelection.prepaymentPenalty`;
   a product that can charge one blocks the test naming the term and the cap
   the rule bounds, because the penalty's term is not modeled yet, and a
   product that cannot settles the trigger false.

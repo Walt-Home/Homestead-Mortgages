@@ -23,6 +23,7 @@ import { proposeScenario, type ScenarioTerms } from "./evidence.js";
 import { toCents } from "./money.js";
 import { BORROWING_ROLES, toDomainState } from "./transition.js";
 import type { Db } from "./db.js";
+import { recordOriginationParties } from "./originator.js";
 
 export interface ApplicationRef {
   readonly id: string;
@@ -90,6 +91,9 @@ export async function createDraftApplication(
     select: { id: true },
   });
   await ensureApplicationParty(tx, app.id, args.partyId, "PRIMARY_BORROWER");
+  // Born with its originator of record: the company and the person, from
+  // configuration, as the two deal-party rows a casefile cannot do without.
+  await recordOriginationParties(tx, app.id);
   const scenario = await proposeScenario(app.id, args.terms, tx);
   return { applicationId: app.id, scenarioId: scenario.id };
 }

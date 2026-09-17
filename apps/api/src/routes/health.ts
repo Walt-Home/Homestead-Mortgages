@@ -5,6 +5,8 @@ import { SHADOW_ENGINE_VERSION } from "@hm/underwriting";
 import { config } from "../config.js";
 import { aporStatus } from "../services/apor.js";
 import { providerMix, providerModes } from "../services/connectors.js";
+import { originatorPlaceholdersIn } from "@hm/du";
+import { originatorFromConfig } from "../services/originator.js";
 
 export const healthRouter = Router();
 
@@ -59,6 +61,10 @@ healthRouter.get("/", async (_req, res) => {
     // rather than merely set, because the one thing that must never happen to
     // this flag is that nobody notices it is on.
     personas: config.demoPersonasEnabled ? "enabled" : "disabled",
+    // Whether the NMLSR numbers a casefile names are ours or the
+    // placeholders, reported rather than merely set.
+    originator:
+      originatorPlaceholdersIn(originatorFromConfig()).length === 0 ? "configured" : "placeholder",
     // Whether the average prime offer rate series reaches the current week.
     // Three legal tests block without it and every decision ends `referred`,
     // and nothing else on this page would say so: the database answers, the

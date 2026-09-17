@@ -16,6 +16,7 @@
 
 import { compact, container, leaf, type DuNode } from "../document.js";
 import { assertInstitutionEmittable, type DuInstitution } from "../institution.js";
+import { assertDealPartiesEmittable } from "../originator.js";
 import { createLabelIndex, createLabels } from "../labels.js";
 import { renderDateTime } from "../values.js";
 import { buildAssets } from "./assets.js";
@@ -138,6 +139,9 @@ export async function assembleSubmission(
 
   const application = await loadApplication(db, applicationId);
   if (!application) throw new Error(`No application ${applicationId} to assemble.`);
+  // The originator rows, refused in production while they carry the
+  // placeholder id they were born with. See originator.ts.
+  assertDealPartiesEmittable(application.dealParties);
 
   const [assets, liabilities, expenses, income, employments, facts, snapshots] = await Promise.all([
     loadAssets(db, applicationId),

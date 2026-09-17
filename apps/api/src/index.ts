@@ -19,6 +19,7 @@ import { decisionRouter } from "./routes/decision.js";
 import { esignRouter } from "./routes/esign.js";
 import { documentRouter } from "./routes/documents.js";
 import { applicationRouter } from "./routes/application.js";
+import { vestingRouter } from "./routes/vesting.js";
 import { declarationRouter } from "./routes/declarations.js";
 import { securityHeaders } from "./security-policy.js";
 
@@ -58,6 +59,7 @@ app.use("/api/files", esignRouter);
 app.use("/api/files", documentRouter);
 app.use("/api/files", applicationRouter);
 app.use("/api/files", declarationRouter);
+app.use("/api/files", vestingRouter);
 app.use("/api/files", propertyFileRouter);
 
 // An unmatched /api path fell through to the SPA fallback and returned HTML,

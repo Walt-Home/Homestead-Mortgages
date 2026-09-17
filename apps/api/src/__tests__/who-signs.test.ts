@@ -44,6 +44,7 @@ import {
 } from "./support/factories.js";
 import { callAs } from "./support/http.js";
 import { connectors } from "../services/connectors.js";
+import { recordVesting } from "../services/vesting.js";
 
 const ROUTES = [fileRouter, connectorRouter, applicationRouter, esignRouter];
 
@@ -439,6 +440,13 @@ describe("a transcript pull is one taxpayer's", () => {
       data: { demographics: { ethnicity: ["declined"], race: ["declined"], sex: "declined" } },
     });
 
+    // The signature attests to how title will read, and refuses without it.
+    await recordVesting(h.fileId, {
+      proposed: {
+        fullName: "Priya Raman and Dev Raman",
+        vestingType: "JointTenantsWithRightOfSurvivorship",
+      },
+    });
     const signed = await callAs<{ signedBy: string; transcripts: unknown }>(
       h.userId,
       ROUTES,

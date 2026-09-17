@@ -84,6 +84,8 @@ export interface LoanFileView {
   isDemo: boolean;
   /** Everybody who has stated who they are, in document order. */
   invitedBorrowers: InvitedBorrowerView[];
+  /** How title will read (Proposed) and, on a refinance, how it reads now (Current). */
+  vestings: { status: "Current" | "Proposed"; fullName: string; vestingType: string | null }[];
   borrowers: {
     id: string;
     /**

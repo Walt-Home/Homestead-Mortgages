@@ -47,6 +47,7 @@ import { borrowerOrdinals, documentOrder } from "./borrower-order.js";
 import { piecesByParty, sixPieces } from "./evidence.js";
 import { toDomainState } from "./transition.js";
 import { RatiosSchema, ReserveAssessmentSchema } from "@hm/shared/decision-figures";
+import { vestingsOnFile } from "./vesting.js";
 
 /**
  * The stored outcome, parsed rather than asserted.
@@ -536,6 +537,7 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
 
     borrowers: inDocumentOrder,
     invitedBorrowers,
+    vestings: await vestingsOnFile(id, db),
     consents,
 
     application,

@@ -90,6 +90,7 @@ function file(authorized = true): LoanFile {
     // borrower who is not on the file, so the fixture has to hold one — the
     // old fixture was dangling and nothing could tell.
     invitedBorrowers: [],
+    vestings: [],
     borrowers: [
       {
         id: "b1",

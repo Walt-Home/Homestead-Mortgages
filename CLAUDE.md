@@ -142,6 +142,15 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   the wrong name today. Wiring the ID scan to a persona means giving the
   fixtures eight people.
 
+- **Our NMLSR numbers are placeholders until somebody sets five variables.**
+  Every application is born carrying the origination company and the loan
+  originator as `du_deal_parties` rows, from `ORIGINATION_COMPANY_NAME`,
+  `ORIGINATION_COMPANY_NMLS_ID`, `LOAN_ORIGINATOR_FIRST_NAME`,
+  `LOAN_ORIGINATOR_LAST_NAME` and `LOAN_ORIGINATOR_NMLS_ID`. Unset, the
+  placeholders in `packages/du/src/originator.ts` stand in — values with
+  letters in them, which no NMLSR id has — and a production assembly refuses
+  a row carrying one. `/api/health` reports `originator: placeholder` until
+  then. The vesting on the review screen has no such gap: it is asked.
 - **A co-borrower has no bank of their own yet.** Screen 2 names one, the
   applicant sends them a link (Resend when `MAIL_PROVIDER=resend`; otherwise
   an in-memory outbox that only a test reads, and the route refuses in

@@ -100,6 +100,7 @@ const response = (over: Record<string, unknown>, consents: unknown[] = []): Loan
       stage: "bank",
       borrowers: [DANA, THEO()],
       invitedBorrowers: [],
+      vestings: [],
       consents,
       documents: [],
       transcripts: [],

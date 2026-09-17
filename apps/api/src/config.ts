@@ -132,6 +132,22 @@ export const config = {
     allowProduction: process.env.DU_ALLOW_PRODUCTION === "true",
   },
 
+  /**
+   * Who originates. Five public identifiers — a legal name and an NMLSR id
+   * for the company, a name and an NMLSR id for the originator — printed on
+   * every disclosure, so plain variables rather than secrets. Unset, the
+   * placeholders in `packages/du` stand in: values with letters in them that
+   * no NMLSR id has, written onto every application at birth and refused at
+   * assembly in production.
+   */
+  originator: {
+    companyLegalName: process.env.ORIGINATION_COMPANY_NAME,
+    companyNmlsId: process.env.ORIGINATION_COMPANY_NMLS_ID,
+    originatorFirstName: process.env.LOAN_ORIGINATOR_FIRST_NAME,
+    originatorLastName: process.env.LOAN_ORIGINATOR_LAST_NAME,
+    originatorNmlsId: process.env.LOAN_ORIGINATOR_NMLS_ID,
+  },
+
   /** Outbound mail. Only read when MAIL_PROVIDER=resend. */
   mail: {
     resendApiKey: process.env.RESEND_API_KEY ?? "",

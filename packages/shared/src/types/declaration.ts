@@ -39,6 +39,30 @@ export type BankruptcyChapter =
  */
 export type PropertyEstateType = "FeeSimple" | "Leasehold";
 
+/**
+ * How title will be held — URLA L2.4, MISMO `RelationshipVestingType`, the
+ * `DuVestingType` enum restated for the browser. Null where one name is on
+ * title and there is no relationship to state.
+ */
+export type VestingType =
+  | "Individual"
+  | "JointTenantsWithRightOfSurvivorship"
+  | "LifeEstate"
+  | "Other"
+  | "TenantsByTheEntirety"
+  | "TenantsInCommon";
+
+/**
+ * What will read on title (L2.1, `Proposed`) and, on a refinance, what reads
+ * on it today (L2.2, `Current`). A fact about the deal rather than about a
+ * person, so it hangs off the file beside `estateType`.
+ */
+export interface TitleVesting {
+  readonly status: "Current" | "Proposed";
+  readonly fullName: string;
+  readonly vestingType: VestingType | null;
+}
+
 export type ResidencyType = "Current" | "Prior";
 
 export type ResidencyBasis = "Own" | "Rent" | "LivingRentFree";

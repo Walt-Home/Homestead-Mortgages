@@ -24,6 +24,7 @@ const HAND_WRITTEN = [
   "packages/du/src/index.ts",
   "packages/du/src/identity.ts",
   "packages/du/src/institution.ts",
+  "packages/du/src/originator.ts",
   "packages/du/src/writer.ts",
   "packages/du/src/document.ts",
   "packages/du/src/labels.ts",

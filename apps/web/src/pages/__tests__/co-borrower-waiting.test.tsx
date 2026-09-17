@@ -55,6 +55,7 @@ const response = (over: Record<string, unknown>): LoanFileResponse =>
       stage: "decision",
       borrowers: [DANA],
       invitedBorrowers: [],
+      vestings: [],
       consents: [],
       documents: [],
       transcripts: [],

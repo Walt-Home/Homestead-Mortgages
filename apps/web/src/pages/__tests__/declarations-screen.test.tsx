@@ -271,8 +271,20 @@ describe("a file with two borrowers", () => {
       ...over,
     });
 
+  // Two names on title need a manner of holding before the signature is
+  // offered, so the household states one.
   const joint = (over: Record<string, unknown> = {}) =>
-    response({ borrowers: [me, them()], ...over });
+    response({
+      borrowers: [me, them()],
+      vestings: [
+        {
+          status: "Proposed",
+          fullName: "Dana Whitfield and Theo Okafor",
+          vestingType: "JointTenantsWithRightOfSurvivorship",
+        },
+      ],
+      ...over,
+    });
 
   /** The markup above the co-borrower's heading, and the markup below it. */
   function split(markup: string): { mine: string; theirs: string } {
@@ -371,7 +383,7 @@ describe("a file with two borrowers", () => {
     // progress wait on another's, which is a rule nothing here has been given.
     const markup = render(
       <ReviewPage />,
-      response({
+      joint({
         borrowers: [me, them({ declaration: null, residences: [] })],
         property: { occupancy: "second_home" },
       }),

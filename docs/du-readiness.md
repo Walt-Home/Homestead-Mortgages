@@ -166,8 +166,10 @@ three lists rather than trusting it after they change.
   and the claim that turns a named person into a signed-in one, any surface a
   co-borrower can sign on at all, a bank a second borrower can link, and
   demographics asked of each of them — item 1.
-- **Vesting and the non-borrower parties** have tables. `du_vestings` holds the
-  sentence that will read on title, `du_deal_parties` holds the origination
+- **Vesting and the non-borrower parties** have tables and, now, writers.
+  `du_vestings` holds the sentence that will read on title — asked on the review
+  screen, stated by the applicant, refused at signing when absent —
+  and `du_deal_parties` holds the origination
   company, the originator, the note holder and the counseling agency, and a
   deferred trigger counts the ten-party ceiling across those two and the
   borrowing parties together. Nothing writes either table yet: there is no
@@ -252,7 +254,7 @@ which have a longer lead time than anything above.
 | 7   | Employer as an entity               | Green  | Real entity, derivable arc, classification derived, the two 1b answers asked |
 | 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                           |
 | 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                     |
-| —   | Vesting and non-borrower parties    | Yellow | Two tables and the ten-party ceiling; nothing writes them yet                |
+| —   | Vesting and non-borrower parties    | Green  | Asked on the review screen; the originator on every application from birth   |
 | 8   | What we compute vs what DU does     | Green  | Boundary written, both columns typed and CHECKed, a corpus test holds it     |
 | —   | The submission                      | Yellow | Emitter, gate and both ends built; nothing carries a document                |
 | —   | The product and the property        | Green  | A product table, a retrieved building and one question on screen 3           |
@@ -815,10 +817,13 @@ this with the people doing the work.
    demographics asked of each applicant, and a signature apiece.
 2. ~~**Write down the compute boundary** and type the two JSON columns.~~ Done:
    item 8 above, `DU_DERIVED_FIGURES`, the two CHECKs and the corpus test.
-3. **Writers for vesting and the non-borrower parties.** The tables and the
-   ten-party ceiling landed; what is missing is anything that fills them — a
-   vesting on the review screen, and our own NMLS numbers somewhere other than
-   a fixture.
+3. ~~**Writers for vesting and the non-borrower parties.**~~ Done: the review
+   screen asks how title will read (L2.1, L2.4, and L2.2 on a refinance) and the
+   signature is refused without an answer; every application is born with the
+   origination company and the loan originator as deal-party rows from
+   `ORIGINATION_COMPANY_*` / `LOAN_ORIGINATOR_*`, with `packages/du`
+   placeholders standing in until the numbers exist, refused at assembly in
+   production, and `/api/health` reporting which.
 4. ~~**The modeled set and the derived inventory.**~~ Done: every table the
    corpus names is either on the wire or in `TABLES_OFF_THE_WIRE` with a
    reason, and `npm run du:verify` fails when the inventory and the code

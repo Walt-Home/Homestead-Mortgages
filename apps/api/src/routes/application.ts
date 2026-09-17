@@ -219,6 +219,20 @@ applicationRouter.post(
       );
     }
 
+    // The signature attests to the application, and how title will read is
+    // on it (URLA L2.1). The applicant states it; a co-borrower signing their
+    // own part is not asked for the household's. A legacy file with no
+    // application row has nowhere to state one and is not asked either — the
+    // row, not the receipt, which is null until the six pieces are in.
+    const isApplication = (await applicationForFile(prisma, id)) !== null;
+    if (owner && isApplication && !file.vestings.some((v) => v.status === "Proposed")) {
+      throw new AppError(
+        409,
+        "How the title will read has to be stated before signing.",
+        "VESTING_REQUIRED",
+      );
+    }
+
     const esign = connectors().esign;
     const signed: string[] = [];
     for (const kind of SIGNED_DOCUMENTS) {

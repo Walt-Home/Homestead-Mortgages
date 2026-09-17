@@ -75,6 +75,16 @@ import {
 import { borrowerName, coBorrowers, primaryBorrower } from "../lib/borrowers.js";
 import type { Assessment } from "../lib/api.js";
 import type { FileEmployment } from "@hm/shared";
+import {
+  CURRENT_VESTING,
+  defaultVestingSentence,
+  PROPOSED_VESTING,
+  VESTING_TYPE,
+  VESTING_TYPE_LABELS,
+  vestingAnswered,
+  vestingBody,
+  type VestingForm,
+} from "../lib/vesting.js";
 
 /**
  * The one refusal this screen re-words rather than passing through.
@@ -123,6 +133,9 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   const [work, setWork] = useState<WorkForm>({});
   const [saving, setSaving] = useState(false);
   const [readyToSign, setReadyToSign] = useState(false);
+  // How title will read. Seeded once the file loads: the stored answer
+  // wins, else every borrower's name joined, which is the corpus's shape.
+  const [vesting, setVesting] = useState<VestingForm | null>(null);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [intentSaving, setIntentSaving] = useState(false);
@@ -228,6 +241,26 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
    * violation. Easy to decline is the design goal; declined by default is a
    * fabricated answer.
    */
+  const refinance = file?.loan?.purpose != null && file.loan.purpose !== "purchase";
+  // What the form shows before anybody has typed: the stored answer, else
+  // every name on the file joined. Derived rather than seeded by an effect,
+  // so the first render — and a server render — already has it.
+  const storedVesting = file?.vestings ?? [];
+  const seededVesting: VestingForm | null = file
+    ? {
+        proposedName:
+          storedVesting.find((v) => v.status === "Proposed")?.fullName ??
+          defaultVestingSentence(file.borrowers),
+        vestingType:
+          (storedVesting.find((v) => v.status === "Proposed")?.vestingType as
+            VestingForm["vestingType"] | null | undefined) ?? "",
+        currentName: storedVesting.find((v) => v.status === "Current")?.fullName ?? "",
+      }
+    : null;
+  const vestingForm = vesting ?? seededVesting;
+  const vestingDone =
+    vestingForm !== null && vestingAnswered(vestingForm, file?.borrowers.length ?? 1, refinance);
+
   const demographicsAnswered =
     !primaryResidence ||
     ((demographics.ethnicity === "declined" || demographics.ethnicity.length > 0) &&
@@ -244,7 +277,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     // borrower told us about their work is true, and a job nobody answered
     // about has nothing for them to have told us.
     if (!workComplete) return;
-    if (!fileId || !primary) return;
+    if (!fileId || !primary || !vestingForm || !vestingDone) return;
     setSaving(true);
     setError(null);
     // The signer, and only them. HMDA collects demographics per application
@@ -252,6 +285,10 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     // it re-sends the person it asked and never a co-borrower it did not.
     const b = primary;
     try {
+      // How title will read, before the person: the signature attests to
+      // the application and L2.1 is on it, and the route refuses a
+      // signature without one.
+      await api.post(`/files/${fileId}/vesting`, vestingBody(vestingForm, refinance));
       /*
        * The jobs first, and only when there are any.
        *
@@ -702,6 +739,63 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
           <p className="mt-4 text-sm text-ink-muted">{CO_BORROWER_COPY.whatTheyDo}</p>
         )}
 
+        {vestingForm && (
+          /* One sentence about the deal, above the person. Said here and
+             nowhere else on the screen: the input is where it is read back. */
+          <div className="mt-7 border-t border-rule-soft pt-6">
+            <label className="super-label" htmlFor="vesting-proposed">
+              {PROPOSED_VESTING}
+            </label>
+            <input
+              id="vesting-proposed"
+              className="super-input mt-1"
+              value={vestingForm.proposedName}
+              onChange={(e) => setVesting({ ...vestingForm, proposedName: e.target.value })}
+              disabled={readOnly}
+            />
+            {(others.length > 0 || vestingForm.vestingType !== "") && (
+              <div className="mt-3">
+                <label className="super-label" htmlFor="vesting-type">
+                  {VESTING_TYPE}
+                </label>
+                <select
+                  id="vesting-type"
+                  className="super-input mt-1"
+                  value={vestingForm.vestingType}
+                  onChange={(e) =>
+                    setVesting({
+                      ...vestingForm,
+                      vestingType: e.target.value as VestingForm["vestingType"],
+                    })
+                  }
+                  disabled={readOnly}
+                >
+                  <option value="">Choose one</option>
+                  {Object.entries(VESTING_TYPE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {refinance && (
+              <div className="mt-3">
+                <label className="super-label" htmlFor="vesting-current">
+                  {CURRENT_VESTING}
+                </label>
+                <input
+                  id="vesting-current"
+                  className="super-input mt-1"
+                  value={vestingForm.currentName}
+                  onChange={(e) => setVesting({ ...vestingForm, currentName: e.target.value })}
+                  disabled={readOnly}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {primaryResidence && (
           <DemographicQuestions value={demographics} onChange={setDemographics} />
         )}
@@ -750,7 +844,14 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
               <button
                 className="super-btn super-btn-primary"
                 onClick={() => void saveAndContinue()}
-                disabled={!declared || !workComplete || !demographicsAnswered || saving || readOnly}
+                disabled={
+                  !declared ||
+                  !workComplete ||
+                  !vestingDone ||
+                  !demographicsAnswered ||
+                  saving ||
+                  readOnly
+                }
               >
                 {saving ? "Saving…" : "Continue to sign"}
               </button>

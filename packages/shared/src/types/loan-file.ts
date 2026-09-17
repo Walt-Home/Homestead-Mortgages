@@ -20,6 +20,7 @@ import type {
   FileEmployment,
 } from "./verification.js";
 import type { Decision, DisclosureRecord } from "./decision.js";
+import type { TitleVesting } from "./declaration.js";
 import type {
   AvmEstimate,
   FloodDetermination,
@@ -134,6 +135,8 @@ export interface LoanFile {
    * Empty on every file that can be signed. See `InvitedBorrower`.
    */
   readonly invitedBorrowers: readonly InvitedBorrower[];
+  /** How title will read, and on a refinance how it reads now. Empty until asked on the review screen. */
+  readonly vestings: readonly TitleVesting[];
   readonly consents: readonly Consent[];
 
   readonly application: ApplicationReceipt | null;

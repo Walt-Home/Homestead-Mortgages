@@ -77,7 +77,19 @@ Walt's. They are stale; `docs/decisions.md` records why the move happened.
 **The secret names are prefixed.** The box above shows the Secret Manager names;
 inside the container they arrive as `DATABASE_URL`, `SESSION_SECRET`,
 `VENDOR_TOKEN_KEY`, `PLAID_SECRET`, `STRIPE_SECRET_KEY_SANDBOX` and
-`GOOGLE_PLACES_API_KEY`. `gcloud secrets describe DATABASE_URL` finds nothing.
+`GOOGLE_PLACES_API_KEY`, plus `CORELOGIC_CLIENT_KEY` and
+`CORELOGIC_CLIENT_SECRET` once the repository variable
+`PROPERTY_RECORDS_PROVIDER` is `corelogic`. `gcloud secrets describe
+DATABASE_URL` finds nothing.
+
+**Turning a vendor on is three steps, in this order.** Create the secret
+(`gcloud secrets create HOMESTEAD_MORTGAGES_CORELOGIC_CLIENT_KEY
+--data-file=-`), grant the runtime account accessor on that one secret
+(`gcloud secrets add-iam-policy-binding … --member=serviceAccount:hm-run@…
+--role=roles/secretmanager.secretAccessor`), and only then set the repository
+variable that makes the deploy reference it. A revision that references a
+secret it cannot read fails to start, and the order is what keeps the
+previous revision serving while the new one is refused.
 
 **Know this failure mode.** `gcloud run deploy --allow-unauthenticated` does not
 fail when the org's `iam.allowedPolicyMemberDomains` constraint blocks it. It

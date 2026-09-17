@@ -341,6 +341,17 @@ jobs:
           ENV_VARS="$ENV_VARS,BANK_PROVIDER=plaid,PLAID_ENV=sandbox,PLAID_PRODUCT=assets"
           ENV_VARS="$ENV_VARS,PLAID_CLIENT_ID=${{ vars.PLAID_CLIENT_ID }}"
           ENV_VARS="$ENV_VARS,IDENTITY_PROVIDER=stripe,PROPERTY_DATA_PROVIDER=google_places"
+          SECRETS="DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET:latest,PLAID_SECRET=HOMESTEAD_MORTGAGES_PLAID_SECRET:latest,VENDOR_TOKEN_KEY=HOMESTEAD_MORTGAGES_VENDOR_TOKEN_KEY:latest,STRIPE_SECRET_KEY_SANDBOX=HOMESTEAD_MORTGAGES_STRIPE_SECRET_KEY_SANDBOX:latest,GOOGLE_PLACES_API_KEY=HOMESTEAD_MORTGAGES_GOOGLE_PLACES_API_KEY:latest"
+          # CoreLogic answers the county record and the AVM beneath Places once
+          # the repository variable PROPERTY_RECORDS_PROVIDER is "corelogic".
+          # Gated on the variable rather than always on, because a revision
+          # that references a secret that does not exist fails to start: the
+          # two secrets are created and granted to the runtime account first,
+          # then the variable is set, and until then the fixture answers.
+          if [ "${{ vars.PROPERTY_RECORDS_PROVIDER }}" = "corelogic" ]; then
+            ENV_VARS="$ENV_VARS,PROPERTY_RECORDS_PROVIDER=corelogic"
+            SECRETS="$SECRETS,CORELOGIC_CLIENT_KEY=HOMESTEAD_MORTGAGES_CORELOGIC_CLIENT_KEY:latest,CORELOGIC_CLIENT_SECRET=HOMESTEAD_MORTGAGES_CORELOGIC_CLIENT_SECRET:latest"
+          fi
           # Reported by /health; the service itself never fetches — the step
           # above and the scheduled job write the table it reads.
           ENV_VARS="$ENV_VARS,APOR_PROVIDER=ffiec"
@@ -368,7 +379,7 @@ jobs:
             --region ${{ env.REGION }} \
             --service-account ${{ env.RUNTIME_SA }} \
             --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
-            --set-secrets "DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET:latest,PLAID_SECRET=HOMESTEAD_MORTGAGES_PLAID_SECRET:latest,VENDOR_TOKEN_KEY=HOMESTEAD_MORTGAGES_VENDOR_TOKEN_KEY:latest,STRIPE_SECRET_KEY_SANDBOX=HOMESTEAD_MORTGAGES_STRIPE_SECRET_KEY_SANDBOX:latest,GOOGLE_PLACES_API_KEY=HOMESTEAD_MORTGAGES_GOOGLE_PLACES_API_KEY:latest" \
+            --set-secrets "$SECRETS" \
             --set-env-vars "$ENV_VARS" \
             --allow-unauthenticated \
             --port 8080 \
@@ -439,6 +450,15 @@ jobs:
               *) echo "::error::expected provider not running: $expected"; exit 1 ;;
             esac
           done
+          # When CoreLogic was asked for, the record and the AVM are its and
+          # /health says so; a deploy that quietly fell back to the fixture
+          # would put a fixture's tax bill behind a real vendor's name.
+          if [ "${{ vars.PROPERTY_RECORDS_PROVIDER }}" = "corelogic" ]; then
+            case "$PROVIDERS" in
+              *"corelogic for records and AVM"*) echo "ok: corelogic answers the record and the AVM" ;;
+              *) echo "::error::PROPERTY_RECORDS_PROVIDER=corelogic did not reach the service"; exit 1 ;;
+            esac
+          fi
           # An sk_live_ key would make the adapter throw at boot rather than
           # report "(test)", so this doubles as a live-mode tripwire.
           case "$PROVIDERS" in

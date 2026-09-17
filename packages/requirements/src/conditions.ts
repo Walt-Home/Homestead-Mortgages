@@ -17,8 +17,13 @@
  * is the single worst thing this product can do.
  */
 
-import type { Borrower, LoanFile } from "@hm/shared";
-import { COMMUNITY_PROPERTY_STATES, RESIDENCE_HISTORY_MONTHS } from "@hm/shared";
+import type { Borrower, HouseholdMember, LoanFile } from "@hm/shared";
+import {
+  COMMUNITY_PROPERTY_STATES,
+  RESIDENCE_HISTORY_MONTHS,
+  household,
+  memberFor,
+} from "@hm/shared";
 import type { ConditionKey } from "./types.js";
 
 /** true / false / not-yet-knowable. */
@@ -41,6 +46,21 @@ function ofAnyBorrower(
 ): Applicability {
   if (borrowers.length === 0) return null;
   const answers = borrowers.map(of);
+  if (answers.includes(true)) return true;
+  return answers.includes(null) ? null : false;
+}
+
+/**
+ * The same rule over every borrower's own reports. A condition about a
+ * credit report or an asset report is true of the loan if it is true of
+ * anybody's, and undetermined while somebody's report is still to come and
+ * nobody's has said yes — one person's pulled report must not answer for a
+ * person who has not pulled.
+ */
+function ofAnyMember(file: LoanFile, of: (m: HouseholdMember) => Applicability): Applicability {
+  const members = household(file);
+  if (members.length === 0) return null;
+  const answers = members.map(of);
   if (answers.includes(true)) return true;
   return answers.includes(null) ? null : false;
 }
@@ -83,12 +103,16 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
   borrower_lep: (f) =>
     f.borrowers.length === 0 ? null : f.borrowers.some((b) => b.preferredLanguage !== "en"),
 
-  borrowed_funds_used: (f) => (f.assets ? f.assets.borrowedFunds.length > 0 : null),
+  borrowed_funds_used: (f) =>
+    ofAnyMember(f, (m) => (m.assets ? m.assets.borrowedFunds.length > 0 : null)),
 
   prior_significant_derogatory: (f) =>
-    f.credit ? f.credit.publicRecords.some((r) => SIGNIFICANT_DEROGATORY.has(r.type)) : null,
+    ofAnyMember(f, (m) =>
+      m.credit ? m.credit.publicRecords.some((r) => SIGNIFICANT_DEROGATORY.has(r.type)) : null,
+    ),
 
-  dispute_flag: (f) => (f.credit ? f.credit.tradelines.some((t) => t.disputed) : null),
+  dispute_flag: (f) =>
+    ofAnyMember(f, (m) => (m.credit ? m.credit.tradelines.some((t) => t.disputed) : null)),
 
   /**
    * "Deposit exceeds 50% of monthly income" needs both halves. If we have the
@@ -97,21 +121,28 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
    * not returned.
    */
   large_deposit_present: (f) => {
-    if (!f.assets) return null;
     const monthlyIncome = f.incomeSources.reduce((sum, s) => sum + s.monthlyAmount, 0);
     if (monthlyIncome === 0) return null;
-    return f.assets.largeDeposits.some((d) => d.amount > monthlyIncome * 0.5);
+    return ofAnyMember(f, (m) =>
+      m.assets ? m.assets.largeDeposits.some((d) => d.amount > monthlyIncome * 0.5) : null,
+    );
   },
 
   retirement_assets_used: (f) =>
-    f.assets ? f.assets.accounts.some((a) => a.type === "retirement" && a.usedForQualifying) : null,
+    ofAnyMember(f, (m) =>
+      m.assets
+        ? m.assets.accounts.some((a) => a.type === "retirement" && a.usedForQualifying)
+        : null,
+    ),
 
   thin_credit_file: (f) =>
-    f.credit
-      ? f.credit.scores.length === 0 || f.credit.tradelines.length < THIN_FILE_TRADELINE_COUNT
-      : null,
+    ofAnyMember(f, (m) =>
+      m.credit
+        ? m.credit.scores.length === 0 || m.credit.tradelines.length < THIN_FILE_TRADELINE_COUNT
+        : null,
+    ),
 
-  asset_report_available: (f) => f.assets !== null,
+  asset_report_available: (f) => household(f).some((m) => m.assets !== null),
 
   /**
    * Anybody on the file who rents and has no mortgage rating in the last 12
@@ -127,19 +158,18 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
    * housing that nobody has put to them.
    */
   renter_limited_mortgage_history: (f) => {
-    // The file carries ONE credit report and that report carries no party.
-    // Every pull mints its token from the first borrower, so the tradelines
-    // are hers and nobody else's — judging a co-borrower by them retires his
-    // rent history on the strength of her mortgage, which is the borrowed
-    // evidence this predicate was made per-borrower to stop. Until a report
-    // exists per borrower, everybody but her answers null: "we have not
-    // pulled his credit" has to stay distinguishable from "he has a mortgage".
-    const whoseCreditThisIs = f.borrowers[0];
+    // Each person against their OWN credit report. Judging a co-borrower by
+    // the applicant's tradelines retires his rent history on the strength of
+    // her mortgage, which is the borrowed evidence this predicate was made
+    // per-borrower to stop; a person whose report has not been pulled answers
+    // null, so "we have not pulled his credit" stays distinguishable from "he
+    // has a mortgage".
     return ofAnyBorrower(f.borrowers, (borrower) => {
       if (borrower.currentHousing === null) return null;
       if (borrower.currentHousing === "own") return false;
-      if (borrower !== whoseCreditThisIs || !f.credit) return null;
-      const hasMortgageHistory = f.credit.tradelines.some(
+      const credit = memberFor(f, borrower).credit;
+      if (!credit) return null;
+      const hasMortgageHistory = credit.tradelines.some(
         (t) => t.type === "mortgage" && t.paymentHistory.length >= 12,
       );
       return !hasMortgageHistory;
@@ -182,9 +212,12 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
         ),
 
   employment_gap: (f) => {
-    if (!f.payroll) return null;
     const now = new Date();
-    return f.payroll.gaps.some((g) => g.days > 30 && monthsAgo(g.startDate, now) <= 24);
+    return ofAnyMember(f, (m) =>
+      m.payroll
+        ? m.payroll.gaps.some((g) => g.days > 30 && monthsAgo(g.startDate, now) <= 24)
+        : null,
+    );
   },
 
   military_borrower: (f) =>
@@ -202,10 +235,12 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
             s.type === "commission",
         ),
 
-  gift_funds_used: (f) => (f.assets ? f.assets.gifts.length > 0 : null),
+  gift_funds_used: (f) => ofAnyMember(f, (m) => (m.assets ? m.assets.gifts.length > 0 : null)),
 
   prior_bankruptcy: (f) =>
-    f.credit ? f.credit.publicRecords.some((r) => r.type === "bankruptcy") : null,
+    ofAnyMember(f, (m) =>
+      m.credit ? m.credit.publicRecords.some((r) => r.type === "bankruptcy") : null,
+    ),
 
   /**
    * "Recent derogatory present". The sheet does not define recent; 24 months
@@ -214,21 +249,24 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
    * tri-merge returns.
    */
   recent_derogatory: (f) => {
-    if (!f.credit) return null;
     const now = new Date();
-    const recentRecord = f.credit.publicRecords.some((r) => monthsAgo(r.date, now) <= 24);
-    const recentLate = f.credit.tradelines.some((t) => t.maxDelinquency > 0);
-    return recentRecord || recentLate;
+    return ofAnyMember(f, (m) => {
+      if (!m.credit) return null;
+      const recentRecord = m.credit.publicRecords.some((r) => monthsAgo(r.date, now) <= 24);
+      const recentLate = m.credit.tradelines.some((t) => t.maxDelinquency > 0);
+      return recentRecord || recentLate;
+    });
   },
 
   recent_inquiries: (f) => {
-    if (!f.credit) return null;
     const now = new Date();
-    return f.credit.inquiries.some((i) => daysAgo(i.date, now) <= 90);
+    return ofAnyMember(f, (m) =>
+      m.credit ? m.credit.inquiries.some((i) => daysAgo(i.date, now) <= 90) : null,
+    );
   },
 
   ssn_mismatch_or_fraud_alert: (f) =>
-    f.credit ? f.credit.ssnMismatch || f.credit.fraudAlert : null,
+    ofAnyMember(f, (m) => (m.credit ? m.credit.ssnMismatch || m.credit.fraudAlert : null)),
 
   support_income_used: (f) =>
     f.incomeSources.length === 0

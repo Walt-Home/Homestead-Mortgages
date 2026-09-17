@@ -8,6 +8,7 @@
  */
 
 import type { LoanFile, ReserveAssessment } from "@hm/shared";
+import { household, householdAccounts, householdTradelines } from "@hm/shared";
 import { DerivationLog, round } from "./derive.js";
 import { GUIDELINES, mortgageInsuranceRate } from "./guidelines.js";
 
@@ -28,37 +29,109 @@ export const ESCROW_ASSUMPTION = {
   annualInsuranceRate: 0.0035,
 };
 
-/** Middle score per borrower; lowest of those across borrowers (CRD-002). */
-export function representativeFico(file: LoanFile, log: DerivationLog): number | null {
-  if (!file.credit || file.credit.scores.length === 0) {
-    return log.blocked("CRD-002", "Representative FICO", ["credit report"]);
+export interface CreditScores {
+  /** The loan's representative score: the lowest of the borrowers' own. What pricing reads. */
+  readonly representative: number;
+  /**
+   * What the minimum is tested against: the representative score on a
+   * one-borrower loan, the average of the borrowers' own scores on a loan
+   * with more than one.
+   */
+  readonly forEligibility: number;
+  /** Null on a one-borrower loan, where there is nothing to average. */
+  readonly averageMedian: number | null;
+}
+
+/**
+ * Each borrower's own score, then the loan's (CRD-002).
+ *
+ * Per borrower: the middle of three bureau scores, the lower of two, the one
+ * (Selling Guide B3-5.1-02). The loan's representative score is the LOWEST of
+ * those, and it is what pricing reads on every loan. The minimum is tested
+ * against the representative score on a one-borrower loan and against the
+ * AVERAGE of the borrowers' own scores on a loan with more than one — the
+ * guide's rule for a manually underwritten loan, and the nearest rule there
+ * is for a shadow engine, since DU runs its own model and states no score.
+ *
+ * Blocked, naming the person, while ANY borrower has no credit report. A
+ * lowest-of-one on a two-person loan looks exactly like the loan's score and
+ * is not, and the DTI downstream would be short one person's debts.
+ */
+export function representativeFico(file: LoanFile, log: DerivationLog): CreditScores | null {
+  const members = household(file);
+  const missing = members.filter((m) => !m.credit || m.credit.scores.length === 0);
+  if (members.length === 0 || missing.length > 0) {
+    return log.blocked(
+      "CRD-002",
+      "Representative FICO",
+      members.length <= 1 ? ["credit report"] : missing.map((m) => `credit report for ${m.name}`),
+    );
   }
-  const scores = [...file.credit.scores].map((s) => s.score).sort((a, b) => a - b);
+
   // Three bureaus → the middle one. Two → the lower. One → itself.
-  const middle = scores.length >= 3 ? scores[1] : scores[0];
-  if (middle === undefined) {
-    return log.blocked("CRD-002", "Representative FICO", ["credit report scores"]);
+  const own = members.map((member) => {
+    const sorted = [...member.credit!.scores].map((s) => s.score).sort((a, b) => a - b);
+    return {
+      member,
+      score: sorted.length >= 3 ? sorted[1]! : sorted[0]!,
+      formula:
+        sorted.length >= 3
+          ? "middle of three bureau scores"
+          : `lowest of ${sorted.length} available bureau score(s)`,
+      bureaus: Object.fromEntries(member.credit!.scores.map((s) => [s.bureau, s.score])),
+    };
+  });
+
+  if (own.length === 1) {
+    const only = own[0]!;
+    const score = log.record("CRD-002", "Representative FICO", only.score, only.formula, only.bureaus);
+    return { representative: score, forEligibility: score, averageMedian: null };
   }
-  return log.record(
+
+  for (const o of own) {
+    log.record("CRD-002", `Representative FICO (${o.member.name})`, o.score, o.formula, {
+      borrower: o.member.name,
+      ...o.bureaus,
+    });
+  }
+  const byName = Object.fromEntries(own.map((o) => [o.member.name, o.score]));
+  const representative = log.record(
     "CRD-002",
     "Representative FICO",
-    middle,
-    scores.length >= 3
-      ? "middle of three bureau scores"
-      : `lowest of ${scores.length} available bureau score(s)`,
-    Object.fromEntries(file.credit.scores.map((s) => [s.bureau, s.score])),
+    Math.min(...own.map((o) => o.score)),
+    "lowest of the borrowers' own scores (Selling Guide B3-5.1-02); what pricing reads",
+    byName,
   );
+  const averageMedian = log.record(
+    "CRD-002",
+    "Average median credit score",
+    Math.round(own.reduce((sum, o) => sum + o.score, 0) / own.length),
+    "average of the borrowers' own scores, rounded to the nearest whole number; " +
+      "what the minimum is tested against on a loan with more than one borrower",
+    byName,
+  );
+  return { representative, forEligibility: averageMedian, averageMedian };
+}
+
+/** Who is still to pull credit, as a blocked derivation names them. */
+function creditWaitingFor(file: LoanFile): readonly string[] {
+  const { withoutCredit } = householdTradelines(file);
+  return household(file).length <= 1
+    ? ["credit report"]
+    : withoutCredit.map((m) => `credit report for ${m.name}`);
 }
 
 export function revolvingUtilization(file: LoanFile, log: DerivationLog): number | null {
-  if (!file.credit) return log.blocked("CRD-016", "Revolving utilization", ["credit report"]);
-  const revolving = file.credit.tradelines.filter(
-    (t) => t.type === "revolving" || t.type === "heloc",
-  );
+  const lines = householdTradelines(file);
+  if (lines.withCredit.length === 0 || lines.withoutCredit.length > 0) {
+    return log.blocked("CRD-016", "Revolving utilization", creditWaitingFor(file));
+  }
+  const revolving = lines.tradelines.filter((t) => t.type === "revolving" || t.type === "heloc");
   const limit = revolving.reduce((sum, t) => sum + (t.creditLimit ?? 0), 0);
   if (limit === 0) {
     return log.record("CRD-016", "Revolving utilization", 0, "no revolving limit on file", {
       revolvingLines: revolving.length,
+      joint_tradelines_deduplicated: lines.deduplicated,
     });
   }
   const balance = revolving.reduce((sum, t) => sum + t.balance, 0);
@@ -66,8 +139,13 @@ export function revolvingUtilization(file: LoanFile, log: DerivationLog): number
     "CRD-016",
     "Revolving utilization",
     round((balance / limit) * 100),
-    "revolving_balance / revolving_limit",
-    { revolving_balance: balance, revolving_limit: limit },
+    "revolving_balance / revolving_limit, across every borrower's report, a joint line once",
+    {
+      revolving_balance: balance,
+      revolving_limit: limit,
+      borrowers_with_credit: lines.withCredit.length,
+      joint_tradelines_deduplicated: lines.deduplicated,
+    },
   );
 }
 
@@ -164,19 +242,29 @@ export function housingPitia(file: LoanFile, log: DerivationLog): number | null 
   );
 }
 
-/** Monthly liabilities from the credit report, less anything excluded. */
+/**
+ * Monthly liabilities from every borrower's credit report, less anything
+ * excluded, a joint account once. Blocked while anybody's report is missing:
+ * a DTI short one person's debts is a number that looks like an answer.
+ */
 export function monthlyLiabilities(file: LoanFile, log: DerivationLog): number | null {
-  if (!file.credit) return log.blocked("UW-004", "Monthly liabilities", ["credit report"]);
-  const counted = file.credit.tradelines.filter((t) => !t.exclusionReasonCode);
+  const lines = householdTradelines(file);
+  if (lines.withCredit.length === 0 || lines.withoutCredit.length > 0) {
+    return log.blocked("UW-004", "Monthly liabilities", creditWaitingFor(file));
+  }
+  const counted = lines.tradelines.filter((t) => !t.exclusionReasonCode);
   const total = counted.reduce((sum, t) => sum + t.monthlyPayment, 0);
   return log.record(
     "UW-004",
     "Monthly liabilities",
     round(total),
-    "sum of tradeline monthly payments, excluding those with a reason code",
+    "sum of tradeline monthly payments across every borrower's report, a joint account once, " +
+      "excluding those with a reason code",
     {
       tradelines_counted: counted.length,
-      tradelines_excluded: file.credit.tradelines.length - counted.length,
+      tradelines_excluded: lines.tradelines.length - counted.length,
+      borrowers_with_credit: lines.withCredit.length,
+      joint_tradelines_deduplicated: lines.deduplicated,
     },
   );
 }
@@ -346,12 +434,17 @@ export function reserves(
     },
   );
 
-  if (!file.assets || pitia === null || fundsNeeded === null) {
+  // Every borrower's accounts, a joint account once. Computed on whoever has
+  // connected a bank: assets only add, so a co-borrower who has not linked
+  // one leaves the household with fewer reserves rather than with none, and
+  // the derivation says how many of them counted.
+  const banks = householdAccounts(file);
+  if (banks.withAssets.length === 0 || pitia === null || fundsNeeded === null) {
     log.blocked(
       "AST-004",
       "Reserves satisfied",
       [
-        !file.assets ? "bank connection" : null,
+        banks.withAssets.length === 0 ? "bank connection" : null,
         pitia === null ? "housing payment" : null,
         fundsNeeded === null ? "funds to close" : null,
       ].filter((x): x is string => x !== null),
@@ -362,7 +455,7 @@ export function reserves(
   // Retirement money counts at a haircut because liquidating it costs
   // penalties and tax; the vested balance is not what actually arrives.
   const RETIREMENT_HAIRCUT = 0.6;
-  const eligible = file.assets.accounts
+  const eligible = banks.accounts
     .filter((a) => a.usedForQualifying)
     .reduce(
       (sum, a) =>
@@ -376,8 +469,15 @@ export function reserves(
     "AST-004",
     "Eligible post-close assets",
     round(postClose),
-    "eligible assets - funds to close (retirement counted at 60%)",
-    { eligible_assets: round(eligible), funds_to_close: fundsNeeded },
+    "eligible assets across every connected bank, a joint account once, - funds to close " +
+      "(retirement counted at 60%)",
+    {
+      eligible_assets: round(eligible),
+      funds_to_close: fundsNeeded,
+      borrowers_with_assets: banks.withAssets.length,
+      borrowers_without_assets: banks.withoutAssets.length,
+      joint_accounts_deduplicated: banks.deduplicated,
+    },
   );
 
   const actualMonths =

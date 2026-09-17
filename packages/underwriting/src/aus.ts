@@ -27,6 +27,7 @@ import type {
   LoanCondition,
   LoanFile,
 } from "@hm/shared";
+import { household, householdPublicRecords } from "@hm/shared";
 import { DerivationLog, round } from "./derive.js";
 import { GUIDELINES } from "./guidelines.js";
 import {
@@ -86,17 +87,32 @@ function monthsBetween(iso: string, now: Date): number {
   return (now.getFullYear() - then.getFullYear()) * 12 + (now.getMonth() - then.getMonth());
 }
 
-/** The maximum LTV this loan's purpose and occupancy allow. */
-function maxLtvFor(file: LoanFile): number | null {
+/** Whether anybody on the loan will not live in the home. */
+export function hasNonOccupantCoBorrower(file: LoanFile): boolean {
+  return file.borrowers.some((b) => b.occupiesProperty === false);
+}
+
+/**
+ * The maximum LTV this loan's purpose and occupancy allow — and, when a
+ * co-borrower will not occupy the property, the lower of that and 95
+ * (Selling Guide B2-2-04).
+ */
+export function maxLtvFor(file: LoanFile): number | null {
   if (!file.loan || !file.property) return null;
   const g = GUIDELINES.ltv;
-  if (file.loan.purpose === "cash_out_refinance") return g.cashOutRefinanceMax;
-  if (file.loan.purpose === "rate_term_refinance") return g.rateTermRefinanceMax;
-  return file.property.occupancy === "primary_residence"
-    ? g.purchasePrimaryMax
-    : file.property.occupancy === "second_home"
-      ? g.purchaseSecondHomeMax
-      : g.purchaseInvestmentMax;
+  const byPurpose =
+    file.loan.purpose === "cash_out_refinance"
+      ? g.cashOutRefinanceMax
+      : file.loan.purpose === "rate_term_refinance"
+        ? g.rateTermRefinanceMax
+        : file.property.occupancy === "primary_residence"
+          ? g.purchasePrimaryMax
+          : file.property.occupancy === "second_home"
+            ? g.purchaseSecondHomeMax
+            : g.purchaseInvestmentMax;
+  return hasNonOccupantCoBorrower(file)
+    ? Math.min(byPurpose, g.nonOccupantCoBorrowerMax)
+    : byPurpose;
 }
 
 export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision {
@@ -105,79 +121,92 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
   const findings: AusFinding[] = [];
 
   /* ── Credit ───────────────────────────────────────────────────────────── */
-  const fico = representativeFico(file, log);
+  const scores = representativeFico(file, log);
+  const fico = scores?.representative ?? null;
   revolvingUtilization(file, log);
 
-  if (fico !== null && fico < GUIDELINES.credit.minimumRepresentativeFico) {
+  if (scores !== null && scores.forEligibility < GUIDELINES.credit.minimumRepresentativeFico) {
+    const tested = scores.averageMedian === null ? "Representative FICO" : "Average median credit score";
     findings.push({
       requirementId: "CRD-002",
       code: "FICO_BELOW_MINIMUM",
-      message: `Representative FICO of ${fico} is below the ${GUIDELINES.credit.minimumRepresentativeFico} minimum.`,
+      message: `${tested} of ${scores.forEligibility} is below the ${GUIDELINES.credit.minimumRepresentativeFico} minimum.`,
       category: "credit",
     });
   }
 
-  // Seasoning. Both are recorded only when the derogatory actually exists, so
-  // a clean file does not carry a derivation claiming it passed a test that
-  // was never relevant.
-  if (file.credit) {
-    const bankruptcy = file.credit.publicRecords.find((r) => r.type === "bankruptcy");
-    if (bankruptcy) {
-      const reference = bankruptcy.dischargeDate ?? bankruptcy.date;
-      const months = monthsBetween(reference, now);
-      const minimum =
-        bankruptcy.chapter === "13"
-          ? GUIDELINES.credit.bankruptcyChapter13SeasoningMonths
-          : GUIDELINES.credit.bankruptcyChapter7SeasoningMonths;
-      log.record(
-        "CRD-006",
-        "Bankruptcy seasoning",
-        months,
-        `months since discharge vs ${minimum} minimum`,
-        {
-          chapter_type: bankruptcy.chapter ?? "unknown",
-          discharge_date: reference,
-          minimum_months: minimum,
-        },
-      );
-      if (months < minimum) {
-        findings.push({
-          requirementId: "CRD-006",
-          code: "BANKRUPTCY_SEASONING",
-          message: `${months} months since discharge; ${minimum} required.`,
-          category: "credit",
-        });
-      }
-    }
-
-    const significant = file.credit.publicRecords.find(
-      (r) => r.type === "foreclosure" || r.type === "short_sale" || r.type === "deed_in_lieu",
+  // Seasoning, across every borrower's report. Both are recorded only when
+  // the derogatory actually exists, so a clean file does not carry a
+  // derivation claiming it passed a test that was never relevant — and when
+  // two people carry one, the derivation is about the more recent, which is
+  // the one that decides.
+  const records = householdPublicRecords(file);
+  const bankruptcies = records
+    .filter((r) => r.record.type === "bankruptcy")
+    .map((r) => ({ ...r, reference: r.record.dischargeDate ?? r.record.date }))
+    .sort((a, b) => (a.reference < b.reference ? 1 : -1));
+  const bankruptcy = bankruptcies[0];
+  if (bankruptcy) {
+    const months = monthsBetween(bankruptcy.reference, now);
+    const minimum =
+      bankruptcy.record.chapter === "13"
+        ? GUIDELINES.credit.bankruptcyChapter13SeasoningMonths
+        : GUIDELINES.credit.bankruptcyChapter7SeasoningMonths;
+    log.record(
+      "CRD-006",
+      "Bankruptcy seasoning",
+      months,
+      `months since discharge vs ${minimum} minimum`,
+      {
+        borrower: bankruptcy.member.name,
+        chapter_type: bankruptcy.record.chapter ?? "unknown",
+        discharge_date: bankruptcy.reference,
+        minimum_months: minimum,
+      },
     );
-    if (significant) {
-      const months = monthsBetween(significant.date, now);
-      const minimum =
-        significant.type === "foreclosure"
-          ? GUIDELINES.credit.foreclosureSeasoningMonths
-          : GUIDELINES.credit.shortSaleOrDilSeasoningMonths;
-      log.record(
-        "CRD-007",
-        "Derogatory seasoning",
-        months,
-        `months since event vs ${minimum} minimum`,
-        {
-          event_type: significant.type,
-          event_date: significant.date,
-          minimum_months: minimum,
-        },
-      );
-      if (months < minimum) {
-        findings.push({
-          requirementId: "CRD-007",
-          code: "DEROGATORY_SEASONING",
-          message: `${months} months since ${significant.type}; ${minimum} required.`,
-          category: "credit",
-        });
-      }
+    if (months < minimum) {
+      findings.push({
+        requirementId: "CRD-006",
+        code: "BANKRUPTCY_SEASONING",
+        message: `${months} months since discharge; ${minimum} required.`,
+        category: "credit",
+      });
+    }
+  }
+
+  const significant = records
+    .filter(
+      (r) =>
+        r.record.type === "foreclosure" ||
+        r.record.type === "short_sale" ||
+        r.record.type === "deed_in_lieu",
+    )
+    .sort((a, b) => (a.record.date < b.record.date ? 1 : -1))[0];
+  if (significant) {
+    const months = monthsBetween(significant.record.date, now);
+    const minimum =
+      significant.record.type === "foreclosure"
+        ? GUIDELINES.credit.foreclosureSeasoningMonths
+        : GUIDELINES.credit.shortSaleOrDilSeasoningMonths;
+    log.record(
+      "CRD-007",
+      "Derogatory seasoning",
+      months,
+      `months since event vs ${minimum} minimum`,
+      {
+        borrower: significant.member.name,
+        event_type: significant.record.type,
+        event_date: significant.record.date,
+        minimum_months: minimum,
+      },
+    );
+    if (months < minimum) {
+      findings.push({
+        requirementId: "CRD-007",
+        code: "DEROGATORY_SEASONING",
+        message: `${months} months since ${significant.record.type}; ${minimum} required.`,
+        category: "credit",
+      });
     }
   }
 
@@ -185,34 +214,45 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
   monthlyBaseIncome(file, log);
 
   // INC-009 — transcripts against documented income, within tolerance.
-  if (file.transcripts.length > 0 && file.incomeSources.length > 0) {
+  //
+  // The income rows are the household's and carry no party, so the wages
+  // they are checked against are the household's too: each person's latest
+  // transcript, summed. Compared only once everybody's transcripts are in —
+  // one person's wages against two people's income is a variance nobody
+  // would recognize — and until then it is simply not computed, the same as
+  // a one-person file with no transcript yet.
+  const members = household(file);
+  const latestByMember = members.map(
+    (m) => [...m.transcripts].sort((a, b) => b.taxYear - a.taxYear)[0] ?? null,
+  );
+  if (members.length > 0 && latestByMember.every((t) => t !== null) && file.incomeSources.length > 0) {
+    const latestTranscripts = latestByMember as NonNullable<(typeof latestByMember)[number]>[];
     const annualDocumented = file.incomeSources.reduce((s, i) => s + i.monthlyAmount, 0) * 12;
-    const latest = [...file.transcripts].sort((a, b) => b.taxYear - a.taxYear)[0];
-    if (latest) {
-      const variance =
-        annualDocumented === 0
-          ? 0
-          : round(((annualDocumented - latest.wages) / latest.wages) * 100);
-      const TOLERANCE_PERCENT = 10;
-      log.record(
-        "INC-009",
-        "Transcript reconciliation",
-        variance,
-        `documented annual income vs transcript wages, ${TOLERANCE_PERCENT}% tolerance`,
-        {
-          documented_annual_income: round(annualDocumented),
-          transcript_wages: latest.wages,
-          transcript_year: latest.taxYear,
-        },
-      );
-      if (Math.abs(variance) > TOLERANCE_PERCENT) {
-        findings.push({
-          requirementId: "INC-009",
-          code: "TRANSCRIPT_VARIANCE",
-          message: `Documented income varies ${variance}% from ${latest.taxYear} transcript wages.`,
-          category: "income",
-        });
-      }
+    const wages = latestTranscripts.reduce((s, t) => s + t.wages, 0);
+    const year = Math.max(...latestTranscripts.map((t) => t.taxYear));
+    const variance =
+      annualDocumented === 0 || wages === 0 ? 0 : round(((annualDocumented - wages) / wages) * 100);
+    const TOLERANCE_PERCENT = 10;
+    log.record(
+      "INC-009",
+      "Transcript reconciliation",
+      variance,
+      `documented annual income vs transcript wages, ${TOLERANCE_PERCENT}% tolerance` +
+        (members.length > 1 ? "; every borrower's latest transcript, summed" : ""),
+      {
+        documented_annual_income: round(annualDocumented),
+        transcript_wages: wages,
+        transcript_year: year,
+        borrowers_with_transcripts: latestTranscripts.length,
+      },
+    );
+    if (Math.abs(variance) > TOLERANCE_PERCENT) {
+      findings.push({
+        requirementId: "INC-009",
+        code: "TRANSCRIPT_VARIANCE",
+        message: `Documented income varies ${variance}% from ${year} transcript wages.`,
+        category: "income",
+      });
     }
   }
 
@@ -348,6 +388,7 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
     "every product parameter within its limit",
     {
       max_ltv: maxLtv,
+      non_occupant_co_borrower: hasNonOccupantCoBorrower(file),
       actual_ltv: ltv.ltv,
       max_dti: GUIDELINES.ratios.maxDtiBack,
       actual_dti: dti.back,

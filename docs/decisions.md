@@ -1917,6 +1917,60 @@ first time the flow changes, and a tester signing in as Dev would be reading
 a co-borrower no co-borrower could have become. Built through the flow, the
 sample cannot say anything the product would not.
 
+## A household's numbers are the household's
+
+A loan with two borrowers carries two credit reports, two asset reports and
+two sets of transcripts, and every figure on the decision is about the loan.
+The file-level `credit`, `assets`, `payroll` and `transcripts` stay Borrower
+1's, by party, because the screens read them; `LoanFile.reports` carries
+everybody's, and `household()` in `@hm/shared` is the only way the engine and
+the requirement evaluators read a report now. Decided 2026-09-17.
+
+**The score.** Each borrower's own score is the middle of three bureau scores,
+the lower of two, the one. The loan's representative score is the LOWEST of
+those, and it is what pricing reads on every loan. The 620 minimum is tested
+against the representative score on a one-borrower loan and against the
+average of the borrowers' own scores, rounded to the nearest whole number, on
+a loan with more than one. That is the Selling Guide's rule for a manually
+underwritten loan (B3-5.1-01 and B3-5.1-02, both effective April 22, 2026),
+and the nearest rule there is for a shadow engine: DU runs its own model on
+the report data and states no score of its own. The rounding is ours; the
+guide's example divides evenly.
+
+**A missing report blocks, and names the person.** The score, the liabilities
+and the utilization are blocked while any borrower has no credit report, with
+"credit report for Dev Raman" as the reason. A lowest-of-one on a two-person
+loan looks exactly like the loan's score and is not, and a DTI short one
+person's debts is a number that looks like an answer. Reserves are the
+opposite case: computed on whoever has connected a bank, with the derivation
+counting who has not. Assets only add, so a co-borrower without a bank link
+leaves the household with fewer reserves rather than with none.
+
+**A joint account is one account.** A tradeline on both credit reports is one
+obligation — `DI-C09` in the DU corpus is one `LIABILITY` with two obligors —
+and a deposit account on both asset reports is one balance. Same creditor,
+kind and opening date; same institution, kind and mask. The derivation
+records how many it folded, so the two fixtures a sample household shares
+read as one report rather than as a household twice in debt.
+
+**Transcripts are compared once everybody's are in.** Income rows carry no
+party, so the wages they are checked against are every borrower's latest
+transcript, summed, and INC-009 is not computed until each borrower has one.
+One person's wages against two people's income is a variance nobody would
+recognize.
+
+**A non-occupant co-borrower caps the LTV at 95.** Selling Guide B2-2-04, for
+a DU casefile with a co-borrower who will not occupy the property. The
+projection carries each borrower's `occupiesProperty` off their application
+role, and `maxLtvFor` takes the lower of the purpose's ceiling and 95 when
+anybody's is false.
+
+**Every read of the file is redacted to the reader's own reports.** The engine
+runs on the server with all of them. The one route that serializes a file
+strips `reports` to the reader's party, applicant included: a co-borrower's
+tradelines are their whole financial life, under a screen that promised them
+it stays theirs.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

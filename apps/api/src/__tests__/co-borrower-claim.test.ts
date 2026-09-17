@@ -30,6 +30,8 @@ import { declarationRouter } from "../routes/declarations.js";
 import { fileRouter } from "../routes/files.js";
 import { connectors } from "../services/connectors.js";
 import { loadLoanFile } from "../services/repository.js";
+import { outstanding } from "@hm/requirements";
+import { underwrite, APOR_TABLE } from "@hm/underwriting";
 import { createUser } from "./support/factories.js";
 import { callAs } from "./support/http.js";
 import { inviteCoBorrower } from "../services/invitations.js";
@@ -629,8 +631,9 @@ describe("once they have arrived", () => {
 
   it("links a bank of their own, beside the applicant's, and reads back only theirs", async () => {
     // Two `bank` links on one file, one per person. The file's own report
-    // stays the applicant's — it is what the engine reads — and a
-    // co-borrower's read carries theirs in its place.
+    // stays the applicant's — it is what the screens read; the engine reads
+    // both, through `reports` — and a co-borrower's read carries theirs in
+    // its place.
     const h = await claimed();
     await callAs(h.theo.id, [fileRouter], "POST", `/${h.fileId}/borrowers`, THEO_HIMSELF);
     for (const kind of ["verification_authorization", "econsent"]) {
@@ -685,6 +688,114 @@ describe("once they have arrived", () => {
     expect(theirs.body.file.links.map((l) => l.partyId)).toEqual(
       theirs.body.file.links.map(() => links.find((l) => l.partyId !== dana.partyId)!.partyId),
     );
+  });
+
+  /*
+   * The engine reads everybody. Two people's application carries two credit
+   * reports and two asset reports, and the loan's numbers are computed from
+   * both: the score is blocked until his report is in, and names him; the
+   * reserves count both banks. And each person's read of the file carries
+   * their own reports and nobody else's — the applicant's read of a
+   * co-borrower's tradelines is the co-borrower's whole financial life, under
+   * a screen that promised it stays theirs.
+   */
+  async function authorized() {
+    const h = await claimed();
+    await callAs(h.theo.id, [fileRouter], "POST", `/${h.fileId}/borrowers`, THEO_HIMSELF);
+    const dana = (await loadLoanFile(h.fileId))!.borrowers[0]!;
+    for (const kind of ["verification_authorization", "econsent"]) {
+      await callAs(h.theo.id, [connectorRouter], "POST", `/${h.fileId}/consents`, {
+        kind,
+        borrowerId: h.borrowerId,
+      });
+      await callAs(h.user.id, [connectorRouter], "POST", `/${h.fileId}/consents`, {
+        kind,
+        borrowerId: dana.id,
+      });
+    }
+    const theoParty = (await prisma.borrower.findUniqueOrThrow({ where: { id: h.borrowerId } }))
+      .partyId;
+    return { ...h, dana, theoParty };
+  }
+  const decide = async (fileId: string) =>
+    underwrite((await loadLoanFile(fileId))!, {
+      aporTable: APOR_TABLE,
+      casefileId: "household-test",
+      now: new Date().toISOString(),
+    });
+
+  it("carries each person's reports by party, and hands each reader only their own", async () => {
+    const h = await authorized();
+    expect(
+      (await callAs(h.user.id, [connectorRouter], "POST", `/${h.fileId}/bank`, {})).status,
+    ).toBe(201);
+    expect(
+      (await callAs(h.theo.id, [connectorRouter], "POST", `/${h.fileId}/bank`, {})).status,
+    ).toBe(201);
+
+    const file = (await loadLoanFile(h.fileId))!;
+    expect(file.reports?.map((r) => [r.partyId, r.assets !== null])).toEqual([
+      [h.dana.partyId, true],
+      [h.theoParty, true],
+    ]);
+    // The file-level report is still hers, by party, for the screens.
+    expect(file.assets?.reportId).toBe(file.reports![0]!.assets?.reportId);
+
+    const hers = await callAs<{ file: { reports: { partyId: string }[] } }>(
+      h.user.id,
+      [fileRouter],
+      "GET",
+      `/${h.fileId}`,
+    );
+    expect(hers.body.file.reports.map((r) => r.partyId)).toEqual([h.dana.partyId]);
+    const his = await callAs<{ file: { reports: { partyId: string }[] } }>(
+      h.theo.id,
+      [fileRouter],
+      "GET",
+      `/${h.fileId}`,
+    );
+    expect(his.body.file.reports.map((r) => r.partyId)).toEqual([h.theoParty]);
+
+    // And the engine counts both banks, which no reader can see together.
+    const reserves = decide(h.fileId).then((d) =>
+      d.derivations.find((x) => x.label === "Eligible post-close assets"),
+    );
+    expect((await reserves)?.inputs).toMatchObject({ borrowers_with_assets: 2 });
+  });
+
+  it("blocks the loan's score until his credit is in, and names him", async () => {
+    const h = await authorized();
+    expect(
+      (await callAs(h.user.id, [connectorRouter], "POST", `/${h.fileId}/credit`, {})).status,
+    ).toBe(201);
+
+    const before = await decide(h.fileId);
+    const blocked = before.derivations.find((d) => d.label === "Representative FICO");
+    expect(blocked?.blockedBy).toEqual(["credit report for Theo Okafor"]);
+    expect(before.aus?.recommendation).toBe("refer");
+    // The outstanding list says the same thing, in the same name.
+    const crd001 = outstanding((await loadLoanFile(h.fileId))!).find(
+      (i) => i.requirement.id === "CRD-001",
+    );
+    expect(crd001?.satisfaction).toMatchObject({
+      status: "unsatisfied",
+      missing: expect.stringContaining("Theo Okafor: credit has not been pulled"),
+    });
+
+    expect(
+      (await callAs(h.theo.id, [connectorRouter], "POST", `/${h.fileId}/credit`, {})).status,
+    ).toBe(201);
+    const after = await decide(h.fileId);
+    const labels = after.derivations.map((d) => d.label);
+    expect(labels).toContain("Representative FICO (Dana Whitfield)");
+    expect(labels).toContain("Representative FICO (Theo Okafor)");
+    expect(labels).toContain("Average median credit score");
+    const liabilities = after.derivations.find((d) => d.label === "Monthly liabilities");
+    expect(liabilities?.blockedBy).toBeUndefined();
+    expect(liabilities?.inputs).toMatchObject({ borrowers_with_credit: 2 });
+    // Two pulls of one fixture return one person's tradelines twice; the
+    // household counts each once.
+    expect(liabilities?.inputs.joint_tradelines_deduplicated).toBeGreaterThan(0);
   });
 
   it("sees the household on their own home page", async () => {

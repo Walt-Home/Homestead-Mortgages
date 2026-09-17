@@ -42,8 +42,9 @@ const REGISTER: Record<string, number> = {
   "apps/api/src/routes/property.ts": 4,
   "apps/api/src/services/screening.ts": 1,
   // The sample borrowers walk the same pulls the routes do, and the sample
-  // household's co-borrower pulls their own transcripts on their own signature.
-  "apps/api/src/scripts/seed-personas.ts": 7,
+  // household's co-borrower pulls his own credit and his own transcripts on
+  // his own authorization.
+  "apps/api/src/scripts/seed-personas.ts": 8,
   // Tests that write a snapshot to have one to read back.
   "apps/api/src/__tests__/employment-income.test.ts": 2,
   "apps/api/src/__tests__/income-identity.test.ts": 1,

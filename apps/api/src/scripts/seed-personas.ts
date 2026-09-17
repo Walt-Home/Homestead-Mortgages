@@ -1040,6 +1040,9 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     const dev = await addCoBorrower(w);
     await propertyData(w);
     await credit(w);
+    // His report beside hers, on his own authorization: the loan's score and
+    // its debts are computed from both, and block until both are in.
+    await creditAsCoBorrower(w, dev);
     await screening(w);
     await liens(w);
     await declarations(w);
@@ -1326,6 +1329,42 @@ async function addCoBorrower(w: Walk): Promise<CoBorrowerOnFile> {
  * No URLA 1b answers of his: he has no job on the file to answer about,
  * because nothing of his has been pulled.
  */
+/**
+ * The co-borrower's own credit pull, minted on HIS consent and filed under
+ * his party — what `POST /files/:id/credit` does when he presses the button
+ * in his own session. The fixture answers with the same report it gave her,
+ * because eight sample borrowers share three fixtures; the household's
+ * arithmetic folds the identical tradelines into one, so the numbers on her
+ * decision read as they did when the file carried one report.
+ */
+async function creditAsCoBorrower(w: Walk, dev: CoBorrowerOnFile): Promise<void> {
+  const file = await currentFile(w);
+  const him = file.borrowers.find((b) => b.id === dev.borrowerId);
+  if (!him) throw new Error(`persona ${w.story.key}: the co-borrower is not on his own file`);
+  const result = await w.registry.credit.pullTriMerge(
+    file,
+    await tokenFor(file, him, "credit_report", w.tx),
+  );
+  await recordSnapshot(
+    w.loanFileId,
+    "credit",
+    result.provider,
+    result.externalId,
+    result.data,
+    result.retrievedAt,
+    dev.partyId,
+    w.tx,
+  );
+  await recordEvent(
+    w.loanFileId,
+    "connector_pull",
+    result.provider,
+    { kind: "credit", borrowerId: dev.borrowerId },
+    "CRD-001",
+    w.tx,
+  );
+}
+
 async function signAsCoBorrower(w: Walk, dev: CoBorrowerOnFile): Promise<void> {
   await grantConsent(w.tx, w.loanFileId, dev.borrowerId, "form_4506c");
   await grantConsent(w.tx, w.loanFileId, dev.borrowerId, "application_signature");

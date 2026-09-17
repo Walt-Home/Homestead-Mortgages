@@ -9,10 +9,18 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { LoanFile } from "@hm/shared";
+import type { Borrower, CreditReport, DepositAccount, LoanFile, Tradeline } from "@hm/shared";
 import { DerivationLog, round } from "../derive.js";
-import { housingPitia, loanToValue, representativeFico, reserves } from "../calculations.js";
+import {
+  housingPitia,
+  loanToValue,
+  monthlyLiabilities,
+  representativeFico,
+  reserves,
+} from "../calculations.js";
 import { runComplianceTests } from "../compliance.js";
+import { maxLtvFor } from "../aus.js";
+import { afterIdentity } from "./support/in-memory-file.js";
 import { pointsAndFeesLimit, REGULATION_Z_THRESHOLDS } from "../guidelines.js";
 
 function file(overrides: Partial<LoanFile> = {}): LoanFile {
@@ -100,18 +108,222 @@ describe("representative FICO", () => {
   it("takes the middle of three, not the average", () => {
     const log = new DerivationLog();
     // Average would be 700. The rule is the middle score.
-    expect(representativeFico(file({ credit: scores([620, 680, 800]) }), log)).toBe(680);
+    const result = representativeFico(file({ credit: scores([620, 680, 800]) }), log);
+    expect(result?.representative).toBe(680);
+    expect(result?.forEligibility).toBe(680);
+    expect(result?.averageMedian).toBeNull();
   });
 
   it("takes the lower of two", () => {
     const log = new DerivationLog();
-    expect(representativeFico(file({ credit: scores([720, 690]) }), log)).toBe(690);
+    expect(representativeFico(file({ credit: scores([720, 690]) }), log)?.representative).toBe(690);
   });
 
   it("blocks rather than guessing when there is no report", () => {
     const log = new DerivationLog();
     expect(representativeFico(file({ credit: null }), log)).toBeNull();
     expect(log.all()[0]?.blockedBy).toContain("credit report");
+  });
+
+  /*
+   * Two people, two reports. The loan's representative score is the lowest
+   * of the two, which is what pricing reads; the 620 minimum on a loan with
+   * more than one borrower is tested against the average of the two
+   * (Selling Guide B3-5.1-02). Read off one report, a two-person loan's score
+   * was one person's, and the DTI beneath it was short the other's debts.
+   */
+  describe("with more than one borrower", () => {
+    const person = (id: string, first: string, last: string): Borrower => ({
+      ...file().borrowers[0]!,
+      id,
+      partyId: `party-${id}`,
+      firstName: first,
+      lastName: last,
+    });
+    const dana = person("b1", "Dana", "Whitfield");
+    const theo = person("b2", "Theo", "Okafor");
+    const two = (hers: CreditReport | null, his: CreditReport | null): LoanFile =>
+      file({
+        borrowers: [dana, theo],
+        credit: hers,
+        reports: [
+          { partyId: dana.partyId, credit: hers, assets: null, payroll: null, transcripts: [] },
+          { partyId: theo.partyId, credit: his, assets: null, payroll: null, transcripts: [] },
+        ],
+      });
+
+    it("prices on the lowest and tests the minimum on the average", () => {
+      const log = new DerivationLog();
+      const result = representativeFico(two(scores([700, 720, 740]), scores([600, 605, 660])), log);
+      expect(result).toEqual({ representative: 605, forEligibility: 663, averageMedian: 663 });
+      const labels = log.all().map((d) => d.label);
+      expect(labels).toEqual([
+        "Representative FICO (Dana Whitfield)",
+        "Representative FICO (Theo Okafor)",
+        "Representative FICO",
+        "Average median credit score",
+      ]);
+      expect(log.all()[2]?.inputs).toEqual({ "Dana Whitfield": 720, "Theo Okafor": 605 });
+    });
+
+    it("blocks the loan's score while anybody's report is missing, and names them", () => {
+      const log = new DerivationLog();
+      expect(representativeFico(two(scores([700, 720, 740]), null), log)).toBeNull();
+      expect(log.all()[0]?.blockedBy).toEqual(["credit report for Theo Okafor"]);
+    });
+
+    it("reads a file assembled without per-person reports as Borrower 1's alone", () => {
+      const log = new DerivationLog();
+      const inMemory = { ...two(scores([700, 720, 740]), null), reports: undefined };
+      expect(representativeFico(inMemory, log)).toBeNull();
+      expect(log.all()[0]?.blockedBy).toEqual(["credit report for Theo Okafor"]);
+    });
+
+    it("counts a joint account once in the household's liabilities", () => {
+      const line = (id: string, creditor: string, payment: number): Tradeline => ({
+        id,
+        creditorName: creditor,
+        type: "installment",
+        balance: 10_000,
+        monthlyPayment: payment,
+        openedDate: "2023-05-01",
+        disputed: false,
+        paymentHistory: [],
+        maxDelinquency: 0,
+      });
+      const hers = {
+        ...scores([700, 720, 740]),
+        tradelines: [line("h1", "Auto Co", 400), line("h2", "Card Co", 50)],
+      };
+      // The same auto loan on his report, under his report's own id.
+      const his = {
+        ...scores([600, 605, 660]),
+        tradelines: [line("t9", "Auto Co", 400), line("t2", "Student Co", 150)],
+      };
+      const log = new DerivationLog();
+      expect(monthlyLiabilities(two(hers, his), log)).toBe(600);
+      expect(log.all()[0]?.inputs).toMatchObject({
+        tradelines_counted: 3,
+        borrowers_with_credit: 2,
+        joint_tradelines_deduplicated: 1,
+      });
+    });
+
+    it("counts every connected bank's accounts, a joint account once, in reserves", () => {
+      const account = (id: string, mask: string, balance: number): DepositAccount => ({
+        id,
+        institution: "Fixture Bank",
+        type: "checking",
+        mask,
+        currentBalance: balance,
+        balanceHistory: [],
+        usedForQualifying: true,
+      });
+      const report = (id: string, accounts: DepositAccount[]) => ({
+        reportId: id,
+        generatedAt: "",
+        monthsCovered: 12,
+        vendorAuthorizedForDu: true,
+        accounts,
+        largeDeposits: [],
+        identifiedRentPayments: 0,
+        alternativeReferences: [],
+        incomeSources: [],
+        employments: [],
+        incomeConfidence: "verified" as const,
+        gifts: [],
+        borrowedFunds: [],
+        earnestMoneyVerified: true,
+      });
+      const hers = report("hers", [account("a1", "1111", 20_000), account("a2", "2222", 5_000)]);
+      const his = report("his", [account("z1", "2222", 5_000), account("z2", "3333", 15_000)]);
+      const f: LoanFile = {
+        ...two(null, null),
+        assets: hers,
+        reports: [
+          { partyId: dana.partyId, credit: null, assets: hers, payroll: null, transcripts: [] },
+          { partyId: theo.partyId, credit: null, assets: his, payroll: null, transcripts: [] },
+        ],
+      };
+      const log = new DerivationLog();
+      // 20,000 + 5,000 + 15,000: the shared account is not 10,000.
+      expect(reserves(f, 2_000, 0, log).eligiblePostCloseAssets).toBe(40_000);
+      const eligible = log.all().find((d) => d.label === "Eligible post-close assets");
+      expect(eligible?.inputs).toMatchObject({
+        borrowers_with_assets: 2,
+        borrowers_without_assets: 0,
+        joint_accounts_deduplicated: 1,
+      });
+    });
+
+    it("computes reserves on whoever has connected a bank, and says how many have not", () => {
+      const f: LoanFile = {
+        ...two(null, null),
+        reports: [
+          {
+            partyId: dana.partyId,
+            credit: null,
+            assets: {
+              reportId: "hers",
+              generatedAt: "",
+              monthsCovered: 12,
+              vendorAuthorizedForDu: true,
+              accounts: [
+                {
+                  id: "a1",
+                  institution: "B",
+                  type: "checking",
+                  mask: "1",
+                  currentBalance: 30_000,
+                  balanceHistory: [],
+                  usedForQualifying: true,
+                },
+              ],
+              largeDeposits: [],
+              identifiedRentPayments: 0,
+              alternativeReferences: [],
+              incomeSources: [],
+              employments: [],
+              incomeConfidence: "verified",
+              gifts: [],
+              borrowedFunds: [],
+              earnestMoneyVerified: true,
+            },
+            payroll: null,
+            transcripts: [],
+          },
+          { partyId: theo.partyId, credit: null, assets: null, payroll: null, transcripts: [] },
+        ],
+      };
+      const log = new DerivationLog();
+      expect(reserves(f, 2_000, 0, log).eligiblePostCloseAssets).toBe(30_000);
+      const eligible = log.all().find((d) => d.label === "Eligible post-close assets");
+      expect(eligible?.inputs).toMatchObject({
+        borrowers_with_assets: 1,
+        borrowers_without_assets: 1,
+      });
+    });
+  });
+});
+
+describe("the LTV ceiling", () => {
+  it("drops to 95 when a co-borrower will not live in the home", () => {
+    const f = afterIdentity();
+    const dana = { ...f.borrowers[0]!, occupiesProperty: true };
+    expect(maxLtvFor({ ...f, borrowers: [dana] })).toBe(97);
+    expect(
+      maxLtvFor({
+        ...f,
+        borrowers: [dana, { ...dana, id: "b2", partyId: "p2", occupiesProperty: false }],
+      }),
+    ).toBe(95);
+    // Unknown is not "no": a file assembled without the role keeps the purpose's ceiling.
+    expect(
+      maxLtvFor({
+        ...f,
+        borrowers: [dana, { ...dana, id: "b2", partyId: "p2", occupiesProperty: undefined }],
+      }),
+    ).toBe(97);
   });
 });
 

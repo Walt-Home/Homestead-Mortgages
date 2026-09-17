@@ -11,7 +11,7 @@
  * done" in different words.
  */
 
-import { RESIDENCE_HISTORY_MONTHS, type Borrower, type LoanFile } from "@hm/shared";
+import { RESIDENCE_HISTORY_MONTHS, memberFor, type Borrower, type LoanFile } from "@hm/shared";
 import type { Requirement } from "./types.js";
 
 /** Evidence that it is done. */
@@ -48,7 +48,7 @@ const check = (condition: boolean, evidence: string, missing: string): Met | Unm
  * before. A second person is what puts a name in front of them, and nothing
  * else does, so no existing file's count moves for this.
  */
-function ofEveryBorrower(ask: (b: Borrower, f: LoanFile) => Met | Unmet): Evaluator {
+function ofEveryBorrower(ask: (b: Borrower, f: LoanFile) => Satisfaction): Evaluator {
   return (f) => {
     if (f.borrowers.length === 0) return no("no borrower");
     const named = (b: Borrower, text: string) =>
@@ -58,6 +58,13 @@ function ofEveryBorrower(ask: (b: Borrower, f: LoanFile) => Met | Unmet): Evalua
       (a): a is { b: Borrower; answer: Unmet } => a.answer.status === "unsatisfied",
     );
     if (unmet.length) return no(unmet.map((a) => named(a.b, a.answer.missing)).join("; "));
+    // Something to do outranks something to wait for; and a wait names who
+    // it is waiting on, because on a joint file that is the whole answer.
+    const waiting = answers.filter(
+      (a): a is { b: Borrower; answer: { status: "blocked"; waitingFor: string } } =>
+        a.answer.status === "blocked",
+    );
+    if (waiting.length) return wait(waiting.map((a) => named(a.b, a.answer.waitingFor)).join("; "));
     return ok(answers.map((a) => named(a.b, (a.answer as Met).evidence)).join("; "));
   };
 }
@@ -227,20 +234,31 @@ export const EVALUATORS: Record<string, Evaluator> = {
     );
   },
 
-  "CRD-001": (f) =>
-    !f.credit
+  /*
+   * A credit report is one person's, so the five that read one are asked of
+   * each borrower against their OWN report. Read off the file's one report
+   * they answered "tri-merge on file" for a co-borrower whose credit had never
+   * been pulled, which is the applicant's evidence standing in for his — and
+   * the engine, which blocks the loan's score until everybody's report is in,
+   * disagreeing with the outstanding list about whether anything was owed.
+   */
+  "CRD-001": ofEveryBorrower((b, f) => {
+    const credit = memberFor(f, b).credit;
+    return !credit
       ? no("credit has not been pulled")
       : check(
-          f.credit.scores.length === 3,
-          `tri-merge ${f.credit.reportId} dated ${f.credit.reportDate}`,
-          `only ${f.credit.scores.length} of 3 bureau scores returned`,
-        ),
+          credit.scores.length === 3,
+          `tri-merge ${credit.reportId} dated ${credit.reportDate}`,
+          `only ${credit.scores.length} of 3 bureau scores returned`,
+        );
+  }),
 
   "CRD-002": derived("CRD-002", "representative FICO"),
 
-  "CRD-003": (f) => {
-    if (!f.credit) return wait("the credit pull");
-    const unreconciled = f.credit.tradelines.filter(
+  "CRD-003": ofEveryBorrower((b, f) => {
+    const credit = memberFor(f, b).credit;
+    if (!credit) return wait("the credit pull");
+    const unreconciled = credit.tradelines.filter(
       (t) => t.monthlyPayment === 0 && !t.exclusionReasonCode,
     );
     return check(
@@ -248,38 +266,42 @@ export const EVALUATORS: Record<string, Evaluator> = {
       "every tradeline is in DTI or excluded with a reason",
       `${unreconciled.length} tradeline(s) neither counted nor excluded`,
     );
-  },
+  }),
 
-  "CRD-004": (f) =>
-    !f.credit
+  "CRD-004": ofEveryBorrower((b, f) => {
+    const credit = memberFor(f, b).credit;
+    return !credit
       ? wait("the credit pull")
-      : ok(`${f.credit.publicRecords.length} public record(s) reviewed`),
+      : ok(`${credit.publicRecords.length} public record(s) reviewed`);
+  }),
 
-  "CRD-005": (f) => {
-    if (!f.credit) return wait("the credit pull");
-    const mortgage = f.credit.tradelines.find((t) => t.type === "mortgage");
+  "CRD-005": ofEveryBorrower((b, f) => {
+    const own = memberFor(f, b);
+    if (!own.credit) return wait("the credit pull");
+    const mortgage = own.credit.tradelines.find((t) => t.type === "mortgage");
     if (mortgage && mortgage.paymentHistory.length >= 12) {
       return ok(`${mortgage.paymentHistory.length} months of mortgage rating`);
     }
-    const rentMonths = f.assets?.identifiedRentPayments ?? 0;
+    const rentMonths = own.assets?.identifiedRentPayments ?? 0;
     return check(
       rentMonths >= 12,
       `${rentMonths} months of rent history`,
       "no 12-month housing payment history from a mortgage rating or the bank report",
     );
-  },
+  }),
 
   "CRD-007": derived("CRD-007", "foreclosure / short sale / DIL seasoning"),
 
-  "CRD-014": (f) => {
-    if (!f.credit) return wait("the credit pull");
-    const disputed = f.credit.tradelines.filter((t) => t.disputed);
+  "CRD-014": ofEveryBorrower((b, f) => {
+    const credit = memberFor(f, b).credit;
+    if (!credit) return wait("the credit pull");
+    const disputed = credit.tradelines.filter((t) => t.disputed);
     return check(
       disputed.length === 0,
       "no disputed tradelines remain",
       `${disputed.length} disputed tradeline(s) unresolved`,
     );
-  },
+  }),
 
   "CRD-016": derived("CRD-016", "revolving utilization"),
 

@@ -51,6 +51,8 @@ export const GUIDELINES = {
     purchaseInvestmentMax: 85,
     rateTermRefinanceMax: 97,
     cashOutRefinanceMax: 80,
+    /** A DU casefile with a co-borrower who will not occupy the property (B2-2-04). */
+    nonOccupantCoBorrowerMax: 95,
   },
 
   /**

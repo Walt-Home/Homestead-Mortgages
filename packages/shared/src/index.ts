@@ -1,4 +1,5 @@
 export * from "./types/index.js";
+export * from "./household.js";
 export * from "./facts.js";
 export * from "./authorization.js";
 export * from "./du-response.js";

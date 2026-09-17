@@ -151,7 +151,8 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   letters in them, which no NMLSR id has — and a production assembly refuses
   a row carrying one. `/api/health` reports `originator: placeholder` until
   then. The vesting on the review screen has no such gap: it is asked.
-- **A co-borrower's reports do not reach the engine.** Screen 2 names one,
+- **A co-borrower walks their own half, and the engine reads everybody.**
+  Screen 2 names one,
   the applicant sends them a link (Resend when `MAIL_PROVIDER=resend`;
   otherwise an in-memory outbox that only a test reads, and the route refuses
   in production rather than pretend), `/claim/:token` takes it after Google
@@ -166,9 +167,14 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   Dev, the seed reads his link out of the fixture outbox, and he claims it
   as a sign-in of his own (`priya_dev_raman:dev`, listed under her on the
   sign-in page) — so the sample cannot drift from the flow.
-  What the engine reads is still Borrower 1's reports by party;
-  consuming a co-borrower's is the compute-boundary item. `docs/states.md`
-  has the shape.
+  The file's own `credit`, `assets`, `payroll` and `transcripts` stay
+  Borrower 1's, for the screens; `LoanFile.reports` carries everybody's by
+  party, `household()` in `@hm/shared` is how the engine and the evaluators
+  read a report, and every read of a file is redacted to the reader's own.
+  The loan's score is the lowest of the borrowers' own, the minimum is tested
+  against their average, a joint account counts once, and a missing report
+  blocks by name — `docs/decisions.md`, "A household's numbers are the
+  household's". `docs/states.md` has the shape.
 
 ## Five rules that are not style preferences
 

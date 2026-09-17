@@ -301,6 +301,25 @@ export interface TaxTranscript {
   readonly retrievedAt: string;
 }
 
+/* ── One person's reports ──────────────────────────────────────────────── */
+
+/**
+ * One borrower's own reports on a file, by party.
+ *
+ * A credit report, an asset report and a payroll pull are each about ONE
+ * person, so a household holds one of each per person who has pulled. The
+ * file-level `credit`, `assets`, `payroll` and `transcripts` on `LoanFile`
+ * stay Borrower 1's, because the screens read them that way; the engine reads
+ * every entry of `LoanFile.reports` instead, through `household()`.
+ */
+export interface BorrowerReports {
+  readonly partyId: string;
+  readonly credit: CreditReport | null;
+  readonly assets: AssetReport | null;
+  readonly payroll: PayrollData | null;
+  readonly transcripts: readonly TaxTranscript[];
+}
+
 /* ── Uploaded documents ─────────────────────────────────────────────────── */
 
 export interface UploadedDocument {

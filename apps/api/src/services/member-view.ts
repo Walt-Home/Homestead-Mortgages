@@ -75,10 +75,16 @@ function onlyThatTheySigned(c: Consent): Consent {
  * everybody on it is somebody else.
  */
 export function redactOthers(file: LoanFile, you: string | null): LoanFile {
+  const yourParty = file.borrowers.find((b) => b.id === you)?.partyId ?? null;
   return {
     ...file,
     borrowers: file.borrowers.map((b) => (b.id === you ? b : onlyTheirName(b))),
     consents: file.consents.map((c) => (c.borrowerId === you ? c : onlyThatTheySigned(c))),
+    // Everybody's reports reach the engine; only the reader's own reach the
+    // reader. The applicant's read of a co-borrower's credit report is the
+    // co-borrower's whole financial life, under a screen that promised them
+    // it stays theirs.
+    reports: file.reports?.filter((r) => r.partyId === yourParty),
   };
 }
 

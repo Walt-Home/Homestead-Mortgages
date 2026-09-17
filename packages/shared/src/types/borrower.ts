@@ -125,6 +125,13 @@ export interface Borrower {
   readonly firstTimeHomebuyer: boolean | null;
   readonly isMilitary: boolean;
   /**
+   * Whether this person will live in the home, off their role on the
+   * application: false for a `NON_OCCUPANT_CO_BORROWER`. A DU casefile with
+   * one caps the LTV at 95 (Selling Guide B2-2-04). Optional because only the
+   * projection knows the role; absent is unknown, and unknown does not cap.
+   */
+  readonly occupiesProperty?: boolean;
+  /**
    * Null is "nobody has been asked", and it is not "rent".
    *
    * The column behind this carried a NOT NULL default of `"rent"` while no

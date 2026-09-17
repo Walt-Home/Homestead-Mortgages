@@ -11,6 +11,7 @@ import type { LoanTerms, ProductSelection, SubjectProperty } from "./loan.js";
 import type { Borrower, Consent, InvitedBorrower } from "./borrower.js";
 import type {
   AssetReport,
+  BorrowerReports,
   CreditReport,
   IncomeReportSource,
   IncomeSource,
@@ -171,6 +172,23 @@ export interface LoanFile {
   readonly assets: AssetReport | null;
   readonly payroll: PayrollData | null;
   readonly transcripts: readonly TaxTranscript[];
+
+  /**
+   * Every borrower's own reports, one entry per borrower, in document order.
+   *
+   * The four fields above are Borrower 1's, by party, and the screens read
+   * them. The engine reads THIS, through `household()` in `@hm/shared`: a
+   * co-borrower's tradelines are debts the loan carries and their accounts
+   * are reserves it may count, and a DTI computed on one person's reports for
+   * two people's application was a number that looked like an answer.
+   *
+   * Optional for the reason `qualifyingIncomeReportedBy` is: only the
+   * projection off the database can fill it. A file assembled in memory
+   * without it is read as Borrower 1's, whose reports are the four fields,
+   * with nobody else's known. Every read of a file strips everybody's but
+   * the reader's own.
+   */
+  readonly reports?: readonly BorrowerReports[];
 
   /**
    * Income and employment as finally determined. These are not raw connector

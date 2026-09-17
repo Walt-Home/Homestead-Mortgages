@@ -16,6 +16,7 @@ import type {
   AssetReport,
   Borrower,
   Consent,
+  BorrowerReports,
   CreditReport,
   Decision,
   DisclosureRecord,
@@ -262,9 +263,9 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
   // replace the applicant's on the file the engine reads. A legacy snapshot
   // with no party is still the applicant's, because nobody else could have
   // made it.
-  const latestOf = <T>(kind: string, partyId: string | null): T | null => {
+  const latestOf = <T>(kind: string, partyId: string | null, legacyIsTheirs = true): T | null => {
     const snapshot = row.snapshots.find(
-      (s) => s.kind === kind && (s.partyId === partyId || s.partyId === null),
+      (s) => s.kind === kind && (s.partyId === partyId || (legacyIsTheirs && s.partyId === null)),
     );
     return snapshot ? (snapshot.payload as T) : null;
   };
@@ -387,6 +388,7 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       demographics: (b.demographics as Borrower["demographics"]) ?? null,
       firstTimeHomebuyer: who.firstTimeHomebuyer,
       isMilitary: who.isMilitary,
+      occupiesProperty: roleByParty.get(b.partyId) !== "NON_OCCUPANT_CO_BORROWER",
       // Situational: what they pay NOW, on THIS file. Stays on the row.
       currentHousing: b.currentHousing as Borrower["currentHousing"],
       monthlyRent: num(b.monthlyRent) ?? undefined,
@@ -453,6 +455,18 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
 
   // Whose reports the file's own fields carry: Borrower 1's, by party.
   const applicantParty = inDocumentOrder[0]?.partyId ?? null;
+  // And everybody's, each by their own party, for the engine. A legacy
+  // snapshot with no party is the applicant's and nobody else's.
+  const reports: BorrowerReports[] = inDocumentOrder.map((b) => {
+    const theirs = b.partyId === applicantParty;
+    return {
+      partyId: b.partyId,
+      credit: latestOf<CreditReport>("credit", b.partyId, theirs),
+      assets: latestOf<AssetReport>("bank", b.partyId, theirs),
+      payroll: latestOf<PayrollData>("payroll", b.partyId, theirs),
+      transcripts: latestOf<readonly TaxTranscript[]>("irs", b.partyId, theirs) ?? [],
+    };
+  });
   const conditions = await db.loanCondition.findMany({ where: { loanFileId: id } });
   const application = await applicationReceipt(db, id, inDocumentOrder, consents, ordinals);
 
@@ -569,6 +583,7 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
     assets: latestOf<AssetReport>("bank", applicantParty),
     payroll: latestOf<PayrollData>("payroll", applicantParty),
     transcripts: latestOf<readonly TaxTranscript[]>("irs", applicantParty) ?? [],
+    reports,
 
     incomeSources: row.incomeSources.map((s) => ({
       type: s.type as never,

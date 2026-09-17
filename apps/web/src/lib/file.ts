@@ -171,7 +171,7 @@ export interface LoanFileView {
     apn: string;
     county: string;
     propertyType: string;
-    priorOwnershipInLastThreeYears: boolean;
+    priorOwnershipInLastThreeYears: boolean | null;
     monthlyAssociationDues?: number;
   } | null;
   valuation: unknown | null;

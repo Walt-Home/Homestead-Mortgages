@@ -70,10 +70,11 @@ export interface PropertyRecord {
   readonly lastSale?: PropertySale;
   /**
    * Whether this borrower held an ownership interest in a principal residence
-   * in the prior three years. Answers the first-time-homebuyer question and
-   * one of screen 4's five derived declarations, so it is never asked.
+   * in the prior three years. A fact about the person, not the parcel: the
+   * fixture answers it for its persona, and a real county record answers null,
+   * which screen 2 reads as "not derived" rather than as either answer.
    */
-  readonly priorOwnershipInLastThreeYears: boolean;
+  readonly priorOwnershipInLastThreeYears: boolean | null;
 }
 
 /* ── Valuation ──────────────────────────────────────────────────────────── */

@@ -67,6 +67,14 @@ export const config = {
    */
   providers: {
     propertyData: process.env.PROPERTY_DATA_PROVIDER ?? "fixture",
+    /**
+     * Who answers for the county record and the valuation, beneath whichever
+     * adapter answers autocomplete. "corelogic" or the fixture. The flood
+     * determination stays with the fixture either way: it is a separate
+     * product, and on a federally related mortgage it has to be a certified
+     * one rather than a map read.
+     */
+    propertyRecords: process.env.PROPERTY_RECORDS_PROVIDER ?? "fixture",
     identity: process.env.IDENTITY_PROVIDER ?? "fixture",
     bank: process.env.BANK_PROVIDER ?? "fixture",
     /**
@@ -161,6 +169,19 @@ export const config = {
    * bundle is somebody else's bill.
    */
   googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY,
+
+  /**
+   * CoreLogic's Property API, for the county record and the AVM. The client
+   * key and secret are the developer portal's master credentials for every
+   * CoreLogic API, so they live in Secret Manager and nowhere a bundle could
+   * carry them. The base URL is overridable because the v2 specification and
+   * the older guide name different hosts.
+   */
+  corelogic: {
+    clientKey: process.env.CORELOGIC_CLIENT_KEY,
+    clientSecret: process.env.CORELOGIC_CLIENT_SECRET,
+    baseUrl: process.env.CORELOGIC_BASE_URL,
+  },
 
   /**
    * Stripe. The SANDBOX key is preferred deliberately and the live key is only

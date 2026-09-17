@@ -251,3 +251,38 @@ variable "alert_email" {
   type        = string
   default     = ""
 }
+
+# ── CoreLogic ────────────────────────────────────────────────────────────────
+
+variable "corelogic_client_key_secret" {
+  description = <<-EOT
+    Secret Manager secret holding the CoreLogic client key. The portal calls
+    the pair the master credentials for every CoreLogic API, which is why both
+    halves are secrets rather than one variable and one secret: a client key
+    alone still names the account the bill goes to.
+  EOT
+  type        = string
+  default     = "HOMESTEAD_MORTGAGES_CORELOGIC_CLIENT_KEY"
+}
+
+variable "corelogic_client_secret_secret" {
+  description = "Secret Manager secret holding the CoreLogic client secret."
+  type        = string
+  default     = "HOMESTEAD_MORTGAGES_CORELOGIC_CLIENT_SECRET"
+}
+
+variable "property_records_provider" {
+  description = <<-EOT
+    Who answers for the county record and the AVM beneath autocomplete:
+    "corelogic" or "fixture". Separate from PROPERTY_DATA_PROVIDER so the
+    Places autocomplete and the CoreLogic record can be turned on one at a
+    time. The flood determination stays on the fixture either way.
+  EOT
+  type        = string
+  default     = "fixture"
+
+  validation {
+    condition     = contains(["fixture", "corelogic"], var.property_records_provider)
+    error_message = "property_records_provider must be fixture or corelogic."
+  }
+}

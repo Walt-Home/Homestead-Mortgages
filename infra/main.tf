@@ -235,16 +235,41 @@ resource "google_cloud_run_v2_service" "api" {
         }
       }
 
-      # ── Google Places ──────────────────────────────────────────────────────
+      # ── Google Places, over CoreLogic ──────────────────────────────────────
       #
-      # Autocomplete only. The assessor record, valuation and flood lookups
-      # stay on the fixture — they are separate vendors, and a flood
-      # determination on a federally related mortgage has to be a certified
-      # one rather than a map read.
+      # Places answers autocomplete. Beneath it CoreLogic answers the county
+      # record and the AVM. The flood determination stays on the fixture — it
+      # is a separate product, and on a federally related mortgage it has to
+      # be a certified one rather than a map read.
 
       env {
         name  = "PROPERTY_DATA_PROVIDER"
         value = "google_places"
+      }
+
+      env {
+        name  = "PROPERTY_RECORDS_PROVIDER"
+        value = var.property_records_provider
+      }
+
+      # The two CoreLogic secrets are referenced only when the provider is on.
+      # A revision that references a secret that does not exist yet fails to
+      # start, so a deployment that has not created them keeps booting on the
+      # fixture until somebody flips the variable.
+      dynamic "env" {
+        for_each = var.property_records_provider == "corelogic" ? {
+          CORELOGIC_CLIENT_KEY    = var.corelogic_client_key_secret
+          CORELOGIC_CLIENT_SECRET = var.corelogic_client_secret_secret
+        } : {}
+        content {
+          name = env.key
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = "latest"
+            }
+          }
+        }
       }
 
       env {

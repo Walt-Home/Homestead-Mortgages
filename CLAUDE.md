@@ -86,11 +86,19 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
 
 ## Known stubs, for whoever wires the real thing
 
-- **Address autocomplete is a fixture list of three addresses.** Anything else
-  falls back to manual entry with no property card. A real Places/Smarty
-  adapter implements `suggestAddresses` only; the assessor, AVM and flood
-  lookups are separate vendors, and a flood determination on a federally
-  related mortgage has to be a _certified_ one, not a FEMA map read.
+- **The property card is CoreLogic's when `PROPERTY_RECORDS_PROVIDER=corelogic`,
+  and the flood zone is never theirs.** `adapters/corelogic.ts` answers the
+  county record (one Property Detail call plus the HOA product) and the AVM
+  (the originations model's summary) off a bearer token minted from
+  `CORELOGIC_CLIENT_KEY` and `CORELOGIC_CLIENT_SECRET`; Google Places sits
+  over it for autocomplete when both are named. A land use the adapter cannot
+  place is refused into the manual path rather than guessed onto a federal
+  submission, and `priorOwnershipInLastThreeYears` reads null from a real
+  record because a parcel knows nothing about who is buying it. The flood
+  determination stays on the fixture: it is a separate product, and on a
+  federally related mortgage it has to be a _certified_ one, not a map read.
+  Unset, everything is the fixture's three addresses, and anything else falls
+  back to manual entry with no property card.
 - **Manual bank-statement upload collects filenames and sends nothing.**
   `apps/web/src/pages/BankPage.tsx`. Deliberate — where the bytes go is a real
   decision, and `routes/documents.ts` never transmits them today.

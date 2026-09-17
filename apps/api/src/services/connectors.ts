@@ -16,6 +16,7 @@
 import {
   duConnector,
   fixtureRegistry,
+  coreLogicConnector,
   googlePlacesConnector,
   mismoAusResponseReader,
   plaidConnector,
@@ -155,7 +156,37 @@ export function connectors(): ConnectorRegistry {
     ]),
   );
 
-  let propertyData = fixtures.propertyData;
+  // Two layers, each read from its own variable. Beneath: who answers for the
+  // county record and the valuation — CoreLogic, or the fixture — with the
+  // flood determination always the fixture's, because it is a separate
+  // product and a certified one is not a map read. Above: who answers
+  // autocomplete, which may be Places over whatever is beneath.
+  let records = fixtures.propertyData;
+  let recordsLabel = "fixture for records";
+  const wantsCoreLogic =
+    config.providers.propertyRecords === "corelogic" ||
+    config.providers.propertyData === "corelogic";
+  if (wantsCoreLogic) {
+    if (!config.corelogic.clientKey || !config.corelogic.clientSecret) {
+      // At boot, not at the first address: a record lookup that silently
+      // fell back to the fixture would put a fixture's tax bill behind a
+      // real vendor's name.
+      throw new Error(
+        "PROPERTY_RECORDS_PROVIDER=corelogic but CORELOGIC_CLIENT_KEY or " +
+          "CORELOGIC_CLIENT_SECRET is not set.",
+      );
+    }
+    records = coreLogicConnector({
+      clientKey: config.corelogic.clientKey,
+      clientSecret: config.corelogic.clientSecret,
+      ...(config.corelogic.baseUrl ? { baseUrl: config.corelogic.baseUrl } : {}),
+      fallback: fixtures.propertyData,
+    });
+    recordsLabel = "corelogic for records and AVM, fixture for flood";
+  }
+
+  let propertyData = records;
+  if (wantsCoreLogic) chosen.propertyData = "corelogic (+ fixture for flood)";
   if (config.providers.propertyData === "google_places") {
     if (!config.googlePlacesApiKey) {
       // Failing at boot rather than at the first keystroke: an autocomplete
@@ -166,11 +197,11 @@ export function connectors(): ConnectorRegistry {
     propertyData = googlePlacesConnector({
       apiKey: config.googlePlacesApiKey,
       // Places knows which addresses exist and nothing else. The assessor
-      // record, the valuation and the flood zone stay with the fixture until a
-      // property-data vendor is wired.
-      fallback: fixtures.propertyData,
+      // record, the valuation and the flood zone come from whatever is
+      // beneath it.
+      fallback: records,
     });
-    chosen.propertyData = "google-places (+ fixture for records)";
+    chosen.propertyData = `google-places (+ ${recordsLabel})`;
   }
 
   let identity = fixtures.identity;

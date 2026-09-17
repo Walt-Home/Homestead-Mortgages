@@ -805,13 +805,15 @@ function PropertyCard({
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
 
+  // A zero is a figure the county did not report, not a house with no
+  // bedrooms, so it is left off rather than read out.
   const facts = [
     TYPE_LABEL[r.propertyType] ?? r.propertyType,
-    `${r.bedrooms} bed`,
-    `${r.bathrooms} bath`,
-    `${r.squareFeet.toLocaleString()} sq ft`,
-    `built ${r.yearBuilt}`,
-  ];
+    r.bedrooms > 0 ? `${r.bedrooms} bed` : null,
+    r.bathrooms > 0 ? `${r.bathrooms} bath` : null,
+    r.squareFeet > 0 ? `${r.squareFeet.toLocaleString()} sq ft` : null,
+    r.yearBuilt > 0 ? `built ${r.yearBuilt}` : null,
+  ].filter((f): f is string => f !== null);
 
   const FIELDS: { key: string; label: string; current: string }[] = [
     { key: "bedrooms", label: "Bedrooms", current: String(r.bedrooms) },

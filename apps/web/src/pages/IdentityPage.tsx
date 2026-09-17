@@ -412,13 +412,16 @@ export function IdentityPage() {
               ssnLast4: digits.slice(-4),
             }
           : {}),
-        // Derived from the county record rather than asked — screen 1 already
-        // retrieved whether this borrower held an ownership interest.
-        // On the repair path the file never loaded, so there is no record
-        // to derive from; null asserts nothing and the earlier fact stands.
+        // Derived from the county record rather than asked, where the record
+        // carries it — the fixture answers for its persona; a real vendor's
+        // record answers null, because a parcel knows nothing about who is
+        // buying it, and null asserts nothing. On the repair path the file
+        // never loaded, so there is no record to derive from either.
         firstTimeHomebuyer: data?.file
           ? data.file.propertyRecord
-            ? !data.file.propertyRecord.priorOwnershipInLastThreeYears
+            ? data.file.propertyRecord.priorOwnershipInLastThreeYears === null
+              ? null
+              : !data.file.propertyRecord.priorOwnershipInLastThreeYears
             : true
           : null,
         // No housing basis, because this screen does not ask for one.

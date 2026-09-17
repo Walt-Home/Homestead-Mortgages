@@ -348,15 +348,15 @@ that does not exist. They are excluded from the graph and recorded in
 
 Thirteen ports in one file. Six have a real adapter (three of them partial); seven are fixture-only.
 
-| Port                                                           | Real adapter     | State                                                                                                                                 |
-| -------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `propertyData`                                                 | Google Places v1 | ⚠ `suggestAddresses` only — assessor, AVM, flood delegate to the fixture                                                              |
-| `identity`                                                     | Stripe Identity  | ⚠ Test mode only; refuses `sk_live_` without an explicit flag                                                                         |
-| `bank`                                                         | Plaid            | ⚠ Sandbox, `assets` rather than CRA, so `vendorAuthorizedForDu` is false and CRD-017 stays unsatisfied                                |
-| `du`                                                           | Fannie Mae       | ⚠ Submits under `DU_*` credentials nobody holds yet; fixture answers Approve/Eligible                                                 |
-| `aporSeries`                                                   | CFPB (FFIEC)     | The published `YieldTableFixed.txt`, cross-checked against the survey by Appendix J                                                   |
-| `mail`                                                         | Resend           | The co-borrower invitation is the only message; a fixture outbox otherwise, and the invitation route refuses to pretend in production |
-| `credit` `payroll` `irs` `esign` `screening` `liens` `pricing` | —                | ⚠ Fixture only. Three hand-written personas                                                                                           |
+| Port                                                           | Real adapter                                    | State                                                                                                                                                   |
+| -------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `propertyData`                                                 | Google Places v1 over CoreLogic Property API v2 | Places answers autocomplete; CoreLogic the county record and the AVM. ⚠ Flood delegates to the fixture: a certified determination is a separate product |
+| `identity`                                                     | Stripe Identity                                 | ⚠ Test mode only; refuses `sk_live_` without an explicit flag                                                                                           |
+| `bank`                                                         | Plaid                                           | ⚠ Sandbox, `assets` rather than CRA, so `vendorAuthorizedForDu` is false and CRD-017 stays unsatisfied                                                  |
+| `du`                                                           | Fannie Mae                                      | ⚠ Submits under `DU_*` credentials nobody holds yet; fixture answers Approve/Eligible                                                                   |
+| `aporSeries`                                                   | CFPB (FFIEC)                                    | The published `YieldTableFixed.txt`, cross-checked against the survey by Appendix J                                                                     |
+| `mail`                                                         | Resend                                          | The co-borrower invitation is the only message; a fixture outbox otherwise, and the invitation route refuses to pretend in production                   |
+| `credit` `payroll` `irs` `esign` `screening` `liens` `pricing` | —                                               | ⚠ Fixture only. Three hand-written personas                                                                                                             |
 
 Selection is per-connector and happens once, at boot, from three independent env
 vars; anything unset stays on the fixture. Missing credentials throw at boot, not

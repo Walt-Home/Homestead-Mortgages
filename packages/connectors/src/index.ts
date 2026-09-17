@@ -2,6 +2,7 @@ export * from "./ports/index.js";
 export * from "./guard.js";
 export * from "./adapters/fixture.js";
 export * from "./adapters/google-places.js";
+export * from "./adapters/corelogic.js";
 export * from "./adapters/stripe-identity.js";
 export * from "./adapters/plaid.js";
 export * from "./adapters/du.js";

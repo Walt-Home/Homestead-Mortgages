@@ -396,10 +396,26 @@ inspection. Each connector now reads its own variable and falls back to the
 fixture, and `/health` reports the resulting mix.
 
 **Google Places** implements one method of `PropertyDataConnector`. It knows
-which addresses exist and nothing else — the assessor record, the valuation and
-the flood determination stay with the fixture, and the adapter claims no
-requirements at all, because APP-004 is satisfied by the public-record match
-rather than by autocomplete.
+which addresses exist and nothing else — the adapter claims no requirements at
+all, because APP-004 is satisfied by the public-record match rather than by
+autocomplete — and it sits over whatever answers for the record beneath it.
+
+**CoreLogic answers for the record and the valuation** (2026-09-17), read off
+the v2 Property API's own specification. `PROPERTY_RECORDS_PROVIDER=corelogic`
+is its own variable so the two vendors can be turned on one at a time. Four
+rules, each a refusal to guess: a land use the keyword table cannot place is
+`PropertyNotDescribableError`, a subclass of the not-found error, so the
+borrower gets the manual path rather than a card carrying a guessed
+`Detached`; `priorOwnershipInLastThreeYears` is null from a real record, and
+screen 2 stops deriving the first-time-homebuyer answer from it, because a
+parcel knows nothing about who is buying it; a figure the county did not
+report is zero and the card leaves it out; and the flood determination is
+never CoreLogic's, because the Property API has none and a certified
+determination is a separate product. The AVM is the originations model's
+summary, with the confidence read on the 0–100 scale from the score or, where
+it is absent, from the forecast standard deviation. One search per address
+however many of the three lookups ask, because the trial account allows 100
+property requests and 25 valuations a day.
 
 **Stripe Identity refuses a live key** unless `STRIPE_ALLOW_LIVE_IDENTITY=true`,
 and nothing sets it. This is not squeamishness about a few dollars per

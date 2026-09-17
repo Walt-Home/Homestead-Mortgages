@@ -32,7 +32,7 @@ flowchart LR
   B1["Borrower 1<br/>identity · credit · bank · IRS · Section 5 · signature"]:::green
   CB["Co-borrower<br/>named · invited · claimed · own half<br/>reports reach the engine"]:::green
   DATA["The data<br/>declarations · product · property<br/>employment · vesting · originator"]:::green
-  AST["Assets & liabilities<br/><i>tables and writers; no pull calls them</i>"]:::yellow
+  AST["Assets & liabilities<br/>written by the credit and bank pulls"]:::green
   ASM["Assemble<br/>MISMO 3.4 graph"]:::green
   GATE["Preflight gate<br/>no off switch"]:::green
   EMIT["Emit<br/>bytes"]:::green
@@ -53,47 +53,43 @@ flowchart LR
 🟢 built, enforced, tested · 🟡 built, with a named gap · 🔴 not built, or
 blocked outside the code
 
-| #   | Item                                |     | Today                                                                          |
-| --- | ----------------------------------- | --- | ------------------------------------------------------------------------------ |
-| 1   | One casefile per loan               | 🟢  | Ours is stable; DU's is write-once, written only by `recordDuResponse`         |
-| 2   | Income survives a re-pull           | 🟢  | Snapshot lineage on every row; nothing deletes and recreates                   |
-| 3   | Borrower declarations               | 🟢  | Asked on screen 3, stored per person, chains held by CHECKs                    |
-| —   | Current residence                   | 🟢  | The fabricated `"rent"` is gone; screen 3 asks                                 |
-| 4   | Verification report identifier      | 🟡  | Stored and attributed per borrower; assets read neither                        |
-| 5   | Up to four borrowers                | 🟢  | Named, invited, claimed, own half walked; the engine reads everybody's reports |
-| 6   | Assets, liabilities, owned property | 🟡  | Tables, ownership and writers built; no pull calls the writers                 |
-| 7   | Employer as an entity               | 🟡  | Every pulled job has one; two current employers leave wage income unattached   |
-| 8   | What we compute vs. what DU does    | 🟢  | Boundary written, both columns typed and CHECKed, a corpus test holds it       |
-| —   | Identity model                      | 🟢  | Party is the person; facts carry provenance                                    |
-| —   | Ownership shape                     | 🟢  | Join tables with roles; nothing emittable without an owner                     |
-| —   | Product and property                | 🟢  | A product table, two building facts retrieved, one estate question asked       |
-| —   | Vesting and non-borrower parties    | 🟢  | Asked on review; originator rows at birth; ten-party ceiling enforced          |
-| —   | Generators and `du:verify`          | 🟢  | Six tables from the corpus, rebuilt and checked in CI                          |
-| —   | Assembler and emitter               | 🟢  | MISMO 3.4 with arcs, round-tripped on all eighteen samples                     |
-| —   | Preflight gate                      | 🟢  | Graph, cardinality, conditionality, format; every check has a fixture          |
-| —   | Transport                           | 🟡  | Built to the credential boundary; tested against a stubbed `fetch`             |
-| —   | Response recording                  | 🟢  | Append-only tables, unknown verdicts refused; no caller yet                    |
-| —   | A route that submits                | 🔴  | Nothing outside the tests runs assemble, gate, emit, send                      |
-| —   | Who we submit under                 | 🔴  | Institution and originator are placeholders, refused in production             |
+| #   | Item                                |     | Today                                                                                |
+| --- | ----------------------------------- | --- | ------------------------------------------------------------------------------------ |
+| 1   | One casefile per loan               | 🟢  | Ours is stable; DU's is write-once, written only by `recordDuResponse`               |
+| 2   | Income survives a re-pull           | 🟢  | Snapshot lineage on every row; nothing deletes and recreates                         |
+| 3   | Borrower declarations               | 🟢  | Asked on screen 3, stored per person, chains held by CHECKs                          |
+| —   | Current residence                   | 🟢  | The fabricated `"rent"` is gone; screen 3 asks                                       |
+| 4   | Verification report identifier      | 🟡  | Every row names its snapshot; the asset arc to a verification is disputed in the tab |
+| 5   | Up to four borrowers                | 🟢  | Named, invited, claimed, own half walked; the engine reads everybody's reports       |
+| 6   | Assets, liabilities, owned property | 🟢  | Tables, ownership, writers; the credit and bank pulls write them per person          |
+| 7   | Employer as an entity               | 🟡  | Every pulled job has one; two current employers leave wage income unattached         |
+| 8   | What we compute vs. what DU does    | 🟢  | Boundary written, both columns typed and CHECKed, a corpus test holds it             |
+| —   | Identity model                      | 🟢  | Party is the person; facts carry provenance                                          |
+| —   | Ownership shape                     | 🟢  | Join tables with roles; nothing emittable without an owner                           |
+| —   | Product and property                | 🟢  | A product table, two building facts retrieved, one estate question asked             |
+| —   | Vesting and non-borrower parties    | 🟢  | Asked on review; originator rows at birth; ten-party ceiling enforced                |
+| —   | Generators and `du:verify`          | 🟢  | Six tables from the corpus, rebuilt and checked in CI                                |
+| —   | Assembler and emitter               | 🟢  | MISMO 3.4 with arcs, round-tripped on all eighteen samples                           |
+| —   | Preflight gate                      | 🟢  | Graph, cardinality, conditionality, format; every check has a fixture                |
+| —   | Transport                           | 🟡  | Built to the credential boundary; tested against a stubbed `fetch`                   |
+| —   | Response recording                  | 🟢  | Append-only tables, unknown verdicts refused; no caller yet                          |
+| —   | A route that submits                | 🔴  | Nothing outside the tests runs assemble, gate, emit, send                            |
+| —   | Who we submit under                 | 🔴  | Institution and originator are placeholders, refused in production                   |
 
-Fourteen green, four yellow, two red. Re-derive the tally from the table, not
+Fifteen green, three yellow, two red. Re-derive the tally from the table, not
 the other way around.
 
 ## What's left, in dependency order
 
-1. **The bank pull writing assets.** `writeAsset`, `writeLiability` and
-   `writeExpense` exist in `packages/du`. Nothing calls them, so a real file's
-   casefile emits no assets today. Item 4 follows: once assets are rows, they
-   name the report they came from.
-2. **A route or job that submits.** Assemble, gate, emit, `du.submit`,
+1. **A route or job that submits.** Assemble, gate, emit, `du.submit`,
    `recordDuResponse`. Every piece exists and is tested alone. Nothing strings
    them together for an application.
-3. **The values from the agreement.** `DU_ENDPOINT`, `DU_CREDENTIAL_SCHEME`,
+2. **The values from the agreement.** `DU_ENDPOINT`, `DU_CREDENTIAL_SCHEME`,
    `DU_CREDENTIAL`, `DU_SELLER_SERVICER_NUMBER`, and the five
    `ORIGINATION_COMPANY_*` / `LOAN_ORIGINATOR_*` values. Longest lead time of
    anything here, and no code closes it.
 
-Items 1 and 2 wait on nothing. Item 3 is a contract.
+Item 1 waits on nothing. Item 2 is a contract.
 
 ## Decided
 
@@ -166,7 +162,10 @@ keeps it gone. The written explanation of a bankruptcy is persisted.
 the vendor's report id and, now, `party_id`: required for person-keyed kinds,
 forbidden for address-keyed ones. Income, employment and the
 `UNDERWRITING_VERIFICATION` elements read it, one per report type per borrower,
-latest pull only. Assets read neither the id nor the snapshot.
+latest pull only. Every asset and liability row names the snapshot it came from.
+What is not emitted is the arc from a verification to an asset: the tab disputes
+its endpoint and the emitter throws on a disputed name, so it waits on Fannie
+Mae rather than on code.
 
 **Item 5: up to four borrowers.** The ceiling is held twice: `borrower_ordinal`
 is constrained one through four at the database, and the preflight caps
@@ -216,8 +215,11 @@ the type, not only the nulls. `lien_upb_cents` is derived by trigger. Ownership
 is join tables with roles; deferred triggers refuse anything emittable with no
 owner and survive a revive, a role flip and an account deletion. An account
 keeps its row across a re-pull through a three-tier identity key prefixed by
-the party. The writers are in `packages/du/src/writer.ts`. Nothing in
-production calls them.
+the party. The credit pull writes each tradeline as a liability the person
+owes, and the bank pull writes each qualifying account and each gift as an
+asset they own, matched in place on a re-pull and retired when a report drops
+them (`docs/decisions.md`, "The pulls write the rows a casefile carries").
+Which owned property secures a mortgage is still a person's pairing.
 
 **Item 7: employer as an entity.** Real, with a party FK and an identity key
 that survives the EIN promotion. `income_sources.employment_income` is true

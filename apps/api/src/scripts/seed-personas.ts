@@ -95,6 +95,8 @@ import {
 } from "../services/party.js";
 import { loadLoanFile, recordEvent, recordSnapshot } from "../services/repository.js";
 import { reconcileIncomeAndEmployment } from "../services/income.js";
+import { reconcileAssets } from "../services/assets.js";
+import { reconcileLiabilities } from "../services/liabilities.js";
 import { screenAndRecord } from "../services/screening.js";
 import {
   settleAfterIntake,
@@ -580,7 +582,7 @@ async function credit(w: Walk): Promise<void> {
     file,
     await tokenFor(file, primaryBorrower(file), "credit_report", w.tx),
   );
-  await recordSnapshot(
+  const snapshot = await recordSnapshot(
     w.loanFileId,
     "credit",
     result.provider,
@@ -591,6 +593,14 @@ async function credit(w: Walk): Promise<void> {
     w.tx,
   );
   await linked(w, "credit", result.provider);
+  await reconcileLiabilities(w.tx, {
+    loanFileId: w.loanFileId,
+    partyId: w.partyId,
+    snapshotId: snapshot.id,
+    provider: result.provider,
+    reported: result.data,
+    now: new Date(result.retrievedAt),
+  });
   // UW-018's fraud and red-flag review has no provider, and it is a review
   // rather than a lookup, so the credit route records it as a system assertion
   // and says in the event that nothing was actually consulted. A sample
@@ -735,6 +745,14 @@ async function bank(w: Walk): Promise<void> {
     loanFileId: w.loanFileId,
     partyId: w.partyId,
     snapshotId: snapshot.id,
+    reported: result.data,
+    now: new Date(result.retrievedAt),
+  });
+  await reconcileAssets(w.tx, {
+    loanFileId: w.loanFileId,
+    partyId: w.partyId,
+    snapshotId: snapshot.id,
+    provider: result.provider,
     reported: result.data,
     now: new Date(result.retrievedAt),
   });
@@ -1345,7 +1363,7 @@ async function creditAsCoBorrower(w: Walk, dev: CoBorrowerOnFile): Promise<void>
     file,
     await tokenFor(file, him, "credit_report", w.tx),
   );
-  await recordSnapshot(
+  const snapshot = await recordSnapshot(
     w.loanFileId,
     "credit",
     result.provider,
@@ -1355,6 +1373,14 @@ async function creditAsCoBorrower(w: Walk, dev: CoBorrowerOnFile): Promise<void>
     dev.partyId,
     w.tx,
   );
+  await reconcileLiabilities(w.tx, {
+    loanFileId: w.loanFileId,
+    partyId: dev.partyId,
+    snapshotId: snapshot.id,
+    provider: result.provider,
+    reported: result.data,
+    now: new Date(result.retrievedAt),
+  });
   await recordEvent(
     w.loanFileId,
     "connector_pull",

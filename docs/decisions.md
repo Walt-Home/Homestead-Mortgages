@@ -1971,6 +1971,43 @@ strips `reports` to the reader's party, applicant included: a co-borrower's
 tradelines are their whole financial life, under a screen that promised them
 it stays theirs.
 
+## The pulls write the rows a casefile carries
+
+`du_assets` and `du_liabilities` had writers and nothing called them, so a
+real file's casefile emitted neither what the borrower had nor what they owed.
+The credit pull and the bank pull now reconcile their reports into rows in the
+same transaction as the snapshot — `services/liabilities.ts` and
+`services/assets.ts`, the shape `services/income.ts` set — owed or owned by
+the person whose report it is, matched in place on a re-pull, retired when a
+report drops them, never deleted. Decided 2026-09-17. The engine still reads
+the snapshots; these are what the submission carries.
+
+**What a tradeline becomes.** The bureau's kind on DU's list: a mortgage is a
+`MortgageLoan`, a card is `Revolving`, a HELOC a `HELOC`, and an auto loan, a
+student loan and any other installment are `Installment`, because DU's list
+has no finer name. A tradeline the bureau could not classify is `Other` with
+one fixed description. No account number, because a credit report carries the
+vendor's tradeline id and not the account's. The exclusion indicator follows
+the CRD-003 reason code, so the casefile says what the decision did. Nothing
+is paid off at closing, because that is the borrower's statement and no pull
+can make it. Which owned property secures a mortgage is a person's pairing,
+not a match on a creditor's name.
+
+**What an account becomes.** Only accounts the borrower uses to qualify, on
+their own answer from the bank screen; a retirement account at its vested
+balance, which is what could be withdrawn; a brokerage account on the Stocks
+line. A gift is a `GiftOfCash` from the donor the report names, the
+relationship mapped onto DU's source list and `Other` carrying the report's
+own word, marked as already in the account because the report saw it land. A
+gift has no vendor id, so its item id is the donor and the transfer date.
+
+**A joint account pulled by two people is two rows.** The identity key opens
+with the party (`packages/du/src/identity.ts` says why), so each person's
+pull writes their own row. The household's decision folds the pair, because
+it reads the snapshots; collapsing the rows on the wire has a whole balance
+riding on it and is a person's call on the way out, not a coincidence of keys
+on the way in.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

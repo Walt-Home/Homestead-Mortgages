@@ -49,6 +49,7 @@ const REGISTER: Record<string, number> = {
   "apps/api/src/__tests__/employment-income.test.ts": 2,
   "apps/api/src/__tests__/income-identity.test.ts": 1,
   "apps/api/src/__tests__/join.test.ts": 1,
+  "apps/api/src/__tests__/pulls-write-rows.test.ts": 1,
   "apps/api/src/__tests__/re-pull.test.ts": 1,
   "apps/api/src/__tests__/snapshot-subject.test.ts": 5,
   "apps/api/src/__tests__/standing.test.ts": 2,

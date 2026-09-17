@@ -17,6 +17,8 @@ import {
 } from "../services/repository.js";
 import { connectors } from "../services/connectors.js";
 import { reconcileIncomeAndEmployment } from "../services/income.js";
+import { reconcileAssets } from "../services/assets.js";
+import { reconcileLiabilities } from "../services/liabilities.js";
 import { assertSignsForThemselves, retrievalSubject, tokenFor } from "../services/authorization.js";
 import { borrowingRoleFor } from "../services/borrower-order.js";
 import { signedOn } from "../services/signature.js";
@@ -197,16 +199,30 @@ connectorRouter.post(
       file,
       await tokenFor(file, subject, "credit_report"),
     );
-    await recordSnapshot(
-      id,
-      "credit",
-      result.provider,
-      result.externalId,
-      result.data,
-      result.retrievedAt,
-      subject.partyId,
-    );
-    await upsertLink(id, "credit", result.provider, subject.partyId);
+    // One transaction: the snapshot, the link and the liability rows the
+    // casefile carries, each owed by the person whose report it is. A row's
+    // owner arcs are checked at COMMIT, so they cannot be written outside one.
+    await prisma.$transaction(async (tx) => {
+      const snapshot = await recordSnapshot(
+        id,
+        "credit",
+        result.provider,
+        result.externalId,
+        result.data,
+        result.retrievedAt,
+        subject.partyId,
+        tx,
+      );
+      await upsertLink(id, "credit", result.provider, subject.partyId, tx);
+      await reconcileLiabilities(tx, {
+        loanFileId: id,
+        partyId: subject.partyId,
+        snapshotId: snapshot.id,
+        provider: result.provider,
+        reported: result.data,
+        now: new Date(result.retrievedAt),
+      });
+    });
     // APP-018 names the credit pull as its source: a refinance's existing
     // servicer and balance come off the report. Nothing wrote them back, so a
     // refinance could never satisfy a requirement it had made applicable.
@@ -347,6 +363,14 @@ connectorRouter.post(
         loanFileId: id,
         partyId: subject.partyId,
         snapshotId: snapshot.id,
+        reported: result.data,
+        now: new Date(result.retrievedAt),
+      });
+      await reconcileAssets(tx, {
+        loanFileId: id,
+        partyId: subject.partyId,
+        snapshotId: snapshot.id,
+        provider: result.provider,
         reported: result.data,
         now: new Date(result.retrievedAt),
       });

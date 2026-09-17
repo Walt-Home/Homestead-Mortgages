@@ -1,6 +1,7 @@
 /**
- * Eight sample borrowers, walked to their states through the real doors, and
- * one row this build cannot walk.
+ * Eight sample borrowers, walked to their states through the real doors, one
+ * co-borrower invited and arriving through the same doors, and one row this
+ * build cannot walk.
  *
  *   npm run build && npm run seed:personas
  *
@@ -56,6 +57,8 @@ import {
   fixtureRegistry,
   PUBLIC_RECORDS,
   type ConnectorRegistry,
+  type FixtureMailConnector,
+  type MailConnector,
   type PricingConnector,
 } from "@hm/connectors";
 import type { Address, ApplicationState, LoanFile } from "@hm/shared";
@@ -76,11 +79,13 @@ import {
   scenarioTermsFrom,
 } from "../services/applications.js";
 import { primaryBorrower, tokenFor } from "../services/authorization.js";
+import { nameCoBorrower } from "../services/co-borrowers.js";
 import type { Db } from "../services/db.js";
 import { decideApplication, recordDecision } from "../services/decide.js";
 import { recordDeclaration, type DeclarationInput } from "../services/declarations.js";
 import { recordEmploymentDeclarations } from "../services/employment-declarations.js";
 import { pinTridPieces, proposeScenario } from "../services/evidence.js";
+import { acceptClaim, inviteCoBorrower } from "../services/invitations.js";
 import {
   assertFacts,
   partyForUser,
@@ -217,13 +222,17 @@ const PERSON: Record<
   },
 };
 
-/** Dev Raman, who is on Priya's application and has no sign-in of his own. */
+/**
+ * Dev Raman, the other half of Priya's household. She names him by this name
+ * at this address, the invitation goes to this address, and his own sign-in
+ * is minted on it — the row the picker offers as her story's `coBorrower`.
+ */
 const DEV = {
   first: "Dev",
   last: "Raman",
   dateOfBirth: "1986-02-11",
   ssnLast4: "7745",
-  email: "dev@priya_dev_raman.personas.supermortgage.invalid",
+  email: "priya_dev_raman.dev@personas.supermortgage.invalid",
   phone: "408-555-0177",
 };
 
@@ -391,12 +400,17 @@ const DECLINED = {
   visualObservationNoted: false,
 } as unknown as Prisma.InputJsonValue;
 
-/** A signature, with the evidence that it happened. The trigger mirrors it. */
+/**
+ * A signature, with the evidence that it happened. The trigger mirrors the
+ * first three as authorizations; `application_signature` is a co-borrower's
+ * attestation to their own answers, the row `POST /files/:id/sign-application`
+ * writes for a signer who is not the file's owner, and mints nothing.
+ */
 async function grantConsent(
   tx: Db,
   loanFileId: string,
   borrowerId: string,
-  kind: "verification_authorization" | "econsent" | "form_4506c",
+  kind: "verification_authorization" | "econsent" | "form_4506c" | "application_signature",
 ): Promise<void> {
   await tx.consent.create({
     data: {
@@ -524,18 +538,19 @@ async function declarations(w: Walk): Promise<void> {
   // has answered, so a sample file where the co-borrower said nothing would
   // read "needs you" for a screen the story is past.
   //
-  // Taken by staff, because that is the only way his answers can exist. Dev
-  // has never signed in, so there is no principal of his own to assert them,
-  // and `du_declarations_are_self_attested` refuses Priya's — a declaration is
-  // a statement by the person it is about. They share the address and moved on
-  // the same day, so he says what she says; what differs is who wrote it down.
+  // Each for themselves. Dev arrived through the claim, so the party on his
+  // row is his own and its principal can attest — the only kind
+  // `du_declarations_are_self_attested` accepts, because a declaration is a
+  // statement by the person it is about, and it refuses Priya's and staff's
+  // alike. They share the address and moved on the same day, so he says what
+  // she says; what differs is who says it.
   const file = await currentFile(w);
   for (const other of file.borrowers) {
     if (other.partyId === w.partyId) continue;
     await recordDeclaration(
       w.loanFileId,
       {
-        assertedByPrincipalId: await staffPrincipal(w.tx, `ops-${w.applicationId}`),
+        assertedByPrincipalId: await principalForParty(w.tx, other.partyId),
         borrowerId: other.id,
         declaration: answers,
         residences,
@@ -815,12 +830,10 @@ async function employmentDeclarations(w: Walk): Promise<void> {
     await recordEmploymentDeclarations(
       w.loanFileId,
       {
-        // Their own principal for the walker; staff for anyone else, for the
-        // reason `declarations` gives — a co-borrower who has never signed in
-        // has no principal of their own to assert with.
-        assertedByPrincipalId: own
-          ? await principalForParty(w.tx, w.partyId)
-          : await staffPrincipal(w.tx, `ops-${w.applicationId}`),
+        // Each person's own principal, for the reason `declarations` gives:
+        // everybody on a sample file signed in as themselves, the co-borrower
+        // through the claim, so each has one to assert with.
+        assertedByPrincipalId: await principalForParty(w.tx, borrower.partyId),
         ...(own ? {} : { borrowerId: borrower.id }),
         answers: jobs.map((job) => ({
           employmentId: job.id,
@@ -1024,7 +1037,7 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
 
   /** Two people, commission income and a gift, with two branches on the way. */
   async priya_dev_raman(w) {
-    await addCoBorrower(w);
+    const dev = await addCoBorrower(w);
     await propertyData(w);
     await credit(w);
     await screening(w);
@@ -1038,6 +1051,9 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await uploadDocument(w, "CRD-008", "letter-of-explanation.pdf");
     await vesting(w);
     await signApplication(w);
+    // His signature after hers: his own 4506-C and his own attestation, and
+    // nothing of the file's.
+    await signAsCoBorrower(w, dev);
     await decide(w);
   },
 
@@ -1173,56 +1189,106 @@ async function activeAddress(w: Walk): Promise<string | null> {
   return active?.propertyAddress ?? null;
 }
 
+/** What the walk holds about the co-borrower once he has arrived. */
+interface CoBorrowerOnFile {
+  readonly borrowerId: string;
+  readonly partyId: string;
+}
+
 /**
- * Dev Raman, who is on the application and has no sign-in.
- *
- * His `createdAt` is a second after Priya's row on purpose. Between the insert
- * below and the membership that gives him Borrower 2, he is on the file with
- * no ordinal, and `loadLoanFile` falls back to creation order for exactly that
- * case — two rows written in one transaction can share a millisecond, and the
- * id breaks the tie by whichever uuid sorts first, which is not a fact anybody
- * wants to depend on.
- *
- * His three pieces are pinned under his own authorization and do not complete
- * anything: the receipt counts ONE primary borrower's pieces, which is what
- * makes a co-borrower's SSN not somebody else's application.
+ * The token, read off the email — the only place it is. A fixture mailer
+ * keeps an outbox for exactly this, and a real one keeps nothing: the seed
+ * reads the link the way a person reads it out of an inbox, and it is the
+ * one thing here that could not be done against a real mail provider.
  */
-async function addCoBorrower(w: Walk): Promise<void> {
-  const priya = await w.tx.borrower.findFirstOrThrow({
-    where: { loanFileId: w.loanFileId, partyId: w.partyId },
-    select: { createdAt: true },
-  });
+function tokenInTheEmail(mail: MailConnector): string {
+  const last = (mail as FixtureMailConnector).outbox?.at(-1);
+  const match = /\/claim\/([A-Za-z0-9_-]+)/.exec(last?.text ?? "");
+  if (!match) throw new Error("no claim link in the last email the seed sent");
+  return match[1]!;
+}
 
-  const party = await w.tx.party.create({
-    data: { kind: "PERSON", claimStatus: "CLAIMED", sourceFirstSeen: "persona_seed" },
-    select: { id: true },
-  });
-  const principalId = await principalForParty(w.tx, party.id);
-  await assertFacts(w.tx, party.id, principalId, [
-    { predicate: "legal_name", value: { first: DEV.first, last: DEV.last } },
-    { predicate: "date_of_birth", value: DEV.dateOfBirth },
-    { predicate: "email", value: DEV.email },
-    { predicate: "phone", value: DEV.phone },
-    { predicate: "current_address", value: { ...CURRENT_ADDRESS.priya_dev_raman } },
-    { predicate: "marital_status", value: "unmarried" },
-    { predicate: "citizenship", value: "us_citizen" },
-    { predicate: "preferred_language", value: "en" },
-    { predicate: "is_military", value: false },
-    { predicate: "ssn_token", value: `vault:persona:${w.story.key}:dev` },
-  ]);
+/**
+ * Dev Raman, who is invited by Priya and arrives as himself.
+ *
+ * The product's doors, in the product's order. She names him — a name, an
+ * email, and that he will live in the home — and sends him the link. He
+ * signs in, as a user of his own, the row the picker offers as her story's
+ * `coBorrower`, and takes the link: the party she named folds into the one
+ * his sign-in minted, and the borrower row and the membership the naming
+ * made move to the survivor with it. Then his own half in his own name —
+ * screen 2 under his own principal, which supersedes the name and email she
+ * stated for him; his consents; and his pieces pinned under his own
+ * authorization, which complete nothing, because the receipt counts ONE
+ * primary borrower's pieces, which is what makes a co-borrower's SSN not
+ * somebody else's application. His Section 5 comes with everybody else's in
+ * `declarations`, and his signature after Priya's in `signAsCoBorrower`.
+ *
+ * His borrower row is the one the naming wrote, after screen 2 wrote hers,
+ * so creation order already says who came first. That matters for the
+ * moment between the naming and the membership that gives him Borrower 2,
+ * when he is on the file with no ordinal and `loadLoanFile` falls back to
+ * creation order.
+ *
+ * No bank of his own: links are still one per file and kind, and a
+ * co-borrower's is a slice of its own.
+ */
+async function addCoBorrower(w: Walk): Promise<CoBorrowerOnFile> {
+  const who = w.story.coBorrower;
+  if (!who) throw new Error(`persona ${w.story.key}: the story names no co-borrower to add`);
 
-  const dev = await w.tx.borrower.create({
+  const named = await nameCoBorrower(
+    w.loanFileId,
+    { firstName: DEV.first, lastName: DEV.last, email: DEV.email, occupiesProperty: true },
+    w.tx,
+  );
+  await inviteCoBorrower(w.loanFileId, named.borrowerId, w.registry.mail, w.tx);
+  const token = tokenInTheEmail(w.registry.mail);
+
+  // His sign-in, on the same reserved domain as hers. His party is minted
+  // before the claim so it says what it is — a sample borrower, not a self
+  // sign-up — and the claim finds it rather than minting one.
+  const user = await w.tx.user.create({
     data: {
-      loanFileId: w.loanFileId,
-      partyId: party.id,
-      ssnLast4: DEV.ssnLast4,
-      demographics: DECLINED,
-      createdAt: new Date(priya.createdAt.getTime() + 1_000),
+      googleSub: `persona:${who.key}`,
+      email: DEV.email,
+      name: `${who.name.first} ${who.name.last}`,
+      personaKey: who.key,
     },
     select: { id: true },
   });
+  const partyId = await partyForUser(w.tx, user.id, { sourceFirstSeen: "persona_seed" });
+  const claimed = await acceptClaim(token, user.id, w.tx);
+  if (claimed.borrowerId !== named.borrowerId) {
+    throw new Error(`persona ${w.story.key}: the claim landed on a row the naming did not make`);
+  }
 
-  await ensureApplicationParty(w.tx, w.applicationId, party.id, "CO_BORROWER");
+  // His screen 2. The facts go on his party under his own principal, and the
+  // last four and the demographics stay on the row, the way the borrowers
+  // route writes a co-borrower's own save. Declined, like everybody else's:
+  // demographics are his to give.
+  await recordBorrowerFacts(w.tx, {
+    loanFileId: w.loanFileId,
+    existingPartyId: partyId,
+    input: {
+      firstName: DEV.first,
+      lastName: DEV.last,
+      email: DEV.email,
+      phone: DEV.phone,
+      dateOfBirth: DEV.dateOfBirth,
+      ssnVaultHandle: `vault:persona:${w.story.key}:dev`,
+      currentAddress: CURRENT_ADDRESS.priya_dev_raman,
+      maritalStatus: "unmarried",
+      citizenship: "us_citizen",
+      preferredLanguage: "en",
+      firstTimeHomebuyer: true,
+      isMilitary: false,
+    },
+  });
+  await w.tx.borrower.update({
+    where: { id: named.borrowerId },
+    data: { ssnLast4: DEV.ssnLast4, demographics: DECLINED },
+  });
 
   // Both people are on the application now, so ask the reader itself which one
   // it hands back first — not a copy of its ordering, which could drift from
@@ -1238,9 +1304,74 @@ async function addCoBorrower(w: Walk): Promise<void> {
         "so every borrowers[0] read would be the wrong person",
     );
   }
+  if (file.invitedBorrowers.length > 0) {
+    throw new Error(`persona ${w.story.key}: the co-borrower is still listed as invited`);
+  }
 
-  await grantConsent(w.tx, w.loanFileId, dev.id, "verification_authorization");
-  await pinTridPieces(w.tx, { applicationId: w.applicationId, partyId: party.id });
+  await grantConsent(w.tx, w.loanFileId, named.borrowerId, "verification_authorization");
+  await grantConsent(w.tx, w.loanFileId, named.borrowerId, "econsent");
+  await pinTridPieces(w.tx, { applicationId: w.applicationId, partyId });
+  return { borrowerId: named.borrowerId, partyId };
+}
+
+/**
+ * The co-borrower's signature, the way `POST /files/:id/sign-application`
+ * records one for a signer who is not the file's owner: his own 4506-C, an
+ * `application_signature` consent in his name, and his transcripts pulled
+ * under his own grant and filed against his party. Never the file's
+ * `applicationSignedAt`, which is the applicant's, and never the stage, which
+ * is where HER flow resumes. His act settles the application the way hers
+ * did; she signed first, so the ledger records that it did not need to move.
+ *
+ * No URLA 1b answers of his: he has no job on the file to answer about,
+ * because nothing of his has been pulled.
+ */
+async function signAsCoBorrower(w: Walk, dev: CoBorrowerOnFile): Promise<void> {
+  await grantConsent(w.tx, w.loanFileId, dev.borrowerId, "form_4506c");
+  await grantConsent(w.tx, w.loanFileId, dev.borrowerId, "application_signature");
+  await recordEvent(
+    w.loanFileId,
+    "co_borrower_signed",
+    "borrower",
+    { borrowerId: dev.borrowerId, documents: ["form_4506c"] },
+    undefined,
+    w.tx,
+  );
+  await settleBorrowerAct(w.tx, {
+    applicationId: w.applicationId,
+    loanFileId: w.loanFileId,
+    partyId: dev.partyId,
+    reasonCode: "application_signed",
+    causedBy: "event:application_signed",
+  });
+
+  const file = await currentFile(w);
+  const signer = file.borrowers.find((b) => b.id === dev.borrowerId);
+  if (!signer) throw new Error(`persona ${w.story.key}: the co-borrower is not on his own file`);
+  const year = new Date().getFullYear();
+  const result = await w.registry.irs.fetchTranscripts(
+    file,
+    await tokenFor(file, signer, "tax_transcript", w.tx),
+    [year - 1, year - 2],
+  );
+  await recordSnapshot(
+    w.loanFileId,
+    "irs",
+    result.provider,
+    result.externalId,
+    result.data,
+    result.retrievedAt,
+    dev.partyId,
+    w.tx,
+  );
+  await recordEvent(
+    w.loanFileId,
+    "connector_pull",
+    result.provider,
+    { kind: "irs" },
+    "INC-003",
+    w.tx,
+  );
 }
 
 /* ── Running it ───────────────────────────────────────────────────────────── */
@@ -1291,6 +1422,24 @@ async function seedPersona(story: SeededPersona): Promise<SeedReport> {
       expected: story.target,
       loanFileId: file?.id ?? null,
     };
+  }
+  // The co-borrower's sign-in without the applicant's is a household that was
+  // half removed, and walking it again would stop at his unique key. Reported
+  // as the drift it is, rather than as a constraint the walk ran into.
+  if (story.coBorrower) {
+    const half = await prisma.user.findUnique({
+      where: { personaKey: story.coBorrower.key },
+      select: { id: true },
+    });
+    if (half) {
+      return {
+        key: story.key,
+        result: "drift",
+        state: null,
+        expected: story.target,
+        loanFileId: null,
+      };
+    }
   }
 
   // One interactive transaction per persona: the whole walk commits or none of
@@ -1379,8 +1528,11 @@ async function seedPersona(story: SeededPersona): Promise<SeedReport> {
  * at. Deleting the user takes the file, the application, its ledger, its pins
  * and its clocks — by a BEFORE DELETE trigger that removes the files while the
  * user row is still standing, which is the only order in which the ledger is
- * gone before the principals it names. Dev has no user of his own, so his
- * party is found through the file and removed afterwards.
+ * gone before the principals it names. A co-borrower has a sign-in of their
+ * own, deleted after the applicant's so the file is gone before the party it
+ * names; deleting theirs takes their party and, folded into it, the one the
+ * applicant named. The sweep after that is for a party this seed minted for
+ * nobody, and finds none today.
  */
 export async function resetPersona(key: PersonaKey): Promise<void> {
   assertEnabled();
@@ -1400,6 +1552,10 @@ export async function resetPersona(key: PersonaKey): Promise<void> {
   }
 
   await prisma.user.delete({ where: { id: user.id } });
+  const story = PERSONA_STORIES.find((s) => s.key === key);
+  if (story && isSeeded(story) && story.coBorrower) {
+    await prisma.user.deleteMany({ where: { personaKey: story.coBorrower.key } });
+  }
   // Only a party this seed made and nobody else holds. A party with a user, or
   // one still named by a borrower row, belongs to somebody else's file.
   for (const partyId of others) {

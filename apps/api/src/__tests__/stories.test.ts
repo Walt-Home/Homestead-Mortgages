@@ -26,7 +26,17 @@ import {
   VENDOR_CLAIM,
   type ApplicationState,
 } from "@hm/shared";
-import { isSeeded, NOT_SEEDED_HERE, PERSONA_STORIES } from "../personas/stories.js";
+import {
+  isSeeded,
+  NOT_SEEDED_HERE,
+  PERSONA_KEY_SHAPE,
+  PERSONA_STORIES,
+} from "../personas/stories.js";
+
+/** The second rows: a co-borrower, with `on` the story they are listed under. */
+const CO_BORROWERS = PERSONA_STORIES.flatMap((s) =>
+  isSeeded(s) && s.coBorrower ? [{ ...s.coBorrower, on: s }] : [],
+);
 
 /** Every line of a story a tester can read on the sign-in page. */
 function copy(): { key: string; text: string }[] {
@@ -35,6 +45,10 @@ function copy(): { key: string; text: string }[] {
       { key: s.key, text: `${s.name.first} ${s.name.last}` },
       { key: s.key, text: s.story },
       ...(isSeeded(s) ? [] : [{ key: s.key, text: s.unavailableBecause }]),
+    ]),
+    ...CO_BORROWERS.flatMap((c) => [
+      { key: c.key, text: `${c.name.first} ${c.name.last}` },
+      { key: c.key, text: c.story },
     ]),
     // Not attached to any one story — the listing hands it to whichever rows
     // the seed has not written — but it renders in the same place.
@@ -90,19 +104,30 @@ describe("what a persona row says", () => {
   });
 
   it("says something, in one line", () => {
-    for (const story of PERSONA_STORIES) {
-      expect(story.story.length).toBeGreaterThan(20);
-      expect(story.story).not.toContain("\n");
+    for (const { key, story } of [...PERSONA_STORIES, ...CO_BORROWERS]) {
+      expect(story.length, key).toBeGreaterThan(20);
+      expect(story, key).not.toContain("\n");
     }
   });
 });
 
 describe("the list itself", () => {
   it("has one row per key, and every key is one the database will take", () => {
-    const keys = PERSONA_STORIES.map((s) => s.key);
+    const keys = [...PERSONA_STORIES.map((s) => s.key), ...CO_BORROWERS.map((c) => c.key)];
     expect(new Set(keys).size).toBe(keys.length);
-    // The same shape as the CHECK in 20260909150000_persona_users.
-    for (const key of keys) expect(key).toMatch(/^[a-z][a-z0-9_]{1,40}$/);
+    // The same shape as the CHECK, last widened in
+    // 20260917100000_a_co_borrower_has_a_sign_in_of_their_own.
+    for (const key of keys) expect(key).toMatch(PERSONA_KEY_SHAPE);
+  });
+
+  it("keys a co-borrower's row to the story they are on", () => {
+    // The listing finds the story from the key alone, and the colon is the
+    // one character a story's own key can never contain.
+    expect(CO_BORROWERS.length).toBeGreaterThan(0);
+    for (const c of CO_BORROWERS) {
+      expect(c.key.startsWith(`${c.on.key}:`), c.key).toBe(true);
+      expect(c.key).not.toBe(c.on.key);
+    }
   });
 
   it("targets states the machine has heard of", () => {

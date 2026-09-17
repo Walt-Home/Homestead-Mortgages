@@ -161,7 +161,12 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   one signature — and every route resolves "the borrower" by the person
   asking, with `assertFileAccess` mode `self`; links are per person, and a
   member's read of the file is redacted to the household's half plus their
-  own reports. What the engine reads is still Borrower 1's reports by party;
+  own reports.
+  The sample household is seeded through exactly this path — Priya names
+  Dev, the seed reads his link out of the fixture outbox, and he claims it
+  as a sign-in of his own (`priya_dev_raman:dev`, listed under her on the
+  sign-in page) — so the sample cannot drift from the flow.
+  What the engine reads is still Borrower 1's reports by party;
   consuming a co-borrower's is the compute-boundary item. `docs/states.md`
   has the shape.
 

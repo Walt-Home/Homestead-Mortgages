@@ -31,7 +31,7 @@ import type { MailConnector } from "@hm/connectors";
 import { config } from "../config.js";
 import { AppError } from "../middleware/error-handler.js";
 import { primaryBorrowerRow } from "./borrower-order.js";
-import type { Db } from "./db.js";
+import { ownsTransaction, type Db } from "./db.js";
 import { assertFacts, mergePartyInto, partyForUser, principalForParty } from "./party.js";
 import { recordEvent } from "./repository.js";
 
@@ -121,90 +121,16 @@ export async function inviteCoBorrower(
   const token = mintInvitationToken();
   const tokenHash = hashInvitationToken(token);
 
-  const minted = await db.$transaction(async (tx) => {
-    const row = await tx.borrower.findFirst({
-      where: { id: borrowerId, loanFileId },
-      select: {
-        id: true,
-        partyId: true,
-        ssnLast4: true,
-        party: { select: { claimStatus: true } },
-      },
-    });
-    if (!row) throw new AppError(404, "That person is not on this file.", "NOT_FOUND");
-    const primary = await primaryBorrowerRow(tx, loanFileId);
-    if (!primary) throw new AppError(409, "Tell us who you are first.", "NO_BORROWER");
-    if (primary.id === row.id) {
-      throw new AppError(
-        409,
-        "You are the applicant; there is nobody to invite here.",
-        "APPLICANT_STAYS",
-      );
-    }
-    if (row.party.claimStatus === "CLAIMED" || row.party.claimStatus === "MERGED") {
-      throw new AppError(409, "They have already signed in.", "CO_BORROWER_ARRIVED");
-    }
-
-    // The two things the applicant said about them, which are the two things
-    // the email needs.
-    const facts = await tx.fact.findMany({
-      where: {
-        partyId: row.partyId,
-        predicate: { in: ["legal_name", "email"] },
-        supersededById: null,
-        retractedAt: null,
-      },
-      select: { predicate: true, value: true },
-    });
-    const name = (facts.find((f) => f.predicate === "legal_name")?.value ?? {}) as {
-      first?: string;
-      last?: string;
-    };
-    const email = facts.find((f) => f.predicate === "email")?.value;
-    if (typeof email !== "string" || !email) {
-      throw new AppError(409, "There is no email on file for them.", "NO_EMAIL");
-    }
-    const applicantName = await tx.fact.findFirst({
-      where: {
-        partyId: primary.partyId,
-        predicate: "legal_name",
-        supersededById: null,
-        retractedAt: null,
-      },
-      select: { value: true },
-    });
-    const applicant = (applicantName?.value ?? {}) as { first?: string; last?: string };
-
-    // Dead before the new one is live, so the partial unique index never sees two.
-    await tx.coBorrowerInvitation.updateMany({
-      where: { borrowerId: row.id, acceptedAt: null, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-    const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
-    const invitation = await tx.coBorrowerInvitation.create({
-      data: {
-        loanFileId,
-        borrowerId: row.id,
-        partyId: row.partyId,
-        tokenHash,
-        sentToEmail: email,
-        invitedByPrincipalId: await principalForParty(tx, primary.partyId),
-        expiresAt,
-      },
-      select: { id: true },
-    });
-    if (row.party.claimStatus === "PROVISIONAL") {
-      await tx.party.update({ where: { id: row.partyId }, data: { claimStatus: "CLAIM_PENDING" } });
-    }
-    return {
-      invitationId: invitation.id,
-      email,
-      expiresAt,
-      coBorrowerFirstName: name.first ?? "",
-      applicantName:
-        `${applicant.first ?? ""} ${applicant.last ?? ""}`.trim() || "Your co-applicant",
-    };
-  });
+  // The row is minted in one boundary and the email goes AFTER it: a send
+  // that fails leaves a row and a ledger line saying so, which is what the
+  // applicant is told and what a re-send revokes. The boundary is opened
+  // here only when the caller brought none — the persona seed walks a whole
+  // household inside a single transaction and hands it in, and Prisma cannot
+  // nest interactive transactions; inside a caller's boundary the send is
+  // inside it too, which for the one such caller is a fixture outbox.
+  const minted = ownsTransaction(db)
+    ? await prisma.$transaction((tx) => mintInvitation(tx, loanFileId, borrowerId, tokenHash))
+    : await mintInvitation(db, loanFileId, borrowerId, tokenHash);
 
   const link = claimUrl(token);
   const outcome = await mail.send(
@@ -220,24 +146,133 @@ export async function inviteCoBorrower(
     // The row exists and the email did not go. Recorded as such, and refused
     // as such — the applicant is told the truth and can try again, which
     // revokes this one.
-    await recordEvent(loanFileId, "co_borrower_invitation_not_delivered", "system", {
-      borrowerId,
-      invitationId: minted.invitationId,
-      reason: outcome.reason,
-    });
+    await recordEvent(
+      loanFileId,
+      "co_borrower_invitation_not_delivered",
+      "system",
+      {
+        borrowerId,
+        invitationId: minted.invitationId,
+        reason: outcome.reason,
+      },
+      undefined,
+      db,
+    );
     throw new AppError(502, "We could not send the invitation. Try again.", "MAIL_NOT_DELIVERED");
   }
-  await recordEvent(loanFileId, "co_borrower_invited", "borrower", {
-    borrowerId,
-    invitationId: minted.invitationId,
-    provider: outcome.provider,
-    expiresAt: minted.expiresAt.toISOString(),
-  });
+  await recordEvent(
+    loanFileId,
+    "co_borrower_invited",
+    "borrower",
+    {
+      borrowerId,
+      invitationId: minted.invitationId,
+      provider: outcome.provider,
+      expiresAt: minted.expiresAt.toISOString(),
+    },
+    undefined,
+    db,
+  );
   return {
     invitationId: minted.invitationId,
     sentTo: minted.email,
     expiresAt: minted.expiresAt.toISOString(),
     ...(developerEchoAllowed ? { link } : {}),
+  };
+}
+
+/**
+ * The row, the revocation of the last one, and the party's move to
+ * CLAIM_PENDING — everything about an invitation except the email. Returns
+ * what the email needs, so the send can happen after the commit.
+ */
+async function mintInvitation(
+  tx: Db,
+  loanFileId: string,
+  borrowerId: string,
+  tokenHash: string,
+) {
+  const row = await tx.borrower.findFirst({
+    where: { id: borrowerId, loanFileId },
+    select: {
+      id: true,
+      partyId: true,
+      ssnLast4: true,
+      party: { select: { claimStatus: true } },
+    },
+  });
+  if (!row) throw new AppError(404, "That person is not on this file.", "NOT_FOUND");
+  const primary = await primaryBorrowerRow(tx, loanFileId);
+  if (!primary) throw new AppError(409, "Tell us who you are first.", "NO_BORROWER");
+  if (primary.id === row.id) {
+    throw new AppError(
+      409,
+      "You are the applicant; there is nobody to invite here.",
+      "APPLICANT_STAYS",
+    );
+  }
+  if (row.party.claimStatus === "CLAIMED" || row.party.claimStatus === "MERGED") {
+    throw new AppError(409, "They have already signed in.", "CO_BORROWER_ARRIVED");
+  }
+
+  // The two things the applicant said about them, which are the two things
+  // the email needs.
+  const facts = await tx.fact.findMany({
+    where: {
+      partyId: row.partyId,
+      predicate: { in: ["legal_name", "email"] },
+      supersededById: null,
+      retractedAt: null,
+    },
+    select: { predicate: true, value: true },
+  });
+  const name = (facts.find((f) => f.predicate === "legal_name")?.value ?? {}) as {
+    first?: string;
+    last?: string;
+  };
+  const email = facts.find((f) => f.predicate === "email")?.value;
+  if (typeof email !== "string" || !email) {
+    throw new AppError(409, "There is no email on file for them.", "NO_EMAIL");
+  }
+  const applicantName = await tx.fact.findFirst({
+    where: {
+      partyId: primary.partyId,
+      predicate: "legal_name",
+      supersededById: null,
+      retractedAt: null,
+    },
+    select: { value: true },
+  });
+  const applicant = (applicantName?.value ?? {}) as { first?: string; last?: string };
+
+  // Dead before the new one is live, so the partial unique index never sees two.
+  await tx.coBorrowerInvitation.updateMany({
+    where: { borrowerId: row.id, acceptedAt: null, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+  const invitation = await tx.coBorrowerInvitation.create({
+    data: {
+      loanFileId,
+      borrowerId: row.id,
+      partyId: row.partyId,
+      tokenHash,
+      sentToEmail: email,
+      invitedByPrincipalId: await principalForParty(tx, primary.partyId),
+      expiresAt,
+    },
+    select: { id: true },
+  });
+  if (row.party.claimStatus === "PROVISIONAL") {
+    await tx.party.update({ where: { id: row.partyId }, data: { claimStatus: "CLAIM_PENDING" } });
+  }
+  return {
+    invitationId: invitation.id,
+    email,
+    expiresAt,
+    coBorrowerFirstName: name.first ?? "",
+    applicantName:
+      `${applicant.first ?? ""} ${applicant.last ?? ""}`.trim() || "Your co-applicant",
   };
 }
 
@@ -320,69 +355,79 @@ export async function acceptClaim(
   userId: string,
   db: Db = prisma,
 ): Promise<Claimed> {
-  const claimed = await db.$transaction(async (tx) => {
-    const [locked] = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM co_borrower_invitations
-       WHERE token_hash = ${hashInvitationToken(token)}
-         AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()
-       FOR UPDATE`;
-    const invitation = locked ? await liveInvitation(tx, token) : null;
-    if (!invitation) throw new AppError(404, "That link is not good any more.", "NOT_FOUND");
+  // The lock below needs a transaction around it, and there is one either
+  // way: opened here when the caller brought none, or the caller's own —
+  // the persona seed claims inside the transaction that walks the household,
+  // and Prisma cannot nest interactive transactions. Same idiom as
+  // `recordDeclaration`.
+  if (ownsTransaction(db)) {
+    return prisma.$transaction((tx) => acceptClaim(token, userId, tx));
+  }
+  const [locked] = await db.$queryRaw<{ id: string }[]>`
+    SELECT id FROM co_borrower_invitations
+     WHERE token_hash = ${hashInvitationToken(token)}
+       AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+     FOR UPDATE`;
+  const invitation = locked ? await liveInvitation(db, token) : null;
+  if (!invitation) throw new AppError(404, "That link is not good any more.", "NOT_FOUND");
 
-    const claimant = await partyForUser(tx, userId);
-    if (claimant === invitation.partyId) {
-      throw new AppError(409, "This invitation is for somebody else.", "NOT_YOURS");
-    }
-    // The applicant taking their own co-borrower's link, or a person already
-    // on this file twice over. One person holds one role on one mortgage.
-    const already = await tx.borrower.findFirst({
-      where: { loanFileId: invitation.loanFileId, partyId: claimant },
-      select: { id: true },
-    });
-    if (already) {
-      throw new AppError(409, "You are already on this application.", "ALREADY_ON_FILE");
-    }
+  const claimant = await partyForUser(db, userId);
+  if (claimant === invitation.partyId) {
+    throw new AppError(409, "This invitation is for somebody else.", "NOT_YOURS");
+  }
+  // The applicant taking their own co-borrower's link, or a person already
+  // on this file twice over. One person holds one role on one mortgage.
+  const already = await db.borrower.findFirst({
+    where: { loanFileId: invitation.loanFileId, partyId: claimant },
+    select: { id: true },
+  });
+  if (already) {
+    throw new AppError(409, "You are already on this application.", "ALREADY_ON_FILE");
+  }
 
-    const stated = await tx.fact.findMany({
+  const stated = await db.fact.findMany({
+    where: {
+      partyId: invitation.partyId,
+      predicate: { in: ["legal_name", "email"] },
+      supersededById: null,
+      retractedAt: null,
+    },
+    select: { predicate: true, value: true, assertedByPrincipalId: true },
+  });
+
+  await mergePartyInto(db, invitation.partyId, claimant);
+
+  // Restated on the survivor, under the principal that stated them — the
+  // applicant's — and only where the survivor has nothing of its own. A
+  // person who already had a legal name on their party keeps it; the
+  // co-borrower's own screen 2 supersedes either.
+  for (const fact of stated) {
+    const own = await db.fact.findFirst({
       where: {
-        partyId: invitation.partyId,
-        predicate: { in: ["legal_name", "email"] },
+        partyId: claimant,
+        predicate: fact.predicate,
         supersededById: null,
         retractedAt: null,
       },
-      select: { predicate: true, value: true, assertedByPrincipalId: true },
+      select: { id: true },
     });
+    if (own) continue;
+    await assertFacts(db, claimant, fact.assertedByPrincipalId, [
+      { predicate: fact.predicate, value: fact.value as never },
+    ]);
+  }
 
-    await mergePartyInto(tx, invitation.partyId, claimant);
-
-    // Restated on the survivor, under the principal that stated them — the
-    // applicant's — and only where the survivor has nothing of its own. A
-    // person who already had a legal name on their party keeps it; the
-    // co-borrower's own screen 2 supersedes either.
-    for (const fact of stated) {
-      const own = await tx.fact.findFirst({
-        where: {
-          partyId: claimant,
-          predicate: fact.predicate,
-          supersededById: null,
-          retractedAt: null,
-        },
-        select: { id: true },
-      });
-      if (own) continue;
-      await assertFacts(tx, claimant, fact.assertedByPrincipalId, [
-        { predicate: fact.predicate, value: fact.value as never },
-      ]);
-    }
-
-    await tx.coBorrowerInvitation.update({
-      where: { id: invitation.id },
-      data: { acceptedAt: new Date(), acceptedByPartyId: claimant },
-    });
-    return { loanFileId: invitation.loanFileId, borrowerId: invitation.borrowerId };
+  await db.coBorrowerInvitation.update({
+    where: { id: invitation.id },
+    data: { acceptedAt: new Date(), acceptedByPartyId: claimant },
   });
-  await recordEvent(claimed.loanFileId, "co_borrower_claimed", "borrower", {
-    borrowerId: claimed.borrowerId,
-  });
-  return claimed;
+  await recordEvent(
+    invitation.loanFileId,
+    "co_borrower_claimed",
+    "borrower",
+    { borrowerId: invitation.borrowerId },
+    undefined,
+    db,
+  );
+  return { loanFileId: invitation.loanFileId, borrowerId: invitation.borrowerId };
 }

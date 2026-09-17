@@ -262,14 +262,21 @@ async function seedEveryPersona(): Promise<void> {
   for (const story of PERSONA_STORIES) {
     if (!isSeeded(story)) continue;
     await createUser({ personaKey: story.key, name: `${story.name.first} ${story.name.last}` });
+    if (story.coBorrower) {
+      const { key, name } = story.coBorrower;
+      await createUser({ personaKey: key, name: `${name.first} ${name.last}` });
+    }
   }
 }
+
+/** The rows the listing adds for a second person on a story's file. */
+const CO_BORROWER_ROWS = PERSONA_STORIES.filter((s) => isSeeded(s) && s.coBorrower).length;
 
 describe("the sign-in page's list of sample borrowers", () => {
   it("names every story, and marks the one that cannot be offered", async () => {
     await seedEveryPersona();
     const rows = await personaRows((await createUser()).id);
-    expect(rows).toHaveLength(PERSONA_STORIES.length);
+    expect(rows).toHaveLength(PERSONA_STORIES.length + CO_BORROWER_ROWS);
 
     // With every row the seed can walk actually written, the only one left
     // unavailable is the one this build cannot produce a person in at all.
@@ -298,6 +305,46 @@ describe("the sign-in page's list of sample borrowers", () => {
   it("says nothing has been seeded when nothing has", async () => {
     const rows = await personaRows((await createUser()).id);
     expect(rows.every((r) => r.state === null && r.seededAt === null)).toBe(true);
+  });
+
+  it("offers a co-borrower only beside the applicant, wearing the household's state", async () => {
+    const story = PERSONA_STORIES.find((s) => s.key === "priya_dev_raman");
+    const who = story && isSeeded(story) ? story.coBorrower : undefined;
+    expect(who).toBeDefined();
+
+    // His row alone is a sign-in to nothing: no file is his. The seed writes
+    // the two in one transaction, so this is a half-removed household.
+    await createUser({ personaKey: who!.key, name: "Dev Raman" });
+    const alone = (await personaRows((await createUser()).id)).find((r) => r.key === who!.key);
+    expect(alone?.available).toBe(false);
+    expect(alone?.unavailableBecause).toBe(NOT_SEEDED_HERE);
+
+    // With hers, he is offered, right under her, and the state beside him is
+    // her file's — none yet, because nothing has walked her anywhere.
+    await createUser({ personaKey: "priya_dev_raman", name: "Priya and Dev Raman" });
+    const rows = await personaRows((await createUser()).id);
+    const keys = rows.map((r) => r.key);
+    expect(keys.indexOf(who!.key)).toBe(keys.indexOf("priya_dev_raman") + 1);
+    const his = rows.find((r) => r.key === who!.key);
+    expect(his?.available).toBe(true);
+    expect(his?.unavailableBecause).toBeNull();
+    expect(his?.state).toBeNull();
+    expect(his?.seededAt).not.toBeNull();
+
+    // And his key, colon and all, is one the sign-in route takes.
+    const res = await callAs(
+      (await createUser()).id,
+      [authRouter],
+      "POST",
+      `/personas/${who!.key}`,
+      {},
+      "/api/auth",
+    );
+    expect(res.status).toBe(201);
+    expect((res.body as { user: { persona: unknown } }).user.persona).toEqual({
+      key: who!.key,
+      name: "Dev Raman",
+    });
   });
 
   it("shows a seeded persona with no application yet as having no state", async () => {

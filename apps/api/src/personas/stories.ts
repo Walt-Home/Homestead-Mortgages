@@ -102,6 +102,29 @@ export interface SeededPersona extends PersonaBase<SeededKey> {
   readonly terms: PersonaTerms;
   readonly market?: MarketInputs;
   readonly expectedOutcome?: DecisionOutcome;
+  /**
+   * A second sign-in on this story's file: the person the applicant named,
+   * who owns no file and is listed under the row that does. The seed walks
+   * them through the product's own invitation and claim, so the picker can
+   * offer both halves of a household and a tester can be either.
+   */
+  readonly coBorrower?: SeededCoBorrower;
+}
+
+/**
+ * The shape `users.persona_key` takes, and the one the sign-in route accepts:
+ * a story's key, or a story's key with a suffix after a colon for a second
+ * person on that story's file. The database's CHECK says the same thing, and
+ * a key the CHECK refuses would fail the deploy rather than the build.
+ */
+export const PERSONA_KEY_SHAPE = /^[a-z][a-z0-9_]{1,40}(?::[a-z][a-z0-9_]{1,20})?$/;
+
+/** A co-borrower's own row on the picker. Their `key` is the story's, suffixed. */
+export interface SeededCoBorrower {
+  readonly key: `${SeededKey}:${string}`;
+  readonly name: { readonly first: string; readonly last: string };
+  /** One line, in borrower words, like the story above it. */
+  readonly story: string;
 }
 
 /** A state the model can name and this build cannot produce a person in. */
@@ -230,6 +253,14 @@ export const PERSONA_STORIES: readonly PersonaStory[] = [
     // that this row reads the same whenever the seed is run.
     market: { apr: 6.625, apor: 6.2, pointsAndFeesAmount: 6_720, totalLoanAmount: 332_730 },
     expectedOutcome: "approved_with_conditions",
+    // The other half of the household, seeded through the invitation Priya
+    // sends and the claim he takes, so signing in as him is signing in as a
+    // co-borrower who arrived the way a real one does.
+    coBorrower: {
+      key: "priya_dev_raman:dev",
+      name: { first: "Dev", last: "Raman" },
+      story: "Invited by Priya, and finished his own part: his details, his answers, his signature.",
+    },
   },
   {
     key: "tom_nguyen",

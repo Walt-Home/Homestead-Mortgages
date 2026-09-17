@@ -162,10 +162,12 @@ three lists rather than trusting it after they change.
   4506-C, and nobody may make either on their behalf. Screen 2 names one — a
   name, an email, whether they will live in the home — and the file waits on
   them: signing, deciding and assembling all refuse while somebody named has
-  not completed their own profile. What is missing is the invitation itself
-  and the claim that turns a named person into a signed-in one, any surface a
-  co-borrower can sign on at all, a bank a second borrower can link, and
-  demographics asked of each of them — item 1.
+  not completed their own profile. The invitation and the claim are built,
+  and the sample household is seeded through them rather than beside them:
+  the seed names Dev, reads his link out of the fixture outbox, claims it as
+  a sign-in of his own and walks his own half — screen 2, Section 5, his
+  signature — through the same services a real co-borrower goes through.
+  What is missing is a co-borrower's reports reaching the engine — item 1.
 - **Vesting and the non-borrower parties** have tables and, now, writers.
   `du_vestings` holds the sentence that will read on title — asked on the review
   screen, stated by the applicant, refused at signing when absent —

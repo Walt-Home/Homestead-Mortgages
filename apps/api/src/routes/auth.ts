@@ -6,7 +6,12 @@ import { providerModes } from "../services/connectors.js";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { requireAuth } from "../middleware/require-auth.js";
 import { signInAsLocalDeveloper, signInAsPersona, signInWithGoogle } from "../services/auth.js";
-import { isSeeded, NOT_SEEDED_HERE, PERSONA_STORIES } from "../personas/stories.js";
+import {
+  isSeeded,
+  NOT_SEEDED_HERE,
+  PERSONA_KEY_SHAPE,
+  PERSONA_STORIES,
+} from "../personas/stories.js";
 import { toDomainState } from "../services/transition.js";
 import { acceptClaim, previewClaim } from "../services/invitations.js";
 
@@ -111,7 +116,7 @@ personaRouter.get(
     const seeded = new Map(users.map((u) => [u.personaKey, u]));
 
     res.json({
-      personas: PERSONA_STORIES.map((story) => {
+      personas: PERSONA_STORIES.flatMap((story) => {
         const row = seeded.get(story.key);
         const status = row?.loanFiles[0]?.application?.status;
         /*
@@ -123,17 +128,18 @@ personaRouter.get(
          * run, and every one of them signs in to a 503.
          */
         const offerable = isSeeded(story) && row !== undefined;
-        return {
+        /*
+         * Where the file ACTUALLY stands, not where the story says it should.
+         * A persona that drifted is a persona whose pill should say so —
+         * this page is how a tester would notice, and a listing that showed
+         * the intended state would be the one place the drift was hidden.
+         */
+        const state = status ? toDomainState(status) : null;
+        const own = {
           key: story.key,
           name: `${story.name.first} ${story.name.last}`,
           story: story.story,
-          /*
-           * Where the file ACTUALLY stands, not where the story says it should.
-           * A persona that drifted is a persona whose pill should say so —
-           * this page is how a tester would notice, and a listing that showed
-           * the intended state would be the one place the drift was hidden.
-           */
-          state: status ? toDomainState(status) : null,
+          state,
           available: offerable,
           unavailableBecause: offerable
             ? null
@@ -142,6 +148,28 @@ personaRouter.get(
               : story.unavailableBecause,
           seededAt: row?.createdAt.toISOString() ?? null,
         };
+        if (!isSeeded(story) || !story.coBorrower) return [own];
+        /*
+         * The co-borrower's row, under the applicant's. They own no file, so
+         * the state beside them is the household's — the one file they are
+         * on — and the row is offered only when both halves were seeded,
+         * because the seed writes them in one transaction and a co-borrower
+         * with no file to be on is a sign-in to nothing.
+         */
+        const theirs = seeded.get(story.coBorrower.key);
+        const both = offerable && theirs !== undefined;
+        return [
+          own,
+          {
+            key: story.coBorrower.key,
+            name: `${story.coBorrower.name.first} ${story.coBorrower.name.last}`,
+            story: story.coBorrower.story,
+            state: both ? state : null,
+            available: both,
+            unavailableBecause: both ? null : NOT_SEEDED_HERE,
+            seededAt: theirs?.createdAt.toISOString() ?? null,
+          },
+        ];
       }),
     });
   }),
@@ -152,10 +180,7 @@ personaRouter.post(
   asyncRoute(async (req, res) => {
     // The same shape the database's CHECK takes, so an unknown key is a 503
     // about seeding rather than a query with something arbitrary in it.
-    const key = z
-      .string()
-      .regex(/^[a-z][a-z0-9_]{1,40}$/)
-      .parse(req.params.key);
+    const key = z.string().regex(PERSONA_KEY_SHAPE).parse(req.params.key);
     const user = await signInAsPersona(key);
     await new Promise<void>((resolve, reject) =>
       req.session.regenerate((err) => (err ? reject(err) : resolve())),

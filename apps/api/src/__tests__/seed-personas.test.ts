@@ -30,12 +30,14 @@ vi.hoisted(() => {
 });
 
 import { isSeeded, PERSONA_STORIES, type PersonaKey } from "../personas/stories.js";
+import { authRouter } from "../routes/auth.js";
 import { purgeLegacyDemo, resetPersona, seedAll } from "../scripts/seed-personas.js";
 import { borrowerObligations } from "../services/obligations.js";
 import { loadLoanFile } from "../services/repository.js";
 import { principalForParty } from "../services/party.js";
 import { toDomainState, transition } from "../services/transition.js";
 import { ingestFixtureApor } from "./support/apor.js";
+import { callAs } from "./support/http.js";
 
 // The deploy fetches the average prime offer rates before it seeds, because the
 // sample borrowers are decided against that table; the tests do the same. A
@@ -257,12 +259,12 @@ describe("the seed walks every persona to its state", () => {
     // derived column asserting a basis with no `du_residences` row behind it,
     // which is the one thing that column is not allowed to do.
     //
-    // Everybody on a sample file answers the declarations screen now — the
-    // eight for themselves, and Dev through the staff principal that is the
-    // only way a co-borrower with no sign-in can answer at all. So each of
-    // them HAS a basis, and this is the assertion that says the column is
-    // still derived rather than manufactured: every stated basis has the row
-    // that person's own answer created behind it.
+    // Everybody on a sample file answers the declarations screen now, each
+    // for themselves — Dev included, since he arrived through the claim with
+    // a principal of his own. So each of them HAS a basis, and this is the
+    // assertion that says the column is still derived rather than
+    // manufactured: every stated basis has the row that person's own answer
+    // created behind it.
     await seedAll();
 
     const stated = await prisma.borrower.findMany({
@@ -370,6 +372,127 @@ describe("each persona is the state their story describes", () => {
     });
     expect(conditions.map((c) => c.requirementId)).toEqual(["INC-009", "UW-004"]);
     expect(conditions.every((c) => c.owner === "borrower")).toBe(true);
+  });
+
+  it("walks Dev through the invitation, the claim and his own half", async () => {
+    // The household is the product's co-borrower flow, seeded through the
+    // product's own services rather than built as two complete people by
+    // hand — so what a tester signs in to as Dev is what a real co-borrower
+    // would have left behind, and the sample cannot drift from the flow.
+    await seedAll();
+    const { file } = await persona("priya_dev_raman");
+    const story = PERSONA_STORIES.find((s) => s.key === "priya_dev_raman");
+    const who = story && isSeeded(story) ? story.coBorrower : undefined;
+    expect(who?.key).toBe("priya_dev_raman:dev");
+
+    // A sign-in of his own, whose party is the survivor of the one Priya
+    // named: CLAIMED, marked as the seed's, with exactly one MERGED party
+    // pointing at it — the provisional one the naming minted.
+    const dev = await prisma.user.findUniqueOrThrow({
+      where: { personaKey: who!.key },
+      select: {
+        id: true,
+        partyId: true,
+        party: { select: { claimStatus: true, sourceFirstSeen: true } },
+      },
+    });
+    expect(dev.party).toEqual({ claimStatus: "CLAIMED", sourceFirstSeen: "persona_seed" });
+    const folded = await prisma.party.findMany({
+      where: { mergedIntoPartyId: dev.partyId! },
+      select: { claimStatus: true, sourceFirstSeen: true },
+    });
+    expect(folded).toEqual([
+      { claimStatus: "MERGED", sourceFirstSeen: "co_borrower_named_by_applicant" },
+    ]);
+
+    // The row the naming made is his now, and he has said who he is on it:
+    // the last four are on the row and his date of birth is his own word.
+    const loaded = (await loadLoanFile(file.id))!;
+    expect(loaded.invitedBorrowers).toEqual([]);
+    const his = loaded.borrowers[1]!;
+    expect(his.partyId).toBe(dev.partyId);
+    expect(his.ssn.last4).toBe("7745");
+    const dob = await prisma.fact.findFirstOrThrow({
+      where: { partyId: dev.partyId!, predicate: "date_of_birth", supersededById: null },
+      select: { assertedBy: { select: { partyId: true } } },
+    });
+    expect(dob.assertedBy.partyId).toBe(dev.partyId);
+
+    // The invitation went to his address and was taken by him.
+    const invitation = await prisma.coBorrowerInvitation.findFirstOrThrow({
+      where: { borrowerId: his.id },
+      select: { acceptedAt: true, acceptedByPartyId: true, revokedAt: true, sentToEmail: true },
+    });
+    expect(invitation.acceptedAt).not.toBeNull();
+    expect(invitation.revokedAt).toBeNull();
+    expect(invitation.acceptedByPartyId).toBe(dev.partyId);
+    expect(invitation.sentToEmail).toBe("priya_dev_raman.dev@personas.supermortgage.invalid");
+
+    // Section 5 attested by him: neither staff's word nor Priya's.
+    const declaration = await prisma.duDeclaration.findFirstOrThrow({
+      where: { applicationParty: { partyId: dev.partyId!, application: { loanFileId: file.id } } },
+      select: { assertedBy: { select: { kind: true, partyId: true } } },
+    });
+    expect(declaration.assertedBy).toEqual({ kind: "BORROWER", partyId: dev.partyId });
+
+    // His signature is a consent row in his name beside his own 4506-C. The
+    // file's own signature is Priya's alone, and hers is the column.
+    const consents = await prisma.consent.findMany({
+      where: { borrowerId: his.id, revokedAt: null },
+      select: { kind: true },
+      orderBy: { kind: "asc" },
+    });
+    expect(consents.map((c) => c.kind)).toEqual([
+      "application_signature",
+      "econsent",
+      "form_4506c",
+      "verification_authorization",
+    ]);
+    const signed = await prisma.loanFile.findUniqueOrThrow({
+      where: { id: file.id },
+      select: { applicationSignedAt: true },
+    });
+    expect(signed.applicationSignedAt).not.toBeNull();
+    expect(
+      await prisma.consent.count({
+        where: { loanFileId: file.id, kind: "application_signature" },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.consent.count({
+        where: { borrowerId: loaded.borrowers[0]!.id, kind: "application_signature" },
+      }),
+    ).toBe(0);
+    // And his transcripts came back under his own grant, filed against him.
+    expect(
+      await prisma.connectorSnapshot.count({
+        where: { loanFileId: file.id, kind: "irs", partyId: dev.partyId! },
+      }),
+    ).toBe(1);
+
+    // The sign-in page offers him right under Priya, wearing the household's
+    // state, and his row signs in as him.
+    const listing = await callAs<{
+      personas: { key: string; name: string; state: string | null; available: boolean }[];
+    }>(dev.id, [authRouter], "GET", "/personas", undefined, "/api/auth");
+    const keys = listing.body.personas.map((p) => p.key);
+    expect(keys.indexOf(who!.key)).toBe(keys.indexOf("priya_dev_raman") + 1);
+    expect(listing.body.personas.find((p) => p.key === who!.key)).toMatchObject({
+      name: "Dev Raman",
+      state: "conditionally_approved",
+      available: true,
+    });
+    const session = await callAs<{ user: { id: string; persona: { key: string } | null } }>(
+      dev.id,
+      [authRouter],
+      "POST",
+      `/personas/${who!.key}`,
+      {},
+      "/api/auth",
+    );
+    expect(session.status).toBe(201);
+    expect(session.body.user.id).toBe(dev.id);
+    expect(session.body.user.persona?.key).toBe(who!.key);
   });
 
   it("retires Tom's own terms with the ones we can do", async () => {
@@ -500,19 +623,24 @@ describe("clearing personas out", () => {
   it("re-creates one persona, and its co-borrower, without touching the others", async () => {
     await seedAll();
     const before = await census();
+    const household = ["priya_dev_raman", "priya_dev_raman:dev"];
     const untouched = await prisma.user.findMany({
-      where: { personaKey: { notIn: ["priya_dev_raman"] } },
+      where: { personaKey: { notIn: household } },
       select: { id: true, personaKey: true },
       orderBy: { personaKey: "asc" },
     });
 
     await resetPersona("priya_dev_raman");
     expect(await prisma.user.findUnique({ where: { personaKey: "priya_dev_raman" } })).toBeNull();
-    // Dev has no user of his own, so nothing else would have taken his party.
-    expect(await prisma.party.count()).toBe(before.parties - 2);
+    // Dev's sign-in goes with the household, and with it his party and the
+    // one Priya named, folded into his by the claim: three parties, not two.
+    expect(
+      await prisma.user.findUnique({ where: { personaKey: "priya_dev_raman:dev" } }),
+    ).toBeNull();
+    expect(await prisma.party.count()).toBe(before.parties - 3);
     expect(
       await prisma.user.findMany({
-        where: { personaKey: { notIn: ["priya_dev_raman"] } },
+        where: { personaKey: { notIn: household } },
         select: { id: true, personaKey: true },
         orderBy: { personaKey: "asc" },
       }),
@@ -571,18 +699,20 @@ describe("the guard on which borrower sorts first", () => {
    * construction and the guard passes forever.
    */
   it("stands after the position that decides the order, and before any pull", () => {
+    // The position is decided by the claim now: naming puts Dev on the
+    // application, and accepting the invitation moves that seat onto the
+    // party his own sign-in made. The guard reads the file after the claim
+    // and before anything is pulled in his name.
     const source = seedSource();
-    const create = source.indexOf("const dev = await w.tx.borrower.create({");
-    const position = source.indexOf(
-      'ensureApplicationParty(w.tx, w.applicationId, party.id, "CO_BORROWER")',
-    );
+    const named = source.indexOf("const named = await nameCoBorrower(");
+    const claimed = source.indexOf("const claimed = await acceptClaim(token, user.id, w.tx);");
     const guard = source.indexOf("the co-borrower holds the lower borrower_ordinal");
     const onward = source.indexOf(
-      'grantConsent(w.tx, w.loanFileId, dev.id, "verification_authorization")',
+      'grantConsent(w.tx, w.loanFileId, named.borrowerId, "verification_authorization")',
     );
-    expect(create).toBeGreaterThan(-1);
-    expect(position).toBeGreaterThan(create);
-    expect(guard).toBeGreaterThan(position);
+    expect(named).toBeGreaterThan(-1);
+    expect(claimed).toBeGreaterThan(named);
+    expect(guard).toBeGreaterThan(claimed);
     expect(onward).toBeGreaterThan(guard);
   });
 

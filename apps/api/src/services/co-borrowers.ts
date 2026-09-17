@@ -30,7 +30,7 @@ import type { Demographics } from "@hm/shared";
 import { AppError } from "../middleware/error-handler.js";
 import { applicationForFile, ensureApplicationParty } from "./applications.js";
 import { primaryBorrowerRow } from "./borrower-order.js";
-import type { Db } from "./db.js";
+import { ownsTransaction, type Db } from "./db.js";
 import {
   assertFacts,
   createProvisionalParty,
@@ -100,31 +100,44 @@ export async function nameCoBorrower(
   named: NamedCoBorrower,
   db: Db = prisma,
 ): Promise<Appended> {
-  const appended = await db.$transaction(async (tx) => {
-    const { primary, app } = await applicantOn(tx, loanFileId);
-    const partyId = await createProvisionalParty(tx, {
-      sourceFirstSeen: "co_borrower_named_by_applicant",
-    });
-    // The applicant's principal on the two facts the applicant can honestly
-    // assert about somebody else. Everything else about this person is theirs
-    // to state, and arrives under their own principal when they do.
-    await assertFacts(tx, partyId, await principalForParty(tx, primary.partyId), [
-      { predicate: "legal_name", value: { first: named.firstName, last: named.lastName } },
-      { predicate: "email", value: named.email },
-    ]);
-    const borrower = await tx.borrower.create({
-      data: { loanFileId, partyId, ssnLast4: null },
-      select: { id: true },
-    });
-    const role = roleFor(named.occupiesProperty);
-    const edge = await ensureApplicationParty(tx, app.id, partyId, role);
-    return { borrowerId: borrower.id, partyId, borrowerOrdinal: edge.borrowerOrdinal, role };
+  // One boundary, opened here only when the caller brought none. The persona
+  // seed walks a whole household inside a single transaction and hands it
+  // in, and Prisma cannot nest interactive transactions — so the top-level
+  // client opens one and re-enters with it, and a transaction client does
+  // the work as it is. The same idiom as `recordDeclaration`.
+  if (ownsTransaction(db)) {
+    return prisma.$transaction((tx) => nameCoBorrower(loanFileId, named, tx));
+  }
+  const { primary, app } = await applicantOn(db, loanFileId);
+  const partyId = await createProvisionalParty(db, {
+    sourceFirstSeen: "co_borrower_named_by_applicant",
   });
-  await recordEvent(loanFileId, "co_borrower_named", "borrower", {
-    borrowerId: appended.borrowerId,
-    borrowerOrdinal: appended.borrowerOrdinal,
-    role: appended.role,
+  // The applicant's principal on the two facts the applicant can honestly
+  // assert about somebody else. Everything else about this person is theirs
+  // to state, and arrives under their own principal when they do.
+  await assertFacts(db, partyId, await principalForParty(db, primary.partyId), [
+    { predicate: "legal_name", value: { first: named.firstName, last: named.lastName } },
+    { predicate: "email", value: named.email },
+  ]);
+  const borrower = await db.borrower.create({
+    data: { loanFileId, partyId, ssnLast4: null },
+    select: { id: true },
   });
+  const role = roleFor(named.occupiesProperty);
+  const edge = await ensureApplicationParty(db, app.id, partyId, role);
+  const appended = { borrowerId: borrower.id, partyId, borrowerOrdinal: edge.borrowerOrdinal, role };
+  await recordEvent(
+    loanFileId,
+    "co_borrower_named",
+    "borrower",
+    {
+      borrowerId: appended.borrowerId,
+      borrowerOrdinal: appended.borrowerOrdinal,
+      role: appended.role,
+    },
+    undefined,
+    db,
+  );
   return appended;
 }
 

@@ -1886,6 +1886,23 @@ household's half and their own, because "your private identity details and
 credentials stay private" is a promise kept in the response rather than in
 a screen.
 
+**The sample household goes through the same doors.** Priya and Dev used to
+be built as two complete people by hand — a second CLAIMED party with every
+identity fact under it, written straight into the seed. Now the seed names
+him through `nameCoBorrower`, sends the link through `inviteCoBorrower` on
+the fixture mailer, reads the token back out of the outbox the way a person
+reads it out of an inbox, mints him a sign-in of his own and takes the link
+through `acceptClaim`, then walks his half the way his screens would: his
+facts under his own principal, his Section 5 attested by himself, his
+signature as a consent row in his name. Three services gained the
+`recordDeclaration` re-entry idiom for it — handed the top-level client they
+open a transaction and call themselves with it; handed one, they do the work
+in it — because a walk is one transaction and Prisma cannot nest them. The
+reason is not tidiness: a sample built beside the flow drifts from it the
+first time the flow changes, and a tester signing in as Dev would be reading
+a co-borrower no co-borrower could have become. Built through the flow, the
+sample cannot say anything the product would not.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

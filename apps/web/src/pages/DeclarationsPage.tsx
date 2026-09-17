@@ -136,9 +136,6 @@ export function DeclarationsPage() {
       await api.post(`/files/${fileId}/declaration`, bodyFrom(form, purchase));
       await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
       await queryClient.invalidateQueries({ queryKey: ["assessment"] });
-      // The next step for everybody. A co-borrower's bank is not theirs to
-      // link yet, and the bank screen is where that is said — a step nobody
-      // is sent to is a step nobody hears about.
       navigate(`/f/${fileId}/bank`);
     } catch (err) {
       if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {

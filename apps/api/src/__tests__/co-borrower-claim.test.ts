@@ -601,6 +601,66 @@ describe("once they have arrived", () => {
     ).toBe(404);
   });
 
+  it("links a bank of their own, beside the applicant's, and reads back only theirs", async () => {
+    // Two `bank` links on one file, one per person. The file's own report
+    // stays the applicant's — it is what the engine reads — and a
+    // co-borrower's read carries theirs in its place.
+    const h = await claimed();
+    await callAs(h.theo.id, [fileRouter], "POST", `/${h.fileId}/borrowers`, THEO_HIMSELF);
+    for (const kind of ["verification_authorization", "econsent"]) {
+      await callAs(h.theo.id, [connectorRouter], "POST", `/${h.fileId}/consents`, {
+        kind,
+        borrowerId: h.borrowerId,
+      });
+    }
+    const dana = (await loadLoanFile(h.fileId))!.borrowers[0]!;
+    for (const kind of ["verification_authorization", "econsent"]) {
+      await callAs(h.user.id, [connectorRouter], "POST", `/${h.fileId}/consents`, {
+        kind,
+        borrowerId: dana.id,
+      });
+    }
+
+    const hers = await callAs(h.user.id, [connectorRouter], "POST", `/${h.fileId}/bank`, {});
+    expect(hers.status, JSON.stringify(hers.body)).toBe(201);
+    const his = await callAs(h.theo.id, [connectorRouter], "POST", `/${h.fileId}/bank`, {});
+    expect(his.status, JSON.stringify(his.body)).toBe(201);
+
+    const links = await prisma.connectorLink.findMany({
+      where: { loanFileId: h.fileId, kind: "bank" },
+      select: { partyId: true },
+    });
+    expect(new Set(links.map((l) => l.partyId))).toEqual(
+      new Set([
+        dana.partyId,
+        (await prisma.borrower.findUniqueOrThrow({ where: { id: h.borrowerId } })).partyId,
+      ]),
+    );
+
+    // The file's report is the applicant's, whoever pulled last.
+    const file = (await loadLoanFile(h.fileId))!;
+    const snapshots = await prisma.connectorSnapshot.findMany({
+      where: { loanFileId: h.fileId, kind: "bank" },
+      select: { partyId: true, externalId: true },
+    });
+    const herSnapshot = snapshots.find((s) => s.partyId === dana.partyId)!;
+    expect(file.assets).not.toBeNull();
+    expect(file.links.filter((l) => l.kind === "bank").map((l) => l.partyId)).toContain(
+      dana.partyId,
+    );
+    expect(snapshots).toHaveLength(2);
+    expect(herSnapshot).toBeDefined();
+
+    // And his read carries his, not hers.
+    const theirs = await callAs<{
+      file: { assets: unknown; links: { kind: string; partyId: string }[] };
+    }>(h.theo.id, [fileRouter], "GET", `/${h.fileId}`);
+    expect(theirs.body.file.assets).not.toBeNull();
+    expect(theirs.body.file.links.map((l) => l.partyId)).toEqual(
+      theirs.body.file.links.map(() => links.find((l) => l.partyId !== dana.partyId)!.partyId),
+    );
+  });
+
   it("does not let the applicant's screen 2 land on the co-borrower", async () => {
     // The applicant revisiting screen 2 after the claim still edits her own
     // row. Resolved by party, so the newest row on the file is not "hers".

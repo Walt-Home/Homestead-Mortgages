@@ -30,6 +30,7 @@ import type {
   LienSearch,
   InvitedBorrower,
   ExistingLoan,
+  ConnectorLink,
 } from "@hm/shared";
 import { DECISION_OUTCOMES, TERMINAL } from "@hm/shared";
 import type { Prisma } from "@hm/db";
@@ -256,6 +257,18 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
     const snapshot = row.snapshots.find((s) => s.kind === kind);
     return snapshot ? (snapshot.payload as T) : null;
   };
+  // A person-keyed report is the APPLICANT's, by party — Borrower 1's — and
+  // not whichever party pulled most recently. Before a co-borrower could
+  // pull, the two were the same row; now a co-borrower's bank report must not
+  // replace the applicant's on the file the engine reads. A legacy snapshot
+  // with no party is still the applicant's, because nobody else could have
+  // made it.
+  const latestOf = <T>(kind: string, partyId: string | null): T | null => {
+    const snapshot = row.snapshots.find(
+      (s) => s.kind === kind && (s.partyId === partyId || s.partyId === null),
+    );
+    return snapshot ? (snapshot.payload as T) : null;
+  };
 
   // Which retrieval wrote a row, by the snapshot it names. Only the two kinds
   // that carry income are answers; anything else is a row written by something
@@ -436,6 +449,8 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       }
     : null;
 
+  // Whose reports the file's own fields carry: Borrower 1's, by party.
+  const applicantParty = inDocumentOrder[0]?.partyId ?? null;
   const conditions = await db.loanCondition.findMany({ where: { loanFileId: id } });
   const application = await applicationReceipt(db, id, inDocumentOrder, consents, ordinals);
 
@@ -548,10 +563,10 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
     sanctions: latest<SanctionsScreening>("sanctions"),
     lienSearch: latest<LienSearch>("lien_search"),
 
-    credit: latest<CreditReport>("credit"),
-    assets: latest<AssetReport>("bank"),
-    payroll: latest<PayrollData>("payroll"),
-    transcripts: latest<readonly TaxTranscript[]>("irs") ?? [],
+    credit: latestOf<CreditReport>("credit", applicantParty),
+    assets: latestOf<AssetReport>("bank", applicantParty),
+    payroll: latestOf<PayrollData>("payroll", applicantParty),
+    transcripts: latestOf<readonly TaxTranscript[]>("irs", applicantParty) ?? [],
 
     incomeSources: row.incomeSources.map((s) => ({
       type: s.type as never,
@@ -613,6 +628,7 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
 
     links: row.links.map((l) => ({
       kind: l.kind as never,
+      partyId: l.partyId,
       provider: l.provider,
       linkedAt: l.linkedAt.toISOString(),
       lastSyncedAt: l.lastSyncedAt.toISOString(),
@@ -764,6 +780,50 @@ export async function assertFileAccess(
     if (member) return;
   }
   throw new AppError(404, "Loan file not found", "NOT_FOUND");
+}
+
+/**
+ * One person's own reports on a file, by party: what a co-borrower reads
+ * back in place of the applicant's. The file's own fields carry Borrower 1's
+ * (see `latestOf` in `loadLoanFile`); this is the same rule asked for
+ * somebody else on the file.
+ */
+export async function ownReportsFor(
+  loanFileId: string,
+  partyId: string,
+  db: Db = prisma,
+): Promise<{
+  credit: CreditReport | null;
+  assets: AssetReport | null;
+  payroll: PayrollData | null;
+  transcripts: readonly TaxTranscript[];
+  links: ConnectorLink[];
+}> {
+  const snapshots = await db.connectorSnapshot.findMany({
+    where: { loanFileId, partyId, kind: { in: ["credit", "bank", "payroll", "irs"] } },
+    orderBy: { retrievedAt: "desc" },
+    select: { kind: true, payload: true },
+  });
+  const latest = <T>(kind: string): T | null => {
+    const snapshot = snapshots.find((s) => s.kind === kind);
+    return snapshot ? (snapshot.payload as T) : null;
+  };
+  const links = await db.connectorLink.findMany({ where: { loanFileId, partyId } });
+  return {
+    credit: latest<CreditReport>("credit"),
+    assets: latest<AssetReport>("bank"),
+    payroll: latest<PayrollData>("payroll"),
+    transcripts: latest<readonly TaxTranscript[]>("irs") ?? [],
+    links: links.map((l) => ({
+      kind: l.kind as ConnectorLink["kind"],
+      partyId: l.partyId,
+      provider: l.provider,
+      linkedAt: l.linkedAt.toISOString(),
+      lastSyncedAt: l.lastSyncedAt.toISOString(),
+      status: l.status as ConnectorLink["status"],
+      persistentMonitoringEnabled: l.persistentMonitoringEnabled,
+    })),
+  };
 }
 
 /**

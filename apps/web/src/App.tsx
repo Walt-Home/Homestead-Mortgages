@@ -186,7 +186,14 @@ function ResumeToStage() {
     const you = data.you;
     const invited = data.file.invitedBorrowers.some((b) => b.id === you);
     const declared = data.file.borrowers.find((b) => b.id === you)?.declaration != null;
-    return <Navigate to={`/f/${fileId}/${resumeForCoBorrower({ invited, declared })}`} replace />;
+    // Their own link, by party: the file a member reads carries only theirs.
+    const bankLinked = data.file.links.some((l) => l.kind === "bank");
+    return (
+      <Navigate
+        to={`/f/${fileId}/${resumeForCoBorrower({ invited, declared, bankLinked })}`}
+        replace
+      />
+    );
   }
   return <Navigate to={`/f/${fileId}/${STAGE_TO_SCREEN[stage]}`} replace />;
 }

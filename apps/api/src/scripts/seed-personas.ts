@@ -679,8 +679,15 @@ async function propertyData(w: Walk): Promise<void> {
 async function linked(w: Walk, kind: string, provider: string): Promise<void> {
   const now = new Date();
   await w.tx.connectorLink.upsert({
-    where: { loanFileId_kind: { loanFileId: w.loanFileId, kind } },
-    create: { loanFileId: w.loanFileId, kind, provider, linkedAt: now, lastSyncedAt: now },
+    where: { loanFileId_kind_partyId: { loanFileId: w.loanFileId, kind, partyId: w.partyId } },
+    create: {
+      loanFileId: w.loanFileId,
+      kind,
+      provider,
+      partyId: w.partyId,
+      linkedAt: now,
+      lastSyncedAt: now,
+    },
     update: { lastSyncedAt: now, status: "active" },
   });
 }

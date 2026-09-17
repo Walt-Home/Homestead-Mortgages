@@ -266,8 +266,6 @@ export const CO_BORROWER_REVIEW_COPY = {
   doneTitle: "You are done.",
   doneBody: (applicantFirstName: string) =>
     `Your part is signed. ${applicantFirstName || "The applicant"} finishes the rest, and we will let you both know where it stands.`,
-  bankNotice:
-    "The bank connection is the applicant's for now. Your own comes later; nothing here is waiting on you.",
 } as const;
 
 export const CLAIM_COPY = {

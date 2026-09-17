@@ -151,18 +151,19 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   letters in them, which no NMLSR id has — and a production assembly refuses
   a row carrying one. `/api/health` reports `originator: placeholder` until
   then. The vesting on the review screen has no such gap: it is asked.
-- **A co-borrower has no bank of their own yet.** Screen 2 names one, the
-  applicant sends them a link (Resend when `MAIL_PROVIDER=resend`; otherwise
-  an in-memory outbox that only a test reads, and the route refuses in
-  production rather than pretend), `/claim/:token` takes it after Google
+- **A co-borrower's reports do not reach the engine.** Screen 2 names one,
+  the applicant sends them a link (Resend when `MAIL_PROVIDER=resend`;
+  otherwise an in-memory outbox that only a test reads, and the route refuses
+  in production rather than pretend), `/claim/:token` takes it after Google
   sign-in, and the claim is a merge — the trigger lets a PROVISIONAL party go
   to `CLAIM_PENDING` or `MERGED` and nowhere else. From there the co-borrower
-  walks their own half — screen 2, Section 5, demographics, one signature —
-  and every route resolves "the borrower" by the person asking, with
-  `assertFileAccess` mode `self`. The applicant's person is redacted from what
-  a co-borrower reads. `connector_links` is still unique per `(file, kind)`
-  and every report is read as the applicant's, so a co-borrower's half skips
-  the bank step; that is the next slice. `docs/states.md` has the shape.
+  walks their own half — screen 2, Section 5, their own bank, demographics,
+  one signature — and every route resolves "the borrower" by the person
+  asking, with `assertFileAccess` mode `self`; links are per person, and a
+  member's read of the file is redacted to the household's half plus their
+  own reports. What the engine reads is still Borrower 1's reports by party;
+  consuming a co-borrower's is the compute-boundary item. `docs/states.md`
+  has the shape.
 
 ## Five rules that are not style preferences
 

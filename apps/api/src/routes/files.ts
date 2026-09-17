@@ -17,6 +17,7 @@ import {
   loadLoanFile,
   recordEvent,
   STAGE_TO_DOMAIN,
+  ownReportsFor,
 } from "../services/repository.js";
 import { primaryBorrowerRow } from "../services/borrower-order.js";
 import { nameCoBorrower, removeNamedCoBorrower } from "../services/co-borrowers.js";
@@ -754,8 +755,9 @@ fileRouter.get(
       select: { userId: true },
     });
     const yours = owner.userId === req.user!.id;
+    const own = !yours && you ? await ownReportsFor(id, you) : null;
     res.json({
-      file: yours ? file : memberView(file, yourRow),
+      file: yours || !own ? file : memberView(file, yourRow, own),
       you: yourRow,
       // Whether the reader is the applicant. A co-borrower is on the file
       // and not its owner, and the screens they see are theirs alone.

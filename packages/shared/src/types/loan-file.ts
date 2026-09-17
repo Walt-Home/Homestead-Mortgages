@@ -112,6 +112,8 @@ export interface ApplicationSigner {
  */
 export interface ConnectorLink {
   readonly kind: "credit" | "bank" | "payroll" | "irs";
+  /** Whose link. Null only for a link keyed on an address, of which there are none today. */
+  readonly partyId: string | null;
   readonly provider: string;
   readonly linkedAt: string;
   readonly lastSyncedAt: string;

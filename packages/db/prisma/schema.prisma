@@ -500,6 +500,11 @@ model ConnectorLink {
   provider String
   status   String @default("active")
 
+  /// Whose link this is. The snapshots it produces carry the same party;
+  /// nullable for a link keyed on an address, though none exists today.
+  partyId String? @map("party_id") @db.Uuid
+  party   Party?  @relation("ConnectorLinkParty", fields: [partyId], references: [id], onDelete: Cascade)
+
   linkedAt                    DateTime @map("linked_at")
   lastSyncedAt                DateTime @map("last_synced_at")
   persistentMonitoringEnabled Boolean  @default(false) @map("persistent_monitoring_enabled")
@@ -507,8 +512,9 @@ model ConnectorLink {
   /// Set when monitoring is on. Null means nothing is scheduled.
   nextSyncDueAt DateTime? @map("next_sync_due_at")
 
-  @@unique([loanFileId, kind])
+  @@unique([loanFileId, kind, partyId], map: "connector_links_one_per_person_and_kind")
   @@index([persistentMonitoringEnabled, nextSyncDueAt])
+  @@index([partyId], map: "connector_links_party")
   @@map("connector_links")
 }
 
@@ -1055,6 +1061,7 @@ model Party {
   incomeSources       IncomeSource[]
   employments         Employment[]
   connectorSnapshots  ConnectorSnapshot[]
+  connectorLinks      ConnectorLink[]        @relation("ConnectorLinkParty")
   invitationsAsNamed  CoBorrowerInvitation[] @relation("InvitationNamedParty")
   invitationsAccepted CoBorrowerInvitation[] @relation("InvitationAcceptedBy")
 

@@ -240,25 +240,25 @@ which have a longer lead time than anything above.
 
 ## At a glance
 
-| #   | Item                                | Status | One line                                                                     |
-| --- | ----------------------------------- | ------ | ---------------------------------------------------------------------------- |
-| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                           |
-| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked                       |
-| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                            |
-| —   | The generators and `du:verify`      | Green  | Corpus vendored, six tables rebuilt in CI, holder check runs both ways       |
-| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once, and a response is what writes it               |
-| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                              |
-| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person                  |
-| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                              |
-| —   | The serializer                      | Green  | Assembles and emits MISMO 3.4, arcs included, round-tripped on eighteen      |
-| 7   | Employer as an entity               | Green  | Real entity, derivable arc, classification derived, the two 1b answers asked |
-| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                           |
-| 5   | Up to four borrowers                | Yellow | Two render and answer for themselves; no screen adds one                     |
-| —   | Vesting and non-borrower parties    | Green  | Asked on the review screen; the originator on every application from birth   |
-| 8   | What we compute vs what DU does     | Green  | Boundary written, both columns typed and CHECKed, a corpus test holds it     |
-| —   | The submission                      | Yellow | Emitter, gate and both ends built; nothing carries a document                |
-| —   | The product and the property        | Green  | A product table, a retrieved building and one question on screen 3           |
-| —   | Who we submit under                 | Red    | Both elements emitted, both PLACEHOLDERS, refused outside development        |
+| #   | Item                                | Status | One line                                                                                       |
+| --- | ----------------------------------- | ------ | ---------------------------------------------------------------------------------------------- |
+| 3   | Borrower declarations               | Green  | Asked on their own screen, stored, chains enforced                                             |
+| —   | Current residence                   | Green  | The fabricated `"rent"` is gone; the question is asked                                         |
+| 6   | Assets, liabilities, owned property | Green  | Tables, ownership arcs, identity across a re-pull                                              |
+| —   | The generators and `du:verify`      | Green  | Corpus vendored, six tables rebuilt in CI, holder check runs both ways                         |
+| 1   | One casefile per loan               | Green  | Ours stable; DU's write-once, and a response is what writes it                                 |
+| 2   | Income survives a re-pull           | Green  | Snapshot lineage instead of delete-and-recreate                                                |
+| —   | Identity model                      | Green  | The party layer won; `borrowers` is a record about a person                                    |
+| —   | Ownership shape                     | Green  | Relational + join tables, now applied to assets                                                |
+| —   | The serializer                      | Green  | Assembles and emits MISMO 3.4, arcs included, round-tripped on eighteen                        |
+| 7   | Employer as an entity               | Green  | Real entity, derivable arc, classification derived, the two 1b answers asked                   |
+| 4   | Verification report identifier      | Yellow | Stored and attributed; assets still do not read it                                             |
+| 5   | Up to four borrowers                | Yellow | Named, invited, claimed, and walking their own half; their reports do not reach the engine yet |
+| —   | Vesting and non-borrower parties    | Green  | Asked on the review screen; the originator on every application from birth                     |
+| 8   | What we compute vs what DU does     | Green  | Boundary written, both columns typed and CHECKed, a corpus test holds it                       |
+| —   | The submission                      | Yellow | Emitter, gate and both ends built; nothing carries a document                                  |
+| —   | The product and the property        | Green  | A product table, a retrieved building and one question on screen 3                             |
+| —   | Who we submit under                 | Red    | Both elements emitted, both PLACEHOLDERS, refused outside development                          |
 
 **The three that blocked any submission are closed.** Declarations, the current
 residence, and assets with liabilities and owned property were each a hard stop
@@ -562,10 +562,12 @@ What is still missing is narrower than it was, and none of it is structural:
   `borrowerId` to the person asking), the three demographic questions, and
   one signature that is theirs alone — their 4506-C and an
   `application_signature` consent in their name, never the file's
-  `applicationSignedAt`, which stays the applicant's. What is still not
-  theirs: a bank of their own, because `connector_links` is unique per
-  `(loanFileId, kind)` and every report on the file is read as the
-  applicant's. Their half skips the bank step and says so.
+  `applicationSignedAt`, which stays the applicant's. A link is a person's now
+  — `connector_links.party_id`, one per person per kind — so a co-borrower
+  links their own bank and their read of the file carries their own reports;
+  the file's own fields stay Borrower 1's by party, which is what the engine
+  reads. A co-borrower's reports reaching the engine is the compute-boundary
+  item's, not the projection's.
 - **`connector_links` is unique on `(loanFileId, kind)`**, so a second borrower
   cannot link their own bank.
 - **The demographics are asked once**, of the applicant. Regulation B wants
@@ -810,11 +812,13 @@ own answers and the signature attests to answers they gave.
 Dependency order, not importance. No time estimates — build a schedule from
 this with the people doing the work.
 
-1. **The second borrower.** The ordinal column, per-person declarations, an
-   engine that judges each person on their own answers, a review screen that
-   renders both, and a screen that names one and waits on them are done. What
-   is left is the invitation and the claim, a bank each of them can link, the
-   demographics asked of each applicant, and a signature apiece.
+1. **The second borrower.** Named on screen 2, invited by a link whose token
+   exists only in the email, claimed by a merge into the person's own Google
+   sign-in, and walking their own half — screen 2, Section 5, their own bank,
+   demographics, one signature — with every route resolving "the borrower" by
+   the person asking. What is left is a co-borrower's reports reaching the
+   engine (the compute-boundary item's to decide) and the sample household
+   walking that same flow.
 2. ~~**Write down the compute boundary** and type the two JSON columns.~~ Done:
    item 8 above, `DU_DERIVED_FIGURES`, the two CHECKs and the corpus test.
 3. ~~**Writers for vesting and the non-borrower parties.**~~ Done: the review

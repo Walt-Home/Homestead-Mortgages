@@ -9,10 +9,11 @@
  * they are applying with; their date of birth, their number, their contact
  * details, their answers and their reports do not.
  *
- * Every report on the file is nulled for a member today, because every
- * report on the file today is the applicant's: nothing yet keys a pull to the
- * party it was pulled on. When a member's own credit and bank reports exist
- * they come back to them here, by party, and nobody else's do.
+ * A member's own reports come back to them, by party — their credit, their
+ * bank, their payroll, their transcripts and their links — and nobody else's
+ * do. The file's own fields carry the applicant's, which is what the engine
+ * reads; a co-borrower's reports reach the engine through the compute
+ * boundary item, not through this view.
  */
 
 import type { Address, Borrower, LoanFile } from "@hm/shared";
@@ -38,22 +39,33 @@ function onlyTheirName(b: Borrower): Borrower {
   };
 }
 
-export function memberView(file: LoanFile, you: string | null): LoanFile {
+/** What a member's own pulls produced, in place of the applicant's. */
+export interface OwnReports {
+  readonly credit: LoanFile["credit"];
+  readonly assets: LoanFile["assets"];
+  readonly payroll: LoanFile["payroll"];
+  readonly transcripts: LoanFile["transcripts"];
+  readonly links: LoanFile["links"];
+}
+
+export function memberView(file: LoanFile, you: string | null, own: OwnReports): LoanFile {
+  const mine = file.borrowers.find((b) => b.id === you)?.partyId ?? null;
   return {
     ...file,
     borrowers: file.borrowers.map((b) => (b.id === you ? b : onlyTheirName(b))),
     consents: file.consents.filter((c) => c.borrowerId === you),
     sanctions: null,
     lienSearch: null,
-    credit: null,
-    assets: null,
-    payroll: null,
-    transcripts: [],
-    incomeSources: [],
-    employment: [],
+    // Their own reports, by party — never the applicant's.
+    credit: own.credit,
+    assets: own.assets,
+    payroll: own.payroll,
+    transcripts: own.transcripts,
+    incomeSources: file.incomeSources.filter((i) => i.partyId === mine),
+    employment: file.employment.filter((e) => e.partyId === mine),
     qualifyingIncomeReportedBy: undefined,
     documents: [],
-    links: [],
+    links: own.links,
     sanctionsScreenClear: null,
     ssnValidatedWithSsa: null,
   };

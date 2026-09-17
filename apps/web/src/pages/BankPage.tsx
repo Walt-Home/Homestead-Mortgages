@@ -28,7 +28,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
-import { CO_BORROWER_REVIEW_COPY } from "../lib/outcomes.js";
 import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
 import { SAMPLE_FILE } from "../lib/home-copy.js";
 import { useLoanFile, type DecisionRatios, type DecisionView } from "../lib/file.js";
@@ -492,24 +491,6 @@ export function BankPage() {
       <span className="text-sm text-ink-muted">{creditCopy.pillNote}</span>
     </div>
   ) : null;
-
-  // A co-borrower's bank is the applicant's connection for now: their own
-  // half has no bank step, and landing here by URL should say so rather
-  // than start a link in somebody else's name.
-  if (data && !data.owner) {
-    return (
-      <div className="super-card">
-        <h1 className="font-display text-2xl text-ink sm:text-3xl">Your bank</h1>
-        <p className="mt-2 text-base text-ink-soft">{CO_BORROWER_REVIEW_COPY.bankNotice}</p>
-        <button
-          className="super-btn super-btn-primary mt-7"
-          onClick={() => navigate(`/f/${fileId}/review`)}
-        >
-          Continue
-        </button>
-      </div>
-    );
-  }
 
   if (result) {
     const total = result.accounts.reduce((sum, a) => sum + a.currentBalance, 0);

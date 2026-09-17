@@ -37,7 +37,10 @@ export const connectorRouter = Router();
  * variant here on purpose.
  */
 async function requireFile(id: string, userId: string) {
-  await assertFileAccess(id, userId, "write");
+  // "self": a pull is about the person asking — `retrievalSubject` resolves
+  // them by party — so a co-borrower on the file makes their own, under
+  // their own authorization, and never the applicant's.
+  await assertFileAccess(id, userId, "self");
   const file = await loadLoanFile(id);
   if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
   return file;
@@ -203,7 +206,7 @@ connectorRouter.post(
       result.retrievedAt,
       subject.partyId,
     );
-    await upsertLink(id, "credit", result.provider);
+    await upsertLink(id, "credit", result.provider, subject.partyId);
     // APP-018 names the credit pull as its source: a refinance's existing
     // servicer and balance come off the report. Nothing wrote them back, so a
     // refinance could never satisfy a requirement it had made applicable.
@@ -334,7 +337,7 @@ connectorRouter.post(
         subject.partyId,
         tx,
       );
-      await upsertLink(id, "bank", result.provider, tx);
+      await upsertLink(id, "bank", result.provider, subject.partyId, tx);
 
       // The bank report carries income and employment, not just assets — the
       // sheet says so ("Assets + income + employment + cash flow + rent
@@ -402,7 +405,7 @@ connectorRouter.post(
         subject.partyId,
         tx,
       );
-      await upsertLink(id, "payroll", result.provider, tx);
+      await upsertLink(id, "payroll", result.provider, subject.partyId, tx);
 
       await reconcileIncomeAndEmployment(tx, {
         loanFileId: id,
@@ -465,7 +468,7 @@ connectorRouter.post(
         subject.partyId,
         tx,
       );
-      await upsertLink(id, "irs", result.provider, tx);
+      await upsertLink(id, "irs", result.provider, subject.partyId, tx);
       await recordEvent(id, "connector_pull", result.provider, { kind: "irs" }, "INC-003", tx);
       // The pull is ours to make, but the borrower's signature is what
       // licensed it, so the act is recorded as theirs — the same person the
@@ -531,16 +534,21 @@ async function settleBranch(
   });
 }
 
+/**
+ * One link per person per kind. A co-borrower's bank is a second `bank`
+ * link on the same file, in their party's name, beside the applicant's.
+ */
 async function upsertLink(
   loanFileId: string,
   kind: string,
   provider: string,
+  partyId: string,
   db: Db = prisma,
 ): Promise<void> {
   const now = new Date();
   await db.connectorLink.upsert({
-    where: { loanFileId_kind: { loanFileId, kind } },
-    create: { loanFileId, kind, provider, linkedAt: now, lastSyncedAt: now },
+    where: { loanFileId_kind_partyId: { loanFileId, kind, partyId } },
+    create: { loanFileId, kind, provider, partyId, linkedAt: now, lastSyncedAt: now },
     update: { lastSyncedAt: now, status: "active" },
   });
 }

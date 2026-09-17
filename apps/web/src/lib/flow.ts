@@ -102,16 +102,18 @@ export const STAGE_TO_SCREEN: Record<FlowStage, ScreenPath> = {
  *
  * The file's stage is the applicant's — where THEIR flow stands — and a
  * person applying with them has a shorter road of their own: say who they
- * are, answer Section 5 about themselves, sign. The bank is the applicant's
- * connection for now, so it is not on it. Read off the person's own row
- * rather than off any stage, because nothing stores one for them.
+ * are, answer Section 5 about themselves, link their bank, sign. Read off
+ * the person's own row and links rather than off any stage, because nothing
+ * stores one for them.
  */
 export function resumeForCoBorrower(input: {
   readonly invited: boolean;
   readonly declared: boolean;
+  readonly bankLinked: boolean;
 }): ScreenPath {
   if (input.invited) return "identity";
   if (!input.declared) return "declarations";
+  if (!input.bankLinked) return "bank";
   return "review";
 }
 

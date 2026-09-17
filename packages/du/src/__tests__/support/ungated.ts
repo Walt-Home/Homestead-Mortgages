@@ -8,12 +8,12 @@
  * `exports` map, so nothing this repository ships can reach it at run time and
  * a test can.
  *
- * What needs it: no application this repository can assemble is emittable
- * today. Eight data points the specification requires on the loan being applied
- * for and on the subject property have no column anywhere — `docs/du-readiness.md`
- * names all eight — so `emitSubmission` refuses every casefile, and the
- * questions "which row becomes which element" and "does the whole document
- * validate" would go unasked until those columns exist.
+ * What needs it: the tests that ask "which row becomes which element" and
+ * "does the whole document validate" of a fixture the gate would refuse — one
+ * deliberately short of a product, a building fact or a declared job. The
+ * columns that once made EVERY casefile unemittable are built now
+ * (`docs/du-readiness.md`); this stays because a fixture is allowed to be
+ * short of them and the mapping is still worth asking about.
  */
 
 export { emitDocument } from "../../emit.js";

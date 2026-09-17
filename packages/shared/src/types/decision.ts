@@ -146,7 +146,7 @@ export const DU_DERIVED_FIGURES: Readonly<
   },
   // The proposed housing payment. MISMO carries it as HOUSING_EXPENSE rows
   // by component rather than as one figure, and those rows are the lender's
-  // to state (docs/du-readiness.md, the tables not yet modeled).
+  // to state (`packages/du-schema/du-not-round-tripped.txt`).
   housingPitia: { mismo: null, from: ["BaseLoanAmount", "NoteRatePercent"] },
   totalMonthlyDebt: {
     mismo: "TotalLiabilitiesMonthlyPaymentAmount",

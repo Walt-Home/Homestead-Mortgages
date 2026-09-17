@@ -58,6 +58,7 @@ import { advanceIfLegal, moved, transition } from "../services/transition.js";
 import { consent, createUser } from "./support/factories.js";
 import { ingestFixtureApor } from "./support/apor.js";
 import { callAs } from "./support/http.js";
+import { recordVesting } from "../services/vesting.js";
 
 /** Screen 1's body: a $415,000 house with a $332,000 loan. */
 const SCREEN_ONE = {
@@ -462,6 +463,8 @@ describe("the signature", () => {
     // could be deleted from the handler and they would all still pass.
     const { user, fileId } = await throughScreenTwo({ demographics: DEMOGRAPHICS });
     expect(await statusOf(fileId)).toBe("awaiting_borrower");
+    // The signature attests to how title will read, and refuses without it.
+    await recordVesting(fileId, { proposed: { fullName: "Dana Whitfield", vestingType: null } });
 
     const res = await callAs<{ signed: string[] }>(
       user.id,

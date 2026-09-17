@@ -177,7 +177,10 @@ describe("an answer the reader accepts", () => {
       "<AutomatedUnderwritingCaseIdentifier>1234567890</AutomatedUnderwritingCaseIdentifier>" +
       "<AutomatedUnderwritingRecommendationDescription>Approve/Eligible" +
       "</AutomatedUnderwritingRecommendationDescription>";
-    const xml = document(dealLoans(both), service(message("Eligible.", undefined, 1), dealLoans(both)));
+    const xml = document(
+      dealLoans(both),
+      service(message("Eligible.", undefined, 1), dealLoans(both)),
+    );
     const response = read(xml);
     expect(response.status).toBe("answered");
   });
@@ -189,9 +192,7 @@ describe("an answer the reader accepts", () => {
           "<AutomatedUnderwritingRecommendationDescription>Approve/Eligible" +
           "</AutomatedUnderwritingRecommendationDescription>",
       ),
-      service(
-        message("First.", "0001") + message("Second.") + message("Third.", "0003"),
-      ),
+      service(message("First.", "0001") + message("Second.") + message("Third.", "0003")),
     );
     // Not every message is numbered here, so document order is the order.
     const response = read(xml);
@@ -242,6 +243,7 @@ describe("an answer the reader accepts", () => {
     expect(read(xml).messages[0]!.text).toBe("Income < debt & Ratio too high.");
   });
 
+  // Eighteen xmllint runs; six seconds on a CI runner, so not the default five.
   it("validates every one of those fixtures against the vendored wrapper", () => {
     // The one check available on a format nobody here has seen: the fixtures
     // are at least documents the DU schema chain accepts.
@@ -267,7 +269,7 @@ describe("an answer the reader accepts", () => {
       ),
     ];
     for (const fixture of fixtures) expect(xmllintErrors(fixture)).toEqual([]);
-  });
+  }, 30_000);
 });
 
 describe("an answer the reader refuses", () => {
@@ -310,9 +312,7 @@ describe("an answer the reader refuses", () => {
   it("refuses a case identifier the column cannot hold", () => {
     // `applications.du_casefile_id` is a VARCHAR(30) and DU_FORMATS says String
     // 30. Truncating here would store a number that is not the case.
-    expect(() => read(answered("Approve/Eligible", "1".repeat(31)))).toThrow(
-      DuResponseFormatError,
-    );
+    expect(() => read(answered("Approve/Eligible", "1".repeat(31)))).toThrow(DuResponseFormatError);
     expect(read(answered("Approve/Eligible", "1".repeat(30))).duCasefileId).toHaveLength(30);
   });
 
@@ -344,10 +344,7 @@ describe("an answer the reader refuses", () => {
   });
 
   it("refuses messages where only some carry a sequence number", () => {
-    const xml = document(
-      "",
-      service(message("First.", undefined, 1) + message("Second.")),
-    );
+    const xml = document("", service(message("First.", undefined, 1) + message("Second.")));
     expect(() => read(xml)).toThrow(/partial order/);
   });
 

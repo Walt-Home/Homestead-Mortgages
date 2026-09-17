@@ -46,6 +46,7 @@ import type { ConnectorResult, DuSubmission } from "@hm/connectors";
 import {
   parseDuRecommendation,
   parseDuResponseStatus,
+  type DuAnswer,
   type DuRecommendation,
   type DuResponse,
   type DuResponseStatus,
@@ -83,6 +84,47 @@ const STORED_STATUS: Record<DuResponseStatus, StoredStatus> = {
   answered: "ANSWERED",
   errored: "ERRORED",
 };
+
+/** The stored spellings back to DU's own, for a reader. */
+const WIRE: Record<StoredRecommendation, DuRecommendation> = Object.fromEntries(
+  Object.entries(STORED).map(([wire, stored]) => [stored, wire]),
+) as Record<StoredRecommendation, DuRecommendation>;
+const WIRE_STATUS: Record<StoredStatus, DuResponseStatus> = {
+  ANSWERED: "answered",
+  ERRORED: "errored",
+};
+
+/** What DU last answered about this file's application, or null when nothing has been sent. */
+export async function latestDuAnswer(
+  loanFileId: string,
+  db: Db = prisma,
+): Promise<DuAnswer | null> {
+  const row = await db.duResponse.findFirst({
+    where: { application: { loanFileId } },
+    orderBy: { seq: "desc" },
+    select: {
+      seq: true,
+      status: true,
+      recommendation: true,
+      duCasefileId: true,
+      provider: true,
+      submittedAt: true,
+      receivedAt: true,
+      messages: { orderBy: { ordinal: "asc" }, select: { category: true, code: true, text: true } },
+    },
+  });
+  if (!row) return null;
+  return {
+    seq: row.seq,
+    status: WIRE_STATUS[row.status],
+    recommendation: row.recommendation === null ? null : WIRE[row.recommendation],
+    duCasefileId: row.duCasefileId,
+    provider: row.provider,
+    submittedAt: row.submittedAt.toISOString(),
+    receivedAt: row.receivedAt.toISOString(),
+    messages: row.messages,
+  };
+}
 
 export interface RecordedDuResponse {
   readonly id: string;

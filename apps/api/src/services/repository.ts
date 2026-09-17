@@ -44,6 +44,7 @@ import {
 import type { Db } from "./db.js";
 import { liveFactsByParty, partyOfUser } from "./party.js";
 import { declarationsOnFile } from "./declarations.js";
+import { latestDuAnswer } from "./du-response.js";
 import { borrowerOrdinals, documentOrder } from "./borrower-order.js";
 import { piecesByParty, sixPieces } from "./evidence.js";
 import { toDomainState } from "./transition.js";
@@ -421,6 +422,7 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
     userAgent: c.userAgent,
   }));
 
+  const duResponse = await latestDuAnswer(id, db);
   const decisionRow = row.decisions[0];
   const decision: Decision | null = decisionRow
     ? {
@@ -653,6 +655,7 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       persistentMonitoringEnabled: l.persistentMonitoringEnabled,
     })),
 
+    duResponse,
     decision: decision
       ? {
           ...decision,

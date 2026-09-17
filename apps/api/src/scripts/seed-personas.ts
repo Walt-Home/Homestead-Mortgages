@@ -84,6 +84,8 @@ import type { Db } from "../services/db.js";
 import { decideApplication, recordDecision } from "../services/decide.js";
 import { recordDeclaration, type DeclarationInput } from "../services/declarations.js";
 import { recordEmploymentDeclarations } from "../services/employment-declarations.js";
+import { submitApplicationToDu } from "../services/du-submission.js";
+import { recordBuildingFacts } from "../services/building-facts.js";
 import { pinTridPieces, proposeScenario } from "../services/evidence.js";
 import { acceptClaim, inviteCoBorrower } from "../services/invitations.js";
 import {
@@ -684,6 +686,10 @@ async function propertyData(w: Walk): Promise<void> {
       w.tx,
     );
   }
+  // The two building facts a casefile has to carry, off the county's record
+  // exactly as the route writes them. Left null, every seeded file was
+  // refused at the gate for a unit count it had retrieved and never kept.
+  await recordBuildingFacts(w.tx, w.loanFileId, record.data);
   await recordEvent(
     w.loanFileId,
     "connector_pull",
@@ -986,6 +992,17 @@ async function decide(w: Walk): Promise<void> {
     "UW-002",
     w.tx,
   );
+  // And the casefile goes to Desktop Underwriter through the same service the
+  // decision route uses — the fixture port here, which answers at once; on a
+  // deployment carrying placeholders the submission is refused and the
+  // refusal is a row, exactly as it would be for a real borrower.
+  await submitApplicationToDu({
+    loanFileId: w.loanFileId,
+    file,
+    now: new Date(),
+    db: w.tx,
+    du: w.registry.du,
+  });
 }
 
 /* ── The eight walks ──────────────────────────────────────────────────────── */

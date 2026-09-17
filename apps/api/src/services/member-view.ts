@@ -126,6 +126,8 @@ export function memberView(file: LoanFile, you: string | null, own: OwnReports):
     ssnValidatedWithSsa: null,
     // Computed from the applicant's reports, and explained in terms of them.
     decision: null,
+    // Fannie Mae's assessment of the loan, which the applicant reads.
+    duResponse: null,
     disclosures: [],
   };
 }

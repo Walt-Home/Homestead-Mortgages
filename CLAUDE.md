@@ -142,6 +142,16 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   the wrong name today. Wiring the ID scan to a persona means giving the
   fixtures eight people.
 
+- **The decision route submits to Desktop Underwriter, and a refusal is a
+  row.** `submitApplicationToDu` runs after every decision and in the persona
+  seed: assemble, gate, emit, send through the `du` port, record. On staging
+  the placeholders refuse it and the refusal is a `FileEvent`; against the
+  fixture in development and tests, every decided sample borrower is answered.
+  There is no vault for taxpayer identifiers: the fixture path is handed a
+  number nobody has ever been issued, and against Fannie Mae the gate refuses
+  every borrower until one exists. `GET /files/:id/du-responses` reads the
+  answers back; `npm run du:submit --workspace=@hm/api -- <fileId>` resubmits
+  by hand. The document is never stored.
 - **Our NMLSR numbers are placeholders until somebody sets five variables.**
   Every application is born carrying the origination company and the loan
   originator as `du_deal_parties` rows, from `ORIGINATION_COMPANY_NAME`,

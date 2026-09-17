@@ -17,6 +17,7 @@ import { decideApplication, recordDecision } from "../services/decide.js";
 import { aporTableFromDatabase } from "../services/apor.js";
 import { coBorrowerNeedsToFinish } from "../services/co-borrowers.js";
 import { applicationStanding } from "../services/standing.js";
+import { submitApplicationToDu } from "../services/du-submission.js";
 import { RatiosSchema } from "@hm/shared/decision-figures";
 
 export const decisionRouter = Router();
@@ -99,7 +100,52 @@ decisionRouter.post(
       "UW-002",
     );
 
-    res.status(201).json({ decision, applicationState: await applicationStanding(prisma, id) });
+    // Then Desktop Underwriter's assessment, recorded beside ours and never
+    // in place of it. A refusal is an outcome here, not an error: the
+    // decision above stands whatever happens on the way to Fannie Mae.
+    const du = await submitApplicationToDu({ loanFileId: id, file, now: new Date() });
+
+    res.status(201).json({
+      decision,
+      du,
+      applicationState: await applicationStanding(prisma, id),
+    });
+  }),
+);
+
+/** What Desktop Underwriter has answered about this application, every time, oldest first. */
+decisionRouter.get(
+  "/:id/du-responses",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    await assertFileAccess(id, req.user!.id, "own");
+    const application = await prisma.application.findUnique({
+      where: { loanFileId: id },
+      select: { id: true, duCasefileId: true },
+    });
+    if (!application) {
+      res.json({ duCasefileId: null, responses: [] });
+      return;
+    }
+    const responses = await prisma.duResponse.findMany({
+      where: { applicationId: application.id },
+      orderBy: { seq: "asc" },
+      select: {
+        id: true,
+        seq: true,
+        status: true,
+        recommendation: true,
+        duCasefileId: true,
+        provider: true,
+        submittedAt: true,
+        receivedAt: true,
+        messages: {
+          orderBy: { ordinal: "asc" },
+          select: { category: true, code: true, text: true },
+        },
+      },
+    });
+    res.json({ duCasefileId: application.duCasefileId, responses });
   }),
 );
 

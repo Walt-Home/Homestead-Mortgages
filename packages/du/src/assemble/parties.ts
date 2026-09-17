@@ -104,6 +104,20 @@ function individualName(facts: PartyFacts | undefined): DuNode | null {
   ]);
 }
 
+/**
+ * A telephone number as DU takes it: ten digits and nothing else, which is
+ * what every shipped sample carries. A person types it with dashes, dots or
+ * parentheses, and a country code of 1 in front of ten digits is the same
+ * number; anything that does not come out to ten digits is emitted as the
+ * digits it did come out to, so the preflight refuses it by its length
+ * rather than this function inventing a number that fits.
+ */
+export function telephoneDigits(value: string | null): string | null {
+  if (value === null) return null;
+  const digits = value.replace(/[^0-9]/g, "");
+  return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+}
+
 function contactPoints(facts: PartyFacts | undefined): DuNode | null {
   return container("CONTACT_POINTS", [
     container("CONTACT_POINT", [
@@ -113,7 +127,7 @@ function contactPoints(facts: PartyFacts | undefined): DuNode | null {
     ]),
     container("CONTACT_POINT", [
       container("CONTACT_POINT_TELEPHONE", [
-        leaf("ContactPointTelephoneValue", readString(facts, "phone")),
+        leaf("ContactPointTelephoneValue", telephoneDigits(readString(facts, "phone"))),
       ]),
     ]),
   ]);
@@ -413,7 +427,7 @@ function dealParty(
       container("CONTACT_POINTS", [
         container("CONTACT_POINT", [
           container("CONTACT_POINT_TELEPHONE", [
-            leaf("ContactPointTelephoneValue", party.contactTelephone),
+            leaf("ContactPointTelephoneValue", telephoneDigits(party.contactTelephone)),
           ]),
         ]),
       ]),

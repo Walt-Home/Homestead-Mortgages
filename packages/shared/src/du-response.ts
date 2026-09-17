@@ -111,6 +111,23 @@ export interface DuMessage {
 }
 
 /**
+ * What Desktop Underwriter last answered about an application, as the file
+ * carries it beside the decision. Fannie Mae's assessment of a loan they might
+ * buy, recorded and not a decision: nothing moves on it, and the owner reads
+ * it while a co-borrower's read of the file carries null.
+ */
+export interface DuAnswer {
+  readonly seq: number;
+  readonly status: DuResponseStatus;
+  readonly recommendation: DuRecommendation | null;
+  readonly duCasefileId: string | null;
+  readonly provider: string;
+  readonly submittedAt: string;
+  readonly receivedAt: string;
+  readonly messages: readonly DuMessage[];
+}
+
+/**
  * A response, which either carries a recommendation or does not.
  *
  * A union rather than a nullable field, for the reason the engine returns

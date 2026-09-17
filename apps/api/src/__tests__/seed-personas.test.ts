@@ -19,6 +19,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@hm/db";
+import type { DuConnector } from "@hm/connectors";
+import { DuTransportError } from "@hm/connectors";
 import { assessAll } from "@hm/requirements";
 import type { SanctionsScreening } from "@hm/shared";
 
@@ -32,6 +34,8 @@ vi.hoisted(() => {
 import { isSeeded, PERSONA_STORIES, type PersonaKey } from "../personas/stories.js";
 import { authRouter } from "../routes/auth.js";
 import { purgeLegacyDemo, resetPersona, seedAll } from "../scripts/seed-personas.js";
+import { fileRouter } from "../routes/files.js";
+import { submitApplicationToDu } from "../services/du-submission.js";
 import { borrowerObligations } from "../services/obligations.js";
 import { loadLoanFile } from "../services/repository.js";
 import { principalForParty } from "../services/party.js";
@@ -201,6 +205,146 @@ describe("the seed walks every persona to its state", () => {
       expect(le[0]!.tolledFrom).not.toBeNull();
       expect(le[0]!.tolledUntil).toBeNull();
     }
+  });
+
+  /*
+   * The casefile goes to Desktop Underwriter after every decision, through
+   * the same service the route uses. Against the fixture port every decided
+   * sample borrower is answered — the two-person household included — and
+   * an undecided one was never sent. The first walk of this path found two
+   * defects on every seeded file: a unit count the seed retrieved and never
+   * kept, and telephone numbers twelve characters long at a ten-digit
+   * destination. Both are fixed where a real borrower would have hit them.
+   */
+  it("sends every decided file to Desktop Underwriter and records the answer", async () => {
+    await seedAll();
+    for (const story of SEEDED) {
+      const { file } = await persona(story.key);
+      const application = await prisma.application.findUniqueOrThrow({
+        where: { loanFileId: file.id },
+        select: { id: true, duCasefileId: true },
+      });
+      const responses = await prisma.duResponse.findMany({
+        where: { applicationId: application.id },
+        select: { seq: true, status: true, recommendation: true, duCasefileId: true },
+      });
+      const events = await prisma.fileEvent.findMany({
+        where: { loanFileId: file.id, kind: { startsWith: "du_" } },
+        select: { kind: true, payload: true },
+      });
+      if (!story.expectedOutcome) {
+        expect(responses, story.key).toEqual([]);
+        expect(events, story.key).toEqual([]);
+        expect(application.duCasefileId, story.key).toBeNull();
+        continue;
+      }
+      expect(
+        events.map((e) => e.kind),
+        story.key,
+      ).toEqual(["du_submitted"]);
+      expect(responses, story.key).toEqual([
+        {
+          seq: 1,
+          status: "ANSWERED",
+          recommendation: "APPROVE_ELIGIBLE",
+          duCasefileId: application.duCasefileId,
+        },
+      ]);
+      expect(application.duCasefileId, story.key).not.toBeNull();
+    }
+  });
+
+  it("resubmits under the casefile DU minted, and records a transport failure without losing it", async () => {
+    await seedAll();
+    const { file, user } = await persona("priya_dev_raman");
+    const loaded = (await loadLoanFile(file.id))!;
+    const before = await prisma.application.findUniqueOrThrow({
+      where: { loanFileId: file.id },
+      select: { duCasefileId: true },
+    });
+
+    const sent: string[] = [];
+    const answering: DuConnector = {
+      capabilities: { provider: "stub-du", mode: "fixture", satisfies: [] },
+      async submit(submission) {
+        sent.push(submission.duCasefileId ?? "");
+        return {
+          data: {
+            status: "answered",
+            duCasefileId: submission.duCasefileId!,
+            recommendation: "Refer with Caution",
+            messages: [{ category: "Risk/Eligibility", code: "0022", text: "Refer with Caution." }],
+            respondedAt: new Date().toISOString(),
+          },
+          provider: "stub-du",
+          retrievedAt: new Date().toISOString(),
+          externalId: "du-2",
+        };
+      },
+    };
+    const again = await submitApplicationToDu({
+      loanFileId: file.id,
+      file: loaded,
+      now: new Date(),
+      du: answering,
+    });
+    // The second submission carried the case DU opened the first time.
+    expect(sent).toEqual([before.duCasefileId]);
+    expect(again).toMatchObject({
+      status: "answered",
+      recommendation: "Refer with Caution",
+      seq: 2,
+    });
+
+    const failing: DuConnector = {
+      capabilities: { provider: "stub-du", mode: "fixture", satisfies: [] },
+      async submit() {
+        throw new DuTransportError("the connection dropped", true);
+      },
+    };
+    const failed = await submitApplicationToDu({
+      loanFileId: file.id,
+      file: loaded,
+      now: new Date(),
+      du: failing,
+    });
+    expect(failed).toMatchObject({
+      status: "failed",
+      reason: "transport",
+      mayHaveOpenedACase: true,
+    });
+    const kinds = (
+      await prisma.fileEvent.findMany({
+        where: { loanFileId: file.id, kind: { startsWith: "du_" } },
+        orderBy: { occurredAt: "asc" },
+        select: { kind: true },
+      })
+    ).map((e) => e.kind);
+    expect(kinds).toEqual(["du_submitted", "du_submitted", "du_submission_failed"]);
+
+    // The file carries the latest answer beside the decision, for the
+    // applicant; a co-borrower's read of the same file carries none of it.
+    const hers = await callAs<{
+      file: { duResponse: { seq: number; recommendation: string } | null };
+    }>(user.id, [fileRouter], "GET", `/${file.id}`);
+    expect(hers.body.file.duResponse).toMatchObject({
+      seq: 2,
+      status: "answered",
+      recommendation: "Refer with Caution",
+      duCasefileId: before.duCasefileId,
+    });
+    const dev = await prisma.user.findUniqueOrThrow({
+      where: { personaKey: "priya_dev_raman:dev" },
+      select: { id: true },
+    });
+    const his = await callAs<{ file: { duResponse: unknown } }>(
+      dev.id,
+      [fileRouter],
+      "GET",
+      `/${file.id}`,
+    );
+    expect(his.status).toBe(200);
+    expect(his.body.file.duResponse).toBeNull();
   });
 
   it("leaves nothing on the borrower of a file that has been decided", async () => {

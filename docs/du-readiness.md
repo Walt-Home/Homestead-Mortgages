@@ -6,16 +6,18 @@ what it says.** A status page that lags the code gets believed.
 
 ## The bottom line
 
-**An application becomes a casefile Desktop Underwriter would accept. Nothing
-sends it.**
+**An application becomes a casefile Desktop Underwriter would accept, and the
+decision route sends it.** Against the fixture port every decided sample
+borrower is answered and recorded; against Fannie Mae, what is missing is a
+vault and a contract.
 
-- **Built:** the model, the assembler, a preflight gate with no off switch, the
-  emitter, the transport adapter and the response tables. All eleven columns
-  that stood between the model and a sendable casefile, plus the twelfth the
-  gate found.
-- **Not built:** the one route or job that runs that path for a real
-  application. Nothing outside the tests calls the assembler, the emitter, the
-  `du` port or `recordDuResponse`.
+- **Built:** the model, the rows the pulls write into it, the assembler, a
+  preflight gate with no off switch, the emitter, the transport adapter, the
+  response tables, and the service that strings them together after every
+  decision. A refusal at any step is an outcome and a row, never a silence.
+- **Not built:** a vault for taxpayer identifiers. The fixture path uses a
+  number nobody has ever been issued; the real path is refused at the gate
+  for every borrower until one exists.
 - **Not ours to build:** an endpoint, a credential, Grander's seller/servicer
   number and five NMLS values. Each is a value from the integration agreement.
   The code refuses every placeholder in production.
@@ -36,9 +38,10 @@ flowchart LR
   ASM["Assemble<br/>MISMO 3.4 graph"]:::green
   GATE["Preflight gate<br/>no off switch"]:::green
   EMIT["Emit<br/>bytes"]:::green
-  RUN["A route that submits<br/><i>not built</i>"]:::red
+  RUN["The decision route submits<br/>refusals recorded by name"]:::green
   TX["Transport<br/><i>built to the credential boundary</i>"]:::yellow
   KEYS["Endpoint · credential<br/>seller/servicer · NMLS<br/><i>from the agreement</i>"]:::red
+  SSN["Taxpayer identifiers<br/><i>no vault</i>"]:::red
   DU(["Desktop Underwriter"]):::ext
   RESP["Response tables<br/>append-only, casefile id write-once"]:::green
 
@@ -48,6 +51,7 @@ flowchart LR
   AST --> ASM
   ASM --> GATE --> EMIT --> RUN --> TX --> DU --> RESP
   KEYS -.-> TX
+  SSN -.-> ASM
 ```
 
 🟢 built, enforced, tested · 🟡 built, with a named gap · 🔴 not built, or
@@ -72,24 +76,28 @@ blocked outside the code
 | —   | Assembler and emitter               | 🟢  | MISMO 3.4 with arcs, round-tripped on all eighteen samples                           |
 | —   | Preflight gate                      | 🟢  | Graph, cardinality, conditionality, format; every check has a fixture                |
 | —   | Transport                           | 🟡  | Built to the credential boundary; tested against a stubbed `fetch`                   |
-| —   | Response recording                  | 🟢  | Append-only tables, unknown verdicts refused; no caller yet                          |
-| —   | A route that submits                | 🔴  | Nothing outside the tests runs assemble, gate, emit, send                            |
+| —   | Response recording                  | 🟢  | Append-only tables, unknown verdicts refused, read back to the owner                 |
+| —   | The decision route submits          | 🟢  | Assemble, gate, emit, send, record after every decision; every refusal a row         |
+| —   | Taxpayer identifiers on the wire    | 🔴  | No vault; the fixture path uses an unissued number, the real path is refused         |
 | —   | Who we submit under                 | 🔴  | Institution and originator are placeholders, refused in production                   |
 
-Fifteen green, three yellow, two red. Re-derive the tally from the table, not
+Sixteen green, three yellow, two red. Re-derive the tally from the table, not
 the other way around.
 
 ## What's left, in dependency order
 
-1. **A route or job that submits.** Assemble, gate, emit, `du.submit`,
-   `recordDuResponse`. Every piece exists and is tested alone. Nothing strings
-   them together for an application.
+1. **A vault for taxpayer identifiers.** `borrowers.ssn_vault_handle` is an
+   opaque reference and nothing resolves it. `submitApplicationToDu` takes a
+   resolver; against the fixture it hands over a number the Social Security
+   Administration has never issued, and against Fannie Mae it hands over
+   nothing, so the gate refuses every borrower by name. Where the nine digits
+   live, and who may read them, is a decision before it is code.
 2. **The values from the agreement.** `DU_ENDPOINT`, `DU_CREDENTIAL_SCHEME`,
    `DU_CREDENTIAL`, `DU_SELLER_SERVICER_NUMBER`, and the five
    `ORIGINATION_COMPANY_*` / `LOAN_ORIGINATOR_*` values. Longest lead time of
    anything here, and no code closes it.
 
-Item 1 waits on nothing. Item 2 is a contract.
+Item 1 is a decision, then code. Item 2 is a contract.
 
 ## Decided
 
@@ -304,7 +312,20 @@ schemes, reads the answer through a reader that refuses any shape it cannot
 vouch for, and resends DU's own casefile id on a resubmission so one loan does
 not open two cases. It is exercised against an injected `fetchImpl`, never a
 server. `du_responses` and `du_response_messages` are append-only by trigger
-and refuse a status this system has never seen. No route calls any of it.
+and refuse a status this system has never seen.
+
+`submitApplicationToDu` is the string: after every decision the route
+assembles, gates, emits, sends through the `du` port and records, and the seed
+does the same. Each way it can stop is an outcome with a name and a
+`FileEvent` — the placeholders in production, a borrower with nothing
+retrieved, a preflight refusal listing XPaths and never values, a transport
+failure that says whether a case may have been opened — and a resubmission
+carries the casefile DU minted. `GET /files/:id/du-responses` reads every
+answer back to the owner; `npm run du:submit` resubmits by hand. The first
+full walk found two defects on every seeded file, both fixed where a real
+borrower would have hit them: a unit count the seed retrieved and never kept,
+and telephone numbers rendered with their dashes at a ten-digit destination.
+The document is never stored; it carries cleartext social security numbers.
 
 ## Facts worth keeping
 

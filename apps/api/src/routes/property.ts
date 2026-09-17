@@ -24,9 +24,8 @@ import {
   recordSnapshot,
 } from "../services/repository.js";
 import { AddressNotFoundError } from "@hm/connectors";
-import type { PropertyRecord } from "@hm/shared";
-import type { DuAttachmentType } from "@hm/db";
 import { connectors } from "../services/connectors.js";
+import { recordBuildingFacts } from "../services/building-facts.js";
 import { quoteSubjectProduct } from "../services/pricing.js";
 import { assertPurposeInScope } from "../services/scope.js";
 import { screenAndRecord } from "../services/screening.js";
@@ -44,56 +43,10 @@ const addressSchema = z.object({
   postalCode: z.string().min(5),
 });
 
-/**
- * What the assessor record says about the building, in the two columns a DU
- * submission reads.
- *
- * Both are retrieved rather than asked, because both describe a building and
- * the county is who holds them. Neither is defaulted: an address no vendor
- * answers for writes nothing here, the columns stay null, and the preflight
- * refuses the casefile — which is a refusal we own, where a 1 and a `Detached`
- * would be an invented fact on a federal submission.
- *
- * A unit count outside one to four is kept OUT of the column rather than
- * clipped into it. Five units is a commercial loan this product does not
- * underwrite, `loan_files_financed_unit_count_is_one_to_four` refuses the row,
- * and a file left with no unit count is refused later by name — where a 4
- * standing in for a 12 would not be.
- */
-const ATTACHMENT: Readonly<Record<PropertyRecord["attachment"], DuAttachmentType>> = {
-  attached: "Attached",
-  detached: "Detached",
-};
-
-/**
- * Exported because it is the only writer of two columns a federal submission
- * carries, and the registry it would otherwise have to be reached through is a
- * module singleton with no seam — a test that went the long way round would be
- * testing which adapter is wired rather than what an unmapped value does.
- */
-export function buildingFacts(record: PropertyRecord) {
-  // A vendor value nobody mapped stops the pull. The fixture's `attachment` is
-  // a union of two and the type holds, but the field is documented as the one a
-  // real Places, Smarty or ATTOM adapter fills from parsed vendor JSON — and an
-  // unmapped string there reads as `undefined`, which Prisma takes as "leave
-  // this column as it was". That is the one outcome worse than either answer:
-  // the column keeps somebody else's record and nothing downstream can tell.
-  //
-  // Annotated rather than inferred: the lookup is exhaustive over the TYPE, so
-  // a new member of the union is a compile error here, and the value itself
-  // still arrives from a vendor at runtime.
-  const attachment: DuAttachmentType | undefined = ATTACHMENT[record.attachment];
-  if (!attachment) {
-    throw new Error(
-      `${JSON.stringify(record.attachment)} is not an attachment this route can name. Add it ` +
-        "to ATTACHMENT; do not leave the column as it was.",
-    );
-  }
-  return {
-    financedUnitCount: record.units >= 1 && record.units <= 4 ? record.units : null,
-    propertyAttachmentType: attachment,
-  };
-}
+// The two building facts live in `services/building-facts.ts`, shared with the
+// persona seed; re-exported so the tests that exercise the unmapped-attachment
+// refusal keep their import.
+export { buildingFacts } from "../services/building-facts.js";
 
 /**
  * Load a file the caller may act on, in one of two modes.
@@ -389,7 +342,7 @@ propertyFileRouter.post(
     // type back to us on create; these are read straight off the connector
     // result, because a column DU reads should not be a value a browser could
     // have edited on its way past.
-    await prisma.loanFile.update({ where: { id }, data: buildingFacts(record.data) });
+    await recordBuildingFacts(prisma, id, record.data);
     await recordEvent(
       id,
       "connector_pull",

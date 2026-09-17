@@ -21,6 +21,7 @@ import type {
   FileEmployment,
 } from "./verification.js";
 import type { Decision, DisclosureRecord } from "./decision.js";
+import type { DuAnswer } from "../du-response.js";
 import type { TitleVesting } from "./declaration.js";
 import type {
   AvmEstimate,
@@ -222,6 +223,13 @@ export interface LoanFile {
   readonly links: readonly ConnectorLink[];
 
   readonly decision: Decision | null;
+  /**
+   * Desktop Underwriter's latest answer, beside the decision and never in
+   * place of it. Optional for the reason `reports` is: the projection fills
+   * it, a file assembled in memory has none, and a co-borrower's read is
+   * null.
+   */
+  readonly duResponse?: DuAnswer | null;
 
   /** Set by the OFAC/SDN screen (CRD-010). Null until it has run. */
   readonly sanctionsScreenClear: boolean | null;

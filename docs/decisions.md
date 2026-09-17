@@ -2008,6 +2008,46 @@ it reads the snapshots; collapsing the rows on the wire has a whole balance
 riding on it and is a person's call on the way out, not a coincidence of keys
 on the way in.
 
+## The decision route submits, and a refusal is a row
+
+Every piece of the Desktop Underwriter path existed and was tested alone, and
+nothing called it. `services/du-submission.ts` is the string: after every
+decision, assemble, gate, emit, send through the `du` port, record — the
+route and the persona seed both go through it. Decided 2026-09-17.
+
+**A refusal is an outcome with a name, never a silence.** The placeholder
+institution or originator in production, a borrower with nothing retrieved
+about them, a casefile the preflight refuses, a transport that dropped: each
+returns a status and writes a `FileEvent` saying why, and the shadow decision
+above it stands. A preflight refusal carries XPaths and labels and never a
+value, so it is safe in a log. A transport failure says whether a case may
+have been opened, because a resubmission that carries no case identifier
+opens a second case for one loan.
+
+**Nothing here is a decision.** What comes back is Fannie Mae's assessment of
+a loan they might buy. `recordDuResponse` moves no application; the answer is
+read back beside the decision through `GET /files/:id/du-responses`, owner
+only, and a resubmission carries the casefile DU minted the first time.
+
+**The document is never stored.** It carries up to four cleartext social
+security numbers; it lives in memory between the emitter and the transport.
+
+**There is no vault, and the fixture path says so.** `ssn_vault_handle` is
+opaque and nothing resolves it. Against the FIXTURE port the resolver hands
+the assembler a nine-digit value in the 000 area, which the Social Security
+Administration has never issued, deterministic per party; the fixture reads
+nothing. Against Fannie Mae there is no resolver, the container is omitted,
+and the gate refuses every borrower by name. Where the nine digits live is a
+decision before it is code.
+
+**The first full walk found two defects on every seeded file.** The seed
+recorded the county's snapshot and never wrote the unit count and attachment
+onto the file, which the route did; both now go through
+`services/building-facts.ts`. And a telephone number went out as a person
+typed it — `512-555-0134`, twelve characters at a destination that takes ten
+— so the assembler renders ten digits, whatever was typed around them, and
+never invents a number that fits.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

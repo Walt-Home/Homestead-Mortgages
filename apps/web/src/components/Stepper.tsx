@@ -32,7 +32,12 @@ export function Stepper({
   reached?: FlowStage;
 }) {
   const currentIndex = screenIndex(current);
-  const reachedAt = reachedIndex(reached);
+  // No stage, nothing to go back to. Undefined is a file not yet read, and
+  // a co-borrower's shell, which passes none on purpose: the stage is the
+  // applicant's, and the screens behind the dots before their own are the
+  // applicant's to edit. `reachedIndex(undefined)` answers 0 — the first
+  // step — which would still have linked the property screen.
+  const reachedAt = reached === undefined ? -1 : reachedIndex(reached);
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

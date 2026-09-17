@@ -167,8 +167,15 @@ export function revisitFrom(
  * sends no vault handle for a blank field, and the server already accepts a
  * revisit without one; a `required` attribute was all that stood in the way.
  */
-export function ssnRequired(file: Pick<LoanFileView, "borrowers"> | undefined): boolean {
-  return !primaryBorrower(file)?.ssn.last4;
+export function ssnRequired(
+  file: Pick<LoanFileView, "borrowers"> | undefined,
+  you: string | null = null,
+): boolean {
+  // The reader's own row. A co-borrower's read reduces the applicant to a
+  // name, so reading the first row would ask them to retype a number their
+  // own row already carries.
+  const mine = (you && file?.borrowers.find((b) => b.id === you)) || primaryBorrower(file);
+  return !mine?.ssn.last4;
 }
 
 export function IdentityPage() {
@@ -438,20 +445,26 @@ export function IdentityPage() {
       // revisit with somebody already named reads them back above instead of
       // naming them again, and the box is not offered.
       if (withSomeone && named.length === 0 && coBorrowerFilled) {
-        await api.post(`/files/${fileId}/co-borrowers`, {
+        const person = await api.post<{ borrowerId: string }>(`/files/${fileId}/co-borrowers`, {
           firstName: coFirstName.trim(),
           lastName: coLastName.trim(),
           email: coEmail.trim(),
           occupiesProperty: coLivesHere,
         });
+        // And the link, in the same act: a person named and not told is a
+        // person waiting on nothing. The token is in the email and nowhere
+        // else; the response says where it went.
+        await api.post(`/files/${fileId}/co-borrowers/${person.borrowerId}/invitations`, {});
       }
 
-      const file = await api.get<{ file: LoanFileView }>(`/files/${fileId}`);
+      const file = await api.get<{ file: LoanFileView; you: string | null }>(`/files/${fileId}`);
       // The authorization is the applicant's own. It is read back off the file
       // rather than off this form because the row is the server's answer to
       // the save above, and a co-borrower on the file is not who just signed
       // this screen.
-      const borrowerId = primaryBorrower(file.file)?.id;
+      // The reader's own row — the server's `you` — never the first row: a
+      // co-borrower's session posting the applicant's id was refused 403.
+      const borrowerId = file.you ?? primaryBorrower(file.file)?.id;
       if (borrowerId) {
         // Always posted, never skipped on what the file already shows.
         //
@@ -554,6 +567,17 @@ export function IdentityPage() {
       }
     } finally {
       setRunning(false);
+    }
+  }
+
+  /** A fresh link; the last one stops working. */
+  async function sendAgain(borrowerId: string) {
+    setError(null);
+    try {
+      await api.post(`/files/${fileId}/co-borrowers/${borrowerId}/invitations`, {});
+      await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not send the link. Try again.");
     }
   }
 
@@ -688,7 +712,7 @@ export function IdentityPage() {
         <input
           id="ssn"
           className="super-input"
-          required={ssnRequired(data?.file)}
+          required={ssnRequired(data?.file, data?.you ?? null)}
           inputMode="numeric"
           autoComplete="off"
           placeholder="000-00-0000"
@@ -769,6 +793,15 @@ export function IdentityPage() {
                   <button
                     type="button"
                     className="super-link-quiet"
+                    onClick={() => void sendAgain(who.id)}
+                    disabled={readOnly || running}
+                  >
+                    Send again
+                  </button>
+                  {" · "}
+                  <button
+                    type="button"
+                    className="super-link-quiet"
                     onClick={() => void removeNamed(who.id)}
                     disabled={readOnly || running}
                   >
@@ -776,7 +809,7 @@ export function IdentityPage() {
                   </button>
                 </p>
               ))}
-              <p className="mt-2 text-xs text-ink-faint">{WAITING_COPY.noEmailYet}</p>
+              <p className="mt-2 text-xs text-ink-faint">{WAITING_COPY.emailed}</p>
             </>
           ) : (
             <>

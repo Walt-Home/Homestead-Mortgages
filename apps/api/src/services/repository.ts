@@ -38,7 +38,6 @@ import { AppError } from "../middleware/error-handler.js";
 import {
   displayNameFrom,
   factMapsByParty,
-  identityMissing,
   requireIdentity,
 } from "./borrower-projection.js";
 import type { Db } from "./db.js";
@@ -331,8 +330,11 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
   const invitedBorrowers: InvitedBorrower[] = [];
   const arrived = row.borrowers.filter((b) => {
     const facts = factsByParty.get(b.partyId) ?? new Map();
-    const missing = identityMissing(facts);
-    if (missing.length === 0 || b.ssnLast4 !== null) return true;
+    // The row's own statement, and nothing else: a person who already holds
+    // a complete identity on their party from their own file, and claims an
+    // invitation onto this one, has still said nothing on THIS application
+    // until their screen 2 here states a number.
+    if (b.ssnLast4 !== null) return true;
     const name = (facts.get("legal_name") ?? {}) as { first?: string; last?: string };
     invitedBorrowers.push({
       id: b.id,
@@ -783,6 +785,20 @@ export async function assertFileAccess(
 }
 
 /**
+ * Whether this file is this user's own — the applicant's — as distinct from
+ * one they are a member of. Asked after `assertFileAccess` by a route that
+ * admits both and does one thing more for the owner: the stage is the
+ * applicant's resume point, and a co-borrower's save must not move it.
+ */
+export async function ownsFile(loanFileId: string, userId: string): Promise<boolean> {
+  const file = await prisma.loanFile.findUnique({
+    where: { id: loanFileId },
+    select: { userId: true },
+  });
+  return file?.userId === userId;
+}
+
+/**
  * One person's own reports on a file, by party: what a co-borrower reads
  * back in place of the applicant's. The file's own fields carry Borrower 1's
  * (see `latestOf` in `loadLoanFile`); this is the same rule asked for
@@ -933,8 +949,19 @@ async function obligationsByApplication(
  * than reading around it on a second connection.
  */
 export async function listAccessibleFiles(userId: string, db: Db = prisma) {
+  // Theirs, the shared demo set, and every file their party holds a borrower
+  // row on: a co-borrower who has claimed their invitation is on an
+  // application they do not own, and the home page is their way back to it.
+  // By party rather than by user, because that is how membership is held.
+  const partyId = await partyOfUser(db, userId);
   const rows = await db.loanFile.findMany({
-    where: { OR: [{ userId }, { isDemo: true }] },
+    where: {
+      OR: [
+        { userId },
+        { isDemo: true },
+        ...(partyId ? [{ borrowers: { some: { partyId } } }] : []),
+      ],
+    },
     orderBy: [{ isDemo: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,

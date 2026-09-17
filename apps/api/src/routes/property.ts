@@ -30,7 +30,7 @@ import { connectors } from "../services/connectors.js";
 import { quoteSubjectProduct } from "../services/pricing.js";
 import { assertPurposeInScope } from "../services/scope.js";
 import { screenAndRecord } from "../services/screening.js";
-import { primaryBorrower, tokenFor } from "../services/authorization.js";
+import { retrievalSubject, tokenFor } from "../services/authorization.js";
 import { prisma } from "@hm/db";
 
 export const propertyRouter = Router();
@@ -95,8 +95,18 @@ export function buildingFacts(record: PropertyRecord) {
   };
 }
 
-async function requireFile(id: string, userId: string) {
-  await assertFileAccess(id, userId, "write");
+/**
+ * Load a file the caller may act on, in one of two modes.
+ *
+ * "write" is the applicant's: the property card and a correction to it are
+ * facts about the house, which is the applicant's to state. "self" is anybody
+ * on the file acting about themselves: a co-borrower scanning their own ID or
+ * being screened is doing their own screen 2, and a "write" there answered
+ * them 404 — so the scan never returned, `identity` was never set, and the
+ * Continue button it gates stayed disabled for every co-borrower.
+ */
+async function requireFile(id: string, userId: string, mode: "write" | "self") {
+  await assertFileAccess(id, userId, mode);
   const file = await loadLoanFile(id);
   if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
   return file;
@@ -317,7 +327,7 @@ propertyFileRouter.post(
   "/:id/property-data",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    const file = await requireFile(id, req.user!.id);
+    const file = await requireFile(id, req.user!.id, "write");
     if (!file.property) {
       throw new AppError(409, "This file has no property yet.", "NO_PROPERTY");
     }
@@ -407,12 +417,16 @@ propertyFileRouter.post(
   "/:id/screening",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    const file = await requireFile(id, req.user!.id);
+    const file = await requireFile(id, req.user!.id, "self");
 
+    // Whom: the person asking, by party. A co-borrower's screen 2 screens the
+    // co-borrower; defaulting to Borrower 1 would screen the applicant a
+    // second time and screen the person actually present not at all.
+    const subject = await retrievalSubject(file, req.user!.id);
     // The snapshot, the column, the event and the hold are one act, and they
     // live in a service rather than here so that anything else that screens a
     // person writes the same four things.
-    const { screening } = await screenAndRecord(prisma, file, connectors());
+    const { screening } = await screenAndRecord(prisma, file, connectors(), subject);
     res.status(201).json({ screening });
   }),
 );
@@ -427,7 +441,7 @@ propertyFileRouter.post(
   "/:id/liens",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    const file = await requireFile(id, req.user!.id);
+    const file = await requireFile(id, req.user!.id, "self");
     const apn = z.string().min(1).safeParse(req.body?.apn);
     if (!apn.success) {
       throw new AppError(
@@ -437,9 +451,11 @@ propertyFileRouter.post(
       );
     }
 
+    // Keyed on the address, but authorized by a person: the token names
+    // whoever pressed the button, under the grant they signed here.
     const result = await connectors().liens.searchLiens(
       file,
-      await tokenFor(file, primaryBorrower(file), "public_record_liens"),
+      await tokenFor(file, await retrievalSubject(file, req.user!.id), "public_record_liens"),
       apn.data,
     );
     await recordSnapshot(
@@ -475,7 +491,7 @@ propertyFileRouter.post(
   "/:id/identity-document",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    const file = await requireFile(id, req.user!.id);
+    const file = await requireFile(id, req.user!.id, "self");
 
     const identity = connectors().identity;
     const session = await identity.createVerificationSession(file, "prefill");
@@ -529,9 +545,9 @@ propertyFileRouter.post(
   "/:id/identity-document/complete",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    // requireFile is the ownership check; the domain LoanFile it returns does
+    // requireFile is the access check; the domain LoanFile it returns does
     // not carry storage-only columns, so the id comes from the row.
-    await requireFile(id, req.user!.id);
+    await requireFile(id, req.user!.id, "self");
     const row = await prisma.loanFile.findUnique({
       where: { id },
       select: { identityPrefillVerificationId: true },
@@ -579,7 +595,7 @@ propertyFileRouter.post(
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const input = correctionSchema.parse(req.body);
-    await requireFile(id, req.user!.id);
+    await requireFile(id, req.user!.id, "write");
 
     if (!input.note && !input.corrections) {
       throw new AppError(400, "Nothing to record.", "EMPTY_CORRECTION");

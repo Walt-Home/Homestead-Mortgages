@@ -86,7 +86,7 @@ export function App() {
           person reaches before they have an account, and it is in both
           trees so that signing in on it lands them back on it.
         */}
-        <Route path="/claim/:token" element={<ClaimPage />} />
+        <Route path="/claim" element={<ClaimPage />} />
         <Route path="*" element={<SignInPage />} />
       </Routes>
     );
@@ -94,7 +94,7 @@ export function App() {
 
   return (
     <Routes>
-      <Route path="/claim/:token" element={<ClaimPage />} />
+      <Route path="/claim" element={<ClaimPage />} />
       <Route path="/" element={<Chrome />}>
         <Route index element={<HomePage />} />
         <Route path="privacy" element={<PrivacyPage />} />
@@ -287,7 +287,10 @@ function FileShell() {
     <Shell
       screen={screen}
       fileId={fileId}
-      reached={file.data?.file.stage}
+      // The stage is the applicant's resume point, and the dots before a
+      // screen link back to it. A co-borrower's shell passes none, so no dot
+      // on their stepper links to a screen that is the applicant's to edit.
+      reached={file.data?.owner === false ? undefined : file.data?.file.stage}
       isDemo={file.data?.file.isDemo}
       debug={debug}
       assessment={assessment.data}

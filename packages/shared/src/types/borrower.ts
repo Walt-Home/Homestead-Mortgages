@@ -147,6 +147,17 @@ export interface Borrower {
    * of this type keeps. A borrower who has said nothing has not said no.
    */
   readonly declaration: BorrowerDeclaration | null;
+  /**
+   * Whether THIS person has answered, said without the answers.
+   *
+   * Set only on a borrower the reader is not: the read of a file reduces
+   * everybody else on it to a name, and nulls their declaration on the way —
+   * so the applicant's review screen could not otherwise tell "Theo has
+   * answered" from "Theo has not", which is the one thing about his answers
+   * it is allowed to say. Absent on the reader's own row, where the
+   * declaration itself is present.
+   */
+  readonly declared?: boolean;
   /** Empty until the same answers are given; one current row, at most one prior. */
   readonly residences: readonly BorrowerResidence[];
 }

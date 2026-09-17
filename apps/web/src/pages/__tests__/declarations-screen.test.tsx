@@ -32,7 +32,7 @@ import {
   PRIOR_PROPERTY_USAGE,
   QUESTIONS,
 } from "../../lib/declarations.js";
-import { CO_BORROWER_COPY, SIGNING_COPY } from "../../lib/outcomes.js";
+import { CO_BORROWER_STATUS, SIGNING_COPY } from "../../lib/outcomes.js";
 
 const session = vi.hoisted(() => ({ user: null as { persona: unknown } | null }));
 
@@ -263,6 +263,7 @@ describe("a file with two borrowers", () => {
   /** The co-borrower, who owns and has. */
   const them = (over: Record<string, unknown> = {}) =>
     borrower({
+      declared: true,
       id: "b2",
       firstName: "Theo",
       lastName: "Okafor",
@@ -286,95 +287,40 @@ describe("a file with two borrowers", () => {
       ...over,
     });
 
-  /** The markup above the co-borrower's heading, and the markup below it. */
-  function split(markup: string): { mine: string; theirs: string } {
-    const at = markup.indexOf(CO_BORROWER_COPY.answersOf(THEIR_NAME));
-    expect(at, "the co-borrower's block is not on the page").toBeGreaterThan(-1);
-    return { mine: markup.slice(0, at), theirs: markup.slice(at) };
-  }
-
-  it("renders a block for each of them, under their own names", () => {
+  it("names them with a status, and shows none of their answers", () => {
+    // The read reduces everybody but the reader to a name and whether they
+    // have answered, and this screen says exactly that much: their answers
+    // are theirs, in both directions.
     const markup = render(<ReviewPage />, joint());
     expect(markup).toContain(SIGNING_COPY.heading);
-    expect(markup).toContain(CO_BORROWER_COPY.answersOf(THEIR_NAME));
+    expect(markup).toContain(CO_BORROWER_STATUS.answered(THEIR_NAME));
+    expect(markup).toContain(CO_BORROWER_STATUS.notYetSigned(THEIR_NAME));
+    expect(markup).toContain(CO_BORROWER_STATUS.theirs);
+    expect(markup).not.toContain("I own it, 90 months");
+    // Only one block of answers on the page: the signer's.
+    expect(markup.split(SIGNING_COPY.heading).length).toBe(2);
   });
 
-  it("puts each person's own answers in their own block", () => {
-    const { mine, theirs } = split(render(<ReviewPage />, joint()));
-
-    // The applicant rents; the co-borrower owns.
-    expect(mine).toContain("I rent it, 30 months, $1,850 a month");
-    expect(theirs).toContain("I own it, 90 months");
-
-    // The co-borrower has declared a bankruptcy, in their own words.
-    expect(theirs).toContain("Chapter 7");
-    expect(theirs).toContain("Discharged in 2019.");
-  });
-
-  it("shows neither of them the other's answers", () => {
-    // The failure this exists to stop, stated from both sides: one file-level
-    // declaration rendered twice would put the bankruptcy under both names and
-    // the rent under both, and every assertion above would still pass.
-    const { mine, theirs } = split(render(<ReviewPage />, joint()));
-    expect(mine).not.toContain("Chapter 7");
-    expect(mine).not.toContain("Discharged in 2019.");
-    expect(theirs).not.toContain("I rent it, 30 months, $1,850 a month");
-  });
-
-  it("renders them in the order the file sends them", () => {
-    // Document order is the API's answer, off `borrower_ordinal`, and this
-    // screen does not hold a second opinion about who Borrower 1 is. So a file
-    // whose list arrives the other way round renders the other way round —
-    // and the heading that says "What you told us" follows the position, which
-    // is what makes the order load-bearing rather than cosmetic.
-    const markup = render(<ReviewPage />, response({ borrowers: [them(), me] }));
-    const signer = markup.indexOf(SIGNING_COPY.heading);
-    const other = markup.indexOf(CO_BORROWER_COPY.answersOf("Dana Whitfield"));
-    expect(signer).toBeGreaterThan(-1);
-    expect(other).toBeGreaterThan(signer);
-  });
-
-  it("says whose answers are missing when a co-borrower has not given any", () => {
-    // Not the applicant's sentence. They have answered, and the button they
-    // are looking at is about their own signature — "there are a few questions
-    // still to answer before you sign" over somebody else's empty block reads
-    // as work the reader can do.
+  it("says they have not answered when they have not, without asking on their behalf", () => {
     const markup = render(
       <ReviewPage />,
-      response({ borrowers: [me, them({ declaration: null, residences: [] })] }),
+      joint({ borrowers: [me, them({ declaration: null, residences: [], declared: false })] }),
     );
-    expect(markup).toContain(CO_BORROWER_COPY.theirs(THEIR_NAME));
+    expect(markup).toContain(CO_BORROWER_STATUS.notYetAnswered(THEIR_NAME));
     expect(markup).not.toContain(SIGNING_COPY.unanswered);
-  });
-
-  it("offers no way to answer for them", () => {
-    // Screen 3 posts as whoever is signed in, so a link out of a co-borrower's
-    // block would take the applicant there to answer in their own name — which
-    // is the misattribution the separate blocks exist to stop, arriving by the
-    // one control on the block.
-    //
-    // Split on the co-borrower's own sentence rather than on their heading: an
-    // unanswered block has no heading, and that is the block a link would be
-    // most tempting on.
-    const markup = render(
-      <ReviewPage />,
-      response({ borrowers: [me, them({ declaration: null, residences: [] })] }),
-    );
-    const at = markup.indexOf(CO_BORROWER_COPY.theirs(THEIR_NAME));
-    expect(at, "the co-borrower's block is not on the page").toBeGreaterThan(-1);
-    const theirs = markup.slice(at);
-    expect(theirs).not.toContain(SIGNING_COPY.answerThem);
-    expect(theirs).not.toContain(SIGNING_COPY.change);
-    expect(theirs).not.toContain('href="/f/f1/declarations"');
-
-    // And the applicant's block still has one, so the assertion above is about
-    // whose block it is rather than about the link having been removed.
+    const at = markup.indexOf(CO_BORROWER_STATUS.notYetAnswered(THEIR_NAME));
+    expect(markup.slice(at)).not.toContain(SIGNING_COPY.answerThem);
     expect(markup.slice(0, at)).toContain('href="/f/f1/declarations"');
   });
 
-  it("says what a co-borrower is asked to do, and only where there is one", () => {
-    expect(render(<ReviewPage />, joint())).toContain(CO_BORROWER_COPY.whatTheyDo);
-    expect(render(<ReviewPage />, answered())).not.toContain(CO_BORROWER_COPY.whatTheyDo);
+  it("says they have signed once their own signature is on the file", () => {
+    const markup = render(
+      <ReviewPage />,
+      joint({
+        consents: [{ kind: "application_signature", borrowerId: "b2", grantedAt: "2026-09-16" }],
+      }),
+    );
+    expect(markup).toContain(CO_BORROWER_STATUS.signed(THEIR_NAME));
   });
 
   it("lets the applicant sign on their own answers alone", () => {

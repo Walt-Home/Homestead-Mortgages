@@ -22,7 +22,7 @@ import {
 import { primaryBorrowerRow } from "../services/borrower-order.js";
 import { nameCoBorrower, removeNamedCoBorrower } from "../services/co-borrowers.js";
 import { inviteCoBorrower } from "../services/invitations.js";
-import { memberView } from "../services/member-view.js";
+import { memberView, redactOthers } from "../services/member-view.js";
 import { assertPurposeInScope } from "../services/scope.js";
 import { connectors } from "../services/connectors.js";
 import { quoteSubjectProduct } from "../services/pricing.js";
@@ -587,7 +587,10 @@ fileRouter.post(
       { screen: "identity", borrowerId: existingBorrower?.id ?? null },
     );
 
-    await advanceStage(id, "CREDIT");
+    // The stage is the applicant's resume point. A co-borrower's screen 2 is
+    // theirs, and moving the applicant's file to CREDIT on it sent the
+    // applicant's next visit past a screen they had not finished.
+    if (aboutTheApplicant) await advanceStage(id, "CREDIT");
 
     // Read the file back once, so a party whose facts will not project fails
     // here — as a 500 the client routes to the repair screen — rather than on
@@ -756,8 +759,11 @@ fileRouter.get(
     });
     const yours = owner.userId === req.user!.id;
     const own = !yours && you ? await ownReportsFor(id, you) : null;
+    // The promise holds in both directions: the owner reads the whole file
+    // and everybody on it but themselves reduced to a name and a status, so
+    // a co-borrower's date of birth and answers are theirs alone too.
     res.json({
-      file: yours || !own ? file : memberView(file, yourRow, own),
+      file: yours ? redactOthers(file, yourRow) : !own ? file : memberView(file, yourRow, own),
       you: yourRow,
       // Whether the reader is the applicant. A co-borrower is on the file
       // and not its owner, and the screens they see are theirs alone.

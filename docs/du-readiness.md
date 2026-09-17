@@ -172,7 +172,11 @@ three lists rather than trusting it after they change.
   the seed names Dev, reads his link out of the fixture outbox, claims it as
   a sign-in of his own and walks his own half — screen 2, Section 5, his
   signature — through the same services a real co-borrower goes through.
-  What is missing is a co-borrower's reports reaching the engine — item 1.
+  The read is redacted in both directions — the applicant sees that a
+  co-borrower has answered and signed, never what they said — and the
+  invitation is sent from screen 2, its token in the URL fragment where no
+  request log records it. What is missing is a co-borrower's reports
+  reaching the engine — item 1.
 - **Vesting and the non-borrower parties** have tables and, now, writers.
   `du_vestings` holds the sentence that will read on title — asked on the review
   screen, stated by the applicant, refused at signing when absent —

@@ -47,9 +47,15 @@ export function hashInvitationToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-/** The URL in the email. The token is a path segment, never a query string. */
+/**
+ * The URL in the email. The token rides in the FRAGMENT: a browser never
+ * sends the part after `#` to a server, so it reaches neither our request
+ * logs nor the platform's, which record every path. As a path segment it
+ * was written to both on every open, and a log is not where a bearer secret
+ * belongs. The page reads it off `location.hash` and posts it in a body.
+ */
 export function claimUrl(token: string): string {
-  return `${config.publicOrigin.replace(/\/$/, "")}/claim/${token}`;
+  return `${config.publicOrigin.replace(/\/$/, "")}/claim#${token}`;
 }
 
 /** What the email says. Plain text, one link, no names the recipient did not already know. */
@@ -142,6 +148,14 @@ export async function inviteCoBorrower(
       expiresAt: minted.expiresAt,
     }),
   );
+  if (outcome.status === "sent") {
+    // "Invited" means the link went. A row minted and never delivered leaves
+    // the person named, not invited, and a re-send is what moves them.
+    await db.party.updateMany({
+      where: { id: minted.partyId, claimStatus: "PROVISIONAL" },
+      data: { claimStatus: "CLAIM_PENDING" },
+    });
+  }
   if (outcome.status !== "sent") {
     // The row exists and the email did not go. Recorded as such, and refused
     // as such — the applicant is told the truth and can try again, which
@@ -186,12 +200,7 @@ export async function inviteCoBorrower(
  * CLAIM_PENDING — everything about an invitation except the email. Returns
  * what the email needs, so the send can happen after the commit.
  */
-async function mintInvitation(
-  tx: Db,
-  loanFileId: string,
-  borrowerId: string,
-  tokenHash: string,
-) {
+async function mintInvitation(tx: Db, loanFileId: string, borrowerId: string, tokenHash: string) {
   const row = await tx.borrower.findFirst({
     where: { id: borrowerId, loanFileId },
     select: {
@@ -213,6 +222,17 @@ async function mintInvitation(
   }
   if (row.party.claimStatus === "CLAIMED" || row.party.claimStatus === "MERGED") {
     throw new AppError(409, "They have already signed in.", "CO_BORROWER_ARRIVED");
+  }
+  // A person whose identity was stated on their behalf — the paper joint
+  // URLA, `appendCoBorrowerWithFacts` — is not somebody to invite: a claim
+  // would merge that stated identity into a party that carries none of it,
+  // and every read of the file would then throw on the hole.
+  if (row.ssnLast4 !== null) {
+    throw new AppError(
+      409,
+      "Their details were stated on this application already; there is nothing to invite them to.",
+      "IDENTITY_ALREADY_STATED",
+    );
   }
 
   // The two things the applicant said about them, which are the two things
@@ -263,16 +283,13 @@ async function mintInvitation(
     },
     select: { id: true },
   });
-  if (row.party.claimStatus === "PROVISIONAL") {
-    await tx.party.update({ where: { id: row.partyId }, data: { claimStatus: "CLAIM_PENDING" } });
-  }
   return {
     invitationId: invitation.id,
+    partyId: row.partyId,
     email,
     expiresAt,
     coBorrowerFirstName: name.first ?? "",
-    applicantName:
-      `${applicant.first ?? ""} ${applicant.last ?? ""}`.trim() || "Your co-applicant",
+    applicantName: `${applicant.first ?? ""} ${applicant.last ?? ""}`.trim() || "Your co-applicant",
   };
 }
 

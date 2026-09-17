@@ -1865,6 +1865,26 @@ applicant typed is where the link went, not who may follow it, and a stricter
 rule would refuse a person whose Google account is not the address their
 partner had for them.
 
+**The privacy promise holds in both directions, and the link is the only
+place the token is.** A review of the co-borrower commits found the read
+one-sided: a member's read was redacted to the household's half, and the
+applicant's read carried the co-borrower's whole person, answers and
+transcripts — under a screen that told the co-borrower the opposite. Now
+everybody but the reader is reduced to a name and two facts — answered, and
+signed — whoever reads, and `GET /files/:id/declaration` reads the asker's
+own row and nobody else's. The invitation token rides in the URL fragment,
+which a browser never sends to a server, and reaches the API in a POST body;
+a path is written to every request log between the browser and the process.
+Taking an invitation is a press, not a page load, since the account signed
+in on a shared browser is not necessarily the person the link was sent to,
+and a merge is not undone. A co-borrower's signature settles nothing of the
+applicant's, moves no stage, and is not held by a third person still
+pending; their account cannot be deleted while it holds a row on somebody
+else's application; a sample borrower cannot take a real person's
+invitation; and a person whose identity was stated on their behalf cannot
+be invited at all, because the claim would merge a stated identity into a
+party that carries none of it.
+
 **Each person signs for themselves, and a route means "the borrower" by
 who is asking.** A joint application has one signature per person: the
 applicant's is the file's `applicationSignedAt`, and a co-borrower's is a

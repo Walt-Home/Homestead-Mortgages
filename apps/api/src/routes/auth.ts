@@ -238,6 +238,25 @@ authRouter.delete(
       where: { id: userId },
       select: { partyId: true },
     });
+    // A co-borrower on somebody else's application is refused. Deleting the
+    // party cascades their borrower row and their membership out of an
+    // application they do not own, which would silently change what another
+    // person applied for — and the ledger of that application names this
+    // person's principal. Leaving an application is its own act, and it is
+    // not built; until it is, the account stays.
+    const elsewhere = partyId
+      ? await prisma.borrower.findFirst({
+          where: { partyId, loanFile: { userId: { not: userId } } },
+          select: { id: true },
+        })
+      : null;
+    if (elsewhere) {
+      throw new AppError(
+        409,
+        "You are a co-borrower on somebody else's application, so this account cannot be deleted while you are on it.",
+        "ON_ANOTHER_APPLICATION",
+      );
+    }
     const files = await prisma.loanFile.count({ where: { userId } });
     await prisma.$transaction(async (tx) => {
       await tx.loanFile.deleteMany({ where: { userId } });
@@ -296,11 +315,18 @@ function publicUser(user: {
  * proven anything about. Taking it requires a session, the same Google
  * sign-in as everything else, and never an email match: the address the
  * applicant typed is where the link went, not who may follow it.
+ *
+ * Both are POSTs carrying the token in the body, and neither takes it in the
+ * path. A path is written to every request log between the browser and this
+ * process; a body is not. The link itself keeps the token in the URL
+ * fragment for the same reason — see `claimUrl`.
  */
-authRouter.get(
-  "/claims/:token",
+const claimSchema = z.object({ token: z.string().min(20).max(200) });
+
+authRouter.post(
+  "/claims/preview",
   asyncRoute(async (req, res) => {
-    const token = z.string().min(20).max(200).parse(req.params.token);
+    const { token } = claimSchema.parse(req.body);
     const preview = await previewClaim(token);
     if (!preview) throw new AppError(404, "That link is not good any more.", "NOT_FOUND");
     res.json(preview);
@@ -308,10 +334,21 @@ authRouter.get(
 );
 
 authRouter.post(
-  "/claims/:token/accept",
+  "/claims/accept",
   requireAuth,
   asyncRoute(async (req, res) => {
-    const token = z.string().min(20).max(200).parse(req.params.token);
+    // Mounted before the read-only gate, like DELETE /me, so it carries the
+    // same refusal itself: a sample borrower is shared with every tester, and
+    // one of them taking a real person's invitation would put a seeded row on
+    // somebody's application.
+    if (req.user!.personaKey) {
+      throw new AppError(
+        403,
+        "This is a sample borrower. Nothing can be changed while signed in as one.",
+        "PERSONA_READ_ONLY",
+      );
+    }
+    const { token } = claimSchema.parse(req.body);
     const claimed = await acceptClaim(token, req.user!.id);
     res.status(201).json(claimed);
   }),

@@ -28,7 +28,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { BorrowerDeclaration, BorrowerResidence, FileEmployment } from "@hm/shared";
 import { ReviewPage } from "../ReviewPage.js";
 import type { LoanFileResponse } from "../../lib/file.js";
-import { CO_BORROWER_COPY, SIGNING_COPY, WORK_COPY } from "../../lib/outcomes.js";
+import { CO_BORROWER_STATUS, SIGNING_COPY, WORK_COPY } from "../../lib/outcomes.js";
 import { answerFor, currentJobsFor, workAnswered, workBody, workLines } from "../../lib/work.js";
 
 const session = vi.hoisted(() => ({ user: null as { persona: unknown } | null }));
@@ -45,7 +45,6 @@ vi.mock("react-router-dom", async (original) => ({
 
 const MY_PARTY = "p1";
 const THEIR_PARTY = "p2";
-const THEIR_NAME = "Theo Okafor";
 
 const RENTING: BorrowerResidence = {
   residencyType: "Current",
@@ -372,7 +371,9 @@ describe("a co-borrower's jobs are theirs", () => {
       ...over,
     });
 
-  it("shows their answered jobs back, without controls", () => {
+  it("shows nothing of their work, only that they are on the application", () => {
+    // Their jobs are theirs to answer about and theirs to see. The applicant's
+    // screen names them with a status and asks nothing about their work.
     const markup = render(
       joint({
         employment: [
@@ -380,32 +381,18 @@ describe("a co-borrower's jobs are theirs", () => {
         ],
       }),
     );
-    expect(markup).toContain(CO_BORROWER_COPY.workOf(THEIR_NAME));
-    expect(markup).toContain(
-      "Borealis Freight — not self-employed; not employed by a party to this transaction",
-    );
-    // The applicant has no job of their own here, so the questions must be
-    // nowhere on the page: a control under somebody else's name would record
-    // the applicant's answer about their employer.
+    expect(markup).not.toContain("Borealis Freight");
     expect(markup).not.toContain(WORK_COPY.selfEmployed);
-    expect(markup).not.toContain(WORK_COPY.partyToTransaction);
-  });
-
-  it("says whose answers are missing when they have not given any", () => {
-    const markup = render(joint({ employment: [job({ id: "e9", partyId: THEIR_PARTY })] }));
-    expect(markup).toContain(CO_BORROWER_COPY.noWorkAnswers(THEIR_NAME));
-    expect(markup).not.toContain(WORK_COPY.unanswered);
+    expect(markup).toContain(CO_BORROWER_STATUS.theirs);
   });
 
   it("does not hold the applicant's signature on them", () => {
-    // Who signs what is not this screen's to change. A co-borrower answers
-    // when they sign in, and until then the applicant's own set is complete.
     const markup = render(joint({ employment: [job({ id: "e9", partyId: THEIR_PARTY })] }));
     expect(markup).toContain("Continue to sign");
     expect(markup).not.toMatch(DISABLED_SIGN);
   });
 
-  it("gives each of them their own jobs and nobody else's", () => {
+  it("asks the applicant about their own jobs and nobody else's", () => {
     const markup = render(
       joint({
         employment: [
@@ -414,11 +401,8 @@ describe("a co-borrower's jobs are theirs", () => {
         ],
       }),
     );
-    const at = markup.indexOf(CO_BORROWER_COPY.workOf(THEIR_NAME));
-    expect(at, "the co-borrower's work block is not on the page").toBeGreaterThan(-1);
-    expect(markup.slice(0, at)).toContain("Operations lead at Acme");
-    expect(markup.slice(at)).not.toContain("Operations lead at Acme");
-    expect(markup.slice(0, at)).not.toContain("Borealis Freight —");
+    expect(markup).toContain("Operations lead at Acme");
+    expect(markup).not.toContain("Borealis Freight");
   });
 });
 

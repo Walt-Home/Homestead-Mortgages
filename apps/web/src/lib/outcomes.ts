@@ -235,9 +235,9 @@ export const WAITING_COPY = {
     names.length === 1
       ? `${names[0]} has been added to this application and has not completed their part yet. Once they have, you can review everything together and sign.`
       : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} have been added to this application and have not completed their part yet. Once they have, you can review everything together and sign.`,
-  /** What has to be true before an email exists to say it. */
-  noEmailYet:
-    "We do not send them an email yet, so let them know yourself. Their invitation is on its way in a later release.",
+  /** Said beside a named person, and again on the review screen while they have not finished. */
+  emailed:
+    "We emailed them a link to their own part. It works once and for seven days; you can send a fresh one.",
 } as const;
 
 /**
@@ -281,10 +281,22 @@ export const CLAIM_COPY = {
   signIn:
     "Sign in with Google to continue. Any Google account works — it does not have to be the address the invitation went to.",
   taking: "Taking you to your application…",
+  thisIsMe: "Yes, this is me — continue",
   couldNotTake: "That did not work. Try the link again.",
   deadTitle: "That link is not good any more.",
   deadBody:
     "Invitation links work once and for seven days. Ask the person who invited you to send a new one.",
+} as const;
+
+/** One line per co-borrower on the applicant's review screen: done, or not yet. */
+export const CO_BORROWER_STATUS = {
+  answered: (name: string) => `${name} has answered their questions.`,
+  notYetAnswered: (name: string) => `${name} has not answered their questions yet.`,
+  signed: (name: string) => `${name} has signed their part.`,
+  notYetSigned: (name: string) => `${name} has not signed their part yet.`,
+  /** What the applicant is and is not shown of them, said once. */
+  theirs:
+    "Their answers, their details and their reports are theirs. You see that they have finished, not what they said.",
 } as const;
 
 export const CO_BORROWER_COPY = {

@@ -21,7 +21,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
-import type { FixtureMailConnector } from "@hm/connectors";
+import type { FixtureMailConnector, MailConnector } from "@hm/connectors";
 import { applicationRouter } from "../routes/application.js";
 import { authRouter } from "../routes/auth.js";
 import { connectorRouter } from "../routes/connectors.js";
@@ -32,6 +32,8 @@ import { connectors } from "../services/connectors.js";
 import { loadLoanFile } from "../services/repository.js";
 import { createUser } from "./support/factories.js";
 import { callAs } from "./support/http.js";
+import { inviteCoBorrower } from "../services/invitations.js";
+import { appendCoBorrowerWithFacts } from "../services/co-borrowers.js";
 
 const SCREEN_ONE = {
   purpose: "purchase",
@@ -134,7 +136,7 @@ function invite(userId: string, fileId: string, borrowerId: string) {
 /** The token, read off the email — the only place it is. */
 function tokenInTheEmail(): string {
   const last = outbox().at(-1);
-  const match = /\/claim\/([A-Za-z0-9_-]+)/.exec(last?.text ?? "");
+  const match = /\/claim#([A-Za-z0-9_-]+)/.exec(last?.text ?? "");
   if (!match) throw new Error("no claim link in the last email");
   return match[1]!;
 }
@@ -144,10 +146,15 @@ function accept(userId: string, token: string) {
     userId,
     [authRouter],
     "POST",
-    `/claims/${token}/accept`,
-    {},
+    "/claims/accept",
+    { token },
     "/api/auth",
   );
+}
+
+/** What a holder of the link is shown before signing in. */
+function look(userId: string, token: string) {
+  return callAs(userId, [authRouter], "POST", "/claims/preview", { token }, "/api/auth");
 }
 
 describe("sending the invitation", () => {
@@ -184,7 +191,7 @@ describe("sending the invitation", () => {
     // echoed, and it is the same link that went out.
     const h = await namedHousehold();
     const res = await invite(h.user.id, h.fileId, h.borrowerId);
-    expect(res.body.link).toBe(`http://localhost:5173/claim/${tokenInTheEmail()}`);
+    expect(res.body.link).toBe(`http://localhost:5173/claim#${tokenInTheEmail()}`);
   });
 
   it("re-sending kills the last link", async () => {
@@ -195,27 +202,46 @@ describe("sending the invitation", () => {
     const second = tokenInTheEmail();
     expect(second).not.toBe(first);
 
-    const dead = await callAs(
-      h.user.id,
-      [authRouter],
-      "GET",
-      `/claims/${first}`,
-      undefined,
-      "/api/auth",
-    );
+    const dead = await look(h.user.id, first);
     expect(dead.status).toBe(404);
-    const live = await callAs(
-      h.user.id,
-      [authRouter],
-      "GET",
-      `/claims/${second}`,
-      undefined,
-      "/api/auth",
-    );
+    const live = await look(h.user.id, second);
     expect(live.status).toBe(200);
     expect(await prisma.coBorrowerInvitation.count({ where: { borrowerId: h.borrowerId } })).toBe(
       2,
     );
+  });
+
+  it("leaves them named, not invited, when the email does not go", async () => {
+    // The party moves to invited only once the link has actually gone. A
+    // mailer that answers not_delivered leaves the person named, and the
+    // review screen keeps saying so rather than "invited".
+    const h = await namedHousehold();
+    const silent: MailConnector = {
+      capabilities: { provider: "test-silence", mode: "fixture", satisfies: [] },
+      send: async () => ({ status: "not_delivered", reason: "the wire is down" }),
+    };
+    await expect(inviteCoBorrower(h.fileId, h.borrowerId, silent)).rejects.toMatchObject({
+      code: "MAIL_NOT_DELIVERED",
+    });
+    const party = await prisma.party.findUniqueOrThrow({ where: { id: h.partyId } });
+    expect(party.claimStatus).toBe("PROVISIONAL");
+    expect((await loadLoanFile(h.fileId))!.invitedBorrowers[0]!.status).toBe("named");
+  });
+
+  it("refuses to invite a person whose identity was stated for them", async () => {
+    // The paper joint URLA: a co-borrower appended with every fact. A claim
+    // would merge that identity into a party carrying none of it.
+    const user = await createUser();
+    const created = await callAs<{ id: string }>(user.id, [fileRouter], "POST", "/", SCREEN_ONE);
+    await callAs(user.id, [fileRouter], "POST", `/${created.body.id}/borrowers`, DANA);
+    const stated = await appendCoBorrowerWithFacts(created.body.id, {
+      ...THEO_HIMSELF,
+      ssnLast4: "8765",
+      ssnVaultHandle: "vault:theo:1",
+    });
+    const res = await invite(user.id, created.body.id, stated.borrowerId);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: { code: "IDENTITY_ALREADY_STATED" } });
   });
 
   it("is the applicant's to send", async () => {
@@ -244,14 +270,7 @@ describe("looking at the link", () => {
     const token = tokenInTheEmail();
     const stranger = await createUser();
 
-    const res = await callAs(
-      stranger.id,
-      [authRouter],
-      "GET",
-      `/claims/${token}`,
-      undefined,
-      "/api/auth",
-    );
+    const res = await look(stranger.id, token);
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
@@ -268,10 +287,8 @@ describe("looking at the link", () => {
     await invite(h.user.id, h.fileId, h.borrowerId);
     const token = tokenInTheEmail();
     const stranger = await createUser();
-    const look = (t: string) =>
-      callAs(stranger.id, [authRouter], "GET", `/claims/${t}`, undefined, "/api/auth");
 
-    expect((await look("a".repeat(43))).status).toBe(404);
+    expect((await look(stranger.id, "a".repeat(43))).status).toBe(404);
     // Eight days ago, so the deadline is in the past and still after the
     // making — the CHECK holds even for a row a test ages by hand.
     await prisma.coBorrowerInvitation.updateMany({
@@ -281,7 +298,7 @@ describe("looking at the link", () => {
         expiresAt: new Date(Date.now() - 1_000),
       },
     });
-    expect((await look(token)).status).toBe(404);
+    expect((await look(stranger.id, token)).status).toBe(404);
   });
 });
 
@@ -507,7 +524,8 @@ describe("once they have arrived", () => {
       select: { assertedBy: { select: { partyId: true } } },
     });
     expect(stored.assertedBy.partyId).toBe(theo.partyId);
-    // And reads back as theirs, without naming a row either.
+    // And reads back as theirs, without naming a row — and the applicant's
+    // row, named, answers 404: a member reads nobody's answers but their own.
     const read = await callAs<{ declaration: { declaration: { bankruptcy: boolean } } | null }>(
       h.theo.id,
       [declarationRouter],
@@ -515,6 +533,14 @@ describe("once they have arrived", () => {
       `/${h.fileId}/declaration`,
     );
     expect(read.body.declaration?.declaration.bankruptcy).toBe(true);
+    const dana = (await loadLoanFile(h.fileId))!.borrowers[0]!;
+    const hers = await callAs(
+      h.theo.id,
+      [declarationRouter],
+      "GET",
+      `/${h.fileId}/declaration?borrowerId=${dana.id}`,
+    );
+    expect(hers.status).toBe(404);
   });
 
   it("signs for themselves, and the file's own signature stays the applicant's", async () => {
@@ -659,6 +685,77 @@ describe("once they have arrived", () => {
     expect(theirs.body.file.links.map((l) => l.partyId)).toEqual(
       theirs.body.file.links.map(() => links.find((l) => l.partyId !== dana.partyId)!.partyId),
     );
+  });
+
+  it("sees the household on their own home page", async () => {
+    const h = await claimed();
+    const res = await callAs<{ files: { id: string }[] }>(h.theo.id, [fileRouter], "GET", "/");
+    expect(res.body.files.some((f) => f.id === h.fileId)).toBe(true);
+  });
+
+  it("cannot delete their account while on somebody else's application", async () => {
+    const h = await claimed();
+    const res = await callAs(h.theo.id, [authRouter], "DELETE", "/me", undefined, "/api/auth");
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: { code: "ON_ANOTHER_APPLICATION" } });
+    expect(await prisma.user.count({ where: { id: h.theo.id } })).toBe(1);
+  });
+
+  it("is shown to the applicant as a name and a status, never as answers", async () => {
+    const h = await claimed();
+    await callAs(h.theo.id, [fileRouter], "POST", `/${h.fileId}/borrowers`, THEO_HIMSELF);
+    await callAs(h.theo.id, [declarationRouter], "POST", `/${h.fileId}/declaration`, {
+      declaration: { ...SECTION_FIVE, bankruptcy: true, bankruptcyChapters: ["ChapterSeven"] },
+      residences: [OWNING],
+      propertyEstateType: "FeeSimple",
+    });
+    type Seen = { file: { borrowers: Record<string, unknown>[] } };
+    const hers = await callAs<Seen>(h.user.id, [fileRouter], "GET", `/${h.fileId}`);
+    const theo = hers.body.file.borrowers.find((b) => b.id === h.borrowerId)!;
+    expect(theo.firstName).toBe("Theo");
+    expect(theo.declared).toBe(true);
+    expect(theo.declaration).toBeNull();
+    expect(theo.dateOfBirth).toBe("");
+    expect(theo.ssn).toEqual({ last4: "", vaultHandle: "" });
+    expect(JSON.stringify(hers.body)).not.toContain("8765");
+    expect(JSON.stringify(hers.body)).not.toContain("1984-02-19");
+  });
+
+  it("signs their own part while a third person is still pending, and moves nothing of the applicant's", async () => {
+    const h = await claimed();
+    await callAs(h.user.id, [fileRouter], "POST", `/${h.fileId}/co-borrowers`, {
+      firstName: "Marisol",
+      lastName: "Vega",
+      email: "marisol@example.test",
+      occupiesProperty: true,
+    });
+    await callAs(h.theo.id, [fileRouter], "POST", `/${h.fileId}/borrowers`, {
+      ...THEO_HIMSELF,
+      demographics: { ethnicity: "declined", race: "declined", sex: "declined" },
+    });
+    for (const kind of ["verification_authorization", "econsent"]) {
+      await callAs(h.theo.id, [connectorRouter], "POST", `/${h.fileId}/consents`, {
+        kind,
+        borrowerId: h.borrowerId,
+      });
+    }
+    const before = await prisma.loanFile.findUniqueOrThrow({
+      where: { id: h.fileId },
+      select: { stage: true },
+    });
+    const signed = await callAs(
+      h.theo.id,
+      [applicationRouter],
+      "POST",
+      `/${h.fileId}/sign-application`,
+    );
+    expect(signed.status, JSON.stringify(signed.body)).toBe(201);
+    const after = await prisma.loanFile.findUniqueOrThrow({
+      where: { id: h.fileId },
+      select: { stage: true, applicationSignedAt: true },
+    });
+    expect(after.stage).toBe(before.stage);
+    expect(after.applicationSignedAt).toBeNull();
   });
 
   it("does not let the applicant's screen 2 land on the co-borrower", async () => {

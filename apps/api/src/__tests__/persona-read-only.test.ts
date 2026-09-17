@@ -405,6 +405,24 @@ describe("deleting a sample borrower's account", () => {
     expect(await prisma.user.count({ where: { id: maya.id } })).toBe(1);
   });
 
+  it("cannot take a real person's invitation", async () => {
+    // The accept route is mounted under /auth, ahead of the read-only gate,
+    // so it carries the refusal itself — a sample borrower is shared with
+    // every tester, and one of them taking an invitation would merge a
+    // seeded person into somebody's application.
+    const maya = await createUser({ personaKey: "maya_okafor", name: "Maya Okafor" });
+    const res = await callAs(
+      maya.id,
+      [authRouter],
+      "POST",
+      "/claims/accept",
+      { token: "a".repeat(43) },
+      "/api/auth",
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { error: { code: string } }).error.code).toBe("PERSONA_READ_ONLY");
+  });
+
   it("still deletes a real person's account", async () => {
     // The refusal is about the persona and nothing else — without this, a
     // check on the wrong side of the condition would pass every test above.

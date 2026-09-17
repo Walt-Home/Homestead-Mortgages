@@ -14,8 +14,8 @@
  * reach with nothing but a string.
  */
 
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
 import { useAuth } from "../lib/auth.js";
@@ -32,7 +32,9 @@ interface ClaimPreview {
 }
 
 export function ClaimPage() {
-  const { token } = useParams<{ token: string }>();
+  // The token rides in the fragment, which a browser never sends to any
+  // server: it reaches neither our logs nor the platform's.
+  const token = window.location.hash.replace(/^#/, "") || undefined;
   const { status, config } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
@@ -40,23 +42,31 @@ export function ClaimPage() {
 
   const preview = useQuery({
     queryKey: ["claim", token],
-    queryFn: () => api.get<ClaimPreview>(`/auth/claims/${token}`),
+    queryFn: () => api.post<ClaimPreview>("/auth/claims/preview", { token }),
     enabled: Boolean(token),
     retry: false,
   });
 
-  // Signed in with a good link: take it, once, and go.
-  useEffect(() => {
-    if (status !== "signed-in" || !token || !preview.data || taking) return;
+  // Taking it is a press, not a page load: whoever is signed in on this
+  // browser is not necessarily the person the link was sent to, and a merge
+  // is not undone. Once: a failed attempt stays failed rather than retrying
+  // on every render.
+  const attempted = useRef(false);
+  async function takeIt() {
+    if (!token || attempted.current) return;
+    attempted.current = true;
     setTaking(true);
-    void api
-      .post<{ loanFileId: string; borrowerId: string }>(`/auth/claims/${token}/accept`, {})
-      .then((claimed) => navigate(`/f/${claimed.loanFileId}/identity`, { replace: true }))
-      .catch((err: unknown) => {
-        setError(err instanceof ApiError ? err.message : CLAIM_COPY.couldNotTake);
-        setTaking(false);
-      });
-  }, [status, token, preview.data, taking, navigate]);
+    try {
+      const claimed = await api.post<{ loanFileId: string; borrowerId: string }>(
+        "/auth/claims/accept",
+        { token },
+      );
+      navigate(`/f/${claimed.loanFileId}/identity`, { replace: true });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : CLAIM_COPY.couldNotTake);
+      setTaking(false);
+    }
+  }
 
   const dead = preview.isError || (preview.isSuccess && !preview.data);
 
@@ -79,7 +89,16 @@ export function ClaimPage() {
             </p>
             <p className="mt-2 text-sm text-ink-muted">{CLAIM_COPY.yours}</p>
             {status === "signed-in" ? (
-              <p className="mt-8 text-base text-ink-soft">{error ?? CLAIM_COPY.taking}</p>
+              <div className="mt-8">
+                {error && <p className="mb-3 text-sm text-danger">{error}</p>}
+                <button
+                  className="super-btn super-btn-primary"
+                  onClick={() => void takeIt()}
+                  disabled={taking || attempted.current}
+                >
+                  {taking ? CLAIM_COPY.taking : CLAIM_COPY.thisIsMe}
+                </button>
+              </div>
             ) : (
               <div className="mt-8">
                 <p className="mb-3 text-sm text-ink-muted">

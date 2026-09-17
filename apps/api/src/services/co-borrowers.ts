@@ -125,7 +125,12 @@ export async function nameCoBorrower(
   });
   const role = roleFor(named.occupiesProperty);
   const edge = await ensureApplicationParty(db, app.id, partyId, role);
-  const appended = { borrowerId: borrower.id, partyId, borrowerOrdinal: edge.borrowerOrdinal, role };
+  const appended = {
+    borrowerId: borrower.id,
+    partyId,
+    borrowerOrdinal: edge.borrowerOrdinal,
+    role,
+  };
   await recordEvent(
     loanFileId,
     "co_borrower_named",
@@ -202,10 +207,20 @@ export async function removeNamedCoBorrower(
   db: Db = prisma,
 ): Promise<void> {
   await db.$transaction(async (tx) => {
-    const row = await tx.borrower.findFirst({
-      where: { id: borrowerId, loanFileId },
-      select: { id: true, partyId: true, party: { select: { claimStatus: true } } },
-    });
+    // The row is locked before it is read, so a claim landing at the same
+    // moment either goes first — and this then sees a party that has arrived
+    // — or waits, and then finds the invitation gone with the row. Read
+    // unlocked, the edge was deleted by a party id that the claim had
+    // already moved on from.
+    const [locked] = await tx.$queryRaw<{ id: string; party_id: string }[]>`
+      SELECT id, party_id FROM borrowers WHERE id = ${borrowerId}::uuid AND loan_file_id = ${loanFileId}::uuid
+      FOR UPDATE`;
+    const row = locked
+      ? await tx.borrower.findUniqueOrThrow({
+          where: { id: locked.id },
+          select: { id: true, partyId: true, party: { select: { claimStatus: true } } },
+        })
+      : null;
     if (!row) throw new AppError(404, "That person is not on this file.", "NOT_FOUND");
     const primary = await primaryBorrowerRow(tx, loanFileId);
     if (primary && primary.id === row.id) {

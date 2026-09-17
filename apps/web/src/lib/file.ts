@@ -123,6 +123,14 @@ export interface LoanFileView {
      * answers above a signature.
      */
     declaration: BorrowerDeclaration | null;
+    /**
+     * Whether this person has answered, on a row that is not the reader's.
+     *
+     * The read reduces everybody but the reader to a name and nulls their
+     * declaration on the way, so this is what the applicant's review screen
+     * has to say "Theo has answered" from. Absent on the reader's own row.
+     */
+    declared?: boolean;
     residences: BorrowerResidence[];
   }[];
   /*

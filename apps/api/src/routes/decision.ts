@@ -106,12 +106,18 @@ decisionRouter.post(
 /**
  * The decision as last computed. Read-only, and the only way a demo file can
  * show one at all: recomputing is a write, and demo files refuse writes.
+ *
+ * "own", not "read". The derivation log under a decision carries the
+ * applicant's bureau scores and income, which is exactly what a co-borrower's
+ * read of the file is redacted to keep from them — and a member reading it
+ * here would have had it by a second route. The file's own read answers a
+ * member `decision: null` for the same reason.
  */
 decisionRouter.get(
   "/:id/decision",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    await assertFileAccess(id, req.user!.id, "read");
+    await assertFileAccess(id, req.user!.id, "own");
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
     res.json({ decision: file.decision });
@@ -150,12 +156,16 @@ decisionRouter.post(
   }),
 );
 
-/** Decision history — the substrate for "what changed since last time". */
+/**
+ * Decision history — the substrate for "what changed since last time". The
+ * applicant's, like the decision itself: the ratios are computed from one
+ * person's reports.
+ */
 decisionRouter.get(
   "/:id/decisions",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    await assertFileAccess(id, req.user!.id, "read");
+    await assertFileAccess(id, req.user!.id, "own");
     const decisions = await prisma.decision.findMany({
       where: { loanFileId: id },
       orderBy: { computedAt: "desc" },

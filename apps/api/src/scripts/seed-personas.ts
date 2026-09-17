@@ -1203,7 +1203,7 @@ interface CoBorrowerOnFile {
  */
 function tokenInTheEmail(mail: MailConnector): string {
   const last = (mail as FixtureMailConnector).outbox?.at(-1);
-  const match = /\/claim\/([A-Za-z0-9_-]+)/.exec(last?.text ?? "");
+  const match = /\/claim#([A-Za-z0-9_-]+)/.exec(last?.text ?? "");
   if (!match) throw new Error("no claim link in the last email the seed sent");
   return match[1]!;
 }

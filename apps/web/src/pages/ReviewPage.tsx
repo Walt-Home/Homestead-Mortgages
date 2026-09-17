@@ -32,7 +32,7 @@
  * violation — so the occupancy check is a compliance control, not tidiness.
  */
 
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api.js";
@@ -61,6 +61,7 @@ import {
   SIGN_LEAD,
   WAITING_COPY,
   WORK_COPY,
+  CO_BORROWER_STATUS,
 } from "../lib/outcomes.js";
 import { answerLines, type AnswerLine, type YesNo } from "../lib/declarations.js";
 import {
@@ -69,7 +70,6 @@ import {
   jobHeading,
   workAnswered,
   workBody,
-  workLines,
   type WorkForm,
 } from "../lib/work.js";
 import { borrowerName, coBorrowers, primaryBorrower } from "../lib/borrowers.js";
@@ -718,25 +718,23 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
           nothing at all here — not an empty heading, not "no jobs on file".
         */}
         <MyWork jobs={myJobs} form={work} onChange={setWork} />
-        {others.map((who) => (
-          <Fragment key={who.id}>
-            <Answers
-              heading={CO_BORROWER_COPY.answersOf(borrowerName(who))}
-              lines={answerLines(who.declaration, who.residences)}
-              unanswered={CO_BORROWER_COPY.theirs(borrowerName(who))}
-              to={null}
-            />
-            {/* Theirs to answer, so theirs to be shown without controls. */}
-            <TheirWork name={borrowerName(who)} jobs={currentJobsFor(file, who.partyId)} />
-          </Fragment>
-        ))}
         {others.length > 0 && (
-          /* What a co-borrower is actually for, once there is one to explain.
-             It renders under the blocks rather than over them, because the
-             blocks are the answer to "where are their answers" and this is the
-             answer to "what are they asked" — and only the first of those is a
-             question somebody reading a co-borrower's empty block has. */
-          <p className="mt-4 text-sm text-ink-muted">{CO_BORROWER_COPY.whatTheyDo}</p>
+          /* Everybody else on the application, as a status and not as their
+             answers: the read reduces them to a name and whether they have
+             answered, and this screen says exactly that much. */
+          <div className="mt-7 border-t border-rule-soft pt-6">
+            {others.map((who) => (
+              <p key={who.id} className="text-base text-ink-soft">
+                {who.declared
+                  ? CO_BORROWER_STATUS.answered(borrowerName(who))
+                  : CO_BORROWER_STATUS.notYetAnswered(borrowerName(who))}{" "}
+                {hasConsent(file, "application_signature", who.id)
+                  ? CO_BORROWER_STATUS.signed(borrowerName(who))
+                  : CO_BORROWER_STATUS.notYetSigned(borrowerName(who))}
+              </p>
+            ))}
+            <p className="mt-2 text-sm text-ink-muted">{CO_BORROWER_STATUS.theirs}</p>
+          </div>
         )}
 
         {vestingForm && (
@@ -812,7 +810,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
               <p className="mt-2 text-base text-ink-soft">
                 {WAITING_COPY.body(invited.map((who) => `${who.firstName} ${who.lastName}`))}
               </p>
-              <p className="mt-2 text-sm text-ink-muted">{WAITING_COPY.noEmailYet}</p>
+              <p className="mt-2 text-sm text-ink-muted">{WAITING_COPY.emailed}</p>
             </div>
           ) : readyToSign ? (
             <div className="super-notice">
@@ -971,38 +969,6 @@ function MyWork({
           </section>
         );
       })}
-    </div>
-  );
-}
-
-/**
- * A co-borrower's jobs, read back and nothing more.
- *
- * No controls, for the reason their declarations carry no link: the POST
- * asserts as whoever is signed in, so an answer given here would be recorded
- * as the applicant speaking about somebody else's employer. A co-borrower
- * answers when they sign in.
- *
- * An unanswered set says so rather than rendering nothing, because the
- * applicant is reading a page that is about to be signed and a silently
- * missing block reads as a finished one.
- */
-function TheirWork({ name, jobs }: { name: string; jobs: readonly FileEmployment[] }) {
-  if (jobs.length === 0) return null;
-  const lines = workLines(jobs);
-  if (lines.length === 0) {
-    return <p className="mt-4 text-base text-ink-soft">{CO_BORROWER_COPY.noWorkAnswers(name)}</p>;
-  }
-  return (
-    <div className="mt-4">
-      <p className="text-sm text-ink-muted">{CO_BORROWER_COPY.workOf(name)}</p>
-      <ul className="mt-2 flex flex-col gap-1">
-        {lines.map((line) => (
-          <li key={line} className="text-base text-ink-soft">
-            {line}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

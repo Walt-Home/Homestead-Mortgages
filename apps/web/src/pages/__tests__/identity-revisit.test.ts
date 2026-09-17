@@ -88,7 +88,9 @@ describe("the social security number", () => {
     // A predicate nothing reads is a rule that holds only in a test, and this
     // one is a bare `required` attribute away from being back.
     const input = src.slice(src.indexOf('id="ssn"'));
-    expect(input.slice(0, input.indexOf("/>"))).toContain("required={ssnRequired(data?.file)}");
+    expect(input.slice(0, input.indexOf("/>"))).toContain(
+      "required={ssnRequired(data?.file, data?.you ?? null)}",
+    );
   });
 
   it("is never minted from a field the borrower left alone", () => {

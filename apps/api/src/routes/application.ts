@@ -35,6 +35,7 @@ import { advanceStage } from "../services/stage.js";
 import { applicationForFile } from "../services/applications.js";
 import { coBorrowerNeedsToFinish } from "../services/co-borrowers.js";
 import { settleBorrowerAct } from "../services/standing.js";
+import { partyForUser } from "../services/party.js";
 
 export const applicationRouter = Router();
 
@@ -44,7 +45,10 @@ applicationRouter.post(
   "/:id/identity-verification",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
-    await assertFileAccess(id, req.user!.id, "write");
+    // "self": a verification is of the person asking, and `signerOn` below
+    // resolves them by party. A co-borrower proving who they are on their own
+    // screen 2 was refused here with a 404 under "write".
+    await assertFileAccess(id, req.user!.id, "self");
 
     const file = await loadLoanFile(id);
     if (!file || file.borrowers.length === 0) {
@@ -116,12 +120,17 @@ applicationRouter.post(
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const { verificationId } = z.object({ verificationId: z.string().min(1) }).parse(req.body);
-    await assertFileAccess(id, req.user!.id, "write");
+    await assertFileAccess(id, req.user!.id, "self");
 
-    // Scoped to this file's borrower, so a session id from elsewhere cannot be
-    // completed against this application.
+    // Scoped to the asker's own row on this file, so a session id from
+    // elsewhere cannot be completed against this application, and one
+    // person on a joint file cannot complete the other's check.
     const borrower = await prisma.borrower.findFirst({
-      where: { loanFileId: id, identityVerificationId: verificationId },
+      where: {
+        loanFileId: id,
+        identityVerificationId: verificationId,
+        partyId: await partyForUser(prisma, req.user!.id),
+      },
       select: { id: true },
     });
     if (!borrower) throw new AppError(404, "That verification was not found.", "NOT_FOUND");
@@ -188,11 +197,13 @@ applicationRouter.post(
     const file = await loadLoanFile(id);
     if (!file) throw new AppError(404, "Loan file not found", "NOT_FOUND");
     if (file.borrowers.length === 0) throw new AppError(409, "Nothing to sign yet.", "NO_BORROWER");
-    // Everyone named on the application has to have arrived before it can be
-    // signed: a signature attests to an application, and one with a person on
-    // it who has not stated who they are is not finished. The product's words
+    // Everyone named on the application has to have arrived before the
+    // APPLICANT can sign it: their signature attests to the application, and
+    // one with a person on it who has not stated who they are is not
+    // finished. A co-borrower signs their own part and nobody else's, so a
+    // third person still pending holds nothing of theirs. The product's words
     // are the ones a borrower sees.
-    if (file.invitedBorrowers.length > 0) {
+    if (owner && file.invitedBorrowers.length > 0) {
       throw new AppError(
         409,
         coBorrowerNeedsToFinish(file.invitedBorrowers),
@@ -208,10 +219,19 @@ applicationRouter.post(
     // Demographics are required before signing: Regulation B wants them
     // requested on the application, and the application is what is being
     // signed. Refusing here is the only place that ordering is enforceable.
+    //
+    // On a principal dwelling only. Reg B collects them for a primary
+    // residence and forbids collecting them otherwise, which is why the review
+    // screen asks them only then — so requiring them on a second home refused
+    // a signature over a question the screen was right not to put.
     const d = borrower.demographics;
     const answered = (v: readonly string[] | string | undefined) =>
       v === "declined" || (Array.isArray(v) ? v.length > 0 : Boolean(v));
-    if (!d || !answered(d.ethnicity) || !answered(d.race) || !answered(d.sex)) {
+    const principalDwelling = file.property?.occupancy === "primary_residence";
+    if (
+      principalDwelling &&
+      (!d || !answered(d.ethnicity) || !answered(d.race) || !answered(d.sex))
+    ) {
       throw new AppError(
         409,
         "The demographic questions have to be answered or declined before signing.",
@@ -307,7 +327,12 @@ applicationRouter.post(
         );
       }
 
-      const app = await applicationForFile(tx, id);
+      // The applicant's signature is the act the application was waiting on,
+      // so the ball leaves their court here. A co-borrower's is a row of their
+      // own and moves nothing: it is the applicant who still has to sign, and
+      // settling on the co-borrower's act took the application out of
+      // awaiting_borrower with the applicant's signature still to come.
+      const app = owner ? await applicationForFile(tx, id) : null;
       if (app) {
         await settleBorrowerAct(tx, {
           applicationId: app.id,

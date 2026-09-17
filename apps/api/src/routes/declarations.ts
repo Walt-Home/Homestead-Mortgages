@@ -28,8 +28,8 @@ import { recordEmploymentDeclarations } from "../services/employment-declaration
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "@hm/db";
-import { asyncRoute } from "../middleware/error-handler.js";
-import { assertFileAccess } from "../services/repository.js";
+import { AppError, asyncRoute } from "../middleware/error-handler.js";
+import { assertFileAccess, ownsFile } from "../services/repository.js";
 import { loadDeclaration, recordDeclaration } from "../services/declarations.js";
 import { partyForUser, partyOfUser, principalForParty } from "../services/party.js";
 import { advanceStage } from "../services/stage.js";
@@ -297,7 +297,11 @@ declarationRouter.post(
     const view = await recordDeclaration(id, { ...input, borrowerId, assertedByPrincipalId });
     // The high-water mark, not a cursor: a borrower who comes back to correct
     // one answer after connecting their bank is not moved back to this screen.
-    await advanceStage(id, "DECLARATIONS");
+    //
+    // The applicant's mark. The stage is where THEIR flow resumes, and a
+    // co-borrower answering on their own screen 3 has walked none of it — so
+    // their save leaves it where the applicant left it.
+    if (await ownsFile(id, req.user!.id)) await advanceStage(id, "DECLARATIONS");
     res.status(201).json({ declaration: view });
   }),
 );
@@ -339,19 +343,33 @@ declarationRouter.post(
   }),
 );
 
+/**
+ * One person's Section 5, read back: always the asker's own.
+ *
+ * The answers are about the person who gave them, and "your private identity
+ * details and credentials stay private" holds in both directions — so this
+ * never reads anybody else's row, whoever asks. A `borrowerId` may name the
+ * asker's own row and nothing else; naming another is a 404 rather than a
+ * 403, the same rule `assertFileAccess` keeps, because a 403 confirms the row
+ * exists. Before this, a co-borrower could pass the applicant's id and read
+ * her answers verbatim, and a reader with no row of their own was handed
+ * Borrower 1's. A reader with no row now has nothing here: null, not somebody
+ * else's.
+ */
 declarationRouter.get(
   "/:id/declaration",
   asyncRoute(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     await assertFileAccess(id, req.user!.id, "read");
 
-    // Absent is the person asking, the same way the POST reads it — and
-    // Borrower 1 for a reader with no row of their own.
     const asked = z.string().uuid().optional().parse(req.query.borrowerId);
     const partyId = await partyOfUser(prisma, req.user!.id);
-    const borrowerId = asked ?? (partyId ? await ownRowOn(id, partyId) : undefined);
+    const own = partyId ? await ownRowOn(id, partyId) : undefined;
+    if (asked && asked !== own) {
+      throw new AppError(404, "That borrower is not on this file.", "NOT_FOUND");
+    }
 
-    const view = await loadDeclaration(id, borrowerId);
+    const view = own ? await loadDeclaration(id, own) : null;
     res.json({ declaration: view });
   }),
 );

@@ -3,22 +3,27 @@
 Where the Desktop Underwriter work stands, against the readiness audit of
 2026-09-08. It exists so nobody re-derives the same answer twice.
 
-Re-measured at `07e594f`. **Update it in the commit that changes what it
+Re-measured at `3e2b10d`. **Update it in the commit that changes what it
 says** — a status page that lags the code is worse than none, because it gets
 believed. Line numbers move; treat them as pointers to a name.
 
 ## Where this stands
 
-**The model a submission is assembled from is built, a submission is assembled
-and emitted from it, a preflight refuses to emit one Desktop Underwriter would
-reject, both ends of the exchange with DU exist, and a casefile with no job on
-it now comes out of the gate as bytes. Nothing sends, and a casefile carrying
-employment now emits.**
+**The model a submission is assembled from is built; a submission is assembled
+and emitted from it, jobs included; a preflight refuses to emit one Desktop
+Underwriter would reject; both ends of the exchange exist and the transport
+that would carry a casefile is written and tested against a stubbed server. What
+it lacks is the endpoint, the credential and the seller/servicer number the
+integration agreement supplies, so nothing reaches Fannie Mae yet — and a
+household of up to four people can now be named, invited, claimed and walked
+through its own halves, with how title will read and who originated on every
+application.**
 
-Fifteen items are tracked below: twelve done, three partial. The count still
-flatters us — what remains of the submission path is a transport that actually
-carries a document somewhere, and until there is one, the port that would submit
-has nothing beneath it.
+Seventeen rows are tracked below: thirteen green, three yellow, one red. The
+yellow three are narrower than they read — assets not yet reading the
+verification identifier, a co-borrower's reports not yet reaching the engine,
+and a document nothing carries anywhere — and the red one is a number nobody
+holds, which no code closes.
 
 **The gate found things, and they are in this page rather than in a comment.**
 
@@ -514,8 +519,8 @@ clock does not wait for a co-borrower. TRID's pieces are about the consumer
 asking for credit, so one person's name beside another's SSN describes nobody;
 and a clock may only ever err EARLY, which is the rule `ECOA_ADVERSE_ACTION_30D`
 already follows — withholding the receipt until every borrower had finished
-would delay a legal deadline that has already started, and on a joint file today
-it would withhold it forever, because a co-borrower cannot sign in. So the
+would delay a legal deadline that has already started — and on a joint file it
+would wait on a person who may take days to claim their invitation. So the
 consent and the e-sign routes put a signer on the application at the role they
 actually hold, through `borrowingRoleFor`. Naming `PRIMARY_BORROWER` outright,
 as both did, made a signer who is not Borrower 1 — the shape a replaced
@@ -570,30 +575,17 @@ What is still missing is narrower than it was, and none of it is structural:
   the file's own fields stay Borrower 1's by party, which is what the engine
   reads. A co-borrower's reports reaching the engine is the compute-boundary
   item's, not the projection's.
-- **`connector_links` is unique on `(loanFileId, kind)`**, so a second borrower
-  cannot link their own bank.
-- **The demographics are asked once**, of the applicant. Regulation B wants
-  them requested of each applicant, and screen 5 asks its three questions of
-  the person signing.
-- **A co-borrower's Section 5 cannot be written at all** until they have a
-  session of their own or a member of staff takes the answers by phone, and
-  there is no staff route either. The refusal is the correct one — a
-  declaration is a statement the declaring borrower signs — but it means a
-  joint application is not completable by the applicant alone, and the
-  signature is still the applicant's own.
-- **A co-borrower has nowhere to sign, and the applicant may not sign for
-  them.** They are appended by the applicant and have never signed in, so
-  neither their verification authorization nor their 4506-C can be collected
-  through any route today, and nothing of theirs is retrieved. Both halves are
-  enforced rather than merely absent — the routes refuse a signature taken on
-  somebody else's behalf, and the minter refuses a pull on a signature made
-  anywhere else — and the review screen says so in the applicant's own words
-  instead of looking finished: in the signing panel before the signature, and
-  in the two endings after it, because the signature is what makes every other
-  sentence on that screen stop rendering. An outstanding co-borrower signature
-  raises no branch card — its source is the signature, which `branchesFor()`
-  deliberately excludes — so those sentences are the only place the product
-  says it. A claim or invite path is its own work.
+- **A co-borrower's reports do not reach the engine.** Links and snapshots are
+  theirs by party, and their own read carries them, but the file's own
+  `credit`, `assets` and `payroll` are Borrower 1's, which is what the engine
+  reads. Consuming a second person's reports is the compute-boundary item's
+  question, not the projection's.
+- **Two answers are still settled by a stated household's silence** — APP-015
+  and APP-017 read back `marital_status` and `preferred_language` for a person
+  appended on paper who was never asked. A named co-borrower states both on
+  their own screen 2, so the gap is only the paper path.
+- **No staff route takes a co-borrower's answers by phone**, so a household
+  that cannot sign in has to be stated on paper through the service.
 - **Four `borrowers[0]` reads remain** in TypeScript source excluding tests —
   the figure moves a lot with the filter, so it is stated here with its filter
   attached. The eight route reads are gone: the connector, application and
@@ -844,7 +836,7 @@ this with the people doing the work.
    agreement — and a first real payload, which is what the reader is checked
    against next.
 
-Steps 1 through 3 wait on neither the EULA nor the credentials.
+Step 1 waits on neither the EULA nor the credentials; step 6 is the credentials.
 
 ## How to check this
 

@@ -1,19 +1,18 @@
 # System Architecture
 
-> **WIP.** This describes the system as it stands on 4 September 2026, while it
-> is still forming. Two things follow from that, and both are marked throughout:
-> parts of the system are deliberately fixtures or stubs, and a second data
-> model — Party / Application / Loan, designed in `docs/states.md` — is
-> half-landed in the schema and wired to nothing. Sections that describe the
-> target rather than the running system say so in place. If this file and the
-> code disagree, the code wins and this file is stale.
+> **As of 17 September 2026.** The Party / Application / Loan model designed in
+> `docs/states.md` is the running system now: every route reads people through
+> facts on a party, every pull is minted a purpose token for one party, and a
+> credit request is an `Application` with a gapless ledger. What is still a
+> fixture or a stub is marked ⚠ in place. If this file and the code disagree,
+> the code wins and this file is stale.
 
 ## Overview
 
 Homestead Mortgages onboards a homebuyer, retrieves what underwriting needs from
 connected accounts rather than uploads, and returns a decision that explains
 itself. It is one npm-workspaces monorepo — an Express 5 API and a React 19 SPA
-over six domain packages — shipped as **a single container** on Cloud Run,
+over eight domain packages — shipped as **a single container** on Cloud Run,
 backed by its own Cloud SQL Postgres, with Google sign-in for identity.
 
 Three things distinguish it from a CRUD app and shape every section below:
@@ -108,31 +107,33 @@ two records is stale and the repo does not say which.
 Versions are what the lockfile resolves, with the declared range in parentheses
 where the two differ meaningfully.
 
-| Layer                                                   | Technology                                                           | Purpose                                                                                                                                                       |
-| ------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Monorepo**                                            | npm workspaces + Turbo 2                                             | `apps/*` and `packages/*`; `build` and `test` both `dependsOn: ["^build"]`                                                                                    |
-| **Language**                                            | TypeScript 5.9 (declared `^5.4.0`), ESM, Node16 resolution           | `strict` + `noUncheckedIndexedAccess`, composite project references                                                                                           |
-| **API**                                                 | Express 5.2                                                          | One process; serves `/api` and, in the image, the built SPA                                                                                                   |
-| **SPA**                                                 | React 19.2 + Vite 8 + react-router 7                                 | Five borrower screens, three branches, a public front door                                                                                                    |
-| **Server state**                                        | TanStack Query 5                                                     | `staleTime: 0`, `retry: false` — a stale panel showing satisfied work as outstanding is what makes the flow feel broken                                       |
-| **Styling**                                             | Tailwind 3.4 driven by the `@hm/brand` preset                        | The preset **replaces** Tailwind's palette and scales rather than extending them                                                                              |
-| **Database**                                            | PostgreSQL 16 (Cloud SQL)                                            | 18 models, 10 enums; relational for what we query, JSONB for what a vendor said                                                                               |
-| **ORM**                                                 | Prisma 7.10 (declared `^7.8.0`) via `@prisma/adapter-pg` over `pg` 8 | Driver adapter; `prisma.config.ts` sets `datasource.url` only when `DATABASE_URL` is present, so `prisma generate` runs in CI with no database                |
-| **Sessions**                                            | `express-session` + `connect-pg-simple`                              | Server-side sessions in Postgres so sign-out is possible. ⚠ The `user_sessions` table is created at boot by `createTableIfMissing` and is in **no migration** |
-| **Auth**                                                | `google-auth-library` (`verifyIdToken`)                              | Google ID token → `User` upsert on `googleSub` → session                                                                                                      |
-| **Validation**                                          | Zod 3                                                                | Per-route body schemas; every `:id` is `z.string().uuid()`                                                                                                    |
-| **Headers**                                             | Helmet 8 + `cors`                                                    | `security-policy.ts` owns COOP and the CSP allowing the Google and Plaid scripts                                                                              |
-| **Crypto**                                              | `node:crypto` AES-256-GCM                                            | Vendor bearer tokens at rest; refuses to boot without a 32-byte key                                                                                           |
-| **Bank**                                                | Plaid (sandbox) — hand-rolled `fetch`, no SDK                        | ⚠ Deployed as `PLAID_PRODUCT=assets`, which is **not** a consumer report; CRA is the target                                                                   |
-| **Identity**                                            | Stripe Identity (test mode)                                          | ⚠ Refuses an `sk_live_` key unless explicitly allowed — live mode collects biometrics under BIPA and there is no retention policy                             |
-| **Address**                                             | Google Places API v1                                                 | ⚠ `suggestAddresses` only; assessor, AVM and flood stay fixture                                                                                               |
-| **Credit / payroll / IRS / e-sign / screening / liens** | —                                                                    | ⚠ **No real adapter.** Fixture-only, three hand-written personas                                                                                              |
-| **Email**                                               | —                                                                    | ⚠ Resend is chosen and **not integrated**. Several regulatory clocks can only be stopped by a delivered notice                                                |
-| **Tests**                                               | Vitest 4 against a real `postgres:16-alpine`                         | The API suite mocks almost nothing — see [Testing](#testing)                                                                                                  |
-| **Lint / format**                                       | ESLint 10 flat config (root, one for all workspaces) + Prettier 3    | ⚠ `format:check` exists and is not in CI                                                                                                                      |
-| **CI/CD**                                               | GitHub Actions → Artifact Registry → Cloud Run                       | Keyless via Workload Identity Federation                                                                                                                      |
-| **IaC**                                                 | Terraform ≥1.5, `hashicorp/google ~>5.0`                             | ⚠ Six resources, applied by hand, local state                                                                                                                 |
-| **Observability**                                       | **None**                                                             | See [Observability](#observability) — this is an absence, not a stack                                                                                         |
+| Layer                                                   | Technology                                                           | Purpose                                                                                                                                                                    |
+| ------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Monorepo**                                            | npm workspaces + Turbo 2                                             | `apps/*` and `packages/*`; `build` and `test` both `dependsOn: ["^build"]`                                                                                                 |
+| **Language**                                            | TypeScript 5.9 (declared `^5.4.0`), ESM, Node16 resolution           | `strict` + `noUncheckedIndexedAccess`, composite project references                                                                                                        |
+| **API**                                                 | Express 5.2                                                          | One process; serves `/api` and, in the image, the built SPA                                                                                                                |
+| **SPA**                                                 | React 19.2 + Vite 8 + react-router 7                                 | Five borrower screens, three branches, a public front door                                                                                                                 |
+| **Server state**                                        | TanStack Query 5                                                     | `staleTime: 0`, `retry: false` — a stale panel showing satisfied work as outstanding is what makes the flow feel broken                                                    |
+| **Styling**                                             | Tailwind 3.4 driven by the `@hm/brand` preset                        | The preset **replaces** Tailwind's palette and scales rather than extending them                                                                                           |
+| **Database**                                            | PostgreSQL 16 (Cloud SQL)                                            | 18 models, 10 enums; relational for what we query, JSONB for what a vendor said                                                                                            |
+| **ORM**                                                 | Prisma 7.10 (declared `^7.8.0`) via `@prisma/adapter-pg` over `pg` 8 | Driver adapter; `prisma.config.ts` sets `datasource.url` only when `DATABASE_URL` is present, so `prisma generate` runs in CI with no database                             |
+| **Sessions**                                            | `express-session` + `connect-pg-simple`                              | Server-side sessions in Postgres so sign-out is possible. ⚠ The `user_sessions` table is created at boot by `createTableIfMissing` and is in **no migration**              |
+| **Auth**                                                | `google-auth-library` (`verifyIdToken`)                              | Google ID token → `User` upsert on `googleSub` → session                                                                                                                   |
+| **Validation**                                          | Zod 3                                                                | Per-route body schemas; every `:id` is `z.string().uuid()`                                                                                                                 |
+| **Headers**                                             | Helmet 8 + `cors`                                                    | `security-policy.ts` owns COOP and the CSP allowing the Google and Plaid scripts                                                                                           |
+| **Crypto**                                              | `node:crypto` AES-256-GCM                                            | Vendor bearer tokens at rest; refuses to boot without a 32-byte key                                                                                                        |
+| **Bank**                                                | Plaid (sandbox) — hand-rolled `fetch`, no SDK                        | ⚠ Deployed as `PLAID_PRODUCT=assets`, which is **not** a consumer report; CRA is the target                                                                                |
+| **Identity**                                            | Stripe Identity (test mode)                                          | ⚠ Refuses an `sk_live_` key unless explicitly allowed — live mode collects biometrics under BIPA and there is no retention policy                                          |
+| **Address**                                             | Google Places API v1                                                 | ⚠ `suggestAddresses` only; assessor, AVM and flood stay fixture                                                                                                            |
+| **Credit / payroll / IRS / e-sign / screening / liens** | —                                                                    | ⚠ **No real adapter.** Fixture-only, three hand-written personas                                                                                                           |
+| **Email**                                               | Resend, behind a `mail` port (`MAIL_PROVIDER=resend`)                | ⚠ Resend is chosen and **not integrated**. Several regulatory clocks can only be stopped by a delivered notice                                                             |
+| **Desktop Underwriter**                                 | `adapters/du.ts` (`DU_PROVIDER=fannie`)                              | ⚠ Built and tested against a stub; the endpoint, credential and seller/servicer number come from the integration agreement, and the adapter refuses to submit without them |
+| **Average prime offer rate**                            | CFPB's published table, fetched by a Cloud Run job daily             | The engine reads `apor_weeks`; a week the series does not reach blocks UW-008 and `/api/health` says so                                                                    |
+| **Tests**                                               | Vitest 4 against a real `postgres:16-alpine`                         | The API suite mocks almost nothing — see [Testing](#testing)                                                                                                               |
+| **Lint / format**                                       | ESLint 10 flat config (root, one for all workspaces) + Prettier 3    | ⚠ `format:check` exists and is not in CI                                                                                                                                   |
+| **CI/CD**                                               | GitHub Actions → Artifact Registry → Cloud Run                       | Keyless via Workload Identity Federation                                                                                                                                   |
+| **IaC**                                                 | Terraform ≥1.5, `hashicorp/google ~>5.0`                             | ⚠ Six resources, applied by hand, local state                                                                                                                              |
+| **Observability**                                       | **None**                                                             | See [Observability](#observability) — this is an absence, not a stack                                                                                                      |
 
 ## Data Flow
 
@@ -149,9 +150,11 @@ Express 5  apps/api/src/index.ts   ── order is the load-bearing fact ──
    │
    ├─ app.use("/api", requireAuth)   ◄── ONE gate, so a new router cannot forget
    │
-   └─ /api/files/* ──► assertFileAccess(id, user, read|write)
-          │              missing → 404 · someone else's → 404 (never 403)
-          │              demo + write → 403 · otherwise continue
+   └─ /api/files/* ──► assertFileAccess(id, user, read|self|write|own)
+          │              missing → 404 · a stranger → 404 (never 403)
+          │              a member (their party holds a borrower row) → read, and
+          │                self for the screens about themselves
+          │              the owner → everything · demo + any write → 403
           ▼
      services/repository.ts   ── the ONLY place Prisma rows become a LoanFile
           │
@@ -188,7 +191,8 @@ catching it.
 apps/api ──┬──► @hm/requirements ──┐
            ├──► @hm/underwriting ──┼──► @hm/shared   (LoanFile, no runtime deps)
            ├──► @hm/connectors  ──┤
-           ├───────────────────────┘   (direct, for LoanFile)
+           ├──► @hm/du ───────────┘──► @hm/db, @hm/du-schema (the vendored corpus)
+           ├───────────────────────    (direct, for LoanFile)
            └──► @hm/db             (Prisma — depends on NO workspace package)
 
 apps/web ──┬──► @hm/brand          (tokens, Tailwind preset, .super-* CSS)
@@ -211,7 +215,9 @@ and Google Places.
 | `packages/shared`       | The vocabulary. `LoanFile` is the object everything reads — nullable sections all the way down, because a file is legitimately half-empty for most of its life                                                                             |
 | `packages/requirements` | The 85 requirements, executable: 39 applicability predicates, 85 satisfaction evaluators, a dependency graph                                                                                                                               |
 | `packages/underwriting` | The shadow AUS — ratios, reserves, compliance, pricing, each figure carrying its derivation                                                                                                                                                |
-| `packages/connectors`   | Nine ports, fixture adapters for all nine, three partial real ones, and the authorization guard                                                                                                                                            |
+| `packages/connectors`   | Thirteen ports, fixture adapters for all thirteen, six real ones (three partial), and the authorization guard                                                                                                                              |
+| `packages/du`           | The Desktop Underwriter submission: the six generated tables, the assembler, the MISMO 3.4 emitter, the preflight, the institution and originator placeholders, and the compute boundary the Map holds                                     |
+| `packages/du-schema`    | The vendored corpus — DU Spec 1.9.3, the Fannie schema chain, the MISMO reference model and the eighteen sample casefiles — that `du:verify` rebuilds the tables from                                                                      |
 | `packages/db`           | Prisma schema and migrations. Several guarantees are triggers and CHECK constraints, not application code                                                                                                                                  |
 | `packages/brand`        | Supermortgage design tokens. `tokens.mjs` is the source of truth and `tokens.css` is generated from it; `base.css`, `components.css`, `scene.css` and the Tailwind preset are hand-written and read the tokens rather than being generated |
 
@@ -340,14 +346,17 @@ that does not exist. They are excluded from the graph and recorded in
 
 ## Connectors and the authorization guard
 
-Nine ports in one file. Three have a partial real adapter; six are fixture-only.
+Thirteen ports in one file. Six have a real adapter (three of them partial); seven are fixture-only.
 
-| Port                                                 | Real adapter     | State                                                                                                  |
-| ---------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------ |
-| `propertyData`                                       | Google Places v1 | ⚠ `suggestAddresses` only — assessor, AVM, flood delegate to the fixture                               |
-| `identity`                                           | Stripe Identity  | ⚠ Test mode only; refuses `sk_live_` without an explicit flag                                          |
-| `bank`                                               | Plaid            | ⚠ Sandbox, `assets` rather than CRA, so `vendorAuthorizedForDu` is false and CRD-017 stays unsatisfied |
-| `credit` `payroll` `irs` `esign` `screening` `liens` | —                | ⚠ Fixture only. Three hand-written personas                                                            |
+| Port                                                           | Real adapter     | State                                                                                                                                 |
+| -------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `propertyData`                                                 | Google Places v1 | ⚠ `suggestAddresses` only — assessor, AVM, flood delegate to the fixture                                                              |
+| `identity`                                                     | Stripe Identity  | ⚠ Test mode only; refuses `sk_live_` without an explicit flag                                                                         |
+| `bank`                                                         | Plaid            | ⚠ Sandbox, `assets` rather than CRA, so `vendorAuthorizedForDu` is false and CRD-017 stays unsatisfied                                |
+| `du`                                                           | Fannie Mae       | ⚠ Submits under `DU_*` credentials nobody holds yet; fixture answers Approve/Eligible                                                 |
+| `aporSeries`                                                   | CFPB (FFIEC)     | The published `YieldTableFixed.txt`, cross-checked against the survey by Appendix J                                                   |
+| `mail`                                                         | Resend           | The co-borrower invitation is the only message; a fixture outbox otherwise, and the invitation route refuses to pretend in production |
+| `credit` `payroll` `irs` `esign` `screening` `liens` `pricing` | —                | ⚠ Fixture only. Three hand-written personas                                                                                           |
 
 Selection is per-connector and happens once, at boot, from three independent env
 vars; anything unset stays on the fixture. Missing credentials throw at boot, not
@@ -363,7 +372,7 @@ the port line:**
    screening · liens                      │   ├─ assert4506cExec.   │
    irs ──────────────────────────────────►│      (INC-008)          │
                                           └─────────────────────────┘
-   esign · propertyData · identity ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─► vendor
+   esign · propertyData · identity · aporSeries · mail ─ ─ ─ ─ ─ ─ ─ ─► vendor
         unguarded, deliberately
 ```
 
@@ -387,11 +396,12 @@ rather than an omission. It drives `fixtureRegistry()` only; Plaid's guard is
 covered in its own suite, and the Stripe and Places adapters are unguarded by
 design.
 
-⚠ The guard's evidence is whatever `LoanFile` the caller passed — it reads
-`file.consents` in memory. And it takes a **file**, so on a two-borrower file
-borrower A's signature authorizes a pull about borrower B. That defect is what
-the Authorization / purpose-token model exists to close, and the guard has not
-been swapped.
+The guard takes a **purpose token**, minted by `tokenFor(file, subject,
+category)` for one party under a live grant of the right purpose, and every
+route resolves that subject by the session (`retrievalSubject`). On a
+two-borrower file borrower A's signature therefore authorizes nothing about
+borrower B: the minter refuses, and `guard.test.ts` calls every guarded port
+with a stranger's token and fails if any answers.
 
 ## The decision engine
 
@@ -437,6 +447,16 @@ date-stamp every result **is never read** — no `Decision` carries it, so a
 decision made against stale numbers is not identifiable after the fact. Several
 of those thresholds change every January.
 
+**What the engine computes is the shadow of what DU derives.** Every figure in
+`ratios` and `reserves` — the two DTIs, the three LTVs, the housing payment, the
+debt total, the qualifying income, the reserve months — is one Desktop
+Underwriter derives itself from the inputs we send; `DU_DERIVED_FIGURES` in
+`packages/shared` records that boundary figure by figure and a test in
+`packages/du` holds the generated Map to it. The two columns are parsed at the
+writer and the reader and held to their eight and four keys by CHECKs. The
+Regulation Z thresholds are a dated table (`REGULATION_Z_THRESHOLDS`, 2026, from
+the Federal Register), so a decision names the year it was measured against.
+
 ⚠ APR, APOR and the fee totals are now derived from the file rather than
 accepted from a caller — the average prime offer rate computed from the CFPB's
 weekly survey by the CFPB's published method and fetched into `apor_weeks` on
@@ -467,6 +487,15 @@ two snapshots, and you cannot diff against a row you overwrote.
 | `authorizations`                                  | **Postgres trigger, partial.** Not append-only — revocation is an in-place `UPDATE`. The trigger freezes party, purpose, categories, dates and the disclosure hash, and makes revocation one-way. ⚠ `counterparties`, the envelope id, IP and user agent are not covered |
 | `connector_snapshots`, `decisions`, `file_events` | ⚠ **Convention and code only.** No triggers; the guarantee is that `.create()` is the only call anyone makes. A stray `.update()` would succeed                                                                                                                          |
 
+`apor_fetches` and `apor_weeks` are append-only the same way: a re-fetch of an
+unchanged CFPB document inserts nothing, and the latest fetch is the figure in
+force. `decisions.ratios` and `decisions.reserves` are held to their eight and
+four figures by CHECKs and parsed at both ends. `co_borrower_invitations` holds
+the SHA-256 of a token that exists only in the emailed link, with one live row
+per named person by partial unique index. `connector_links` is one row per
+person per kind — `(loan_file_id, kind, party_id)` — so a co-borrower's bank is
+a second link beside the applicant's, and every snapshot says whose it is.
+
 `VendorToken` is deliberately _not_ append-only — a re-link replaces the
 credential, because old bearer tokens are liability, not history.
 
@@ -483,24 +512,25 @@ they were stated facts.
 
 ## Security Model
 
-| Layer                       | Mechanism                                                                                                                                                                                                                                                                                                                           |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Authentication**          | Google ID token verified with `verifyIdToken` against `GOOGLE_CLIENT_ID`; `email_verified === false` → 403. The process refuses to boot in production without a client id                                                                                                                                                           |
-| **Session**                 | Postgres-backed, cookie `hm.sid`: `httpOnly`, `secure` in production, `sameSite: lax`, 12h rolling. `session.regenerate()` before `userId` is set — session-fixation rotation                                                                                                                                                       |
-| **Route gate**              | `app.use("/api", requireAuth)` mounted once, after `/api/health` and `/api/auth`, so a new router cannot forget it                                                                                                                                                                                                                  |
-| **File authorization**      | `assertFileAccess` on every file route (18 call sites). Someone else's file returns **404, not 403** — a 403 confirms the id exists, which is an enumeration oracle. A test asserts the two refusals are indistinguishable (same status, same error code) at the service layer. Demo files are readable by all and writable by none |
-| **Connector authorization** | The APP-005 guard inside the adapters, not the routes. `AuthorizationError` → 403 + `requirementId`                                                                                                                                                                                                                                 |
-| **Vendor credentials**      | AES-256-GCM at rest, fresh IV per encryption, key from Secret Manager with **no default** — a missing key is a boot failure, not a table of plaintext bank credentials                                                                                                                                                              |
-| **Biometrics**              | The Stripe adapter throws on an `sk_live_` key unless explicitly allowed; the deploy fails the build if `/api/health` ever reports live identity                                                                                                                                                                                    |
-| **Headers**                 | Helmet, plus COOP `same-origin-allow-popups` (strict COOP hangs the Google popup) and a CSP naming the Google and Plaid script origins                                                                                                                                                                                              |
-| **Proxy trust**             | `TRUST_PROXY` is a **hop count**, not `true`, so a client cannot spoof `X-Forwarded-For` and forge the IP recorded on a consent                                                                                                                                                                                                     |
-| **Validation**              | Zod per route; every `:id` is a UUID; a document's `satisfiesRequirementId` must exist in the registry                                                                                                                                                                                                                              |
-| **Deletion**                | `DELETE /api/auth/me` deletes the `User` row and relies on schema cascades; a test reads the schema and fails if any child relation lacks `onDelete: Cascade`                                                                                                                                                                       |
-| **AI safety (schema)**      | A trigger blocks an `AI_AGENT` principal from writing the top confidence tiers. An AI filling a gap with a plausible value is exactly how "we do not know" becomes "we checked and you passed"                                                                                                                                      |
-| ⚠ **CSRF**                  | **None.** What stands in for it is `sameSite: lax` alone. The "every mutating route needs a JSON body" argument does not generalize — `POST /files/:id/credit`, `/payroll`, `/irs`, `/identity-verification`, `/intent-to-proceed`, every `DELETE` and `POST /auth/signout` parse no body at all                                    |
-| ⚠ **Rate limiting**         | **None**, including on `/api/auth/google`                                                                                                                                                                                                                                                                                           |
-| ⚠ **Health endpoint**       | `/api/health` is public and returns the first line of the underlying driver error on failure, which can disclose connection details — a host and port, or the Cloud SQL socket path — depending on how the connection failed                                                                                                        |
-| ⚠ **Personal data at rest** | DOB, address, phone and email sit in plain columns. No retention window, no privacy policy beyond `/privacy`                                                                                                                                                                                                                        |
+| Layer                       | Mechanism                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Authentication**          | Google ID token verified with `verifyIdToken` against `GOOGLE_CLIENT_ID`; `email_verified === false` → 403. The process refuses to boot in production without a client id                                                                                                                                                                                                                                                                                                                                                              |
+| **Session**                 | Postgres-backed, cookie `hm.sid`: `httpOnly`, `secure` in production, `sameSite: lax`, 12h rolling. `session.regenerate()` before `userId` is set — session-fixation rotation                                                                                                                                                                                                                                                                                                                                                          |
+| **Route gate**              | `app.use("/api", requireAuth)` mounted once, after `/api/health` and `/api/auth`, so a new router cannot forget it                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **File authorization**      | `assertFileAccess` on every file route, in four modes: `read` for anyone on the file, `self` for the screens a person fills in about themselves, `write` and `own` for the applicant. Someone else's file returns **404, not 403** — a 403 confirms the id exists, which is an enumeration oracle. What a reader gets back is redacted in both directions: everybody but the reader is a name and two facts (answered, signed), the decision and its derivation log are the applicant's, and the Section 5 read is the asker's own row |
+| **Invitation token**        | 32 random bytes in the emailed link and nowhere else; the table holds its SHA-256; seven days, once, one live per person, a re-send kills the last. It rides in the URL fragment and reaches the API in a POST body, so no request log records it; every bad link answers the same 404; a sample-borrower session cannot take one; taking it is a press, not a page load                                                                                                                                                               |
+| **Connector authorization** | The APP-005 guard inside the adapters, not the routes. `AuthorizationError` → 403 + `requirementId`                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Vendor credentials**      | AES-256-GCM at rest, fresh IV per encryption, key from Secret Manager with **no default** — a missing key is a boot failure, not a table of plaintext bank credentials                                                                                                                                                                                                                                                                                                                                                                 |
+| **Biometrics**              | The Stripe adapter throws on an `sk_live_` key unless explicitly allowed; the deploy fails the build if `/api/health` ever reports live identity                                                                                                                                                                                                                                                                                                                                                                                       |
+| **Headers**                 | Helmet, plus COOP `same-origin-allow-popups` (strict COOP hangs the Google popup) and a CSP naming the Google and Plaid script origins                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Proxy trust**             | `TRUST_PROXY` is a **hop count**, not `true`, so a client cannot spoof `X-Forwarded-For` and forge the IP recorded on a consent                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **Validation**              | Zod per route; every `:id` is a UUID; a document's `satisfiesRequirementId` must exist in the registry                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Deletion**                | `DELETE /api/auth/me` deletes the `User` row and relies on schema cascades; a test reads the schema and fails if any child relation lacks `onDelete: Cascade`. Refused with 409 while the person's party holds a borrower row on somebody else's application, because the cascade would take them out of it                                                                                                                                                                                                                            |
+| **AI safety (schema)**      | A trigger blocks an `AI_AGENT` principal from writing the top confidence tiers. An AI filling a gap with a plausible value is exactly how "we do not know" becomes "we checked and you passed"                                                                                                                                                                                                                                                                                                                                         |
+| ⚠ **CSRF**                  | **None.** What stands in for it is `sameSite: lax` alone. The "every mutating route needs a JSON body" argument does not generalize — `POST /files/:id/credit`, `/payroll`, `/irs`, `/identity-verification`, `/intent-to-proceed`, every `DELETE` and `POST /auth/signout` parse no body at all                                                                                                                                                                                                                                       |
+| ⚠ **Rate limiting**         | **None**, including on `/api/auth/google`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ⚠ **Health endpoint**       | `/api/health` is public and returns the first line of the underlying driver error on failure, which can disclose connection details — a host and port, or the Cloud SQL socket path — depending on how the connection failed                                                                                                                                                                                                                                                                                                           |
+| ⚠ **Personal data at rest** | DOB, address, phone and email sit in plain columns. No retention window, no privacy policy beyond `/privacy`                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Environments & Branching
 
@@ -650,30 +680,26 @@ accent — red means "you can act on this", and a screen that also uses red for
 `docs/states.md` is the model for user states and account states. Its own status
 table, verified against the schema:
 
-| Piece                                          | Status                                                                             |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `FlowStage`, five screens, decision outcomes   | **Built** — and being replaced                                                     |
-| Tests against a real Postgres                  | **Built**                                                                          |
-| Party, facts, principals                       | **Built** — schema, triggers and CHECK constraints; **not wired to a route**       |
-| Authorizations and the purpose token           | **Built** — schema, constraints and minting; **the guard has not been swapped**    |
-| Evidence artifacts, retrieval requests         | Designed                                                                           |
-| Applications, scenarios, the transition ledger | Designed — **no `Application` or `Loan` table exists**                             |
-| Rewritten decision engine (three-axis)         | Designed                                                                           |
-| Loans and servicing                            | Designed                                                                           |
-| Roles and staff tooling                        | Designed — there is no role on `User`, so an underwriter cannot open a file at all |
-| Monitoring, notifications                      | Designed, deferred                                                                 |
-| Notice generation and delivery                 | **Not designed in detail. Resend is chosen and not integrated**                    |
-
-The relationship layer landed **alongside** the loan-file tables rather than
-replacing them. Every `prisma.party` / `fact` / `principal` / `authorization`
-call in the repo is inside a test; `mintPurposeToken` has no production caller.
+| Piece                                          | Status                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FlowStage`, five screens, decision outcomes   | **Built**                                                                                                                                                                                                                                                                        |
+| Tests against a real Postgres                  | **Built**                                                                                                                                                                                                                                                                        |
+| Party, facts, principals                       | **Built** and wired: screen 2 asserts facts on the party, every reader projects from them                                                                                                                                                                                        |
+| Authorizations and the purpose token           | **Built** and used: every pull is minted a token for one party under a live grant, and the adapters refuse without one                                                                                                                                                           |
+| Applications, scenarios, the transition ledger | **Built**: `POST /api/files` births an application, its scenario and the ledger; the machine moves it                                                                                                                                                                            |
+| Co-borrowers                                   | **Built**: named, invited by an emailed link, claimed by Google sign-in as a merge, walking their own half — screen 2, Section 5, their own bank, demographics, one signature — with the read redacted in both directions. ⚠ A co-borrower's reports do not reach the engine yet |
+| The Desktop Underwriter submission             | **Built** to the wire: tables, assembler, emitter, preflight, transport and reader. ⚠ Waits on the endpoint, credential and seller/servicer number; every application is born with placeholder originator rows refused at assembly in production                                 |
+| Loans and servicing                            | **Built** as tables and a machine (`createImportedLoan`, the claim edge); ⚠ no importer, no ingest route, no machine credential                                                                                                                                                  |
+| Roles and staff tooling                        | Designed — there is no role on `User`, so an underwriter cannot open a file at all                                                                                                                                                                                               |
+| Monitoring, notifications                      | Designed, deferred                                                                                                                                                                                                                                                               |
+| Notice generation and delivery                 | ⚠ Resend is integrated behind a `mail` port and sends exactly one message, the co-borrower invitation; no regulatory notice is generated or delivered                                                                                                                            |
 
 That last row governs more than it looks like it does. Several regulatory clocks
-can only be _stopped_ by a delivered notice, so until Resend is wired in, a clock
-whose satisfying channel is unconfigured **must not be opened** — either the
-application is not taken, or the clock opens tolled with the reason recorded.
-Opening them on schedule with no way to satisfy them would write a permanent,
-tamper-evident record of a breach we never had the means to avoid.
+can only be _stopped_ by a delivered notice, so until a notice can be sent, a
+clock whose satisfying channel is unconfigured **must not be opened** — either
+the application is not taken, or the clock opens tolled with the reason
+recorded. Opening them on schedule with no way to satisfy them would write a
+permanent, tamper-evident record of a breach we never had the means to avoid.
 
 ### Other known stubs
 
@@ -700,8 +726,12 @@ tamper-evident record of a breach we never had the means to avoid.
   ports.) Plus the CLS-* closing sheet, a real tax/insurance source, the real
   LLPA matrix, a real fee table, and a mortgage-insurance rate card — the one
   input that keeps every loan above 80% LTV at `referred`. The APOR is no longer
-  on this list: it is fetched from the CFPB and computed by their method, and
-  the computation is tested against their published figures.
+  on this list: the CFPB's published table is fetched daily and cross-checked
+  against their own method. Neither is the DU transport: it is built, and waits
+  on the integration agreement's numbers.
+- **Our NMLSR numbers are placeholders** until `ORIGINATION_COMPANY_*` and
+  `LOAN_ORIGINATOR_*` are set; `/api/health` reports `originator: placeholder`
+  until then, and a production assembly refuses a row carrying one.
 - **CI cannot authenticate to GCP** until this repository is added to the Workload
   Identity provider's attribute condition and to `hm-github-actions@`'s
   `workloadIdentityUser` binding — per `docs/decisions.md`, which is in tension
@@ -714,6 +744,11 @@ tamper-evident record of a breach we never had the means to avoid.
 - `docs/states.md` — the user-state and account-state model, both halves, with
   the built/designed boundary marked throughout
 - `docs/requirements.md` — the registry and the three questions it keeps apart
+- `docs/du-readiness.md`, `docs/du-graph.md`, `docs/du-generation.md` — what a
+  Desktop Underwriter submission is, what it needs, and where the generated
+  tables come from
+- `docs/entities.md` and `docs/loan-lifecycle.md` — the nouns, who writes them,
+  and the loan side
 - `docs/brand.md` — the Supermortgage identity and what adopting it took
 - `CLAUDE.md` — the rules that are not style preferences
 

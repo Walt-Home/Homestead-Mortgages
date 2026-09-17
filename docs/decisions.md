@@ -80,7 +80,8 @@ originally ran as `hm-run@`, which holds **project-wide**
 could have read every secret in the project (Anthropic, Twilio, Resend, Walt's
 own `DATABASE_URL_PROD`) and deleted objects from Walt's buckets. Nothing in
 the code would have done that; the point is that nothing structural stopped it.
-`hm-run@` now holds `cloudsql.client` and accessor on exactly two secrets,
+`hm-run@` now holds `cloudsql.client` and accessor on the secrets the deploy
+mounts — six today, granted on the secrets themselves —
 granted on the secrets rather than the project.
 
 **HMX monorepo shape.** Turbo, Prisma, Terraform, npm workspaces. Palette and
@@ -323,20 +324,13 @@ a secret.
 ## The org policy that shapes access
 
 `constraints/iam.allowedPolicyMemberDomains` is set org-wide to customer
-`C02l6gns3`, so `allUsers` cannot be added to any IAM policy under trywalt.ai.
-That means no plain shareable link: Cloud Run answers 403 to an anonymous
-browser no matter what the application would have done with the request.
-
-Worth knowing about the failure mode — `gcloud run deploy
---allow-unauthenticated` does **not** fail when the org blocks it. It logs and
-continues, and you get a service with no invoker bindings at all that returns
-403 to everything, which reads exactly like a broken container. The workflow
-now asks for `domain:trywalt.ai` instead, which the constraint permits, and
-re-asserts it on every deploy.
-
-Reaching it therefore means `gcloud run services proxy` on port 5173 — a
-registered OAuth origin, so sign-in works unchanged. Two layers of Google auth
-(the proxy's, then the app's) is redundant but not harmful.
+`C02l6gns3`, which forbids `allUsers` everywhere else under trywalt.ai. This
+project holds a project-level exception, the deploy binds `allUsers` and fails
+the build if the binding is missing — because `gcloud run deploy
+--allow-unauthenticated` does not fail when the constraint blocks it, it logs
+and leaves a service that 403s everything and reads like a broken container.
+The service is reached at its public URL with Google sign-in; `gcloud run
+services proxy` is no longer how anybody opens it.
 
 If a plain link is wanted, someone in `gcp-organization-admins@` or
 `gcp-security-admins@` has to grant this project an exception to the
@@ -1919,8 +1913,10 @@ messages:
 | Pricing                         | Engine or investor execution; only the ANSWER takes either |
 
 Plus: the CLS-* closing-stage sheet, the requirements for the monitoring loop,
-a real tax/insurance source, the real LLPA matrix, a real fee table, and the
-FFIEC's own APOR series in place of the fixture one.
+a real tax/insurance source, the real LLPA matrix, a real fee table, and a real
+mortgage-insurance rate card — the one input that keeps every loan above 80%
+LTV at `referred`. The APOR is off this list: the CFPB's published table is
+fetched daily and cross-checked against their own method.
 
 ## One-time infrastructure prerequisite
 

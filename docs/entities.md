@@ -43,16 +43,17 @@ rather than asserted.
 
 ### People
 
-| Entity                | Is                                                      | Written by                             |
-| --------------------- | ------------------------------------------------------- | -------------------------------------- |
-| `users`               | A sign-in, as Google knows it. An account, not a person | Production — upsert on `google_sub`    |
-| `parties`             | The durable person we hold information about            | Production — always `CLAIMED`/`PERSON` |
-| `principals`          | Anything that can assert or cause something             | Production — 3 of 5 kinds              |
-| `facts`               | One dated statement, by a named actor, about a person   | Production — always `SELF_ATTESTED`    |
-| `borrowers`           | A record _about_ a party, on one file                   | Production                             |
-| `application_parties` | Who is on a credit request, in what role                | Production                             |
-| `loan_parties`        | Who is on a mortgage, in what role                      | **Nothing**                            |
-| `employers`           | A company that pays this person                         | Production — vendor pulls only         |
+| Entity                    | Is                                                                             | Written by                                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `users`                   | A sign-in, as Google knows it. An account, not a person                        | Production — upsert on `google_sub`                                                                                              |
+| `parties`                 | The durable person we hold information about                                   | Production — `CLAIMED` for a sign-in; `PROVISIONAL` for a named co-borrower, `CLAIM_PENDING` once invited, `MERGED` once claimed |
+| `principals`              | Anything that can assert or cause something                                    | Production — 3 of 5 kinds                                                                                                        |
+| `facts`                   | One dated statement, by a named actor, about a person                          | Production — always `SELF_ATTESTED`                                                                                              |
+| `borrowers`               | A record _about_ a party, on one file                                          | Production                                                                                                                       |
+| `application_parties`     | Who is on a credit request, in what role                                       | Production                                                                                                                       |
+| `loan_parties`            | Who is on a mortgage, in what role                                             | Seed and tests — no importer yet                                                                                                 |
+| `co_borrower_invitations` | The SHA-256 of a link a named person was emailed, and when it stops being good | Production — the invitation route                                                                                                |
+| `employers`               | A company that pays this person                                                | Production — vendor pulls only                                                                                                   |
 
 ### The application
 
@@ -169,21 +170,25 @@ the first writer arrives into a shape that already refuses the wrong thing.
 | `disclosures`                               | The same. `DisclosureRecord` exists as a type with no rows behind it |
 | `authorizations`, written directly          | Nothing writes it by hand; `consents` mirrors into it by trigger     |
 
-`createProvisionalParty` and `mergePartyInto` likewise have no caller outside
-tests, so `PROVISIONAL`, `CLAIM_PENDING`, `MERGED` and `PartyKind.ENTITY`
-distinguish nothing in a live database today.
+`createProvisionalParty` is what naming a co-borrower does, and `mergePartyInto`
+is what claiming an invitation does — the named party folds into the party the
+person's own sign-in made, and the borrower row, the membership and the loan
+parties follow. `PartyKind.ENTITY` still distinguishes nothing in a live
+database.
 
 ## What is not modeled at all
 
-**Assets, liabilities and owned property are not entities in this system.**
-No table, no model, no join. The underwriting engine reads them straight out of
-snapshot JSON — `monthlyLiabilities` sums credit tradelines out of the payload,
-and reserves come off bank balances the same way.
+**Assets, liabilities, expenses and owned property are entities now** —
+`du_assets`, `du_liabilities`, `du_expenses` and the owned property nested
+inside an asset — each owned by a borrowing party through an arc, with a
+deferred trigger that refuses an emittable row left without an owner. The
+Desktop Underwriter pages own them: `docs/du-graph.md` for the shape and
+`docs/du-readiness.md` for what is written and what is not. ⚠ The underwriting
+engine still reads liabilities and reserves out of snapshot JSON rather than
+out of those tables; the tables are what a submission carries.
 
-So a debt has no obligor and an asset has no owner, and neither can be attached
-to a second borrower. That is the structural gap behind the DU work: see
-`docs/du-readiness.md`, where it is item 6 and the reason joint ownership has
-to exist in the first migration rather than be retrofitted.
+**What is not modeled at all:** a servicer with a row, a regulatory notice
+that was delivered, and a role on a `User` that would let staff open a file.
 
 ## Where the rest lives
 

@@ -248,8 +248,12 @@ function that turns an arcrole name into a URI throws on a disputed one, so the
 refusal holds for whatever folds an arc next rather than for the two files that
 fold them today. Both readings validate and one of them means the wrong thing.
 
-**Nothing sends.** There is no transport. What there is now is a refusal: a
-casefile that fails any check above produces no bytes at all, and the refusal
+**Nothing reaches Fannie Mae yet.** The transport exists —
+`packages/connectors/src/adapters/du.ts` posts an emitted casefile under a
+configured credential and reads the answer through a reader that refuses any
+shape it cannot vouch for — and waits on the endpoint, the credential and the
+seller/servicer number the integration agreement supplies. What runs today is
+the refusal: a casefile that fails any check above produces no bytes at all, and the refusal
 goes to whoever asked for the document rather than to a borrower — it names an
 XPath, a label or a row id and never a value, so it is safe to log, which the
 casefile it is about is not.

@@ -2428,6 +2428,12 @@ export const TABLES_OFF_THE_WIRE = {
   vendor_tokens: {
     why: "An encrypted bearer credential a vendor handed back, which is the single worst row in this schema to put on a wire.",
   },
+  user_authenticators: {
+    why: "The encrypted secret behind the second step of a sign-in, and the lock on guessing it; the same kind of row as vendor_tokens, and a casefile says who the borrower is and never how they proved it.",
+  },
+  user_recovery_codes: {
+    why: "The hashes of the codes a person was handed for the day their phone is gone; how they get back into their own account, never anything about the loan.",
+  },
   co_borrower_invitations: {
     why: "The hash of a link a named co-borrower was emailed and when it stops being good; how a person reached their own half of the application, never anything about them.",
   },

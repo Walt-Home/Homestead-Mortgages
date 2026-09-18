@@ -1,7 +1,7 @@
 # What DU needs, and what we have
 
 Where the Desktop Underwriter work stands against the readiness audit of
-2026-09-08. Re-measured at `f974ba1`. **Update it in the commit that changes
+2026-09-08. Re-measured at `7b87bef`. **Update it in the commit that changes
 what it says.** A status page that lags the code gets believed.
 
 ## The bottom line
@@ -44,6 +44,7 @@ flowchart LR
   SSN["Taxpayer identifiers<br/><i>no vault</i>"]:::red
   DU(["Desktop Underwriter"]):::ext
   RESP["Response tables<br/>append-only, casefile id write-once"]:::green
+  VEND["Property record<br/>CoreLogic for a real borrower, fixture for the samples<br/><i>trial budget, uncounted</i>"]:::yellow
 
   B1 --> DATA
   CB --> DATA
@@ -52,36 +53,38 @@ flowchart LR
   ASM --> GATE --> EMIT --> RUN --> TX --> DU --> RESP
   KEYS -.-> TX
   SSN -.-> ASM
+  VEND -.-> DATA
 ```
 
 🟢 built, enforced, tested · 🟡 built, with a named gap · 🔴 not built, or
 blocked outside the code
 
-| #   | Item                                |     | Today                                                                                |
-| --- | ----------------------------------- | --- | ------------------------------------------------------------------------------------ |
-| 1   | One casefile per loan               | 🟢  | Ours is stable; DU's is write-once, written only by `recordDuResponse`               |
-| 2   | Income survives a re-pull           | 🟢  | Snapshot lineage on every row; nothing deletes and recreates                         |
-| 3   | Borrower declarations               | 🟢  | Asked on screen 3, stored per person, chains held by CHECKs                          |
-| —   | Current residence                   | 🟢  | The fabricated `"rent"` is gone; screen 3 asks                                       |
-| 4   | Verification report identifier      | 🟡  | Every row names its snapshot; the asset arc to a verification is disputed in the tab |
-| 5   | Up to four borrowers                | 🟢  | Named, invited, claimed, own half walked; the engine reads everybody's reports       |
-| 6   | Assets, liabilities, owned property | 🟢  | Tables, ownership, writers; the credit and bank pulls write them per person          |
-| 7   | Employer as an entity               | 🟡  | Every pulled job has one; two current employers leave wage income unattached         |
-| 8   | What we compute vs. what DU does    | 🟢  | Boundary written, both columns typed and CHECKed, a corpus test holds it             |
-| —   | Identity model                      | 🟢  | Party is the person; facts carry provenance                                          |
-| —   | Ownership shape                     | 🟢  | Join tables with roles; nothing emittable without an owner                           |
-| —   | Product and property                | 🟢  | A product table, two building facts retrieved, one estate question asked             |
-| —   | Vesting and non-borrower parties    | 🟢  | Asked on review; originator rows at birth; ten-party ceiling enforced                |
-| —   | Generators and `du:verify`          | 🟢  | Six tables from the corpus, rebuilt and checked in CI                                |
-| —   | Assembler and emitter               | 🟢  | MISMO 3.4 with arcs, round-tripped on all eighteen samples                           |
-| —   | Preflight gate                      | 🟢  | Graph, cardinality, conditionality, format; every check has a fixture                |
-| —   | Transport                           | 🟡  | Built to the credential boundary; tested against a stubbed `fetch`                   |
-| —   | Response recording                  | 🟢  | Append-only tables, unknown verdicts refused, read back to the owner                 |
-| —   | The decision route submits          | 🟢  | Assemble, gate, emit, send, record after every decision; every refusal a row         |
-| —   | Taxpayer identifiers on the wire    | 🔴  | No vault; the fixture path uses an unissued number, the real path is refused         |
-| —   | Who we submit under                 | 🔴  | Institution and originator are placeholders, refused in production                   |
+| #   | Item                                |     | Today                                                                                    |
+| --- | ----------------------------------- | --- | ---------------------------------------------------------------------------------------- |
+| 1   | One casefile per loan               | 🟢  | Ours is stable; DU's is write-once, written only by `recordDuResponse`                   |
+| 2   | Income survives a re-pull           | 🟢  | Snapshot lineage on every row; nothing deletes and recreates                             |
+| 3   | Borrower declarations               | 🟢  | Asked on screen 3, stored per person, chains held by CHECKs                              |
+| —   | Current residence                   | 🟢  | The fabricated `"rent"` is gone; screen 3 asks                                           |
+| 4   | Verification report identifier      | 🟡  | Every row names its snapshot; the asset arc to a verification is disputed in the tab     |
+| 5   | Up to four borrowers                | 🟢  | Named, invited, claimed, own half walked; the engine reads everybody's reports           |
+| 6   | Assets, liabilities, owned property | 🟢  | Tables, ownership, writers; the credit and bank pulls write them per person              |
+| 7   | Employer as an entity               | 🟡  | Every pulled job has one; two current employers leave wage income unattached             |
+| 8   | What we compute vs. what DU does    | 🟢  | Boundary written, both columns typed and CHECKed, a corpus test holds it                 |
+| —   | Identity model                      | 🟢  | Party is the person; facts carry provenance                                              |
+| —   | Ownership shape                     | 🟢  | Join tables with roles; nothing emittable without an owner                               |
+| —   | Product and property                | 🟢  | A product table, two building facts retrieved, one estate question asked                 |
+| —   | Property record vendor              | 🟡  | CoreLogic when the flag is on, read off the land-use code; a trial budget nothing counts |
+| —   | Vesting and non-borrower parties    | 🟢  | Asked on review; originator rows at birth; ten-party ceiling enforced                    |
+| —   | Generators and `du:verify`          | 🟢  | Six tables from the corpus, rebuilt and checked in CI                                    |
+| —   | Assembler and emitter               | 🟢  | MISMO 3.4 with arcs, round-tripped on all eighteen samples                               |
+| —   | Preflight gate                      | 🟢  | Graph, cardinality, conditionality, format; every check has a fixture                    |
+| —   | Transport                           | 🟡  | Built to the credential boundary; tested against a stubbed `fetch`                       |
+| —   | Response recording                  | 🟢  | Append-only tables, unknown verdicts refused, read back to the owner                     |
+| —   | The decision route submits          | 🟢  | Assemble, gate, emit, send, record after every decision; every refusal a row             |
+| —   | Taxpayer identifiers on the wire    | 🔴  | No vault; the fixture path uses an unissued number, the real path is refused             |
+| —   | Who we submit under                 | 🔴  | Institution and originator are placeholders, refused in production                       |
 
-Sixteen green, three yellow, two red. Re-derive the tally from the table, not
+Sixteen green, four yellow, two red. Re-derive the tally from the table, not
 the other way around.
 
 ## What's left, in dependency order
@@ -106,6 +109,9 @@ Item 1 is a decision, then code. Item 2 is a contract.
   casefile has to round-trip.
 - **Under Grander's seller/servicer number.** Grander is the creditor;
   Supermortgage administers as their agent. Decided 2026-09-14.
+- **CoreLogic answers the record and the valuation; nobody answers the
+  flood.** Decided 2026-09-17. The Property API carries no flood product, a
+  certified determination is a separate one, and DU asks for none.
 - **The corpus is vendored, all of it.** Nine XSDs (five MISMO, three Fannie,
   `xml.xsd`), eighteen samples and the specification workbook live in
   `packages/du-schema`. The workbook was held out as "a document that moves";
@@ -265,9 +271,24 @@ sendable casefile, all built, in three places:
   refuses rewriting a product in place: a product on different terms is another
   row.
 - `financed_unit_count` and `property_attachment_type` are retrieved off the
-  assessor record on screen 1. `AttachmentType` is the twelfth column, found by
-  the gate the moment a unit count existed to require it. All eighteen samples
-  carry it, seven `Attached` and eleven `Detached`.
+  county record on screen 1: CoreLogic's when a provider variable names
+  `corelogic` (`PROPERTY_RECORDS_PROVIDER`, on staging), the fixture's when
+  none does, and the fixture's for all eight sample borrowers in every
+  environment, because the seed builds its own fixture registry and the deploy
+  hands it no vendor. On a CoreLogic record both come from the classifier,
+  which reads the manufactured-home flag, then the Universal Land Use code,
+  and for a code that is blank or only "residential" the property indicator
+  and then the description text; any other code the table lacks is refused.
+  Attachment is fixed per code, per indicator and per class on the
+  description path, where only a single-family description reads the words.
+  The count is the code's own for a duplex, triplex or quadruplex, the
+  buildings' for any other two-to-four, and 1 for every other kind; only the
+  indicator path refuses a count outside two to four, and the description
+  path takes a blank count as 1 and no test reaches it. A land use the classifier cannot
+  place is refused into the manual path with nothing written, and the gate
+  then names `FinancedUnitCount`. `AttachmentType` is the twelfth column,
+  found by the gate the moment a unit count existed to require it. All
+  eighteen samples carry it, seven `Attached` and eleven `Detached`.
 - `property_estate_type` is asked on screen 3 as APP-028, because no vendor
   record carries it and the title commitment does not exist at submission.
 - The three on a job: `EmploymentClassificationType` is derived (the current job
@@ -278,6 +299,18 @@ All are nullable and nothing defaults one. A moved address nulls the three
 building facts by trigger. The gate test in `du-submission.test.ts` asserts an
 empty finding list and emits; three tests beside it withhold one thing each and
 name what goes missing.
+
+**What CoreLogic does not change.** Nothing the casefile carries comes from
+the valuation or the flood determination. `PropertyEstimatedValueAmount` is
+the borrower's stated price or value through the scenario, the engine's LTV
+reads the same column, DU requires no flood data point and no sample carries
+one, and the assembler loads neither snapshot. A parcel the model will not
+price and an address the fixture cannot place, both null on the card since
+`383e937`, leave the casefile as it was. Two gaps stand beside the vendor. The
+trial account allows 100 property requests and 25 valuations a day, three and
+one per borrower lookup, and nothing counts them. And on a real record screen
+2 writes no first-time-homebuyer fact, then the review screen fills it with
+`true` at signing: APP-021, never a DU data point, but a guess all the same.
 
 **Vesting and the non-borrower parties.** `du_vestings` holds the sentence that
 will read on title, asked on the review screen and refused at signing when

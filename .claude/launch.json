@@ -12,6 +12,19 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--workspace=@hm/web"],
       "port": 5173
+    },
+    {
+      "name": "api-demo",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DEMO_PERSONAS=true",
+        "GOOGLE_CLIENT_ID=",
+        "npm",
+        "run",
+        "dev",
+        "--workspace=@hm/api"
+      ],
+      "port": 8080
     }
   ]
 }

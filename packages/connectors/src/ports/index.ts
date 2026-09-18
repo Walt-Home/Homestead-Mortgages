@@ -56,6 +56,34 @@ export class AddressNotFoundError extends Error {
   }
 }
 
+/**
+ * The parcel is on record and no automated valuation exists for it. Not the
+ * same fact as the address being unknown: a co-op building, a new
+ * construction, a parcel the model will not price all have a record and no
+ * estimate, and a screen that reads this as "no record" drops the card it
+ * could have shown.
+ */
+export class ValuationUnavailableError extends Error {
+  constructor(readonly address: string) {
+    super(`No automated valuation is available for ${address}.`);
+    this.name = "ValuationUnavailableError";
+  }
+}
+
+/**
+ * No flood determination has been made for the address. Until a flood vendor
+ * is wired the fixture knows three addresses, and every other parcel is
+ * undetermined rather than unknown — a federally related mortgage needs a
+ * certified determination, and an undetermined one is a fact a screen can
+ * say, where an invented zone is not.
+ */
+export class FloodNotDeterminedError extends Error {
+  constructor(readonly address: string) {
+    super(`No flood determination has been made for ${address}.`);
+    this.name = "FloodNotDeterminedError";
+  }
+}
+
 /** Which requirements an adapter claims it can satisfy. Checked in tests. */
 export interface ConnectorCapabilities {
   readonly provider: string;

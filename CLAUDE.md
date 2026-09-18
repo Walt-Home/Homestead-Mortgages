@@ -94,9 +94,13 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   over it for autocomplete when both are named. A land use the adapter cannot
   place is refused into the manual path rather than guessed onto a federal
   submission, and `priorOwnershipInLastThreeYears` reads null from a real
-  record because a parcel knows nothing about who is buying it. The flood
-  determination stays on the fixture: it is a separate product, and on a
-  federally related mortgage it has to be a _certified_ one, not a map read.
+  record because a parcel knows nothing about who is buying it. The kind of
+  dwelling is read off the Universal Land Use code, because a live record
+  carries codes and no descriptions. A parcel the model will not price has no
+  valuation rather than no record. The flood determination is the fixture's
+  for its three addresses and "not determined" for every other one: it is a
+  separate product, and on a federally related mortgage it has to be a
+  _certified_ one, not a map read.
   Unset, everything is the fixture's three addresses, and anything else falls
   back to manual entry with no property card. `/demo/property` is a vendor
   demo page — type an address, fetch what each adapter answers, read the raw

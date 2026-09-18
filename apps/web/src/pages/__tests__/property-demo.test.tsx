@@ -83,6 +83,29 @@ describe("the answer", () => {
   });
 });
 
+describe("an answer with no valuation and no flood determination", () => {
+  const markup = renderToStaticMarkup(
+    <LookupView
+      result={{
+        ...ANSWER,
+        valuation: null,
+        flood: null,
+        providers: { record: "corelogic", valuation: null, flood: null },
+      }}
+      ms={300}
+    />,
+  );
+
+  it("says so in words, and names nobody for them", () => {
+    expect(markup).toContain("No automated valuation for this parcel.");
+    expect(markup).toContain("Not determined. No flood vendor is wired yet");
+    expect(markup).toContain("valuation from nobody");
+    expect(markup).toContain("flood from nobody");
+    expect(markup).not.toContain("Zone ");
+    expect(markup).toContain("$389,000");
+  });
+});
+
 describe("a lookup that did not answer", () => {
   it("says no record, in the server's words", () => {
     const copy = lookupFailureCopy(

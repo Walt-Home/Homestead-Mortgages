@@ -39,7 +39,9 @@
  *   4. **The valuation is one call.** `GET .../avm/thv/thvOriginations/summary`
  *      — the originations model, because that is what this is — answers the
  *      estimate, the range, a confidence score and a forecast standard
- *      deviation.
+ *      deviation. A building the model will not price answers with every
+ *      figure at zero, which is `ValuationUnavailableError` here and a null
+ *      valuation on the screen, never a record-less address.
  *
  * ── What is mapped by rule, and what is refused ────────────────────────────
  *
@@ -72,6 +74,8 @@ import type {
 } from "@hm/shared";
 import {
   AddressNotFoundError,
+  FloodNotDeterminedError,
+  ValuationUnavailableError,
   type ConnectorResult,
   type PropertyDataConnector,
 } from "../ports/index.js";
@@ -224,42 +228,107 @@ interface TokenResponse {
 /* ── Mapping rules ──────────────────────────────────────────────────────── */
 
 /**
- * CoreLogic's land use, as this product's property type and attachment.
+ * What a record says about the kind of dwelling, in the two codes it carries.
  *
- * By keyword over the descriptions rather than by the numeric code, because
- * the codes are a county-by-county conversion and the descriptions are what
- * the specification defines them by. The land-use description is the finer
- * of the two and is read first; the property-type code groups classes — its
- * code 10 reads "Single Family Residence / Townhouse" — so it is read only
- * when the land use says nothing, and a grouped text that fits two classes is
- * ambiguous rather than the first one that matched. Anything that does not
- * match is refused upstream, not defaulted here.
+ * On the wire the descriptions are null and the codes are what arrive:
+ * `landUseCode` is CoreLogic's Universal Land Use code — the table Realist
+ * publishes ("Universal Land Use Codes as may be found in Realist", First
+ * American CoreLogic) — and `propertyTypeCode` is the coarser property
+ * indicator, whose 10 is "Single Family Residence / Townhouse" and whose 11 is
+ * "Condominium". The land use is the finer of the two and is read first; the
+ * indicator settles what the land use leaves open; a description, where a
+ * county sends one, is the fallback for a code this table does not carry.
  */
-export function classifyLandUse(site: {
+export interface LandUseFacts {
+  readonly propertyTypeCode?: string | null;
   readonly propertyTypeCodeDescription?: string | null;
+  readonly landUseCode?: string | null;
   readonly landUseCodeDescription?: string | null;
   readonly countyLandUseDescription?: string | null;
   readonly isManufacturedHome?: string | null;
-}): { propertyType: PropertyType; attachment: PropertyRecord["attachment"] } | null {
+}
+
+export interface DwellingKind {
+  readonly propertyType: PropertyType;
+  readonly attachment: PropertyRecord["attachment"];
+  /** Units the code itself states, where it does: a duplex is two. */
+  readonly units?: number;
+}
+
+/**
+ * The residential rows of the Universal Land Use table that name a dwelling
+ * this product underwrites. A row absent here is refused, and that includes
+ * the ones a person might expect: a condominium PROJECT (113) is the parcel
+ * the units sit on, a mobile home LOT or PARK (135, 136) is land, and a
+ * multi-family dwelling (133) or ten-or-fewer (132) says nothing about how
+ * many units until the buildings do.
+ */
+const UNIVERSAL_LAND_USE: Readonly<Record<string, DwellingKind>> = {
+  "163": { propertyType: "single_family", attachment: "detached" }, // SFR
+  "264": { propertyType: "single_family", attachment: "detached" }, // SFR (the commercial tab's copy)
+  "148": { propertyType: "single_family", attachment: "detached" }, // PUD
+  "109": { propertyType: "single_family", attachment: "detached" }, // CABIN
+  "160": { propertyType: "single_family", attachment: "detached" }, // RURAL HOMESITE
+  "102": { propertyType: "townhouse", attachment: "attached" }, // TOWNHOUSE/ROWHOUSE
+  "112": { propertyType: "condo", attachment: "attached" }, // CONDOMINIUM
+  "116": { propertyType: "condo", attachment: "attached" }, // MID RISE CONDO
+  "117": { propertyType: "condo", attachment: "attached" }, // HIGH RISE CONDO
+  "111": { propertyType: "co_op", attachment: "attached" }, // COOPERATIVE
+  "115": { propertyType: "two_to_four_unit", attachment: "detached", units: 2 }, // DUPLEX
+  "165": { propertyType: "two_to_four_unit", attachment: "detached", units: 3 }, // TRIPLEX
+  "151": { propertyType: "two_to_four_unit", attachment: "detached", units: 4 }, // QUADRUPLEX
+  "138": { propertyType: "manufactured", attachment: "detached" }, // MANUFACTURED HOME
+  "137": { propertyType: "manufactured", attachment: "detached" }, // MOBILE HOME PP
+};
+
+/** Land uses that are residential but say nothing about the kind: the indicator decides. */
+const RESIDENTIAL_NEC = new Set(["100", "132", "133"]);
+
+export function classifyLandUse(
+  site: LandUseFacts,
+  unitsCount?: number | null,
+): DwellingKind | null {
+  if (site.isManufacturedHome === "Y") {
+    return { propertyType: "manufactured", attachment: "detached" };
+  }
+  const landUse = (site.landUseCode ?? "").trim();
+  const byLandUse = UNIVERSAL_LAND_USE[landUse];
+  if (byLandUse) return byLandUse;
+
+  // The indicator, for a residential land use that names no kind or none at
+  // all. 10 is a house or a townhouse and the table above is where a
+  // townhouse would have been named, so it reads as a house; 11 is a
+  // condominium; 21 is two to four units, and how many is the buildings'.
+  const indicator = (site.propertyTypeCode ?? "").trim();
+  const open = landUse === "" || RESIDENTIAL_NEC.has(landUse);
+  if (open) {
+    if (indicator === "10") return { propertyType: "single_family", attachment: "detached" };
+    if (indicator === "11") return { propertyType: "condo", attachment: "attached" };
+    if (indicator === "21") {
+      const units = typeof unitsCount === "number" ? unitsCount : 0;
+      return units >= 2 && units <= 4
+        ? { propertyType: "two_to_four_unit", attachment: "detached", units }
+        : null;
+    }
+  }
+
+  // A code this table does not carry, or no code at all: the description,
+  // where a county sent one, and nothing otherwise.
+  if (landUse !== "" && !open) return null;
   const upper = (...parts: (string | null | undefined)[]): string =>
     parts
       .filter((part): part is string => typeof part === "string" && part.length > 0)
       .join(" | ")
       .toUpperCase();
-  if (site.isManufacturedHome === "Y") {
-    return { propertyType: "manufactured", attachment: "detached" };
-  }
   return (
     classifyText(upper(site.landUseCodeDescription, site.countyLandUseDescription)) ??
     classifyText(upper(site.propertyTypeCodeDescription))
   );
 }
 
-type Placed = { propertyType: PropertyType; attachment: PropertyRecord["attachment"] };
-
-function classifyText(text: string): Placed | null {
+function classifyText(text: string): DwellingKind | null {
   if (text === "") return null;
-  const matches: Placed[] = [];
+  const matches: DwellingKind[] = [];
   if (/MOBILE|MANUFACTURED/.test(text)) {
     matches.push({ propertyType: "manufactured", attachment: "detached" });
   }
@@ -489,7 +558,8 @@ export function coreLogicConnector(options: CoreLogicOptions): PropertyDataConne
 
       const site = detail.siteLocation?.data;
       const landUse = site?.landUseAndZoningCodes ?? {};
-      const kind = classifyLandUse(landUse);
+      const summary = detail.buildings?.data?.allBuildingsSummary ?? {};
+      const kind = classifyLandUse(landUse, summary.unitsCount);
       if (!kind) {
         throw new PropertyNotDescribableError(
           oneLine(address),
@@ -498,7 +568,6 @@ export function coreLogicConnector(options: CoreLogicOptions): PropertyDataConne
         );
       }
 
-      const summary = detail.buildings?.data?.allBuildingsSummary ?? {};
       const building = detail.buildings?.data?.Buildings?.[0];
       const tax = detail.taxAssessment?.items?.[0];
       const sale = detail.lastMarketSale?.items?.[0];
@@ -508,7 +577,9 @@ export function coreLogicConnector(options: CoreLogicOptions): PropertyDataConne
       const soldOn = isoDay(sale?.transactionDetails?.saleDateDerived);
       const salePrice = sale?.transactionDetails?.saleAmount;
 
-      const units = kind.propertyType === "two_to_four_unit" ? reported(summary.unitsCount) : 1;
+      // What the code states, else what the buildings count, else one.
+      const units =
+        kind.units ?? (kind.propertyType === "two_to_four_unit" ? reported(summary.unitsCount) : 1);
 
       const record: PropertyRecord = {
         apn,
@@ -564,9 +635,11 @@ export function coreLogicConnector(options: CoreLogicOptions): PropertyDataConne
       const res = await get<AvmSummaryResponse>(
         `/v2/properties/${encodeURIComponent(clip)}/avm/thv/${model}/summary`,
       );
+      // A building the model will not price answers 200 with every figure at
+      // zero. That is no estimate, not an estimate of nothing.
       const summary = res?.summary;
-      if (!summary || typeof summary.estimatedValue !== "number") {
-        throw new AddressNotFoundError(oneLine(address));
+      if (!summary || typeof summary.estimatedValue !== "number" || summary.estimatedValue <= 0) {
+        throw new ValuationUnavailableError(oneLine(address));
       }
       const value = summary.estimatedValue;
       return {
@@ -583,7 +656,18 @@ export function coreLogicConnector(options: CoreLogicOptions): PropertyDataConne
       };
     },
 
-    determineFlood: (address: Address): Promise<ConnectorResult<FloodDetermination>> =>
-      fallback.determineFlood(address),
+    // The fallback's, where it has one. The fixture answers for its three
+    // addresses; for any other parcel the honest answer is that nothing has
+    // determined the zone, which is not the same fact as no record.
+    async determineFlood(address: Address): Promise<ConnectorResult<FloodDetermination>> {
+      try {
+        return await fallback.determineFlood(address);
+      } catch (err) {
+        if (err instanceof AddressNotFoundError) {
+          throw new FloodNotDeterminedError(oneLine(address));
+        }
+        throw err;
+      }
+    },
   };
 }

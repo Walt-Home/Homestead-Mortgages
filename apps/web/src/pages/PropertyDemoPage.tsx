@@ -28,10 +28,12 @@ interface Suggestion {
 
 export interface LookupResponse {
   record: PropertyRecord;
-  valuation: AvmEstimate;
-  flood: FloodDetermination;
+  /** Null when the model will not price the parcel. */
+  valuation: AvmEstimate | null;
+  /** Null until a flood vendor has determined the zone. */
+  flood: FloodDetermination | null;
   provider: string;
-  providers?: { record: string; valuation: string; flood: string };
+  providers?: { record: string; valuation: string | null; flood: string | null };
 }
 
 type Fetch =
@@ -86,14 +88,29 @@ export function LookupView({ result, ms }: { result: LookupResponse; ms: number 
   const f = result.flood;
   const providers = result.providers ?? {
     record: result.provider,
-    valuation: result.provider,
-    flood: result.provider,
+    valuation: v ? result.provider : null,
+    flood: f ? result.provider : null,
   };
   return (
     <div className="mt-8 flex flex-col gap-6">
       <p className="text-sm text-ink-faint">
-        Answered in {Math.round(ms)} ms. Record from <code>{providers.record}</code>, valuation from{" "}
-        <code>{providers.valuation}</code>, flood from <code>{providers.flood}</code>.
+        Answered in {Math.round(ms)} ms. Record from <code>{providers.record}</code>; valuation{" "}
+        {providers.valuation ? (
+          <>
+            from <code>{providers.valuation}</code>
+          </>
+        ) : (
+          "from nobody"
+        )}
+        ; flood{" "}
+        {providers.flood ? (
+          <>
+            from <code>{providers.flood}</code>
+          </>
+        ) : (
+          "from nobody"
+        )}
+        .
       </p>
 
       <section className="rounded-lg border border-rule bg-surface p-6">
@@ -135,26 +152,44 @@ export function LookupView({ result, ms }: { result: LookupResponse; ms: number 
 
       <section className="rounded-lg border border-rule bg-surface p-6">
         <p className="super-eyebrow">The valuation</p>
-        <h2 className="mt-2 font-display text-2xl text-ink">{money(v.value)}</h2>
-        <dl className="mt-5 grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
-          <Fact label="Range" value={`${money(v.low)} – ${money(v.high)}`} />
-          <Fact label="Confidence" value={`${v.confidence} / 100`} />
-          <Fact label="As of" value={v.asOf} />
-        </dl>
+        {v ? (
+          <>
+            <h2 className="mt-2 font-display text-2xl text-ink">{money(v.value)}</h2>
+            <dl className="mt-5 grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
+              <Fact label="Range" value={`${money(v.low)} – ${money(v.high)}`} />
+              <Fact label="Confidence" value={`${v.confidence} / 100`} />
+              <Fact label="As of" value={v.asOf} />
+            </dl>
+          </>
+        ) : (
+          <p className="mt-2 text-base text-ink-soft">
+            No automated valuation for this parcel. The model answered with nothing to price it on,
+            which is a fact about the building and not about the address.
+          </p>
+        )}
       </section>
 
       <section className="rounded-lg border border-rule bg-surface p-6">
         <p className="super-eyebrow">The flood determination</p>
-        <h2 className="mt-2 font-display text-2xl text-ink">Zone {f.zone}</h2>
-        <dl className="mt-5 grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
-          <Fact
-            label="Special flood hazard area"
-            value={f.inSpecialFloodHazardArea ? "Yes" : "No"}
-          />
-          <Fact label="Insurance required" value={f.insuranceRequired ? "Yes" : "No"} />
-          <Fact label="Community" value={f.communityId} />
-          <Fact label="Determined on" value={f.determinedOn} />
-        </dl>
+        {f ? (
+          <>
+            <h2 className="mt-2 font-display text-2xl text-ink">Zone {f.zone}</h2>
+            <dl className="mt-5 grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
+              <Fact
+                label="Special flood hazard area"
+                value={f.inSpecialFloodHazardArea ? "Yes" : "No"}
+              />
+              <Fact label="Insurance required" value={f.insuranceRequired ? "Yes" : "No"} />
+              <Fact label="Community" value={f.communityId} />
+              <Fact label="Determined on" value={f.determinedOn} />
+            </dl>
+          </>
+        ) : (
+          <p className="mt-2 text-base text-ink-soft">
+            Not determined. No flood vendor is wired yet, and the fixture knows three addresses; a
+            certified determination is a separate product.
+          </p>
+        )}
       </section>
 
       <details className="rounded-lg border border-rule bg-surface p-6">

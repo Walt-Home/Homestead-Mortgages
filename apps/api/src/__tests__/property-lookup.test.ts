@@ -7,7 +7,9 @@
  * fixture did.
  */
 import { describe, expect, it } from "vitest";
-import { propertyRouter } from "../routes/property.js";
+import { FloodNotDeterminedError, ValuationUnavailableError } from "@hm/connectors";
+import { AppError } from "../middleware/error-handler.js";
+import { propertyRouter, settleLookup } from "../routes/property.js";
 import { createUser } from "./support/factories.js";
 import { callAs } from "./support/http.js";
 
@@ -67,5 +69,67 @@ describe("GET /property/lookup", () => {
     const maya = await createUser({ personaKey: "maya_okafor" });
     const res = await lookup(maya.id, OAK);
     expect(res.status).toBe(200);
+  });
+});
+
+describe("settling the three answers", () => {
+  const ok = <T>(
+    data: T,
+    provider: string,
+  ): PromiseFulfilledResult<{
+    data: T;
+    provider: string;
+    retrievedAt: string;
+    externalId: string;
+  }> => ({
+    status: "fulfilled",
+    value: { data, provider, retrievedAt: "2026-09-18T00:00:00.000Z", externalId: "x" },
+  });
+  const failed = (reason: unknown): PromiseRejectedResult => ({ status: "rejected", reason });
+  const record = ok({ apn: "1" } as never, "corelogic");
+
+  it("keeps the record and reads an absent valuation or flood as null", () => {
+    const settled = settleLookup([
+      record,
+      failed(new ValuationUnavailableError("1 W 72nd St")),
+      failed(new FloodNotDeterminedError("1 W 72nd St")),
+    ] as never);
+    expect(settled.record.provider).toBe("corelogic");
+    expect(settled.valuation).toBeNull();
+    expect(settled.flood).toBeNull();
+  });
+
+  it("is the manual path only when the record itself is missing", () => {
+    expect(() =>
+      settleLookup([
+        failed(new Error("no record")),
+        ok(null as never, "x"),
+        ok(null as never, "x"),
+      ] as never),
+    ).toThrow("no record");
+    try {
+      settleLookup([
+        failed(
+          Object.assign(new Error("No public record found for 1 Nowhere Ln."), {
+            name: "AddressNotFoundError",
+          }),
+        ),
+        ok(null as never, "x"),
+        ok(null as never, "x"),
+      ] as never);
+    } catch (err) {
+      // An AddressNotFoundError by class, not by name, is what maps to 404.
+      expect(err).not.toBeInstanceOf(AppError);
+    }
+  });
+
+  it("does not swallow a real failure behind an absence", () => {
+    expect(() =>
+      settleLookup([
+        record,
+        failed(new Error("the vendor is down")),
+        ok(null as never, "x"),
+      ] as never),
+    ).toThrow("the vendor is down");
   });
 });

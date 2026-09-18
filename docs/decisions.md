@@ -403,7 +403,7 @@ autocomplete — and it sits over whatever answers for the record beneath it.
 **CoreLogic answers for the record and the valuation** (2026-09-17), read off
 the v2 Property API's own specification. `PROPERTY_RECORDS_PROVIDER=corelogic`
 is its own variable so the two vendors can be turned on one at a time. Four
-rules, each a refusal to guess: a land use the keyword table cannot place is
+rules, each a refusal to guess: a land use the table cannot place is
 `PropertyNotDescribableError`, a subclass of the not-found error, so the
 borrower gets the manual path rather than a card carrying a guessed
 `Detached`; `priorOwnershipInLastThreeYears` is null from a real record, and
@@ -416,6 +416,39 @@ summary, with the confidence read on the 0–100 scale from the score or, where
 it is absent, from the forecast standard deviation. One search per address
 however many of the three lookups ask, because the trial account allows 100
 property requests and 25 valuations a day.
+
+**The kind of dwelling is read off the code, not the description** (2026-09-18).
+The first live records carried `landUseCode` and `propertyTypeCode` and null
+for every description, so a classifier keyed on words would have refused
+every real parcel. The adapter embeds the residential rows of CoreLogic's
+Universal Land Use table — the one Realist publishes, "Universal Land Use
+Codes as may be found in Realist", First American CoreLogic — and reads that
+first: 163 is a house, 102 a townhouse, 112/116/117 a condominium, 111 a
+cooperative, 115/165/151 a duplex, triplex and quadruplex with the unit count
+the code itself states, 138/137 a manufactured home. The property indicator
+settles a residential land use that names no kind (100, 132, 133): 10 is a
+house, 11 a condominium, 21 two to four units with the count taken from the
+buildings and refused outside two to four. A condominium project (113), a
+mobile home lot or park (135, 136), and everything commercial, exempt or
+vacant is refused into the manual path. Descriptions are the fallback for a
+code the table does not carry. The Dakota answered 111 and the two museums
+tried answered 601 and 620, which is how the table was checked against the
+wire.
+
+**An absent valuation and an absent flood determination are each their own
+absence, and neither is an absent record** (2026-09-18). The originations
+model answers a parcel it will not price — a cooperative, a building it has
+never seen sell — with a summary of zeros rather than an error, and the
+flood determination is still the fixture's, which knows three addresses and
+rejects the rest as not found. Both used to reach the borrower as something
+else: the zeros as a $0 estimate, the fixture's rejection as "no county
+record" for a parcel whose record was sitting in the same settlement. The
+adapter throws `ValuationUnavailableError` and `FloodNotDeterminedError`,
+`settleLookup` in `routes/property.ts` folds each to null beside a whole
+record, and the card leaves the estimate line off and says the zone is not
+yet determined. Only the record can make a lookup a 404; the other two are
+allowed to be missing on their own, and the demo page names which of the
+three came from nobody.
 
 **Stripe Identity refuses a live key** unless `STRIPE_ALLOW_LIVE_IDENTITY=true`,
 and nothing sets it. This is not squeamishness about a few dollars per

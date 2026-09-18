@@ -23,9 +23,15 @@ import {
   recordEvent,
   recordSnapshot,
 } from "../services/repository.js";
-import { AddressNotFoundError } from "@hm/connectors";
+import {
+  AddressNotFoundError,
+  FloodNotDeterminedError,
+  ValuationUnavailableError,
+} from "@hm/connectors";
 import { connectors } from "../services/connectors.js";
 import { recordBuildingFacts } from "../services/building-facts.js";
+import type { ConnectorResult } from "@hm/connectors";
+import type { AvmEstimate, FloodDetermination, PropertyRecord } from "@hm/shared";
 import { quoteSubjectProduct } from "../services/pricing.js";
 import { assertPurposeInScope } from "../services/scope.js";
 import { screenAndRecord } from "../services/screening.js";
@@ -88,32 +94,72 @@ propertyRouter.get(
  * retrievable at address-selection time rather than on submit — a card the
  * borrower is asked to confirm cannot arrive after the thing it confirms.
  */
+/**
+ * The three answers about an address, each settled on its own.
+ *
+ * The record is the one that has to exist: without it there is no card and
+ * no file, and the address is the manual path. The other two may honestly be
+ * absent for a parcel that is on record — a building the model will not
+ * price, an address no flood vendor has determined — and reading either as
+ * "no record" dropped the card the county had answered for. Exported so the
+ * rule can be held by a test without a vendor behind it.
+ */
+export function settleLookup(
+  results: readonly [
+    PromiseSettledResult<ConnectorResult<PropertyRecord>>,
+    PromiseSettledResult<ConnectorResult<AvmEstimate>>,
+    PromiseSettledResult<ConnectorResult<FloodDetermination>>,
+  ],
+): {
+  record: ConnectorResult<PropertyRecord>;
+  valuation: ConnectorResult<AvmEstimate> | null;
+  flood: ConnectorResult<FloodDetermination> | null;
+} {
+  const [record, valuation, flood] = results;
+  if (record.status === "rejected") {
+    if (record.reason instanceof AddressNotFoundError) {
+      throw new AppError(404, record.reason.message, "ADDRESS_NOT_FOUND");
+    }
+    throw record.reason;
+  }
+  const absent = <T>(
+    settled: PromiseSettledResult<ConnectorResult<T>>,
+    isAbsence: (reason: unknown) => boolean,
+  ): ConnectorResult<T> | null => {
+    if (settled.status === "fulfilled") return settled.value;
+    if (isAbsence(settled.reason)) return null;
+    throw settled.reason;
+  };
+  return {
+    record: record.value,
+    valuation: absent(valuation, (r) => r instanceof ValuationUnavailableError),
+    flood: absent(flood, (r) => r instanceof FloodNotDeterminedError),
+  };
+}
+
 async function lookedUp(address: z.infer<typeof addressSchema>) {
   const propertyData = connectors().propertyData;
-  try {
-    const [record, valuation, flood] = await Promise.all([
+  const { record, valuation, flood } = settleLookup(
+    await Promise.allSettled([
       propertyData.lookupRecord(address),
       propertyData.estimateValue(address),
       propertyData.determineFlood(address),
-    ]);
-    return {
-      record: record.data,
-      valuation: valuation.data,
-      flood: flood.data,
-      provider: record.provider,
-      // Each answer names who gave it. The record and the valuation may be one
-      // vendor's while the flood determination is still the fixture's.
-      providers: { record: record.provider, valuation: valuation.provider, flood: flood.provider },
-    };
-  } catch (err) {
-    // Not an error the borrower caused, and not one that should stop them.
-    // Screen 1 falls back to asking the two things the record would have
-    // told us, and the flow continues.
-    if (err instanceof AddressNotFoundError) {
-      throw new AppError(404, err.message, "ADDRESS_NOT_FOUND");
-    }
-    throw err;
-  }
+    ]),
+  );
+  return {
+    record: record.data,
+    valuation: valuation?.data ?? null,
+    flood: flood?.data ?? null,
+    provider: record.provider,
+    // Each answer names who gave it, and an absent one names nobody. The
+    // record and the valuation may be one vendor's while the flood
+    // determination is still the fixture's, or nobody's.
+    providers: {
+      record: record.provider,
+      valuation: valuation?.provider ?? null,
+      flood: flood?.provider ?? null,
+    },
+  };
 }
 
 propertyRouter.post(
@@ -307,23 +353,21 @@ propertyFileRouter.post(
 
     const propertyData = connectors().propertyData;
     const address = file.property.address;
-    let record, valuation, flood;
-    try {
-      [record, valuation, flood] = await Promise.all([
+    // A file on an address we hold no record for is a legitimate file. It
+    // just carries no property snapshots, and the first-time-homebuyer flag
+    // stays undetermined rather than being asserted from nothing. A record
+    // with no valuation or no flood determination is a file with a record
+    // and, for now, nothing on those two: `file.valuation` and `file.flood`
+    // stay null, which is what "not yet determined" has always read as.
+    const { record, valuation, flood } = settleLookup(
+      await Promise.allSettled([
         propertyData.lookupRecord(address),
         propertyData.estimateValue(address),
         propertyData.determineFlood(address),
-      ]);
-    } catch (err) {
-      // A file on an address we hold no record for is a legitimate file. It
-      // just carries no property snapshots, and the first-time-homebuyer flag
-      // stays undetermined rather than being asserted from nothing.
-      if (err instanceof AddressNotFoundError) {
-        throw new AppError(404, err.message, "ADDRESS_NOT_FOUND");
-      }
-      throw err;
-    }
-
+      ]),
+    );
+    // Keyed on the address, not on a person. Screen 1 runs before there is a
+    // borrower to attribute it to, which is why it is unguarded at all.
     await recordSnapshot(
       id,
       "property_record",
@@ -331,32 +375,30 @@ propertyFileRouter.post(
       record.externalId,
       record.data,
       record.retrievedAt,
-      // Keyed on the address, not on a person. Screen 1 runs before there is
-      // a borrower to attribute it to, which is why it is unguarded at all.
       null,
     );
-    await recordSnapshot(
-      id,
-      "valuation",
-      valuation.provider,
-      valuation.externalId,
-      valuation.data,
-      valuation.retrievedAt,
-      // Keyed on the address, not on a person. Screen 1 runs before there is
-      // a borrower to attribute it to, which is why it is unguarded at all.
-      null,
-    );
-    await recordSnapshot(
-      id,
-      "flood",
-      flood.provider,
-      flood.externalId,
-      flood.data,
-      flood.retrievedAt,
-      // Keyed on the address, not on a person. Screen 1 runs before there is
-      // a borrower to attribute it to, which is why it is unguarded at all.
-      null,
-    );
+    if (valuation) {
+      await recordSnapshot(
+        id,
+        "valuation",
+        valuation.provider,
+        valuation.externalId,
+        valuation.data,
+        valuation.retrievedAt,
+        null,
+      );
+    }
+    if (flood) {
+      await recordSnapshot(
+        id,
+        "flood",
+        flood.provider,
+        flood.externalId,
+        flood.data,
+        flood.retrievedAt,
+        null,
+      );
+    }
     // The two building facts a submission has to carry, written from the
     // record rather than from the client. Screen 1 already echoes a property
     // type back to us on create; these are read straight off the connector
@@ -373,8 +415,8 @@ propertyFileRouter.post(
 
     res.status(201).json({
       record: record.data,
-      valuation: valuation.data,
-      flood: flood.data,
+      valuation: valuation?.data ?? null,
+      flood: flood?.data ?? null,
     });
   }),
 );

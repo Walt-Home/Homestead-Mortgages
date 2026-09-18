@@ -18,7 +18,12 @@ import {
   CoreLogicError,
   PropertyNotDescribableError,
 } from "../adapters/corelogic.js";
-import { AddressNotFoundError, fixturePropertyDataConnector } from "../index.js";
+import {
+  AddressNotFoundError,
+  FloodNotDeterminedError,
+  ValuationUnavailableError,
+  fixturePropertyDataConnector,
+} from "../index.js";
 
 const fallback = fixturePropertyDataConnector({ latencyMs: 0 });
 
@@ -342,10 +347,7 @@ describe("the county record", () => {
           siteLocation: {
             data: {
               ...DETAIL.siteLocation.data,
-              landUseAndZoningCodes: {
-                landUseCode: "103",
-                landUseCodeDescription: "TRIPLEX (3 UNITS, ANY COMBINATION)",
-              },
+              landUseAndZoningCodes: { landUseCode: "165", landUseCodeDescription: null },
             },
           },
         }),
@@ -376,12 +378,20 @@ describe("the valuation", () => {
     );
   });
 
-  it("is the manual path when the model has no estimate", async () => {
-    const { c } = connector({
+  it("is no valuation, not no record, when the model has no estimate or answers zeros", async () => {
+    const missing = connector({
       ...HAPPY,
       "/v2/properties/1234567890/avm/thv/thvOriginations/summary": () => json({}, 404),
     });
-    await expect(c.estimateValue(OAK)).rejects.toBeInstanceOf(AddressNotFoundError);
+    await expect(missing.c.estimateValue(OAK)).rejects.toBeInstanceOf(ValuationUnavailableError);
+    await expect(missing.c.estimateValue(OAK)).rejects.not.toBeInstanceOf(AddressNotFoundError);
+    // A building the model will not price answers 200 with every figure at zero.
+    const zeros = connector({
+      ...HAPPY,
+      "/v2/properties/1234567890/avm/thv/thvOriginations/summary": () =>
+        json({ summary: { estimatedValue: 0, lowValue: 0, highValue: 0, confidenceScore: 0 } }),
+    });
+    await expect(zeros.c.estimateValue(OAK)).rejects.toBeInstanceOf(ValuationUnavailableError);
   });
 });
 
@@ -402,6 +412,15 @@ describe("the three methods together", () => {
       mode: "production",
       satisfies: ["APP-004"],
     });
+  });
+
+  it("say a parcel the fallback does not know is undetermined, not unknown", async () => {
+    // The fixture knows three addresses. Every other parcel has a record and
+    // no flood determination, which is a different fact from no record.
+    const { c } = connector(HAPPY);
+    const elsewhere = { line1: "1 W 72nd St", city: "New York", state: "NY", postalCode: "10023" };
+    await expect(c.determineFlood(elsewhere)).rejects.toBeInstanceOf(FloodNotDeterminedError);
+    await expect(c.determineFlood(elsewhere)).rejects.not.toBeInstanceOf(AddressNotFoundError);
   });
 
   it("answer autocomplete from typeahead, and nothing when it is down", async () => {
@@ -445,6 +464,57 @@ describe("the three methods together", () => {
 });
 
 describe("the mapping rules", () => {
+  it("read the Universal Land Use code first, as the wire sends it: codes and no descriptions", () => {
+    const code = (landUseCode: string, propertyTypeCode = "10") =>
+      classifyLandUse({ landUseCode, propertyTypeCode, landUseCodeDescription: null });
+    expect(code("163")).toEqual({ propertyType: "single_family", attachment: "detached" });
+    expect(code("148")).toEqual({ propertyType: "single_family", attachment: "detached" });
+    expect(code("102")).toEqual({ propertyType: "townhouse", attachment: "attached" });
+    expect(code("112", "11")).toEqual({ propertyType: "condo", attachment: "attached" });
+    expect(code("117", "11")).toEqual({ propertyType: "condo", attachment: "attached" });
+    expect(code("111", "11")).toEqual({ propertyType: "co_op", attachment: "attached" });
+    expect(code("115", "21")).toEqual({
+      propertyType: "two_to_four_unit",
+      attachment: "detached",
+      units: 2,
+    });
+    expect(code("151", "21")).toEqual({
+      propertyType: "two_to_four_unit",
+      attachment: "detached",
+      units: 4,
+    });
+    expect(code("138")).toEqual({ propertyType: "manufactured", attachment: "detached" });
+    // A condominium PROJECT is the parcel the units sit on; a mobile home
+    // park is land; tax-exempt and art are not dwellings.
+    expect(code("113", "11")).toBeNull();
+    expect(code("136")).toBeNull();
+    expect(code("601", "90")).toBeNull();
+    expect(code("620", "90")).toBeNull();
+  });
+
+  it("let the property indicator settle a residential land use that names no kind", () => {
+    expect(classifyLandUse({ landUseCode: "100", propertyTypeCode: "10" })).toEqual({
+      propertyType: "single_family",
+      attachment: "detached",
+    });
+    expect(classifyLandUse({ landUseCode: "133", propertyTypeCode: "11" })).toEqual({
+      propertyType: "condo",
+      attachment: "attached",
+    });
+    expect(classifyLandUse({ landUseCode: "133", propertyTypeCode: "21" }, 3)).toEqual({
+      propertyType: "two_to_four_unit",
+      attachment: "detached",
+      units: 3,
+    });
+    // Two to four units with no count is not a kind this product can state.
+    expect(classifyLandUse({ landUseCode: "133", propertyTypeCode: "21" }, null)).toBeNull();
+    expect(classifyLandUse({ landUseCode: "133", propertyTypeCode: "21" }, 6)).toBeNull();
+    expect(classifyLandUse({ landUseCode: "", propertyTypeCode: "11" })).toEqual({
+      propertyType: "condo",
+      attachment: "attached",
+    });
+  });
+
   it("place the land uses this product underwrites", () => {
     expect(classifyLandUse({ landUseCodeDescription: "CONDOMINIUM (RESIDENTIAL)" })).toEqual({
       propertyType: "condo",

@@ -58,8 +58,10 @@ interface PropertyRecord {
 
 interface Lookup {
   record: PropertyRecord;
-  valuation: { value: number; confidence: number };
-  flood: { zone: string; insuranceRequired: boolean; inSpecialFloodHazardArea: boolean };
+  /** Null when the model will not price the parcel. */
+  valuation: { value: number; confidence: number } | null;
+  /** Null until a flood vendor has determined the zone. */
+  flood: { zone: string; insuranceRequired: boolean; inSpecialFloodHazardArea: boolean } | null;
 }
 
 interface Affordability {
@@ -685,7 +687,7 @@ export function PropertyLoanPage() {
           value={price}
           onChange={(e) => setPrice(e.target.value.replace(/[^\d]/g, ""))}
         />
-        {lookup && (
+        {lookup?.valuation && (
           <p className="mt-1.5 text-xs text-ink-muted">
             Our estimate for this address is {money(lookup.valuation.value)}.
           </p>
@@ -846,13 +848,13 @@ function PropertyCard({
       <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-ink-soft">
         <Fact label="Assessed" value={money(r.assessedValue)} />
         <Fact label="Property tax" value={`${money(r.annualPropertyTax)}/yr`} />
-        <Fact label="Flood zone" value={lookup.flood.zone} />
+        <Fact label="Flood zone" value={lookup.flood ? lookup.flood.zone : "not yet determined"} />
         {r.hoaExists && r.monthlyAssociationDues !== undefined && (
           <Fact label="HOA" value={`${money(r.monthlyAssociationDues)}/mo`} />
         )}
       </dl>
 
-      {lookup.flood.insuranceRequired && (
+      {lookup.flood?.insuranceRequired && (
         <p className="mt-3 text-sm text-ink-soft">
           This one sits in a flood zone, so flood insurance will be required. Worth knowing now
           rather than at closing.

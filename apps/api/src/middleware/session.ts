@@ -16,6 +16,25 @@ import { config } from "../config.js";
 declare module "express-session" {
   interface SessionData {
     userId?: string;
+    /**
+     * Where the second step of sign-in stands for THIS session.
+     *
+     * Unset is the state a Google sign-in leaves it in: somebody has proven
+     * who they are and not yet that they hold their phone, and `requireAuth`
+     * refuses everything past `/api/auth` until they do. "verified" is a code
+     * accepted in this session. "exempt" is a session minted for a sample
+     * borrower or the local developer — neither is a person with a phone to
+     * enroll, and both are already refused every write or unreachable in
+     * production.
+     */
+    secondFactor?: "verified" | "exempt";
+    /**
+     * An enrollment in progress: the secret the QR code encodes, held here
+     * and not in a row until a code from it has been seen. A half-enrolled
+     * row would lock its owner out with an authenticator they never finished
+     * adding.
+     */
+    pendingAuthenticatorSecret?: string;
   }
 }
 

@@ -31,6 +31,15 @@ export class ApiError extends Error {
  */
 export const SESSION_EXPIRED = "hm:session-expired";
 
+/**
+ * Fired when the server says the session is identified but not yet
+ * authenticated — a Google sign-in with the second step still to do. The
+ * auth context listens and renders that step in place of whatever was asked
+ * for. It carries which step: "enroll" when there is no authenticator yet,
+ * "verify" when there is one to hear from.
+ */
+export const SECOND_FACTOR_REQUIRED = "hm:second-factor-required";
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,
@@ -44,12 +53,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         error?: { message?: string; code?: string; requirementId?: string; predicate?: string };
       }
     ).error;
-    if (response.status === 401 && error?.code === "SIGN_IN_REQUIRED") {
-      // Not for /auth/me, which 401s as its normal "nobody is signed in"
-      // answer during startup — announcing that would bounce a visitor who
-      // was never signed in to begin with.
-      if (!path.startsWith("/auth/")) {
+    // Not for /auth/*: /auth/me 401s as its normal "nobody is signed in"
+    // answer during startup, and announcing that would bounce a visitor who
+    // was never signed in to begin with. The second-factor routes refuse a
+    // wrong code with a 401 of their own, which the screen handles itself.
+    if (response.status === 401 && !path.startsWith("/auth/")) {
+      if (error?.code === "SIGN_IN_REQUIRED") {
         window.dispatchEvent(new CustomEvent(SESSION_EXPIRED));
+      } else if (
+        error?.code === "SECOND_FACTOR_REQUIRED" ||
+        error?.code === "SECOND_FACTOR_ENROLLMENT_REQUIRED"
+      ) {
+        window.dispatchEvent(
+          new CustomEvent(SECOND_FACTOR_REQUIRED, {
+            detail: { standing: error.code === "SECOND_FACTOR_REQUIRED" ? "verify" : "enroll" },
+          }),
+        );
       }
     }
     throw new ApiError(

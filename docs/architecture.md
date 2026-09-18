@@ -13,7 +13,8 @@ Homestead Mortgages onboards a homebuyer, retrieves what underwriting needs from
 connected accounts rather than uploads, and returns a decision that explains
 itself. It is one npm-workspaces monorepo — an Express 5 API and a React 19 SPA
 over eight domain packages — shipped as **a single container** on Cloud Run,
-backed by its own Cloud SQL Postgres, with Google sign-in for identity.
+backed by its own Cloud SQL Postgres, with Google sign-in for identity and a
+code from an authenticator app as the second step of every sign-in.
 
 Three things distinguish it from a CRUD app and shape every section below:
 
@@ -38,7 +39,7 @@ pre-move layout, in which the project, registry and Workload Identity pool were
 Walt's. They are stale; `docs/decisions.md` records why the move happened.
 
 ```
-                        Browser (any Google account)
+                 Browser (any Google account + an authenticator app)
                                     │
                                     ▼
               ┌──────────────────────────────────────────┐
@@ -159,8 +160,11 @@ Express 5  apps/api/src/index.ts   ── order is the load-bearing fact ──
    │
    ├─ /api/health ── OPEN ──► SELECT 1 → 200 | 503
    ├─ /api/auth   ── OPEN ──► verifyIdToken → user.upsert → session.regenerate
+   │     then /second-factor/{enroll, enroll/confirm, verify} ─► session.regenerate again
    │
    ├─ app.use("/api", requireAuth)   ◄── ONE gate, so a new router cannot forget
+   │     a session, a user, AND the second factor; without it, 401 SECOND_FACTOR_*
+   │     (requireSession, the weaker gate, is /me and /second-factor/* alone)
    │
    └─ /api/files/* ──► assertFileAccess(id, user, read|self|write|own)
           │              missing → 404 · a stranger → 404 (never 403)
@@ -529,6 +533,7 @@ they were stated facts.
 | **Authentication**          | Google ID token verified with `verifyIdToken` against `GOOGLE_CLIENT_ID`; `email_verified === false` → 403. The process refuses to boot in production without a client id                                                                                                                                                                                                                                                                                                                                                              |
 | **Session**                 | Postgres-backed, cookie `hm.sid`: `httpOnly`, `secure` in production, `sameSite: lax`, 12h rolling. `session.regenerate()` before `userId` is set — session-fixation rotation                                                                                                                                                                                                                                                                                                                                                          |
 | **Route gate**              | `app.use("/api", requireAuth)` mounted once, after `/api/health` and `/api/auth`, so a new router cannot forget it                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Second factor**           | TOTP (RFC 6238) from an authenticator app, enforced for every Google sign-in: `requireAuth` refuses until the session has presented a code. Secret AES-256-GCM under `VENDOR_TOKEN_KEY`; a code is good once (`last_used_step`); five wrong codes lock the row for fifteen minutes; eight single-use recovery codes kept as SHA-256. Sample borrowers and the local developer are exempt, marked on the session by the route that minted it                                                                                            |
 | **File authorization**      | `assertFileAccess` on every file route, in four modes: `read` for anyone on the file, `self` for the screens a person fills in about themselves, `write` and `own` for the applicant. Someone else's file returns **404, not 403** — a 403 confirms the id exists, which is an enumeration oracle. What a reader gets back is redacted in both directions: everybody but the reader is a name and two facts (answered, signed), the decision and its derivation log are the applicant's, and the Section 5 read is the asker's own row |
 | **Invitation token**        | 32 random bytes in the emailed link and nowhere else; the table holds its SHA-256; seven days, once, one live per person, a re-send kills the last. It rides in the URL fragment and reaches the API in a POST body, so no request log records it; every bad link answers the same 404; a sample-borrower session cannot take one; taking it is a press, not a page load                                                                                                                                                               |
 | **Connector authorization** | The APP-005 guard inside the adapters, not the routes. `AuthorizationError` → 403 + `requirementId`                                                                                                                                                                                                                                                                                                                                                                                                                                    |

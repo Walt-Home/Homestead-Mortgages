@@ -36,6 +36,7 @@ import {
   resumeForCoBorrower,
 } from "./lib/flow.js";
 import { SignInPage } from "./pages/SignInPage.js";
+import { SecondFactorPage } from "./pages/SecondFactorPage.js";
 import { ClaimPage } from "./pages/ClaimPage.js";
 import { CoBorrowerReviewPage } from "./pages/CoBorrowerReviewPage.js";
 import { LandingPage } from "./pages/LandingPage.js";
@@ -53,7 +54,7 @@ import { IrsPage, PayrollPage } from "./pages/ConnectPages.js";
 import { UploadPage } from "./pages/UploadPage.js";
 
 export function App() {
-  const { status, config, user } = useAuth();
+  const { status, config, user, secondFactor } = useAuth();
 
   // Render nothing rather than the sign-in page while the session is still
   // being resolved — a signed-in person should never see a sign-in flash.
@@ -93,6 +94,25 @@ export function App() {
     );
   }
 
+  if (secondFactor === "enroll" || secondFactor === "verify") {
+    return (
+      <Routes>
+        {/*
+          Identified, not yet authenticated: a Google sign-in with the second
+          step still to do. The step renders IN PLACE for every private path,
+          the way the sign-in page does while signed out, so a deep link and
+          an invitation's fragment both survive it. The two public pages stay
+          public; the server would refuse anything else anyway.
+        */}
+        <Route path="/" element={<Chrome />}>
+          <Route path="privacy" element={<PrivacyPage />} />
+          <Route path="brand" element={<BrandPage />} />
+        </Route>
+        <Route path="*" element={<SecondFactorPage mode={secondFactor} />} />
+      </Routes>
+    );
+  }
+
   return (
     <Routes>
       <Route path="/claim" element={<ClaimPage />} />
@@ -100,6 +120,8 @@ export function App() {
         <Route index element={<HomePage />} />
         <Route path="privacy" element={<PrivacyPage />} />
         <Route path="brand" element={<BrandPage />} />
+        {/* A new phone: the same enrollment, from a session that has already presented a code. */}
+        <Route path="second-factor" element={<SecondFactorPage mode="replace" />} />
         {/*
           The state gallery. A design surface rather than a feature: most of
           the states it renders have no column behind them yet, and the figures

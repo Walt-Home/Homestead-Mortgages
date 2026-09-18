@@ -57,7 +57,62 @@ model User {
 
   loanFiles LoanFile[]
 
+  authenticator UserAuthenticator?
+
   @@map("users")
+}
+
+/// The second step of a sign-in: the secret an authenticator app shares with
+/// us, one row per person.
+///
+/// Google says who somebody is; this says they are holding the phone they
+/// enrolled. The secret is AES-256-GCM ciphertext under VENDOR_TOKEN_KEY, the
+/// same key and for the same reason as `vendor_tokens`: a row that read
+/// plainly would let whoever read it mint every code from here on. Not
+/// append-only — a person who enrolls a new phone replaces the row, and the
+/// old secret is a liability, not history.
+model UserAuthenticator {
+  userId String @id @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// base64(iv):base64(authTag):base64(ciphertext) of the base32 secret.
+  secretCiphertext String @map("secret_ciphertext")
+
+  /// The 30-second step of the last code accepted. A code is good once:
+  /// anything at or before this step is refused, so a code read over a
+  /// shoulder is worthless the moment it is used rather than for the rest of
+  /// the window.
+  lastUsedStep Int? @map("last_used_step")
+
+  /// Wrong codes in a row, and the moment the lock they earned lifts. Six
+  /// digits is a million guesses; five wrong in a row buys a quarter of an
+  /// hour, and the count is on the row rather than the session so a fresh
+  /// sign-in does not buy five more.
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  lockedUntil    DateTime? @map("locked_until")
+
+  enrolledAt DateTime @default(now()) @map("enrolled_at")
+
+  recoveryCodes UserRecoveryCode[]
+
+  @@map("user_authenticators")
+}
+
+/// One of the eight codes handed over at enrollment, for the day the phone
+/// is gone. Only its SHA-256 lands here — like an invitation token, the code
+/// itself is shown once and held nowhere. `usedAt` rather than a delete, so
+/// "how many are left" and "when was one spent" both stay answerable.
+model UserRecoveryCode {
+  id            String            @id @default(uuid()) @db.Uuid
+  userId        String            @map("user_id") @db.Uuid
+  authenticator UserAuthenticator @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  codeHash  String    @map("code_hash")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@unique([userId, codeHash])
+  @@map("user_recovery_codes")
 }
 
 // ─── THE FILE ───────────────────────────────────────────────────────────────

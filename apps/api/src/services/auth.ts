@@ -171,4 +171,13 @@ export function assertAuthConfigured(): void {
         "so starting without it would serve a door that never opens.",
     );
   }
+  // The second step of sign-in stores an authenticator secret per person,
+  // encrypted under this key. Without it every real person would be stopped
+  // at enrollment with a 500, which is the same door that never opens.
+  if (config.nodeEnv === "production" && !config.vendorTokenKey) {
+    throw new Error(
+      "VENDOR_TOKEN_KEY must be set in production. It encrypts authenticator " +
+        "secrets at rest, and sign-in cannot be completed without one.",
+    );
+  }
 }

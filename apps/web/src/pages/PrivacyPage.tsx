@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError } from "../lib/api.js";
 import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
 import { SSN_COPY } from "../lib/disclosures.js";
+import { SECOND_FACTOR_COPY } from "../lib/second-factor.js";
 
 /**
  * Whether this session has an account of its own to delete.
@@ -109,6 +110,13 @@ export function PrivacyPage() {
         </p>
       </div>
 
+      {/*
+        The sign-in, for a person who has one of their own. The same test as
+        the delete card, for the same reason: a sample borrower's session has
+        no authenticator behind it and nothing to replace.
+      */}
+      {user && canDelete(user) && <SignInCard />}
+
       {/* Three ways this card can read, because there are three people it can
           be showing. The banner links here from the sign-in page, so it renders
           for somebody who has not signed in and has nothing to delete yet —
@@ -176,6 +184,41 @@ export function PrivacyPage() {
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * What the sign-in takes, and the one thing a person can do about it here:
+ * enroll a new phone. The count of recovery codes is read rather than
+ * remembered, so a code spent in another browser is not still counted.
+ */
+function SignInCard() {
+  const [codesLeft, setCodesLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ enrolled: boolean; recoveryCodesRemaining: number }>("/auth/second-factor")
+      .then((r) => {
+        if (!cancelled) setCodesLeft(r.recoveryCodesRemaining);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div className="super-card mt-8">
+      <h2 className="font-display text-base text-ink">{SECOND_FACTOR_COPY.privacy.title}</h2>
+      <p className="mt-1.5 text-sm text-ink-muted">
+        {SECOND_FACTOR_COPY.privacy.body}
+        {codesLeft !== null && ` ${SECOND_FACTOR_COPY.privacy.codesLeft(codesLeft)}`}
+      </p>
+      <Link to="/second-factor" className="super-btn super-btn-outline mt-4">
+        {SECOND_FACTOR_COPY.privacy.replace}
+      </Link>
     </div>
   );
 }

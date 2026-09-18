@@ -225,6 +225,14 @@ every file route, and a request for someone else's file returns **404, not
 holding a session. Demo files are readable by all and writable by none. There
 are tests; do not relax them.
 
+**Sign-in has a second step.** A Google sign-in identifies; a six-digit code
+from an authenticator app authenticates, and `requireAuth` refuses everything
+past `/api/auth` until a session has done both. `requireSession` is the weaker
+gate and only `/me` and the `/second-factor` routes may use it — a test reads
+the routes to hold that. Sample borrowers and the local developer are exempt,
+marked on the session by the route that minted it and by nothing else. See
+`docs/decisions.md`, "Sign-in has a second step".
+
 **4. Nothing may be pulled before APP-005.** The guard is inside the connector
 adapters, not the routes, so a new route cannot forget it. `guard.test.ts`
 calls every adapter against an unauthorized file and fails if any returns data.
@@ -336,7 +344,8 @@ images and nothing else. Terraform manages all of it.
 
 ## Reaching the deployed app
 
-Publicly, at the Cloud Run URL, signed in with any Google account. That needed
+Publicly, at the Cloud Run URL, signed in with any Google account plus a code
+from an authenticator app — the first sign-in enrolls one. That needed
 a project-level exception to the org's `iam.allowedPolicyMemberDomains`
 constraint, which forbids `allUsers` everywhere else under trywalt.ai.
 

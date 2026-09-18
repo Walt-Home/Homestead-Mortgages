@@ -1,10 +1,10 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "@hm/db";
 import { config } from "../config.js";
 import { providerModes } from "../services/connectors.js";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
-import { requireAuth } from "../middleware/require-auth.js";
+import { requireAuth, requireSession } from "../middleware/require-auth.js";
 import { signInAsLocalDeveloper, signInAsPersona, signInWithGoogle } from "../services/auth.js";
 import {
   isSeeded,
@@ -14,6 +14,15 @@ import {
 } from "../personas/stories.js";
 import { toDomainState } from "../services/transition.js";
 import { acceptClaim, previewClaim } from "../services/invitations.js";
+import {
+  ISSUER,
+  beginEnrollment,
+  confirmEnrollment,
+  isEnrolled,
+  recoveryCodesRemaining,
+  secondFactorStanding,
+  verifySecondFactor,
+} from "../services/second-factor.js";
 
 export const authRouter = Router();
 
@@ -68,7 +77,12 @@ authRouter.post(
       req.session.regenerate((err) => (err ? reject(err) : resolve())),
     );
     req.session.userId = user.id;
-    res.status(201).json({ user: publicUser(user) });
+    // Identified, not yet authenticated: the second factor is unset, and the
+    // answer says which screen finishes the sign-in.
+    res.status(201).json({
+      user: publicUser(user),
+      secondFactor: await secondFactorStanding(req.session, user.id),
+    });
   }),
 );
 
@@ -80,7 +94,9 @@ authRouter.post(
       req.session.regenerate((err) => (err ? reject(err) : resolve())),
     );
     req.session.userId = user.id;
-    res.status(201).json({ user: publicUser(user) });
+    // Not a person with a phone to enroll, and unreachable in production.
+    req.session.secondFactor = "exempt";
+    res.status(201).json({ user: publicUser(user), secondFactor: "satisfied" });
   }),
 );
 
@@ -186,17 +202,128 @@ personaRouter.post(
       req.session.regenerate((err) => (err ? reject(err) : resolve())),
     );
     req.session.userId = user.id;
-    res.status(201).json({ user: publicUser(user) });
+    // A sample borrower is shared with every tester and refused every write;
+    // there is nobody whose phone could be enrolled.
+    req.session.secondFactor = "exempt";
+    res.status(201).json({ user: publicUser(user), secondFactor: "satisfied" });
   }),
 );
 
 if (config.demoPersonasEnabled) authRouter.use(personaRouter);
 
-authRouter.get(
-  "/me",
+/**
+ * The second step of sign-in.
+ *
+ * Every route here takes `requireSession` and not `requireAuth`, because
+ * they are how the second factor gets presented — a gate that demanded it
+ * first would be the e-sign trap again (see the connector guard). `/me` is
+ * the only other route that may, and `second-factor.test.ts` reads this file
+ * to hold both facts.
+ *
+ * Enrollment is two requests with a phone in the middle: the first hands over
+ * a secret and keeps it in the session, the second sees a code from it and
+ * only then writes a row. A person who already has an authenticator may
+ * replace it — that is how a new phone is enrolled — but only from a session
+ * that has already presented a code, or a stolen Google password would be
+ * enough to swap the phone.
+ */
+const secondFactorRouter = Router();
+
+secondFactorRouter.post(
+  "/second-factor/enroll",
+  requireSession,
+  asyncRoute(async (req, res) => {
+    const standing = await secondFactorStanding(req.session, req.user!.id);
+    if (standing === "verify") {
+      throw new AppError(
+        401,
+        "Enter the code from your current authenticator app before replacing it.",
+        "SECOND_FACTOR_REQUIRED",
+      );
+    }
+    const { secret, otpauthUri } = beginEnrollment(req.user!);
+    req.session.pendingAuthenticatorSecret = secret;
+    res.json({ secret, otpauthUri, issuer: ISSUER, account: req.user!.email });
+  }),
+);
+
+const codeSchema = z.object({ code: z.string().min(1).max(64) });
+
+secondFactorRouter.post(
+  "/second-factor/enroll/confirm",
+  requireSession,
+  asyncRoute(async (req, res) => {
+    const { code } = codeSchema.parse(req.body);
+    const secret = req.session.pendingAuthenticatorSecret;
+    if (!secret) {
+      throw new AppError(
+        409,
+        "Start by adding the authenticator app.",
+        "NO_ENROLLMENT_IN_PROGRESS",
+      );
+    }
+    const { recoveryCodes } = await confirmEnrollment(req.user!.id, secret, code);
+    await elevate(req);
+    res.status(201).json({ recoveryCodes, secondFactor: "satisfied" });
+  }),
+);
+
+secondFactorRouter.post(
+  "/second-factor/verify",
+  requireSession,
+  asyncRoute(async (req, res) => {
+    const { code } = codeSchema.parse(req.body);
+    await verifySecondFactor(req.user!.id, code);
+    await elevate(req);
+    res.json({ secondFactor: "satisfied" });
+  }),
+);
+
+/**
+ * What the privacy page says about the sign-in. Behind the full gate, like
+ * everything else a finished session reads.
+ */
+secondFactorRouter.get(
+  "/second-factor",
   requireAuth,
   asyncRoute(async (req, res) => {
-    res.json({ user: publicUser(req.user!) });
+    res.json({
+      enrolled: await isEnrolled(req.user!.id),
+      recoveryCodesRemaining: await recoveryCodesRemaining(req.user!.id),
+    });
+  }),
+);
+
+authRouter.use(secondFactorRouter);
+
+/**
+ * The session after a code: a new id, the same person, the gate open.
+ * Rotated for the same reason sign-in rotates — a session id fixed before the
+ * second step must not be the one that is trusted after it. Regenerating also
+ * drops the pending secret, which has done its job.
+ */
+async function elevate(req: Request): Promise<void> {
+  const userId = req.session.userId;
+  await new Promise<void>((resolve, reject) =>
+    req.session.regenerate((err) => (err ? reject(err) : resolve())),
+  );
+  req.session.userId = userId;
+  req.session.secondFactor = "verified";
+}
+
+/**
+ * Who is signed in and where the sign-in stands. The weaker gate on purpose:
+ * this is how the client learns that the second step is still to do, so it
+ * has to answer before that step is done.
+ */
+authRouter.get(
+  "/me",
+  requireSession,
+  asyncRoute(async (req, res) => {
+    res.json({
+      user: publicUser(req.user!),
+      secondFactor: await secondFactorStanding(req.session, req.user!.id),
+    });
   }),
 );
 

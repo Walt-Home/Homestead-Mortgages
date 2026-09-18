@@ -1393,6 +1393,71 @@ There is no default key and no plaintext fallback, so a missing
 `decisions`, this table is deliberately **not** append-only — a re-link
 replaces the credential. Old live bearer tokens are a liability, not history.
 
+## Sign-in has a second step
+
+Google says who somebody is. Since September 2026 that no longer gets them in:
+`requireAuth` refuses everything past `/api/auth` until the session has also
+presented a six-digit code from an authenticator app, and a person with no
+authenticator is sent to enroll one before they can reach a file. It is
+enforced rather than offered, because the file behind the gate holds twelve
+months of bank transactions and a credit report, and a second factor a person
+can decline is the one the person whose Google password was phished did
+decline.
+
+The shape, and why each piece is the way it is:
+
+- **TOTP, hand-rolled, held to the RFCs.** `services/totp.ts` is RFC 4226 and
+  RFC 6238 in eighty lines, and `totp.test.ts` reproduces every vector both
+  appendices publish. A library would be the same lines behind a name plus a
+  base32 package, and the sign-in is the wrong place to inherit a transitive
+  dependency's next advisory. Not passkeys, because the relying-party id is the
+  hostname and the hostname is a Cloud Run hash today; not SMS, because it
+  needs a vendor and a phone number and is the weakest of the three.
+- **The secret is ciphertext under `VENDOR_TOKEN_KEY`**, the same key and the
+  same argument as the section above: a TOTP secret read out of a backup mints
+  every code from then on. The API refuses to boot in production without the
+  key; outside production a fixed development key stands in, the way the
+  session secret does.
+- **A code is good once.** `last_used_step` records the 30-second step of the
+  last code accepted and nothing at or before it gets in again, so a code read
+  over a shoulder is worthless the moment it is used.
+- **Guessing is expensive, and the count is on the row.** Five wrong codes lock
+  the row for fifteen minutes. On the row rather than the session, because a
+  session is free: an attacker holding the Google password can mint one per
+  request, and a per-session counter would hand them five guesses each.
+- **Losing the phone is survivable.** Eight recovery codes are shown once at
+  enrollment and only their SHA-256 is kept, like an invitation token. Each is
+  spent by the one `UPDATE` that finds it unspent, so two requests racing for
+  the same code cannot both win.
+- **Enrollment is two requests with a phone in the middle.** The secret rides
+  in the server-side session until a code from it has been seen, and only then
+  is a row written — a half-enrolled row would lock its owner out with an
+  authenticator they never finished adding. Replacing an authenticator is the
+  same two requests from a session that has already presented a code, so a
+  stolen password cannot swap the phone.
+- **The session id rotates twice**: at sign-in, as before, and again when the
+  code is accepted. A session id fixed before the second step is not the one
+  trusted after it.
+- **Two things are exempt**, and both are marked on the session by the route
+  that minted it: a sample borrower, who is shared with every tester and
+  refused every write, and the local developer, who is unreachable in
+  production. A Google sign-in is never exempt.
+
+`requireSession` is the weaker gate — a session and a user, nothing about the
+code — and exists for `/me`, which is how the client learns which screen to
+show, and for the second-factor routes, which are how the code gets presented.
+`second-factor.test.ts` reads `routes/auth.ts` and fails if anything else uses
+it, and reads `index.ts` to hold that the gate over everything is the strong
+one. The `callAs` harness stubs the session as verified, for the same reason it
+stubs `userId`: every other route's test is about what a signed-in person's
+request does, and the gate is walked through a real express-session in its own
+file.
+
+What is not built: anything a support person can use to reset an authenticator
+for somebody who has lost the phone and spent every recovery code. Today that
+is a `DELETE` on `user_authenticators` by hand, and it should become a route
+that records who did it.
+
 ## Tests run against a real Postgres
 
 The API suite used to mock `@hm/db`. Two files did it explicitly, and the cost

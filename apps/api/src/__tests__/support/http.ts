@@ -52,6 +52,11 @@ export async function callAs<T = Record<string, unknown>>(
     // still what a signed-in person's request does, not how they signed in.
     (req as unknown as { session: Record<string, unknown> }).session = {
       userId,
+      // The second step of sign-in, already done. The same stub as `userId`
+      // and for the same reason: a route's test is about what a signed-in
+      // person's request does, and `second-factor.test.ts` is where the
+      // gate itself is walked through a real session.
+      secondFactor: "verified",
       // Enough of express-session for the routes that rotate or end one. A
       // real store would prove nothing here and would need a second database.
       destroy: (cb: () => void) => cb(),

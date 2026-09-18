@@ -26,7 +26,12 @@ const IV_BYTES = 12; // GCM's standard nonce length.
 
 export class VendorTokenKeyError extends Error {}
 
-function loadKey(raw: string | undefined): Buffer {
+/**
+ * Exported for the authenticator secrets, which are the same kind of thing —
+ * a credential that mints access on demand — and are kept under the same key
+ * by the same cipher. See `services/second-factor.ts`.
+ */
+export function loadKey(raw: string | undefined): Buffer {
   if (!raw) {
     throw new VendorTokenKeyError(
       "VENDOR_TOKEN_KEY is not set. It encrypts vendor bank credentials at rest " +

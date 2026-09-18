@@ -7,7 +7,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { api, ApiError, SESSION_EXPIRED } from "./api.js";
+import { api, ApiError, SECOND_FACTOR_REQUIRED, SESSION_EXPIRED } from "./api.js";
 import type { ConnectorModes } from "./disclosures.js";
 
 export interface AuthUser {
@@ -17,6 +17,22 @@ export interface AuthUser {
   pictureUrl: string | null;
   /** Set when this session is a sample borrower. Null for a real person. */
   persona: { key: string; name: string | null } | null;
+}
+
+/**
+ * Where the second step of sign-in stands, as the server reports it.
+ *
+ * "satisfied" is the gate open — a code was accepted in this session, or the
+ * session is a sample borrower's or the local developer's, which have no
+ * phone to enroll. The other two are the screens that finish a sign-in:
+ * "enroll" when the person has no authenticator yet, "verify" when they do.
+ */
+export type SecondFactorStanding = "satisfied" | "enroll" | "verify";
+
+/** What every sign-in route and `/me` answer with. */
+interface SessionResponse {
+  user: AuthUser;
+  secondFactor: SecondFactorStanding;
 }
 
 /**
@@ -93,6 +109,14 @@ export function vendorDemoVisible(
 interface AuthState {
   status: "loading" | "signed-in" | "signed-out";
   user: AuthUser | null;
+  /**
+   * Null until the server has said. While it is "enroll" or "verify" the app
+   * renders that step in place of everything else, the way it renders the
+   * sign-in page in place of everything while signed out.
+   */
+  secondFactor: SecondFactorStanding | null;
+  /** The step is done: a code was accepted. Called by the screen that sent it. */
+  completeSecondFactor: () => void;
   config: AuthConfig | null;
   signInWithGoogle: (credential: string) => Promise<void>;
   signInAsDeveloper: () => Promise<void>;
@@ -106,6 +130,7 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthState["status"]>("loading");
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [secondFactor, setSecondFactor] = useState<SecondFactorStanding | null>(null);
   const [config, setConfig] = useState<AuthConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,9 +140,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const cfg = await api.get<AuthConfig>("/auth/config").catch(() => null);
       if (!cancelled) setConfig(cfg);
       try {
-        const me = await api.get<{ user: AuthUser }>("/auth/me");
+        const me = await api.get<SessionResponse>("/auth/me");
         if (!cancelled) {
           setUser(me.user);
+          setSecondFactor(me.secondFactor);
           setStatus("signed-in");
         }
       } catch {
@@ -136,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const onExpired = () => {
       setUser(null);
+      setSecondFactor(null);
       setStatus("signed-out");
       setError("Your session ended. Sign in again to pick up where you left off.");
     };
@@ -143,17 +170,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener(SESSION_EXPIRED, onExpired);
   }, []);
 
-  const finish = useCallback((next: AuthUser) => {
-    setUser(next);
+  // The server can also say the second step is still to do — a session that
+  // was identified in another tab, say, and never finished. The screen for
+  // it replaces whatever was being asked for, and the URL survives.
+  useEffect(() => {
+    const onRequired = (event: Event) => {
+      const standing = (event as CustomEvent<{ standing: SecondFactorStanding }>).detail?.standing;
+      if (standing === "enroll" || standing === "verify") setSecondFactor(standing);
+    };
+    window.addEventListener(SECOND_FACTOR_REQUIRED, onRequired);
+    return () => window.removeEventListener(SECOND_FACTOR_REQUIRED, onRequired);
+  }, []);
+
+  const finish = useCallback((next: SessionResponse) => {
+    setUser(next.user);
+    setSecondFactor(next.secondFactor);
     setStatus("signed-in");
     setError(null);
   }, []);
 
+  const completeSecondFactor = useCallback(() => setSecondFactor("satisfied"), []);
+
   const signInWithGoogle = useCallback(
     async (credential: string) => {
       try {
-        const r = await api.post<{ user: AuthUser }>("/auth/google", { credential });
-        finish(r.user);
+        const r = await api.post<SessionResponse>("/auth/google", { credential });
+        finish(r);
       } catch (err) {
         setError(
           err instanceof ApiError && err.code === "DOMAIN_NOT_ALLOWED"
@@ -166,8 +208,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const signInAsDeveloper = useCallback(async () => {
-    const r = await api.post<{ user: AuthUser }>("/auth/developer", {});
-    finish(r.user);
+    const r = await api.post<SessionResponse>("/auth/developer", {});
+    finish(r);
   }, [finish]);
 
   /**
@@ -181,8 +223,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInAsPersona = useCallback(
     async (key: string) => {
       try {
-        const r = await api.post<{ user: AuthUser }>(`/auth/personas/${key}`, {});
-        finish(r.user);
+        const r = await api.post<SessionResponse>(`/auth/personas/${key}`, {});
+        finish(r);
       } catch (err) {
         setError(
           err instanceof ApiError && err.code === "PERSONAS_NOT_SEEDED"
@@ -197,6 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     await api.post("/auth/signout", {});
     setUser(null);
+    setSecondFactor(null);
     setStatus("signed-out");
   }, []);
 
@@ -205,6 +248,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         status,
         user,
+        secondFactor,
+        completeSecondFactor,
         config,
         signInWithGoogle,
         signInAsDeveloper,

@@ -87,7 +87,9 @@ every adapter against an unauthorized file and fails if any returns data.
 
 **https://homestead-mortgages-staging-dhlswvsiia-uc.a.run.app**
 
-Sign in with any Google account. The service is publicly reachable, which
+Sign in with any Google account, then with a code from an authenticator app —
+the first sign-in walks you through adding one. The service is publicly
+reachable, which
 required a project-level exception to the org's Domain Restricted Sharing
 constraint — see `docs/decisions.md`. Public means the sign-in page is
 reachable, not the data: every `/api` route past `/health` and `/auth` requires

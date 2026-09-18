@@ -58,6 +58,14 @@ resource "google_sql_database_instance" "homestead-mortgages" {
       # Cloud Run socket (runtime), both of which authenticate with IAM rather
       # than an IP allowlist.
       ipv4_enabled = var.public_ip_enabled
+
+      # Refuse a plaintext connection at the instance rather than relying on
+      # nobody ever adding an authorized network. The Auth Proxy and the Cloud
+      # Run socket carry their own TLS and are unaffected; the only connection
+      # this turns away is one that could not happen today anyway. It exists so
+      # "does the database enforce encryption in transit" is answered by the
+      # instance and not by a description of the network.
+      ssl_mode = "ENCRYPTED_ONLY"
     }
 
     backup_configuration {

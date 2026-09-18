@@ -98,7 +98,10 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   determination stays on the fixture: it is a separate product, and on a
   federally related mortgage it has to be a _certified_ one, not a map read.
   Unset, everything is the fixture's three addresses, and anything else falls
-  back to manual entry with no property card.
+  back to manual entry with no property card. `/demo/property` is a vendor
+  demo page — type an address, fetch what each adapter answers, read the raw
+  response — mounted wherever `DEMO_PERSONAS` is, open to a sample borrower's
+  session because the lookup is a `GET` and touches no file.
 - **Manual bank-statement upload collects filenames and sends nothing.**
   `apps/web/src/pages/BankPage.tsx`. Deliberate — where the bytes go is a real
   decision, and `routes/documents.ts` never transmits them today.

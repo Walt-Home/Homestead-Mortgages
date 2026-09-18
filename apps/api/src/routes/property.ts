@@ -88,32 +88,52 @@ propertyRouter.get(
  * retrievable at address-selection time rather than on submit — a card the
  * borrower is asked to confirm cannot arrive after the thing it confirms.
  */
+async function lookedUp(address: z.infer<typeof addressSchema>) {
+  const propertyData = connectors().propertyData;
+  try {
+    const [record, valuation, flood] = await Promise.all([
+      propertyData.lookupRecord(address),
+      propertyData.estimateValue(address),
+      propertyData.determineFlood(address),
+    ]);
+    return {
+      record: record.data,
+      valuation: valuation.data,
+      flood: flood.data,
+      provider: record.provider,
+      // Each answer names who gave it. The record and the valuation may be one
+      // vendor's while the flood determination is still the fixture's.
+      providers: { record: record.provider, valuation: valuation.provider, flood: flood.provider },
+    };
+  } catch (err) {
+    // Not an error the borrower caused, and not one that should stop them.
+    // Screen 1 falls back to asking the two things the record would have
+    // told us, and the flow continues.
+    if (err instanceof AddressNotFoundError) {
+      throw new AppError(404, err.message, "ADDRESS_NOT_FOUND");
+    }
+    throw err;
+  }
+}
+
 propertyRouter.post(
   "/lookup",
   asyncRoute(async (req, res) => {
-    const address = addressSchema.parse(req.body);
-    const propertyData = connectors().propertyData;
-    try {
-      const [record, valuation, flood] = await Promise.all([
-        propertyData.lookupRecord(address),
-        propertyData.estimateValue(address),
-        propertyData.determineFlood(address),
-      ]);
-      res.json({
-        record: record.data,
-        valuation: valuation.data,
-        flood: flood.data,
-        provider: record.provider,
-      });
-    } catch (err) {
-      // Not an error the borrower caused, and not one that should stop them.
-      // Screen 1 falls back to asking the two things the record would have
-      // told us, and the flow continues.
-      if (err instanceof AddressNotFoundError) {
-        throw new AppError(404, err.message, "ADDRESS_NOT_FOUND");
-      }
-      throw err;
-    }
+    res.json(await lookedUp(addressSchema.parse(req.body)));
+  }),
+);
+
+/**
+ * The same retrieval as a GET, for the vendor demo page. A lookup is a read
+ * of a public record about an address and writes nothing, so it belongs on
+ * the method the persona gate lets through: a sample borrower's session is
+ * refused every POST, and the demo is exactly what a tester signed in as one
+ * is there to see.
+ */
+propertyRouter.get(
+  "/lookup",
+  asyncRoute(async (req, res) => {
+    res.json(await lookedUp(addressSchema.parse(req.query)));
   }),
 );
 

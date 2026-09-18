@@ -16,8 +16,9 @@ import { DebugPanel, type RawLedgerRow } from "./components/DebugPanel.js";
 import { Lockup } from "./components/Wordmark.js";
 import { Footer } from "./components/Footer.js";
 import { api, ApiError, type Assessment } from "./lib/api.js";
-import { stateGalleryVisible, useAuth } from "./lib/auth.js";
+import { stateGalleryVisible, useAuth, vendorDemoVisible } from "./lib/auth.js";
 import { StatesGalleryPage } from "./pages/StatesGalleryPage.js";
+import { PropertyDemoPage } from "./pages/PropertyDemoPage.js";
 import {
   hasStopped,
   landingScreen,
@@ -111,6 +112,14 @@ export function App() {
         */}
         {stateGalleryVisible(config, user) && (
           <Route path="states" element={<StatesGalleryPage />} />
+        )}
+        {/*
+          The vendor demo: type an address, fetch what CoreLogic says. Off the
+          real product by the same flag as the gallery, but open to a sample
+          borrower's session, because it reads public data and touches no file.
+        */}
+        {vendorDemoVisible(config, user) && (
+          <Route path="demo/property" element={<PropertyDemoPage />} />
         )}
         {/*
           Where an OAuth bank returns the borrower.

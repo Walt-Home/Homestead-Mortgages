@@ -75,6 +75,21 @@ export function stateGalleryVisible(
   return user !== null && user.persona === null;
 }
 
+/**
+ * Whether the vendor demo page is reachable: the same "not the real product"
+ * test the gallery uses, without the persona refusal. The demo reads public
+ * county data about an address a person types and touches no file, so a
+ * session holding a sample borrower can use it — the lookup is on a GET for
+ * exactly that reason — and there is nothing on the page a tester could read
+ * as a fact about their sample borrower.
+ */
+export function vendorDemoVisible(
+  config: Pick<AuthConfig, "demoPersonasEnabled"> | null,
+  user: Pick<AuthUser, "persona"> | null,
+): boolean {
+  return Boolean(config?.demoPersonasEnabled) && user !== null;
+}
+
 interface AuthState {
   status: "loading" | "signed-in" | "signed-out";
   user: AuthUser | null;

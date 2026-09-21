@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "build": "npm run typecheck",
     "lint": "eslint scripts --max-warnings 0 --no-error-on-unmatched-pattern",
-    "test": "node scripts/test.mjs && npm run du:verify",
+    "test": "node scripts/test.mjs && python3 tools/audit.py --check && python3 tools/spec_lint_names.py && npm run du:verify",
     "clean": "rm -rf .cache",
     "du:build": "node tools/build-du.mjs",
     "du:verify": "node tools/build-du.mjs --verify"

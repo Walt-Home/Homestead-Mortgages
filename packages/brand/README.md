@@ -72,14 +72,14 @@ the product without renaming.
 
 | Semantic color                     | Role                                                    |
 | ---------------------------------- | ------------------------------------------------------- |
-| `ground`                           | the page. Black. Never a "surface color"                |
-| `surface`, `raised`                | one and two steps up: fields, menus, hover washes       |
+| `ground`                           | the page. Paper. Never a "surface color"                |
+| `surface`, `raised`                | one and two steps up: fields, cards, hover washes       |
 | `ink`, `ink-soft`, `ink-muted`     | text, supporting copy, labels                           |
 | `rule`, `rule-soft`, `rule-strong` | structural divider, hairline, input boundary            |
 | `accent` / `accent-ink`            | what you can act on: links, secondary buttons, the mark |
-| `primary` / `primary-ink`          | the one white button a screen gets                      |
-| `ok`, `warn`, `danger`             | status. Never the accent                                |
-| `focus`                            | the ring                                                |
+| `primary` / `primary-ink`          | the one red button a screen gets                        |
+| `ok`, `warn`, `danger`             | status. `danger` is a darker shade of the accent        |
+| `focus`                            | the ring. Ink, not the accent                           |
 
 Components: `.super-btn` (+ `-primary`, `-outline`, `-solid`, `-danger`,
 `-ghost`), `.super-cta`, `.super-link`, `.super-link-quiet`, `.super-label`,
@@ -93,6 +93,9 @@ Components: `.super-btn` (+ `-primary`, `-outline`, `-solid`, `-danger`,
 2. Components name roles, not primitives. `text-accent`, never `text-red-500`
    (there is no `text-red-500`).
 3. Display type is Georgia at regular weight. `font-display` forces 400.
-4. One `.super-btn-primary` per screen. Red is for the actions around it.
+4. One `.super-btn-primary` per screen. On paper it is red, and so are the
+   outline actions around it.
 5. `danger` is never the same primitive as `accent`; the tests enforce it.
+   On paper it is a darker shade of the same red, which is as far apart as
+   Doug's palette puts them.
 6. Status colors (`ok`, `warn`, `danger`) are for state. Decoration uses grays.

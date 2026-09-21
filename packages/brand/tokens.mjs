@@ -21,38 +21,52 @@
  * `tailwind-preset.mjs` reads this file at config time, so a token added here
  * becomes a utility (bg-*, text-*, border-*) without touching Tailwind config.
  *
- * Every value was read from Doug's prototype at supermortgage.com — see
- * docs/brand.md — except the ones marked `proposed`.
+ * Every color is one Doug's Apply product ships — `prototype-theme.css` and
+ * `apply.css` in doug-ludlow/Supermortgage, the paper-and-ink set that has
+ * been its default since 15 September 2026 — except where a comment says the
+ * value he ships fails a contrast floor and names the one used instead. The
+ * faces, sizes, radii and motion are still the 3 September reading of the
+ * marketing prototype; see docs/brand.md for both.
  */
 
 /* ── Primitives ─────────────────────────────────────────────────────────── */
 
 export const primitives = Object.freeze({
   color: Object.freeze({
-    black: "#000000",
     white: "#FFFFFF",
+    black: "#000000", // No role points here. The mark is still drawn on it for
+    // marketing, and the brand page shows that rendering.
 
-    // Grays, light to dark. Steps are named by lightness so a new one can be
-    // slotted in without renaming its neighbours.
-    "gray-50": "#ECECEC", // the prototype's supporting-copy gray
-    "gray-200": "#A3A3A3", // hsl(0 0% 63.9%) — muted foreground
-    "gray-400": "#8A8A8A", // proposed: incidental text, still AA on black
-    "gray-500": "#6B6B6B", // proposed: a boundary gray that clears 3:1 on black
-    "gray-600": "#4A4A4A", // hsl(0 0% 29%) — the prototype's border
-    "gray-700": "#3B3B3B", // mobile-menu border
-    "gray-800": "#2A2A2A", // the scene's hairline. No role points here; it is
-    // marketing scenery (see docs/brand.md), kept so the palette is complete.
-    "gray-850": "#1A1A1A", // hsl(0 0% 10%) — secondary / muted fills
-    "gray-900": "#111111", // mobile-menu surface
-    "gray-950": "#0B0B0E", // the road
+    // Paper and its grays, light to dark. Named by lightness so a step can be
+    // slotted in without renaming its neighbors. The comment on each is the
+    // custom property it is in Doug's Apply product.
+    "paper-50": "#FCFCFC", // --paper: the ground
+    "paper-100": "#F4F4F4", // --subtle, --desktop: a raised block; the desk behind the sheet
+    "paper-200": "#EBEBEB", // --selected: a chosen row
+    "gray-200": "#E5E5E5", // --line: dividers inside a surface
+    "gray-250": "#DEDEDE", // --card-line: the edge of a card
+    "gray-300": "#BABABC", // --field-line. 1.9:1 on paper — decorative only, never a
+    // boundary that carries meaning; WCAG 1.4.11 wants 3:1, see rule-strong.
+    "gray-400": "#A2A2A4", // --quiet. 2.5:1 on paper — icons and hairlines, never text.
+    "gray-500": "#747479", // his dark set's --choice-line. The lightest gray that clears
+    // 3:1 on paper AND on white, so it is the input boundary here.
+    "gray-600": "#68686A", // --muted: labels, captions. 5.4:1, AA.
+    "gray-800": "#2A2A2A", // the street scene's hairline. No role points here.
+    "gray-900": "#080808", // --text: everything that must be read.
+    "gray-950": "#0B0B0E", // the street scene's road. No role points here.
 
-    "red-500": "#FF3C2E", // hsl(4 100% 59%) — Super Red. The one accent.
-    "red-300": "#FF8A8A", // proposed: error text that is not the accent
+    "red-500": "#BF242B", // --accent, --button: Super Red, deepened for paper. The one accent.
+    "red-600": "#AA1D24", // --accent-pressed
+    "red-800": "#842128", // --accent-text: red that reads as text on paper, 9.2:1
+    "red-100": "#F9E1E2", // --accent-soft: the wash behind a selected red thing
 
-    // Borrowed from the pixel world for the two states a product needs and a
-    // landing page does not. Scenery colors, promoted deliberately.
-    "green-500": "#2FAE4A",
-    "gold-500": "#E0A41F",
+    // Status. His set carries a positive and a caution. The caution he ships,
+    // #B76A00, is 4.0:1 on paper and the floor is 4.5, so this is the darker
+    // one from his earlier light set. The green is the pixel world's, kept for
+    // the street scene; the status green is his.
+    "green-500": "#2FAE4A", // the street's grass. No role points here.
+    "green-600": "#1F7A45", // --sm-positive
+    "gold-700": "#A35A00", // --sm-caution, the earlier light set's
   }),
 
   // Nothing here is a web font. The prototype links Inter and never uses it;
@@ -78,33 +92,43 @@ export const primitives = Object.freeze({
  */
 export const semantic = Object.freeze({
   color: Object.freeze({
-    ground: "black",
-    surface: "gray-900",
-    raised: "gray-850",
+    ground: "paper-50",
+    surface: "white",
+    raised: "paper-100",
 
-    // Four steps of de-emphasis, and no more. Homestead's palette had seven
-    // and its own docs admit some were aliased by accident; on black the
-    // useful range runs out below `ink-faint`, which is already at the AA
-    // floor for small text.
-    ink: "white", // headings, and anything that must be read
-    "ink-soft": "gray-50", // body copy
-    "ink-muted": "gray-200", // labels, secondary detail
-    "ink-faint": "gray-400", // captions, disclaimers, incidental
+    // Four roles, two values. Doug's theme has three text steps — text,
+    // muted, quiet — and the third is 2.5:1 on paper, which the floors
+    // refuse. So `ink` and `ink-soft` are his text and `ink-muted` and
+    // `ink-faint` are his muted. The roles stay distinct so a dark set can
+    // spread them out again; on paper they collapse, and that is his palette
+    // rather than a loss.
+    ink: "gray-900", // headings, and anything that must be read
+    "ink-soft": "gray-900", // body copy
+    "ink-muted": "gray-600", // labels, secondary detail
+    "ink-faint": "gray-600", // captions, disclaimers, incidental
 
-    rule: "gray-600", // structural: card, nav, toast, menu edges
-    "rule-soft": "gray-700", // dividers inside a surface — quieter than its own edge
+    rule: "gray-250", // structural: card, nav, toast, menu edges
+    "rule-soft": "gray-200", // dividers inside a surface — quieter than its own edge
     "rule-strong": "gray-500", // input boundaries and anything carrying meaning (3:1)
 
     accent: "red-500",
-    "accent-ink": "black",
-    primary: "white",
-    "primary-ink": "black",
+    "accent-ink": "white",
+    // The one primary button a screen gets is the red one, as in his Apply
+    // product. There is no white button on paper, so `primary` and `accent`
+    // are the same red and `.super-btn-primary` and `.super-btn-solid` render
+    // alike.
+    primary: "red-500",
+    "primary-ink": "white",
 
-    ok: "green-500",
-    warn: "gold-500",
-    danger: "red-300",
+    ok: "green-600",
+    warn: "gold-700",
+    // A darker shade of the accent rather than another hue: his palette has
+    // no error color that is not red. The primitives differ, which is what
+    // the test holds. Whether a shade split is enough of a split is open —
+    // docs/brand.md, open question 9.
+    danger: "red-800",
 
-    focus: "red-500",
+    focus: "gray-900", // his --sm-focus: the ring is ink, not the accent
   }),
 
   font: Object.freeze({

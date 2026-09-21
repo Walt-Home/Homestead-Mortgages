@@ -79,34 +79,34 @@ const COLOR_GROUPS: { title: string; note: string; roles: [string, string][] }[]
  * The four sanctioned color treatments.
  *
  * Named with primitives rather than semantic roles on purpose. This page
- * documents the palette, and the system has no role for "a sheet of white
- * paper" — that is open question 4 in docs/brand.md. Everywhere other than
- * this page, a component names a role.
+ * documents the palette, and two of the four renderings sit on a black no
+ * role points at any more — it is the street scene's and the marketing
+ * site's. Everywhere other than this page, a component names a role.
  */
 const LOGO_VARIANTS = [
-  {
-    name: "White on black",
-    fg: "var(--sm-white)",
-    bg: "var(--sm-black)",
-    use: "The default. Any product surface.",
-  },
-  {
-    name: "Red on black",
-    fg: "var(--sm-red-500)",
-    bg: "var(--sm-black)",
-    use: "The nav, and the mark on the moving van.",
-  },
   {
     name: "Black on white",
     fg: "var(--sm-black)",
     bg: "var(--sm-white)",
-    use: "Print, and anything that lands on paper.",
+    use: "The default. Every product surface.",
   },
   {
     name: "Red on white",
     fg: "var(--sm-red-500)",
     bg: "var(--sm-white)",
-    use: "Sparingly. 3.5 : 1, so never small.",
+    use: "The nav. 6 : 1 with the paper red, so fine at any size.",
+  },
+  {
+    name: "White on black",
+    fg: "var(--sm-white)",
+    bg: "var(--sm-black)",
+    use: "Marketing, and the street.",
+  },
+  {
+    name: "Red on black",
+    fg: "var(--sm-red-500)",
+    bg: "var(--sm-black)",
+    use: "The mark on the moving van.",
   },
 ];
 

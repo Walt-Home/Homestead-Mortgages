@@ -8,7 +8,7 @@
  */
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
     background: var(--sm-color-ground);
     font-family: var(--sm-font-text);
     -webkit-font-smoothing: antialiased;

@@ -6,6 +6,13 @@ copy in its bundle. Nothing here was invented except where a line is marked
 **proposed**. The visual companion to this document is the brand page
 artifact: <https://claude.ai/code/artifact/5a56ee8d-b28f-4aad-931b-3311e6faee56>.
 
+Revised 21 September 2026: the **color** section now reads from the
+paper-and-ink set Doug's Apply product ships in doug-ludlow/Supermortgage
+(`apps/borrower/app/prototype-theme.css`, `components/apply/apply.css`), his
+default since 15 September. The faces, the type scale, space, shape and
+motion are still the 3 September reading; the black ground survives only
+under the street scene.
+
 Supermortgage is the consumer brand this repo's borrower flow will eventually
 wear. The tokens in `apps/web/src/index.css` today are Homestead's warm
 cream, olive and gold; they are the opposite of this system and nothing maps
@@ -24,7 +31,7 @@ for.
 
 Everything else follows from that split:
 
-- Black is the ground and never a "surface color".
+- Paper is the ground and never a "surface color"; black is the street's.
 - Red is spent only on things a borrower can act on.
 - One display face, one text face, neither of them a web font.
 - Nothing has a shadow.
@@ -84,38 +91,63 @@ is consistent about this ("Thanks for your interest in Supermortgage!").
 
 ## Color
 
+The product's palette is Doug's paper-and-ink set. Each row names the custom
+property it is in his Apply product and the primitive it is in
+`packages/brand/tokens.mjs`; a value he ships that fails a contrast floor is
+called out, with the one used instead.
+
 ### Core
 
-| Name      | Hex       | HSL token                              | Role                                                               |
-| --------- | --------- | -------------------------------------- | ------------------------------------------------------------------ |
-| Black     | `#000000` | `--background: 0 0% 0%`                | The ground. Every page, every surface. Pure black, not near-black. |
-| White     | `#FFFFFF` | `--foreground: 0 0% 100%`, `--primary` | Type, the wordmark, the one primary CTA.                           |
-| Super Red | `#FF3C2E` | `--accent: 4 100% 59%`, `--ring`       | The mark, account buttons, links, focus rings.                     |
+| Name      | Hex       | Doug's property        | Role                                                                                                                              |
+| --------- | --------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Paper     | `#FCFCFC` | `--paper`              | The ground. Every page. Not white: white is one step up.                                                                          |
+| White     | `#FFFFFF` | `--surface`            | Fields, cards, the sheet.                                                                                                         |
+| Text      | `#080808` | `--text`               | Headings and body copy alike. His theme has one text color, so `ink` and `ink-soft` are the same value.                           |
+| Super Red | `#BF242B` | `--accent`, `--button` | The mark, every button, links, the current step. Deeper than the marketing prototype's `#FF3C2E` because it has to read on paper. |
 
 ### Grays
 
-| Name     | Hex       | Token                                            | Role                                           |
-| -------- | --------- | ------------------------------------------------ | ---------------------------------------------- |
-| Sub      | `#ECECEC` | (literal in `.super-sub`)                        | Supporting copy under a headline.              |
-| Muted    | `#A3A3A3` | `--muted-foreground: 0 0% 63.9%`                 | Labels, captions.                              |
-| Rule     | `#4A4A4A` | `--border`, `--input`, `--card-border: 0 0% 29%` | Nav bottom border, toast border, input border. |
-| Hairline | `#2A2A2A` | (literal in `.super-street-wrap`)                | Dividers inside the scene. Decorative only.    |
-| Surface  | `#1A1A1A` | `--muted`, `--secondary: 0 0% 10%`               | Secondary fills.                               |
-| Menu     | `#111111` | (literal)                                        | The mobile menu, with a `#3B3B3B` border.      |
-| Road     | `#0B0B0E` | (literal)                                        | Footer strip; dashes in `#3A3A42`.             |
+| Hex       | Doug's property          | Token       | Role                                                                                           |
+| --------- | ------------------------ | ----------- | ---------------------------------------------------------------------------------------------- |
+| `#F4F4F4` | `--subtle`, `--desktop`  | `paper-100` | A raised block; the desk behind the sheet.                                                     |
+| `#EBEBEB` | `--selected`             | `paper-200` | A chosen row.                                                                                  |
+| `#E5E5E5` | `--line`                 | `gray-200`  | Dividers inside a surface (`rule-soft`).                                                       |
+| `#DEDEDE` | `--card-line`            | `gray-250`  | The edge of a card (`rule`).                                                                   |
+| `#BABABC` | `--field-line`           | `gray-300`  | His input border. 1.9 : 1, so here it is decorative only.                                      |
+| `#A2A2A4` | `--quiet`                | `gray-400`  | His third text step. 2.5 : 1, so here it is icons and hairlines, never text.                   |
+| `#747479` | dark set `--choice-line` | `gray-500`  | The input boundary (`rule-strong`): the lightest gray that clears 3 : 1 on paper and on white. |
+| `#68686A` | `--muted`                | `gray-600`  | Labels and captions (`ink-muted`, and `ink-faint` until a dark set spreads them). 5.4 : 1.     |
 
-### Three reds
+### The reds
 
-The prototype has three reds that are meant to be one:
+| Hex       | Doug's property    | Token     | Role                                              |
+| --------- | ------------------ | --------- | ------------------------------------------------- |
+| `#BF242B` | `--accent`         | `red-500` | The accent and the primary button.                |
+| `#AA1D24` | `--accent-pressed` | `red-600` | Pressed.                                          |
+| `#842128` | `--accent-text`    | `red-800` | Red as text, 9.2 : 1. The error color (`danger`). |
+| `#F9E1E2` | `--accent-soft`    | `red-100` | The wash behind a selected red thing.             |
 
-| Where                                      | Hex                           |
-| ------------------------------------------ | ----------------------------- |
-| CSS accent token                           | `#FF3C2E` (`hsl(4 100% 59%)`) |
-| Every pixel-art sprite, including the mark | `#FF3B30`                     |
-| `favicon.svg`                              | `#FF3C00`                     |
+The marketing prototype's three reds (`#FF3C2E` in its CSS, `#FF3B30` in the
+sprites, `#FF3C00` in the favicon) are now a question about the street scene
+and the favicon only. Open question 1 stands for those.
 
-They differ by a few points and a side-by-side shows it. **The token wins.**
-Redraw the sprites and the favicon to `#FF3C2E`. Open question 1.
+### Status
+
+| Hex       | Token       | Role                                                                                                                           |
+| --------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `#1F7A45` | `green-600` | `ok`. Doug's `--sm-positive`.                                                                                                  |
+| `#A35A00` | `gold-700`  | `warn`. The caution his Apply skin ships, `#B76A00`, is 4.0 : 1 on paper; this is the one from his earlier light set, 5.1 : 1. |
+| `#842128` | `red-800`   | `danger`. A shade of the accent, not another hue. Open question 9.                                                             |
+
+### The dark set
+
+Doug's theme carries a second value set under `data-theme="dark"`: paper
+`#151516`, surface `#222224`, text `#F5F5F5`, muted `#ADADB2`, quiet
+`#94949A`, line `#38383B`, accent `#EF858B` on the ground and `#BF242B` for
+the button. Every pair in it clears the floors except the input boundary on
+a surface (2.9 : 1). It is not built here yet. `tokens.mjs` is arranged so
+that it is a second semantic map under a selector and no component changes;
+that is also where `ink-soft` and `ink-faint` get their own values back.
 
 ### The pixel world
 
@@ -140,16 +172,22 @@ part of the brand.
 
 ### Contrast (WCAG 2.x, computed)
 
-| Pair                                       | Ratio    | Verdict                                                                                                       |
-| ------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------- |
-| White on Black                             | 21.0 : 1 | AAA                                                                                                           |
-| Sub on Black                               | 17.8 : 1 | AAA                                                                                                           |
-| Muted on Black                             | 8.3 : 1  | AAA                                                                                                           |
-| Super Red on Black (outline button, links) | 5.9 : 1  | AA text, AAA large                                                                                            |
-| Black on Super Red (solid button)          | 5.9 : 1  | AA text                                                                                                       |
-| White on Super Red                         | 3.5 : 1  | Large text only                                                                                               |
-| Super Red on White                         | 3.5 : 1  | Large text only. Red links on a light surface fail.                                                           |
-| Rule `#4A4A4A` on Black                    | 2.4 : 1  | Fine for decorative rules. Below the 3 : 1 required for an input border or any boundary that carries meaning. |
+The floors in `packages/brand/test/tokens.test.mjs` are what the build
+enforces; this is what they read on paper.
+
+| Pair                                  | Ratio    | Verdict                                                    |
+| ------------------------------------- | -------- | ---------------------------------------------------------- |
+| Text on paper                         | 19.5 : 1 | AAA                                                        |
+| Muted on paper                        | 5.4 : 1  | AA                                                         |
+| Muted on the raised block             | 5.1 : 1  | AA                                                         |
+| Super Red on paper (links, outlines)  | 5.8 : 1  | AA                                                         |
+| White on Super Red (the button)       | 6.0 : 1  | AA                                                         |
+| `ok` on paper                         | 5.2 : 1  | AA                                                         |
+| `warn` on paper                       | 5.1 : 1  | AA                                                         |
+| `danger` on paper                     | 9.2 : 1  | AAA                                                        |
+| Input boundary `#747479` on paper     | 4.5 : 1  | Above the 3 : 1 a boundary needs                           |
+| His `--field-line` `#BABABC` on paper | 1.9 : 1  | Decorative only                                            |
+| His `--quiet` `#A2A2A4` on paper      | 2.5 : 1  | Never text. His own rule limits it to helper text of 15px+ |
 
 ## Typography
 
@@ -417,12 +455,12 @@ Principles:
    serif and sans get chosen and loaded.
 3. **A vector wordmark.** It is a white PNG today: cannot be recolored,
    blurs at 3×, has no dark-on-light version.
-4. **Light surfaces.** The prototype has no light mode. The borrower flow has
-   forms, documents and PDFs. Decide whether those live on black, or whether
-   the product side of the brand has a paper surface, and what red does there
-   (3.5 : 1 on white).
-5. **Input borders.** `--input` is the same 29 % gray as the rules, 2.4 : 1 on
-   black. Inputs need a lighter border or a filled field.
+4. ~~**Light surfaces.**~~ Decided 21 September 2026: the product is on
+   paper, with Doug's deeper red (`#BF242B`, 5.8 : 1). What is open now is the
+   dark set — see "The dark set" above.
+5. ~~**Input borders.**~~ Decided with 4: `rule-strong` is `#747479`, the
+   lightest gray that clears 3 : 1 on paper and on white. Doug's own field
+   border (`#BABABC`) does not, and stays decorative.
 6. **The guarantee.** "Lowest rates guaranteed" and "automatically
    refinances" are advertising claims on a mortgage product. Before this copy
    ships, someone who knows the rules has to say what disclosures ride with
@@ -436,6 +474,12 @@ Principles:
 7. **Metadata.** `<meta name="description">` still reads "built on Replit";
    there is no OG image. The street would make a good one.
 8. **Relationship to the Homestead tokens.** See below.
+9. **Red for errors.** Doug's palette has no error color that is not red:
+   `danger` is `#842128`, a darker shade of the `#BF242B` accent. The test
+   that keeps them separate primitives passes, but the rule it guards —
+   red cannot mean both "press here" and "something is wrong" — is now held
+   by shade alone. Decide whether that is enough, or whether the error color
+   gets its own hue and Doug's set gains one.
 
 ## How the brand reaches a screen
 
@@ -475,12 +519,11 @@ by a pixel or two as a result, which is the cost of having a scale at all.
 
 ### Still open
 
-The prototype had no light surface, and neither does this: the product is
-black throughout. That remains open question 4 above, and it now has a
-concrete shape — every form, notice, table and figure in the borrower flow has
-a dark treatment, so a light mode would be a second value set for the semantic
-tier rather than a redesign. `tokens.mjs` is arranged for that: remap the
-roles under a selector and no component changes.
+The product is on paper now, and the second value set is the dark one —
+Doug's `data-theme="dark"` set, listed under "The dark set" above. Every form,
+notice, table and figure in the borrower flow renders on the semantic roles,
+so the dark set is a remap of those roles under a selector rather than a
+redesign. `tokens.mjs` is arranged for that; nothing renders it yet.
 
 The mark is drawn in `apps/web/src/components/Wordmark.tsx` rather than
 loaded from the prototype's PNG, because the PNG is white-only and cannot take

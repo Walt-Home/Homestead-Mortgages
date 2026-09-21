@@ -251,9 +251,11 @@ is not a decision, and nothing downstream may render it as one.
 
 ## The design system is a package, and it has one source of truth
 
-The product wears **Supermortgage**: black ground, one red accent, Georgia
-display, Helvetica text. The identity is documented in `docs/brand.md`;
-`packages/brand` is how it reaches a screen.
+The product wears **Supermortgage**: paper ground, one red accent, Georgia
+display, Helvetica text. The colors are the paper-and-ink set Doug's Apply
+product ships, adopted 21 September 2026; the faces are still the marketing
+prototype's. The identity is documented in `docs/brand.md`; `packages/brand`
+is how it reaches a screen.
 
 **To change a color or a font, edit `packages/brand/tokens.mjs` and run
 `npm run brand:build`.** That is the whole procedure, and it is the reason the
@@ -287,7 +289,9 @@ weights are fine on sans text.
 
 **`danger` is never the accent.** Red means "you can act on this". A screen
 that also uses red for "something is wrong" has made both meaningless, so the
-error color is its own primitive and a test enforces the split.
+error color is its own primitive and a test enforces the split. On paper the
+split is a shade rather than a hue — Doug's palette has no error color that is
+not red — and whether that is enough is open question 9 in `docs/brand.md`.
 
 The contrast floors are tests, not guidance — `packages/brand/test` fails the
 build if a token edit drops body text, a label, a status color or an input

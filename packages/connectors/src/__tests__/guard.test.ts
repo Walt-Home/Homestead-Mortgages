@@ -183,7 +183,17 @@ const GUARDED_PORTS = [
   "du",
 ] as const;
 type GuardedPort = (typeof GUARDED_PORTS)[number];
-const UNGUARDED_PORTS = ["identity", "esign", "propertyData", "aporSeries", "mail"] as const;
+// `servicing` is keyed on a loan number and reads the servicing platform's
+// own conclusions about a mortgage it already holds; the port's comment has
+// the argument, and the route that hands the answer out is where "whose" is.
+const UNGUARDED_PORTS = [
+  "identity",
+  "esign",
+  "propertyData",
+  "aporSeries",
+  "mail",
+  "servicing",
+] as const;
 
 describe("a token is for one kind of data", () => {
   it("refuses a token at the adapter when it is for something else", () => {

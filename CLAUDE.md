@@ -33,7 +33,7 @@ Prisma against Postgres, Terraform for the GCP pieces this repo owns.
 data/v1-build.csv          source of truth for WHAT must be satisfied
 packages/requirements      the 85 requirements, executable
 packages/underwriting      the shadow AUS
-packages/connectors        five ports, fixture adapters, the authorization guard
+packages/connectors        fourteen ports, fixture adapters, the authorization guard
 packages/shared            domain types; LoanFile is the object everything reads
 packages/kernel            Doug's kernel, vendored: money, calendar, ledger, fsm, timers, events
 packages/partner-book      the tape reader: a servicer's book onto the partner-feed contract
@@ -113,6 +113,19 @@ Nothing in the borrower flow renders a req_id. Keep it that way.
 not.** Screen 1 runs before APP-005 exists, so guarding the property lookups
 would make the flow unreachable from its own first step — the same trap the
 e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
+
+**The `servicing` port reads Doug's platform, and is keyed on a loan
+number.** `GET /api/loans/:id/servicing` answers the party on a loan with
+the tape's newest observation beside what `apps/servicing` has concluded
+about the loan — the review's verdict, the offer, readiness, the open
+clocks — read over his `/v1` door when the servicer's `integrationDepth` is
+`API` or `SUBSERVICED`. The port is unguarded for the reason the property
+lookups are: the key is the servicer's loan number, never a person, and the
+route decides "whose" with `assertLoanAccess` before it asks. The fixture
+answers what his engine answered for the twelve-loan sample book, and the
+real adapter (`SERVICING_PROVIDER=supermortgage`) is held to the same
+record by a test that replays his door. See `docs/decisions.md`, "The
+servicing platform is read, never joined".
 
 ## Known stubs, for whoever wires the real thing
 

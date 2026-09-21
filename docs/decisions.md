@@ -1605,10 +1605,9 @@ it is production. The shape, and why:
 - **HTTP is the only seam.** Nothing in `apps/api` imports from
   `apps/servicing` and nothing there imports from ours. What our product
   needs from his platform — a loan's servicing record, a payoff figure, the
-  daily review's verdict — it will ask for over his `/v1` API with a
-  principal credential, through a `servicing` connector port with a fixture
-  beside it, the way every other vendor is reached. That port is step 3 of
-  the servicing plan and is not written yet.
+  daily review's verdict — it asks for over his `/v1` API with a bearer,
+  through the `servicing` connector port with a fixture beside it, the way
+  every other vendor is reached. The next section is that port.
 - **His tests, as his.** `scripts/test.mjs` runs them under `node --test`
   with type stripping, one Postgres database per file cloned from a migrated
   template, on `supermortgage_test` beside our own test database, with `supermortgage_probe` for his hosted-measurement tests. The seven
@@ -1636,11 +1635,76 @@ written down.
 
 What is not built: the deploy (a second Cloud Run service, a second database
 and user on our instance, the sweep as a scheduled job, secrets for the
-token), the `servicing` connector port, and any bridge between a loan in
-our `loans` and the same loan in his. His tape import and ours are two
+token), and any bridge between a loan in our `loans` and the same loan in
+his beyond the servicer's own loan number. His tape import and ours are two
 readers of the same file into two models; which one a partner's tape goes
 to is the "one system of record" question the analysis left open, and this
 does not answer it.
+
+## The servicing platform is read, never joined
+
+The `servicing` connector port, 21 September 2026, is how a loan on our
+side learns what the platform on the other side has concluded about it: the
+daily review's verdict and its reasons, the offer the review produced if it
+did, what a refinance would still need, the clocks running, the events that
+led there. `GET /api/loans/:id/servicing` hands that to the party on the
+loan beside the newest `servicing_observations` row, and the two halves are
+kept apart on the wire — `observed` is what the tape said on its as-of date,
+`live` is what the platform says now — because a card that blended them
+would show a balance from one source beside a verdict from another as if
+they were one reading. The port carries no balance and no next due date for
+the same reason: the tape already delivers those, and a second source for
+the same figure is a disagreement waiting to happen.
+
+- **Keyed on the servicer's loan number, and unguarded.** The two sides
+  share no id, so the lookup is the number the servicer put on the tape,
+  which his schema holds unique and ours holds unique per servicer. The
+  port is listed with the property lookups in `guard.test.ts` as unguarded,
+  and the argument is the same one: the key is a loan, never a person, the
+  platform already holds the loan from the same partner's tape, and nothing
+  about a person crosses in either direction. Who may SEE the answer is
+  decided by `assertLoanAccess` before anything is asked, and a stranger is
+  answered as a loan that does not exist.
+- **Only when the servicer is wired that deep.** `Servicer.integrationDepth`
+  is the knob the loan model was given for this. `NONE` and `DEEP_LINK` do
+  not ask; `API` and `SUBSERVICED` do. The route says which it was, so a
+  screen can tell "not asked" from "asked and nothing there" from "asked and
+  could not reach it" — three different answers that one `null` would have
+  collapsed.
+- **Read off his events, not his tools.** His §34 read tools would answer
+  the whole record in one call and are staff-session only by his rule, so
+  the adapter reads `/v1/loans/{id}/events` and `/timers` and assembles the
+  record from the events his engine wrote — `partner_book.review.written`
+  for the verdict, `refi.opportunity.offer_ready` for the benefit
+  disclosure — and calls only the two tools his bus allows a system actor:
+  `33.2/review.facts` for the reasons in words and `33.3/readiness.read`.
+  A refusal from either leaves the record standing without it; a refusal
+  from his door is a throw, and the route reports it as `unavailable` with
+  the reason rather than as nothing. When he exposes a machine read of the
+  book, the adapter shrinks.
+- **The fixture answers what his engine answered.** The twelve verdicts in
+  `servicing-fixture.ts` are what his `partner_book_reviews` held for the
+  sample book after `seed-demo` and one sweep on 21 September, and loan 1's
+  offer is his benefit disclosure figure for figure; a test holds the
+  adapter, replaying his door's captured answers, to the same record the
+  fixture gives. Nothing in the fixture is invented, so a screen built
+  against it is built against the shapes his engine produces.
+- **Rates cross as his fractions and leave as our percents.** His events
+  carry `"0.06375"`; the record carries `"6.375"`, the three-decimal
+  percent string the feed contract settled on. Cents are `bigint` on the
+  record and decimal strings on the wire.
+- **One token, both ends.** Outside production `SERVICING_API_TOKEN` is the
+  same variable `apps/servicing` reads for its own door, so one line in
+  `.env` names both; in production his door refuses the shared token and
+  the value is a principal's token his `principals.issue` minted. The
+  registry refuses to build the real adapter without `SERVICING_API_URL`
+  rather than answer fixture verdicts under his name.
+
+What it does not do: write anything on his side, hold his loan id on ours
+(the lookup walks his imports each time, which is fine for a card and wrong
+for a batch), or reach a loan his platform services rather than watches —
+the `serviced` relationship is recognized and untested, because nothing
+boarded is his and ours at once yet.
 
 ## Tests run against a real Postgres
 

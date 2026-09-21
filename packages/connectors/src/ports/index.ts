@@ -37,6 +37,7 @@ import type {
   PricingScenario,
   PropertyRecord,
   SanctionsScreening,
+  ServicingRecord,
   TaxTranscript,
 } from "@hm/shared";
 
@@ -765,6 +766,32 @@ export interface MailConnector {
   send(message: MailMessage): Promise<MailOutcome>;
 }
 
+/**
+ * The servicing platform's record of a mortgage: what it has concluded about
+ * a loan it watches or services, keyed on the number the servicer uses.
+ *
+ * Unguarded, and listed as such in the guard test, for the reason the
+ * property lookups are: the key is a loan number, never a person, and the
+ * platform on the other side already holds the same loan from the same
+ * partner's tape — the tape that lands here without anyone's authorization
+ * either, because a servicer's facts about a mortgage are not a consumer
+ * report. Nothing about a person crosses in either direction. Who may SEE
+ * the answer is the route's rule: a party on the loan, or nobody.
+ *
+ * `null` is an answer — the platform holds no such loan — and a vendor
+ * failure is a throw, so a caller cannot read "we could not ask" as "there
+ * is nothing".
+ */
+export interface ServicingLoanRef {
+  readonly servicerSlug: string;
+  readonly servicerLoanNumber: string;
+}
+
+export interface ServicingConnector {
+  readonly capabilities: ConnectorCapabilities;
+  fetchRecord(ref: ServicingLoanRef): Promise<ConnectorResult<ServicingRecord> | null>;
+}
+
 export interface ConnectorRegistry {
   readonly identity: IdentityConnector;
   readonly credit: CreditConnector;
@@ -779,4 +806,5 @@ export interface ConnectorRegistry {
   readonly du: DuConnector;
   readonly aporSeries: AporSeriesConnector;
   readonly mail: MailConnector;
+  readonly servicing: ServicingConnector;
 }

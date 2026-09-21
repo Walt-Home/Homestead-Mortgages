@@ -24,6 +24,13 @@ outside production the token is `dev-token`, as in his own README. The
 variables `scripts/run.mjs` maps are listed at the top of that file; anything
 else his config reads passes through under its own name.
 
+Our API reads it through the `servicing` connector port when
+`SERVICING_PROVIDER=supermortgage` and `SERVICING_API_URL` name it; the
+token is the same variable, so one `.env` line serves both ends. Unset, the
+port's fixture answers what his engine answered for the sample book, and
+nothing here needs to be running. See `docs/decisions.md`, "The servicing
+platform is read, never joined".
+
 What is on the other side, from his `src/runtime/server.ts`:
 
 | Surface                                       | What it is                                                              |

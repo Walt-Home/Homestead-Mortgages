@@ -21,6 +21,7 @@ import {
   mismoAusResponseReader,
   plaidConnector,
   stripeIdentityConnector,
+  supermortgageServicingConnector,
   type ConnectorRegistry,
   type DuCredential,
   type PersonaId,
@@ -317,7 +318,25 @@ export function connectors(): ConnectorRegistry {
     chosen.mail = "resend";
   }
 
-  registry = { ...fixtures, propertyData, identity, bank, aporSeries, du, mail };
+  // The servicing platform. Its fixture answers what his engine answered for
+  // the sample book; the real adapter needs to know where he is, and refuses
+  // to be built without that rather than answering fixture verdicts under
+  // his name.
+  let servicing = fixtures.servicing;
+  if (config.providers.servicing === "supermortgage") {
+    if (!config.servicing.apiUrl) {
+      throw new Error("SERVICING_PROVIDER=supermortgage but SERVICING_API_URL is not set.");
+    }
+    servicing = supermortgageServicingConnector({
+      baseUrl: config.servicing.apiUrl,
+      // Outside production his door takes the shared token; unset, it is the
+      // same default his own README and apps/servicing/scripts/run.mjs use.
+      token: config.servicing.apiToken || "dev-token",
+    });
+    chosen.servicing = `supermortgage (${config.servicing.apiUrl})`;
+  }
+
+  registry = { ...fixtures, propertyData, identity, bank, aporSeries, du, mail, servicing };
   mix = chosen;
   // Read off the registry that was just assembled, not off `config`. The
   // configuration is the intent and the registry is the outcome, and every

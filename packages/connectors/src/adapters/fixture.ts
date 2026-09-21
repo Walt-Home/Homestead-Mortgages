@@ -69,6 +69,7 @@ import {
 import { PERSONAS, type PersonaId, DEFAULT_PERSONA } from "../fixtures/personas.js";
 import { ADDRESS_BOOK, OFAC_LISTS, PUBLIC_RECORDS } from "../fixtures/public-records.js";
 import { RATE_SHEET, SHEET_LOCK_DAYS, sheetWindow } from "../fixtures/rate-sheet.js";
+import { fixtureServicingConnector } from "./servicing-fixture.js";
 
 export interface FixtureOptions {
   readonly persona?: PersonaId;
@@ -805,5 +806,6 @@ export function fixtureRegistry(options: FixtureOptions = {}): ConnectorRegistry
     du: fixtureDuConnector(options),
     aporSeries: fixtureAporSeriesConnector(options),
     mail: fixtureMailConnector(options),
+    servicing: fixtureServicingConnector({ latencyMs: options.latencyMs ?? 0 }),
   };
 }

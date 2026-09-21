@@ -98,6 +98,23 @@ export const config = {
      * fixture in production rather than pretending.
      */
     mail: process.env.MAIL_PROVIDER ?? "fixture",
+    /**
+     * "supermortgage" reads a loan's servicing record from Doug's runtime
+     * (apps/servicing) over its machine door; anything else serves the
+     * fixture, which answers what his engine answered for the sample book.
+     */
+    servicing: process.env.SERVICING_PROVIDER ?? "fixture",
+  },
+
+  /**
+   * Where the servicing platform is, and how our API gets in. The token is
+   * the same SERVICING_API_TOKEN apps/servicing reads for its own door, so one
+   * variable names both ends locally; in production it is a principal's token
+   * his `principals.issue` minted, and his door refuses the shared one.
+   */
+  servicing: {
+    apiUrl: process.env.SERVICING_API_URL ?? "",
+    apiToken: process.env.SERVICING_API_TOKEN ?? "",
   },
 
   /**

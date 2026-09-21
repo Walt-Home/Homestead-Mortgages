@@ -22,6 +22,7 @@ import { applicationRouter } from "./routes/application.js";
 import { vestingRouter } from "./routes/vesting.js";
 import { declarationRouter } from "./routes/declarations.js";
 import { partnerRouter } from "./routes/partner.js";
+import { loanRouter } from "./routes/loans.js";
 import { securityHeaders } from "./security-policy.js";
 
 const app = express();
@@ -71,6 +72,10 @@ app.use("/api/files", applicationRouter);
 app.use("/api/files", declarationRouter);
 app.use("/api/files", vestingRouter);
 app.use("/api/files", propertyFileRouter);
+// A mortgage, to the party it belongs to. Below the gate like everything a
+// person reaches; `assertLoanAccess` inside it answers a stranger and a loan
+// that does not exist in the same words.
+app.use("/api/loans", loanRouter);
 
 // An unmatched /api path fell through to the SPA fallback and returned HTML,
 // which the client then tried to parse as JSON — turning "no such endpoint"

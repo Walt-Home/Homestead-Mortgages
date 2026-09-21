@@ -91,16 +91,17 @@ configuration change rather than a migration, which is why no state names it.
 
 This is the part to be honest about.
 
-| Piece                                           | Status                                                    |
-| ----------------------------------------------- | --------------------------------------------------------- |
-| `LoanState`, the enum and its migration         | Built                                                     |
-| `loans`, `loan_parties`, the cascade            | Built                                                     |
-| `loans_terminal_is_final`, the transition guard | Built                                                     |
-| `services/loan-transition.ts`                   | Built; the importer moves a loan a tape says ended        |
-| `services/loans.ts` constructor                 | Built; `services/partner-book.ts` is its first caller     |
-| A route that creates a loan                     | `POST /api/partner/book/imports`, opened by a partner key |
-| The tape reader                                 | `packages/partner-book`, one profile, Doug's §33.1 ported |
-| The claim                                       | **Unbuilt** — a signed token, never an e-mail match       |
+| Piece                                           | Status                                                        |
+| ----------------------------------------------- | ------------------------------------------------------------- |
+| `LoanState`, the enum and its migration         | Built                                                         |
+| `loans`, `loan_parties`, the cascade            | Built                                                         |
+| `loans_terminal_is_final`, the transition guard | Built                                                         |
+| `services/loan-transition.ts`                   | Built; the importer moves a loan a tape says ended            |
+| `services/loans.ts` constructor                 | Built; `services/partner-book.ts` is its first caller         |
+| A route that creates a loan                     | `POST /api/partner/book/imports`, opened by a partner key     |
+| The tape reader                                 | `packages/partner-book`, one profile, Doug's §33.1 ported     |
+| A loan's record, to its party                   | `GET /api/loans/:id/servicing`: the tape beside the live read |
+| The claim                                       | **Unbuilt** — a signed token, never an e-mail match           |
 
 Since 21 September 2026 a servicer's tape becomes rows: one
 `partner_book_imports` row per tape read, an `imported_unclaimed` loan on a
@@ -118,6 +119,16 @@ a signed token the partner delivers — and it links no row to a party somebody
 has signed in as, because a loan appearing in an account without a claim is
 the oracle the 404 rule suppresses. Every row is its own provisional party
 until the claim merges it. `docs/decisions.md`, "A book is a tape, read once".
+
+Since the same day a loan answers for itself, to the party on it and to
+nobody else: `GET /api/loans/:id/servicing` is the newest observation — what
+the tape said on its as-of date — beside what the servicing platform has
+concluded since, read live through the `servicing` connector port when the
+servicer's `integrationDepth` is `API` or `SUBSERVICED`: the daily review's
+verdict and reasons, the offer if there is one, what a refinance still needs,
+the open clocks. The two halves stay apart on the wire, and the live half
+says whether it was not asked, asked and empty, or asked and unreachable.
+`docs/decisions.md`, "The servicing platform is read, never joined".
 
 Nothing a borrower can do produces a loan, still. What renders one is the
 sample borrowers' seeded rows and, in development, the twelve-loan Northlight

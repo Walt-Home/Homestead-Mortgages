@@ -6,3 +6,4 @@ export * from "./decision.js";
 export * from "./property-record.js";
 export * from "./loan-file.js";
 export * from "./pricing.js";
+export * from "./servicing.js";

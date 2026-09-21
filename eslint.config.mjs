@@ -44,6 +44,9 @@ export default tseslint.config(
       // differ from upstream, which is the one thing a vendored tree must not
       // do. packages/kernel/src/index.ts beside it is ours and is linted.
       "packages/kernel/src/kernel/**",
+      // His xlsx reader, vendored the same way for the tape reader; the
+      // commit is in packages/partner-book/src/vendored/VENDORED_FROM.
+      "packages/partner-book/src/vendored/**",
     ],
   },
 

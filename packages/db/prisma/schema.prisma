@@ -1156,6 +1156,7 @@ model Principal {
   employmentDeclarations Employment[]            @relation("EmploymentDeclaredBy")
   coBorrowerInvitations  CoBorrowerInvitation[]
   partnerCredentials     PartnerCredential[]     @relation("PartnerCredentialPrincipal")
+  partnerBookImports     PartnerBookImport[]     @relation("PartnerBookImportPrincipal")
 
   @@unique([kind, subject])
   @@index([partyId])
@@ -1730,8 +1731,99 @@ model Servicer {
 
   loans       Loan[]
   credentials PartnerCredential[]
+  imports     PartnerBookImport[]
 
   @@map("servicers")
+}
+
+/// One tape, read once. Append-only: the same two files land once, and a
+/// later tape from the same partner is a new row with a later as-of.
+///
+/// The report is the per-row account of what was loaded, skipped, rejected
+/// or missing — row numbers, column names, loan numbers, our loan ids. Never
+/// a person's contact, because the reader has nowhere to put one.
+model PartnerBookImport {
+  id          String    @id @default(uuid()) @db.Uuid
+  servicerId  String    @map("servicer_id") @db.Uuid
+  servicer    Servicer  @relation(fields: [servicerId], references: [id], onDelete: Restrict)
+  /// The PARTNER principal the key acted as, which every row this import
+  /// caused names as its actor.
+  principalId String    @map("principal_id") @db.Uuid
+  principal   Principal @relation("PartnerBookImportPrincipal", fields: [principalId], references: [id], onDelete: Restrict)
+
+  asOf    DateTime @map("as_of") @db.Date
+  profile String
+
+  tapeSha256       String @map("tape_sha256")
+  /// Empty when there was no supplement, so two absent supplements are the
+  /// same and the uniqueness below still holds.
+  supplementSha256 String @default("") @map("supplement_sha256")
+
+  rowsTotal      Int  @map("rows_total")
+  rowsLoaded     Int  @map("rows_loaded")
+  rowsRejected   Int  @map("rows_rejected")
+  loansCreated   Int  @map("loans_created")
+  loansUpdated   Int  @map("loans_updated")
+  loansUnchanged Int  @map("loans_unchanged")
+  partiesCreated Int  @map("parties_created")
+  report         Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  observations ServicingObservation[]
+
+  @@unique([servicerId, tapeSha256, supplementSha256], map: "partner_book_imports_same_files_once")
+  @@index([servicerId, asOf], map: "partner_book_imports_servicer_as_of")
+  @@map("partner_book_imports")
+}
+
+/// What the servicer said a loan looked like on a date. Append-only, like a
+/// connector snapshot and for the same reason: "your situation changed" is a
+/// diff between two of these, and you cannot diff against a row you
+/// overwrote. Delinquency is a column here and never a loan state.
+///
+/// `facts` is the typed tape row minus the partner's investor economics,
+/// which never enter. `recordHash` is the contract record's fingerprint, so a
+/// re-import can tell "we have this already" from "this changed".
+model ServicingObservation {
+  id       String            @id @default(uuid()) @db.Uuid
+  loanId   String            @map("loan_id") @db.Uuid
+  loan     Loan              @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  importId String            @map("import_id") @db.Uuid
+  import   PartnerBookImport @relation(fields: [importId], references: [id], onDelete: Restrict)
+
+  asOf   DateTime        @map("as_of") @db.Date
+  status ServicingStatus
+
+  principalBalanceCents BigInt    @map("principal_balance_cents")
+  escrowBalanceCents    BigInt?   @map("escrow_balance_cents")
+  scheduledPaymentCents BigInt?   @map("scheduled_payment_cents")
+  /// The rate as the servicer states it, to the thousandth of a percent —
+  /// the unit a note is quoted in. The loan's integer-bps column rounds.
+  currentRatePct        Decimal?  @map("current_rate_pct") @db.Decimal(6, 3)
+  nextPaymentDueOn      DateTime? @map("next_payment_due_on") @db.Date
+  delinquencyDays       Int?      @map("delinquency_days")
+
+  facts      Json
+  recordHash String @map("record_hash")
+
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  @@unique([importId, loanId], map: "servicing_observations_one_per_import")
+  @@index([loanId, asOf], map: "servicing_observations_loan_as_of")
+  @@map("servicing_observations")
+}
+
+/// The servicer's word for where a loan stands on a tape. Not `LoanState`:
+/// a loan the servicer calls delinquent is still `imported_unclaimed` or
+/// `monitoring_only`, and only the three endings move it.
+enum ServicingStatus {
+  CURRENT
+  DELINQUENT
+  PAID_OFF
+  CHARGED_OFF
+  MATURED
+  TRANSFERRED
 }
 
 /// A partner's way in: a bearer key, hashed, revocable, and never a session.
@@ -1844,8 +1936,11 @@ model Loan {
   originatingApplicationId String?      @unique @map("originating_application_id") @db.Uuid
   originatingApplication   Application? @relation(fields: [originatingApplicationId], references: [id], onDelete: SetNull)
 
-  servicerId String?   @map("servicer_id") @db.Uuid
-  servicer   Servicer? @relation(fields: [servicerId], references: [id], onDelete: Restrict)
+  servicerId         String?   @map("servicer_id") @db.Uuid
+  servicer           Servicer? @relation(fields: [servicerId], references: [id], onDelete: Restrict)
+  /// The servicer's own number for the loan, which is how the next tape finds
+  /// this row again. Null for a loan we originated, until a servicer names it.
+  servicerLoanNumber String?   @map("servicer_loan_number")
 
   /// The four axes. NULL means the feed did not say. A CHECK requires all four
   /// on a loan we originated, because we know our own.
@@ -1894,14 +1989,16 @@ model Loan {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  parties     LoanParty[]
-  transitions LoanTransition[]
+  parties      LoanParty[]
+  transitions  LoanTransition[]
+  observations ServicingObservation[]
 
   /// The index names here and on the two models below are pinned to what the
   /// migration wrote. Prisma names an unmapped index after its columns, and a
   /// name the model does not state is a name the next `prisma migrate dev`
   /// renames — folding a rename of somebody else's index into an unrelated
   /// migration.
+  @@unique([servicerId, servicerLoanNumber], map: "loans_one_per_servicer_number")
   @@index([status, statusEnteredAt], map: "loans_status_entered")
   @@index([monitoringEnabled, nextReviewDueAt], map: "loans_review_due")
   @@index([originatingApplicationId], map: "loans_originating_app")

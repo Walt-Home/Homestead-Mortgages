@@ -34,17 +34,21 @@ app.use(
     credentials: true,
   }),
 );
+// A partner is a key, not a sign-in. Mounted ABOVE the session gate because
+// the gate would refuse it — a servicer's integration has no session and no
+// second factor — and carrying its own gate, so a key opens this prefix and
+// nothing below. Above the body parser and the session too: a tape is
+// megabytes where a person's screen is kilobytes, so the router parses its own
+// body, and a machine's request never mints a cookie.
+// `partner-credential.test.ts` reads this file to hold the order.
+app.use("/api/partner", partnerRouter);
+
 app.use(express.json({ limit: "1mb" }));
 app.use(sessionMiddleware());
 
 // Open: health for infrastructure probes, auth for getting in at all.
 app.use("/api/health", healthRouter);
 app.use("/api/auth", authRouter);
-// A partner is a key, not a sign-in. Mounted ABOVE the session gate because
-// the gate would refuse it — a servicer's integration has no session and no
-// second factor — and carrying its own gate, so a key opens this prefix and
-// nothing below. `partner-credential.test.ts` reads this file to hold the order.
-app.use("/api/partner", partnerRouter);
 
 // Everything past this point requires a signed-in user. Mounted as one gate
 // rather than per-router, so a new router cannot be added without it.

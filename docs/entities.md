@@ -48,10 +48,10 @@ rather than asserted.
 | `users`                   | A sign-in, as Google knows it. An account, not a person                        | Production — upsert on `google_sub`                                                                                              |
 | `parties`                 | The durable person we hold information about                                   | Production — `CLAIMED` for a sign-in; `PROVISIONAL` for a named co-borrower, `CLAIM_PENDING` once invited, `MERGED` once claimed |
 | `principals`              | Anything that can assert or cause something                                    | Production — 3 of 5 kinds                                                                                                        |
-| `facts`                   | One dated statement, by a named actor, about a person                          | Production — always `SELF_ATTESTED`                                                                                              |
+| `facts`                   | One dated statement, by a named actor, about a person                          | Production — `SELF_ATTESTED` from a screen; `PARTNER_SHARED` at `UNVERIFIED` from a partner's tape, never higher                 |
 | `borrowers`               | A record _about_ a party, on one file                                          | Production                                                                                                                       |
 | `application_parties`     | Who is on a credit request, in what role                                       | Production                                                                                                                       |
-| `loan_parties`            | Who is on a mortgage, in what role                                             | Seed and tests — no importer yet                                                                                                 |
+| `loan_parties`            | Who is on a mortgage, in what role                                             | The partner book import, per tape row; seed and tests                                                                            |
 | `co_borrower_invitations` | The SHA-256 of a link a named person was emailed, and when it stops being good | Production — the invitation route                                                                                                |
 | `partner_credentials`     | The SHA-256 of a servicer's bearer key, and when it was revoked                | The `partner:key` command; read on every `/api/partner` request                                                                  |
 | `employers`               | A company that pays this person                                                | Production — vendor pulls only                                                                                                   |
@@ -88,17 +88,18 @@ rather than asserted.
 
 ### The loan
 
-Every table here exists and is fully constrained. The first three have **no
-writer of any kind** — see `docs/loan-lifecycle.md`. The fourth gained one on
-21 September 2026: `partner:key` writes a servicer when it issues that
-servicer a key, so the row exists before any loan points at it.
+Every table here exists and is fully constrained, and since 21 September 2026
+every one has a writer: a partner's tape, read through the key the partner
+holds — see `docs/loan-lifecycle.md`.
 
-| Entity             | Is                                           |
-| ------------------ | -------------------------------------------- |
-| `loans`            | A mortgage in the world, in one of 11 states |
-| `loan_parties`     | Who is on it                                 |
-| `loan_transitions` | Every move it made                           |
-| `servicers`        | Who collects the payments, and holds a key   |
+| Entity                   | Is                                                                          | Written by                                                      |
+| ------------------------ | --------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `loans`                  | A mortgage in the world, in one of 11 states                                | The partner book import; seed and tests                         |
+| `loan_parties`           | Who is on it                                                                | The same                                                        |
+| `loan_transitions`       | Every move it made                                                          | The import, when a tape says a loan ended                       |
+| `servicers`              | Who collects the payments, and holds a key                                  | `partner:key`                                                   |
+| `partner_book_imports`   | One tape read once: the file hashes, the counts, the per-row report         | The import. Append-only                                         |
+| `servicing_observations` | What the servicer said a loan looked like on a date; delinquency lives here | The import, one per loan per tape. Append-only, like a snapshot |
 
 ## What the database actually enforces
 
@@ -165,12 +166,11 @@ Not a backlog — a map of what is scaffolding. Each is fully modeled and fully
 constrained, which is deliberate: the rules were written before the writers so
 the first writer arrives into a shape that already refuses the wrong thing.
 
-| Table                                       | Waiting on                                                           |
-| ------------------------------------------- | -------------------------------------------------------------------- |
-| `loans`, `loan_parties`, `loan_transitions` | The Grander import, deliberately deferred                            |
-| `regulatory_clocks`                         | Notice delivery. A clock nothing can stop must not be opened         |
-| `disclosures`                               | The same. `DisclosureRecord` exists as a type with no rows behind it |
-| `authorizations`, written directly          | Nothing writes it by hand; `consents` mirrors into it by trigger     |
+| Table                              | Waiting on                                                           |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `regulatory_clocks`                | Notice delivery. A clock nothing can stop must not be opened         |
+| `disclosures`                      | The same. `DisclosureRecord` exists as a type with no rows behind it |
+| `authorizations`, written directly | Nothing writes it by hand; `consents` mirrors into it by trigger     |
 
 `createProvisionalParty` is what naming a co-borrower does, and `mergePartyInto`
 is what claiming an invitation does — the named party folds into the party the
@@ -189,9 +189,11 @@ Desktop Underwriter pages own them: `docs/du-graph.md` for the shape and
 engine still reads liabilities and reserves out of snapshot JSON rather than
 out of those tables; the tables are what a submission carries.
 
-**What is not modeled at all:** a regulatory notice that was delivered, and a
-role on a `User` that would let staff open a file. A servicer with a row is
-modeled now — `partner:key` writes one — but nothing yet points a loan at it.
+**What is not modeled at all:** a regulatory notice that was delivered, a
+role on a `User` that would let staff open a file, and the claim — the signed
+token that turns an imported loan's provisional party into a person who has
+signed in. The loan side of the Grander path is written now; the person side
+is not.
 
 ## Where the rest lives
 

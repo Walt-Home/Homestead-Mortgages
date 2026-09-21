@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/shared" },
     { "path": "packages/kernel" },
+    { "path": "packages/partner-book" },
     { "path": "packages/db" },
     { "path": "packages/requirements" },
     { "path": "packages/underwriting" },

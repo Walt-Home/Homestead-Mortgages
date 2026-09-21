@@ -36,6 +36,7 @@ packages/underwriting      the shadow AUS
 packages/connectors        five ports, fixture adapters, the authorization guard
 packages/shared            domain types; LoanFile is the object everything reads
 packages/kernel            Doug's kernel, vendored: money, calendar, ledger, fsm, timers, events
+packages/partner-book      the tape reader: a servicer's book onto the partner-feed contract
 packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5
@@ -140,22 +141,21 @@ e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
   asset report and a county record, so an unrun pull read as the borrower
   declaring themselves clean. `buildDeclarations` is gone and a test keeps it
   gone.
-- **The Grander persona is a row on the sign-in page and nothing else.** An
-  imported member is a party and a loan with no application, and the loan half
-  is built: `Loan`, `Servicer`, `LoanParty` and `LoanTransition` are tables,
-  `createImportedLoan` births one `imported_unclaimed` from a `partner_import`,
-  and the `borrower_claimed` edge out of it is in
-  `packages/shared/src/loan-machine.ts`. What is missing is anything that would
-  put a row there: nothing outside the tests calls `createImportedLoan`, there
-  is no ingest route and no importer, and the API accepts no machine credential
-  at all — `requireAuth` takes a Google sign-in cookie and nothing else. The
-  claim flow `docs/states.md` specifies, a signed single-use token delivered by
-  Grander rather than an email match at sign-in, is unbuilt too. The persona
-  would still refuse to seed if all of that existed: an application in any
-  state would say they asked us for credit, and an unclaimed party has never
-  authenticated, so there is no user to sign a tester in as. The nearest
-  truthful shape is written into `apps/api/src/personas/stories.ts` as a
-  comment for whoever builds the importer.
+- **The Grander persona is a row on the sign-in page and nothing else, and the
+  loan half of what it stands for is written now.** An imported member is a
+  party and a loan with no application. A servicer's tape reaches
+  `POST /api/partner/book/imports` with a partner key, `packages/partner-book`
+  reads it onto the feed contract in `@hm/shared/portfolio`, and
+  `services/partner-book.ts` turns each row into an `imported_unclaimed` loan
+  on a PROVISIONAL party with the partner's facts, plus a
+  `servicing_observations` row per tape. Nothing about that party is
+  retrievable and the loan is not monitored, because the claim is what makes
+  it somebody's — and the claim, a signed single-use token delivered by
+  Grander rather than an email match at sign-in, is the half still unbuilt.
+  The persona refuses to seed for the same reason it always did: an unclaimed
+  party has never authenticated, so there is no user to sign a tester in as.
+  `npm run partner:book -- sample northlight` loads a twelve-loan sample book
+  instead. See `docs/decisions.md`, "A book is a tape, read once".
 - **A sample borrower on hold needs a knob to be held.** All three connector
   fixtures screen clear, so `FixtureOptions.screening: "near_match"` is what
   makes Omar's snapshot, his `sanctionsScreenClear` column and his ledger row

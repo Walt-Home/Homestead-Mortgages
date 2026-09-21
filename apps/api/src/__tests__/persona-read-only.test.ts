@@ -135,7 +135,7 @@ describe("where the read-only gate is mounted", () => {
     const above = [...INDEX.slice(0, gateAt).matchAll(/app\.use\("(\/api\/[^"]*)"/g)].map(
       (m) => m[1],
     );
-    expect(above).toEqual(["/api/health", "/api/auth", "/api/partner"]);
+    expect(above).toEqual(["/api/partner", "/api/health", "/api/auth"]);
   });
 });
 

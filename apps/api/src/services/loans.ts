@@ -83,12 +83,15 @@ export async function createImportedLoan(
     axes: LoanAxes;
     parties: readonly LoanPartyInput[];
     servicerId: string | null;
+    /** The servicer's own number for it, which is how the next tape finds it. */
+    servicerLoanNumber?: string | null;
   },
 ): Promise<{ loanId: string }> {
   return create(tx, {
     status: "IMPORTED_UNCLAIMED",
     source: "PARTNER_IMPORT",
     servicerId: args.servicerId,
+    servicerLoanNumber: args.servicerLoanNumber ?? null,
     axes: args.axes,
     terms: args.terms,
     property: args.property,
@@ -119,6 +122,7 @@ export async function createOriginatedLoan(
     status: "PENDING_BOARDING",
     source: "ORIGINATION",
     servicerId: args.servicerId ?? null,
+    servicerLoanNumber: null,
     axes: args.axes,
     terms: args.terms,
     property: args.property,
@@ -145,6 +149,7 @@ async function create(
     status: "IMPORTED_UNCLAIMED" | "PENDING_BOARDING";
     source: "PARTNER_IMPORT" | "ORIGINATION";
     servicerId: string | null;
+    servicerLoanNumber: string | null;
     axes: LoanAxes;
     terms: LoanTerms;
     property: LoanProperty;
@@ -163,6 +168,7 @@ async function create(
       source: args.source,
       originatingApplicationId: args.originatingApplicationId,
       servicerId: args.servicerId,
+      servicerLoanNumber: args.servicerLoanNumber,
       objective: args.axes.objective ?? null,
       program: args.axes.program ?? null,
       lienPosition: args.axes.lienPosition ?? null,

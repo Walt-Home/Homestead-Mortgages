@@ -15,13 +15,20 @@
       "@hm/db": ["../../packages/db/src/index.ts"],
       "@hm/du": ["../../packages/du/src/index.ts"],
       "@hm/du/test-support": ["../../packages/du/src/__tests__/support/ungated.ts"],
-      "@hm/shared/decision-figures": ["../../packages/shared/src/decision-figures.ts"]
+      "@hm/shared/decision-figures": ["../../packages/shared/src/decision-figures.ts"],
+      "@hm/partner-book": ["../../packages/partner-book/src/index.ts"]
     }
   },
   "include": ["src"],
   "references": [
     {
       "path": "../../packages/shared"
+    },
+    {
+      "path": "../../packages/kernel"
+    },
+    {
+      "path": "../../packages/partner-book"
     },
     {
       "path": "../../packages/requirements"

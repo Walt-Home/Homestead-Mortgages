@@ -16,6 +16,7 @@
     "@hm/connectors": "*",
     "@hm/db": "*",
     "@hm/du": "*",
+    "@hm/partner-book": "*",
     "@hm/requirements": "*",
     "@hm/shared": "*",
     "@hm/underwriting": "*",

@@ -1,0 +1,17 @@
+Doug Ludlow's xlsx reader and writer, vendored byte for byte.
+
+Repository   https://github.com/doug-ludlow/Supermortgage
+Branch       claude/mortgage-subservicer-builder-y9nr7e
+Commit       293261b371fe97d2b6b39e1f29ca60dd808ac8fb (2026-09-17)
+File         src/infra/files/xlsx.ts  ->  packages/partner-book/src/vendored/xlsx.ts
+Vendored     2026-09-21, step 2 of "The Servicing Seam"
+
+A dependency-free SpreadsheetML reader and writer on node:zlib: the zip's
+central directory, shared strings, sheet rows, Excel serial dates. It is
+the one thing the tape reader needs that is neither the kernel nor ours,
+and it is kept as his so a re-sync is a copy rather than a merge. Lint
+and Prettier skip this directory for that reason (root eslint.config.mjs
+and .prettierignore). The same license condition as packages/kernel
+applies: his repository carries no LICENSE file.
+
+Local changes to his file: none.

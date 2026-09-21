@@ -206,7 +206,7 @@ jobs:
   # own: his image (apps/servicing/Dockerfile — one image, the modes his
   # entrypoint has), his migrations applied from that image through the Auth
   # Proxy, his demo seeded the same way, the service deployed, the sweep job
-  # pointed at the new image, and his two probes read back. Before the API's
+  # pointed at the new image, and the runtime's two probes read back. Before the API's
   # own deploy, because the API is told where his door is.
   #
   # Not gated on GOOGLE_CLIENT_ID: nothing in his runtime signs anyone in
@@ -355,7 +355,7 @@ jobs:
           done
           echo "readyz: $READY"
           case "$READY" in
-            *'"database":"reachable"'*) echo "his database is reachable from the deployed revision" ;;
+            *'"database":"reachable"'*) echo "the servicing database is reachable from the deployed revision" ;;
             *) echo "::error::the servicing service cannot reach its database"; exit 1 ;;
           esac
           DOOR=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$URL/v1/partner-book/imports")

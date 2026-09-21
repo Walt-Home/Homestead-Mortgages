@@ -1709,15 +1709,20 @@ boarded is his and ours at once yet.
 ## The servicing app deploys beside the API
 
 Since 21 September 2026 `apps/servicing` deploys as a second Cloud Run
-service in the same project, `homestead-mortgages-staging-servicing`, the
-shape Doug's own infra gives it: one image (`apps/servicing/Dockerfile`, node
+service in OUR project, `homestead-mortgages-staging-servicing`: our GCP
+project, our Cloud SQL instance, our secrets, our identities, our Terraform.
+Nothing in it reaches Doug's own deployment, whose `infra/` was never
+vendored and whose runbook was read only for the shape of his image and
+jobs. "His" below means the vendored code — his migrations, his sweep, his
+door — and never his cloud. The shape is the one that runbook gives the
+runtime: one image (`apps/servicing/Dockerfile`, node
 22 with psql and xmllint, his sources run with type stripping) in three
 modes — `serve` as the service, `migrate` run by the deploy before it, `sweep`
 as a Cloud Run job Cloud Scheduler fires every five minutes — on a database
 of its own on the shared instance, under a runtime identity of its own. The
 deploy workflow's `deploy-servicing` job builds the image, applies his
 migrations and seeds his demo from that image through the Auth Proxy, deploys
-the service, points the sweep job at the image and reads his two probes back;
+the service, points the sweep job at the image and reads the runtime's two probes back;
 the API's own deploy runs after it and is told where his door is, so
 `/api/health` reports `servicing: supermortgage (https://…)` and the
 `servicing` port answers from his platform rather than the fixture. His demo
@@ -1741,7 +1746,7 @@ Three decisions in it, all about keeping the two apps apart on one instance:
   hand, because `CREATE EXTENSION` on Cloud SQL needs the superuser-like role
   and an existing extension passes the check without asking. The asymmetry is
   real and recorded: our app role is API-created, so it can still open his
-  database; his cannot open ours. Terraform describes his database and not
+  database; his cannot open ours. Terraform describes the servicing database and not
   his role, because Terraform can only make the kind of user the boundary
   needs him not to be.
 - **Two secrets, and the identity that reads them reads nothing else.**
@@ -1774,7 +1779,7 @@ firing exit as `skipped`. It runs with no retries, because the next firing is
 the retry, and a failed execution is alerted the way the APOR fetch's is.
 
 Applied by hand from `infra/`, as the rest of it is, with `-target` on the
-new resources: the identity, its grants and his database before the first
+new resources: the identity, its grants and the servicing database before the first
 deploy; the sweep job and its schedule after it, because a Cloud Run job
 needs an image that exists. The service itself is deployed by the workflow
 and described in Terraform, the same standing the API's service has.

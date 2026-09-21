@@ -580,7 +580,7 @@ resource "google_monitoring_alert_policy" "apor_fetch_failed" {
 #   created once by hand, because `CREATE EXTENSION` on Cloud SQL needs the
 #   superuser-like role and `IF NOT EXISTS` passes an existing one without
 #   asking. The asymmetry is real and recorded: our app role is API-created,
-#   so it can still open his database; his cannot open ours.
+#   so it can still open the servicing database; his cannot open ours.
 #
 # The service is publicly routable for the reason the API is: our API
 # presents his bearer in the Authorization header, and Cloud Run's own IAM

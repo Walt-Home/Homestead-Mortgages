@@ -82,8 +82,9 @@ Next.js apps under Chromium are left out, because those apps are not here.
 
 ## Deploy it
 
-It deploys itself: every push to `main` runs the workflow's `deploy-servicing`
-job, which builds `Dockerfile` from the repository root, applies
+It deploys itself, into our GCP project and nowhere else — Doug's own
+deployment and its `infra/` are his prototype and were not copied. Every push
+to `main` runs the workflow's `deploy-servicing` job, which builds `Dockerfile` from the repository root, applies
 `db/migrations` and runs `seed-demo` from that image through the Cloud SQL
 Auth Proxy, deploys `homestead-mortgages-staging-servicing`, points the sweep
 job at the image and reads `/readyz` back. The API's deploy follows and is

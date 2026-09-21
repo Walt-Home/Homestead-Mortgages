@@ -299,7 +299,7 @@ variable "servicing_database_url_secret" {
     Secret Manager secret holding the servicing app's connection string: its
     own database on the shared instance, as its own role. Read by the
     servicing runtime identity and by nothing else — in particular not by
-    hm-run@, so the API's container cannot open his database, and his cannot
+    hm-run@, so the API's container cannot open the servicing database, and his cannot
     open ours because the role in this URL is a plain one that owns exactly
     one database (see main.tf).
   EOT

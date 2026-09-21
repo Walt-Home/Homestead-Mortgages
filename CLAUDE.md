@@ -397,12 +397,12 @@ Today `hm-run@` holds `cloudsql.client` and accessor on the secrets the API
 mounts, granted on the secrets themselves. `hm-github-actions@` can deploy and
 push images and nothing else. Terraform manages all of it.
 
-**Doug's servicing runtime deploys beside the API**, as
-`homestead-mortgages-staging-servicing`: his image
+**Doug's servicing runtime deploys beside the API, in our project and
+nowhere else**, as `homestead-mortgages-staging-servicing`: his image
 (`apps/servicing/Dockerfile`), his migrations and demo seed applied from it
 through the proxy, the sweep as a Cloud Run job every five minutes, on a
 database of its own under `hm-servicing-run@`, which reads exactly its own two
-secrets. His database role is a plain one made in SQL, not a `google_sql_user`,
+secrets. The servicing database role is a plain one made in SQL, not a `google_sql_user`,
 because an API-created user is a `cloudsqlsuperuser` and can open every
 database on the instance; his cannot open ours. The API's deploy runs after
 his and is told where his door is. See `docs/decisions.md`, "The servicing app

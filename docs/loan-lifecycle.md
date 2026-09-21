@@ -87,28 +87,41 @@ work will reuse for assets and liabilities.
 then API, then Supermortgage as the subservicer. Becoming the servicer is a
 configuration change rather than a migration, which is why no state names it.
 
-## Status: built, with no production writer
+## Status: built, and a partner's tape writes it
 
 This is the part to be honest about.
 
-| Piece                                           | Status                         |
-| ----------------------------------------------- | ------------------------------ |
-| `LoanState`, the enum and its migration         | Built                          |
-| `loans`, `loan_parties`, the cascade            | Built                          |
-| `loans_terminal_is_final`, the transition guard | Built                          |
-| `services/loan-transition.ts`                   | Built, exercised only by tests |
-| `services/loans.ts` constructor                 | Built, **no non-test caller**  |
-| A route that creates a loan                     | **Does not exist**             |
-| The Grander import that would fill it           | **Deferred, deliberately**     |
+| Piece                                           | Status                                                    |
+| ----------------------------------------------- | --------------------------------------------------------- |
+| `LoanState`, the enum and its migration         | Built                                                     |
+| `loans`, `loan_parties`, the cascade            | Built                                                     |
+| `loans_terminal_is_final`, the transition guard | Built                                                     |
+| `services/loan-transition.ts`                   | Built; the importer moves a loan a tape says ended        |
+| `services/loans.ts` constructor                 | Built; `services/partner-book.ts` is its first caller     |
+| A route that creates a loan                     | `POST /api/partner/book/imports`, opened by a partner key |
+| The tape reader                                 | `packages/partner-book`, one profile, Doug's §33.1 ported |
+| The claim                                       | **Unbuilt** — a signed token, never an e-mail match       |
 
-No mounted router mentions loans. Nothing a borrower can do produces one. The
-model is in place and waiting for the import that populates it, which was
-deferred on purpose rather than forgotten — see `docs/du-readiness.md` for why
-the Grander relationship is the question that gates it.
+Since 21 September 2026 a servicer's tape becomes rows: one
+`partner_book_imports` row per tape read, an `imported_unclaimed` loan on a
+PROVISIONAL party of its own per loan the servicer has not sent before, and a
+`servicing_observations` row per loan per tape — what the servicer said it
+looked like on that date, appended and never overwritten, with delinquency as
+a column rather than a state. A tape that says a loan ended moves it as
+`servicer_reported` through the same mover a route would use; a tape that says
+it transferred is recorded and the loan waits, because the machine models a
+transfer as a window with two ends and a tape reports only that it closed.
 
-Treat "there is no production writer" as load-bearing when reading anything
-that renders a loan: the sample borrowers are the only rows that exist, and
-they are seeded.
+Two things the import does not do, on purpose. It reads no contact from the
+supplement — the feed contract has nowhere to put an e-mail, and the claim is
+a signed token the partner delivers — and it links no row to a party somebody
+has signed in as, because a loan appearing in an account without a claim is
+the oracle the 404 rule suppresses. Every row is its own provisional party
+until the claim merges it. `docs/decisions.md`, "A book is a tape, read once".
+
+Nothing a borrower can do produces a loan, still. What renders one is the
+sample borrowers' seeded rows and, in development, the twelve-loan Northlight
+book that `npm run partner:book -- sample northlight` loads.
 
 ## Where the rest lives
 

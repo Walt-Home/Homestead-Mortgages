@@ -259,7 +259,8 @@ export const PERSONA_STORIES: readonly PersonaStory[] = [
     coBorrower: {
       key: "priya_dev_raman:dev",
       name: { first: "Dev", last: "Raman" },
-      story: "Invited by Priya, and finished his own part: his details, his answers, his signature.",
+      story:
+        "Invited by Priya, and finished his own part: his details, his answers, his signature.",
     },
   },
   {
@@ -315,29 +316,20 @@ export const PERSONA_STORIES: readonly PersonaStory[] = [
      * Not seeded, and not fixable by seeding harder.
      *
      * A Grander member is a party and a loan with no application. The loan
-     * half is built: `createImportedLoan` in `services/loans.ts` births one
-     * `imported_unclaimed` from a `partner_import` with no originating
-     * application, and `loan-machine.ts` holds the `borrower_claimed` edge out
-     * of it. What is missing is anything that would put a row there. Nothing
-     * outside the tests calls `createImportedLoan`, there is no ingest route
-     * and no importer, and the API accepts no machine credential for one to
-     * present — `requireAuth` takes a Google sign-in cookie and nothing else.
-     * Claiming one is a signed single-use token from Grander, not a sign-in
-     * match, and that is unbuilt too.
+     * half is written now: a servicer's tape reaches
+     * `POST /api/partner/book/imports` with a partner key, and
+     * `services/partner-book.ts` makes each row an `imported_unclaimed` loan
+     * on a PROVISIONAL party carrying the partner's facts at
+     * PARTNER_SHARED/UNVERIFIED, with nothing person-keyed retrievable. What
+     * is missing is the person half: the claim, a signed single-use token
+     * from Grander rather than a sign-in match, is unbuilt.
      *
-     * The seed would refuse even with all of that built. An application in any
+     * The seed refuses for the reason it always did. An application in any
      * state would say this person asked us for credit when they did not, and
      * an unclaimed party has never authenticated — so there is no user to sign
-     * a tester in as.
-     *
-     * The nearest truthful shape, for whoever builds the importer: a
-     * PROVISIONAL party with `sourceFirstSeen: "grander_import"`, its facts
-     * asserted by a PARTNER principal at PARTNER_SHARED/UNVERIFIED, one loan
-     * row in `imported_unclaimed`, no user, and nothing person-keyed
-     * retrievable until the claim. Every piece of that exists already —
-     * `createProvisionalParty`, `partnerPrincipal` and `assertPartnerFacts` in
-     * `services/party.ts`, and `moveLoanIfLegal` in
-     * `services/loan-transition.ts` for the claim itself.
+     * a tester in as. `npm run partner:book -- sample northlight` puts twelve
+     * such loans into a development database instead, through the same
+     * service the key reaches.
      */
     unavailableBecause: "This is a mortgage that already exists, and we don't hold those yet.",
   },

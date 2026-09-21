@@ -37,6 +37,16 @@ export default tseslint.config(
       // Generated from Fannie Mae's DU specification by scripts/build-du.mjs,
       // same reasoning. `npm run du:verify` is what guards these.
       "packages/du/src/generated/**",
+      // Vendored byte for byte from doug-ludlow/Supermortgage — the commit is
+      // in packages/kernel/VENDORED_FROM — and held to his tsconfig, which is
+      // stricter than ours in every way that matters. Linting it found twelve
+      // style findings and no defect, and fixing them would make the tree
+      // differ from upstream, which is the one thing a vendored tree must not
+      // do. packages/kernel/src/index.ts beside it is ours and is linted.
+      "packages/kernel/src/kernel/**",
+      // His xlsx reader, vendored the same way for the tape reader; the
+      // commit is in packages/partner-book/src/vendored/VENDORED_FROM.
+      "packages/partner-book/src/vendored/**",
     ],
   },
 

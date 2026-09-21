@@ -12,7 +12,7 @@
 Homestead Mortgages onboards a homebuyer, retrieves what underwriting needs from
 connected accounts rather than uploads, and returns a decision that explains
 itself. It is one npm-workspaces monorepo — an Express 5 API and a React 19 SPA
-over eight domain packages — shipped as **a single container** on Cloud Run,
+over nine domain packages — shipped as **a single container** on Cloud Run,
 backed by its own Cloud SQL Postgres, with Google sign-in for identity and a
 code from an authenticator app as the second step of every sign-in.
 
@@ -213,11 +213,13 @@ apps/api ──┬──► @hm/requirements ──┐
 
 apps/web ──┬──► @hm/brand          (tokens, Tailwind preset, .super-* CSS)
            └──► @hm/shared         ⚠ declared, aliased, imported by nothing
+
+(nothing) ────► @hm/kernel         Doug's kernel, vendored; its first consumer is the loan model's dates
 ```
 
 **Dependency flow**: `apps → {requirements, underwriting, connectors} → shared`,
-with `apps/api` also importing `shared` directly. `@hm/shared`, `@hm/db` and
-`@hm/brand` are leaves.
+with `apps/api` also importing `shared` directly. `@hm/shared`, `@hm/db`,
+`@hm/brand` and `@hm/kernel` are leaves.
 
 **Only `@hm/underwriting` is pure** — it is handed `now` and `casefileId`, so a
 run is reproducible from its inputs. ⚠ `@hm/requirements` touches no database and
@@ -226,16 +228,17 @@ makes no request, but it _does_ read the wall clock in four places
 from its inputs alone. `@hm/connectors` makes real HTTPS calls to Plaid, Stripe
 and Google Places.
 
-| Package                 | What it is                                                                                                                                                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `packages/shared`       | The vocabulary. `LoanFile` is the object everything reads — nullable sections all the way down, because a file is legitimately half-empty for most of its life                                                                             |
-| `packages/requirements` | The 85 requirements, executable: 39 applicability predicates, 85 satisfaction evaluators, a dependency graph                                                                                                                               |
-| `packages/underwriting` | The shadow AUS — ratios, reserves, compliance, pricing, each figure carrying its derivation                                                                                                                                                |
-| `packages/connectors`   | Thirteen ports, fixture adapters for all thirteen, six real ones (three partial), and the authorization guard                                                                                                                              |
-| `packages/du`           | The Desktop Underwriter submission: the six generated tables, the assembler, the MISMO 3.4 emitter, the preflight, the institution and originator placeholders, and the compute boundary the Map holds                                     |
-| `packages/du-schema`    | The vendored corpus — DU Spec 1.9.3, the Fannie schema chain, the MISMO reference model and the eighteen sample casefiles — that `du:verify` rebuilds the tables from                                                                      |
-| `packages/db`           | Prisma schema and migrations. Several guarantees are triggers and CHECK constraints, not application code                                                                                                                                  |
-| `packages/brand`        | Supermortgage design tokens. `tokens.mjs` is the source of truth and `tokens.css` is generated from it; `base.css`, `components.css`, `scene.css` and the Tailwind preset are hand-written and read the tokens rather than being generated |
+| Package                 | What it is                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/shared`       | The vocabulary. `LoanFile` is the object everything reads — nullable sections all the way down, because a file is legitimately half-empty for most of its life                                                                                                                                                                                                                                                                        |
+| `packages/requirements` | The 85 requirements, executable: 39 applicability predicates, 85 satisfaction evaluators, a dependency graph                                                                                                                                                                                                                                                                                                                          |
+| `packages/underwriting` | The shadow AUS — ratios, reserves, compliance, pricing, each figure carrying its derivation                                                                                                                                                                                                                                                                                                                                           |
+| `packages/connectors`   | Thirteen ports, fixture adapters for all thirteen, six real ones (three partial), and the authorization guard                                                                                                                                                                                                                                                                                                                         |
+| `packages/du`           | The Desktop Underwriter submission: the six generated tables, the assembler, the MISMO 3.4 emitter, the preflight, the institution and originator placeholders, and the compute boundary the Map holds                                                                                                                                                                                                                                |
+| `packages/du-schema`    | The vendored corpus — DU Spec 1.9.3, the Fannie schema chain, the MISMO reference model and the eighteen sample casefiles — that `du:verify` rebuilds the tables from                                                                                                                                                                                                                                                                 |
+| `packages/db`           | Prisma schema and migrations. Several guarantees are triggers and CHECK constraints, not application code                                                                                                                                                                                                                                                                                                                             |
+| `packages/kernel`       | Doug's servicing kernel, vendored byte for byte from doug-ludlow/Supermortgage at the commit its `VENDORED_FROM` names: bigint-cents money and a scale-30 Decimal, `PlainDate` with six named day-count calendars, a double-entry ledger that refuses an unbalanced set, a declarative state machine, the timer registry and engine over his 2,097-row spec, and an event store. Imports only Node built-ins. Consumed by nothing yet |
+| `packages/brand`        | Supermortgage design tokens. `tokens.mjs` is the source of truth and `tokens.css` is generated from it; `base.css`, `components.css`, `scene.css` and the Tailwind preset are hand-written and read the tokens rather than being generated                                                                                                                                                                                            |
 
 ⚠ `packages/brand` is the only workspace absent from the root `tsconfig.json`
 project references — it is plain JS and CSS with no `tsc` build, which is why

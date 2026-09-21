@@ -145,6 +145,6 @@ describe("nothing about a loan is reachable without a session", () => {
     const index = readFileSync(resolve(src, "index.ts"), "utf8");
     const above = index.slice(0, index.indexOf('app.use("/api", requireAuth)'));
     const routers = [...above.matchAll(/app\.use\([^)]*?(\w+Router)\)/g)].map((m) => m[1]);
-    expect(routers).toEqual(["healthRouter", "authRouter", "partnerRouter"]);
+    expect(routers).toEqual(["partnerRouter", "healthRouter", "authRouter"]);
   });
 });

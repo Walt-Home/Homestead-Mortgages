@@ -17,7 +17,7 @@
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
@@ -31,6 +31,14 @@ const LEGACY =
 // Build output and installed packages are copies of, or dependencies on, the
 // source; scanning them would report the same fact twice or somebody else's.
 const NOT_SOURCE = new Set(["node_modules", "dist", "build", "coverage", ".turbo"]);
+
+// Somebody else's source, vendored byte for byte: Doug's kernel and the timer
+// registry it reads (packages/kernel/VENDORED_FROM). Eight rows of that
+// registry name `application_received_at`, because his origination spec has a
+// column by that name and anchors TRID clocks on it. That is his column, not a
+// reader of ours, and a vendored tree cannot be edited to say otherwise. The
+// package's own src/index.ts is ours and stays scanned.
+const VENDORED = [join("packages", "kernel", "src", "kernel"), join("packages", "kernel", "spec")];
 const TEXT = /\.(tsx?|jsx?|[cm]js|json|sql|prisma|css|html|md|ya?ml)$/;
 
 function files(dir: string): string[] {
@@ -49,6 +57,7 @@ function scanned(): string[] {
   return ["apps", "packages"]
     .flatMap((workspace) => files(join(repoRoot, workspace)))
     .map((path) => relative(repoRoot, path))
+    .filter((path) => !VENDORED.some((tree) => path.startsWith(tree + sep)))
     .sort();
 }
 
@@ -101,6 +110,11 @@ describe("the legacy receipt columns are retired", () => {
     expect(all).toContain(join("apps", "api", "src", "services", "repository.ts"));
     expect(all).toContain(join("apps", "web", "src", "lib", "flow.ts"));
     expect(all).toContain(join("packages", "shared", "src", "application-machine.ts"));
+    // The vendored tree is skipped and nothing beside it is: the package's own
+    // file is read, his registry is not.
+    expect(all).toContain(join("packages", "kernel", "src", "index.ts"));
+    expect(all).not.toContain(join("packages", "kernel", "spec", "registry", "timers.json"));
+    expect(all).not.toContain(join("packages", "kernel", "src", "kernel", "timers", "registry.ts"));
 
     expect(offenders()).toEqual([
       join(migrations, "20260901150045_initial_schema", "migration.sql"),

@@ -1504,9 +1504,77 @@ things mounted above the session gate. Doug's platform reached the same
 shape independently — a shared bearer outside production and `api_principals`
 rows inside it — which is the seam step 3 of the servicing plan calls across.
 
-What is not built: the routes the key is for. `GET /api/partner/me` is the
-smoke route; the book import that fills `loans` from a partner's tape lands
-once the tape reader is ported onto the vendored kernel.
+`GET /api/partner/me` is the smoke route. The book import beside it is the
+section that follows.
+
+## A book is a tape, read once
+
+The loan model had every constraint and no writer. Since 21 September 2026 a
+servicer's tape is the writer: `POST /api/partner/book/imports`, opened by
+the partner's key, reads the file through `packages/partner-book` and turns
+each row into a loan the servicer has not sent before, or an observation on
+one it has. The reader is a port of Doug's §33.1 onto the vendored kernel —
+his 118-column `m3-v1` profile, his cell parsers, his xlsx reader byte for
+byte — and the derivation onto our feed contract is ours. Decisions, and the
+places where this deliberately differs from his:
+
+- **The contract is the door, and it is strict.** `@hm/shared/portfolio` was
+  written before any tape with two absences on purpose, no tax id and no
+  e-mail, and every derived record is parsed through it before a database is
+  touched. A column the contract cannot hold is a column that never enters.
+  His supplement carries each borrower's e-mail and phone so he can invite
+  them; ours takes its date of birth and name and ignores its e-mail, phone
+  and tax-id columns by name, reporting that it did.
+- **No linking to an existing party.** His rule links a tape row to a party
+  already on the platform when the e-mail and the name agree. A loan
+  attached to a claimed party by an e-mail match would appear in that
+  person's account without a claim, which is the oracle the 404 rule
+  suppresses. Every row becomes a PROVISIONAL party of its own, with the
+  partner's facts at `PARTNER_SHARED` / `UNVERIFIED`, and the claim merges it
+  later.
+- **Not monitored.** `loans_unclaimed_is_not_monitored` holds that nothing
+  about an unclaimed loan is, and the import does not argue with it. His
+  daily review runs over every monitored loan the day the tape lands; ours
+  waits for the claim to turn the review on. That is the analysis's first
+  contradiction in table form, and it stays unresolved here.
+- **An observation, not an overwrite.** The loan row keeps its terms at
+  origination. What moves month to month — balance, rate, next due, how many
+  days behind — is a `servicing_observations` row per loan per tape,
+  append-only like a connector snapshot and for the same reason. Delinquency
+  is a column there and never a loan state.
+- **A tape that says the loan ended moves it, through the same mover a route
+  would use.** Paid off, charged off and matured have edges from every live
+  state and move as `servicer_reported`. "Transferred" has no edge from an
+  unclaimed loan: the machine models a servicing transfer as a window with
+  two ends, and a tape reports only that it closed. It is recorded and
+  reported, and the loan waits for a decision about that edge.
+- **The same two files land once.** An import is unique on the servicer and
+  the SHA-256 of both files; a second reading answers `already_loaded` with
+  the first import's id. A rejected tape — a required header missing — writes
+  nothing at all. Loans the servicer has sent before and this tape does not
+  carry are reported as `not_on_tape`, never moved.
+- **The one lossy step is named.** A note is quoted in eighths and
+  `loans.note_rate_bps` is an integer, so 6.375 % becomes 638 there, by the
+  same rounding a scenario's rate already gets. The contract carries the rate
+  as a three-decimal percent string and the observation keeps it to the
+  thousandth. The column's unit is wrong for a mortgage and has been since
+  `loan_scenarios`; that is a schema change for another day, and until then
+  the observation is where the true figure is.
+- **Investor economics never enter.** The retained rate, the net rate, the
+  remittance type and the reconciled cash flows are marked on the profile
+  and dropped before a fact is built. `docs/states.md` forbids the
+  acquisition channel from reaching anything, and a servicer's margin is
+  exactly the thing a refinance review must not be able to see.
+- **The tape's word for who it is about is a fact, once.** A monthly tape
+  that spells a name the same way every month is not twelve statements a
+  year; a partner fact is re-asserted only when the value changed, compared
+  with its keys sorted, because jsonb keeps its own order.
+
+What is not built: the claim (the signed token that turns a provisional party
+into a person), the daily review the observations exist to feed, and a second
+tape profile. `npm run partner:book -- sample northlight` loads the
+twelve-loan sample book into a development database, through the same
+service the key reaches.
 
 ## Tests run against a real Postgres
 
@@ -2211,6 +2279,42 @@ onto the file, which the route did; both now go through
 typed it — `512-555-0134`, twelve characters at a destination that takes ten
 — so the assembler renders ten digits, whatever was typed around them, and
 never invents a number that fits.
+
+## The kernel is Doug's, byte for byte
+
+Step 1 of the servicing plan (21 September) is his `src/kernel` as
+`packages/kernel`: 1,779 lines of money, calendar, ledger, state machine,
+timers and events that import only Node built-ins. It is vendored rather than
+depended on because his repository is not a package and publishes nothing, and
+rather than ported because a port is a fork on day one and the plan's later
+steps import it as it is.
+
+**Nothing in his tree is edited, and the layout is what makes that possible.**
+His timer registry and its test resolve `../../../spec/registry/timers.json`
+relative to their own file. Mirroring his tree under `src/kernel/` and putting
+the registry at `packages/kernel/spec/registry/timers.json` keeps that path
+true from `src/` and from `dist/` alike, so not one line changed and `diff -r`
+against a clone at his commit reports nothing. The 822 KB registry comes along
+because `loadRegistry()` and one test read it; the kernel is a library with one
+data file, not a pure library.
+
+**Every toolchain difference is absorbed by the package's `tsconfig.json`.**
+He writes `.ts` import specifiers for Node's type stripping; TypeScript 5.7's
+`rewriteRelativeImportExtensions` keeps them and emits `.js` under our
+Node16 resolution. His four extra checks — `exactOptionalPropertyTypes`,
+`noImplicitOverride`, `verbatimModuleSyntax`, `erasableSyntaxOnly` — are on,
+because his code is written to them and they cost nothing. His tests stay on
+`node:test` and `node:assert/strict` and run under `node --test` with type
+stripping, which is zero shim code and Node 22.6 or newer; CI is on 22.
+
+**Lint and Prettier skip the tree**, the way they skip generated files. Lint
+found twelve things, all style — `prefer-const` twice, useless regex escapes,
+a `this` alias, one unused import in a test — and no defect. Fixing them would
+be the first divergence from upstream, and the whole value of a vendored tree
+is that there is none.
+
+**His repository carries no license file.** Doug's written OK to vendor is the
+gate on this reaching `main`, and the vendoring commit says so.
 
 ## Still outstanding
 

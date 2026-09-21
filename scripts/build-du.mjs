@@ -2440,6 +2440,12 @@ export const TABLES_OFF_THE_WIRE = {
   partner_credentials: {
     why: "The hash of a servicer's bearer key and when it was revoked; how a partner's machine reaches the API at all, and never a fact about a borrower or a loan.",
   },
+  partner_book_imports: {
+    why: "One tape read once: the file hashes, the counts and the per-row report of a servicer's book; our record of an import, and a casefile describes a credit request, not a servicing feed.",
+  },
+  servicing_observations: {
+    why: "What a servicer said a loan looked like on a date — balance, rate, next due, delinquency — appended per tape; a mortgage somebody already has, which is the one thing a new casefile is not about.",
+  },
   connector_links: {
     why: "Which source is linked, when it last synced and whether monitoring is on; what a link produced is a snapshot, and the snapshot is what reaches the wire.",
   },

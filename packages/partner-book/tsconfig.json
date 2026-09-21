@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "paths": {
+      "@hm/shared/portfolio": ["../shared/src/portfolio.ts"]
+    }
+  },
+  "include": ["src"],
+  "references": [{ "path": "../kernel" }, { "path": "../shared" }]
+}

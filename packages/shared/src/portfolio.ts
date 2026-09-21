@@ -19,9 +19,13 @@
  * match `docs/states.md` forbids by name, an email match at sign-in, one WHERE
  * clause away, defended by a comment.
  *
- * **Money arrives as `bigint` cents and rates as integer bps**, so the adapter
- * is the only place a vendor's dollar figure becomes cents and no float
- * reaches a service.
+ * **Money arrives as `bigint` cents and rates as three-decimal percent
+ * strings**, so the adapter is the only place a vendor's dollar figure becomes
+ * cents and no float reaches a service. Not integer basis points: a mortgage
+ * note is quoted in eighths, and 6.375 % is 637.5 of them. The `loans` column
+ * that still holds integer bps rounds at the importer, where the rounding is
+ * visible, rather than here, where it would be a lie about what the servicer
+ * said.
  *
  * This module is deliberately outside `index.ts`. `@hm/shared`'s barrel is
  * compiled and bundled by the browser app, which resolves its own copy of zod
@@ -58,6 +62,12 @@ export const ImportedNameSchema = z
   .strict();
 
 export type ImportedName = z.infer<typeof ImportedNameSchema>;
+
+/**
+ * A percent to three decimals, as a string: "7.250", "6.375". The unit a
+ * note rate is actually quoted in, and one no float can hold exactly.
+ */
+export const RatePctSchema = z.string().regex(/^\d{1,2}\.\d{3}$/);
 
 export const ImportedPartySchema = z
   .object({
@@ -122,7 +132,7 @@ export const ImportedLoanRecordSchema = z
         occupancy: z.enum(["primary_residence", "second_home", "investment"]).nullable(),
         rateType: z.enum(["fixed", "arm"]),
         originalPrincipalCents: z.bigint(),
-        noteRateBps: z.number().int(),
+        noteRatePct: RatePctSchema,
         termMonths: z.number().int(),
         originatedOn: z.string().date().nullable(),
         firstPaymentOn: z.string().date().nullable(),
@@ -143,7 +153,7 @@ export const ImportedLoanRecordSchema = z
         principalBalanceCents: z.bigint(),
         escrowBalanceCents: z.bigint().nullable(),
         scheduledPaymentCents: z.bigint().nullable(),
-        currentRateBps: z.number().int().nullable(),
+        currentRatePct: RatePctSchema.nullable(),
         nextPaymentDueOn: z.string().date().nullable(),
         delinquencyDays: z.number().int().nullable(),
       })

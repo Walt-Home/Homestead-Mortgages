@@ -70,7 +70,7 @@ jobs:
         run: npm run brand:verify
 
       - name: TypeScript
-        run: npx tsc -b packages/shared packages/requirements packages/connectors packages/underwriting packages/du-schema packages/du packages/db apps/api apps/web
+        run: npx tsc -b packages/shared packages/kernel packages/requirements packages/connectors packages/underwriting packages/du-schema packages/du packages/db apps/api apps/web
 
       # There was no eslint config in this repo until now — the dependencies
       # were installed and every workspace's `lint` script called eslint, but

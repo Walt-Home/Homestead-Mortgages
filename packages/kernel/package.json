@@ -1,0 +1,63 @@
+{
+  "name": "@hm/kernel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./money": {
+      "types": "./dist/kernel/money/index.d.ts",
+      "import": "./dist/kernel/money/index.js",
+      "default": "./dist/kernel/money/index.js"
+    },
+    "./calendar": {
+      "types": "./dist/kernel/calendar/index.d.ts",
+      "import": "./dist/kernel/calendar/index.js",
+      "default": "./dist/kernel/calendar/index.js"
+    },
+    "./ledger": {
+      "types": "./dist/kernel/ledger/index.d.ts",
+      "import": "./dist/kernel/ledger/index.js",
+      "default": "./dist/kernel/ledger/index.js"
+    },
+    "./fsm": {
+      "types": "./dist/kernel/fsm/index.d.ts",
+      "import": "./dist/kernel/fsm/index.js",
+      "default": "./dist/kernel/fsm/index.js"
+    },
+    "./events": {
+      "types": "./dist/kernel/events/index.d.ts",
+      "import": "./dist/kernel/events/index.js",
+      "default": "./dist/kernel/events/index.js"
+    },
+    "./timers": {
+      "types": "./dist/kernel/timers/index.d.ts",
+      "import": "./dist/kernel/timers/index.js",
+      "default": "./dist/kernel/timers/index.js"
+    },
+    "./concurrency": {
+      "types": "./dist/kernel/concurrency.d.ts",
+      "import": "./dist/kernel/concurrency.js",
+      "default": "./dist/kernel/concurrency.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
+    "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test 'src/**/*.test.ts'",
+    "clean": "rm -rf dist"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.8.0"
+  }
+}

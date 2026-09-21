@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "packages/shared" },
+    { "path": "packages/kernel" },
     { "path": "packages/db" },
     { "path": "packages/requirements" },
     { "path": "packages/underwriting" },

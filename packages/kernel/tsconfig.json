@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    // Doug's imports name their files with the `.ts` extension. This keeps
+    // them as he wrote them and has `tsc -b` emit `.js` in dist, which is
+    // what our Node16 resolution wants. TypeScript 5.7 or newer.
+    "rewriteRelativeImportExtensions": true,
+    // The four checks his tsconfig turns on that ours does not. His code is
+    // written to them (the `...(x !== undefined ? { x } : {})` spreads are
+    // exactOptionalPropertyTypes), so they cost nothing here and hold his bar
+    // for anything that gets added beside it.
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true
+  },
+  "include": ["src"]
+}

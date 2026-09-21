@@ -2162,6 +2162,42 @@ typed it — `512-555-0134`, twelve characters at a destination that takes ten
 — so the assembler renders ten digits, whatever was typed around them, and
 never invents a number that fits.
 
+## The kernel is Doug's, byte for byte
+
+Step 1 of the servicing plan (21 September) is his `src/kernel` as
+`packages/kernel`: 1,779 lines of money, calendar, ledger, state machine,
+timers and events that import only Node built-ins. It is vendored rather than
+depended on because his repository is not a package and publishes nothing, and
+rather than ported because a port is a fork on day one and the plan's later
+steps import it as it is.
+
+**Nothing in his tree is edited, and the layout is what makes that possible.**
+His timer registry and its test resolve `../../../spec/registry/timers.json`
+relative to their own file. Mirroring his tree under `src/kernel/` and putting
+the registry at `packages/kernel/spec/registry/timers.json` keeps that path
+true from `src/` and from `dist/` alike, so not one line changed and `diff -r`
+against a clone at his commit reports nothing. The 822 KB registry comes along
+because `loadRegistry()` and one test read it; the kernel is a library with one
+data file, not a pure library.
+
+**Every toolchain difference is absorbed by the package's `tsconfig.json`.**
+He writes `.ts` import specifiers for Node's type stripping; TypeScript 5.7's
+`rewriteRelativeImportExtensions` keeps them and emits `.js` under our
+Node16 resolution. His four extra checks — `exactOptionalPropertyTypes`,
+`noImplicitOverride`, `verbatimModuleSyntax`, `erasableSyntaxOnly` — are on,
+because his code is written to them and they cost nothing. His tests stay on
+`node:test` and `node:assert/strict` and run under `node --test` with type
+stripping, which is zero shim code and Node 22.6 or newer; CI is on 22.
+
+**Lint and Prettier skip the tree**, the way they skip generated files. Lint
+found twelve things, all style — `prefer-const` twice, useless regex escapes,
+a `this` alias, one unused import in a test — and no defect. Fixing them would
+be the first divergence from upstream, and the whole value of a vendored tree
+is that there is none.
+
+**His repository carries no license file.** Doug's written OK to vendor is the
+gate on this reaching `main`, and the vendoring commit says so.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

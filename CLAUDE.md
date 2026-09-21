@@ -35,12 +35,23 @@ packages/requirements      the 85 requirements, executable
 packages/underwriting      the shadow AUS
 packages/connectors        five ports, fixture adapters, the authorization guard
 packages/shared            domain types; LoanFile is the object everything reads
+packages/kernel            Doug's kernel, vendored: money, calendar, ledger, fsm, timers, events
 packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5
 apps/web                   React + Vite
 infra                      Terraform
 ```
+
+**`packages/kernel` is Doug's, byte for byte.** Everything under its
+`src/kernel/` and `spec/` is doug-ludlow/Supermortgage at the commit
+`packages/kernel/VENDORED_FROM` names, and nothing in it has been edited here:
+`diff -r` against a clone at that commit reports nothing, and that is the
+property to keep. Lint and Prettier skip the tree for the same reason they
+skip generated files. Its tests are his, run under `node --test` rather than
+vitest so they stay his too. `src/index.ts` beside the tree is ours. Nothing
+consumes the package yet; the loan model's dates moving onto `PlainDate` is the
+first thing that will.
 
 ## The borrower flow is FIVE screens; the engine has ten
 

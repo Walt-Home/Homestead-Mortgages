@@ -13,3 +13,10 @@ packages/du/src/generated/
 dist/
 **/dist/
 package-lock.json
+
+# Doug's kernel, vendored byte for byte from doug-ludlow/Supermortgage (the
+# commit is in packages/kernel/VENDORED_FROM). Reformatting it would make every
+# re-sync a merge instead of a copy. The 822 KB timer registry beside it is his
+# spec's data, not ours to reflow.
+packages/kernel/src/kernel/
+packages/kernel/spec/

@@ -1,0 +1,59 @@
+Doug Ludlow's servicing kernel, vendored byte for byte.
+
+Repository   https://github.com/doug-ludlow/Supermortgage
+Branch       claude/mortgage-subservicer-builder-y9nr7e
+             (the branch of record; his remote HEAD, not main)
+Commit       293261b371fe97d2b6b39e1f29ca60dd808ac8fb
+Committed    2026-09-17 14:19:15 +0000
+             "Merge s36-deploy-build into main: apps/partner deployed to
+             /partners on the nonprod demo ..."
+Vendored     2026-09-21, step 1 of "The Servicing Seam"
+             https://claude.ai/code/artifact/01b81333-7be3-4138-952e-37ae29166d5c
+
+What was copied, and where it went
+
+  src/kernel/                 ->  packages/kernel/src/kernel/
+                                  26 files: money, calendar, ledger, fsm,
+                                  timers, events, concurrency, and his five
+                                  test files. 1,779 non-test lines.
+  spec/registry/timers.json   ->  packages/kernel/spec/registry/timers.json
+                                  2,097 rows. loadRegistry() and
+                                  timers.test.ts read it by a path relative
+                                  to their own file.
+
+Both are byte for byte. From this directory,
+
+  find src/kernel spec -type f | sort | xargs shasum -a 256 | shasum -a 256
+
+is 3eb08e585c23c45f82ac54cd844ebfdb44e01e8cdceb31a38a6deb9bc3ceab56, and
+`diff -r` against a clone at the commit above reports nothing.
+
+Why src/kernel/ rather than src/: his registry resolves
+`../../../spec/registry/timers.json` from its own file. Mirroring his tree
+keeps that path true from src/ and from dist/ alike, so nothing had to be
+edited. Everything under src/kernel/ and spec/ is his; src/index.ts,
+package.json, tsconfig.json and this file are ours.
+
+Local changes to his files: none.
+
+Toolchain differences, absorbed by tsconfig.json rather than by edits:
+  - his `.ts` import specifiers stay as written; rewriteRelativeImportExtensions
+    (TypeScript 5.7+) emits `.js` in dist for our Node16 resolution
+  - his four extra checks are on: exactOptionalPropertyTypes,
+    noImplicitOverride, verbatimModuleSyntax, erasableSyntaxOnly
+  - his tests run as his: `node --test` with type stripping, on node:test and
+    node:assert/strict. Node 22.6 or newer.
+  - eslint and Prettier skip src/kernel/ and spec/ (root eslint.config.mjs
+    and .prettierignore say why)
+
+License: the source repository carries no LICENSE file. Doug's written OK to
+vendor is required, and this package must not reach main until Joe confirms
+it has been obtained.
+
+To re-sync:
+  git clone --depth 1 --branch claude/mortgage-subservicer-builder-y9nr7e \
+    https://github.com/doug-ludlow/Supermortgage.git
+  rsync -a --delete Supermortgage/src/kernel/ packages/kernel/src/kernel/
+  cp Supermortgage/spec/registry/timers.json packages/kernel/spec/registry/
+  then update Commit, Committed, Vendored and the hash above, and run
+  npm test --workspace=@hm/kernel.

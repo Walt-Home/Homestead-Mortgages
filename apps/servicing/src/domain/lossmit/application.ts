@@ -1,0 +1,50 @@
+/** §12.1 Acknowledge loss-mit application — classification, 45-day test, completeness, reasonable date, duplicative test. */
+import { type PlainDate, addDays, daysBetween } from "../../kernel/calendar/date.ts";
+import { addBusinessDays, federal, fannieEt } from "../../kernel/calendar/business.ts";
+import { zonedEpochMs } from "../../kernel/calendar/zoned.ts";
+
+export function classify(c: { has_evaluative_info: boolean; confidence: number }): "application" | "rfa_only" { return c.has_evaluative_info || c.confidence < 0.8 ? "application" : "rfa_only"; }
+export function ackDue(receivedOn: PlainDate, loanTz = "America/New_York"): { due_on: PlainDate; due_at_ms: number } { const d = addBusinessDays(receivedOn, 5, federal); return { due_on: d, due_at_ms: zonedEpochMs(d, "23:59", loanTz) }; }
+/**
+ * §1024.41(b)(2) applies only when received > 45 days before a scheduled sale; otherwise Reg X imposes no (b)(2) duty but
+ * Fannie Mae D2-2-05 still requires its acknowledgment within 5 business days — Guide business days (`business_days_fannie_et`:
+ * not Sat/Sun, FRBNY closures, Fannie Mae DC closures), never the servicer's §1024.31 calendar (12.1 timer table, amended).
+ */
+export function fortyFiveDayTest(receivedOn: PlainDate, saleOn: PlainDate | null): { b2_applies: boolean; d2205_notice_due: PlainDate | null } {
+  if (saleOn && receivedOn > addDays(saleOn, -45)) return { b2_applies: false, d2205_notice_due: addBusinessDays(receivedOn, 5, fannieEt) };
+  return { b2_applies: true, d2205_notice_due: null };
+}
+/**
+ * D2-2-05 duties for an application received within 45 days of a scheduled sale (12.1 rule 3, amended): the 5-business-day
+ * acknowledgment in every case; the Incomplete Information Notice unless the *incomplete* BRP arrived 37 days or less before
+ * the sale (then optional — "authorized, but not required"); the explanation of the servicer's plans for evaluating the
+ * borrower and suspending the sale, if appropriate, for a *complete* BRP received 37 days or less before the sale.
+ */
+export function d2205LateApplicationDuties(i: { days_before_sale: number; brp_complete: boolean }): { acknowledgment_required: true; incomplete_information_notice: "required" | "optional" | "not_applicable"; plan_explanation_required: boolean; within_37_days: boolean } {
+  const within37 = i.days_before_sale <= 37;
+  return { acknowledgment_required: true, incomplete_information_notice: i.brp_complete ? "not_applicable" : within37 ? "optional" : "required", plan_explanation_required: i.brp_complete && within37, within_37_days: within37 };
+}
+/** 12.1 `lossmit_applications.protection_tier` at receipt: ≥90 days before a scheduled sale (or no sale) → ge_90; >37 → gt_37; else le_37 (§1024.41(c)(1), (e)(1), (h)(1)). */
+export type ProtectionTier = "ge_90" | "gt_37" | "le_37";
+export function protectionTier(receivedOn: PlainDate, saleOn: PlainDate | null): { protection_tier: ProtectionTier; days_before_sale: number | null } {
+  if (!saleOn) return { protection_tier: "ge_90", days_before_sale: null };
+  const d = daysBetween(receivedOn, saleOn);
+  return { protection_tier: d >= 90 ? "ge_90" : d > 37 ? "gt_37" : "le_37", days_before_sale: d };
+}
+export interface ReasonableDateInputs { readonly ack_sent_on: PlainDate; readonly earliest_unpaid_due: PlainDate | null; readonly sale_on: PlainDate | null; readonly oldest_doc_date: PlainDate | null; }
+export function reasonableDate(i: ReasonableDateInputs): { date: PlainDate; basis: string; milestone_conflict: boolean } {
+  const caps: [PlainDate, string][] = [[addDays(i.ack_sent_on, 30), "ack+30"]];
+  if (i.earliest_unpaid_due) caps.push([addDays(i.earliest_unpaid_due, 119), "day_120_of_delinquency"]);
+  if (i.sale_on) { caps.push([addDays(i.sale_on, -90), "sale-90"]); caps.push([addDays(i.sale_on, -38), "sale-38"]); }
+  if (i.oldest_doc_date) caps.push([addDays(i.oldest_doc_date, 90), "doc_staleness_90"]);
+  // Milestones already behind the acknowledgment date have passed and cannot cap; only future milestones do.
+  const live = caps.filter((c) => c[0] >= i.ack_sent_on);
+  const [earliest, basis] = (live.length ? live : caps).reduce((a, b) => (b[0] < a[0] ? b : a));
+  const floor = addDays(i.ack_sent_on, 7);
+  if (earliest < floor) return { date: floor, basis: `floor ack+7 (cap ${basis} earlier)`, milestone_conflict: true };
+  return { date: earliest, basis, milestone_conflict: false };
+}
+export interface Requirement { readonly item: string; readonly source: "borrower" | "third_party"; status: "missing" | "received" | "verified" | "stale"; }
+export function completeness(reqs: readonly Requirement[]): { complete: boolean; missing: string[] } { const m = reqs.filter((r) => r.source === "borrower" && (r.status === "missing" || r.status === "stale")).map((r) => r.item); return { complete: m.length === 0, missing: m }; }
+export function duplicative(f: { prior_complete_by_us: boolean; prior_fully_processed: boolean; current_since_prior: boolean }): boolean { return f.prior_complete_by_us && f.prior_fully_processed && !f.current_since_prior; }
+export function supplementalRequestDate(facialOn: PlainDate): PlainDate { return addDays(facialOn, 7); }

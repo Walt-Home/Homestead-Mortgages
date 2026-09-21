@@ -4,13 +4,22 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 COPY turbo.json tsconfig.base.json ./
+# Every workspace's manifest, so `npm ci` sees the same tree the lockfile
+# describes. apps/servicing is Doug's runtime and never ships in this image —
+# it is its own service — but its manifest is in the lockfile like the rest.
 COPY packages/shared/package.json packages/shared/
+COPY packages/kernel/package.json packages/kernel/
+COPY packages/partner-book/package.json packages/partner-book/
 COPY packages/requirements/package.json packages/requirements/
 COPY packages/connectors/package.json packages/connectors/
 COPY packages/underwriting/package.json packages/underwriting/
+COPY packages/du-schema/package.json packages/du-schema/
+COPY packages/du/package.json packages/du/
+COPY packages/brand/package.json packages/brand/
 COPY packages/db/package.json packages/db/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/servicing/package.json apps/servicing/
 RUN npm ci
 
 COPY . .

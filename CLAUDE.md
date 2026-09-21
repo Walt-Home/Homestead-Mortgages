@@ -41,18 +41,36 @@ packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5
 apps/web                   React + Vite
+apps/servicing             Doug's servicing platform, vendored whole, on its own database
 infra                      Terraform
 ```
 
-**`packages/kernel` is Doug's, byte for byte.** Everything under its
-`src/kernel/` and `spec/` is doug-ludlow/Supermortgage at the commit
-`packages/kernel/VENDORED_FROM` names, and nothing in it has been edited here:
-`diff -r` against a clone at that commit reports nothing, and that is the
-property to keep. Lint and Prettier skip the tree for the same reason they
-skip generated files. Its tests are his, run under `node --test` rather than
-vitest so they stay his too. `src/index.ts` beside the tree is ours. Nothing
-consumes the package yet; the loan model's dates moving onto `PlainDate` is the
-first thing that will.
+**Three trees are Doug's, byte for byte.** `packages/kernel` (his kernel and
+the timer registry it reads), `packages/partner-book/src/vendored` (his xlsx
+reader) and `apps/servicing` (his whole runtime: `src`, `db`, `spec`, `docs`,
+`fixtures`, `tools`, `tsconfig.json`) are doug-ludlow/Supermortgage at the
+commit each tree's `VENDORED_FROM` names, and nothing in them has been edited
+here: `diff -r` against a clone at that commit reports nothing, and that is
+the property to keep. `scripts/vendor-supermortgage.mjs` re-copies all three
+from one clone so they cannot drift from each other. Lint and Prettier skip
+the trees for the same reason they skip generated files; the repo-walking
+tests in `apps/api` skip them by name. His tests are his, run under
+`node --test` rather than vitest so they stay his too. The files beside each
+tree — `packages/kernel/src/index.ts`, `apps/servicing/scripts/`, each
+`package.json` — are ours. `@hm/partner-book` is what consumes the kernel
+today.
+
+**`apps/servicing` is a testing ground and a reference, never production.**
+It runs his `src/runtime/main.ts` as he runs it, on a database that is not
+ours (his tables collide with ours by name: `loans`, `parties`, `facts`),
+reached through `scripts/run.mjs`, which maps `SERVICING_DATABASE_URL`,
+`SERVICING_PORT` and `SERVICING_API_TOKEN` onto the names his config reads.
+Every vendor in it is an in-repo FAKE. Nothing in `apps/api` imports from it
+and nothing in it imports from ours; the seam between the two is HTTP, and
+the plan for it is `docs/decisions.md`, "Doug's servicing runtime is an app in
+this repo". `npm run servicing:db:setup` makes the database and applies his
+177 migrations; `npm run seed-demo -w @hm/servicing` boards a hundred loans
+and a twelve-loan partner book to look at.
 
 ## The borrower flow is FIVE screens; the engine has ten
 
@@ -400,7 +418,8 @@ you are already editing that line, so the fix never arrives as its own diff.
 
 ```bash
 npm run dev                  # API :8080, web :5173
-npm test                     # all workspaces
+npm test                     # every workspace but apps/servicing
+npm run test:servicing       # Doug's tests, as his, on a database beside ours (its own CI job)
 npm run check                # tsc -b + registry verify
 npm run requirements:build   # after editing data/v1-build.csv
 npm run brand:build          # after editing packages/brand/tokens.mjs
@@ -409,6 +428,8 @@ npm run apor:vendor          # refresh data/ffiec-survey-table.csv from the CFPB
 npm run db:migrate           # prisma migrate dev
 npm run db:test:setup        # create <db>_test and apply migrations to it
 npm run build && npm run seed:personas   # the eight sample borrowers
+npm run servicing:db:setup   # create the servicing database and apply Doug's migrations
+npm run seed-demo -w @hm/servicing       # his 100-loan batch and 12-loan partner book
 ```
 
 `seed:personas` refuses to run unless `DEMO_PERSONAS=true` is in its own

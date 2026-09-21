@@ -1,0 +1,11735 @@
+{
+ "brief": "spec units built 8769/8787 (99.8%): tids 2466/2480, tables 852/852, timers 2097/2097, notices 309/309, tools 1575/1579, figures 1470/1470; processes at 100%: 210/212; retired 27; hosted: not measured (stale: 0242_staff_oidc_append_only.sql vs 0243_36_partner_portal.sql), persisted: not measured (stale: 0242_staff_oidc_append_only.sql vs 0243_36_partner_portal.sql)",
+ "totals": {
+  "tids": {
+   "spec": 2480,
+   "built": 2466
+  },
+  "tables": {
+   "spec": 852,
+   "built": 852
+  },
+  "timers": {
+   "spec": 2097,
+   "built": 2097
+  },
+  "notices": {
+   "spec": 309,
+   "built": 309
+  },
+  "tools": {
+   "spec": 1579,
+   "built": 1575
+  },
+  "figures": {
+   "spec": 1470,
+   "built": 1470
+  },
+  "units": {
+   "spec": 8787,
+   "built": 8769
+  }
+ },
+ "exec_totals": {
+  "hosted": {
+   "spec": 1579,
+   "built": 0
+  },
+  "persisted": {
+   "spec": 852,
+   "built": 0
+  }
+ },
+ "exec_measured": {
+  "hosted": false,
+  "persisted": false
+ },
+ "exec_notes": [
+  "hosted: not measured (stale: 0242_staff_oidc_append_only.sql vs 0243_36_partner_portal.sql)",
+  "persisted: not measured (stale: 0242_staff_oidc_append_only.sql vs 0243_36_partner_portal.sql)"
+ ],
+ "exec_done": [],
+ "retired": {
+  "count": 27,
+  "by_kind": {
+   "tids": 27,
+   "tables": 0,
+   "timers": 0,
+   "notices": 0,
+   "tools": 0,
+   "figures": 0
+  },
+  "rows": [
+   {
+    "unit_id": "32.9-T9",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "spoken payoff request (voice)"
+   },
+   {
+    "unit_id": "32.14-T1",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the anonymous minute \u2014 already retired in 32.16 \u00a70.4 prose, inert until now"
+   },
+   {
+    "unit_id": "32.14-T2",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the anonymous minute \u2014 already retired in 32.16 \u00a70.4 prose, inert until now"
+   },
+   {
+    "unit_id": "32.14-T3",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the anonymous minute \u2014 already retired in 32.16 \u00a70.4 prose, inert until now"
+   },
+   {
+    "unit_id": "32.14-T4",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the anonymous minute \u2014 already retired in 32.16 \u00a70.4 prose, inert until now"
+   },
+   {
+    "unit_id": "32.14-T5",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the anonymous minute \u2014 already retired in 32.16 \u00a70.4 prose, inert until now"
+   },
+   {
+    "unit_id": "32.14-T6",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the anonymous minute \u2014 already retired in 32.16 \u00a70.4 prose, inert until now"
+   },
+   {
+    "unit_id": "32.14-T19",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the anonymous minute \u2014 already retired in 32.16 \u00a70.4 prose, inert until now"
+   },
+   {
+    "unit_id": "32.16-T11",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the rail at \u2265 1024 px and reference chips"
+   },
+   {
+    "unit_id": "32.16-T12",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the rail at \u2265 1024 px and reference chips"
+   },
+   {
+    "unit_id": "32.16-T17",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "in-app voice turns"
+   },
+   {
+    "unit_id": "32.16-T18",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "in-app voice turns"
+   },
+   {
+    "unit_id": "32.16-T20",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "in-app voice turns"
+   },
+   {
+    "unit_id": "32.17-T3",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the video stage"
+   },
+   {
+    "unit_id": "32.17-T4",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the rail beside the call"
+   },
+   {
+    "unit_id": "32.17-T6",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the rail beside the call"
+   },
+   {
+    "unit_id": "32.17-T10",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the video door"
+   },
+   {
+    "unit_id": "32.17-T11",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "Michelle"
+   },
+   {
+    "unit_id": "32.17-T12",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the video stage"
+   },
+   {
+    "unit_id": "32.17-T14",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the video door"
+   },
+   {
+    "unit_id": "32.17-T15",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the video door"
+   },
+   {
+    "unit_id": "32.17-T16",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the video door"
+   },
+   {
+    "unit_id": "32.17-T19",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the video stage"
+   },
+   {
+    "unit_id": "32.17-T20",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the video stage"
+   },
+   {
+    "unit_id": "32.17-T22",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the video stage"
+   },
+   {
+    "unit_id": "32.17-T23",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "the video stage"
+   },
+   {
+    "unit_id": "32.17-T26",
+    "decision": "docs/decisions/2026-09-16-apply-product.md",
+    "date": "2026-09-16",
+    "reason": "Michelle"
+   }
+  ]
+ },
+ "sections": {
+  "1": {
+   "spec": 250,
+   "built": 250,
+   "processes": 7,
+   "done": 7
+  },
+  "2": {
+   "spec": 225,
+   "built": 225,
+   "processes": 7,
+   "done": 7
+  },
+  "3": {
+   "spec": 336,
+   "built": 336,
+   "processes": 9,
+   "done": 9
+  },
+  "4": {
+   "spec": 205,
+   "built": 205,
+   "processes": 5,
+   "done": 5
+  },
+  "5": {
+   "spec": 294,
+   "built": 294,
+   "processes": 7,
+   "done": 7
+  },
+  "6": {
+   "spec": 170,
+   "built": 170,
+   "processes": 5,
+   "done": 5
+  },
+  "7": {
+   "spec": 206,
+   "built": 206,
+   "processes": 6,
+   "done": 6
+  },
+  "8": {
+   "spec": 131,
+   "built": 131,
+   "processes": 3,
+   "done": 3
+  },
+  "9": {
+   "spec": 273,
+   "built": 273,
+   "processes": 9,
+   "done": 9
+  },
+  "10": {
+   "spec": 198,
+   "built": 198,
+   "processes": 6,
+   "done": 6
+  },
+  "11": {
+   "spec": 252,
+   "built": 252,
+   "processes": 5,
+   "done": 5
+  },
+  "12": {
+   "spec": 429,
+   "built": 429,
+   "processes": 9,
+   "done": 9
+  },
+  "13": {
+   "spec": 353,
+   "built": 353,
+   "processes": 9,
+   "done": 9
+  },
+  "14": {
+   "spec": 224,
+   "built": 224,
+   "processes": 4,
+   "done": 4
+  },
+  "15": {
+   "spec": 241,
+   "built": 241,
+   "processes": 4,
+   "done": 4
+  },
+  "16": {
+   "spec": 197,
+   "built": 197,
+   "processes": 4,
+   "done": 4
+  },
+  "17": {
+   "spec": 204,
+   "built": 204,
+   "processes": 4,
+   "done": 4
+  },
+  "18": {
+   "spec": 181,
+   "built": 181,
+   "processes": 7,
+   "done": 7
+  },
+  "19": {
+   "spec": 225,
+   "built": 225,
+   "processes": 4,
+   "done": 4
+  },
+  "20": {
+   "spec": 191,
+   "built": 191,
+   "processes": 4,
+   "done": 4
+  },
+  "21": {
+   "spec": 282,
+   "built": 282,
+   "processes": 6,
+   "done": 6
+  },
+  "22": {
+   "spec": 369,
+   "built": 369,
+   "processes": 6,
+   "done": 6
+  },
+  "23": {
+   "spec": 290,
+   "built": 290,
+   "processes": 7,
+   "done": 7
+  },
+  "24": {
+   "spec": 314,
+   "built": 314,
+   "processes": 6,
+   "done": 6
+  },
+  "25": {
+   "spec": 234,
+   "built": 234,
+   "processes": 4,
+   "done": 4
+  },
+  "26": {
+   "spec": 248,
+   "built": 248,
+   "processes": 4,
+   "done": 4
+  },
+  "27": {
+   "spec": 197,
+   "built": 197,
+   "processes": 2,
+   "done": 2
+  },
+  "28": {
+   "spec": 225,
+   "built": 225,
+   "processes": 4,
+   "done": 4
+  },
+  "29": {
+   "spec": 231,
+   "built": 231,
+   "processes": 4,
+   "done": 4
+  },
+  "30": {
+   "spec": 218,
+   "built": 218,
+   "processes": 4,
+   "done": 4
+  },
+  "31": {
+   "spec": 140,
+   "built": 140,
+   "processes": 3,
+   "done": 3
+  },
+  "32": {
+   "spec": 350,
+   "built": 349,
+   "processes": 18,
+   "done": 17
+  },
+  "33": {
+   "spec": 69,
+   "built": 69,
+   "processes": 3,
+   "done": 3
+  },
+  "34": {
+   "spec": 80,
+   "built": 63,
+   "processes": 5,
+   "done": 4
+  },
+  "35": {
+   "spec": 715,
+   "built": 715,
+   "processes": 12,
+   "done": 12
+  },
+  "36": {
+   "spec": 40,
+   "built": 40,
+   "processes": 6,
+   "done": 6
+  }
+ },
+ "done": [
+  "1.1",
+  "1.2",
+  "1.3",
+  "1.4",
+  "1.5",
+  "1.6",
+  "1.7",
+  "2.1",
+  "2.2",
+  "2.3",
+  "2.4",
+  "2.5",
+  "2.6",
+  "2.7",
+  "3.1",
+  "3.2",
+  "3.3",
+  "3.4",
+  "3.5",
+  "3.6",
+  "3.7",
+  "3.8",
+  "3.9",
+  "4.1",
+  "4.2",
+  "4.3",
+  "4.4",
+  "4.5",
+  "5.1",
+  "5.2",
+  "5.3",
+  "5.4",
+  "5.5",
+  "5.6",
+  "5.7",
+  "6.1",
+  "6.2",
+  "6.3",
+  "6.4",
+  "6.5",
+  "7.1",
+  "7.2",
+  "7.3",
+  "7.4",
+  "7.5",
+  "7.6",
+  "8.1",
+  "8.2",
+  "8.3",
+  "9.1",
+  "9.2",
+  "9.3",
+  "9.4",
+  "9.5",
+  "9.6",
+  "9.7",
+  "9.8",
+  "9.9",
+  "10.1",
+  "10.2",
+  "10.3",
+  "10.4",
+  "10.5",
+  "10.6",
+  "11.1",
+  "11.2",
+  "11.3",
+  "11.4",
+  "11.5",
+  "12.1",
+  "12.2",
+  "12.3",
+  "12.4",
+  "12.5",
+  "12.6",
+  "12.7",
+  "12.8",
+  "12.9",
+  "13.1",
+  "13.2",
+  "13.3",
+  "13.4",
+  "13.5",
+  "13.6",
+  "13.7",
+  "13.8",
+  "13.9",
+  "14.1",
+  "14.2",
+  "14.3",
+  "14.4",
+  "15.1",
+  "15.2",
+  "15.3",
+  "15.4",
+  "16.1",
+  "16.2",
+  "16.3",
+  "16.4",
+  "17.1",
+  "17.2",
+  "17.3",
+  "17.4",
+  "18.1",
+  "18.2",
+  "18.3",
+  "18.4",
+  "18.5",
+  "18.6",
+  "18.7",
+  "19.1",
+  "19.2",
+  "19.3",
+  "19.4",
+  "20.1",
+  "20.2",
+  "20.3",
+  "20.4",
+  "21.1",
+  "21.2",
+  "21.3",
+  "21.4",
+  "21.5",
+  "21.6",
+  "22.1",
+  "22.2",
+  "22.3",
+  "22.4",
+  "22.5",
+  "22.6",
+  "23.1",
+  "23.2",
+  "23.3",
+  "23.4",
+  "23.5",
+  "23.6",
+  "23.7",
+  "24.1",
+  "24.2",
+  "24.3",
+  "24.4",
+  "24.5",
+  "24.6",
+  "25.1",
+  "25.2",
+  "25.3",
+  "25.4",
+  "26.1",
+  "26.2",
+  "26.3",
+  "26.4",
+  "27.1",
+  "27.2",
+  "28.1",
+  "28.2",
+  "28.3",
+  "28.4",
+  "29.1",
+  "29.2",
+  "29.3",
+  "29.4",
+  "30.1",
+  "30.2",
+  "30.3",
+  "30.4",
+  "31.1",
+  "31.2",
+  "31.3",
+  "32.1",
+  "32.2",
+  "32.3",
+  "32.4",
+  "32.5",
+  "32.6",
+  "32.7",
+  "32.8",
+  "32.9",
+  "32.10",
+  "32.11",
+  "32.12",
+  "32.13",
+  "32.14",
+  "32.16",
+  "32.17",
+  "32.18",
+  "33.1",
+  "33.2",
+  "33.3",
+  "34.1",
+  "34.2",
+  "34.3",
+  "34.4",
+  "35.1",
+  "35.2",
+  "35.3",
+  "35.4",
+  "35.5",
+  "35.6",
+  "35.7",
+  "35.8",
+  "35.9",
+  "35.10",
+  "35.11",
+  "35.12",
+  "36.1",
+  "36.2",
+  "36.3",
+  "36.4",
+  "36.5",
+  "36.6"
+ ],
+ "processes": [
+  {
+   "process": "1.1",
+   "title": "Loan data intake & validation (note terms, remittance type A/A\u2013S/A\u2013S/S, escrow flags, MERS MIN)",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 8,
+    "built": 8,
+    "armable": 8,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 41,
+    "built": 41
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "1.2",
+   "title": "Servicing transfer approval from Fannie Mae",
+   "tids": {
+    "spec": 7,
+    "built": 7,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 28,
+    "built": 28
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "1.3",
+   "title": "RESPA transfer notices (goodbye/hello)",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 8,
+    "built": 8,
+    "armable": 8,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 33,
+    "built": 33
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "1.4",
+   "title": "Document custody verification",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 14,
+    "built": 14,
+    "armable": 14,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 38,
+    "built": 38
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "1.5",
+   "title": "MERS transfer of servicing/beneficial rights",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 32,
+    "built": 32
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "1.6",
+   "title": "Escrow/suspense/UPB reconciliation",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 37,
+    "built": 37
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "1.7",
+   "title": "Loss-mit in-flight transfer handling",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 41,
+    "built": 41
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "2.1",
+   "title": "Accept & post periodic payment (P&I + escrow)",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 37,
+    "built": 37
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "2.2",
+   "title": "Partial payment / suspense handling",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 6,
+    "built": 6,
+    "armable": 6,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 32,
+    "built": 32
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "2.3",
+   "title": "Automatic draft (ACH) setup",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 12,
+    "built": 12,
+    "armable": 12,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 41,
+    "built": 41
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "2.4",
+   "title": "Additional principal / unscheduled payments",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 8,
+    "built": 8,
+    "armable": 8,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 30,
+    "built": 30
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "2.5",
+   "title": "Biweekly third-party payments",
+   "tids": {
+    "spec": 7,
+    "built": 7,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 6,
+    "built": 6,
+    "armable": 6,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 23,
+    "built": 23
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "2.6",
+   "title": "Payment during modification pending (trial period)",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 8,
+    "built": 8,
+    "armable": 8,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 24,
+    "built": 24
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "2.7",
+   "title": "Late charge assessment",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 14,
+    "built": 14,
+    "armable": 14,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 38,
+    "built": 38
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "3.1",
+   "title": "Initial escrow account statement",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 3,
+    "built": 3,
+    "armable": 3,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "figures": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 26,
+    "built": 26
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "3.2",
+   "title": "Annual escrow analysis",
+   "tids": {
+    "spec": 17,
+    "built": 17,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 6,
+    "built": 6,
+    "armable": 6,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 34,
+    "built": 34,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 65,
+    "built": 65
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "3.3",
+   "title": "Annual escrow account statement",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 7,
+    "built": 7,
+    "armable": 7,
+    "missing": []
+   },
+   "notices": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 15,
+    "built": 15,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 45,
+    "built": 45
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "3.4",
+   "title": "Cushion enforcement",
+   "tids": {
+    "spec": 7,
+    "built": 7,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 3,
+    "built": 3,
+    "armable": 3,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "figures": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 19,
+    "built": 19
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "3.5",
+   "title": "Surplus refund",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 4,
+    "built": 4,
+    "armable": 4,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "figures": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 31,
+    "built": 31
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "3.6",
+   "title": "Shortage repayment",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 6,
+    "built": 6,
+    "armable": 6,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 37,
+    "built": 37
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "3.7",
+   "title": "Tax disbursement",
+   "tids": {
+    "spec": 15,
+    "built": 15,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 12,
+    "built": 12,
+    "armable": 12,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 46,
+    "built": 46
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "3.8",
+   "title": "Escrow waiver administration",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 12,
+    "built": 12,
+    "armable": 12,
+    "missing": []
+   },
+   "notices": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "tools": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "figures": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 32,
+    "built": 32
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "3.9",
+   "title": "State interest-on-escrow",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 4,
+    "built": 4,
+    "armable": 4,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "figures": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 35,
+    "built": 35
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "4.1",
+   "title": "Notice of Error (NoE) resolution",
+   "tids": {
+    "spec": 16,
+    "built": 16,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "timers": {
+    "spec": 14,
+    "built": 14,
+    "armable": 14,
+    "missing": []
+   },
+   "notices": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "tools": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "figures": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 59,
+    "built": 59
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "4.2",
+   "title": "Request for Information (RFI)",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 35,
+    "built": 35
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "4.3",
+   "title": "Continuity of contact / assigned personnel",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 41,
+    "built": 41
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "4.4",
+   "title": "Successor in interest",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 35,
+    "built": 35
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "4.5",
+   "title": "Complaint handling / UDAAP",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 12,
+    "built": 12,
+    "armable": 12,
+    "missing": []
+   },
+   "notices": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 35,
+    "built": 35
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "5.1",
+   "title": "Loan Activity Report (LAR) submission",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 17,
+    "built": 17,
+    "armable": 17,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 47,
+    "built": 47
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "5.2",
+   "title": "Remittance of P&I",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 21,
+    "built": 21,
+    "armable": 21,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "figures": {
+    "spec": 35,
+    "built": 35,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 82,
+    "built": 82
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "5.3",
+   "title": "Reporting liquidations (payoff/foreclosure/short sale)",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "figures": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 35,
+    "built": 35
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "5.4",
+   "title": "Stop Delinquency Advance handling",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "figures": {
+    "spec": 15,
+    "built": 15,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 42,
+    "built": 42
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "5.5",
+   "title": "Guaranty fee relief",
+   "tids": {
+    "spec": 6,
+    "built": 6,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "figures": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 27,
+    "built": 27
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "5.6",
+   "title": "Repurchase reporting",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "figures": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 30,
+    "built": 30
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "5.7",
+   "title": "Delinquent loan status reporting",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 31,
+    "built": 31
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "6.1",
+   "title": "Establish P&I custodial account (Form 1013)",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 28,
+    "built": 28
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "6.2",
+   "title": "Establish T&I custodial account (Form 1014)",
+   "tids": {
+    "spec": 6,
+    "built": 6,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 18,
+    "built": 18
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "6.3",
+   "title": "Monthly P&I reconciliation (Form 496)",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 15,
+    "built": 15,
+    "armable": 15,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 14,
+    "built": 14,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 55,
+    "built": 55
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "6.4",
+   "title": "T&I custodial reconciliation (Form 496A)",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 29,
+    "built": 29
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "6.5",
+   "title": "Unidentified/unapplied funds management",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 14,
+    "built": 14,
+    "armable": 14,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 40,
+    "built": 40
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "7.1",
+   "title": "Periodic statement",
+   "tids": {
+    "spec": 15,
+    "built": 15,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 56,
+    "built": 56
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "7.2",
+   "title": "ARM interest rate adjustment notice",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "tools": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "figures": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 46,
+    "built": 46
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "7.3",
+   "title": "ARM initial adjustment notice",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 20,
+    "built": 20
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "7.4",
+   "title": "E-SIGN consent for e-delivery",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 8,
+    "built": 8,
+    "armable": 8,
+    "missing": []
+   },
+   "notices": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 31,
+    "built": 31
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "7.5",
+   "title": "GLBA privacy notice",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 6,
+    "built": 6,
+    "armable": 6,
+    "missing": []
+   },
+   "notices": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 22,
+    "built": 22
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "7.6",
+   "title": "Payoff statement",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 7,
+    "built": 7,
+    "armable": 7,
+    "missing": []
+   },
+   "notices": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 31,
+    "built": 31
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "8.1",
+   "title": "Furnish tradeline (Metro 2)",
+   "tids": {
+    "spec": 19,
+    "built": 19,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 49,
+    "built": 49
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "8.2",
+   "title": "Dispute handling (e-OSCAR / ACDV)",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 35,
+    "built": 35
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "8.3",
+   "title": "Suspend credit reporting",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 12,
+    "built": 12,
+    "armable": 12,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 47,
+    "built": 47
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "9.1",
+   "title": "Hazard insurance tracking",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 32,
+    "built": 32
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "9.2",
+   "title": "Force-placed insurance \u2014 first notice",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 8,
+    "built": 8,
+    "armable": 8,
+    "missing": []
+   },
+   "notices": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "tools": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "figures": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 32,
+    "built": 32
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "9.3",
+   "title": "Force-placed \u2014 reminder notice",
+   "tids": {
+    "spec": 6,
+    "built": 6,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 15,
+    "built": 15
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "9.4",
+   "title": "Force-placed renewal notice",
+   "tids": {
+    "spec": 5,
+    "built": 5,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 4,
+    "built": 4,
+    "armable": 4,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 13,
+    "built": 13
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "9.5",
+   "title": "Force-placed cancellation/refund",
+   "tids": {
+    "spec": 7,
+    "built": 7,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 4,
+    "built": 4,
+    "armable": 4,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "figures": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 28,
+    "built": 28
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "9.6",
+   "title": "Flood insurance / mandatory purchase",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "tools": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "figures": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 34,
+    "built": 34
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "9.7",
+   "title": "Loss draft / insurance claim handling",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 50,
+    "built": 50
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "9.8",
+   "title": "Property inspection (delinquent)",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 34,
+    "built": 34
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "9.9",
+   "title": "Property preservation (vacant)",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 35,
+    "built": 35
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "10.1",
+   "title": "Borrower-requested cancellation @80% LTV",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 51,
+    "built": 51
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "10.2",
+   "title": "Automatic termination @78% LTV",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 12,
+    "built": 12,
+    "armable": 12,
+    "missing": []
+   },
+   "notices": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "tools": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "figures": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 39,
+    "built": 39
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "10.3",
+   "title": "Final termination @ midpoint",
+   "tids": {
+    "spec": 7,
+    "built": 7,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 14,
+    "built": 14
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "10.4",
+   "title": "Annual PMI disclosure",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 6,
+    "built": 6,
+    "armable": 6,
+    "missing": []
+   },
+   "notices": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "tools": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 26,
+    "built": 26
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "10.5",
+   "title": "Unearned premium refund",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 7,
+    "built": 7,
+    "armable": 7,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "figures": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 37,
+    "built": 37
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "10.6",
+   "title": "Denial notice",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 8,
+    "built": 8,
+    "armable": 8,
+    "missing": []
+   },
+   "notices": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "tools": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "figures": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 31,
+    "built": 31
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "11.1",
+   "title": "Live contact",
+   "tids": {
+    "spec": 24,
+    "built": 24,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "timers": {
+    "spec": 17,
+    "built": 17,
+    "armable": 17,
+    "missing": []
+   },
+   "notices": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 60,
+    "built": 60
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "11.2",
+   "title": "Written early intervention notice",
+   "tids": {
+    "spec": 15,
+    "built": 15,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "tools": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 13,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 50,
+    "built": 50
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "11.3",
+   "title": "Quality Right Party Contact (QRPC)",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "figures": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 16,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 48,
+    "built": 48
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "11.4",
+   "title": "FDCPA compliance",
+   "tids": {
+    "spec": 16,
+    "built": 16,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 20,
+    "built": 20,
+    "armable": 20,
+    "missing": []
+   },
+   "notices": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 51,
+    "built": 51
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "11.5",
+   "title": "Imminent default evaluation",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 15,
+    "built": 15,
+    "armable": 15,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 43,
+    "built": 43
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "12.1",
+   "title": "Acknowledge loss-mit application",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 52,
+    "built": 52
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "12.2",
+   "title": "Complete-application evaluation",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 17,
+    "built": 17,
+    "armable": 17,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 49,
+    "built": 49
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "12.3",
+   "title": "Appeal handling",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 27,
+    "built": 27
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "12.4",
+   "title": "Forbearance plan",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 17,
+    "built": 17,
+    "armable": 17,
+    "missing": []
+   },
+   "notices": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "tools": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 44,
+    "built": 44
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "12.5",
+   "title": "Repayment plan",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "figures": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 52,
+    "built": 52
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "12.6",
+   "title": "Payment Deferral",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 15,
+    "built": 15,
+    "armable": 15,
+    "missing": []
+   },
+   "notices": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 50,
+    "built": 50
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "12.7",
+   "title": "Disaster Payment Deferral",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 8,
+    "built": 8,
+    "armable": 8,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "figures": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 26,
+    "built": 26
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "12.8",
+   "title": "Fannie Mae Flex Modification",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 23,
+    "built": 23,
+    "armable": 23,
+    "missing": []
+   },
+   "notices": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "tools": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "figures": {
+    "spec": 20,
+    "built": 20,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 65,
+    "built": 65
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "12.9",
+   "title": "Short sale / Mortgage Release (DIL)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 22,
+    "built": 22,
+    "armable": 22,
+    "missing": []
+   },
+   "notices": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "tools": {
+    "spec": 17,
+    "built": 17,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 17,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 64,
+    "built": 64
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "13.1",
+   "title": "120-day pre-foreclosure prohibition",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 7,
+    "built": 7,
+    "armable": 7,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 29,
+    "built": 29
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "13.2",
+   "title": "Dual-tracking restriction",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 35,
+    "built": 35
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "13.3",
+   "title": "Foreclosure referral",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 23,
+    "built": 23,
+    "armable": 23,
+    "missing": []
+   },
+   "notices": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 68,
+    "built": 68
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "13.4",
+   "title": "Prereferral review",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 12,
+    "built": 12,
+    "armable": 12,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 35,
+    "built": 35
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "13.5",
+   "title": "Allowable timeframes / compensatory fees",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 7,
+    "built": 7,
+    "armable": 7,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "figures": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 29,
+    "built": 29
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "13.6",
+   "title": "Default-related law-firm management",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "timers": {
+    "spec": 15,
+    "built": 15,
+    "armable": 15,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "figures": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 48,
+    "built": 48
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "13.7",
+   "title": "Environmental hazard / non-routine litigation",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 30,
+    "built": 30
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "13.8",
+   "title": "SCRA foreclosure protection",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 14,
+    "built": 14,
+    "armable": 14,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 35,
+    "built": 35
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "13.9",
+   "title": "SCRA 6% interest cap",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 12,
+    "built": 12,
+    "armable": 12,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 44,
+    "built": 44
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "14.1",
+   "title": "Bankruptcy monitoring & Proof of Claim",
+   "tids": {
+    "spec": 18,
+    "built": 18,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 35,
+    "built": 35,
+    "armable": 35,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 17,
+    "built": 17,
+    "missing": []
+   },
+   "figures": {
+    "spec": 28,
+    "built": 28,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 17,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 107,
+    "built": 107
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "14.2",
+   "title": "Payment change notices (Rule 3002.1)",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 14,
+    "built": 14,
+    "armable": 14,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "figures": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 52,
+    "built": 52
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "14.3",
+   "title": "Periodic statement in bankruptcy",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "figures": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 47,
+    "built": 47
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "14.4",
+   "title": "Credit reporting suspension in BK",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 6,
+    "built": 6,
+    "armable": 6,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 18,
+    "built": 18
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "15.1",
+   "title": "REOgram / conveyance to Fannie Mae",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 21,
+    "built": 21,
+    "armable": 21,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 20,
+    "built": 20,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 69,
+    "built": 69
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "15.2",
+   "title": "Expense reimbursement submission",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 18,
+    "built": 18,
+    "armable": 18,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "figures": {
+    "spec": 22,
+    "built": 22,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 63,
+    "built": 63
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "15.3",
+   "title": "MI claim filing",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 17,
+    "built": 17,
+    "armable": 17,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 21,
+    "built": 21,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 67,
+    "built": 67
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "15.4",
+   "title": "Delinquency advance reimbursement (Form 4828)",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "figures": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 42,
+    "built": 42
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "16.1",
+   "title": "Payoff statement",
+   "tids": {
+    "spec": 15,
+    "built": 15,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 12,
+    "built": 12,
+    "armable": 12,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "figures": {
+    "spec": 21,
+    "built": 21,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 62,
+    "built": 62
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "16.2",
+   "title": "Remit payoff proceeds to Fannie Mae",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 20,
+    "built": 20,
+    "armable": 20,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "figures": {
+    "spec": 14,
+    "built": 14,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 59,
+    "built": 59
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "16.3",
+   "title": "Lien release / satisfaction recording",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 18,
+    "built": 18,
+    "armable": 18,
+    "missing": []
+   },
+   "notices": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 51,
+    "built": 51
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "16.4",
+   "title": "MERS deactivation",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 25,
+    "built": 25
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "17.1",
+   "title": "Fannie Mae transfer approval",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 19,
+    "built": 19,
+    "armable": 19,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 42,
+    "built": 42
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "17.2",
+   "title": "RESPA goodbye notice",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 14,
+    "built": 14,
+    "armable": 14,
+    "missing": []
+   },
+   "notices": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "tools": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 40,
+    "built": 40
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "17.3",
+   "title": "Data/document transfer",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 41,
+    "built": 41,
+    "armable": 41,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 13,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 75,
+    "built": 75
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "17.4",
+   "title": "Loss-mit in-flight transfer",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 23,
+    "built": 23,
+    "armable": 23,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 47,
+    "built": 47
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "18.1",
+   "title": "Internal QC plan",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "timers": {
+    "spec": 17,
+    "built": 17,
+    "armable": 17,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 43,
+    "built": 43
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "18.2",
+   "title": "Fannie Mae MORA reviews",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 24,
+    "built": 24
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "18.3",
+   "title": "STAR performance measurement",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 19,
+    "built": 19
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "18.4",
+   "title": "Form 582 Lender Record Information",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 28,
+    "built": 28
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "18.5",
+   "title": "Mortgage fraud reporting",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 24,
+    "built": 24
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "18.6",
+   "title": "Reg AB / USAP attestation",
+   "tids": {
+    "spec": 7,
+    "built": 7,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 7,
+    "built": 7,
+    "armable": 7,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 18,
+    "built": 18
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "18.7",
+   "title": "Net-worth / liquidity eligibility",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 25,
+    "built": 25
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "19.1",
+   "title": "Records retention",
+   "tids": {
+    "spec": 15,
+    "built": 15,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "timers": {
+    "spec": 19,
+    "built": 19,
+    "armable": 19,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 47,
+    "built": 47
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "19.2",
+   "title": "GLBA safeguards",
+   "tids": {
+    "spec": 17,
+    "built": 17,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "timers": {
+    "spec": 33,
+    "built": 33,
+    "armable": 33,
+    "missing": []
+   },
+   "notices": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 13,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 84,
+    "built": 84
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "19.3",
+   "title": "Fannie Mae data/tech-provider requirements",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "timers": {
+    "spec": 18,
+    "built": 18,
+    "armable": 18,
+    "missing": []
+   },
+   "notices": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 58,
+    "built": 58
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "19.4",
+   "title": "Fair lending data elements",
+   "tids": {
+    "spec": 16,
+    "built": 16,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 14,
+    "built": 14,
+    "armable": 14,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 36,
+    "built": 36
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "20.1",
+   "title": "Portfolio rate monitoring and refinance-opportunity detection on the subserviced book (self-improving-mortgage trigger)",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 23,
+    "built": 23,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 58,
+    "built": 58
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "20.2",
+   "title": "Solicitation, marketing, and consent compliance for outbound refinance offers and organic acquisition",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "tools": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 45,
+    "built": 45
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "20.3",
+   "title": "Lead intake, identity, E-SIGN/TCPA consents, and the pre-qualification interview (pre-application boundary)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "tools": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "figures": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 41,
+    "built": 41
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "20.4",
+   "title": "Rate quote and pricing engine (base pricing, LLPAs, servicing value, cost pass-through, fee schedule)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 47,
+    "built": 47
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "21.1",
+   "title": "Conversational URLA/1003 intake, application data capture, and the MLO-of-record touchpoint",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 6,
+    "built": 6,
+    "armable": 6,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 15,
+    "built": 15,
+    "missing": []
+   },
+   "figures": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 15,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 38,
+    "built": 38
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "21.2",
+   "title": "TRID application receipt, application date, and the Loan Estimate",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "figures": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 36,
+    "built": 36
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "21.3",
+   "title": "Companion early disclosures: homeownership counseling list, Your Home Loan Toolkit, AfBA, Reg B appraisal notice, FCRA/Reg V credit-score notices, ARM program disclosure and CHARM booklet, GLBA initial privacy notice, the retired RESPA Servicing Disclosure Statement, and state early disclosures",
+   "tids": {
+    "spec": 16,
+    "built": 16,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 18,
+    "built": 18,
+    "armable": 18,
+    "missing": []
+   },
+   "notices": {
+    "spec": 18,
+    "built": 18,
+    "missing": []
+   },
+   "tools": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 16,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 75,
+    "built": 75
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "21.4",
+   "title": "Intent to proceed, fee collection, and rate lock (lock confirmation, revised LE on lock, extensions, relocks, float-down, lock-to-commitment linkage)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 7,
+    "built": 7,
+    "armable": 7,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "figures": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 16,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 47,
+    "built": 47
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "21.5",
+   "title": "Changed circumstances, revised Loan Estimates, and tolerance management (good-faith baseline, 4-business-day rule, resets, cure)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 43,
+    "built": 43
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "21.6",
+   "title": "Application-status decisions: notice of incompleteness, withdrawal, counteroffer, denial/adverse action (ECOA + FCRA), and HMDA action-taken recording",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 43,
+    "built": 43
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "22.1",
+   "title": "Document intake, classification, extraction, integrity/freshness checks, and the borrower needs-list loop",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 8,
+    "built": 8,
+    "armable": 8,
+    "missing": []
+   },
+   "notices": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "tools": {
+    "spec": 15,
+    "built": 15,
+    "missing": []
+   },
+   "figures": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 15,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 45,
+    "built": 45
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "22.2",
+   "title": "Credit report ordering, credit-score model and merge rules, analysis, freezes/disputes, inquiries, and pre-closing refresh (undisclosed-debt monitoring)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 7,
+    "built": 7,
+    "armable": 7,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "figures": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 13,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 41,
+    "built": 41
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "22.3",
+   "title": "Income and employment verification (documentation standards, DU validation service, Income Calculator, IRS transcripts, self-employment, rental/other income, VVOE timing)",
+   "tids": {
+    "spec": 15,
+    "built": 15,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 24,
+    "built": 24,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 55,
+    "built": 55
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "22.4",
+   "title": "Asset, reserve, and cash-to-close verification (VOA, large deposits, gifts, EMD, IPCs, reserves, subordinate financing)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "figures": {
+    "spec": 65,
+    "built": 65,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 16,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 110,
+    "built": 110
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "22.5",
+   "title": "Liabilities, debt-to-income, qualifying payment, and debts paid at closing",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 17,
+    "built": 17,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 54,
+    "built": 54
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "22.6",
+   "title": "Identity, fraud, OFAC/AML, Red Flags, occupancy/undisclosed-REO, and non-arm's-length screening",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "timers": {
+    "spec": 15,
+    "built": 15,
+    "armable": 15,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 22,
+    "built": 22,
+    "missing": []
+   },
+   "figures": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 22,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 64,
+    "built": 64
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "23.1",
+   "title": "DU casefile creation, submission, resubmission tolerances, versioning, and casefile lifecycle",
+   "tids": {
+    "spec": 15,
+    "built": 15,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "figures": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 51,
+    "built": 51
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "23.2",
+   "title": "DU findings interpretation, recommendation policy, and conditions generation (incl. HomeReady/AMI, homebuyer education, value acceptance offers, MI messages, red flags)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 24,
+    "built": 24,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 58,
+    "built": 58
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "23.3",
+   "title": "The credit decision: comprehensive risk assessment, conditional approval, condition clearing (PTD/PTF), and final underwriting sign-off",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 44,
+    "built": 44
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "23.4",
+   "title": "ATR/QM, HPML, HOEPA, and state high-cost determinations",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 8,
+    "built": 8,
+    "armable": 8,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 29,
+    "built": 29,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 66,
+    "built": 66
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "23.5",
+   "title": "The relationship graph and the modeled set: what a DU submission is assembled from",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 37,
+    "built": 37
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "23.6",
+   "title": "Assemble and emit the DU Specification document (MISMO 3.4 B324 + DU/ULAD extensions)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 17,
+    "built": 17
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "23.7",
+   "title": "Preflight: what DU rejects that the schema accepts, and the port contract for a real submission",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 1,
+    "built": 1,
+    "armable": 1,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 17,
+    "built": 17
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "24.1",
+   "title": "Valuation method selection and ordering (value acceptance, value acceptance + property data, hybrid, desktop, traditional), appraiser independence, and property data collection",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 15,
+    "built": 15,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 15,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 41,
+    "built": 41
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "24.2",
+   "title": "Appraisal receipt, UCDP/Collateral Underwriter review, reconsideration of value, appraisal quality/bias controls, Reg B delivery, and HPML appraisal rules",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "tools": {
+    "spec": 19,
+    "built": 19,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 19,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 51,
+    "built": 51
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "24.3",
+   "title": "Property and project eligibility (property types, condo/PUD project review incl. CPM and deferred-maintenance rules, manufactured housing, ADUs, condition ratings, escrow holdbacks, new construction, zoning/environmental)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 13,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 40,
+    "built": 40
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "24.4",
+   "title": "Title, vesting, settlement-agent vetting, existing-lien payoffs, subordinations, and curative",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 22,
+    "built": 22,
+    "missing": []
+   },
+   "figures": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 22,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 67,
+    "built": 67
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "24.5",
+   "title": "Hazard, flood, and other property insurance (coverage, deductibles, carrier ratings, mortgagee clause, flood determination and notice, NFIP/private flood, condo master/HO-6, escrow implications)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "figures": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 16,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 52,
+    "built": 52
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "24.6",
+   "title": "Mortgage insurance ordering, coverage selection, MI types (BPMI/LPMI/single/split), delegated approval, certificate activation, and HPA/MI disclosures",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 18,
+    "built": 18,
+    "missing": []
+   },
+   "figures": {
+    "spec": 18,
+    "built": 18,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 18,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 63,
+    "built": 63
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "25.1",
+   "title": "Compliance testing engine (APR/finance charge, TRID tolerances, QM/ATR, HPML, HOEPA, state high-cost, fee reasonableness, RESPA \u00a78, LO compensation and steering, licensing/NMLSR, E-SIGN, fair-lending pricing exceptions, TCPA) and the compliance gates",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 15,
+    "built": 15,
+    "missing": []
+   },
+   "figures": {
+    "spec": 26,
+    "built": 26,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 15,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 75,
+    "built": 75
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "25.2",
+   "title": "Closing Disclosure: preparation, delivery and receipt evidence, the three-business-day waiting period, redisclosure, post-consummation corrections, the seller's CD, and UCD generation/submission",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 10,
+    "built": 10,
+    "armable": 10,
+    "missing": []
+   },
+   "notices": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "tools": {
+    "spec": 15,
+    "built": 15,
+    "missing": []
+   },
+   "figures": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 15,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 52,
+    "built": 52
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "25.3",
+   "title": "Right of rescission (refinances of principal dwellings): notice, period computation, waiver, confirmation of non-rescission, effect on funding, and rescission processing",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 7,
+    "built": 7,
+    "armable": 7,
+    "missing": []
+   },
+   "notices": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "tools": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "figures": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 44,
+    "built": 44
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "25.4",
+   "title": "Other closing-time and immediate post-closing consumer notices: initial escrow statement delivery, escrow elections and state escrow-waiver disclosures, the \u00a71026.39 notice of ownership transfer (Fannie Mae's practice), GLBA privacy gate, first-payment letter and autopay enrollment, HPA and flood cross-references, state post-closing notices, IRS Form 1098 seeding, and the closing-day notice run",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 12,
+    "built": 12,
+    "armable": 12,
+    "missing": []
+   },
+   "notices": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 63,
+    "built": 63
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "26.1",
+   "title": "Closing document generation and closing instructions (uniform instruments, riders, eNote form, MERS MOM language, state variants incl. Texas 50(a)(6) and NY CEMA, buydown agreements, POA/trust documents, final 1003, document QC)",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "timers": {
+    "spec": 13,
+    "built": 13,
+    "armable": 13,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 17,
+    "built": 17,
+    "missing": []
+   },
+   "figures": {
+    "spec": 19,
+    "built": 19,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 17,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 74,
+    "built": 74
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "26.2",
+   "title": "eClosing execution (RON, IPEN, hybrid, wet), eNote signing, eVault custody, MERS eRegistry registration, eRecording, and paper-note handling",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 14,
+    "built": 14,
+    "armable": 14,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 19,
+    "built": 19,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 19,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 51,
+    "built": 51
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "26.3",
+   "title": "Funding authorization and disbursement (funding conditions, wet vs dry states, rescission expiry, wire controls, per-diem interest and interest credits, table-funding analysis, unwind)",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 14,
+    "built": 14,
+    "armable": 14,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 15,
+    "built": 15,
+    "missing": []
+   },
+   "figures": {
+    "spec": 30,
+    "built": 30,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 15,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 77,
+    "built": 77
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "26.4",
+   "title": "Post-closing document collection, collateral perfection, and trailing documents (endorsements/allonges, assignments for non-MERS, MERS MOM registration and interim-funder designation, recorded security instrument, final title policy, note custody and shipping to warehouse/document custodian)",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 23,
+    "built": 23,
+    "armable": 23,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 46,
+    "built": 46
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "27.1",
+   "title": "Warehouse facility mechanics: advance requests, wet/dry funding limits, collateral control (bailee letters, interim funder, UCC), aging and curtailments, interest/fees, kick-outs and repurchases, borrowing-base and covenant monitoring",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 22,
+    "built": 22,
+    "armable": 22,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 19,
+    "built": 19,
+    "missing": []
+   },
+   "figures": {
+    "spec": 28,
+    "built": 28,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 19,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 87,
+    "built": 87
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "27.2",
+   "title": "Purchase-proceeds settlement, warehouse payoff, gain-on-sale computation and the borrower rate pass-through (Grander economics), MSR accounting hand-off to the partner",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "timers": {
+    "spec": 15,
+    "built": 15,
+    "armable": 15,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 17,
+    "built": 17,
+    "missing": []
+   },
+   "figures": {
+    "spec": 57,
+    "built": 57,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 17,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 110,
+    "built": 110
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "28.1",
+   "title": "Prefunding quality control program (selection, review scope, reverifications, defect handling before closing, reporting)",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 9,
+    "built": 9,
+    "armable": 9,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 20,
+    "built": 20,
+    "missing": []
+   },
+   "figures": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 20,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 53,
+    "built": 53
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "28.2",
+   "title": "Post-closing QC program, Fannie Mae QC reviews (Loan Quality Connect), self-reporting, defect rates, and remedies/appeals",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 24,
+    "built": 24,
+    "armable": 24,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 26,
+    "built": 26,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 26,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 68,
+    "built": 68
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "28.3",
+   "title": "HMDA data capture, ULI generation, rate-spread and other derived fields, LAR editing, annual/quarterly submission, and public disclosure obligations",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "tools": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 39,
+    "built": 39
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "28.4",
+   "title": "Fraud, misrepresentation, AML/SAR, OFAC, and Fannie Mae fraud reporting",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "timers": {
+    "spec": 21,
+    "built": 21,
+    "armable": 21,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 20,
+    "built": 20,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 20,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 65,
+    "built": 65
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "29.1",
+   "title": "Committing and pricing execution (best efforts and mandatory PE\u2013Whole Loan commitments, commitment terms, LLPAs, servicing fee and buy-up/buy-down, pair-off/extension, over/under delivery tolerance)",
+   "tids": {
+    "spec": 16,
+    "built": 16,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 15,
+    "built": 15,
+    "armable": 15,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 14,
+    "built": 14,
+    "missing": []
+   },
+   "figures": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 14,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 61,
+    "built": 61
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "29.2",
+   "title": "Pipeline and interest-rate-risk management (fallout/pull-through, hedge for mandatory execution, mark-to-market, best-efforts operations)",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "timers": {
+    "spec": 12,
+    "built": 12,
+    "armable": 12,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 18,
+    "built": 18,
+    "missing": []
+   },
+   "figures": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 18,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 59,
+    "built": 59
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "29.3",
+   "title": "Delivery data preparation and pre-delivery validation (ULDD, Special Feature Codes, UCD/UCDP/DU identifiers, MI data, EarlyCheck)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 44,
+    "built": 44
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "29.4",
+   "title": "Loan Delivery submission, custodian certification, purchase, purchase advice reconciliation, and post-delivery corrections/remedies",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "timers": {
+    "spec": 23,
+    "built": 23,
+    "armable": 23,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 16,
+    "built": 16,
+    "missing": []
+   },
+   "figures": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 16,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 67,
+    "built": 67
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "30.1",
+   "title": "Fannie Mae post-purchase servicing setup (servicer number, Fannie Mae loan number, remittance type, first reporting cycle, initial custodial deposits, servicer loan number, MERS/eRegistry post-purchase state, custodian record, Escrow Setup event)",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 14,
+    "built": 14,
+    "armable": 14,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "figures": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 51,
+    "built": 51
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "30.2",
+   "title": "New-origination boarding onto the Supermortgage servicing platform at funding (origination-to-servicing data mapping, DQ gate, opening ledger, documents, consents, timers seeded, welcome/first-payment communications, no-transfer-notice design)",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "figures": {
+    "spec": 14,
+    "built": 14,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 13,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 59,
+    "built": 59
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "30.3",
+   "title": "Escrow account establishment at origination: RESPA \u00a71024.17 aggregate analysis, initial deposit, initial escrow statement, CD escrow consistency, waivers, HPML escrow, same-servicer refinance escrow transfer",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 15,
+    "built": 15,
+    "armable": 15,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 20,
+    "built": 20,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 55,
+    "built": 55
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "30.4",
+   "title": "First-90-days servicing hand-off: ownership notice, first statement, first credit and investor cycles, vendor activations, EPD monitoring, servicing file, origination record retention and timer seeding",
+   "tids": {
+    "spec": 14,
+    "built": 14,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 11,
+    "built": 11,
+    "armable": 11,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 53,
+    "built": 53
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "31.1",
+   "title": "Licensing, approvals, and the partner boundary",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 15,
+    "built": 15,
+    "armable": 15,
+    "missing": []
+   },
+   "notices": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "tools": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "figures": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 43,
+    "built": 43
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "31.2",
+   "title": "AI governance, model risk, and fair-lending controls for AI underwriting, pricing, and adverse action",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 19,
+    "built": 19,
+    "armable": 19,
+    "missing": []
+   },
+   "notices": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "tools": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 42,
+    "built": 42
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "31.3",
+   "title": "Records, retention, privacy, data ownership, and security for origination",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 21,
+    "built": 21,
+    "missing": []
+   },
+   "timers": {
+    "spec": 19,
+    "built": 19,
+    "armable": 19,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 21,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 55,
+    "built": 55
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.1",
+   "title": "Shell, theme, component library and Record pane",
+   "tids": {
+    "spec": 0,
+    "built": 0,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 3,
+    "built": 3
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.2",
+   "title": "Data contracts: projections, commands, events, timers, notices, security, API",
+   "tids": {
+    "spec": 0,
+    "built": 0,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 42,
+    "built": 42,
+    "armable": 42,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 45,
+    "built": 45,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 45,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 94,
+    "built": 94
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.3",
+   "title": "Entry and the five-minute qualification",
+   "tids": {
+    "spec": 32,
+    "built": 32,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 32,
+    "built": 32
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.4",
+   "title": "Disclosures, intent to proceed, lock, revised LEs",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 10,
+    "built": 10
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.5",
+   "title": "Verification, needs list, conditions, second borrower",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 13,
+    "built": 13
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.6",
+   "title": "Decision, property, title, insurance, MI, clear to close",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 12,
+    "built": 12
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.7",
+   "title": "CD, closing, rescission, funding, boarding",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 13,
+    "built": 13
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.8",
+   "title": "Servicing: loan home, payments, autopay, statements, escrow",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 11,
+    "built": 11
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.9",
+   "title": "Servicing: insurance, PMI, ARM, life events, requests",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 10,
+    "built": 10
+   },
+   "pct": 100.0,
+   "retired": [
+    "32.9-T9"
+   ]
+  },
+  {
+   "process": "32.10",
+   "title": "Servicing: hardship and delinquency",
+   "tids": {
+    "spec": 11,
+    "built": 11,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 11,
+    "built": 11
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.11",
+   "title": "Rate-watch and the re-refinance loop",
+   "tids": {
+    "spec": 10,
+    "built": 10,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 10,
+    "built": 10
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.12",
+   "title": "Exits",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 8,
+    "built": 8
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.13",
+   "title": "Cross-cutting: acceptance harness, copy library rules, side-quest catalogue",
+   "tids": {
+    "spec": 16,
+    "built": 16,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 16,
+    "built": 16
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.14",
+   "title": "Entry, sign-up and sign-in",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 19,
+    "built": 19
+   },
+   "pct": 100.0,
+   "retired": [
+    "32.14-T1",
+    "32.14-T2",
+    "32.14-T3",
+    "32.14-T4",
+    "32.14-T5",
+    "32.14-T6",
+    "32.14-T19"
+   ]
+  },
+  {
+   "process": "32.16",
+   "title": "The conversational product: an account, then a conversation, with cards only when the rules need one",
+   "tids": {
+    "spec": 27,
+    "built": 27,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 10,
+    "built": 10,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 10,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 40,
+    "built": 40
+   },
+   "pct": 100.0,
+   "retired": [
+    "32.16-T11",
+    "32.16-T12",
+    "32.16-T17",
+    "32.16-T18",
+    "32.16-T20"
+   ]
+  },
+  {
+   "process": "32.17",
+   "title": "The video agent: the same conversation, face to face, with the cards on the rail",
+   "tids": {
+    "spec": 12,
+    "built": 12,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 18,
+    "built": 18
+   },
+   "pct": 100.0,
+   "retired": [
+    "32.17-T3",
+    "32.17-T4",
+    "32.17-T6",
+    "32.17-T10",
+    "32.17-T11",
+    "32.17-T12",
+    "32.17-T14",
+    "32.17-T15",
+    "32.17-T16",
+    "32.17-T19",
+    "32.17-T20",
+    "32.17-T22",
+    "32.17-T23",
+    "32.17-T26"
+   ]
+  },
+  {
+   "process": "32.18",
+   "title": "The DU moment: the assets connection, the credit pull and the underwriting run from the conversation",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "figures": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 12,
+    "built": 12
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "32.19",
+   "title": "The Apply product",
+   "tids": {
+    "spec": 18,
+    "built": 17,
+    "todo": 1,
+    "missing": [
+     18
+    ]
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 18,
+    "built": 17
+   },
+   "pct": 94.4,
+   "retired": []
+  },
+  {
+   "process": "33.1",
+   "title": "The partner book import: the tape and the supplement become monitored loans and real accounts",
+   "tids": {
+    "spec": 13,
+    "built": 13,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "timers": {
+    "spec": 2,
+    "built": 2,
+    "armable": 2,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "figures": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 3,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 30,
+    "built": 30
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "33.2",
+   "title": "The daily refinance review: every monitored loan reviewed each day by the refinance analyst",
+   "tids": {
+    "spec": 7,
+    "built": 7,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 1,
+    "built": 1,
+    "armable": 1,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "figures": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 27,
+    "built": 27
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "33.3",
+   "title": "Refinance readiness: what a refinance needs, what is on file, what is asked for",
+   "tids": {
+    "spec": 6,
+    "built": 6,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 1,
+    "built": 1,
+    "armable": 1,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 12,
+    "built": 12
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "34.1",
+   "title": "Staff sign-in and roles: accounts, the doors, the action log, the access review",
+   "tids": {
+    "spec": 9,
+    "built": 9,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 1,
+    "built": 1,
+    "armable": 1,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 21,
+    "built": 21
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "34.2",
+   "title": "The account directory: every person, their activity and their record, masked by role",
+   "tids": {
+    "spec": 6,
+    "built": 6,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 2,
+    "built": 2,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 2,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 13,
+    "built": 13
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "34.3",
+   "title": "Partner book operations: uploads, import history, the book, reviews, readiness, the daily report",
+   "tids": {
+    "spec": 6,
+    "built": 6,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 12,
+    "built": 12
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "34.4",
+   "title": "Evidence and controls: clocks, escalations, the outbox, AI systems, the evidence pack",
+   "tids": {
+    "spec": 6,
+    "built": 6,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 12,
+    "built": 12
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "34.5",
+   "title": "The portal's information architecture and the accounts list",
+   "tids": {
+    "spec": 16,
+    "built": 3,
+    "todo": 13,
+    "missing": [
+     3,
+     4,
+     5,
+     6,
+     7,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16
+    ]
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 6,
+    "built": 2,
+    "missing": [
+     "directory.counts",
+     "pipeline.list",
+     "loans.list",
+     "notice.read"
+    ]
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 22,
+    "built": 5
+   },
+   "pct": 22.7,
+   "retired": []
+  },
+  {
+   "process": "35.1",
+   "title": "Persistence seam and the typed record",
+   "tids": {
+    "spec": 15,
+    "built": 15,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "timers": {
+    "spec": 3,
+    "built": 3,
+    "armable": 3,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "figures": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 42,
+    "built": 42
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "35.2",
+   "title": "Documents and artifacts: the object store, the PDF writer, stored-byte integrity, legal holds, e-sign envelopes, the borrower viewer and print/mail manifests",
+   "tids": {
+    "spec": 18,
+    "built": 18,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "timers": {
+    "spec": 4,
+    "built": 4,
+    "armable": 4,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "figures": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 13,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 58,
+    "built": 58
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "35.3",
+   "title": "Cycles, jobs and receipts: the planner, the jobs table, `cycles.run_unit` on the bus and the registry of every scheduled cycle",
+   "tids": {
+    "spec": 16,
+    "built": 16,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 3,
+    "built": 3,
+    "armable": 3,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 9,
+    "built": 9,
+    "missing": []
+   },
+   "figures": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 9,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 40,
+    "built": 40
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "35.4",
+   "title": "Month-end and year-end close: close periods, the dependency-ordered chain, the balance attestation, reopen, and the tax-year close that drives 1098 and 1099",
+   "tids": {
+    "spec": 15,
+    "built": 15,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 4,
+    "built": 4,
+    "armable": 4,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 19,
+    "built": 19,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 55,
+    "built": 55
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "35.5",
+   "title": "The installment schedule and the daily cashiering cycle: `loan_installments` at fund and at transfer boarding, the whole-book 2.1/2.7/2.3 sweep, lockbox ingest, ACH origination and NACHA returns as cycles, and the per-loan jurisdiction, time-zone and servicer-identity configuration",
+   "tids": {
+    "spec": 16,
+    "built": 16,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "timers": {
+    "spec": 8,
+    "built": 8,
+    "armable": 8,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 53,
+    "built": 53,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 97,
+    "built": 97
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "35.6",
+   "title": "Closing, funding and delivery orchestration: the state machine from clear-to-close through the CD, consummation, funding, the hand-off from the record, delivery, purchase-advice reconciliation and the warehouse paydown",
+   "tids": {
+    "spec": 19,
+    "built": 19,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 40,
+    "built": 40,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 80,
+    "built": 80
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "35.7",
+   "title": "Operating roles, identity and the FAKE handover: a person for every kernel role, credentials that cannot be self-asserted on `/v1`, reviewer-role disjointness, the role queues and the handover board",
+   "tids": {
+    "spec": 17,
+    "built": 17,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 4,
+    "built": 4,
+    "armable": 4,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 11,
+    "built": 11,
+    "missing": []
+   },
+   "figures": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 11,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 44,
+    "built": 44
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "35.8",
+   "title": "Operator work screens: the per-loan and per-application work the console lacks, each screen a bus tool with server-derived inputs, the queue and the action log",
+   "tids": {
+    "spec": 16,
+    "built": 16,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "figures": {
+    "spec": 22,
+    "built": 22,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 13,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 7,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 63,
+    "built": 63
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "35.9",
+   "title": "Default operations over time: cases progressed by the cycles and the screens \u2014 referral, milestones, docket reactions, executed breach actions, claims filed",
+   "tids": {
+    "spec": 17,
+    "built": 17,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 8,
+    "built": 8,
+    "missing": []
+   },
+   "timers": {
+    "spec": 6,
+    "built": 6,
+    "armable": 6,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 14,
+    "built": 14,
+    "missing": []
+   },
+   "figures": {
+    "spec": 27,
+    "built": 27,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 14,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 8,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 72,
+    "built": 72
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "35.10",
+   "title": "The refinance close of the loop: the prior loan's payoff quote, settlement and ledger zeroing, lien release, escrow disposition and retirement \u2014 whether Supermortgage services it or a partner does \u2014 the partner's notification and the new loan linked, replacing the status flip",
+   "tids": {
+    "spec": 15,
+    "built": 15,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 5,
+    "built": 5,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 13,
+    "built": 13,
+    "missing": []
+   },
+   "figures": {
+    "spec": 27,
+    "built": 27,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 13,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 5,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 65,
+    "built": 65
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "35.11",
+   "title": "Operations stewardship and hosted measurement: the ops steward over cycles, exceptions and the outbox, the daily ops report, and the audit's hosted and persisted columns",
+   "tids": {
+    "spec": 18,
+    "built": 18,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 6,
+    "built": 6,
+    "missing": []
+   },
+   "timers": {
+    "spec": 5,
+    "built": 5,
+    "armable": 5,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 6,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 41,
+    "built": 41
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "35.12",
+   "title": "Production posture: a production environment apart from nonprod, private networking, a person behind every credential, secrets and data classes, `INTEGRATIONS` as a real switch per vendor, backups and the restore drill, the go-live checklist, the four-week parallel run, and no borrower data in nonprod",
+   "tids": {
+    "spec": 19,
+    "built": 19,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 12,
+    "built": 12,
+    "missing": []
+   },
+   "timers": {
+    "spec": 6,
+    "built": 6,
+    "armable": 6,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 14,
+    "built": 14,
+    "missing": []
+   },
+   "figures": {
+    "spec": 7,
+    "built": 7,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 14,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 12,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 58,
+    "built": 58
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "36.1",
+   "title": "Partner identity, doors, roles, action log, tenant scope",
+   "tids": {
+    "spec": 8,
+    "built": 8,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 4,
+    "built": 4,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "tools": {
+    "spec": 1,
+    "built": 1,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 1,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 4,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 14,
+    "built": 14
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "36.2",
+   "title": "Partner tape drop on book.import: the upload with its report, the import history, the status line and the holds",
+   "tids": {
+    "spec": 5,
+    "built": 5,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 5,
+    "built": 5
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "36.3",
+   "title": "The eligibility board: three buckets projected from the daily review",
+   "tids": {
+    "spec": 5,
+    "built": 5,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 3,
+    "built": 3,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 8,
+    "built": 8
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "36.4",
+   "title": "The refinance pipeline feed: members in motion, projected from the rows that already exist",
+   "tids": {
+    "spec": 5,
+    "built": 5,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 5,
+    "built": 5
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "36.5",
+   "title": "Home, the daily report and the two-mode loan page",
+   "tids": {
+    "spec": 5,
+    "built": 5,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 5,
+    "built": 5
+   },
+   "pct": 100.0,
+   "retired": []
+  },
+  {
+   "process": "36.6",
+   "title": "The post-refinance serviced pane contract: dark in V1, one refusal everywhere",
+   "tids": {
+    "spec": 3,
+    "built": 3,
+    "todo": 0,
+    "missing": []
+   },
+   "tables": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "timers": {
+    "spec": 0,
+    "built": 0,
+    "armable": 0,
+    "missing": []
+   },
+   "notices": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "tools": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "figures": {
+    "spec": 0,
+    "built": 0,
+    "missing": []
+   },
+   "hosted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "persisted": {
+    "spec": 0,
+    "built": 0,
+    "measured": false
+   },
+   "units": {
+    "spec": 3,
+    "built": 3
+   },
+   "pct": 100.0,
+   "retired": []
+  }
+ ]
+}

@@ -1,0 +1,83 @@
+Doug Ludlow's servicing platform, vendored byte for byte as an app of its own.
+
+Repository   https://github.com/doug-ludlow/Supermortgage
+Branch       claude/mortgage-subservicer-builder-y9nr7e
+             (the branch of record; his remote HEAD, not main)
+Commit       293261b371fe97d2b6b39e1f29ca60dd808ac8fb
+Committed    2026-09-17 14:19:15 +0000
+             "Merge s36-deploy-build into main: apps/partner deployed to
+             /partners on the nonprod demo ..."
+Vendored     2026-09-21, at Doug's request that the servicing side be
+             integrated here (Joe, the same day: "He explicitly asked me to
+             start integrating what we built on the servicing side"). The
+             plan is https://claude.ai/code/artifact/01b81333-7be3-4138-952e-37ae29166d5c
+
+What was copied, and where it went
+
+  src/            ->  apps/servicing/src/         the runtime: kernel, command bus,
+                                                  infra, notices, 36 domain sections,
+                                                  the hosted API, the sweep, the ops console
+  db/             ->  apps/servicing/db/          migrate.sh and 177 append-only migrations
+  spec/           ->  apps/servicing/spec/        the registry the runtime reads (timers,
+                                                  notices, agents, manifest) and the 212
+                                                  process specs the tools and docs cite
+  docs/           ->  apps/servicing/docs/        his architecture, deploy, audit, UX and
+                                                  decision records; the runtime reads
+                                                  docs/ux/12-message-copy-library.md and
+                                                  docs/audit/
+  fixtures/       ->  apps/servicing/fixtures/    the 100-loan demo transfer batch
+  tools/          ->  apps/servicing/tools/       his spec, audit, lint and probe tooling
+                                                  (one test imports lint-emission.ts)
+  tsconfig.json   ->  apps/servicing/tsconfig.json
+
+Not copied: apps/borrower and apps/partner (his Next.js surfaces — ours is
+apps/web), infra/ (his GCP project), .github/, CLAUDE.md, README.md,
+package.json and the Dockerfiles. Our own package.json, tsconfig.check.json,
+scripts/, README.md and this file sit beside his tree and are the only files
+here that are ours.
+
+Every copied file is byte for byte. From this directory,
+
+  find src db spec docs fixtures tools tsconfig.json -type f -print0 \
+    | sort -z | xargs -0 shasum -a 256 | shasum -a 256
+
+is f0d0f66f236d83468ec54e30b1e400665b66ee8b94df0224fdfc2359e4a07db8, and
+`diff -r` against a clone at the commit above (with __pycache__ ignored)
+reports nothing.
+
+Local changes to his files: none.
+
+What is his and duplicated elsewhere in this repo, on purpose:
+  src/kernel/                       also packages/kernel/src/kernel/, which our
+                                    packages import; the same commit, re-synced
+                                    together by scripts/vendor-supermortgage.mjs
+  src/infra/files/xlsx.ts           also packages/partner-book/src/vendored/xlsx.ts
+  src/infra/integrations/du-schema  the MISMO chain, which packages/du-schema
+                                    also vendors from Fannie Mae directly
+
+Toolchain, absorbed by the files beside his tree rather than by edits:
+  - his entrypoint runs as he runs it: `node --experimental-strip-types
+    src/runtime/main.ts <mode>`. Node 22.12 or newer here (his package.json
+    says 22.18, where the flag is on by default; the explicit flag covers
+    22.12 and is what his Dockerfile passes anyway).
+  - scripts/run.mjs maps SERVICING_DATABASE_URL, SERVICING_PORT and
+    SERVICING_API_TOKEN onto the DATABASE_URL, PORT and API_TOKEN his config
+    reads, so his names never collide with our API's.
+  - scripts/test.mjs runs his tests as his (node --test, one database per
+    file cloned from a migrated template) on a database beside ours, and
+    leaves out the seven suites that build his Next.js apps under Chromium.
+  - tsconfig.check.json extends his tsconfig and excludes the one file that
+    imports his borrower app; playwright-core is a devDependency because
+    three of his suites and one tool import its types.
+  - eslint and Prettier skip every copied directory (root eslint.config.mjs
+    and .prettierignore say why), and the repo-walking tests in apps/api
+    skip them by name.
+
+License: the source repository carries no LICENSE file. Doug's request that
+this be integrated is what the vendoring rests on; ask him to add one when
+convenient.
+
+To re-sync every vendored tree from one clone at one commit:
+  node scripts/vendor-supermortgage.mjs <commit>
+then update Commit, Committed and Vendored above, and run
+  npm run typecheck -w @hm/servicing && npm test -w @hm/servicing

@@ -24,3 +24,15 @@ packages/kernel/spec/
 # His xlsx reader, vendored the same way for the tape reader (the commit is in
 # packages/partner-book/src/vendored/VENDORED_FROM).
 packages/partner-book/src/vendored/
+
+# Doug's servicing runtime, vendored byte for byte as apps/servicing (the
+# commit is in apps/servicing/VENDORED_FROM). Everything under these five
+# directories and the tsconfig is his; scripts/, package.json, README.md and
+# VENDORED_FROM beside them are ours.
+apps/servicing/src/
+apps/servicing/db/
+apps/servicing/spec/
+apps/servicing/docs/
+apps/servicing/fixtures/
+apps/servicing/tsconfig.json
+apps/servicing/.cache/

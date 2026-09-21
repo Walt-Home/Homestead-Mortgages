@@ -1,0 +1,215 @@
+/**
+ * Context assembly for the agent turn (docs/ux/17 §3.2, DELTA-23) — rebuilt every turn, nothing carried.
+ *
+ * The model sees exactly four things, each projected through an allow-list here: the compact `borrower_record` (numbers, dates,
+ * names and identifiers replaced by `{{token}}` placeholders the server fills from the record after the guard), the pending cards
+ * (kind, copy key, the paths it asks for, the options, an unconfirmed proposal), the last N messages of the channel, and the lead's
+ * facts when a lead rode on the cookie. This module imports nothing from DU, credit, fraud, QC or a vendor adapter and reads no other
+ * table: it structurally cannot put a DU message, a credit-report field, findings text, a fraud/QC entity or a vendor payload in front
+ * of the model (32.16 T2 is the contract test over it). The system prompt is stable (a cached prefix); the situation rides in the
+ * user turn; `hash` is the sha256 of both, recorded on `agent_turns.context_hash`.
+ */
+import { createHash } from "node:crypto";
+import type { BorrowerRecord } from "../record.ts";
+import type { CardInstanceRow, MessageRow } from "../../../infra/db/borrower-ui.ts";
+import { servicingView } from "./servicing-context.ts";
+import type { Journey } from "./journey.ts";
+import { REWRITABLE_COMMANDS } from "../../../app/tools/section32-16.ts";
+
+type P = Record<string, unknown>;
+export const PROMPT_VERSION = "32.16-p7";   // 32.16-T31 pins the version string; the 33.1 monitored-loan, 33.2 review and 33.3 readiness sentences below are captured by `agent_turns.context_hash`
+export const AGENT_TIER = "T2_borrower_facing";
+/** The messages of the channel the model sees (docs/ux/17 §3.2: 12 app, 6 SMS, 8 voice). */
+export const MESSAGE_WINDOW: Readonly<Record<string, number>> = { app: 12, sms: 6, voice: 8, email: 6 };
+
+// ---------------------------------------------------------------- the system prompt (docs/ux/17 §1 as instructions; 01 §7 plain language)
+export const SYSTEM_PROMPT = `You are Michelle, the automated assistant of the partner lender named in the situation, built by Supermortgage. Supermortgage is the self-improving mortgage: it checks every loan against the market every day and, when a refinance would put the borrower ahead, does it. Your name is Michelle: introduce yourself by it once at the start and answer to it; never call yourself Supermortgage, and never name Supermortgage as the lender — the lender is the partner. You are talking with a borrower who has an account; the conversation is the whole relationship, from the first message to the last payment.
+
+How to talk: like a friendly, competent person who does this all day — warm, plain, quick, a little wry when it fits, never stiff. Plain words a 13-year-old reads easily, one or two short sentences, one question at a time, no bullet points, no headings, no emoji, no canned phrases. Talk in your own words; never repeat a template sentence from the copy library and never restate the automation disclosure (the footer carries it). Do not narrate your tools.
+
+Where the borrower is, and what to ask: the situation carries a journey — the step they are on, the things needed from them in the order to ask, and for each one why the rules need it, how it gets satisfied, and whether an earlier step still holds it. The journey is the truth about what is required; you decide how to ask. Lead every reply, the first one included, with the top need in your own words; say in one clause why it matters when that helps; and make a suggestion when there is an easier way (connecting payroll instead of digging out pay stubs, the earliest signing slot, scanning an ID instead of typing it). If the borrower asks something else, answer it (explain), then come back to the need. If they bring up a later item, you may take it first; a blocked item waits. Never answer with a bare question such as "What next?" or "Anything else?": a reply that does not say what comes next is not a reply. When process_rules is present, use it to understand the step — never quote it and never state a figure from it.
+
+The record is the memory and you are stateless: the situation is rebuilt every turn from the borrower's record, the pending cards and the last few messages. Call journey_get when something you did may have changed what is needed.
+
+Figures: you write no digits. Every amount, rate, APR, payment, date, phone number, ID number, name and address in your text is a {{token}} exactly as the situation or a tool gave it (for example {{numbers.rate}} or {{dates.REGZ_1026_19E1_LE_3BD}}); the server fills it from the record. A figure a tool did not give does not exist; if asked, say you do not have it yet and what would produce it. Rates: never state, estimate or compare a rate, an APR or a payment yourself; when today's published rates are wanted, call explain with topic "rates" — the system shows the checked rates element with the APRs and the lender's name and NMLSR ID beside your reply, and you refer to it as "the rates shown here" without restating a number. Personal terms come only after the loan officer of record has reviewed them; before that, say so.
+
+Words commit. When the borrower states a fact the current card asks for, call card_propose with the value transcribed as a string (money in cents, choices as the option id); the turn writes it when you finish, so read it back in your own words so they can correct you — never ask them to tap Confirm, never say it is not saved yet. A correction ("make that eighty-five hundred", "it's spelled Reyes") is a new card_propose on the card named under written_this_call. A card that carries a statement (the goal card: electronic documents, a credit check, texts) is agreed to by answering it — say the statement once in your own plain words before you ask, and never ask for a separate yes or a typed name. Never calculate, round or infer a value. Their name and e-mail: when the journey's top need is the name-and-e-mail card (no name on file yet), ask for their name first and nothing else; when they say it, say it back in your words and ask for their e-mail address — do not call card_propose yet, the card needs both and refuses one alone; when they say the address, write it as an address (spoken "at" is @, "dot" is ., no spaces, lower case) and call card_propose once with both legal_name and email together, then read the name and the address back so they can tap Confirm or fix them on the card; say once that this address is how they get back into this conversation if the call drops. Consents, credit authorization, declarations and demographics are never taken in words: point to the card. Never say a fact is done because the borrower said it. Ask for nothing except through a card or a tool. When a need has no card yet and the journey says it is next, call card_request for it so it appears on the rail as you ask.
+
+A monitored loan: when the situation's record carries partner_book with monitored true, the borrower's servicer — the partner named there — set this account up for a loan the partner keeps servicing; nothing about that loan is paid, changed or requested here. On the first turn greet them by first name, say that their loan ending {{partner_book.loan_last4}} with {{partner_book.partner_name}} is on the record here, that the partner keeps servicing it, and that this is where you will talk with them about it; do not ask the goal, and state no rate, no offer and no figure. When they ask whether refinancing makes sense, answer from partner_book.review and nothing else: candidate — a refinance looks worth it and the offer card here holds the terms (point at the card, name no figure); watching — the rate is not there yet and the loan is checked every morning (say no rate, not even as a token); not_now or excluded — the reason in the reasons_copy_keys' plain words, and that the check runs every morning; never a figure of your own, never DU, findings, credit or a score word. When they ask what is still needed for the refinance and the situation carries readiness, answer from it and nothing else: name only the items listed as missing, in that order, in the plain words of their copy keys (an item not listed is on file — never ask for it again), and point at the current card (current_card_instance_id) as the next thing to do; when ready is true, say underwriting has what it needs and point at the checklist card. Never a figure and never a source, a date or a vendor name from the check.
+
+Never: tell the borrower they qualify, are approved, are denied, or are eligible; negotiate a rate, fee or term; mention DU, findings, credit scores, credit-report contents, fraud, QC or compliance reviews; ask about family plans, religion, national origin, race, sex or ancestry; use the words guarantee, guaranteed, pre-approved, approved, denied or lowest.
+
+People: there is no live agent staffed yet. If the borrower asks for a person, say plainly that no one is available live right now and offer what exists: a callback request, a written dispute, or a case, through command_run (callback.schedule, dispute.intake, case.open). Do not offer a transfer as if someone were waiting. If asked whether you are a person: say you are automated and offer the same ways to reach a person. If a tool refuses, tell the borrower simply what happened and do not retry the same call.`;
+
+// ---------------------------------------------------------------- the situation (compact record, cards, messages, lead) — allow-listed projections, figures as tokens
+export interface SessionNext { readonly step: "card" | "idle"; readonly card_instance_id: string | null; readonly kind: string | null; readonly copy_key: string | null; readonly why_copy_key: string | null; readonly allowed_answers: readonly P[]; readonly disallowed_topics: readonly string[]; readonly blocking_reason: string | null; readonly waiting_on: readonly P[] }
+export interface ContextInput {
+  readonly partyFirstName: string;
+  readonly level: string;
+  readonly channel: string;
+  readonly routed_to: "intake" | "borrower-comms";
+  readonly safeMode: string;
+  readonly partnerName: string;
+  readonly record: BorrowerRecord | null;
+  readonly cards: readonly CardInstanceRow[];
+  readonly messages: readonly MessageRow[];
+  readonly lead: P | null;
+  readonly next: SessionNext;
+  readonly borrowerText: string;
+  /** 32.17 rule 22: the card the borrower just finished on the screen (a tap, not words) — the turn that follows it. */
+  readonly continuation?: { card_instance_id: string; copy_key: string; kind: string; status: string } | null | undefined;
+  /** 32.16-T29: the Journey (agent/journey.ts) — where the borrower is, what is needed in order, why, how; null before the account has a record */
+  readonly journey?: Journey | null;
+  /** 32.16-T30: the scrubbed rules of the current step (agent/rules.ts), or null for an internal step */
+  readonly rules?: { readonly process: string; readonly text: string } | null;
+  /** 32.16-T32: the runtime queued human.request for this message before the turn — the model says so and does not queue again */
+  readonly humanRequested?: boolean;
+  /** the tokens the journey's `{{journey.*}}` placeholders fill from */
+  readonly journeyTokens?: Readonly<Record<string, string>>;
+}
+export interface AgentContext { readonly system: string; readonly situation: string; readonly tokens: Readonly<Record<string, string>>; readonly hash: string; readonly view: P }
+
+const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const money = (v: unknown): string | null => { const s = v === undefined || v === null || v === "" ? null : typeof v === "bigint" ? v.toString() : /^-?\d+$/.test(String(v)) ? String(v) : null; return s === null ? null : USD.format(Number(BigInt(s)) / 100); };
+const dateOf = (v: unknown): string | null => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null);
+const short = (id: string): string => id.replace(/-/g, "").slice(0, 8);
+const isFigure = (v: unknown): boolean => typeof v === "number" || typeof v === "bigint" || (typeof v === "string" && /\d/.test(v));
+
+/** The `record.numbers` keys the model may know of (02 §4 / record.ts originationNumbers + servicingNumbers): a rate, a percentage, a count — everything else under `numbers` is dropped; `*_cents` keys pass only as money. */
+const NUMBER_KEYS: Readonly<Record<string, "rate" | "pct" | "count">> = { note_rate: "rate", rate: "rate", apr: "pct", days_past_due: "count", remaining_term_months: "count", ltv_pct: "pct", dti_pct: "pct" };
+/** `record.numbers` → tokens: `numbers.rate` for the note rate, `numbers.<name>` (money) for `*_cents`, `numbers.<key>` for the allow-listed rest — the model sees the keys, never the values; an unlisted key never enters. */
+export function numberTokens(numbers: P | null): { view: P; tokens: Record<string, string> } {
+  const view: P = {}; const tokens: Record<string, string> = {};
+  if (!numbers) return { view, tokens };
+  for (const [k, v] of Object.entries(numbers)) {
+    if (v === null || v === undefined || v === "" || typeof v === "object") continue;
+    let name: string; let value: string | null;
+    if (k.endsWith("_cents")) { name = k.slice(0, -"_cents".length); value = money(v); }
+    else if (NUMBER_KEYS[k]) { const kind = NUMBER_KEYS[k]!; name = kind === "rate" ? "rate" : k; value = typeof v === "number" || typeof v === "bigint" || /^-?\d+(\.\d+)?$/.test(String(v)) ? (kind === "count" ? String(v) : `${String(v)}%`) : null; }
+    else continue;
+    if (value === null) continue;
+    const key = `numbers.${name}`; tokens[key] = value; view[name] = `{{${key}}}`;
+  }
+  return { view, tokens };
+}
+
+/** The compact record (docs/ux/17 §3.3 `record.get`): status, next, needed/doing, numbers, dates, documents, people, property, loan — figures, dates and names as tokens. */
+export function compactRecord(record: BorrowerRecord | null, o: { level: string; partyFirstName: string }): { view: P; tokens: Record<string, string> } {
+  const tokens: Record<string, string> = { "party.first_name": o.partyFirstName };
+  // no name on file yet (an account made with an e-mail): the model greets without a name — never the e-mail, never "there"
+  const party: P = o.partyFirstName ? { first_name: "{{party.first_name}}" } : { first_name: null, note: "no name on file yet: do not address the borrower by name or by e-mail; greet without one" };
+  if (!record) return { view: { subject: null, note: "no application or loan yet: the goal card is the first ask", party }, tokens };
+  const view: P = { party };
+  view["subject"] = { stage: record.subject.stage, transaction_type: record.subject.transaction_type, occupancy: record.subject.occupancy, has_application: !!record.subject.application_id, has_loan: !!record.subject.loan_id };
+  view["status"] = { badge: record.status.badge, one_liner: "{{status.one_liner}}", read_only: record.read_only };
+  tokens["status.one_liner"] = record.status.one_liner;
+  if (record.next) { view["next"] = { label: record.next.label, timer_code: record.next.timer_code, due_at: "{{next.due_at}}", calendar_note: record.next.calendar_note }; tokens["next.due_at"] = dateOf(record.next.due_at) ?? record.next.due_at; }
+  else view["next"] = null;
+  view["needed_from_you"] = record.needed_from_you.map((n) => ({ kind: n.kind, label: n.label, card_instance_id: n.card_instance_id, ...(n.due_at ? { due_at: `{{needed.${n.item_id}.due_at}}` } : {}) }));
+  for (const n of record.needed_from_you) if (n.due_at) tokens[`needed.${n.item_id}.due_at`] = dateOf(n.due_at) ?? n.due_at;
+  view["what_we_are_doing"] = record.what_we_are_doing.map((d) => ({ label: d.label, owner: d.owner, status: d.status }));
+  view["needed_summary"] = { count: record.needed_summary.count, nothing_needed: record.needed_summary.nothing_needed };
+  // 01 §5 / 32.3 T3: an L1 session's origination record carries no personal terms — the model gets no number tokens either
+  const numbers = o.level === "L1" && !record.subject.loan_id ? null : record.numbers;
+  const n = numberTokens(numbers); view["numbers"] = Object.keys(n.view).length ? n.view : null; Object.assign(tokens, n.tokens);
+  view["dates"] = record.dates.map((d) => ({ label: d.label, timer_code: d.timer_code, status: d.status, due_at: `{{dates.${d.timer_code}}}` }));
+  for (const d of record.dates) tokens[`dates.${d.timer_code}`] = dateOf(d.due_at) ?? d.due_at;
+  view["documents"] = record.documents.map((d) => ({ document_id: d["document_id"] ?? d["id"] ?? null, class: d["doc_class"] ?? d["class"] ?? d["notice_code"] ?? d["kind"] ?? null, title: typeof d["title"] === "string" && !isFigure(d["title"]) ? d["title"] : null, status: d["status"] ?? null }));
+  view["people"] = record.people.map((p, k) => { const role = String(p["role"] ?? `person_${k}`); tokens[`people.${role}.name`] = String(p["name"] ?? p["display_name"] ?? ""); return { role, name: `{{people.${role}.name}}` }; });
+  if (record.property) { tokens["property.address"] = String(record.property["address"] ?? record.property["address_line1"] ?? ""); view["property"] = { address: "{{property.address}}", tbd: record.property["tbd"] === true || !tokens["property.address"], state: record.property["state"] ?? null, property_type: record.property["property_type"] ?? null }; }
+  else view["property"] = null;
+  if (record.loan) {
+    const loan = record.loan; const lv: P = {};
+    const auto = loan["autodraft"] as P | undefined; if (auto) lv["autodraft"] = { status: auto["status"] ?? null, next_draft_on: auto["next_draft_on"] ? "{{loan.autodraft.next_draft_on}}" : null }; if (auto?.["next_draft_on"]) tokens["loan.autodraft.next_draft_on"] = String(auto["next_draft_on"]);
+    for (const k of ["escrowed", "ratewatch_status"]) if (loan[k] !== undefined) lv[k] = loan[k];
+    for (const k of ["first_payment_date", "maturity_date"]) if (typeof loan[k] === "string") { tokens[`loan.${k}`] = String(loan[k]); lv[k] = `{{loan.${k}}}`; }
+    view["loan"] = lv;
+  } else view["loan"] = null;
+  view["offers"] = record.offers.length ? record.offers.map((x) => ({ kind: x["kind"] ?? "offer", status: x["status"] ?? null })) : [];
+  // 33.1 rules 5–6: a monitored loan (the partner book) — the partner's name and the loan's last four as tokens (the model types neither a name nor a number), the flag the first-turn instruction reads
+  if (record.partner_book?.monitored) {
+    tokens["partner_book.partner_name"] = String(record.partner_book.partner_name ?? ""); tokens["partner_book.loan_last4"] = String(record.partner_book.loan_last4 ?? "");
+    const pb: P = { monitored: true, partner_name: "{{partner_book.partner_name}}", loan_last4: "{{partner_book.loan_last4}}", note: "the partner named here is the servicer of record and keeps servicing this loan; nothing about it is paid, changed or requested here — payment, autopay, escrow and hardship commands are unavailable (LOAN_MONITORED)" };
+    // 33.2 rule 7: the daily review's verdict and its copy keys ride in the situation — the as-of date and the watch rate as tokens (the model types neither); the reply's words are the model's, the figures none
+    const rv = record.partner_book.review;
+    if (rv) {
+      tokens["partner_book.review.as_of_date"] = rv.as_of_date; if (rv.watch_rate_pct) tokens["partner_book.watch_rate"] = `${rv.watch_rate_pct}%`;
+      pb["review"] = { as_of_date: "{{partner_book.review.as_of_date}}", verdict: rv.outcome, reasons_copy_keys: rv.reasons_copy_keys, ...(rv.watch_rate_token ? { watch_rate_token: "{{partner_book.watch_rate}}" } : {}), offer_card_instance_id: rv.offer_card_instance_id,
+        note: "the refinance analyst's daily review of this loan: when asked whether refinancing makes sense answer from the verdict — candidate: the offer card holds the terms; watching: the rate is not there yet and the loan is checked every morning (state no rate); not_now / excluded: the reason in the copy keys' words; never a figure, never a DU or credit word" };
+    }
+    // 33.3 rule 4: the readiness checklist rides under partner_book too for the loan subject (the same block as `readiness` below)
+    if (record.partner_book.readiness) pb["readiness"] = readinessView(record.partner_book.readiness, tokens);
+    view["partner_book"] = pb;
+  }
+  // 33.3 rule 4 / T5: `readiness {ready, missing[]}` for a monitored loan or a refinance application opened from one — the items by name and as copy keys, the current ask's card; the as-of date as a token; never a source row, a date of an item or a vendor
+  if (record.readiness) view["readiness"] = readinessView(record.readiness, tokens);
+  return { view, tokens };
+}
+/** The readiness block as the model sees it: `ready`, `missing[]` (in the order asked), the copy keys that say each (or the ready line), the current card, and the note that tells the model how to answer. */
+function readinessView(r: NonNullable<BorrowerRecord["readiness"]>, tokens: Record<string, string>): P {
+  tokens["readiness.as_of_date"] = r.as_of_date;
+  return { ready: r.ready, missing: [...r.missing], copy_keys: [...r.copy_keys], current_card_instance_id: r.current_card_instance_id, has_application: !!r.application_id, as_of_date: "{{readiness.as_of_date}}",
+    note: r.ready ? "the refinance file is ready: when asked what is still needed say underwriting has what it needs and point at the checklist card; never a figure" : "what the refinance still needs, in the order to ask: when asked what is still needed name only these items in the copy keys' plain words and point at the current card (current_card_instance_id); an item not listed is on file — never ask for it again; never a figure, a date, a source or a vendor name" };
+}
+
+/** The pending cards as the model may know them: the ask, its paths and options, an unconfirmed proposal — field values as tokens (an employer name, a prefilled amount). */
+export function compactCards(cards: readonly CardInstanceRow[]): { view: P[]; tokens: Record<string, string> } {
+  const tokens: Record<string, string> = {};
+  const view = cards.filter((c) => c.status === "pending").map((c) => {
+    const props = c.props; const id8 = short(c.card_instance_id);
+    const fields = Array.isArray(props["fields"]) ? (props["fields"] as P[]).map((f) => { const path = String(f["path"] ?? ""); const has = f["value"] !== undefined && f["value"] !== null && String(f["value"]) !== ""; if (has) tokens[`card.${id8}.${path}`] = String(f["value"]); return { path, label: typeof f["label"] === "string" ? f["label"] : path, ...(has ? { value: `{{card.${id8}.${path}}}`, source: f["source"] ?? null } : { value: null }), ...(Array.isArray(f["options"]) ? { options: (f["options"] as P[]).map((o) => ({ id: o["id"], label: o["label"] })) } : {}) }; }) : [];
+    const options = Array.isArray(props["options"]) ? (props["options"] as P[]).map((o) => ({ id: o["id"], label: o["label"] })) : [];
+    const proposal = props["proposal"] && typeof props["proposal"] === "object" ? (props["proposal"] as P) : null;
+    return { card_instance_id: c.card_instance_id, kind: c.kind, copy_key: c.copy_key, command_ref: c.command_ref, ...(typeof props["statement"] === "string" ? { statement: props["statement"] } : {}), ...(fields.length ? { fields } : {}), ...(options.length ? { options } : {}), ...(Array.isArray(props["required_paths"]) ? { required_paths: props["required_paths"] } : {}), ...(Array.isArray(props["money_paths"]) ? { money_paths: props["money_paths"] } : {}),
+      ...(proposal ? { proposal: { paths: Array.isArray(proposal["fields"]) ? (proposal["fields"] as P[]).map((f) => f["path"]) : [], option_id: proposal["option_id"] ?? null, unconfirmed: true } } : {}), misses: Number(c.misses ?? 0) };
+  });
+  return { view, tokens };
+}
+
+/** The last N messages of the channel: who said what; a copy-library line is shown as its key, never its text (the model must not learn the templates). */
+export function compactMessages(rows: readonly MessageRow[], channel: string): P[] {
+  const n = MESSAGE_WINDOW[channel] ?? 12;
+  return rows.filter((m) => m.channel === channel || m.channel === "app").slice(-n).map((m) => {
+    const body = m.body_text ?? ""; const copy = /^\{\{copy:([a-z0-9_.]+)\}\}/.exec(body);
+    const text = copy ? `[copy:${copy[1]}]` : body.slice(0, 600);
+    return { sender: m.sender, text: m.sender === "system" && !m.body_text ? `[element:${String((m.copy_tokens as P | null)?.["element"] ?? "")}]` : text, ...(m.card_instance_id ? { card_instance_id: m.card_instance_id } : {}) };
+  });
+}
+
+/** The lead's facts (20.3 rule 6) when a lead rode on the cookie: the goal, the occupancy or contract status, the state; the estimates as tokens. */
+export function compactLead(lead: P | null): { view: P | null; tokens: Record<string, string> } {
+  const tokens: Record<string, string> = {}; if (!lead) return { view: null, tokens };
+  const view: P = {};
+  // the facts are the chip answers (20.3 rule 6); a lead opened at the account door carries none ("undecided", no state) and is no lead on the cookie
+  for (const k of ["transaction_intent", "occupancy", "contract_status", "consumer_state"]) if (typeof lead[k] === "string" && lead[k] && lead[k] !== "undecided") view[k] = lead[k];
+  const est: Record<string, string> = { value_estimate_cents: "home_value", stated_existing_balance_cents: "balance_owed", price_range_cents: "price", down_payment_cents: "down_payment" };
+  for (const [k, name] of Object.entries(est)) { const m = money(lead[k]); if (m) { tokens[`lead.${name}`] = m; view[name] = `{{lead.${name}}}`; } }
+  return { view: Object.keys(view).length ? view : null, tokens };
+}
+
+export function buildContext(i: ContextInput): AgentContext {
+  const rec = compactRecord(i.record, { level: i.level, partyFirstName: i.partyFirstName });
+  const cards = compactCards(i.cards); const lead = compactLead(i.lead);
+  // 32.17 rule 21: the facts the turns wrote lately (newest first, three) — a correction names one of these card_instance_ids in card_propose
+  const written_this_call = i.cards.filter((c) => c.status === "resolved" && (c.evidence as P | null)?.["committed_by"] === "turn").sort((a, b) => String(b.resolved_at ?? "").localeCompare(String(a.resolved_at ?? ""))).slice(0, 3)
+    .map((c) => { const p = c.props["proposal"] as P | null; return { card_instance_id: c.card_instance_id, copy_key: c.copy_key, kind: c.kind, ...(Array.isArray(p?.["fields"]) ? { paths: (p!["fields"] as P[]).map((f) => f["path"]) } : {}), ...(p?.["option_id"] ? { option_id: p["option_id"] } : {}), correctable: !!c.command_ref && REWRITABLE_COMMANDS.has(c.command_ref) }; });
+  // 32.16 Stage 4 (agent/servicing-context.ts): a serviced loan's own block — the next installment, escrow, autopay, MI, hardship, rate watch — as tokens beside the compact record (an origination record adds nothing here)
+  const sv = servicingView(i.record); if (Object.keys(sv.view).length) rec.view["servicing"] = sv.view;
+  // 32.18 rule 6: underwriting has run — the model says so in plain words and names the checklist; never a DU message, a recommendation word or a figure
+  if (i.record?.underwriting) rec.view["underwriting"] = { ...i.record.underwriting, note: "underwriting has run on the application: say so in plain words and name the checklist card as the current ask when conditions wait on the borrower; never a finding, a recommendation word (approve, eligible, refer, ineligible) or a figure" };
+  const tokens = { ...rec.tokens, ...sv.tokens, ...cards.tokens, ...lead.tokens, ...(i.journeyTokens ?? {}) };
+  // docs/ux/17 §1 principle 5 / §3.7: the head of the agenda stated in words — the journey's own line when there is one (32.16-T29), else from session_next — so every reply, the first one included, can lead with it
+  const next_in_words = i.journey ? i.journey.next_in_words : i.next.step === "card" ? `the current ask is the ${i.next.kind ?? "card"} "${i.next.copy_key ?? ""}" (card_instance_id ${i.next.card_instance_id ?? ""}): lead with what it is for, and when the borrower states its facts propose them into it` : `nothing is needed from the borrower right now${i.next.waiting_on.length ? ` — we are working on: ${i.next.waiting_on.map((w) => String(w["label"] ?? "")).filter(Boolean).join("; ")}` : ""}: say so and what happens next`;
+  const view: P = { lender: i.partnerName, channel: i.channel, assurance_level: i.level, agent: i.routed_to, safe_mode: i.safeMode, ...(i.humanRequested ? { person_requested: "the borrower asked for a person and a callback request has already been queued for this message: say so plainly in your own words — no one is live right now, a person will pick it up — and do not call human_transfer or queue it again" } : {}), ...(i.journey ? { journey: i.journey } : {}), next_in_words, ...(i.rules ? { process_rules: { process: i.rules.process, note: "the rules of the current step, for your understanding — never quote them, never state a figure from them", text: i.rules.text } } : {}), record: rec.view, pending_cards: cards.view, ...(written_this_call.length ? { written_this_call } : {}), session_next: i.next, recent_messages: compactMessages(i.messages, i.channel), ...(lead.view ? { lead_facts: lead.view } : {}), tokens_available: Object.keys(tokens) };
+  const situation = JSON.stringify(view, null, 1);
+  const borrower = i.borrowerText || (i.continuation ? `(no new words — the borrower just finished the ${i.continuation.kind} "${i.continuation.copy_key}" on the screen (card_instance_id ${i.continuation.card_instance_id}, now ${i.continuation.status}): in one short sentence acknowledge what that did for them, then go straight on to the current ask — no greeting, no re-introduction, no thanks for their patience; if nothing is needed from them now, say what happens next)` : i.messages.some((m) => m.sender === "borrower") ? "(no new message — the borrower is back; restate where things stand and the current ask)" : i.record?.partner_book?.monitored ? "(the borrower just signed in for the first time to the account their servicer set up for them and has not said anything yet — introduce yourself as Michelle, greet them by first name, say that their loan ending {{partner_book.loan_last4}} with {{partner_book.partner_name}} is on the record here, that {{partner_book.partner_name}} keeps servicing it, and that this is where you will talk with them about it; do not ask the goal; no rate, no offer, no figure)" : "(the borrower just created their account and has not said anything yet — introduce yourself as Michelle, greet them by first name when one is on file (with no name on file, ask their name first: that is the first need), say what the first step is and ask the goal in your own words; if lead facts are present, acknowledge them in your words instead of asking again)");
+  const hash = createHash("sha256").update(SYSTEM_PROMPT).update("\n").update(situation).digest("hex");
+  return { system: SYSTEM_PROMPT, situation: `[situation]\n${situation}\n\n[borrower]\n${borrower}`, tokens, hash, view };
+}
+
+/** Fill `{{token}}` placeholders from the record's tokens; an unknown token is dropped (the guard already refused figures outside tokens). */
+export function fillTokens(text: string, tokens: Readonly<Record<string, string>>): { text: string; unknown: string[] } {
+  const unknown: string[] = [];
+  const out = text.replace(/\{\{([a-zA-Z0-9_.:-]+)\}\}/g, (all, k: string) => { if (k.startsWith("copy:")) return all; const v = tokens[k]; if (v === undefined) { unknown.push(k); return ""; } return v; }).replace(/[ \t]{2,}/g, " ").trim();
+  return { text: out, unknown };
+}

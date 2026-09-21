@@ -8,3 +8,6 @@ dist/
 infra/.terraform/
 infra/*.tfstate
 infra/*.tfstate.backup
+
+# tsc --incremental state for apps/servicing (his tsconfig writes it)
+.cache/

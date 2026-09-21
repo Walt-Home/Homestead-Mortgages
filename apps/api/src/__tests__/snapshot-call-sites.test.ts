@@ -57,6 +57,26 @@ const REGISTER: Record<string, number> = {
 
 const SKIP = new Set(["node_modules", "dist", ".git", ".turbo", "coverage"]);
 
+/**
+ * Somebody else's source, vendored byte for byte: Doug's kernel, his xlsx
+ * reader and his whole servicing runtime (each tree's VENDORED_FROM names the
+ * commit). His platform has a `recordSnapshot` of its own, and a vendored tree
+ * cannot be edited to rename it. Our files beside each tree stay scanned.
+ */
+const VENDORED = [
+  join("packages", "kernel", "src", "kernel"),
+  join("packages", "kernel", "spec"),
+  join("packages", "partner-book", "src", "vendored"),
+  join("apps", "servicing", "src"),
+  join("apps", "servicing", "db"),
+  join("apps", "servicing", "spec"),
+  join("apps", "servicing", "docs"),
+  join("apps", "servicing", "fixtures"),
+  join("apps", "servicing", "tools"),
+];
+const vendored = (file: string) =>
+  VENDORED.some((tree) => relative(repoRoot, file).startsWith(tree + "/"));
+
 function sourceFiles(dir: string, found: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (SKIP.has(entry.name)) continue;
@@ -78,6 +98,7 @@ function scan(): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const top of ["apps", "packages"]) {
     for (const file of sourceFiles(join(repoRoot, top))) {
+      if (vendored(file)) continue;
       const n = callsIn(file);
       if (n) counts[relative(repoRoot, file)] = n;
     }

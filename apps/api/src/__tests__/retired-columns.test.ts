@@ -38,7 +38,18 @@ const NOT_SOURCE = new Set(["node_modules", "dist", "build", "coverage", ".turbo
 // column by that name and anchors TRID clocks on it. That is his column, not a
 // reader of ours, and a vendored tree cannot be edited to say otherwise. The
 // package's own src/index.ts is ours and stays scanned.
-const VENDORED = [join("packages", "kernel", "src", "kernel"), join("packages", "kernel", "spec")];
+const VENDORED = [
+  join("packages", "kernel", "src", "kernel"),
+  join("packages", "kernel", "spec"),
+  join("packages", "partner-book", "src", "vendored"),
+  // His whole runtime, vendored as an app of its own (apps/servicing/VENDORED_FROM):
+  // the same column, in his migrations and his registry, for the same reason.
+  join("apps", "servicing", "src"),
+  join("apps", "servicing", "db"),
+  join("apps", "servicing", "spec"),
+  join("apps", "servicing", "docs"),
+  join("apps", "servicing", "fixtures"),
+];
 const TEXT = /\.(tsx?|jsx?|[cm]js|json|sql|prisma|css|html|md|ya?ml)$/;
 
 function files(dir: string): string[] {
@@ -115,6 +126,8 @@ describe("the legacy receipt columns are retired", () => {
     expect(all).toContain(join("packages", "kernel", "src", "index.ts"));
     expect(all).not.toContain(join("packages", "kernel", "spec", "registry", "timers.json"));
     expect(all).not.toContain(join("packages", "kernel", "src", "kernel", "timers", "registry.ts"));
+    expect(all).toContain(join("apps", "servicing", "scripts", "run.mjs"));
+    expect(all).not.toContain(join("apps", "servicing", "src", "runtime", "main.ts"));
 
     expect(offenders()).toEqual([
       join(migrations, "20260901150045_initial_schema", "migration.sql"),

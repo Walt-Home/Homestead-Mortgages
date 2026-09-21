@@ -46,9 +46,12 @@ Toolchain differences, absorbed by tsconfig.json rather than by edits:
   - eslint and Prettier skip src/kernel/ and spec/ (root eslint.config.mjs
     and .prettierignore say why)
 
-License: the source repository carries no LICENSE file. Doug's written OK to
-vendor is required, and this package must not reach main until Joe confirms
-it has been obtained.
+License: the source repository carries no LICENSE file. Doug asked Joe to
+integrate the servicing side of his repository into this one (Joe, 21
+September 2026: "He explicitly asked me to start integrating what we built
+on the servicing side"), and that request is what this vendoring rests on.
+Ask him to add a LICENSE file when convenient; until then this note is the
+record.
 
 To re-sync:
   git clone --depth 1 --branch claude/mortgage-subservicer-builder-y9nr7e \

@@ -11,7 +11,8 @@ central directory, shared strings, sheet rows, Excel serial dates. It is
 the one thing the tape reader needs that is neither the kernel nor ours,
 and it is kept as his so a re-sync is a copy rather than a merge. Lint
 and Prettier skip this directory for that reason (root eslint.config.mjs
-and .prettierignore). The same license condition as packages/kernel
-applies: his repository carries no LICENSE file.
+and .prettierignore). The same license note as packages/kernel applies:
+his repository carries no LICENSE file, and Doug's request that we
+integrate his servicing side (Joe, 21 September 2026) is what this rests on.
 
 Local changes to his file: none.

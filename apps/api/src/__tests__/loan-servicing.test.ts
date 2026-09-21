@@ -56,6 +56,46 @@ const get = (userId: string, loanId: string) =>
     "/api/loans",
   );
 
+describe("GET /loans", () => {
+  it("lists the mortgages the signed-in person stands on, and nobody else's", async () => {
+    const me = await createUser();
+    const s = await servicer("API");
+    const mine = await loanFor(me.id, s.id, "NL-100002");
+    const stranger = await createUser();
+    await loanFor(stranger.id, s.id, "NL-100003");
+
+    const r = await callAs<{ loans: Record<string, unknown>[] }>(
+      me.id,
+      [loanRouter],
+      "GET",
+      "/",
+      undefined,
+      "/api/loans",
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.loans).toHaveLength(1);
+    expect(r.body.loans[0]).toMatchObject({
+      id: mine,
+      state: "imported_unclaimed",
+      servicerLoanNumber: "NL-100002",
+      servicer: { slug: "northlight", integrationDepth: "API" },
+      originalPrincipalCents: "45000000",
+      property: { city: "Phoenix" },
+    });
+
+    const nobody = await createUser();
+    const empty = await callAs<{ loans: unknown[] }>(
+      nobody.id,
+      [loanRouter],
+      "GET",
+      "/",
+      undefined,
+      "/api/loans",
+    );
+    expect(empty.body.loans).toEqual([]);
+  });
+});
+
 describe("GET /loans/:id/servicing", () => {
   it("reads the platform's record live when the servicer is wired that deep", async () => {
     const me = await createUser();

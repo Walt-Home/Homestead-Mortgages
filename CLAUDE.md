@@ -172,21 +172,25 @@ servicing platform is read, never joined".
   asset report and a county record, so an unrun pull read as the borrower
   declaring themselves clean. `buildDeclarations` is gone and a test keeps it
   gone.
-- **The Grander persona is a row on the sign-in page and nothing else, and the
-  loan half of what it stands for is written now.** An imported member is a
-  party and a loan with no application. A servicer's tape reaches
-  `POST /api/partner/book/imports` with a partner key, `packages/partner-book`
-  reads it onto the feed contract in `@hm/shared/portfolio`, and
-  `services/partner-book.ts` turns each row into an `imported_unclaimed` loan
-  on a PROVISIONAL party with the partner's facts, plus a
-  `servicing_observations` row per tape. Nothing about that party is
-  retrievable and the loan is not monitored, because the claim is what makes
-  it somebody's — and the claim, a signed single-use token delivered by
-  Grander rather than an email match at sign-in, is the half still unbuilt.
-  The persona refuses to seed for the same reason it always did: an unclaimed
-  party has never authenticated, so there is no user to sign a tester in as.
-  `npm run partner:book -- sample northlight` loads a twelve-loan sample book
-  instead. See `docs/decisions.md`, "A book is a tape, read once".
+- **The Grander persona stands on a loan the sample book wrote, and the
+  claim is still unbuilt.** An imported member is a party and a loan with no
+  application. A servicer's tape reaches `POST /api/partner/book/imports`
+  with a partner key, `packages/partner-book` reads it onto the feed contract
+  in `@hm/shared/portfolio`, and `services/partner-book.ts` turns each row
+  into an `imported_unclaimed` loan on a PROVISIONAL party with the partner's
+  facts, plus a `servicing_observations` row per tape. Nothing about that
+  party is retrievable and the loan is not monitored, because the claim is
+  what makes it somebody's — a signed single-use token delivered by Grander,
+  never an email match, and not written yet. The persona seed does what the
+  claim will do, minus the token: it loads the twelve-loan Northlight book
+  under its servicer at integration depth `API`, mints the `grander_import`
+  sign-in with a claimed party, and folds NL-100001's provisional party into
+  it through the same `mergePartyInto` the co-borrower claim uses. Signed in
+  as that row, a tester sees `GET /api/loans` and
+  `GET /api/loans/:id/servicing` — the tape's newest observation beside the
+  servicing platform's live record — and no application. See
+  `docs/decisions.md`, "A book is a tape, read once" and "The servicing
+  platform is read, never joined".
 - **A sample borrower on hold needs a knob to be held.** All three connector
   fixtures screen clear, so `FixtureOptions.screening: "near_match"` is what
   makes Omar's snapshot, his `sanctionsScreenClear` column and his ledger row

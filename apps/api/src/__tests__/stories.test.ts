@@ -26,7 +26,9 @@ import {
   VENDOR_CLAIM,
   type ApplicationState,
 } from "@hm/shared";
+import { NORTHLIGHT, sampleBook } from "@hm/partner-book";
 import {
+  isImported,
   isSeeded,
   NOT_SEEDED_HERE,
   PERSONA_KEY_SHAPE,
@@ -44,7 +46,6 @@ function copy(): { key: string; text: string }[] {
     ...PERSONA_STORIES.flatMap((s) => [
       { key: s.key, text: `${s.name.first} ${s.name.last}` },
       { key: s.key, text: s.story },
-      ...(isSeeded(s) ? [] : [{ key: s.key, text: s.unavailableBecause }]),
     ]),
     ...CO_BORROWERS.flatMap((c) => [
       { key: c.key, text: `${c.name.first} ${c.name.last}` },
@@ -138,12 +139,14 @@ describe("the list itself", () => {
     }
   });
 
-  it("gives every deferred row a reason and nothing to walk", () => {
-    const deferred = PERSONA_STORIES.filter((s) => !isSeeded(s));
-    expect(deferred).toHaveLength(1);
-    for (const story of deferred) {
+  it("stands the imported row on a loan the sample book carries, and walks it nowhere", () => {
+    const imported = PERSONA_STORIES.filter(isImported);
+    expect(imported).toHaveLength(1);
+    const numbers = sampleBook().loans.map((l) => l.servicer_loan_number);
+    for (const story of imported) {
       expect(isSeeded(story)).toBe(false);
-      if (!isSeeded(story)) expect(story.unavailableBecause.length).toBeGreaterThan(20);
+      expect(story.loan.servicerSlug).toBe(NORTHLIGHT.slug);
+      expect(numbers).toContain(story.loan.servicerLoanNumber);
     }
   });
 

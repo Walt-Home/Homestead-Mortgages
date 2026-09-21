@@ -61,12 +61,15 @@ import {
   type MailConnector,
   type PricingConnector,
 } from "@hm/connectors";
-import type { Address, ApplicationState, LoanFile } from "@hm/shared";
+import type { Address, ApplicationState, LoanFile, LoanState } from "@hm/shared";
+import { NORTHLIGHT, sampleBook } from "@hm/partner-book";
 import { quoteSubjectProduct } from "../services/pricing.js";
 import { underwrite } from "@hm/underwriting";
 import {
+  isImported,
   isSeeded,
   PERSONA_STORIES,
+  type ImportedPersona,
   type PersonaKey,
   type PersonaStory,
   type SeededKey,
@@ -90,11 +93,15 @@ import { pinTridPieces, proposeScenario } from "../services/evidence.js";
 import { acceptClaim, inviteCoBorrower } from "../services/invitations.js";
 import {
   assertFacts,
+  mergePartyInto,
+  partnerPrincipal,
   partyForUser,
   principalForParty,
   recordBorrowerFacts,
   staffPrincipal,
 } from "../services/party.js";
+import { importPartnerBook } from "../services/partner-book.js";
+import { toDomainLoanState } from "../services/loan-transition.js";
 import { loadLoanFile, recordEvent, recordSnapshot } from "../services/repository.js";
 import { reconcileIncomeAndEmployment } from "../services/income.js";
 import { reconcileAssets } from "../services/assets.js";
@@ -1460,10 +1467,13 @@ async function signAsCoBorrower(w: Walk, dev: CoBorrowerOnFile): Promise<void> {
 
 export interface SeedReport {
   readonly key: PersonaKey;
-  readonly result: "seeded" | "exists" | "drift" | "deferred";
+  readonly result: "seeded" | "exists" | "drift";
   readonly state: ApplicationState | null;
   readonly expected: ApplicationState | null;
   readonly loanFileId: string | null;
+  /** The imported persona's loan and the state it stands in; absent for a persona walked through an application. */
+  readonly loanId?: string | null;
+  readonly loanState?: LoanState | null;
 }
 
 /**
@@ -1604,6 +1614,111 @@ async function seedPersona(story: SeededPersona): Promise<SeedReport> {
 }
 
 /**
+ * The imported persona: a sign-in stood on a loan the sample book wrote.
+ *
+ * Three things, each idempotent. The servicer, at the depth the live read
+ * asks before it reads (`API`; a second run only reasserts the depth). The
+ * twelve-loan Northlight book, through the same service a partner's key
+ * reaches, which answers `already_loaded` for the same two files and writes
+ * nothing. And the person: a user with a CLAIMED party of their own, into
+ * which the tape's PROVISIONAL party is folded by `mergePartyInto` — the
+ * merge the co-borrower claim uses, so the loan follows the party the way
+ * it will when the claim exists. A loan that has no party at all (a reset
+ * took the merged one with the user) is attached directly, and a loan that
+ * is somebody else's stops the seed rather than sharing it.
+ *
+ * The loan stays `imported_unclaimed` and unmonitored: the claim's own
+ * transition is not written, and the database holds that an unclaimed loan
+ * is not monitored. A tester signed in as this row sees the loan and its
+ * servicing record, and nothing that would need a credit request.
+ */
+async function seedImportedPersona(story: ImportedPersona): Promise<SeedReport> {
+  const servicer = await prisma.servicer.upsert({
+    where: { slug: story.loan.servicerSlug },
+    create: {
+      slug: story.loan.servicerSlug,
+      displayName: NORTHLIGHT.legal_name,
+      integrationDepth: "API",
+    },
+    update: { integrationDepth: "API" },
+    select: { id: true },
+  });
+  const book = sampleBook();
+  const imported = await importPartnerBook({
+    servicerId: servicer.id,
+    principalId: await partnerPrincipal(prisma, story.loan.servicerSlug),
+    profile: "m3-v1",
+    tape: { filename: "northlight.xlsx", bytes: book.tape },
+    supplement: { filename: "supplement.csv", bytes: new TextEncoder().encode(book.supplement) },
+  });
+  if (imported.status === "rejected") {
+    throw new Error(
+      `persona ${story.key}: the sample book was rejected (${imported.missing_headers.join(", ")})`,
+    );
+  }
+  const loan = await prisma.loan.findFirstOrThrow({
+    where: { servicerId: servicer.id, servicerLoanNumber: story.loan.servicerLoanNumber },
+    select: {
+      id: true,
+      status: true,
+      parties: { select: { partyId: true, party: { select: { claimStatus: true } } } },
+    },
+  });
+  const loanState = toDomainLoanState(loan.status);
+
+  const existing = await prisma.user.findUnique({
+    where: { personaKey: story.key },
+    select: { id: true, partyId: true },
+  });
+  if (existing) {
+    const standing = loan.parties.some((p) => p.partyId === existing.partyId);
+    return {
+      key: story.key,
+      result: standing ? "exists" : "drift",
+      state: null,
+      expected: null,
+      loanFileId: null,
+      loanId: loan.id,
+      loanState: standing ? loanState : null,
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        googleSub: `persona:${story.key}`,
+        email: `${story.key}@personas.supermortgage.invalid`,
+        name: `${story.name.first} ${story.name.last}`,
+        personaKey: story.key,
+      },
+      select: { id: true },
+    });
+    const partyId = await partyForUser(tx, user.id, { sourceFirstSeen: "persona_seed" });
+    const provisional = loan.parties.find(
+      (p) => p.party.claimStatus === "PROVISIONAL" || p.party.claimStatus === "CLAIM_PENDING",
+    );
+    if (provisional) {
+      await mergePartyInto(tx, provisional.partyId, partyId);
+    } else if (loan.parties.length === 0) {
+      await tx.loanParty.create({ data: { loanId: loan.id, partyId, role: "PRIMARY_BORROWER" } });
+    } else {
+      throw new Error(
+        `persona ${story.key}: loan ${story.loan.servicerLoanNumber} is already somebody's`,
+      );
+    }
+  });
+  return {
+    key: story.key,
+    result: "seeded",
+    state: null,
+    expected: null,
+    loanFileId: null,
+    loanId: loan.id,
+    loanState,
+  };
+}
+
+/**
  * Re-create exactly one persona.
  *
  * Never the default: a persona that exists is history somebody may be looking
@@ -1683,32 +1798,25 @@ export async function seedAll(
   assertEnabled();
   const reports: SeedReport[] = [];
   for (const story of stories) {
-    if (!isSeeded(story)) {
-      reports.push({
-        key: story.key,
-        result: "deferred",
-        state: null,
-        expected: null,
-        loanFileId: null,
-      });
-      continue;
-    }
-    reports.push(await seedPersona(story));
+    reports.push(isImported(story) ? await seedImportedPersona(story) : await seedPersona(story));
   }
   return reports;
 }
 
 /** One line per persona, and the ledger behind each one that was walked. */
 function line(report: SeedReport): string {
+  const imported = report.loanId !== undefined;
   switch (report.result) {
-    case "deferred":
-      return `persona ${report.key} deferred`;
     case "exists":
-      return `persona ${report.key} exists (${report.state})`;
+      return `persona ${report.key} exists (${imported ? report.loanState : report.state})`;
     case "drift":
-      return `persona ${report.key} DRIFT expected ${report.expected}, is ${report.state ?? "none"}`;
+      return imported
+        ? `persona ${report.key} DRIFT expected on loan ${report.loanId}, is not`
+        : `persona ${report.key} DRIFT expected ${report.expected}, is ${report.state ?? "none"}`;
     default:
-      return `persona ${report.key} seeded ${report.state} file=${report.loanFileId}`;
+      return imported
+        ? `persona ${report.key} seeded ${report.loanState} loan=${report.loanId}`
+        : `persona ${report.key} seeded ${report.state} file=${report.loanFileId}`;
   }
 }
 

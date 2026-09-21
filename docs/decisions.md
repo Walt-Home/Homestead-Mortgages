@@ -1706,6 +1706,16 @@ for a batch), or reach a loan his platform services rather than watches —
 the `serviced` relationship is recognized and untested, because nothing
 boarded is his and ours at once yet.
 
+How it is seen, until the claim exists: the persona seed loads the sample
+book under its servicer at depth `API` and stands the `grander_import`
+sign-in on NL-100001, by folding the tape's provisional party into the
+persona's claimed one through `mergePartyInto` — the merge the co-borrower
+claim uses, and the one the loan claim will. The loan stays
+`imported_unclaimed` and unmonitored, because the claim's transition is not
+written; the tester sees `GET /api/loans` and this route, and no
+application. On staging the servicing platform has the same twelve loans
+from its own seed, so the live half answers from there.
+
 ## The servicing app deploys beside the API
 
 Since 21 September 2026 `apps/servicing` deploys as a second Cloud Run

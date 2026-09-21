@@ -38,6 +38,8 @@ import { createDraftApplication } from "../services/applications.js";
 import { principalForParty } from "../services/party.js";
 import { transition } from "../services/transition.js";
 import { isSeeded, NOT_SEEDED_HERE, PERSONA_STORIES } from "../personas/stories.js";
+import { createImportedLoan } from "../services/loans.js";
+import { partyForUser } from "../services/party.js";
 import { createLoanFile, createUser } from "./support/factories.js";
 import { callAs } from "./support/http.js";
 
@@ -284,10 +286,36 @@ describe("the sign-in page's list of sample borrowers", () => {
     expect(rows).toHaveLength(PERSONA_STORIES.length + CO_BORROWER_ROWS);
 
     // With every row the seed can walk actually written, the only one left
-    // unavailable is the one this build cannot produce a person in at all.
-    const deferred = rows.filter((r) => !r.available);
-    expect(deferred.map((r) => r.key)).toEqual(["grander_import"]);
-    expect(deferred[0]?.unavailableBecause).toContain("already exists");
+    // unavailable is the one that is stood on a loan rather than walked, and
+    // nothing has stood it here.
+    const unseeded = rows.filter((r) => !r.available);
+    expect(unseeded.map((r) => r.key)).toEqual(["grander_import"]);
+    expect(unseeded[0]?.unavailableBecause).toBe(NOT_SEEDED_HERE);
+    expect(unseeded[0]?.state).toBeNull();
+  });
+
+  it("offers the imported row once its sign-in stands on a loan, wearing the loan's state", async () => {
+    const user = await createUser({ personaKey: "grander_import", name: "Grander import" });
+    const partyId = await partyForUser(prisma, user.id, { sourceFirstSeen: "persona_seed" });
+    await createImportedLoan(prisma, {
+      terms: {
+        rateType: "FIXED",
+        noteRateBps: 725,
+        termMonths: 360,
+        originalPrincipalCents: 45_000_000n,
+      },
+      property: { line1: "1200 W Maple Ave", city: "Phoenix", state: "AZ", postalCode: "85013" },
+      axes: {},
+      parties: [{ partyId, role: "PRIMARY_BORROWER" }],
+      servicerId: null,
+      servicerLoanNumber: "NL-100001",
+    });
+    const row = (await personaRows((await createUser()).id)).find(
+      (r) => r.key === "grander_import",
+    );
+    expect(row?.available).toBe(true);
+    expect(row?.unavailableBecause).toBeNull();
+    expect(row?.state).toBe("loan_imported_unclaimed");
   });
 
   it("does not offer a row nothing has been seeded for", async () => {

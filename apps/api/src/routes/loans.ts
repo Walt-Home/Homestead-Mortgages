@@ -38,6 +38,47 @@ const jsonSafe = <T>(value: T): T =>
     JSON.stringify(value, (_, v: unknown) => (typeof v === "bigint" ? v.toString() : v)),
   ) as T;
 
+/** The mortgages the signed-in person stands on, oldest first. Nobody else's, and nothing about the platform yet. */
+loanRouter.get(
+  "/",
+  asyncRoute(async (req, res) => {
+    const loans = await prisma.loan.findMany({
+      where: { parties: { some: { party: { users: { some: { id: req.user!.id } } } } } },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        status: true,
+        servicerLoanNumber: true,
+        noteRateBps: true,
+        originalPrincipalCents: true,
+        propertyLine1: true,
+        propertyCity: true,
+        propertyState: true,
+        propertyPostalCode: true,
+        servicer: { select: { slug: true, displayName: true, integrationDepth: true } },
+      },
+    });
+    res.json(
+      jsonSafe({
+        loans: loans.map((l) => ({
+          id: l.id,
+          state: toDomainLoanState(l.status),
+          servicerLoanNumber: l.servicerLoanNumber,
+          servicer: l.servicer,
+          noteRateBps: l.noteRateBps,
+          originalPrincipalCents: l.originalPrincipalCents,
+          property: {
+            line1: l.propertyLine1,
+            city: l.propertyCity,
+            state: l.propertyState,
+            postalCode: l.propertyPostalCode,
+          },
+        })),
+      }),
+    );
+  }),
+);
+
 type Live =
   | {
       readonly status: "fetched";

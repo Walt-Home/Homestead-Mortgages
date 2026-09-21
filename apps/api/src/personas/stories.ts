@@ -19,6 +19,7 @@
  */
 
 import type { FlowStage } from "@hm/db";
+import { NORTHLIGHT } from "@hm/partner-book";
 import type { PersonaId } from "@hm/connectors";
 import type {
   Address,
@@ -48,8 +49,8 @@ export type PersonaKey =
  * keeps one walk per person, and adding a persona without one is a compile
  * error rather than a missing sample nobody notices until staging.
  */
-export type DeferredKey = "grander_import";
-export type SeededKey = Exclude<PersonaKey, DeferredKey>;
+export type ImportedKey = "grander_import";
+export type SeededKey = Exclude<PersonaKey, ImportedKey>;
 
 /** Screen 1's answers, in dollars. The seed converts to cents at the boundary. */
 export interface PersonaTerms {
@@ -127,24 +128,33 @@ export interface SeededCoBorrower {
   readonly story: string;
 }
 
-/** A state the model can name and this build cannot produce a person in. */
-export interface DeferredPersona extends PersonaBase<DeferredKey> {
+/**
+ * A person the seed stands on a loan a servicer's tape wrote, rather than
+ * walks through an application. No target state, because there is no
+ * application: the loan is the record, and it stands where the tape left it.
+ */
+export interface ImportedPersona extends PersonaBase<ImportedKey> {
   readonly target: null;
-  readonly unavailableBecause: string;
+  /** The loan the sign-in stands on: the sample book's servicer, and the number the servicer put on the tape. */
+  readonly loan: { readonly servicerSlug: string; readonly servicerLoanNumber: string };
 }
 
 /**
  * Two shapes rather than one with optional fields, discriminated on `target`.
  *
- * The deferred row has no fixture, no terms and no stage, and giving it
- * placeholders would be exactly the invention the row exists to refuse. This
- * way the seed cannot reach for terms that were never decided, and the picker
- * cannot offer a row that has nowhere to go.
+ * The imported row has no fixture, no terms and no stage, and giving it
+ * placeholders would be an application this person never asked for. This
+ * way the seed cannot reach for terms that were never decided, and the
+ * walk cannot be run on a row that has no screens.
  */
-export type PersonaStory = SeededPersona | DeferredPersona;
+export type PersonaStory = SeededPersona | ImportedPersona;
 
 export function isSeeded(story: PersonaStory): story is SeededPersona {
   return story.target !== null;
+}
+
+export function isImported(story: PersonaStory): story is ImportedPersona {
+  return story.target === null;
 }
 
 /**
@@ -310,28 +320,33 @@ export const PERSONA_STORIES: readonly PersonaStory[] = [
   {
     key: "grander_import",
     name: { first: "Grander", last: "import" },
-    story: "A mortgage somebody already has, waiting for the person it belongs to.",
+    story:
+      "A mortgage that already exists, shared with us by the servicer, seen by the person it belongs to.",
     target: null,
     /*
-     * Not seeded, and not fixable by seeding harder.
+     * Stood on a loan, not walked to a state.
      *
      * A Grander member is a party and a loan with no application. The loan
-     * half is written now: a servicer's tape reaches
+     * half is written: a servicer's tape reaches
      * `POST /api/partner/book/imports` with a partner key, and
      * `services/partner-book.ts` makes each row an `imported_unclaimed` loan
-     * on a PROVISIONAL party carrying the partner's facts at
-     * PARTNER_SHARED/UNVERIFIED, with nothing person-keyed retrievable. What
-     * is missing is the person half: the claim, a signed single-use token
-     * from Grander rather than a sign-in match, is unbuilt.
+     * on a PROVISIONAL party carrying the partner's facts, with nothing
+     * person-keyed retrievable. The person half — the claim, a signed
+     * single-use token from Grander rather than a sign-in match — is still
+     * unbuilt.
      *
-     * The seed refuses for the reason it always did. An application in any
-     * state would say this person asked us for credit when they did not, and
-     * an unclaimed party has never authenticated — so there is no user to sign
-     * a tester in as. `npm run partner:book -- sample northlight` puts twelve
-     * such loans into a development database instead, through the same
-     * service the key reaches.
+     * So the seed does what the claim will do, minus the token: it loads the
+     * twelve-loan sample book under its servicer at the depth the live read
+     * needs, mints this sign-in with a claimed party of its own, and folds
+     * the tape's provisional party into it through `mergePartyInto`, the
+     * same merge the co-borrower claim uses. The loan follows the party. It
+     * stays `imported_unclaimed` and unmonitored, because the transition the
+     * claim will make is not written either; what this person can see is
+     * `GET /api/loans` and `GET /api/loans/:id/servicing` — the tape's newest
+     * observation beside what the servicing platform has concluded — and
+     * nothing that would need a credit request they never made.
      */
-    unavailableBecause: "This is a mortgage that already exists, and we don't hold those yet.",
+    loan: { servicerSlug: NORTHLIGHT.slug, servicerLoanNumber: "NL-100001" },
   },
   {
     key: "lena_fischer",

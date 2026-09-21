@@ -118,8 +118,11 @@ describe("the seed walks every persona to its state", () => {
     for (const report of reports) {
       const story = PERSONA_STORIES.find((s) => s.key === report.key)!;
       if (!isSeeded(story)) {
-        expect(report.result).toBe("deferred");
+        // Stood on the sample book's first loan rather than walked anywhere.
+        expect(`${report.key}: ${report.result}`).toBe(`${report.key}: seeded`);
         expect(report.loanFileId).toBeNull();
+        expect(report.loanState).toBe("imported_unclaimed");
+        expect(report.loanId).toEqual(expect.any(String));
         continue;
       }
       expect(`${report.key}: ${report.result}`).toBe(`${report.key}: seeded`);
@@ -133,7 +136,6 @@ describe("the seed walks every persona to its state", () => {
     const again = await seedAll();
     expect(await census()).toEqual(first);
     for (const report of again) {
-      if (report.key === "grander_import") continue;
       expect(`${report.key}: ${report.result}`).toBe(`${report.key}: exists`);
     }
   });
@@ -793,7 +795,7 @@ describe("clearing personas out", () => {
     const again = await seedAll();
     expect(again.find((r) => r.key === "priya_dev_raman")!.result).toBe("seeded");
     for (const report of again) {
-      if (report.key === "priya_dev_raman" || report.key === "grander_import") continue;
+      if (report.key === "priya_dev_raman") continue;
       expect(`${report.key}: ${report.result}`).toBe(`${report.key}: exists`);
     }
     expect(await census()).toEqual(before);

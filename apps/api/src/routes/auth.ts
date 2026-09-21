@@ -7,12 +7,14 @@ import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { requireAuth, requireSession } from "../middleware/require-auth.js";
 import { signInAsLocalDeveloper, signInAsPersona, signInWithGoogle } from "../services/auth.js";
 import {
+  isImported,
   isSeeded,
   NOT_SEEDED_HERE,
   PERSONA_KEY_SHAPE,
   PERSONA_STORIES,
 } from "../personas/stories.js";
 import { toDomainState } from "../services/transition.js";
+import { toDomainLoanState } from "../services/loan-transition.js";
 import { acceptClaim, previewClaim } from "../services/invitations.js";
 import {
   ISSUER,
@@ -130,38 +132,47 @@ personaRouter.get(
       },
     });
     const seeded = new Map(users.map((u) => [u.personaKey, u]));
+    // The imported row has no application to read a state off; its state is
+    // the loan's, found through the party its sign-in stands on.
+    const loans = new Map<string, string>();
+    for (const story of PERSONA_STORIES) {
+      if (!isImported(story)) continue;
+      const loan = await prisma.loan.findFirst({
+        where: { parties: { some: { party: { users: { some: { personaKey: story.key } } } } } },
+        select: { status: true },
+      });
+      if (loan) loans.set(story.key, `loan_${toDomainLoanState(loan.status)}`);
+    }
 
     res.json({
       personas: PERSONA_STORIES.flatMap((story) => {
         const row = seeded.get(story.key);
         const status = row?.loanFiles[0]?.application?.status;
         /*
-         * Clickable only when there is a row behind it.
-         *
-         * `isSeeded` is a property of the LIST — this build knows where to
-         * walk that persona — and says nothing about this database. Read on
-         * its own it offers all nine rows on a deployment whose seed has not
-         * run, and every one of them signs in to a 503.
+         * Clickable only when there is a row behind it. The list says what
+         * this build knows how to seed and nothing about this database; read
+         * on its own it would offer all nine rows on a deployment whose seed
+         * has not run, and every one of them signs in to a 503.
          */
-        const offerable = isSeeded(story) && row !== undefined;
+        const offerable = row !== undefined;
         /*
          * Where the file ACTUALLY stands, not where the story says it should.
          * A persona that drifted is a persona whose pill should say so —
          * this page is how a tester would notice, and a listing that showed
          * the intended state would be the one place the drift was hidden.
          */
-        const state = status ? toDomainState(status) : null;
+        const state = isImported(story)
+          ? (loans.get(story.key) ?? null)
+          : status
+            ? toDomainState(status)
+            : null;
         const own = {
           key: story.key,
           name: `${story.name.first} ${story.name.last}`,
           story: story.story,
           state,
           available: offerable,
-          unavailableBecause: offerable
-            ? null
-            : isSeeded(story)
-              ? NOT_SEEDED_HERE
-              : story.unavailableBecause,
+          unavailableBecause: offerable ? null : NOT_SEEDED_HERE,
           seededAt: row?.createdAt.toISOString() ?? null,
         };
         if (!isSeeded(story) || !story.coBorrower) return [own];

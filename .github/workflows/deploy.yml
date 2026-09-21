@@ -461,7 +461,9 @@ jobs:
       # never set either on a real production deploy.
       #
       # Nine lines: eight walked (or `exists`) plus the Grander row, which is
-      # deferred rather than seeded. The script exits non-zero on a drift — a
+      # stood on the sample book's first loan rather than walked — the seed
+      # loads the twelve-loan book under its servicer at integration depth
+      # API, so the servicing port's live read has a loan to find. The script exits non-zero on a drift — a
       # persona standing somewhere its story does not describe — and the
       # sign-in page shows the LIVE state beside each name, so that is a wrong
       # answer on a public page and the deploy stops here rather than ship it.

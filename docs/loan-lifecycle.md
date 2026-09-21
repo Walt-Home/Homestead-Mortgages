@@ -131,8 +131,13 @@ says whether it was not asked, asked and empty, or asked and unreachable.
 `docs/decisions.md`, "The servicing platform is read, never joined".
 
 Nothing a borrower can do produces a loan, still. What renders one is the
-sample borrowers' seeded rows and, in development, the twelve-loan Northlight
-book that `npm run partner:book -- sample northlight` loads.
+twelve-loan Northlight book: the persona seed loads it under its servicer at
+integration depth `API` and stands the `grander_import` sign-in on NL-100001
+by folding the tape's provisional party into the persona's claimed one — the
+merge the claim will use, minus the token — so a tester on staging can sign
+in as that row and read the loan and its live servicing record. In a
+development database, `npm run partner:book -- sample northlight` loads the
+same book with nobody standing on it.
 
 ## Where the rest lives
 

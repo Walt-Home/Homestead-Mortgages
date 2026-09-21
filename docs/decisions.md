@@ -1767,7 +1767,7 @@ Three decisions in it, all about keeping the two apps apart on one instance:
   wants an identity token in the same header, so the two cannot stack. His
   door — `/healthz` and `/readyz` open, everything else behind the token or a
   staff session — is the gate, and the deploy checks it is shut by asking
-  `/v1` without a bearer and requiring a 401.
+  `/v1` without a bearer and requiring a 401. It reads `/readyz` and not `/healthz` for readiness, because on a `run.app` URL Google's front end answers `/healthz` with its own 404 before the request is logged or reaches the container; the container's logs show every `/readyz` and no `/healthz`.
 
 The migration URL the workflow uses is the same role through the proxy, as a
 GitHub secret (`HOMESTEAD_MORTGAGES_SERVICING_MIGRATION_URL`), so the

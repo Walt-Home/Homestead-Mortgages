@@ -25,6 +25,12 @@
         "--workspace=@hm/api"
       ],
       "port": 8080
+    },
+    {
+      "name": "servicing",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--workspace=@hm/servicing"],
+      "port": 8090
     }
   ]
 }

@@ -70,7 +70,7 @@ jobs:
         run: npm run brand:verify
 
       - name: TypeScript
-        run: npx tsc -b packages/shared packages/kernel packages/requirements packages/connectors packages/underwriting packages/du-schema packages/du packages/db apps/api apps/web
+        run: npx tsc -b packages/shared packages/kernel packages/partner-book packages/requirements packages/connectors packages/underwriting packages/du-schema packages/du packages/db apps/api apps/web
 
       # There was no eslint config in this repo until now — the dependencies
       # were installed and every workspace's `lint` script called eslint, but
@@ -141,12 +141,57 @@ jobs:
       - name: Build
         run: npm run build
 
+  # Doug's servicing runtime, vendored whole as apps/servicing, checked and
+  # tested on a runner of its own. His tests are his — node --test, one
+  # Postgres database per file cloned from a migrated template — and his own
+  # CI shards them four ways; here they get a whole runner and their own
+  # Postgres rather than sharing `check`'s with our suite, which already
+  # takes the better part of that job. `npm test` at the root leaves this
+  # workspace out for the same reason (`turbo test --filter=!@hm/servicing`).
+  # His tsconfig is noEmit and NodeNext with .ts specifiers, which `tsc -b`
+  # cannot compose, so the typecheck runs here too, with his settings.
+  servicing:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: homestead_mortgages
+          POSTGRES_PASSWORD: homestead_mortgages
+          POSTGRES_DB: homestead_mortgages
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U homestead_mortgages"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://homestead_mortgages:homestead_mortgages@localhost:5433/homestead_mortgages
+      # His harness creates a database per test file, so the user needs
+      # CREATEDB — the service's user is its superuser — and psql, which the
+      # runner image carries, for his migrate.sh.
+      REQUIRE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: psql is available
+        run: psql --version
+      - name: TypeScript (his settings)
+        run: npm run typecheck -w @hm/servicing
+      - name: His tests, as his
+        run: npm run test:servicing
+
   # Deploying without a Google client id would put up a sign-in page that can
   # never succeed, and the server refuses to boot without one anyway. So the
   # deploy waits for the repo variable rather than shipping a door with no key.
   # Set it once, in the console, and re-run: `gh variable set GOOGLE_CLIENT_ID`.
   awaiting-oauth-client:
-    needs: check
+    needs: [check, servicing]
     if: vars.GOOGLE_CLIENT_ID == ''
     runs-on: ubuntu-latest
     steps:
@@ -159,7 +204,7 @@ jobs:
           echo "See docs/decisions.md → Google sign-in."
 
   deploy:
-    needs: check
+    needs: [check, servicing]
     if: vars.GOOGLE_CLIENT_ID != ''
     runs-on: ubuntu-latest
     permissions:

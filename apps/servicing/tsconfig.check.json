@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*", "tools/**/*"],
+  "exclude": ["src/domain/borrower/32-19.spec.test.ts"]
+}

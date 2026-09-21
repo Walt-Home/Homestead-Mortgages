@@ -1576,6 +1576,72 @@ tape profile. `npm run partner:book -- sample northlight` loads the
 twelve-loan sample book into a development database, through the same
 service the key reaches.
 
+## Doug's servicing runtime is an app in this repo
+
+Doug asked for his servicing side to be integrated here, and on 21 September
+2026 it was, whole: `apps/servicing` is doug-ludlow/Supermortgage at the
+commit its `VENDORED_FROM` names — `src`, `db`, `spec`, `docs`, `fixtures`,
+`tools`, his `tsconfig.json` — byte for byte, running as he runs it on a
+database of its own. It is a testing ground and a reference, and nothing in
+it is production. The shape, and why:
+
+- **Whole, not carved.** His servicing sections (§1–19) import his
+  origination five times and his origination imports them sixty-two, so the
+  domain layer would carve; his runtime would not. `src/runtime/main.ts`
+  boots the borrower flows, the partner portal seed and the closing
+  orchestration beside cashiering and escrow, and `server.ts` mounts all of
+  it. Removing origination is an edit to his files, and an edited vendored
+  tree is a fork that re-syncs as a merge. So origination is here too, unused
+  by us: the origination in this product is ours, and his `/app` and
+  `/partners` front ends were not copied.
+- **Its own database, always.** His `loans`, `parties`, `facts`, `consents`
+  and `documents` collide with ours by name, and his schema is 858 tables
+  under his own `migrate.sh`. `SERVICING_DATABASE_URL` names a separate
+  database on the same server; `scripts/run.mjs` maps it, `SERVICING_PORT`
+  and `SERVICING_API_TOKEN` onto the `DATABASE_URL`, `PORT` and `API_TOKEN`
+  his config reads, so the two apps' environments never share a name. The
+  Cloud SQL lesson above applies with the roles reversed: when this deploys,
+  it gets a database user that can reach its database and not ours.
+- **HTTP is the only seam.** Nothing in `apps/api` imports from
+  `apps/servicing` and nothing there imports from ours. What our product
+  needs from his platform — a loan's servicing record, a payoff figure, the
+  daily review's verdict — it will ask for over his `/v1` API with a
+  principal credential, through a `servicing` connector port with a fixture
+  beside it, the way every other vendor is reached. That port is step 3 of
+  the servicing plan and is not written yet.
+- **His tests, as his.** `scripts/test.mjs` runs them under `node --test`
+  with type stripping, one Postgres database per file cloned from a migrated
+  template, on `supermortgage_test` beside our own test database, with `supermortgage_probe` for his hosted-measurement tests. The seven
+  suites that build his Next.js apps under Chromium are left out because the
+  apps are not here; the other 295 files run. His typecheck runs with his
+  tsconfig through `tsconfig.check.json`, which excludes the one suite that
+  imports his borrower app.
+- **Three vendored trees, one re-sync.** `packages/kernel` and the xlsx
+  reader in `packages/partner-book` are the same commit, and
+  `scripts/vendor-supermortgage.mjs` copies all three from one clone so they
+  cannot drift from each other. Lint, Prettier and the repo-walking tests in
+  `apps/api` skip every vendored tree by name.
+- **Node 22.12, not his 22.18.** His `engines` names 22.18, where type
+  stripping is on by default; the explicit flag his Dockerfile already
+  passes covers 22.12, which is what runs here and in CI.
+
+What it is for, in order: a reference for how a servicing section is built —
+a process's data model, machine, rules, timers and tools, each traceable to
+a spec — while ours are designed; the platform our API reaches for what it
+does not do itself; and the place one real loan can be serviced end to end,
+with a FAKE behind every vendor, before any of it is rewritten onto our
+model. A section of his that ours needs is ported the way the tape reader
+was: onto the kernel, onto our contract, with the refusals ours requires
+written down.
+
+What is not built: the deploy (a second Cloud Run service, a second database
+and user on our instance, the sweep as a scheduled job, secrets for the
+token), the `servicing` connector port, and any bridge between a loan in
+our `loans` and the same loan in his. His tape import and ours are two
+readers of the same file into two models; which one a partner's tape goes
+to is the "one system of record" question the analysis left open, and this
+does not answer it.
+
 ## Tests run against a real Postgres
 
 The API suite used to mock `@hm/db`. Two files did it explicitly, and the cost

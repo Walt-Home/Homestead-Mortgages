@@ -1,0 +1,153 @@
+/**
+ * Copy keys for borrower-facing refusals (docs/ux/02-data-contracts.md §7: errors carry `{code, gate?, copy_key}` and
+ * the UI renders `copy_key` from 12-message-copy-library — never the handler's reason text). Keyed by the gate code a
+ * refusal names (02 §2's gate column) or by the API's own error code; anything unlisted renders `error.generic`.
+ * The strings themselves live in docs/ux/12-message-copy-library.md (the `gate.*` / `auth.*` keys below are to be authored there).
+ */
+export const DEFAULT_COPY_KEY = "error.generic";
+
+/** Gate code → copy key. The five 02 §2 names first; the rest are the gates 02 §2 lists for commands this surface will issue. */
+export const GATE_COPY_KEYS: Readonly<Record<string, string>> = {
+  SM_IDENTITY_IAL2_GATE: "gate.identity.verify_first",                 // "Verify your ID first — it takes about a minute."
+  REGZ_1026_19E2_INTENT_FEE_GATE: "gate.intent.before_fees",           // "Tell us you'd like to proceed before we charge anything."
+  SM_O21_JOINT_INTENT_GATE: "gate.joint_intent.each_borrower",         // "Each borrower confirms they're applying together first."
+  SM_QUOTE_VALIDITY_GATE: "gate.quote.expired",                        // "That quote has expired. Here are today's numbers."
+  SM_O61_COMPLIANCE_PASS_LOCK_GATE: "gate.lock.compliance_pending",    // "We're finishing a check before your rate can lock."
+  FCRA_1681B_A3_SOFT_PULL_PURPOSE_GATE: "gate.credit.authorize_first",
+  SM_O72_RON_STATE_AUTH_GATE: "gate.closing.ron_unavailable",
+  SM_O72_ESIGN_CONSENT_CLOSING_GATE: "gate.closing.esign_consent",
+  ESIGN_7001C_CONSENT_GATE: "gate.esign.consent_first",
+  REGB_1002_9_COUNTEROFFER_90: "gate.counteroffer.window",
+  REGX_1024_41E1_ACCEPT_14: "gate.lossmit.accept_window",
+  FNMA_B4_1_3_12_ROV_CLOSING_GATE: "gate.rov.too_late",
+  REGZ_1026_23_RESCISSION_3SBD_GATE: "gate.rescission.window",
+  SM_UW_CTC_GATE: "gate.closing.not_clear_yet",
+  REGB_1002_9_DECISION_30: "gate.decision.pending",
+  FCRA_1681B_A3_SOFT_PULL_AUTHORIZATION: "gate.credit.authorize_first",
+  REGZ_1026_35B1_HPML_ESCROW_GATE: "escrow.waiver.hpml_period",           // 32.8 §6.3 / 23.4-T5: "Your loan keeps its escrow account until {{date}}."
+};
+
+/** Command refusals the borrower surface itself names (32.2 §2 preconditions the owning handler does not check, 01 §3 card rules, 01 §5 identity). */
+export const COMMAND_COPY_KEYS: Readonly<Record<string, string>> = {
+  CARD_ALREADY_RESOLVED: "thread.card_already_resolved",        // receipt line: "Already done — nothing more needed."
+  CARD_NOT_PENDING: "thread.card_not_pending",
+  CARD_VOICE_CONSENT: "consent.esign.title",                   // 01 §3.5: "Saying yes in chat or on a call doesn't count — check the box and type your name."
+  CARD_EVIDENCE_KIND: "thread.card_needs_tap",                 // 32.1: a consent, signature or payment card is never resolved from evidence
+  CARD_NO_COMMAND: "thread.card_needs_tap",
+  CONSENT_VOICE_VOID: "consent.esign.title",
+  REG_E_ELEMENTS_NOT_SHOWN: "consent.autodraft.title",
+  LOCK_NOT_ACTIVE: "lock.expired",
+  MI_QUOTE_NOT_READY: "mi.compare.title",
+  VALUATION_NOT_ASSIGNED: "valuation.schedule",
+  APPRAISAL_NOT_ACCEPTED: "valuation.copy",
+  ESCROW_STATEMENT_NOT_SENT: "escrow.review_soon",
+  MI_POLICY_NOT_ACTIVE: "pmi.ending",
+  OFFER_NOT_OPEN: "offer.not_now",
+  NO_SERVICED_LOAN: "error.not_yours",
+  APPLICATION_TERMINAL: "decision.withdraw.confirm",
+  COUNTEROFFER_NOT_OPEN: "decision.counteroffer",
+  RESCISSION_NOT_RUNNING: "rescission.expired",
+  CASE_KIND: DEFAULT_COPY_KEY,
+  COMMAND_UNKNOWN: DEFAULT_COPY_KEY,
+  DUPLICATE_RECORD: DEFAULT_COPY_KEY,
+  SUBJECT_REQUIRED: "error.not_yours",
+  DEMOGRAPHICS_OWN_PARTY_ONLY: "demographics.title",
+  CARD_FIELD_REQUIRED: "thread.card_field_required",          // 32.3 T13: a required tap missing — the card refuses, nothing is written
+  NO_DEMOGRAPHIC_AT_LEAD: "gate.demographics.application_first",   // 20.3 T12 / 32.3 T15
+  SCORE_MODEL_MIXED: "credit.rerun.neutral",                    // 23.1 T11 / 32.3 T9: the neutral re-run line, never a score
+  JOINT_INTENT_OWN_PARTY_ONLY: "consent.joint_intent.title",
+  SUBJECT_TERMINAL: "error.read_only",                          // 32.13 T-X-16: "This file is closed, so that can't change…"
+  // 32.14 DELTA-11: the anonymous minute's refusals (POST /v1/borrower/lead) — the guardrails of 32.14 §5 as the API answers them
+  L0_FACTS_ONLY: DEFAULT_COPY_KEY,                              // a fact outside 20.3 rule 6 on a lead without a party — nothing is written
+  STATE_GATE_FIRST: "entry.state.question",                     // no range and no identity ask before the state is known (31.1 readiness first)
+  STEP_ORDER: DEFAULT_COPY_KEY,                                 // the chips are answered in their fixed order
+  LEAD_CLOSED: "lead.state_closed",                             // a closed state ended the lead: no range, no identity ask
+  LEAD_UNKNOWN: DEFAULT_COPY_KEY,                               // a stale lead cookie: the app starts over
+  LEAD_THROTTLED: DEFAULT_COPY_KEY,                             // LEAD_START_PER_HOUR per IP
+  RANGE_CONTENT_CHECK: "auth.choose_method",                    // the 20.2 checklist failed: no number, the identity ask still renders
+  LINK_LOAN_MISMATCH: "auth.link_loan",                         // DELTA-16: refused without saying which field
+};
+
+/** Thread replies the API authors itself while the agent turn is not yet wired (01 §6.4, 01 §7.1, 13 T-X-05). */
+export const THREAD_COPY_KEYS = {
+  affirmativeNeedsCard: "thread.card_affirmative_deep_link",   // "Tap to confirm so it counts: {{deep_link}}" (01 §6.4)
+  humanRequested: "thread.human_requested",                     // "Bringing a person in now. They'll pick up right here."
+  placeholderIntake: "thread.assistant_placeholder.intake",     // "Got it — I'm looking at your file and will answer here."
+  placeholderServicing: "thread.assistant_placeholder.servicing",
+  voiceConsentLink: "consent.esign.title",                       // a spoken yes never resolves a ConsentCard; the link is sent instead (01 §3.5)
+} as const;
+
+/** API error code → copy key (auth, scoping, links, uploads). */
+export const ERROR_COPY_KEYS: Readonly<Record<string, string>> = {
+  AUTH_REQUIRED: "auth.sign_in",                     // "Sign in with a code to continue."
+  SESSION_EXPIRED: "auth.session_expired",           // "You were signed out after a while away. Sign in again."
+  LEVEL_REQUIRED: "auth.step_up",                    // "One more check before we show that."
+  FRESH_L1_REQUIRED: "auth.fresh_code",              // "For payments we ask for a fresh code. We just sent one."
+  OTP_INVALID: "auth.code_wrong",                    // "That code didn't match. Try again."
+  OTP_EXPIRED: "auth.code_expired",                  // "That code expired. We can send a new one."
+  OTP_TOO_MANY_ATTEMPTS: "auth.code_locked",
+  PASSKEY_INVALID: "auth.passkey_failed",
+  OIDC_INVALID: "auth.google.failed",
+  TERMS_NOT_PRESENTED: "terms.pending_mlo",   // 32.14 S4: lead.proceed before terms.presented — the review is still pending                // 32.14 §3 (DELTA-12): a replayed/foreign state, a nonce mismatch, an unverifiable id token — the reason is never shown
+  OIDC_EMAIL_UNVERIFIED: "auth.google.failed",       // the provider did not verify the e-mail: no party is ever linked by an unverified e-mail
+  OIDC_FAKE_MARKER_REQUIRED: "auth.google.failed",   // FAKE provider only: the callback lacked the x-fake-oidc marker
+  L2_MATCH_FAILED: "auth.identity_match_failed",     // "Those details didn't match what we have. Try again or talk to a person."
+  PARTY_SCOPE: "error.not_yours",                    // "That isn't on your account."
+  DEEP_LINK_EXPIRED: "deeplink.expired",             // "That link has expired. Sign in and we'll take you there."
+  DEEP_LINK_UNKNOWN: "deeplink.unknown",
+  DOCUMENT_NOT_VISIBLE: "documents.not_available",
+  DOCUMENT_CONTENT_UNAVAILABLE: "documents.not_available",
+  NOT_YOUR_DOCUMENT: "error.not_yours",                // 35.2 rule 7: an unknown id and another party's document answer the same 404
+  URL_SIGNATURE: "error.not_yours",                    // 35.2: a signed URL bound to another session
+  DOCUMENT_DISPOSED: "document.unavailable",           // 35.2 edge case: a disposed document answers 410 with its tombstone
+  INTEGRITY_FAILED: "documents.not_available",         // 35.2 rule 7: a served mismatch is refused; the sev 1 is the platform's
+  // 32.17 rule 12: the identity card's Confirm (video.identify) — each refusal in the copy library's words, never the generic line
+  IDENTITY_NAME_INVALID: "identity.contact.name_invalid",
+  IDENTITY_EMAIL_INVALID: "identity.contact.email_invalid",
+  IDENTITY_ALREADY_ON_FILE: "identity.contact.already_on_file",
+  IDENTITY_EMAIL_ON_FILE: "identity.contact.email_on_file",
+  IDENTITY_NO_APPLICATION: "identity.no_application",
+  IDENTITY_SESSION_UNKNOWN: "identity.session_unknown",
+  // 32.16 DELTA-29 (POST /v1/borrower/auth/account): e-mail + password accounts — the strings are the copy library's (`account.*` / `auth.*`)
+  ACCOUNT_EXISTS: "account.exists",                  // an account already uses that e-mail: sign in (or reset the password)
+  PASSWORD_WEAK: "account.password_weak",            // fewer than 8 characters
+  PASSWORD_WRONG: "auth.password_wrong",             // unknown e-mail or wrong password — never which
+  ACCOUNT_LOCKED: "auth.account_locked",             // ten failures: fifteen minutes, even with the right password
+  EMAIL_UNVERIFIED: "auth.email_unverified",         // the e-mail code was never entered: a fresh one is sent with the refusal
+  ACCOUNT_THROTTLED: DEFAULT_COPY_KEY,               // ACCOUNT_PER_HOUR per IP on create and sign_in
+  BAD_REQUEST: DEFAULT_COPY_KEY,
+  NOT_FOUND: DEFAULT_COPY_KEY,
+  AI_OFF: "error.human_takes_over",
+  FRAUD_HOLD: DEFAULT_COPY_KEY,
+};
+
+/** 33.2 rule 7: the daily refinance review's verdict as the copy library says it (`refi.review.<verdict>`) and one line per engine reason code (`refi.review.reason.<code>`) — the situation carries the keys, the model answers in its own words, never a figure. */
+export const REFI_REVIEW_COPY_KEYS: Readonly<Record<"candidate" | "watching" | "not_now" | "excluded", string>> = { candidate: "refi.review.candidate", watching: "refi.review.watching", not_now: "refi.review.not_now", excluded: "refi.review.excluded" };
+/** The engine's reason codes the library authors a line for (20.1's fire-rule misses, exclusions and gates; 33.2's own): a formatted reason ("rate_delta_bps -50 < 25", "pricing_refused:…") maps by its leading code. */
+export const REFI_REVIEW_REASON_CODES: readonly string[] = ["rate_delta", "npv_positive", "seven_year_delta_positive", "prescreen", "state_rule", "rate_delta_bps", "no_benefit", "npv_cents", "seven_year_total_cost_delta", "lifetime_interest_delta", "not_priced", "not_priceable", "pricing_refused", "prescreen_failed", "state_rule_failed",
+  "cooldown", "frequency_cap", "premium_recapture_window", "marketing_suppression", "implausible_value", "value_stale", "declined", "expired", "not_active", "not_in_universe", "bankruptcy_active", "foreclosure_referred", "lossmit_plan_active", "deceased_or_sii_pending", "transfer_out_pending", "delinquent",
+  "not_on_latest_tape"];   // 33.1 rule 8: the loan was absent from the partner's latest tape (held out of the review until it returns or an operator resolves it)
+export const REFI_REVIEW_REASON_OTHER_KEY = "refi.review.reason.other";
+export function refiReviewReasonKey(reason: string): string {
+  const code = /^[a-z][a-z0-9_]*/.exec(reason.trim())?.[0] ?? "";
+  return REFI_REVIEW_REASON_CODES.includes(code) ? `refi.review.reason.${code}` : REFI_REVIEW_REASON_OTHER_KEY;
+}
+
+/** 33.3 rule 4 / T5: the readiness checklist as the copy library says it — one line per item still missing or stale (`refi.readiness.missing.<item>`, in the order asked) and the one line for a ready file (`refi.readiness.ready`); the situation carries the keys, the model names the items in its own words and points at the current card, never a figure. */
+export type ReadinessCopyItem = "contact" | "account" | "esign" | "credit_authorization" | "verification_authorization" | "identity" | "ssn" | "credit" | "income" | "assets" | "value" | "insurance" | "payoff";
+export const READINESS_COPY_KEYS: Readonly<Record<ReadinessCopyItem, string>> = {
+  contact: "refi.readiness.missing.contact", account: "refi.readiness.missing.account", esign: "refi.readiness.missing.esign", credit_authorization: "refi.readiness.missing.credit_authorization", verification_authorization: "refi.readiness.missing.verification_authorization",
+  identity: "refi.readiness.missing.identity", ssn: "refi.readiness.missing.ssn", credit: "refi.readiness.missing.credit", income: "refi.readiness.missing.income", assets: "refi.readiness.missing.assets", value: "refi.readiness.missing.value", insurance: "refi.readiness.missing.insurance", payoff: "refi.readiness.missing.payoff",
+};
+export const READINESS_READY_KEY = "refi.readiness.ready";
+/** The keys of one readiness row: the ready line alone, or one line per missing item in the row's order (an unknown item name never maps to a key). */
+export function readinessCopyKeys(ready: boolean, missing: readonly string[]): string[] {
+  if (ready) return [READINESS_READY_KEY];
+  return missing.map((m) => READINESS_COPY_KEYS[m as ReadinessCopyItem]).filter((k): k is string => typeof k === "string");
+}
+
+export function copyKeyFor(code: string, gate?: string): string {
+  if (gate && GATE_COPY_KEYS[gate]) return GATE_COPY_KEYS[gate]!;
+  if (GATE_COPY_KEYS[code]) return GATE_COPY_KEYS[code]!;
+  return ERROR_COPY_KEYS[code] ?? COMMAND_COPY_KEYS[code] ?? DEFAULT_COPY_KEY;
+}

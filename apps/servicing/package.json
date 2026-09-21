@@ -1,0 +1,36 @@
+{
+  "name": "@hm/servicing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Doug's servicing runtime, vendored byte for byte, running as its own app on its own database",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "node scripts/run.mjs serve --watch",
+    "start": "node scripts/run.mjs serve",
+    "sweep": "node scripts/run.mjs sweep",
+    "migrate": "node scripts/run.mjs migrate",
+    "db:setup": "node scripts/run.mjs db-setup",
+    "seed-demo": "node scripts/run.mjs seed-demo",
+    "typecheck": "tsc --noEmit -p tsconfig.check.json",
+    "build": "npm run typecheck",
+    "lint": "eslint scripts --max-warnings 0 --no-error-on-unmatched-pattern",
+    "test": "node scripts/test.mjs && npm run du:verify",
+    "clean": "rm -rf .cache",
+    "du:build": "node tools/build-du.mjs",
+    "du:verify": "node tools/build-du.mjs --verify"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
+    "dotenv": "^16.4.0",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.23.1",
+    "typescript": "^5.7.2",
+    "playwright-core": "^1.63.0"
+  }
+}

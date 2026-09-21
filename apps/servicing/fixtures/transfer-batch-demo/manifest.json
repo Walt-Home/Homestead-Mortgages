@@ -1,0 +1,235 @@
+{
+  "batch": {
+    "batch_id": "B-DEMO-2026-09",
+    "transfer_date": "2026-09-01",
+    "respa_effective_date": "2026-09-01",
+    "sale_date": "2026-08-01",
+    "transferor_name": "Northline Mortgage Servicing LLC",
+    "transferor_servicer_number": "123456789",
+    "partner_servicer_number": "987654321",
+    "transferor_mers_org_id": "1000456",
+    "partner_mers_org_id": "1000123",
+    "d_code": "D-2026-0917-0042",
+    "loan_count": 100,
+    "seed": 20261001,
+    "upb_total": "3722536261",
+    "escrow_total": "17083861"
+  },
+  "generated_by": "tools/gen-transfer-batch.ts (deterministic; seed above)",
+  "files": {
+    "boarding_tape.final.csv": {
+      "sha256": "717452b61d4d4d66527537ad481afaf46ba0608e846cabcf6ba4ad7d9a07221f",
+      "row_count": 100,
+      "bytes": 41580
+    },
+    "payment_history.csv": {
+      "sha256": "6df7a6305120f5822e4e26989b2787808d29035fbbe5c7b5b58b49dbcff1aa21",
+      "row_count": 2398,
+      "bytes": 115241
+    },
+    "escrow_history.csv": {
+      "sha256": "36fdfbbcc7525285df5404a83f3a661005f7051ea9f55efe2ece1f67b9be0e4f",
+      "row_count": 189,
+      "bytes": 7169
+    },
+    "escrow_analysis.csv": {
+      "sha256": "9b3f045f4286fed3983ba6f29c9c7ecaaf36bad621e14ecceca899b7c63fcbf4",
+      "row_count": 85,
+      "bytes": 2760
+    },
+    "lossmit_file.csv": {
+      "sha256": "e3870efeebfc8a149c2440acef678f82df191c36e2eefc27a79a032f478a144e",
+      "row_count": 3,
+      "bytes": 161
+    },
+    "fc_bk_file.csv": {
+      "sha256": "a6db90cb1ddfb0846123179257c5f61aac84d5aa467fdf1592e4e783b0bcfc32",
+      "row_count": 4,
+      "bytes": 256
+    },
+    "consents_file.csv": {
+      "sha256": "257f054aa66377687c0a05f31e08de0ea7eccfd4b3c8878b01cbf00fb18f786e",
+      "row_count": 100,
+      "bytes": 1558
+    },
+    "images_manifest.csv": {
+      "sha256": "6515f18e62c9b63ccb1ffa081ac813a2b6edf24a69af919d71d494a647aca94a",
+      "row_count": 326,
+      "bytes": 35601
+    },
+    "trial_balance.csv": {
+      "sha256": "2cb0c061f716a430c5fd155a4d379da207c089b0cd261bdfbedd1b46765abbcc",
+      "row_count": 100,
+      "bytes": 3254
+    },
+    "fnma_position.csv": {
+      "sha256": "a0f840bd6e69ad31f5a0bf8febdfe113682062b909fc54f614361dabb43fb53e",
+      "row_count": 100,
+      "bytes": 2997
+    },
+    "mers_lookup.csv": {
+      "sha256": "a3a3a1b9323dea4fcec6ec4384ef1bfa289835ef8168c2b776fc929986bf4f8c",
+      "row_count": 97,
+      "bytes": 4117
+    },
+    "fair_lending.csv": {
+      "sha256": "cfc955a109778f75d1b7742d6a3d0fc30a183e39dc1faa256469f4c8ea091ef9",
+      "row_count": 67,
+      "bytes": 4069
+    }
+  },
+  "designed_outcomes": {
+    "hard": {
+      "TR-0000007": [
+        "HF-003"
+      ],
+      "TR-0000013": [
+        "HF-008"
+      ],
+      "TR-0000021": [
+        "HF-006"
+      ],
+      "TR-0000034": [
+        "HF-020"
+      ],
+      "TR-0000042": [
+        "HF-011"
+      ],
+      "TR-0000058": [
+        "HF-007"
+      ]
+    },
+    "warnings": {
+      "TR-0000003": [
+        "W-001"
+      ],
+      "TR-0000006": [
+        "W-002",
+        "W-003"
+      ],
+      "TR-0000008": [
+        "W-011"
+      ],
+      "TR-0000009": [
+        "W-004"
+      ],
+      "TR-0000012": [
+        "W-012"
+      ],
+      "TR-0000018": [
+        "W-003",
+        "W-005"
+      ],
+      "TR-0000025": [
+        "W-006"
+      ],
+      "TR-0000027": [
+        "W-012"
+      ],
+      "TR-0000030": [
+        "W-007"
+      ],
+      "TR-0000037": [
+        "W-003"
+      ],
+      "TR-0000041": [
+        "W-003"
+      ],
+      "TR-0000042": [
+        "W-003"
+      ],
+      "TR-0000045": [
+        "W-008"
+      ],
+      "TR-0000046": [
+        "W-002"
+      ],
+      "TR-0000047": [
+        "W-003"
+      ],
+      "TR-0000049": [
+        "W-003"
+      ],
+      "TR-0000050": [
+        "W-009"
+      ],
+      "TR-0000051": [
+        "W-009"
+      ],
+      "TR-0000052": [
+        "W-003",
+        "W-009"
+      ],
+      "TR-0000054": [
+        "W-002"
+      ],
+      "TR-0000055": [
+        "W-003"
+      ],
+      "TR-0000057": [
+        "W-003",
+        "W-011"
+      ],
+      "TR-0000058": [
+        "W-003"
+      ],
+      "TR-0000061": [
+        "W-010"
+      ],
+      "TR-0000062": [
+        "W-003"
+      ],
+      "TR-0000063": [
+        "W-003"
+      ],
+      "TR-0000066": [
+        "W-001"
+      ],
+      "TR-0000068": [
+        "W-012"
+      ],
+      "TR-0000070": [
+        "W-002",
+        "W-003",
+        "W-013"
+      ],
+      "TR-0000073": [
+        "W-003",
+        "W-014"
+      ],
+      "TR-0000075": [
+        "W-014"
+      ],
+      "TR-0000077": [
+        "W-005"
+      ],
+      "TR-0000078": [
+        "W-002"
+      ],
+      "TR-0000080": [
+        "W-015"
+      ],
+      "TR-0000081": [
+        "W-003"
+      ],
+      "TR-0000082": [
+        "W-002"
+      ],
+      "TR-0000085": [
+        "W-016"
+      ],
+      "TR-0000086": [
+        "W-003"
+      ],
+      "TR-0000089": [
+        "W-002"
+      ],
+      "TR-0000092": [
+        "W-002"
+      ],
+      "TR-0000095": [
+        "W-002"
+      ]
+    }
+  }
+}

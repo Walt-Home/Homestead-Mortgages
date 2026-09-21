@@ -9,8 +9,8 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
-    "test": "turbo test",
-    "check": "tsc -b && npm run requirements:verify && npm run brand:verify && npm run du:verify && npm run apor:verify",
+    "test": "turbo test --filter=!@hm/servicing",
+    "check": "tsc -b && npm run requirements:verify && npm run brand:verify && npm run du:verify && npm run apor:verify && npm run typecheck -w @hm/servicing",
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,css,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,css,md}\"",
     "requirements:build": "node scripts/build-requirements.mjs",
@@ -28,7 +28,9 @@
     "apor:build": "node scripts/build-apor.mjs",
     "apor:verify": "node scripts/build-apor.mjs --verify",
     "apor:fetch": "tsx apps/api/src/scripts/fetch-apor.ts",
-    "apor:vendor": "tsx apps/api/src/scripts/fetch-apor.ts --vendor && node scripts/build-apor.mjs"
+    "apor:vendor": "tsx apps/api/src/scripts/fetch-apor.ts --vendor && node scripts/build-apor.mjs",
+    "servicing:db:setup": "npm run db:setup -w @hm/servicing",
+    "test:servicing": "npm_config_node_options=\"--experimental-strip-types --disable-warning=ExperimentalWarning\" npm run test -w @hm/servicing --"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

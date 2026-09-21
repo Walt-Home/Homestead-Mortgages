@@ -47,6 +47,13 @@ export default tseslint.config(
       // His xlsx reader, vendored the same way for the tape reader; the
       // commit is in packages/partner-book/src/vendored/VENDORED_FROM.
       "packages/partner-book/src/vendored/**",
+      // His servicing runtime, vendored whole as apps/servicing; the commit is
+      // in apps/servicing/VENDORED_FROM. Its scripts/ beside the tree is ours.
+      "apps/servicing/src/**",
+      "apps/servicing/db/**",
+      "apps/servicing/spec/**",
+      "apps/servicing/docs/**",
+      "apps/servicing/fixtures/**",
     ],
   },
 

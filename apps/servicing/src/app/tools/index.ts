@@ -1,0 +1,239 @@
+/**
+ * Every agent tool on the bus, by section. `tools/list-tools.ts` prints the
+ * (process, tool) pairs for the audit; `bindTools` turns them into commands
+ * over a runtime and registers each with its agent's allowlist.
+ */
+import type { ToolDef, ToolRuntime } from "../tools.ts";
+import { toolCommand } from "../tools.ts";
+import type { CommandSpec } from "../commands.ts";
+import type { ToolInput } from "../tools.ts";
+import { AgentRegistry, loadAgentsFile } from "../agents.ts";
+import { SECTION_01_TOOLS } from "./section01.ts";
+import { SECTION_02_TOOLS } from "./section02.ts";
+import { SECTION_03_TOOLS } from "./section03.ts";
+import { SECTION_04_TOOLS } from "./section04.ts";
+import { SECTION_05_TOOLS } from "./section05.ts";
+import { SECTION_06_TOOLS } from "./section06.ts";
+import { SECTION_07_TOOLS } from "./section07.ts";
+import { SECTION_08_TOOLS } from "./section08.ts";
+import { SECTION_09_TOOLS } from "./section09.ts";
+import { SECTION_10_TOOLS } from "./section10.ts";
+import { SECTION_11_TOOLS } from "./section11.ts";
+import { SECTION_12_TOOLS } from "./section12.ts";
+import { SECTION_13_TOOLS } from "./section13.ts";
+import { SECTION_14_TOOLS } from "./section14.ts";
+import { SECTION_15_TOOLS } from "./section15.ts";
+import { SECTION_16_TOOLS } from "./section16.ts";
+import { SECTION_17_TOOLS } from "./section17.ts";
+import { SECTION_18_TOOLS } from "./section18.ts";
+import { SECTION_19_TOOLS } from "./section19.ts";
+// ---- §1–§13 process-owned files (scaffolded by tools/workflows/wire.py)
+import { TOOLS_1_1 } from "./section1-1.ts";
+import { TOOLS_1_2 } from "./section1-2.ts";
+import { TOOLS_1_3 } from "./section1-3.ts";
+import { TOOLS_1_4 } from "./section1-4.ts";
+import { TOOLS_1_5 } from "./section1-5.ts";
+import { TOOLS_1_6 } from "./section1-6.ts";
+import { TOOLS_1_7 } from "./section1-7.ts";
+import { TOOLS_2_1 } from "./section2-1.ts";
+import { TOOLS_2_2 } from "./section2-2.ts";
+import { TOOLS_2_3 } from "./section2-3.ts";
+import { TOOLS_2_4 } from "./section2-4.ts";
+import { TOOLS_2_5 } from "./section2-5.ts";
+import { TOOLS_2_6 } from "./section2-6.ts";
+import { TOOLS_2_7 } from "./section2-7.ts";
+import { TOOLS_3_1 } from "./section3-1.ts";
+import { TOOLS_3_2 } from "./section3-2.ts";
+import { TOOLS_3_3 } from "./section3-3.ts";
+import { TOOLS_3_4 } from "./section3-4.ts";
+import { TOOLS_3_5 } from "./section3-5.ts";
+import { TOOLS_3_6 } from "./section3-6.ts";
+import { TOOLS_3_7 } from "./section3-7.ts";
+import { TOOLS_3_8 } from "./section3-8.ts";
+import { TOOLS_3_9 } from "./section3-9.ts";
+import { TOOLS_4_1 } from "./section4-1.ts";
+import { TOOLS_4_2 } from "./section4-2.ts";
+import { TOOLS_4_3 } from "./section4-3.ts";
+import { TOOLS_4_4 } from "./section4-4.ts";
+import { TOOLS_4_5 } from "./section4-5.ts";
+import { TOOLS_5_1 } from "./section5-1.ts";
+import { TOOLS_5_2 } from "./section5-2.ts";
+import { TOOLS_5_3 } from "./section5-3.ts";
+import { TOOLS_5_4 } from "./section5-4.ts";
+import { TOOLS_5_5 } from "./section5-5.ts";
+import { TOOLS_5_6 } from "./section5-6.ts";
+import { TOOLS_5_7 } from "./section5-7.ts";
+import { TOOLS_6_1 } from "./section6-1.ts";
+import { TOOLS_6_2 } from "./section6-2.ts";
+import { TOOLS_6_3 } from "./section6-3.ts";
+import { TOOLS_6_4 } from "./section6-4.ts";
+import { TOOLS_6_5 } from "./section6-5.ts";
+import { TOOLS_7_1 } from "./section7-1.ts";
+import { TOOLS_7_2 } from "./section7-2.ts";
+import { TOOLS_7_3 } from "./section7-3.ts";
+import { TOOLS_7_4 } from "./section7-4.ts";
+import { TOOLS_7_5 } from "./section7-5.ts";
+import { TOOLS_7_6 } from "./section7-6.ts";
+import { TOOLS_8_1 } from "./section8-1.ts";
+import { TOOLS_8_2 } from "./section8-2.ts";
+import { TOOLS_8_3 } from "./section8-3.ts";
+import { TOOLS_9_1 } from "./section9-1.ts";
+import { TOOLS_9_2 } from "./section9-2.ts";
+import { TOOLS_9_3 } from "./section9-3.ts";
+import { TOOLS_9_4 } from "./section9-4.ts";
+import { TOOLS_9_5 } from "./section9-5.ts";
+import { TOOLS_9_6 } from "./section9-6.ts";
+import { TOOLS_9_7 } from "./section9-7.ts";
+import { TOOLS_9_8 } from "./section9-8.ts";
+import { TOOLS_9_9 } from "./section9-9.ts";
+import { TOOLS_10_1 } from "./section10-1.ts";
+import { TOOLS_10_2 } from "./section10-2.ts";
+import { TOOLS_10_3 } from "./section10-3.ts";
+import { TOOLS_10_4 } from "./section10-4.ts";
+import { TOOLS_10_5 } from "./section10-5.ts";
+import { TOOLS_10_6 } from "./section10-6.ts";
+import { TOOLS_11_1 } from "./section11-1.ts";
+import { TOOLS_11_2 } from "./section11-2.ts";
+import { TOOLS_11_3 } from "./section11-3.ts";
+import { TOOLS_11_4 } from "./section11-4.ts";
+import { TOOLS_11_5 } from "./section11-5.ts";
+import { TOOLS_12_1 } from "./section12-1.ts";
+import { TOOLS_12_2 } from "./section12-2.ts";
+import { TOOLS_12_3 } from "./section12-3.ts";
+import { TOOLS_12_4 } from "./section12-4.ts";
+import { TOOLS_12_5 } from "./section12-5.ts";
+import { TOOLS_12_6 } from "./section12-6.ts";
+import { TOOLS_12_7 } from "./section12-7.ts";
+import { TOOLS_12_8 } from "./section12-8.ts";
+import { TOOLS_12_9 } from "./section12-9.ts";
+import { TOOLS_13_1 } from "./section13-1.ts";
+import { TOOLS_13_2 } from "./section13-2.ts";
+import { TOOLS_13_3 } from "./section13-3.ts";
+import { TOOLS_13_4 } from "./section13-4.ts";
+import { TOOLS_13_5 } from "./section13-5.ts";
+import { TOOLS_13_6 } from "./section13-6.ts";
+import { TOOLS_13_7 } from "./section13-7.ts";
+import { TOOLS_13_8 } from "./section13-8.ts";
+import { TOOLS_13_9 } from "./section13-9.ts";
+// ---- §20–§31 process-owned files (scaffolded by tools/workflows/wire_orig.py)
+import { TOOLS_20_1 } from "./section20-1.ts";
+import { TOOLS_20_2 } from "./section20-2.ts";
+import { TOOLS_20_3 } from "./section20-3.ts";
+import { TOOLS_20_4 } from "./section20-4.ts";
+import { TOOLS_21_1 } from "./section21-1.ts";
+import { TOOLS_21_2 } from "./section21-2.ts";
+import { TOOLS_21_3 } from "./section21-3.ts";
+import { TOOLS_21_4 } from "./section21-4.ts";
+import { TOOLS_21_5 } from "./section21-5.ts";
+import { TOOLS_21_6 } from "./section21-6.ts";
+import { TOOLS_22_1 } from "./section22-1.ts";
+import { TOOLS_22_2 } from "./section22-2.ts";
+import { TOOLS_22_3 } from "./section22-3.ts";
+import { TOOLS_22_4 } from "./section22-4.ts";
+import { TOOLS_22_5 } from "./section22-5.ts";
+import { TOOLS_22_6 } from "./section22-6.ts";
+import { TOOLS_23_1 } from "./section23-1.ts";
+import { TOOLS_23_2 } from "./section23-2.ts";
+import { TOOLS_23_3 } from "./section23-3.ts";
+import { TOOLS_23_4 } from "./section23-4.ts";
+import { TOOLS_24_1 } from "./section24-1.ts";
+import { TOOLS_24_2 } from "./section24-2.ts";
+import { TOOLS_24_3 } from "./section24-3.ts";
+import { TOOLS_24_4 } from "./section24-4.ts";
+import { TOOLS_24_5 } from "./section24-5.ts";
+import { TOOLS_24_6 } from "./section24-6.ts";
+import { TOOLS_25_1 } from "./section25-1.ts";
+import { TOOLS_25_2 } from "./section25-2.ts";
+import { TOOLS_25_3 } from "./section25-3.ts";
+import { TOOLS_25_4 } from "./section25-4.ts";
+import { TOOLS_26_1 } from "./section26-1.ts";
+import { TOOLS_26_2 } from "./section26-2.ts";
+import { TOOLS_26_3 } from "./section26-3.ts";
+import { TOOLS_26_4 } from "./section26-4.ts";
+import { TOOLS_27_1 } from "./section27-1.ts";
+import { TOOLS_27_2 } from "./section27-2.ts";
+import { TOOLS_28_1 } from "./section28-1.ts";
+import { TOOLS_28_2 } from "./section28-2.ts";
+import { TOOLS_28_3 } from "./section28-3.ts";
+import { TOOLS_28_4 } from "./section28-4.ts";
+import { TOOLS_29_1 } from "./section29-1.ts";
+import { TOOLS_29_2 } from "./section29-2.ts";
+import { TOOLS_29_3 } from "./section29-3.ts";
+import { TOOLS_29_4 } from "./section29-4.ts";
+import { TOOLS_30_1 } from "./section30-1.ts";
+import { TOOLS_30_2 } from "./section30-2.ts";
+import { TOOLS_30_3 } from "./section30-3.ts";
+import { TOOLS_30_4 } from "./section30-4.ts";
+import { TOOLS_31_1 } from "./section31-1.ts";
+import { TOOLS_31_2 } from "./section31-2.ts";
+import { TOOLS_31_3 } from "./section31-3.ts";
+// ---- §32 process-owned files (scaffolded by tools/workflows/wire_orig.py)
+import { TOOLS_32_1 } from "./section32-1.ts";
+import { TOOLS_32_2 } from "./section32-2.ts";
+import { TOOLS_32_3 } from "./section32-3.ts";
+import { TOOLS_32_4 } from "./section32-4.ts";
+import { TOOLS_32_5 } from "./section32-5.ts";
+import { TOOLS_32_6 } from "./section32-6.ts";
+import { TOOLS_32_7 } from "./section32-7.ts";
+import { TOOLS_32_8 } from "./section32-8.ts";
+import { TOOLS_32_9 } from "./section32-9.ts";
+import { TOOLS_32_10 } from "./section32-10.ts";
+import { TOOLS_32_11 } from "./section32-11.ts";
+import { TOOLS_32_12 } from "./section32-12.ts";
+import { TOOLS_32_13 } from "./section32-13.ts";
+import { TOOLS_32_14 } from "./section32-14.ts";
+import { TOOLS_32_16 } from "./section32-16.ts";
+import { TOOLS_32_17 } from "./section32-17.ts";
+import { TOOLS_32_18 } from "./section32-18.ts";
+// ---- §33 process-owned files (scaffolded by tools/workflows/wire_orig.py)
+import { TOOLS_33_1 } from "./section33-1.ts";
+import { TOOLS_33_2 } from "./section33-2.ts";
+import { TOOLS_33_3 } from "./section33-3.ts";
+// ---- §34 process-owned files (scaffolded by tools/workflows/wire_orig.py)
+import { TOOLS_34_1 } from "./section34-1.ts";
+import { TOOLS_34_2 } from "./section34-2.ts";
+import { TOOLS_34_3 } from "./section34-3.ts";
+import { TOOLS_34_4 } from "./section34-4.ts";
+import { TOOLS_34_5 } from "./section34-5.ts";
+// ---- §23.5–§23.7 process-owned files (scaffolded by tools/workflows/wire_orig.py)
+import { TOOLS_23_5 } from "./section23-5.ts";
+import { TOOLS_23_6 } from "./section23-6.ts";
+import { TOOLS_23_7 } from "./section23-7.ts";
+// ---- §35 process-owned files (scaffolded by tools/workflows/wire_orig.py)
+import { TOOLS_35_1 } from "./section35-1.ts";
+import { TOOLS_35_2 } from "./section35-2.ts";
+import { TOOLS_35_3 } from "./section35-3.ts";
+import { TOOLS_35_4 } from "./section35-4.ts";
+import { TOOLS_35_5 } from "./section35-5.ts";
+import { TOOLS_35_6 } from "./section35-6.ts";
+import { TOOLS_35_7 } from "./section35-7.ts";
+import { TOOLS_35_8 } from "./section35-8.ts";
+import { TOOLS_35_9 } from "./section35-9.ts";
+import { TOOLS_35_10 } from "./section35-10.ts";
+import { TOOLS_35_11 } from "./section35-11.ts";
+import { TOOLS_35_12 } from "./section35-12.ts";
+// ---- §36 process-owned files (the servicing partner portal)
+import { TOOLS_36_1 } from "./section36-1.ts";
+
+export const ALL_TOOLS: readonly ToolDef[] = [...SECTION_01_TOOLS, ...SECTION_02_TOOLS, ...SECTION_03_TOOLS, ...SECTION_04_TOOLS, ...SECTION_05_TOOLS, ...SECTION_06_TOOLS, ...SECTION_07_TOOLS, ...SECTION_08_TOOLS, ...SECTION_09_TOOLS, ...SECTION_10_TOOLS, ...SECTION_11_TOOLS, ...SECTION_12_TOOLS, ...SECTION_13_TOOLS, ...SECTION_14_TOOLS, ...SECTION_15_TOOLS, ...SECTION_16_TOOLS, ...SECTION_17_TOOLS, ...SECTION_18_TOOLS, ...SECTION_19_TOOLS,
+  ...TOOLS_1_1, ...TOOLS_1_2, ...TOOLS_1_3, ...TOOLS_1_4, ...TOOLS_1_5, ...TOOLS_1_6, ...TOOLS_1_7, ...TOOLS_2_1, ...TOOLS_2_2, ...TOOLS_2_3, ...TOOLS_2_4, ...TOOLS_2_5, ...TOOLS_2_6, ...TOOLS_2_7, ...TOOLS_3_1, ...TOOLS_3_2, ...TOOLS_3_3, ...TOOLS_3_4, ...TOOLS_3_5, ...TOOLS_3_6, ...TOOLS_3_7, ...TOOLS_3_8, ...TOOLS_3_9, ...TOOLS_4_1, ...TOOLS_4_2, ...TOOLS_4_3, ...TOOLS_4_4, ...TOOLS_4_5, ...TOOLS_5_1, ...TOOLS_5_2, ...TOOLS_5_3, ...TOOLS_5_4, ...TOOLS_5_5, ...TOOLS_5_6, ...TOOLS_5_7, ...TOOLS_6_1, ...TOOLS_6_2, ...TOOLS_6_3, ...TOOLS_6_4, ...TOOLS_6_5, ...TOOLS_7_1, ...TOOLS_7_2, ...TOOLS_7_3, ...TOOLS_7_4, ...TOOLS_7_5, ...TOOLS_7_6, ...TOOLS_8_1, ...TOOLS_8_2, ...TOOLS_8_3, ...TOOLS_9_1, ...TOOLS_9_2, ...TOOLS_9_3, ...TOOLS_9_4, ...TOOLS_9_5, ...TOOLS_9_6, ...TOOLS_9_7, ...TOOLS_9_8, ...TOOLS_9_9, ...TOOLS_10_1, ...TOOLS_10_2, ...TOOLS_10_3, ...TOOLS_10_4, ...TOOLS_10_5, ...TOOLS_10_6, ...TOOLS_11_1, ...TOOLS_11_2, ...TOOLS_11_3, ...TOOLS_11_4, ...TOOLS_11_5, ...TOOLS_12_1, ...TOOLS_12_2, ...TOOLS_12_3, ...TOOLS_12_4, ...TOOLS_12_5, ...TOOLS_12_6, ...TOOLS_12_7, ...TOOLS_12_8, ...TOOLS_12_9, ...TOOLS_13_1, ...TOOLS_13_2, ...TOOLS_13_3, ...TOOLS_13_4, ...TOOLS_13_5, ...TOOLS_13_6, ...TOOLS_13_7, ...TOOLS_13_8, ...TOOLS_13_9,
+  ...TOOLS_20_1, ...TOOLS_20_2, ...TOOLS_20_3, ...TOOLS_20_4, ...TOOLS_21_1, ...TOOLS_21_2, ...TOOLS_21_3, ...TOOLS_21_4, ...TOOLS_21_5, ...TOOLS_21_6, ...TOOLS_22_1, ...TOOLS_22_2, ...TOOLS_22_3, ...TOOLS_22_4, ...TOOLS_22_5, ...TOOLS_22_6, ...TOOLS_23_1, ...TOOLS_23_2, ...TOOLS_23_3, ...TOOLS_23_4, ...TOOLS_24_1, ...TOOLS_24_2, ...TOOLS_24_3, ...TOOLS_24_4, ...TOOLS_24_5, ...TOOLS_24_6, ...TOOLS_25_1, ...TOOLS_25_2, ...TOOLS_25_3, ...TOOLS_25_4, ...TOOLS_26_1, ...TOOLS_26_2, ...TOOLS_26_3, ...TOOLS_26_4, ...TOOLS_27_1, ...TOOLS_27_2, ...TOOLS_28_1, ...TOOLS_28_2, ...TOOLS_28_3, ...TOOLS_28_4, ...TOOLS_29_1, ...TOOLS_29_2, ...TOOLS_29_3, ...TOOLS_29_4, ...TOOLS_30_1, ...TOOLS_30_2, ...TOOLS_30_3, ...TOOLS_30_4, ...TOOLS_31_1, ...TOOLS_31_2, ...TOOLS_31_3,
+  ...TOOLS_32_1, ...TOOLS_32_2, ...TOOLS_32_3, ...TOOLS_32_4, ...TOOLS_32_5, ...TOOLS_32_6, ...TOOLS_32_7, ...TOOLS_32_8, ...TOOLS_32_9, ...TOOLS_32_10, ...TOOLS_32_11, ...TOOLS_32_12, ...TOOLS_32_13, ...TOOLS_32_14, ...TOOLS_32_16, ...TOOLS_32_17, ...TOOLS_32_18,
+  ...TOOLS_33_1, ...TOOLS_33_2, ...TOOLS_33_3,
+  ...TOOLS_34_1, ...TOOLS_34_2, ...TOOLS_34_3, ...TOOLS_34_4, ...TOOLS_34_5,
+  ...TOOLS_23_5, ...TOOLS_23_6, ...TOOLS_23_7,
+  ...TOOLS_35_1, ...TOOLS_35_2, ...TOOLS_35_3, ...TOOLS_35_4, ...TOOLS_35_5, ...TOOLS_35_6, ...TOOLS_35_7, ...TOOLS_35_8, ...TOOLS_35_9, ...TOOLS_35_10, ...TOOLS_35_11, ...TOOLS_35_12,
+  ...TOOLS_36_1];
+
+export function bindTools(rt: ToolRuntime, agents: AgentRegistry, defs: readonly ToolDef[] = ALL_TOOLS): Map<string, CommandSpec<ToolInput, unknown>> {
+  const escalates = new Map(loadAgentsFile().processes.map((p) => [p.process, p.escalates_to] as const));
+  const out = new Map<string, CommandSpec<ToolInput, unknown>>();
+  for (const d of defs) {
+    const cmd = toolCommand(d, rt, escalates.get(d.process) ?? []);
+    agents.registerTool(d.agent, cmd.name);
+    for (const a of d.agents ?? []) agents.registerTool(a, cmd.name);
+    out.set(`${d.process} ${d.name}`, cmd);
+  }
+  return out;
+}
+export const toolKey = (process: string, name: string): string => `${process} ${name}`;

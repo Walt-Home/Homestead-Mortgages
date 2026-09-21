@@ -1,0 +1,50 @@
+/** §7.1 Periodic statement — cycle anchor, amount due, (d)(8) delinquency box, variants, reminder panel, Form 1098. */
+import type { Cents } from "../../kernel/money/cents.ts";
+import { divRound, Decimal } from "../../kernel/money/decimal.ts";
+import { type PlainDate, addDays, daysBetween, dayOfWeek } from "../../kernel/calendar/date.ts";
+import { zonedEpochMs } from "../../kernel/calendar/zoned.ts";
+
+export function cycle(priorDueDate: PlainDate, graceDays: number, loanTz = "America/New_York"): { courtesy_period_end: PlainDate; statement_due_by: PlainDate; vendor_file_by: PlainDate; snapshot_at_ms: number } {
+  const courtesy = addDays(priorDueDate, graceDays); const due = addDays(courtesy, 4);
+  let vendor = addDays(due, -1); while (dayOfWeek(vendor) === 0 || dayOfWeek(vendor) === 6) vendor = addDays(vendor, -1);   // no business-day roll: file goes out the preceding weekday
+  return { courtesy_period_end: courtesy, statement_due_by: due, vendor_file_by: vendor, snapshot_at_ms: zonedEpochMs(addDays(courtesy, 1), "01:00", loanTz) };
+}
+export interface AmountDue { readonly current_payment_cents: Cents; readonly past_due_cents: Cents; readonly late_charges_cents: Cents; readonly fees_cents: Cents; readonly suspense_cents: Cents; readonly accelerated_reinstatement_cents?: Cents | null; readonly tpp_payment_cents?: Cents | null; }
+export function amountDue(a: AmountDue): { amount_due_cents: Cents; shortfall_to_complete_cents: Cents | null; suspense_disclosed_cents: Cents } {
+  if (a.accelerated_reinstatement_cents != null) return { amount_due_cents: a.accelerated_reinstatement_cents, shortfall_to_complete_cents: null, suspense_disclosed_cents: a.suspense_cents };
+  if (a.tpp_payment_cents != null) return { amount_due_cents: a.tpp_payment_cents, shortfall_to_complete_cents: null, suspense_disclosed_cents: a.suspense_cents };
+  const due = a.current_payment_cents + a.past_due_cents + a.late_charges_cents + a.fees_cents;   // suspense never netted
+  return { amount_due_cents: due, shortfall_to_complete_cents: a.suspense_cents > 0n ? a.current_payment_cents - a.suspense_cents : null, suspense_disclosed_cents: a.suspense_cents };
+}
+/** 7.1 rule 2: the contractual payment shown as "current" = P&I from the active `loan_terms` version + the escrow portion. */
+export function contractualPayment(piCents: Cents, escrowCents: Cents): Cents { return piCents + escrowCents; }
+/** 7.1 rule 4 (d)(8)(vi): the total amount needed to bring the account current = past due + late charges + fees (+ allowable costs when accelerated, 13.x). */
+export function reinstatementAmount(f: { past_due_cents: Cents; late_charges_cents: Cents; fees_cents: Cents; allowable_costs_cents?: Cents }): Cents { return f.past_due_cents + f.late_charges_cents + f.fees_cents + (f.allowable_costs_cents ?? 0n); }
+export function lateFeeLine(piCents: Cents, pct: string, cap: Cents | null): Cents { const v = divRound(piCents * Decimal.parse(pct).unscaled, 100n * Decimal.ONE.unscaled, "HALF_UP"); return cap !== null && v > cap ? cap : v; }
+/**
+ * (d)(8) delinquency box. `regx_days` counts from the day after the earliest unpaid due date (comment 41(d)(8)-2:
+ * "using February 2 as the first day of delinquency"), so `began_on` = that due date + 1 (7.1 rule 4) while the
+ * (d)(8)(i) sentence names the due date itself ("your first unpaid payment was due Sept. 1, 2026") — `first_unpaid_due`.
+ */
+export function delinquencyBox(statementDate: PlainDate, earliestUnpaidDue: PlainDate | null): { include: boolean; regx_days: number; began_on: PlainDate | null; first_unpaid_due: PlainDate | null } {
+  const days = earliestUnpaidDue ? daysBetween(earliestUnpaidDue, statementDate) : 0;
+  return { include: days > 45, regx_days: days, began_on: earliestUnpaidDue ? addDays(earliestUnpaidDue, 1) : null, first_unpaid_due: earliestUnpaidDue };
+}
+export type Variant = "charged_off" | "bk_exempt" | "bk_modified_7_11" | "bk_modified_12_13" | "successor_unacknowledged" | "tpp" | "accelerated" | "delinquent" | "standard";
+export function variant(f: { charged_off: boolean; bk_chapter: "7" | "11" | "12" | "13" | null; bk_exempt: boolean; successor_unacknowledged: boolean; tpp_active: boolean; accelerated: boolean; regx_days: number }): Variant {
+  if (f.charged_off) return "charged_off"; if (f.bk_exempt) return "bk_exempt";
+  if (f.bk_chapter) return f.bk_chapter === "12" || f.bk_chapter === "13" ? "bk_modified_12_13" : "bk_modified_7_11";
+  if (f.successor_unacknowledged) return "successor_unacknowledged"; if (f.tpp_active) return "tpp"; if (f.accelerated) return "accelerated"; if (f.regx_days > 45) return "delinquent"; return "standard";
+}
+/** D2-2-03 reminder panel on statements dated on/after the 17th when the month's payment is unpaid and no forbearance. */
+export function reminderPanel(statementDate: PlainDate, monthPaymentUnpaid: boolean, forbearanceActive: boolean): { panel: boolean; standalone_by: PlainDate | null } {
+  const day = Number(statementDate.slice(8, 10));
+  const needs = monthPaymentUnpaid && !forbearanceActive;
+  return { panel: needs && day >= 17, standalone_by: needs ? (statementDate.slice(0, 8) + "20") as PlainDate : null };
+}
+export function form1098(interestAppliedCents: Cents, pointsCents: Cents, govAssistanceInterestCents: Cents, upbJan1Cents: Cents): { box1_cents: Cents; box2_cents: Cents } { return { box1_cents: interestAppliedCents - pointsCents - govAssistanceInterestCents, box2_cents: upbJan1Cents }; }
+/** §1026.41(e)(6)(i)(B) (7.1 timer table): the notice is due "within 30 days of charge-off or the most recent periodic statement" — the later of the two dates is the anchor (comment 41(e)(6)-2: a periodic statement provided under §1026.41(a) after charge-off restarts the obligation, so a `statement.sent` after charge-off re-anchors). */
+export function chargeOffNoticeAnchor(approvedOn: PlainDate, lastStatementSentOn?: PlainDate | null): { anchor_on: PlainDate; basis: "charge-off date" | "most recent periodic statement" } {
+  return lastStatementSentOn && lastStatementSentOn > approvedOn ? { anchor_on: lastStatementSentOn, basis: "most recent periodic statement" } : { anchor_on: approvedOn, basis: "charge-off date" };
+}
+export function chargeOffNoticeDue(approvedOn: PlainDate, lastStatementSentOn?: PlainDate | null): PlainDate { return addDays(chargeOffNoticeAnchor(approvedOn, lastStatementSentOn).anchor_on, 30); }

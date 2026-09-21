@@ -87,7 +87,10 @@ deployment and its `infra/` are his prototype and were not copied. Every push
 to `main` runs the workflow's `deploy-servicing` job, which builds `Dockerfile` from the repository root, applies
 `db/migrations` and runs `seed-demo` from that image through the Cloud SQL
 Auth Proxy, deploys `homestead-mortgages-staging-servicing`, points the sweep
-job at the image and reads `/readyz` back. The API's deploy follows and is
+job at the image and reads `/readyz` back. `/readyz` and not `/healthz`: on a
+`run.app` URL Google's front end answers `/healthz` with its own 404 before
+the request is logged or reaches the container, so his liveness probe is
+unreachable there and his readiness probe is the one that means anything. The API's deploy follows and is
 told where the door is. The pieces the deploy assumes — the runtime identity,
 its two secrets, the database and the plain role that owns it, the sweep job
 and its schedule — are described in `infra/` and were applied by hand;

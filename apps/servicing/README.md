@@ -63,7 +63,11 @@ running beside it. Those five fail here under a full run and pass on a
 runner; the other 3,518 pass on a laptop in about twenty-three minutes
 (21 September 2026). CI runs the whole thing in a job of its own.
 
-The database is `SERVICING_TEST_DATABASE_URL`, or our test URL with the name
+Two tools have to be on the machine: `psql`, for his `migrate.sh`, and
+`xmllint`, which his DU schema module shells out to and throws without (his
+Dockerfile installs `libxml2-utils`; macOS ships it; a GitHub runner does
+not, and every journey that reaches the DU moment fails without it). The
+database is `SERVICING_TEST_DATABASE_URL`, or our test URL with the name
 swapped to `supermortgage_test` (his harness asserts that base name); the user needs `CREATEDB`. The first run
 builds a migrated template (about thirty seconds); every file then clones it
 in under a second and drops its clone on exit. The seven suites that build his

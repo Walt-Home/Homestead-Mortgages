@@ -69,6 +69,9 @@ Toolchain, absorbed by the files beside his tree rather than by edits:
   - tsconfig.check.json extends his tsconfig and excludes the one file that
     imports his borrower app; playwright-core is a devDependency because
     three of his suites and one tool import its types.
+  - psql (db/migrate.sh) and xmllint (src/infra/integrations/du-schema
+    shells out to it and throws without it) must be on the machine, as his
+    Dockerfile installs them; CI's servicing job installs libxml2-utils.
   - eslint and Prettier skip every copied directory (root eslint.config.mjs
     and .prettierignore say why), and the repo-walking tests in apps/api
     skip them by name.

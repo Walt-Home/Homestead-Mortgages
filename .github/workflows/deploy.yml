@@ -179,8 +179,19 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: psql is available
-        run: psql --version
+      # His migrate.sh needs psql, which the runner image carries; his DU schema
+      # module shells out to xmllint and throws without it, which the runner
+      # image does NOT carry — the same gap `check` closes above for
+      # packages/du-schema. The first run of this job without it failed 235
+      # tests, every one of them a journey that reached the DU moment and got
+      # a 500 back from 23.1 submitCasefile.
+      - name: psql and xmllint are available
+        run: |
+          psql --version
+          if ! command -v xmllint >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+          fi
+          xmllint --version
       - name: TypeScript (his settings)
         run: npm run typecheck -w @hm/servicing
       - name: His tests, as his

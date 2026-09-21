@@ -124,13 +124,18 @@ describe("where the read-only gate is mounted", () => {
   });
 
   it("is mounted before every router that can be written to", () => {
-    // The two open ones are open on purpose — health for the probes, auth so
-    // that signing in and out stays possible. Anything else mounted above the
-    // gate would be a route a sample borrower could post to.
+    // The three above the gate are above it on purpose — health for the
+    // probes, auth so that signing in and out stays possible, and partner
+    // because a servicer's key is not a session and the session gate would
+    // refuse it. Partner is not a route a sample borrower could post to: its
+    // own gate reads the bearer header and never the session, and
+    // `partner-credential.test.ts` holds that a signed-in person is refused
+    // there. Anything else mounted above this gate would be a route a sample
+    // borrower could write to.
     const above = [...INDEX.slice(0, gateAt).matchAll(/app\.use\("(\/api\/[^"]*)"/g)].map(
       (m) => m[1],
     );
-    expect(above).toEqual(["/api/health", "/api/auth"]);
+    expect(above).toEqual(["/api/health", "/api/auth", "/api/partner"]);
   });
 });
 

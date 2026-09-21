@@ -233,6 +233,15 @@ the routes to hold that. Sample borrowers and the local developer are exempt,
 marked on the session by the route that minted it and by nothing else. See
 `docs/decisions.md`, "Sign-in has a second step".
 
+**A partner is a key, not a sign-in.** `/api/partner/*` is the one prefix a
+session does not open: a servicer's integration is a machine, so it presents
+a bearer key minted by `npm run partner:key`, hashed in `partner_credentials`,
+revocable and never un-revocable. The prefix is mounted above the session gate
+and carries `requirePartner` as its own; a key opens nothing past it and a
+session opens nothing inside it. `partner-credential.test.ts` reads `index.ts`
+to hold that health, auth and partner are the only three things above the
+gate. See `docs/decisions.md`, "A partner is a key, not a sign-in".
+
 **4. Nothing may be pulled before APP-005.** The guard is inside the connector
 adapters, not the routes, so a new route cannot forget it. `guard.test.ts`
 calls every adapter against an unauthorized file and fails if any returns data.

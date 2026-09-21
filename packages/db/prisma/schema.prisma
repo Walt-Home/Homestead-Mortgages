@@ -1155,6 +1155,7 @@ model Principal {
   loanMovesCaused        LoanTransition[]        @relation("LoanTransitionActor")
   employmentDeclarations Employment[]            @relation("EmploymentDeclaredBy")
   coBorrowerInvitations  CoBorrowerInvitation[]
+  partnerCredentials     PartnerCredential[]     @relation("PartnerCredentialPrincipal")
 
   @@unique([kind, subject])
   @@index([partyId])
@@ -1727,9 +1728,45 @@ model Servicer {
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  loans Loan[]
+  loans       Loan[]
+  credentials PartnerCredential[]
 
   @@map("servicers")
+}
+
+/// A partner's way in: a bearer key, hashed, revocable, and never a session.
+///
+/// A servicer that sends us its book is a machine, not a person. It has no
+/// Google account and no phone to enroll, and nothing about it changes from
+/// one request to the next — so it does not get a session, it gets a key. The
+/// key itself is nowhere but the one line the minting command printed; this
+/// row holds its SHA-256, exactly as an invitation row holds its token, so a
+/// copy of the table is not a way in. Revoked is final: the column is set
+/// once, and a trigger refuses to clear it or to re-point the row at another
+/// key or another servicer — mint a new one.
+///
+/// Every request a key authenticates acts as the PARTNER principal named here,
+/// which is the one `partnerPrincipal` mints for the servicer's slug. A loan a
+/// key imports is then attributed in the ledger's own vocabulary, and nothing
+/// downstream has to learn a second word for "the partner".
+model PartnerCredential {
+  id          String    @id @default(uuid()) @db.Uuid
+  servicerId  String    @map("servicer_id") @db.Uuid
+  servicer    Servicer  @relation(fields: [servicerId], references: [id], onDelete: Restrict)
+  principalId String    @map("principal_id") @db.Uuid
+  principal   Principal @relation("PartnerCredentialPrincipal", fields: [principalId], references: [id], onDelete: Restrict)
+
+  /// SHA-256 of the key, hex. The key is nowhere but the line that printed it.
+  keyHash String @unique @map("key_hash")
+  /// What this key is for, in the operator's words: "grander-sftp-2026-09".
+  label   String
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  revokedAt  DateTime? @map("revoked_at")
+
+  @@index([servicerId], map: "partner_credentials_servicer")
+  @@map("partner_credentials")
 }
 
 enum LoanState {

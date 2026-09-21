@@ -53,6 +53,7 @@ rather than asserted.
 | `application_parties`     | Who is on a credit request, in what role                                       | Production                                                                                                                       |
 | `loan_parties`            | Who is on a mortgage, in what role                                             | Seed and tests — no importer yet                                                                                                 |
 | `co_borrower_invitations` | The SHA-256 of a link a named person was emailed, and when it stops being good | Production — the invitation route                                                                                                |
+| `partner_credentials`     | The SHA-256 of a servicer's bearer key, and when it was revoked                | The `partner:key` command; read on every `/api/partner` request                                                                  |
 | `employers`               | A company that pays this person                                                | Production — vendor pulls only                                                                                                   |
 
 ### The application
@@ -87,15 +88,17 @@ rather than asserted.
 
 ### The loan
 
-Every table here exists, is fully constrained, and has **no writer of any
-kind** — see `docs/loan-lifecycle.md`.
+Every table here exists and is fully constrained. The first three have **no
+writer of any kind** — see `docs/loan-lifecycle.md`. The fourth gained one on
+21 September 2026: `partner:key` writes a servicer when it issues that
+servicer a key, so the row exists before any loan points at it.
 
 | Entity             | Is                                           |
 | ------------------ | -------------------------------------------- |
 | `loans`            | A mortgage in the world, in one of 11 states |
 | `loan_parties`     | Who is on it                                 |
 | `loan_transitions` | Every move it made                           |
-| `servicers`        | Who collects the payments                    |
+| `servicers`        | Who collects the payments, and holds a key   |
 
 ## What the database actually enforces
 
@@ -165,7 +168,6 @@ the first writer arrives into a shape that already refuses the wrong thing.
 | Table                                       | Waiting on                                                           |
 | ------------------------------------------- | -------------------------------------------------------------------- |
 | `loans`, `loan_parties`, `loan_transitions` | The Grander import, deliberately deferred                            |
-| `servicers`                                 | The same — no row has ever existed                                   |
 | `regulatory_clocks`                         | Notice delivery. A clock nothing can stop must not be opened         |
 | `disclosures`                               | The same. `DisclosureRecord` exists as a type with no rows behind it |
 | `authorizations`, written directly          | Nothing writes it by hand; `consents` mirrors into it by trigger     |
@@ -187,8 +189,9 @@ Desktop Underwriter pages own them: `docs/du-graph.md` for the shape and
 engine still reads liabilities and reserves out of snapshot JSON rather than
 out of those tables; the tables are what a submission carries.
 
-**What is not modeled at all:** a servicer with a row, a regulatory notice
-that was delivered, and a role on a `User` that would let staff open a file.
+**What is not modeled at all:** a regulatory notice that was delivered, and a
+role on a `User` that would let staff open a file. A servicer with a row is
+modeled now — `partner:key` writes one — but nothing yet points a loan at it.
 
 ## Where the rest lives
 

@@ -1458,6 +1458,56 @@ for somebody who has lost the phone and spent every recovery code. Today that
 is a `DELETE` on `user_authenticators` by hand, and it should become a route
 that records who did it.
 
+## A partner is a key, not a sign-in
+
+A servicer that hands us its book is the first caller of this API that is not
+a person. It has no Google account, no phone to enroll, and no screen to be
+sent to when a gate refuses it — so the session and its second step are the
+wrong shape for it, and since 21 September 2026 it has one of its own:
+`/api/partner/*` is opened by a bearer key and by nothing else.
+
+The shape, and why each piece is the way it is:
+
+- **A key, hashed, exactly as an invitation token is.** `partner:key` mints
+  256 random bits behind an `hm_pk_` prefix, prints them once, and writes
+  only the SHA-256 to `partner_credentials`. A copy of the table is not a way
+  in, and a key that leaks into a log is findable by its prefix.
+- **Revoked is final, and the database holds it.** The column is set once; a
+  trigger refuses to clear it and refuses to re-point a row at another key or
+  another servicer. Rotation is a new row. A permission that can be quietly
+  un-revoked is not one anybody can reason about.
+- **The key acts as a principal the ledger already knows.** Every request a
+  key opens carries the PARTNER principal `partnerPrincipal` mints for the
+  servicer's slug, so a loan the key imports is caused by an actor
+  `loan_transitions` already has a word for. Nothing downstream learns a
+  second meaning of "the partner".
+- **Above the gate, with a gate of its own.** `index.ts` mounts the partner
+  router before `app.use("/api", requireAuth)`, because the session gate would
+  refuse it, and the router carries `requirePartner`, which reads the header
+  and never the session. A signed-in person is refused there exactly as an
+  anonymous request is, and a key presented to any other route is refused by
+  the session gate exactly as an anonymous request is. The two ways in do not
+  meet.
+- **Unknown and revoked are one refusal.** `PARTNER_KEY_INVALID` for both,
+  because "this key used to work" is a fact about our issuance that a
+  stranger holding a stolen key has no business learning.
+- **No second factor, deliberately.** The second step exists because a
+  phished password is a person's whole account; a key is 256 bits with no
+  password behind it, and the equivalent control is revocation, which is
+  free. Scoping is the other half: a key reaches one prefix, and that prefix
+  will hold the book import and the partner's own reads — never a borrower's
+  file.
+
+`partner-credential.test.ts` walks both gates through a real express stack
+and reads `index.ts` to hold that health, auth and partner are the only three
+things mounted above the session gate. Doug's platform reached the same
+shape independently — a shared bearer outside production and `api_principals`
+rows inside it — which is the seam step 3 of the servicing plan calls across.
+
+What is not built: the routes the key is for. `GET /api/partner/me` is the
+smoke route; the book import that fills `loans` from a partner's tape lands
+once the tape reader is ported onto the vendored kernel.
+
 ## Tests run against a real Postgres
 
 The API suite used to mock `@hm/db`. Two files did it explicitly, and the cost

@@ -286,3 +286,49 @@ variable "property_records_provider" {
     error_message = "property_records_provider must be fixture or corelogic."
   }
 }
+
+# ── Doug's servicing runtime ─────────────────────────────────────────────────
+
+variable "servicing_image" {
+  description = "Fully qualified container image for apps/servicing, built from apps/servicing/Dockerfile and set by the deploy workflow."
+  type        = string
+}
+
+variable "servicing_database_url_secret" {
+  description = <<-EOT
+    Secret Manager secret holding the servicing app's connection string: its
+    own database on the shared instance, as its own role. Read by the
+    servicing runtime identity and by nothing else — in particular not by
+    hm-run@, so the API's container cannot open his database, and his cannot
+    open ours because the role in this URL is a plain one that owns exactly
+    one database (see main.tf).
+  EOT
+  type        = string
+  default     = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING"
+}
+
+variable "servicing_api_token_secret" {
+  description = <<-EOT
+    Secret Manager secret holding the bearer his /v1 door takes outside
+    production. The one secret both runtime identities read: his service to
+    check it, our API to present it. In production his door refuses the
+    shared token and this becomes a principal's token his `principals.issue`
+    minted; nothing here is production.
+  EOT
+  type        = string
+  default     = "HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN"
+}
+
+variable "servicing_sweep_schedule" {
+  description = <<-EOT
+    When his sweep runs, as a cron expression in America/New_York — the zone
+    his platform day is kept in. His own nonprod runs it every minute; every
+    five is enough for a testing ground, because a sweep is one pass of every
+    scheduled job and the passes with a clock (the daily refinance check, the
+    record verify, the daily receipt) each fire once per platform day on
+    their own schedule, whichever sweep first crosses it. The sweep lease
+    keeps two firings from overlapping.
+  EOT
+  type        = string
+  default     = "*/5 * * * *"
+}

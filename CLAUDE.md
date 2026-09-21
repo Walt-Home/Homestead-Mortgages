@@ -393,9 +393,20 @@ carries _project-wide_ `secretmanager.secretAccessor` and
 project and deleted objects from Walt's buckets. Nothing in the code would
 have; nothing structural stopped it.
 
-Today `hm-run@` holds `cloudsql.client` and accessor on exactly two secrets,
-granted on the secrets themselves. `hm-github-actions@` can deploy and push
-images and nothing else. Terraform manages all of it.
+Today `hm-run@` holds `cloudsql.client` and accessor on the secrets the API
+mounts, granted on the secrets themselves. `hm-github-actions@` can deploy and
+push images and nothing else. Terraform manages all of it.
+
+**Doug's servicing runtime deploys beside the API**, as
+`homestead-mortgages-staging-servicing`: his image
+(`apps/servicing/Dockerfile`), his migrations and demo seed applied from it
+through the proxy, the sweep as a Cloud Run job every five minutes, on a
+database of its own under `hm-servicing-run@`, which reads exactly its own two
+secrets. His database role is a plain one made in SQL, not a `google_sql_user`,
+because an API-created user is a `cloudsqlsuperuser` and can open every
+database on the instance; his cannot open ours. The API's deploy runs after
+his and is told where his door is. See `docs/decisions.md`, "The servicing app
+deploys beside the API".
 
 ## Reaching the deployed app
 

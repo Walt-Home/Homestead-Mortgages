@@ -56,7 +56,7 @@ Walt's. They are stale; `docs/decisions.md` records why the move happened.
                       │ Cloud SQL socket      │ --set-secrets
                       ▼                       ▼
         ┌─────────────────────────┐   ┌──────────────────────────────┐
-        │ Cloud SQL  POSTGRES_16  │   │ Secret Manager ×6            │
+        │ Cloud SQL  POSTGRES_16  │   │ Secret Manager ×8 for the API │
         │ homestead-mortgages-db  │   │ HOMESTEAD_MORTGAGES_* → env  │
         │  db: homestead-         │   │  …_DATABASE_URL_STAGING      │
         │      mortgages_staging  │   │  …_SESSION_SECRET            │
@@ -66,8 +66,24 @@ Walt's. They are stale; `docs/decisions.md` records why the move happened.
         │                         │   │  …_GOOGLE_PLACES_API_KEY     │
         └─────────────────────────┘   └──────────────────────────────┘
 
+              ┌──────────────────────────────────────────┐
+              │  Cloud Run v2   homestead-mortgages-      │
+              │                 staging-servicing         │
+              │  Doug's runtime (apps/servicing): one     │
+              │  image, modes serve · migrate · sweep     │
+              │  SA hm-servicing-run@ · min 0 / max 2     │
+              │  invoker: allUsers · his bearer door      │
+              └───────┬───────────────────────┬──────────┘
+                      │ same instance,        │ 2 secrets of its own
+                      ▼ its own database      ▼
+                 db: homestead_servicing_     …_SERVICING_DATABASE_URL_STAGING
+                     staging, owned by a      …_SERVICING_API_TOKEN
+                     plain role that can        (the API reads this one too,
+                     open nothing else           to present it at his door)
+                 job: …-staging-servicing-sweep, Cloud Scheduler every 5 min
+
         ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
-          infra/*.tf — 6 resources, applied BY HAND, local state
+          infra/*.tf — applied BY HAND, local state, -target
         │ Cloud SQL instance · database · app role · Run       │
           service · 2 invoker-binding variants.  ⚠ WIP:
         │ CI never runs it, and it already disagrees with what  │

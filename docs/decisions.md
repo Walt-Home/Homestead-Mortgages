@@ -81,8 +81,10 @@ could have read every secret in the project (Anthropic, Twilio, Resend, Walt's
 own `DATABASE_URL_PROD`) and deleted objects from Walt's buckets. Nothing in
 the code would have done that; the point is that nothing structural stopped it.
 `hm-run@` now holds `cloudsql.client` and accessor on the secrets the deploy
-mounts — six today, granted on the secrets themselves —
-granted on the secrets rather than the project.
+mounts — the API's own, plus the servicing door token — granted on the
+secrets themselves rather than the project. The servicing app's identity is
+held to the same rule on its own two; see "The servicing app deploys beside
+the API".
 
 **HMX monorepo shape.** Turbo, Prisma, Terraform, npm workspaces. Palette and
 type stacks ported from Homestead; the component layer was not, because
@@ -1633,9 +1635,7 @@ model. A section of his that ours needs is ported the way the tape reader
 was: onto the kernel, onto our contract, with the refusals ours requires
 written down.
 
-What is not built: the deploy (a second Cloud Run service, a second database
-and user on our instance, the sweep as a scheduled job, secrets for the
-token), and any bridge between a loan in our `loans` and the same loan in
+What is not built: any bridge between a loan in our `loans` and the same loan in
 his beyond the servicer's own loan number. His tape import and ours are two
 readers of the same file into two models; which one a partner's tape goes
 to is the "one system of record" question the analysis left open, and this
@@ -1705,6 +1705,79 @@ What it does not do: write anything on his side, hold his loan id on ours
 for a batch), or reach a loan his platform services rather than watches —
 the `serviced` relationship is recognized and untested, because nothing
 boarded is his and ours at once yet.
+
+## The servicing app deploys beside the API
+
+Since 21 September 2026 `apps/servicing` deploys as a second Cloud Run
+service in the same project, `homestead-mortgages-staging-servicing`, the
+shape Doug's own infra gives it: one image (`apps/servicing/Dockerfile`, node
+22 with psql and xmllint, his sources run with type stripping) in three
+modes — `serve` as the service, `migrate` run by the deploy before it, `sweep`
+as a Cloud Run job Cloud Scheduler fires every five minutes — on a database
+of its own on the shared instance, under a runtime identity of its own. The
+deploy workflow's `deploy-servicing` job builds the image, applies his
+migrations and seeds his demo from that image through the Auth Proxy, deploys
+the service, points the sweep job at the image and reads his two probes back;
+the API's own deploy runs after it and is told where his door is, so
+`/api/health` reports `servicing: supermortgage (https://…)` and the
+`servicing` port answers from his platform rather than the fixture. His demo
+seed boards the same twelve-loan Northlight book our sample book carries, so
+a loan imported here from that tape finds its record there.
+
+Three decisions in it, all about keeping the two apps apart on one instance:
+
+- **His container cannot open our database, and the reason is a role, not a
+  grant.** A user created through the Cloud SQL API — every `google_sql_user`,
+  ours included — is a member of `cloudsqlsuperuser`, which owns every
+  database on the instance, so two API-created users can always open each
+  other's databases whatever `REVOKE` says. His role,
+  `homestead_servicing_app`, is created in SQL instead: `LOGIN CREATEROLE`
+  and nothing more, the owner of `homestead_servicing_staging` and of nothing
+  else, with `CONNECT` on our database revoked from `PUBLIC`. Asked to open
+  ours it is answered "permission denied for database", and that was checked
+  the day it was made. `CREATEROLE` is there because two of his migrations
+  create the `NOLOGIN` roles his data-security sections grant to, and the two
+  extensions his migrations `CREATE … IF NOT EXISTS` were created once by
+  hand, because `CREATE EXTENSION` on Cloud SQL needs the superuser-like role
+  and an existing extension passes the check without asking. The asymmetry is
+  real and recorded: our app role is API-created, so it can still open his
+  database; his cannot open ours. Terraform describes his database and not
+  his role, because Terraform can only make the kind of user the boundary
+  needs him not to be.
+- **Two secrets, and the identity that reads them reads nothing else.**
+  `hm-servicing-run@` holds `cloudsql.client` and accessor on exactly
+  `HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING` and
+  `HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN`, granted on the secrets. It is not
+  granted the API's database URL and `hm-run@` is not granted his, so neither
+  container can reach the other's database by reading the other's secret.
+  The token is the one secret both read — his service to check it, our API
+  to present it — and outside production it is the shared token his door
+  takes; in production his door refuses the shared token and the value
+  becomes a principal's token his `principals.issue` minted. Nothing here is
+  production: every vendor in the image is a FAKE and his config refuses to
+  start a production process on fakes, so `SERVICING_ENVIRONMENT=nonprod` is
+  a consequence and not a setting.
+- **Publicly routable, for one more reason than the API.** Our API presents
+  his bearer in the `Authorization` header, and Cloud Run's own IAM door
+  wants an identity token in the same header, so the two cannot stack. His
+  door — `/healthz` and `/readyz` open, everything else behind the token or a
+  staff session — is the gate, and the deploy checks it is shut by asking
+  `/v1` without a bearer and requiring a 401.
+
+The migration URL the workflow uses is the same role through the proxy, as a
+GitHub secret (`HOMESTEAD_MORTGAGES_SERVICING_MIGRATION_URL`), so the
+migrations that ship are applied by the identity that will run against them.
+The sweep is every five minutes rather than his every minute: a sweep is one
+pass of every scheduled job, the passes with a clock fire once per platform
+day whichever sweep first crosses it, and the sweep lease makes an overlapping
+firing exit as `skipped`. It runs with no retries, because the next firing is
+the retry, and a failed execution is alerted the way the APOR fetch's is.
+
+Applied by hand from `infra/`, as the rest of it is, with `-target` on the
+new resources: the identity, its grants and his database before the first
+deploy; the sweep job and its schedule after it, because a Cloud Run job
+needs an image that exists. The service itself is deployed by the workflow
+and described in Terraform, the same standing the API's service has.
 
 ## Tests run against a real Postgres
 

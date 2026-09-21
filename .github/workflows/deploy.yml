@@ -18,6 +18,11 @@ env:
   # Least privilege: cloudsql.client, plus accessor on exactly two secrets
   # granted on the secrets themselves rather than project-wide.
   RUNTIME_SA: hm-run@homestead-mortgages.iam.gserviceaccount.com
+  # Doug's servicing runtime (apps/servicing), a service of its own under an
+  # identity of its own that reads its two secrets and none of the API's.
+  # See infra/main.tf, "Doug's servicing runtime, as a service of its own".
+  SERVICING_SERVICE: homestead-mortgages-staging-servicing
+  SERVICING_RUNTIME_SA: hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com
 
 jobs:
   check:
@@ -197,6 +202,166 @@ jobs:
       - name: His tests, as his
         run: npm run test:servicing
 
+  # Doug's servicing runtime, deployed beside the API as a service of its
+  # own: his image (apps/servicing/Dockerfile — one image, the modes his
+  # entrypoint has), his migrations applied from that image through the Auth
+  # Proxy, his demo seeded the same way, the service deployed, the sweep job
+  # pointed at the new image, and his two probes read back. Before the API's
+  # own deploy, because the API is told where his door is.
+  #
+  # Not gated on GOOGLE_CLIENT_ID: nothing in his runtime signs anyone in
+  # with Google here, and his door is a bearer.
+  deploy-servicing:
+    needs: [check, servicing]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # From the repository root, so the workspace lockfile resolves his
+      # dependencies; the same manifest-push retry the API's build carries.
+      - name: Build and push the servicing image
+        run: |
+          IMAGE=${{ env.REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICING_SERVICE }}:${{ github.sha }}
+          docker build -f apps/servicing/Dockerfile -t "$IMAGE" .
+          for attempt in 1 2 3; do
+            if docker push "$IMAGE"; then
+              echo "SERVICING_IMAGE=$IMAGE" >> $GITHUB_ENV
+              exit 0
+            fi
+            echo "push attempt $attempt failed; retrying in $((attempt * 10))s"
+            sleep $((attempt * 10))
+          done
+          echo "docker push failed after 3 attempts"
+          exit 1
+
+      - name: Start Cloud SQL Auth Proxy
+        run: |
+          curl -sSo cloud-sql-proxy \
+            https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy --port 5432 \
+            ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} &
+          for i in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+      # His db/migrate.sh, from the image just built, as the servicing role
+      # through the proxy: the image carries psql, and running it there means
+      # the migration that ships is the one the container holds. The URL is
+      # the runner-side form of the runtime's secret — same role, same
+      # database, TCP through the proxy instead of the Cloud Run socket.
+      - name: Apply his migrations
+        run: |
+          set +e
+          OUT=$(docker run --rm --network host \
+            -e SERVICING_DATABASE_URL="$SERVICING_DATABASE_URL" \
+            "$SERVICING_IMAGE" migrate 2>&1)
+          code=$?
+          set -e
+          echo "$OUT" | grep -v '^skip ' || true
+          echo "skipped: $(grep -c '^skip ' <<< "$OUT"), applied: $(grep -c '^apply ' <<< "$OUT")"
+          test "$code" -eq 0
+        env:
+          SERVICING_DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_SERVICING_MIGRATION_URL }}
+
+      # His demo: the 100-loan transfer batch, the entry demo and the
+      # twelve-loan Northlight book — the same NL-1000xx numbers our sample
+      # book carries, so the API's live read finds them. Idempotent by his
+      # rule (a second run reports already_loaded and changes nothing), and
+      # marked synthetic on every row it writes.
+      - name: Seed his demo
+        run: |
+          set +e
+          OUT=$(docker run --rm --network host \
+            -e SERVICING_DATABASE_URL="$SERVICING_DATABASE_URL" \
+            "$SERVICING_IMAGE" seed-demo 2>&1)
+          code=$?
+          set -e
+          echo "$OUT" | tail -n 8
+          test "$code" -eq 0
+          grep -q 'seed-demo partner book' <<< "$OUT"
+        env:
+          SERVICING_DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_SERVICING_MIGRATION_URL }}
+
+      # SERVICING_ENVIRONMENT=nonprod is not a choice: every vendor in the
+      # image is a FAKE and his config refuses to start a production process
+      # on fakes. It is also what admits the shared token at his door.
+      - name: Deploy the servicing service to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICING_SERVICE }} \
+            --image "$SERVICING_IMAGE" \
+            --region ${{ env.REGION }} \
+            --service-account ${{ env.SERVICING_RUNTIME_SA }} \
+            --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
+            --set-secrets "SERVICING_DATABASE_URL=HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING:latest,SERVICING_API_TOKEN=HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN:latest" \
+            --set-env-vars "NODE_ENV=production,SERVICING_PORT=8080,SERVICING_ENVIRONMENT=nonprod,SERVICING_INTEGRATIONS=fake,SERVICING_LOG_FORMAT=json" \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 1Gi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --timeout 300
+
+      # The same absence-versus-error split the APOR job's step makes.
+      - name: Point the scheduled sweep at this image
+        run: |
+          JOB=${{ env.SERVICING_SERVICE }}-sweep
+          set +e
+          ERR=$(gcloud run jobs describe "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --format="value(name)" 2>&1 >/dev/null)
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            gcloud run jobs update "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$SERVICING_IMAGE" --quiet
+          elif grep -qiE "NOT_FOUND|not found|does not exist|cannot find" <<< "$ERR"; then
+            echo "::warning::Cloud Run job $JOB does not exist yet; apply infra/ to schedule the sweep. Until then nothing breaches, offers or reviews on his side."
+          else
+            echo "::error::could not describe Cloud Run job $JOB: $ERR"
+            exit 1
+          fi
+
+      # Public for the reason the API is, and one more: our API presents his
+      # bearer in the Authorization header, where Cloud Run's own IAM door
+      # would want an identity token, so the two cannot stack. His door is
+      # the gate, and the probe below checks it is shut.
+      - name: Confirm the servicing service is reachable and its door is shut
+        run: |
+          gcloud run services add-iam-policy-binding ${{ env.SERVICING_SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --member="allUsers" --role=roles/run.invoker --quiet
+          URL=$(gcloud run services describe ${{ env.SERVICING_SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)")
+          echo "checking $URL"
+          for attempt in 1 2 3 4 5 6; do
+            READY=$(curl -fsS --max-time 30 "$URL/readyz") && break
+            echo "attempt $attempt failed; retrying"
+            sleep 10
+          done
+          echo "readyz: $READY"
+          case "$READY" in
+            *'"database":"reachable"'*) echo "his database is reachable from the deployed revision" ;;
+            *) echo "::error::the servicing service cannot reach its database"; exit 1 ;;
+          esac
+          DOOR=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$URL/v1/partner-book/imports")
+          echo "GET /v1 without a bearer: $DOOR"
+          test "$DOOR" = "401"
+
   # Deploying without a Google client id would put up a sign-in page that can
   # never succeed, and the server refuses to boot without one anyway. So the
   # deploy waits for the repo variable rather than shipping a door with no key.
@@ -215,7 +380,8 @@ jobs:
           echo "See docs/decisions.md → Google sign-in."
 
   deploy:
-    needs: [check, servicing]
+    # After the servicing deploy, because the API is told where his door is.
+    needs: [check, servicing, deploy-servicing]
     if: vars.GOOGLE_CLIENT_ID != ''
     runs-on: ubuntu-latest
     permissions:
@@ -383,6 +549,19 @@ jobs:
           fi
           echo "SERVICE_URL=$URL" >> "$GITHUB_ENV"
 
+      # Where his door is. The servicing deploy ran first, so this resolves on
+      # every run but the very first one in a fresh project; absent, the API
+      # boots on the servicing fixture and says so in /api/health.
+      - name: Resolve the servicing service URL
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICING_SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)" 2>/dev/null || true)
+          if [ -z "$URL" ]; then
+            echo "::warning::servicing service does not exist yet; the API will answer the servicing port from the fixture"
+          fi
+          echo "SERVICING_URL=$URL" >> "$GITHUB_ENV"
+
       - name: Deploy to Cloud Run
         run: |
           ENV_VARS="NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture,STATE_GALLERY=true"
@@ -411,6 +590,14 @@ jobs:
           # Reported by /health; the service itself never fetches — the step
           # above and the scheduled job write the table it reads.
           ENV_VARS="$ENV_VARS,APOR_PROVIDER=ffiec"
+          # The servicing port reads Doug's runtime over its /v1 door with the
+          # token both services mount. Selected only when his service resolved,
+          # because the registry refuses to build the adapter without a URL
+          # rather than answer fixture verdicts under his name.
+          if [ -n "$SERVICING_URL" ]; then
+            ENV_VARS="$ENV_VARS,SERVICING_PROVIDER=supermortgage,SERVICING_API_URL=$SERVICING_URL"
+            SECRETS="$SECRETS,SERVICING_API_TOKEN=HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN:latest"
+          fi
           #
           # STRIPE_ALLOW_LIVE_IDENTITY is deliberately absent, and the secret
           # deliberately names the sandbox key. Live identity collects a real
@@ -527,6 +714,14 @@ jobs:
             *'"personas":"enabled"'*) echo "ok: sample borrowers are mounted" ;;
             *) echo "::error::DEMO_PERSONAS did not reach the service"; exit 1 ;;
           esac
+          # When his service resolved, the servicing port is his and not the
+          # fixture's, and /health names the URL it reads.
+          if [ -n "$SERVICING_URL" ]; then
+            case "$PROVIDERS" in
+              *"supermortgage ($SERVICING_URL)"*) echo "ok: the servicing port reads $SERVICING_URL" ;;
+              *) echo "::error::SERVICING_PROVIDER=supermortgage did not reach the service"; exit 1 ;;
+            esac
+          fi
           # The average prime offer rate series reaches the current week. The
           # fetch step above asserted this against the database; this asserts
           # the deployed revision reads the same table and reports it.

@@ -80,6 +80,25 @@ builds a migrated template (about thirty seconds); every file then clones it
 in under a second and drops its clone on exit. The seven suites that build his
 Next.js apps under Chromium are left out, because those apps are not here.
 
+## Deploy it
+
+It deploys itself: every push to `main` runs the workflow's `deploy-servicing`
+job, which builds `Dockerfile` from the repository root, applies
+`db/migrations` and runs `seed-demo` from that image through the Cloud SQL
+Auth Proxy, deploys `homestead-mortgages-staging-servicing`, points the sweep
+job at the image and reads `/readyz` back. The API's deploy follows and is
+told where the door is. The pieces the deploy assumes — the runtime identity,
+its two secrets, the database and the plain role that owns it, the sweep job
+and its schedule — are described in `infra/` and were applied by hand;
+`docs/decisions.md`, "The servicing app deploys beside the API", has the
+decisions and the SQL that made the role.
+
+```bash
+docker build -f apps/servicing/Dockerfile -t hm-servicing:local .   # from the repo root
+docker run --rm -e SERVICING_DATABASE_URL=… hm-servicing:local db-setup
+docker run --rm -p 8090:8080 -e SERVICING_DATABASE_URL=… -e SERVICING_API_TOKEN=dev-token hm-servicing:local
+```
+
 ## What it is for
 
 The servicing plan (`docs/decisions.md`, "Doug's servicing runtime is an app

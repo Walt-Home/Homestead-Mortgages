@@ -327,6 +327,35 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.allowed_domain
       }
 
+      # ── The servicing platform ─────────────────────────────────────────────
+      #
+      # Doug's runtime, deployed below as a service of its own. The API reads
+      # a loan's servicing record through the `servicing` connector port over
+      # his /v1 door with the token both services mount; "fixture" would make
+      # the port answer what his engine answered for the sample book instead.
+      # The seam is HTTP and nothing else — see docs/decisions.md, "The
+      # servicing platform is read, never joined".
+
+      env {
+        name  = "SERVICING_PROVIDER"
+        value = "supermortgage"
+      }
+
+      env {
+        name  = "SERVICING_API_URL"
+        value = google_cloud_run_v2_service.servicing.uri
+      }
+
+      env {
+        name = "SERVICING_API_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret  = var.servicing_api_token_secret
+            version = "latest"
+          }
+        }
+      }
+
       volume_mounts {
         name       = "cloudsql"
         mount_path = "/cloudsql"
@@ -520,5 +549,343 @@ resource "google_monitoring_alert_policy" "apor_fetch_failed" {
 
   documentation {
     content = "The scheduled fetch of the CFPB's average prime offer rate table failed. Until it succeeds, every decision computed in a week the stored series does not reach blocks UW-008 and ends referred. Read the job's logs; if the CFPB has published and the fetch still fails, the file has changed shape."
+  }
+}
+
+# ── Doug's servicing runtime, as a service of its own ────────────────────────
+#
+# apps/servicing is Doug's platform, vendored whole (docs/decisions.md, "Doug's
+# servicing runtime is an app in this repo"). It deploys beside the API the
+# shape his own infra gives it: one image with three modes — `serve` as a
+# second Cloud Run service, `migrate` run by the deploy before it, `sweep` as
+# a Cloud Run job on a schedule — on a database of its own on the shared
+# instance, under a runtime identity of its own. Every vendor in it is a
+# FAKE, and his config refuses to start a production process on fakes, so
+# ENVIRONMENT is `nonprod` here by construction and not by choice.
+#
+# What keeps the two apps apart is the same argument the instance section
+# makes, applied to the two halves of one instance:
+#
+# - The runtime identity reads exactly two secrets, its database URL and the
+#   door token, granted on the secrets themselves. hm-run@ is not granted his
+#   database URL and he is not granted ours, so neither container can open
+#   the other's database by reading the other's secret.
+# - The database role in his URL is NOT a `google_sql_user`. A user created
+#   through the Cloud SQL API is a member of `cloudsqlsuperuser`, which owns
+#   every database on the instance, so two API-created users can always open
+#   each other's databases whatever is revoked. His role is created in SQL,
+#   `LOGIN CREATEROLE` and nothing more, owns `homestead_servicing_<env>` and
+#   nothing else, and `CONNECT` on our database is revoked from PUBLIC so a
+#   plain role cannot reach it. The two extensions his migrations create are
+#   created once by hand, because `CREATE EXTENSION` on Cloud SQL needs the
+#   superuser-like role and `IF NOT EXISTS` passes an existing one without
+#   asking. The asymmetry is real and recorded: our app role is API-created,
+#   so it can still open his database; his cannot open ours.
+#
+# The service is publicly routable for the reason the API is: our API
+# presents his bearer in the Authorization header, and Cloud Run's own IAM
+# door wants an identity token in the same header, so the two cannot stack.
+# His door — /healthz and /readyz open, everything else behind the token or
+# a staff session — is the gate.
+
+resource "google_service_account" "servicing_run" {
+  account_id   = "hm-servicing-run"
+  display_name = "Runtime identity for the servicing app"
+  description  = "Runs the servicing service and its sweep job. cloudsql.client, plus accessor on its own database URL and the door token, granted on the secrets themselves; nothing on the API's secrets."
+}
+
+resource "google_project_iam_member" "servicing_run_cloudsql" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.servicing_run.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "servicing_run_reads_database_url" {
+  secret_id = var.servicing_database_url_secret
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.servicing_run.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "servicing_run_reads_api_token" {
+  secret_id = var.servicing_api_token_secret
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.servicing_run.email}"
+}
+
+# The API presents the same token, so it reads the same secret.
+resource "google_secret_manager_secret_iam_member" "api_reads_servicing_api_token" {
+  secret_id = var.servicing_api_token_secret
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${var.service_account_email}"
+}
+
+# Owned by the plain role described above, which SQL sets after this creates
+# it; Terraform can describe the database but not a role outside
+# cloudsqlsuperuser.
+resource "google_sql_database" "servicing" {
+  name     = "homestead_servicing_${var.environment}"
+  instance = google_sql_database_instance.homestead-mortgages.name
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_cloud_run_v2_service" "servicing" {
+  name     = "homestead-mortgages-${var.environment}-servicing"
+  location = var.region
+
+  template {
+    service_account = google_service_account.servicing_run.email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 2
+    }
+
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [google_sql_database_instance.homestead-mortgages.connection_name]
+      }
+    }
+
+    containers {
+      image = var.servicing_image
+
+      ports {
+        container_port = 8080
+      }
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "1Gi"
+        }
+      }
+
+      env {
+        name  = "NODE_ENV"
+        value = "production"
+      }
+
+      # scripts/run.mjs reads SERVICING_PORT and defaults to 8090; Cloud Run
+      # listens on the container port, so the two are pinned together here.
+      env {
+        name  = "SERVICING_PORT"
+        value = "8080"
+      }
+
+      # `production` would make his config refuse to boot on fakes, and every
+      # vendor here is a FAKE; `nonprod` is also what admits the shared token
+      # at his /v1 door.
+      env {
+        name  = "SERVICING_ENVIRONMENT"
+        value = "nonprod"
+      }
+
+      env {
+        name  = "SERVICING_INTEGRATIONS"
+        value = "fake"
+      }
+
+      env {
+        name  = "SERVICING_LOG_FORMAT"
+        value = "json"
+      }
+
+      env {
+        name = "SERVICING_DATABASE_URL"
+        value_source {
+          secret_key_ref {
+            secret  = var.servicing_database_url_secret
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "SERVICING_API_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret  = var.servicing_api_token_secret
+            version = "latest"
+          }
+        }
+      }
+
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
+      }
+    }
+  }
+
+  traffic {
+    type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
+    percent = 100
+  }
+
+  # The deploy workflow ships the image, as it does the API's.
+  lifecycle {
+    ignore_changes = [template[0].containers[0].image]
+  }
+}
+
+resource "google_cloud_run_v2_service_iam_member" "servicing_public" {
+  count = var.public ? 1 : 0
+
+  project  = google_cloud_run_v2_service.servicing.project
+  location = google_cloud_run_v2_service.servicing.location
+  name     = google_cloud_run_v2_service.servicing.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# The sweep: one pass of every scheduled job his runtime has — the outbox,
+# the cycles, the daily refinance check, the partner-book review that writes
+# the verdicts our `servicing` port reads, the timers' breach pass, and the
+# receipt — as the same image with a different argument, the way the APOR
+# fetch is the API's image with a different entrypoint. The sweep lease
+# (his advisory lock 35_001) makes a firing that overlaps another exit as
+# `skipped`, so the schedule can be as dense as anyone likes.
+resource "google_cloud_run_v2_job" "servicing_sweep" {
+  name     = "homestead-mortgages-${var.environment}-servicing-sweep"
+  location = var.region
+
+  template {
+    template {
+      service_account = google_service_account.servicing_run.email
+      # The next firing is the retry.
+      max_retries = 0
+      timeout     = "600s"
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.homestead-mortgages.connection_name]
+        }
+      }
+
+      containers {
+        image = var.servicing_image
+        args  = ["sweep"]
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "1Gi"
+          }
+        }
+
+        env {
+          name  = "NODE_ENV"
+          value = "production"
+        }
+
+        env {
+          name  = "SERVICING_ENVIRONMENT"
+          value = "nonprod"
+        }
+
+        env {
+          name  = "SERVICING_INTEGRATIONS"
+          value = "fake"
+        }
+
+        env {
+          name  = "SERVICING_LOG_FORMAT"
+          value = "json"
+        }
+
+        env {
+          name = "SERVICING_DATABASE_URL"
+          value_source {
+            secret_key_ref {
+              secret  = var.servicing_database_url_secret
+              version = "latest"
+            }
+          }
+        }
+
+        # The sweep mode never serves the door, but his config refuses to
+        # start without a token in any mode.
+        env {
+          name = "SERVICING_API_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = var.servicing_api_token_secret
+              version = "latest"
+            }
+          }
+        }
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [template[0].template[0].containers[0].image]
+  }
+}
+
+resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_servicing_sweep" {
+  project  = google_cloud_run_v2_job.servicing_sweep.project
+  location = google_cloud_run_v2_job.servicing_sweep.location
+  name     = google_cloud_run_v2_job.servicing_sweep.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.scheduler.email}"
+}
+
+resource "google_cloud_scheduler_job" "servicing_sweep" {
+  name        = "homestead-mortgages-${var.environment}-servicing-sweep"
+  description = "One pass of every scheduled job in the servicing runtime."
+  schedule    = var.servicing_sweep_schedule
+  time_zone   = "America/New_York"
+  region      = var.region
+  # Scheduler answers the moment the job STARTS; the deadline only bounds
+  # that call.
+  attempt_deadline = "180s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.servicing_sweep.name}:run"
+
+    oauth_token {
+      service_account_email = google_service_account.scheduler.email
+    }
+  }
+
+  depends_on = [google_cloud_run_v2_job_iam_member.scheduler_runs_servicing_sweep]
+}
+
+# As with the APOR fetch: a sweep that exits non-zero is visible only here.
+resource "google_monitoring_alert_policy" "servicing_sweep_failed" {
+  count        = var.alert_email == "" ? 0 : 1
+  display_name = "Servicing sweep failed (${var.environment})"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "a scheduled sweep of the servicing runtime exited non-zero"
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_job\" AND resource.labels.job_name = \"${google_cloud_run_v2_job.servicing_sweep.name}\" AND metric.type = \"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result = \"failed\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      aggregations {
+        alignment_period   = "3600s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.alerts[0].id]
+
+  documentation {
+    content = "A scheduled sweep of the servicing runtime (apps/servicing) failed. A firing that found the lease held exits 0 as skipped, so this is a pass that threw: read the job's logs for the sweep_runs row it left as failed. Until a sweep completes, no timer breaches, no offer goes out, and the partner-book reviews our API reads through the servicing port stop moving."
   }
 }

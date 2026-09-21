@@ -17,7 +17,16 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { TRANSITION_REASONS } from "@hm/shared";
+import { LOAN_TRANSITION_REASONS, TRANSITION_REASONS } from "@hm/shared";
+
+/**
+ * Two ledgers, two closed sets, one scan. An application's move and a loan's
+ * move are grouped by different reports, and `loan-machine.ts` keeps the
+ * loan's list beside its machine for the same reason `application-machine.ts`
+ * keeps the other; a reason written anywhere in the API has to be in one of
+ * them.
+ */
+const KNOWN: readonly string[] = [...TRANSITION_REASONS, ...LOAN_TRANSITION_REASONS];
 
 const src = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -48,7 +57,7 @@ function reasonsWritten(): string[] {
 describe("the reasons the API writes", () => {
   it("are all in the closed set", () => {
     for (const reason of reasonsWritten()) {
-      expect(TRANSITION_REASONS, reason).toContain(reason);
+      expect(KNOWN, reason).toContain(reason);
     }
   });
 

@@ -48,6 +48,13 @@
 # ingress plus Direct VPC egress on the API and the sweep, or an adapter that
 # passes IAP with `Proxy-Authorization`. Named here so nobody thinks IAP did it.
 #
+# Retiring a backend: remove it from this file and run a plain apply, or
+# `terraform state rm` it and delete it with gcloud. Never
+# `terraform destroy -target` it — Terraform takes the target HTTPS proxy
+# and the forwarding rule down with it as dependents, and every hostname
+# is dark until they are recreated. That cost three minutes on
+# 22 September 2026.
+#
 # The certificates provision only after DNS points each hostname at
 # `edge_ip`; until then each sits at PROVISIONING / FAILED_NOT_VISIBLE and
 # retries on its own. `dns_records` in outputs.tf is what to hand whoever

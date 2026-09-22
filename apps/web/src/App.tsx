@@ -43,6 +43,7 @@ import { LandingPage } from "./pages/LandingPage.js";
 import { PrivacyPage } from "./pages/PrivacyPage.js";
 import { BrandPage } from "./pages/BrandPage.js";
 import { HomePage } from "./pages/HomePage.js";
+import { LoanPage } from "./pages/LoanPage.js";
 import { PropertyLoanPage } from "./pages/PropertyLoanPage.js";
 import { IdentityPage } from "./pages/IdentityPage.js";
 import { IdentityReturnPage } from "./pages/IdentityReturnPage.js";
@@ -122,6 +123,12 @@ export function App() {
         <Route path="brand" element={<BrandPage />} />
         {/* A new phone: the same enrollment, from a session that has already presented a code. */}
         <Route path="second-factor" element={<SecondFactorPage mode="replace" />} />
+        {/*
+          A mortgage the person stands on, and its servicing record. Under the
+          frame like the home page, not under the file shell: it is a loan,
+          not an application, and it has no screens to step through.
+        */}
+        <Route path="loans/:loanId" element={<LoanPage />} />
         {/*
           The state gallery. A design surface rather than a feature: most of
           the states it renders have no column behind them yet, and the figures

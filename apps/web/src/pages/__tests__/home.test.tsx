@@ -26,6 +26,8 @@ import { describe, expect, it, vi } from "vitest";
 import { APPLICATION_STATES, TERMINAL, type ApplicationState } from "@hm/shared";
 import { HomePage } from "../HomePage.js";
 import type { FileRow, LoanFileResponse } from "../../lib/file.js";
+import type { LoanRow } from "../../lib/loan.js";
+import { SEE_THIS_MORTGAGE, YOUR_MORTGAGES } from "../../lib/loan-copy.js";
 import { NO_APPLICATION } from "../../lib/ledger.js";
 import { entryFor } from "../../lib/states.js";
 import { PERSONA_READ_ONLY } from "../../lib/auth.js";
@@ -143,6 +145,8 @@ async function home(
   options: {
     files?: readonly FileRow[];
     reads?: Record<string, LoanFileResponse>;
+    /** The mortgages the person stands on; none unless a case says otherwise. */
+    loans?: readonly LoanRow[];
     user?: { persona: unknown } | null;
     failed?: boolean;
   } = {},
@@ -168,6 +172,11 @@ async function home(
   for (const [id, response] of Object.entries(options.reads ?? {})) {
     client.setQueryData(["file", id], response);
   }
+  // Seeded even when a case says nothing about mortgages, and even when the
+  // files read is the one that failed: the page waits on this list as it
+  // waits on the files, and a case about files would otherwise render as
+  // still finding where the person stands.
+  client.setQueryData(["loans"], { loans: options.loans ?? [] });
 
   return decoded(
     renderToStaticMarkup(
@@ -446,5 +455,50 @@ describe("the other files, as rows", () => {
     });
     expect(markup).toContain(SAMPLE_BORROWERS);
     expect(markup).toContain("See this borrower's");
+  });
+});
+
+/** A mortgage a servicer's tape wrote, standing on this person. */
+const MORTGAGE: LoanRow = {
+  id: "50c48cdc-c20d-47a3-9c11-b2e5cbb9de37",
+  state: "imported_unclaimed",
+  servicerLoanNumber: "NL-100001",
+  servicer: {
+    slug: "northlight",
+    displayName: "Northlight Mortgage Servicing (sample partner)",
+    integrationDepth: "API",
+  },
+  noteRateBps: 725,
+  originalPrincipalCents: "45000000",
+  property: { line1: "1200 W Maple Ave", city: "Phoenix", state: "AZ", postalCode: "85013" },
+};
+
+describe("a mortgage on the home page", () => {
+  it("leads the page for a person with no application, and offers its own page", async () => {
+    const persona = { persona: { key: "grander_import", name: "Grander import" } };
+    const markup = await home({ files: [], loans: [MORTGAGE], user: persona });
+    expect(markup).toContain(
+      "Northlight Mortgage Servicing (sample partner) shared this mortgage with us",
+    );
+    expect(markup).toContain("1200 W Maple Ave, Phoenix, AZ");
+    expect(markup).toContain(entryFor("loan_imported_unclaimed")!.pill);
+    expect(markup).toContain(`/loans/${MORTGAGE.id}`);
+    expect(markup).toContain(SEE_THIS_MORTGAGE);
+    // The mortgage is the page: no pitch to start an application under it,
+    // and no read-only refusal either, because nothing here can be pressed.
+    expect(markup).not.toContain(START_LEAD);
+    expect(markup).not.toContain(START_NOW);
+    expect(markup).not.toContain(YOUR_MORTGAGES);
+    // No figure reaches the home page, for the reason the application card carries none.
+    expect(markup).not.toContain("$");
+  });
+
+  it("sits under a live application as a row, not a second card", async () => {
+    const markup = await home({ files: [at("in_underwriting")], loans: [MORTGAGE] });
+    expect(markup).toContain(YOUR_MORTGAGES);
+    expect(markup).toContain(SEE_THIS_MORTGAGE);
+    expect(markup).toContain(`/loans/${MORTGAGE.id}`);
+    // One h1: the application's. The mortgage row carries no heading of its own.
+    expect(markup.match(/<h1/g)).toHaveLength(1);
   });
 });

@@ -1712,8 +1712,11 @@ sign-in on NL-100001, by folding the tape's provisional party into the
 persona's claimed one through `mergePartyInto` — the merge the co-borrower
 claim uses, and the one the loan claim will. The loan stays
 `imported_unclaimed` and unmonitored, because the claim's transition is not
-written; the tester sees `GET /api/loans` and this route, and no
-application. On staging the servicing platform has the same twelve loans
+written; the tester sees the mortgage leading the home page and `/loans/:id`
+as its page — the tape's figures under the servicer's name and date, and
+under ours the verdict in words, the offer as figures and what a refinance
+would still need, with the engine's codes never rendered and the three
+answers that are not a record each said as what it is — and no application. On staging the servicing platform has the same twelve loans
 from its own seed, so the live half answers from there.
 
 ## The servicing app deploys beside the API

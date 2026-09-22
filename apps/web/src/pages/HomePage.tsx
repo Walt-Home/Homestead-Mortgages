@@ -26,12 +26,15 @@
 
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { MortgageLead, MortgageRow } from "../components/Mortgage.js";
 import { StandingCard } from "../components/StandingCard.js";
 import { StandingRow } from "../components/StandingRow.js";
 import { api } from "../lib/api.js";
 import { PERSONA_READ_ONLY, useAuth } from "../lib/auth.js";
 import { useLoanFile, type FileRow } from "../lib/file.js";
 import { NEW_APPLICATION, canStart, rankFiles, standingFor } from "../lib/home.js";
+import { useLoans } from "../lib/loan.js";
+import { YOUR_MORTGAGES } from "../lib/loan-copy.js";
 import {
   CLOSED_FILES,
   FINDING_WHERE_YOU_STAND,
@@ -63,6 +66,11 @@ export function HomePage() {
     queryFn: () => api.get<{ files: FileRow[] }>("/files"),
   });
 
+  // The mortgages the person stands on. A second list rather than rows of the
+  // first, because a loan is not an application: it has no stage, no
+  // decision and no screen to resume, and the page below keeps the two apart.
+  const loans = useLoans();
+
   const ranked = rankFiles(list.data?.files ?? []);
   // Shares `["file", id]` with every file screen, so arriving from this card
   // does not fetch the file a second time.
@@ -77,7 +85,7 @@ export function HomePage() {
   // now — which is false in the instant before the fetch starts, and that is
   // an instant where this page would otherwise claim somebody has never
   // applied.
-  if (list.isPending) {
+  if (list.isPending || loans.isPending) {
     return (
       <div className={CONTAINER}>
         <p className="text-sm text-ink-faint">{FINDING_WHERE_YOU_STAND}</p>
@@ -93,13 +101,19 @@ export function HomePage() {
    * a sample borrower too: it refetches a GET, which is the one thing that
    * session is allowed to do.
    */
-  if (list.isError) {
+  if (list.isError || loans.isError) {
     return (
       <div className={CONTAINER}>
         <div className="super-card">
           <h1 className="font-display text-2xl text-ink sm:text-3xl">{UNREAD_LEAD}</h1>
           <p className="mt-3 max-w-measure-prose text-base text-ink-soft">{UNREAD_BODY}</p>
-          <button className="super-btn super-btn-outline mt-6" onClick={() => void list.refetch()}>
+          <button
+            className="super-btn super-btn-outline mt-6"
+            onClick={() => {
+              void list.refetch();
+              void loans.refetch();
+            }}
+          >
             {TRY_AGAIN}
           </button>
         </div>
@@ -108,6 +122,12 @@ export function HomePage() {
   }
 
   const { primary, live, closed, samples, labels } = ranked;
+  const mortgages = loans.data?.loans ?? [];
+  // A mortgage leads the page only when there is no application to: a live
+  // credit request is the thing with a next step, and the mortgage under it
+  // is a row. With no application at all, the mortgage IS the page.
+  const [leadMortgage, ...otherMortgages] = primary ? [] : mortgages;
+  const rowMortgages = primary ? mortgages : otherMortgages;
   // One file renders as one card and nothing else: no name above it, no
   // headings, no list of one. The name earns its place only once there is
   // something to tell this file apart FROM.
@@ -115,15 +135,27 @@ export function HomePage() {
 
   return (
     <div className={CONTAINER}>
-      {primary ? (
+      {primary || leadMortgage ? (
         <>
-          <StandingCard
-            row={primary}
-            standing={standingFor({ row: primary, file, user })}
-            file={file}
-            user={user}
-            label={named ? labels[primary.id] : undefined}
-          />
+          {primary ? (
+            <StandingCard
+              row={primary}
+              standing={standingFor({ row: primary, file, user })}
+              file={file}
+              user={user}
+              label={named ? labels[primary.id] : undefined}
+            />
+          ) : (
+            leadMortgage && <MortgageLead loan={leadMortgage} />
+          )}
+
+          {rowMortgages.length > 0 && (
+            <Section title={YOUR_MORTGAGES}>
+              {rowMortgages.map((m) => (
+                <MortgageRow key={m.id} loan={m} />
+              ))}
+            </Section>
+          )}
 
           {live.length > 0 && (
             <Section title={OTHER_APPLICATIONS}>

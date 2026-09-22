@@ -91,17 +91,17 @@ configuration change rather than a migration, which is why no state names it.
 
 This is the part to be honest about.
 
-| Piece                                           | Status                                                        |
-| ----------------------------------------------- | ------------------------------------------------------------- |
-| `LoanState`, the enum and its migration         | Built                                                         |
-| `loans`, `loan_parties`, the cascade            | Built                                                         |
-| `loans_terminal_is_final`, the transition guard | Built                                                         |
-| `services/loan-transition.ts`                   | Built; the importer moves a loan a tape says ended            |
-| `services/loans.ts` constructor                 | Built; `services/partner-book.ts` is its first caller         |
-| A route that creates a loan                     | `POST /api/partner/book/imports`, opened by a partner key     |
-| The tape reader                                 | `packages/partner-book`, one profile, Doug's §33.1 ported     |
-| A loan's record, to its party                   | `GET /api/loans/:id/servicing`: the tape beside the live read |
-| The claim                                       | **Unbuilt** — a signed token, never an e-mail match           |
+| Piece                                           | Status                                                                             |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `LoanState`, the enum and its migration         | Built                                                                              |
+| `loans`, `loan_parties`, the cascade            | Built                                                                              |
+| `loans_terminal_is_final`, the transition guard | Built                                                                              |
+| `services/loan-transition.ts`                   | Built; the importer moves a loan a tape says ended                                 |
+| `services/loans.ts` constructor                 | Built; `services/partner-book.ts` is its first caller                              |
+| A route that creates a loan                     | `POST /api/partner/book/imports`, opened by a partner key                          |
+| The tape reader                                 | `packages/partner-book`, one profile, Doug's §33.1 ported                          |
+| A loan's record, to its party                   | `GET /api/loans` and `/api/loans/:id/servicing`; the web's `/loans/:id` renders it |
+| The claim                                       | **Unbuilt** — a signed token, never an e-mail match                                |
 
 Since 21 September 2026 a servicer's tape becomes rows: one
 `partner_book_imports` row per tape read, an `imported_unclaimed` loan on a
@@ -135,7 +135,9 @@ twelve-loan Northlight book: the persona seed loads it under its servicer at
 integration depth `API` and stands the `grander_import` sign-in on NL-100001
 by folding the tape's provisional party into the persona's claimed one — the
 merge the claim will use, minus the token — so a tester on staging can sign
-in as that row and read the loan and its live servicing record. In a
+in as that row, find the mortgage leading the home page, and open `/loans/:id`
+— the tape's figures under the servicer's name and date, the platform's
+verdict, offer and readiness under ours. In a
 development database, `npm run partner:book -- sample northlight` loads the
 same book with nobody standing on it.
 

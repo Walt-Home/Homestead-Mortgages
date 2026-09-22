@@ -112,7 +112,42 @@ export type LiveServicing =
   | { readonly status: "not_wired"; readonly integrationDepth: string }
   | { readonly status: "unavailable"; readonly reason: string };
 
+/**
+ * Our own review of the loan: what the ported engine concluded on its last
+ * run over the tape's newest observation and the sheet's rate. Its facts
+ * and offer are in the engine's own names, cents as strings.
+ */
+export interface LoanReviewWire {
+  readonly asOf: string;
+  readonly verdict: ReviewVerdict;
+  readonly reasons: readonly string[];
+  readonly reasonsInWords: readonly string[];
+  readonly facts: {
+    readonly note_rate_pct?: string;
+    readonly candidate_rate_pct?: string | null;
+    readonly watch_rate_pct?: string;
+    readonly npv_cents?: string | null;
+    readonly seven_year_delta_cents?: string | null;
+    readonly monthly_delta_cents?: string | null;
+  } & Record<string, unknown>;
+  readonly offer: {
+    readonly current_rate_pct: string;
+    readonly current_pi_cents: string;
+    readonly new_rate_pct: string;
+    readonly new_pi_cents: string;
+    readonly pi_delta_cents: string;
+    readonly rate_delta_bps: number;
+    readonly remaining_term_months: number;
+    readonly new_term_months: number;
+    readonly same_term_pi_cents: string;
+    readonly present_same_term_first: boolean;
+  } | null;
+  readonly candidateRatePct: string | null;
+  readonly recordedAt: string;
+}
+
 export interface ServicingResponse {
+  readonly review: LoanReviewWire | null;
   readonly loan: {
     readonly id: string;
     readonly state: string;

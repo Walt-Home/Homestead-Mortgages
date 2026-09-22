@@ -332,3 +332,14 @@ variable "servicing_sweep_schedule" {
   type        = string
   default     = "*/5 * * * *"
 }
+
+variable "loan_review_schedule" {
+  description = <<-EOT
+    When the daily refinance review runs, as a cron expression in
+    America/New_York. His 33.2 reviews at 07:00 ET, after his 20.1 run at
+    06:30; ours is one pass, so one time. A run reviews each monitored loan
+    once for the day and writes nothing the second time.
+  EOT
+  type        = string
+  default     = "0 7 * * *"
+}

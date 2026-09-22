@@ -32,6 +32,7 @@ import {
   ratePct,
   useLoanServicing,
   type LiveServicing,
+  type LoanReviewWire,
   type ServicingObservation,
 } from "../lib/loan.js";
 import {
@@ -50,10 +51,12 @@ import {
   NO_TAPE_YET,
   PAYMENT_NOW,
   PAYMENT_THEN,
+  PLATFORM_SAYS,
   RATE,
   RATE_NOW,
   RATE_THEN,
   READINESS,
+  SAME_TERM_PAYMENT,
   STANDING,
   UNREACHABLE,
   VERDICT,
@@ -69,7 +72,9 @@ import {
   readLiveAt,
   readinessItem,
   readinessStatus,
+  reviewedOn,
   standingWords,
+  watchRateLine,
 } from "../lib/loan-copy.js";
 import { FINDING_WHERE_YOU_STAND, TRY_AGAIN } from "../lib/home-copy.js";
 import { timelineDate } from "../lib/ledger.js";
@@ -120,7 +125,7 @@ export function LoanPage() {
     );
   }
 
-  const { loan, servicer, observed, live } = read.data;
+  const { loan, servicer, observed, live, review } = read.data;
   const name = servicer?.displayName ?? null;
   const entry = loanEntry(loan.state);
 
@@ -155,10 +160,78 @@ export function LoanPage() {
         )}
       </section>
 
+      {/*
+        Ours, when it exists: the ported engine's verdict over the tape's
+        newest observation and today's sheet. The platform's own reading
+        then sits under its own heading, never blended — two engines, two
+        dates — and stands in for ours until the first review has run.
+      */}
       <section className="mt-8">
         <h2 className="font-display text-base text-ink">{WATCHING}</h2>
-        <Watching live={live} servicer={name} onRetry={() => void read.refetch()} />
+        {review ? (
+          <OurReview review={review} />
+        ) : (
+          <Watching live={live} servicer={name} onRetry={() => void read.refetch()} />
+        )}
       </section>
+      {review && live.status !== "not_wired" && (
+        <section className="mt-8">
+          <h2 className="font-display text-base text-ink">{PLATFORM_SAYS}</h2>
+          <Watching live={live} servicer={name} onRetry={() => void read.refetch()} />
+        </section>
+      )}
+    </div>
+  );
+}
+
+/** Our review: the verdict in words, the engine's reasons in its words, and the figures a candidate carries. */
+function OurReview({ review }: { review: LoanReviewWire }) {
+  const words = VERDICT[review.verdict];
+  const offer = review.offer;
+  return (
+    <div className="mt-3">
+      <p className="text-lg text-ink">{words.lead}</p>
+      <p className="mt-2 max-w-measure-prose text-base text-ink-soft">{words.body}</p>
+      {review.reasonsInWords.length > 0 && (
+        <>
+          <p className="mt-4 text-sm text-ink-faint">{WHY}</p>
+          <ul className="mt-1 list-disc pl-5 text-sm text-ink-soft">
+            {review.reasonsInWords.map((w, i) => (
+              <li key={`${i}-${w}`}>{w}</li>
+            ))}
+          </ul>
+        </>
+      )}
+      {review.verdict === "watching" && review.facts.watch_rate_pct && (
+        <p className="mt-3 max-w-measure-prose text-sm text-ink-soft">
+          {watchRateLine(ratePct(review.facts.watch_rate_pct) ?? review.facts.watch_rate_pct)}
+        </p>
+      )}
+      {offer && (
+        <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-rule-soft pt-5 sm:grid-cols-3">
+          <Figure label={RATE_NOW} value={ratePct(offer.current_rate_pct)} />
+          <Figure
+            label={RATE_THEN}
+            value={ratePct(offer.new_rate_pct) && about(ratePct(offer.new_rate_pct)!)}
+          />
+          <Figure label={PAYMENT_NOW} value={dollars(offer.current_pi_cents)} />
+          <Figure
+            label={PAYMENT_THEN}
+            value={dollars(offer.new_pi_cents) && about(dollars(offer.new_pi_cents)!)}
+          />
+          <Figure
+            label={DIFFERENCE_EACH_MONTH}
+            value={dollars(offer.pi_delta_cents) && about(dollars(offer.pi_delta_cents)!)}
+          />
+          <Figure
+            label={SAME_TERM_PAYMENT}
+            value={dollars(offer.same_term_pi_cents) && about(dollars(offer.same_term_pi_cents)!)}
+          />
+        </dl>
+      )}
+      <p className="mt-3 text-xs text-ink-faint">
+        {reviewedOn(calendarDate(review.asOf) ?? review.asOf)}
+      </p>
     </div>
   );
 }

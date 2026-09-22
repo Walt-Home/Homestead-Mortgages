@@ -4,6 +4,7 @@
     { "path": "packages/shared" },
     { "path": "packages/kernel" },
     { "path": "packages/partner-book" },
+    { "path": "packages/refi-review" },
     { "path": "packages/db" },
     { "path": "packages/requirements" },
     { "path": "packages/underwriting" },

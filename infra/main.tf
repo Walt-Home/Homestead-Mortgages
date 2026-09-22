@@ -482,6 +482,106 @@ resource "google_cloud_run_v2_job" "apor_fetch" {
   }
 }
 
+# ── The daily refinance review ───────────────────────────────────────────────
+#
+# Every monitored loan, reviewed each morning by the ported engine
+# (packages/refi-review — Doug's 33.2 over his 20.1) against its newest
+# servicing observation and the rate the pricing port quotes: one
+# loan_reviews row per loan per day. The same image as the service with a
+# different entrypoint, the way the APOR fetch is; the deploy runs it once
+# after the seed so a fresh deployment has a verdict before anyone looks,
+# and a second run in a day writes nothing.
+resource "google_cloud_run_v2_job" "loan_review" {
+  name     = "homestead-mortgages-${var.environment}-loan-review"
+  location = var.region
+
+  template {
+    template {
+      service_account = var.service_account_email
+      max_retries     = 1
+      timeout         = "600s"
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.homestead-mortgages.connection_name]
+        }
+      }
+
+      containers {
+        image   = var.image
+        command = ["node"]
+        args    = ["apps/api/dist/scripts/review-loans.js"]
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "512Mi"
+          }
+        }
+
+        env {
+          name  = "NODE_ENV"
+          value = "production"
+        }
+
+        # The rate comes off the pricing port, which is the fixture's sheet
+        # until a vendor's engine is wired into the registry; every review
+        # row names the source it read, so nothing has to be told here.
+        env {
+          name = "DATABASE_URL"
+          value_source {
+            secret_key_ref {
+              secret  = var.database_url_secret
+              version = "latest"
+            }
+          }
+        }
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [template[0].template[0].containers[0].image]
+  }
+}
+
+resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_loan_review" {
+  project  = google_cloud_run_v2_job.loan_review.project
+  location = google_cloud_run_v2_job.loan_review.location
+  name     = google_cloud_run_v2_job.loan_review.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.scheduler.email}"
+}
+
+resource "google_cloud_scheduler_job" "loan_review" {
+  name        = "homestead-mortgages-${var.environment}-loan-review"
+  description = "Review every monitored loan against today's sheet."
+  schedule    = var.loan_review_schedule
+  time_zone   = "America/New_York"
+  region      = var.region
+
+  retry_config {
+    retry_count = 2
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.loan_review.name}:run"
+
+    oauth_token {
+      service_account_email = google_service_account.scheduler.email
+    }
+  }
+
+  depends_on = [google_cloud_run_v2_job_iam_member.scheduler_runs_loan_review]
+}
+
 resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_apor_fetch" {
   project  = google_cloud_run_v2_job.apor_fetch.project
   location = google_cloud_run_v2_job.apor_fetch.location

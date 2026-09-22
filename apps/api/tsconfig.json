@@ -16,7 +16,9 @@
       "@hm/du": ["../../packages/du/src/index.ts"],
       "@hm/du/test-support": ["../../packages/du/src/__tests__/support/ungated.ts"],
       "@hm/shared/decision-figures": ["../../packages/shared/src/decision-figures.ts"],
-      "@hm/partner-book": ["../../packages/partner-book/src/index.ts"]
+      "@hm/partner-book": ["../../packages/partner-book/src/index.ts"],
+      "@hm/refi-review": ["../../packages/refi-review/src/index.ts"],
+      "@hm/kernel/calendar": ["../../packages/kernel/src/kernel/calendar/index.ts"]
     }
   },
   "include": ["src"],
@@ -29,6 +31,9 @@
     },
     {
       "path": "../../packages/partner-book"
+    },
+    {
+      "path": "../../packages/refi-review"
     },
     {
       "path": "../../packages/requirements"

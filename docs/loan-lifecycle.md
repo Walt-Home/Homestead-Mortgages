@@ -126,6 +126,15 @@ it after signing in, the tape's party folds into theirs, the loan moves to
 `monitoring_only` as `claim_confirmed`, and the review turns on.
 `docs/decisions.md`, "A mortgage is claimed by a token the servicer delivers".
 
+And since 22 September the review is ours. Each morning at seven Eastern a
+job reads every monitored loan off its newest observation, asks the pricing
+port for one 30-year fixed on the candidate, and runs the ported engine —
+Doug's §33.2 over his §20.1, `packages/refi-review` — writing one
+`loan_reviews` row per loan per day, append-only, with the verdict, its
+reasons, its facts and, for a candidate, the benefit disclosure. The deploy
+runs it once after the seed. `docs/decisions.md`, "The daily review is ours
+now".
+
 Since the same day a loan answers for itself, to the party on it and to
 nobody else: `GET /api/loans/:id/servicing` is the newest observation — what
 the tape said on its as-of date — beside what the servicing platform has
@@ -134,7 +143,9 @@ servicer's `integrationDepth` is `API` or `SUBSERVICED`: the daily review's
 verdict and reasons, the offer if there is one, what a refinance still needs,
 the open clocks. The two halves stay apart on the wire, and the live half
 says whether it was not asked, asked and empty, or asked and unreachable.
-`docs/decisions.md`, "The servicing platform is read, never joined".
+Our own newest review rides beside them as a third field, and the page shows
+it first. `docs/decisions.md`, "The servicing platform is read, never
+joined".
 
 Nothing a borrower can do produces a loan, still. What renders one is the
 twelve-loan Northlight book: the persona seed loads it under its servicer at

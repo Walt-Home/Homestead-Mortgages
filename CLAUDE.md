@@ -37,6 +37,7 @@ packages/connectors        fourteen ports, fixture adapters, the authorization g
 packages/shared            domain types; LoanFile is the object everything reads
 packages/kernel            Doug's kernel, vendored: money, calendar, ledger, fsm, timers, events
 packages/partner-book      the tape reader: a servicer's book onto the partner-feed contract
+packages/refi-review       the daily refinance review: Doug's §33.2 over his §20.1, pure, over the kernel
 packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5
@@ -128,6 +129,16 @@ record by a test that replays his door. The first successful read writes
 the platform's id and name onto the row (`servicing_external_id`,
 `servicing_provider`, a pair by CHECK), so later reads go by id. See `docs/decisions.md`, "The
 servicing platform is read, never joined".
+
+**The daily review is ours since 22 September 2026.** `packages/refi-review`
+is Doug's §33.2 over his §20.1, ported pure over the kernel and held to his
+figures by its tests; `services/loan-review.ts` runs it each morning over
+every monitored loan's newest observation with one 30-year fixed quoted off
+the pricing port, and keeps one append-only `loan_reviews` row per loan per
+day. `npm run review:run` is the job by hand; the deploy runs it once after
+the seed and a Cloud Run job runs it at 07:00 Eastern. The servicing route
+carries the newest row as `review`, and the page shows ours first and the
+platform's after. See `docs/decisions.md`, "The daily review is ours now".
 
 ## Known stubs, for whoever wires the real thing
 

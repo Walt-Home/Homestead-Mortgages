@@ -27,6 +27,7 @@ import { prisma } from "@hm/db";
 import type { ServicingRecord } from "@hm/shared";
 import { asyncRoute } from "../middleware/error-handler.js";
 import { connectors } from "../services/connectors.js";
+import { latestLoanReview } from "../services/loan-review.js";
 import { toDomainLoanState } from "../services/loan-transition.js";
 import { assertLoanAccess } from "../services/loans.js";
 
@@ -96,7 +97,7 @@ loanRouter.get(
     const id = z.string().uuid().parse(req.params.id);
     const loan = await assertLoanAccess(prisma, id, req.user!.id);
 
-    const [servicer, observed] = await Promise.all([
+    const [servicer, observed, review] = await Promise.all([
       loan.servicerId
         ? prisma.servicer.findUnique({
             where: { id: loan.servicerId },
@@ -118,6 +119,10 @@ loanRouter.get(
           recordedAt: true,
         },
       }),
+      // Ours: what the ported engine concluded on its last run. Beside the
+      // platform's live read, never blended with it, for the same reason
+      // the tape's half is kept apart: two sources, two dates.
+      latestLoanReview(loan.id),
     ]);
 
     let live: Live;
@@ -178,6 +183,7 @@ loanRouter.get(
           },
         },
         servicer,
+        review,
         observed: observed
           ? {
               ...observed,

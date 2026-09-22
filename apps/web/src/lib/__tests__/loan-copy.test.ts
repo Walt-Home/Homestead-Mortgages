@@ -47,6 +47,8 @@ function everything(): { name: string; text: string }[] {
     { name: "MORTGAGE_CLAIM.body", text: copy.MORTGAGE_CLAIM.body(null, null, null) },
     { name: "MORTGAGE_CLAIM.yours", text: copy.MORTGAGE_CLAIM.yours },
     { name: "MORTGAGE_CLAIM.thisIsMine", text: copy.MORTGAGE_CLAIM.thisIsMine },
+    { name: "reviewedOn", text: copy.reviewedOn("September 22, 2026") },
+    { name: "watchRateLine", text: copy.watchRateLine("5.625%") },
   );
   return out;
 }

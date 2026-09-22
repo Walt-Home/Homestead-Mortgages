@@ -21,6 +21,7 @@ export default defineConfig({
       "@hm/shared/decision-figures": resolve(packages, "shared/src/decision-figures.ts"),
       "@hm/shared": resolve(packages, "shared/src/index.ts"),
       "@hm/partner-book": resolve(packages, "partner-book/src/index.ts"),
+      "@hm/refi-review": resolve(packages, "refi-review/src/index.ts"),
       // The kernel's subpaths, at his source; vite reads his `.ts` specifiers as written.
       "@hm/kernel/money": resolve(packages, "kernel/src/kernel/money/index.ts"),
       "@hm/kernel/calendar": resolve(packages, "kernel/src/kernel/calendar/index.ts"),

@@ -231,6 +231,7 @@ apps/web ──┬──► @hm/brand          (tokens, Tailwind preset, .super-
            └──► @hm/shared         ⚠ declared, aliased, imported by nothing
 
 @hm/partner-book ─► @hm/kernel     Doug's kernel, vendored; the tape reader is its first consumer
+@hm/refi-review ──► @hm/kernel     the daily review, pure; apps/api feeds it and keeps what it says
 apps/servicing ─────► (nothing)      Doug's whole runtime, vendored; the `servicing` port reads it over HTTP, it imports nothing of ours
 ```
 
@@ -238,8 +239,9 @@ apps/servicing ─────► (nothing)      Doug's whole runtime, vendored;
 with `apps/api` also importing `shared` directly. `@hm/shared`, `@hm/db`,
 `@hm/brand` and `@hm/kernel` are leaves.
 
-**Only `@hm/underwriting` is pure** — it is handed `now` and `casefileId`, so a
-run is reproducible from its inputs. ⚠ `@hm/requirements` touches no database and
+**`@hm/underwriting` and `@hm/refi-review` are the pure ones** — each is handed
+its day (`now` and `casefileId`; `as_of` and the rate), so a run is
+reproducible from its inputs. ⚠ `@hm/requirements` touches no database and
 makes no request, but it _does_ read the wall clock in four places
 (`conditions.ts` ×3, `satisfaction.ts` ×1), so an assessment is not reproducible
 from its inputs alone. `@hm/connectors` makes real HTTPS calls to Plaid, Stripe
@@ -256,6 +258,7 @@ and Google Places.
 | `packages/db`           | Prisma schema and migrations. Several guarantees are triggers and CHECK constraints, not application code                                                                                                                                                                                                                                                                                                                                    |
 | `packages/kernel`       | Doug's servicing kernel, vendored byte for byte from doug-ludlow/Supermortgage at the commit its `VENDORED_FROM` names: bigint-cents money and a scale-30 Decimal, `PlainDate` with six named day-count calendars, a double-entry ledger that refuses an unbalanced set, a declarative state machine, the timer registry and engine over his 2,097-row spec, and an event store. Imports only Node built-ins. Consumed by `@hm/partner-book` |
 | `packages/partner-book` | The tape reader: Doug's §33.1 profile and parsers ported onto the kernel, his xlsx reader vendored beside them, and a derivation onto the partner-feed contract in `@hm/shared/portfolio`                                                                                                                                                                                                                                                    |
+| `packages/refi-review`  | The daily refinance review: Doug's §33.2 over his §20.1 trigger rule, ported pure over the kernel's money and calendar and held to his figures; a tape-described loan and a rate in, a verdict with its reasons, facts and benefit disclosure out. Consumed by `apps/api`                                                                                                                                                                    |
 | `apps/servicing`        | Doug's servicing platform, vendored whole at the commit its `VENDORED_FROM` names and run as he runs it on a database of its own: the kernel, the command bus, 36 domain sections, the hosted API, the sweep and the ops console. A testing ground and a reference; every vendor in it is a FAKE. Nothing of ours imports it and it imports nothing of ours                                                                                  |
 | `packages/brand`        | Supermortgage design tokens. `tokens.mjs` is the source of truth and `tokens.css` is generated from it; `base.css`, `components.css`, `scene.css` and the Tailwind preset are hand-written and read the tokens rather than being generated                                                                                                                                                                                                   |
 

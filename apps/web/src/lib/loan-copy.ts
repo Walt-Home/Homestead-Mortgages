@@ -129,6 +129,14 @@ export const VERDICT: Readonly<
   },
 };
 
+/** The platform's own reading, shown under ours once ours exists. */
+export const PLATFORM_SAYS = "What the servicing platform says";
+export const reviewedOn = (day: string) => `Reviewed ${day}`;
+/** For a loan we are watching: the sheet rate it would take. */
+export const watchRateLine = (rate: string) =>
+  `For this to be worth a look, the rate on the sheet would need to reach ${rate}.`;
+export const SAME_TERM_PAYMENT = "Keeping your remaining term instead";
+
 export const WHY = "Why";
 export const checkedOn = (day: string) => `Checked ${day}`;
 export const readLiveAt = (when: string) => `Read from the servicing platform ${when}`;

@@ -1814,6 +1814,8 @@ model ServicingObservation {
 
   recordedAt DateTime @default(now()) @map("recorded_at")
 
+  reviews LoanReview[]
+
   @@unique([importId, loanId], map: "servicing_observations_one_per_import")
   @@index([loanId, asOf], map: "servicing_observations_loan_as_of")
   @@map("servicing_observations")
@@ -2013,6 +2015,8 @@ model Loan {
   /// renames — folding a rename of somebody else's index into an unrelated
   /// migration.
   claims LoanClaim[]
+
+  reviews LoanReview[]
 
   @@unique([servicerId, servicerLoanNumber], map: "loans_one_per_servicer_number")
   @@index([status, statusEnteredAt], map: "loans_status_entered")
@@ -3303,4 +3307,45 @@ model LoanClaim {
 
   @@index([loanId], map: "loan_claims_loan")
   @@map("loan_claims")
+}
+
+/// The daily refinance review's verdict for one monitored loan on one day:
+/// what the ported engine (`@hm/refi-review`) concluded from the newest
+/// observation and the rate the pricing port quoted. Append-only, like the
+/// observation it read — a day's verdict is a fact about that day, and the
+/// next day writes the next row. `facts` is the engine's inputs and outputs
+/// as it saw them, `offer` the benefit disclosure for a candidate, both in
+/// the engine's own names.
+model LoanReview {
+  id     String @id @default(uuid()) @db.Uuid
+  loanId String @map("loan_id") @db.Uuid
+  loan   Loan   @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  asOf DateTime @map("as_of") @db.Date
+
+  observationId String?               @map("observation_id") @db.Uuid
+  observation   ServicingObservation? @relation(fields: [observationId], references: [id], onDelete: SetNull)
+
+  verdict          ReviewVerdict
+  reasons          Json
+  facts            Json
+  offer            Json?
+  /// The candidate rate the pricing port answered, on the eighth grid; null when it had none.
+  candidateRatePct Decimal?      @map("candidate_rate_pct") @db.Decimal(6, 3)
+  rateSource       String?       @map("rate_source")
+  ruleSetVersion   String        @map("rule_set_version")
+  explanation      String
+
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  @@unique([loanId, asOf], map: "loan_reviews_one_per_loan_day")
+  @@index([asOf], map: "loan_reviews_as_of")
+  @@map("loan_reviews")
+}
+
+enum ReviewVerdict {
+  CANDIDATE
+  WATCHING
+  NOT_NOW
+  EXCLUDED
 }

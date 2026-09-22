@@ -17,9 +17,12 @@ import { LoanPage } from "../LoanPage.js";
 import { ApiError } from "../../lib/api.js";
 import type { LiveServicing, ServicingRecordWire, ServicingResponse } from "../../lib/loan.js";
 import { FINDING_WHERE_YOU_STAND, TRY_AGAIN } from "../../lib/home-copy.js";
+import type { LoanReviewWire } from "../../lib/loan.js";
 import {
   NOT_HELD,
   NOT_REVIEWED_YET,
+  PLATFORM_SAYS,
+  SAME_TERM_PAYMENT,
   NOT_YOUR_MORTGAGE_LEAD,
   NO_TAPE_YET,
   READINESS,
@@ -27,6 +30,8 @@ import {
   VERDICT,
   WATCHING,
   notWired,
+  reviewedOn,
+  watchRateLine,
 } from "../../lib/loan-copy.js";
 import { entryFor } from "../../lib/states.js";
 
@@ -71,6 +76,7 @@ const RECORD: ServicingRecordWire = {
 
 function response(over: Partial<ServicingResponse> = {}): ServicingResponse {
   return {
+    review: null,
     loan: {
       id: ID,
       state: "imported_unclaimed",
@@ -233,5 +239,83 @@ describe("the mortgage page", () => {
     const markup = await page({ failed: new Error("network") });
     expect(markup).toContain(TRY_AGAIN);
     expect(markup).not.toContain(NOT_YOUR_MORTGAGE_LEAD);
+  });
+});
+
+/** Our own review of loan 1, as the API hands it out after the first run against the fixture's sheet. */
+const OUR_REVIEW: LoanReviewWire = {
+  asOf: "2026-09-22",
+  verdict: "candidate",
+  reasons: ["rate_delta", "npv_positive", "seven_year_delta_positive", "prescreen", "state_rule"],
+  reasonsInWords: [
+    "the rate reduction clears the program's floor",
+    "the savings over the holding period are positive",
+  ],
+  facts: { note_rate_pct: "7.250", candidate_rate_pct: "6.250" },
+  offer: {
+    current_rate_pct: "7.250",
+    current_pi_cents: "306979",
+    new_rate_pct: "6.250",
+    new_pi_cents: "275832",
+    pi_delta_cents: "31147",
+    rate_delta_bps: 100,
+    remaining_term_months: 337,
+    new_term_months: 360,
+    same_term_pi_cents: "281900",
+    present_same_term_first: false,
+  },
+  candidateRatePct: "6.250",
+  recordedAt: "2026-09-22T11:00:00.000Z",
+};
+
+describe("our own review on the mortgage page", () => {
+  it("leads with our verdict and figures, and puts the platform's reading under its own heading", async () => {
+    const markup = await page({ read: response({ review: OUR_REVIEW }) });
+    expect(markup).toContain(VERDICT.candidate.lead);
+    expect(markup).toContain("the savings over the holding period are positive");
+    expect(markup).toContain("about 6.25%");
+    expect(markup).toContain("about $2,758");
+    expect(markup).toContain("about $311");
+    expect(markup).toContain(SAME_TERM_PAYMENT);
+    expect(markup).toContain(reviewedOn("September 22, 2026"));
+    // The platform's own reading is still on the page, under its own heading, unblended.
+    expect(markup).toContain(PLATFORM_SAYS);
+    expect(markup).toContain("the rate reduction clears the program's floor");
+    expect(markup).toContain("Open until October 21, 2026");
+    // Nothing the engine is written in.
+    for (const word of [
+      "rate_delta",
+      "npv_positive",
+      "fixture-pricing",
+      "CONF-30-FIXED",
+      "candidate_rate_pct",
+    ]) {
+      expect(markup, word).not.toContain(word);
+    }
+  });
+
+  it("says what rate it would take when we are watching, and shows no offer", async () => {
+    const watching: LoanReviewWire = {
+      ...OUR_REVIEW,
+      verdict: "watching",
+      reasons: ["rate_delta_bps -37.5 < 25"],
+      reasonsInWords: ["the rate reduction is under the program's floor"],
+      facts: { note_rate_pct: "5.875", candidate_rate_pct: "6.250", watch_rate_pct: "5.625" },
+      offer: null,
+    };
+    const markup = await page({
+      read: response({ review: watching, live: { status: "not_held" } }),
+    });
+    expect(markup).toContain(VERDICT.watching.lead);
+    expect(markup).toContain(watchRateLine("5.625%"));
+    expect(markup).not.toContain(SAME_TERM_PAYMENT);
+    expect(markup).toContain(PLATFORM_SAYS);
+    expect(markup).toContain(NOT_HELD);
+  });
+
+  it("keeps the platform's reading in the first section until our first review exists", async () => {
+    const markup = await page({ read: response() });
+    expect(markup).not.toContain(PLATFORM_SAYS);
+    expect(markup).toContain(VERDICT.candidate.lead);
   });
 });

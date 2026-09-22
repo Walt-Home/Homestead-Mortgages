@@ -1572,9 +1572,9 @@ places where this deliberately differs from his:
   year; a partner fact is re-asserted only when the value changed, compared
   with its keys sorted, because jsonb keeps its own order.
 
-What is not built: the daily review the observations exist to feed, and a
-second tape profile. The claim is built; see "A mortgage is claimed by a
-token the servicer delivers". `npm run partner:book -- sample northlight` loads the
+What is not built: a second tape profile. The claim is built, and so is the
+daily review the observations exist to feed; see "A mortgage is claimed by a
+token the servicer delivers" and "The daily review is ours now". `npm run partner:book -- sample northlight` loads the
 twelve-loan sample book into a development database, through the same
 service the key reaches.
 
@@ -1766,18 +1766,20 @@ What it does not do: write anything on his side, or reach a loan his platform se
 the `serviced` relationship is recognized and untested, because nothing
 boarded is his and ours at once yet.
 
-How it is seen, until the claim exists: the persona seed loads the sample
-book under its servicer at depth `API` and stands the `grander_import`
-sign-in on NL-100001, by folding the tape's provisional party into the
-persona's claimed one through `mergePartyInto` — the merge the co-borrower
-claim uses, and the one the loan claim will. The loan stays
-`imported_unclaimed` and unmonitored, because the claim's transition is not
-written; the tester sees the mortgage leading the home page and `/loans/:id`
-as its page — the tape's figures under the servicer's name and date, and
-under ours the verdict in words, the offer as figures and what a refinance
-would still need, with the engine's codes never rendered and the three
-answers that are not a record each said as what it is — and no application. On staging the servicing platform has the same twelve loans
-from its own seed, so the live half answers from there.
+How it is seen: the persona seed loads the sample book under its servicer
+at depth `API` and walks the `grander_import` sign-in through the claim on
+NL-100001 — a token minted as the partner, taken as the sign-in — so the
+loan stands at `monitoring_only` with its review on. The tester sees the
+mortgage leading the home page and `/loans/:id` as its page: the tape's
+figures under the servicer's name and date; under "What we're watching" our
+own newest review first, when there is one, and the platform's verdict after
+it under its own heading — the verdict in words, the offer as figures and
+what a refinance would still need, with the engine's codes never rendered
+and the three answers that are not a record each said as what it is — and
+no application. On staging the servicing platform has the same twelve loans
+from its own seed, so the live half answers from there, and the route
+carries our review as `review` beside `observed` and `live`. See "The daily
+review is ours now".
 
 ## The servicing app deploys beside the API
 
@@ -1856,6 +1858,79 @@ new resources: the identity, its grants and the servicing database before the fi
 deploy; the sweep job and its schedule after it, because a Cloud Run job
 needs an image that exists. The service itself is deployed by the workflow
 and described in Terraform, the same standing the API's service has.
+
+## The daily review is ours now
+
+Since 22 September 2026 the review the observations exist to feed runs on
+our side, over our rows, in our project. `packages/refi-review` is Doug's
+§33.2 — the daily pass over a partner's book — over the refinance trigger
+rule his §20.1 gives it, ported as a pure module on the vendored kernel's
+money and calendar: a loan as the tape describes it and a context — the day,
+the rate, the program — in; a verdict with its reasons, its facts and, for a
+candidate, the benefit disclosure out. `services/loan-review.ts` feeds it
+every loan whose review is on and keeps what it says as one `loan_reviews`
+row per loan per day. A Cloud Run job runs it at 07:00 Eastern from the
+API's own image, the deploy runs it once after the seed so a fresh
+deployment has a verdict before anyone looks, and `npm run review:run` is
+the same thing by hand. The page shows it first.
+
+- **Held to his numbers, not to his code.** The port reproduces his worked
+  example to the cent — the payment, the scheduled balance, the per diem,
+  the payoff, the prepaid interest, the seven-year NPV — and, given the same
+  rate, his twelve verdicts on the sample book reason for reason, including
+  the loan his run priced and found not worth it. The tests carry his
+  figures as literals, so a port that drifts from them fails by name.
+- **The rate is the one thing that differs, and every row says so.** His
+  §20.4 solves the candidate's rate off a sheet's price stack against the
+  third-party costs; ours asks the pricing port for one 30-year fixed on
+  the candidate — the same unguarded call screen 1 makes, without a person
+  — and takes the note rate as the pass-through rate with the borrower's
+  costs at zero. It is quoted on the sheet's own lock column, because the
+  column is the sheet's property and not the candidate's. A sheet that
+  answers a stack rather than one rate is "not priced" and the loan
+  watches, the way his engine says `not_priceable`; nothing picks by array
+  order. Until a vendor's engine is wired into the registry the rate is the
+  fixture's, and `rate_source` names the sheet on every row, so a verdict
+  off the fixture can never be mistaken for one off a market.
+- **Gates that read nothing we hold are open, and named.** His engine reads
+  recapture facts from §25.1 and delivery facts from §21 and §30.2 before it
+  fires; we hold neither, so the engine takes them as "not held" and those
+  gates pass. They and the program's exceptions are fields on the context,
+  so the day either exists it is an input and not a rewrite. The two state
+  rules he ships — Massachusetts's net-benefit test and the
+  borrower-interest floor — are ported as they stand.
+- **One row per loan per day, kept as written.** `loan_reviews` is unique
+  on the loan and the day, refuses an `UPDATE` by trigger like every other
+  record here, and an offer belongs to a candidate by CHECK. A second run in
+  a day — the scheduled one after the deploy's — writes nothing and says
+  so. `next_review_due_at` moves to the next morning, which is what the
+  review's own index was shaped for.
+- **Only monitored loans, off the newest observation.** An unclaimed loan is
+  not looked at, because `loans_unclaimed_is_not_monitored` says nothing
+  about it is; the claim turns the review on, and that is the "monitored"
+  the analysis said was still to be defined. A loan the tape cannot
+  describe — no balance, no payment, no rate, no dates — is skipped with the
+  reason, reported, and never guessed at.
+- **The reasons are his words, and the codes never render.** The engine's
+  `REASON_WORDS` carries his phrase for each code; the route hands both out
+  and the page reads only the words.
+- **Ours leads on the page, and his still shows.** Under "What we're
+  watching" our review is first: the verdict in words, the reasons, the
+  offer as figures. The platform's verdict follows under its own heading
+  when the servicer is wired that deep. The two are the same engine over
+  the same tape with different rates under them, and showing both is the
+  check on the port: when they disagree, the rate is why.
+- **Lawful for the reason the loan model gave.** A rate comparison against a
+  published sheet over our own servicing data is not a consumer report. The
+  row the engine sees carries no name, no address and no date of birth, and
+  nothing person-keyed is read on the way to a verdict.
+
+What is not built: his §20.4 rate solve; the recapture and delivery gates;
+the analyst turn and the offer's delivery, which on his side follow a
+candidate and here end at the row; a page over the day's candidates for the
+servicer; an alert when the morning run fails. A monitored loan whose
+servicer's platform is also reviewing it gets two verdicts a day, and that
+stays true until one of them is turned off on purpose.
 
 ## Tests run against a real Postgres
 

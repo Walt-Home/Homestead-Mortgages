@@ -10,6 +10,7 @@ COPY turbo.json tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/kernel/package.json packages/kernel/
 COPY packages/partner-book/package.json packages/partner-book/
+COPY packages/refi-review/package.json packages/refi-review/
 COPY packages/requirements/package.json packages/requirements/
 COPY packages/connectors/package.json packages/connectors/
 COPY packages/underwriting/package.json packages/underwriting/

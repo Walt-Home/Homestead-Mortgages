@@ -75,7 +75,7 @@ jobs:
         run: npm run brand:verify
 
       - name: TypeScript
-        run: npx tsc -b packages/shared packages/kernel packages/partner-book packages/requirements packages/connectors packages/underwriting packages/du-schema packages/du packages/db apps/api apps/web
+        run: npx tsc -b packages/shared packages/kernel packages/partner-book packages/refi-review packages/requirements packages/connectors packages/underwriting packages/du-schema packages/du packages/db apps/api apps/web
 
       # There was no eslint config in this repo until now — the dependencies
       # were installed and every workspace's `lint` script called eslint, but
@@ -518,6 +518,24 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
 
+      # The daily refinance review, once, after the seed: every monitored loan
+      # gets a verdict from the ported engine before anyone looks at staging,
+      # and a second run today — the scheduled one — writes nothing. A loan
+      # the tape cannot describe is reported and skipped, not a failure.
+      - name: Review the monitored loans
+        run: |
+          set +e
+          OUT=$(docker run --rm --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            "$IMAGE" node apps/api/dist/scripts/review-loans.js 2>&1)
+          code=$?
+          set -e
+          echo "$OUT"
+          test "$code" -eq 0
+          grep -qE '^reviewed [0-9]+ of [0-9]+ monitored loans' <<< "$OUT"
+        env:
+          DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
+
       # Public, deliberately.
       #
       # The org-wide Domain Restricted Sharing constraint
@@ -656,6 +674,23 @@ jobs:
             gcloud run jobs update "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$IMAGE" --quiet
           elif grep -qiE "NOT_FOUND|not found|does not exist|cannot find" <<< "$ERR"; then
             echo "::warning::Cloud Run job $JOB does not exist yet; apply infra/ to schedule the APOR fetch. The deploy-time fetch above still ran."
+          else
+            echo "::error::could not describe Cloud Run job $JOB: $ERR"
+            exit 1
+          fi
+
+      # The same absence-versus-error split the APOR job's step makes.
+      - name: Point the scheduled loan review at this image
+        run: |
+          JOB=${{ env.SERVICE }}-loan-review
+          set +e
+          ERR=$(gcloud run jobs describe "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --format="value(name)" 2>&1 >/dev/null)
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            gcloud run jobs update "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$IMAGE" --quiet
+          elif grep -qiE "NOT_FOUND|not found|does not exist|cannot find" <<< "$ERR"; then
+            echo "::warning::Cloud Run job $JOB does not exist yet; apply infra/ to schedule the daily review. The deploy-time review above still ran."
           else
             echo "::error::could not describe Cloud Run job $JOB: $ERR"
             exit 1

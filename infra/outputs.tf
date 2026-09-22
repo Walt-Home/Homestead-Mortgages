@@ -29,3 +29,7 @@ output "servicing_service_account" {
 output "servicing_sweep_job" {
   value = google_cloud_run_v2_job.servicing_sweep.name
 }
+
+output "loan_review_job" {
+  value = google_cloud_run_v2_job.loan_review.name
+}

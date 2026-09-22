@@ -37,6 +37,12 @@ beforeAll(async () => {
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       seen.push({ method: req.method ?? "", url: req.url ?? "", headers: req.headers, body });
+      if (req.url === "/ops/api/staff/invite") {
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("x-acted-as", String(req.headers["x-staff-role"] ?? "none"));
+        res.end(JSON.stringify({ role_seen: req.headers["x-staff-role"] ?? null }));
+        return;
+      }
       if (req.url?.startsWith("/ops/api/auth/signin")) {
         res.setHeader("Set-Cookie", "sm_staff=abc; Path=/; Secure; HttpOnly; SameSite=Strict");
         res.setHeader("Content-Type", "application/json");
@@ -144,6 +150,19 @@ describe("the servicing hostname", () => {
     const list = await call("/console/api/staff?x=1", { headers: { cookie: "sm_staff=abc" } });
     expect(list.status).toBe(200);
     expect(JSON.parse(list.body)).toEqual({ echo: "/ops/api/staff?x=1", cookie: "sm_staff=abc" });
+
+    // The acting role crosses on every call, and the role he acted as comes back.
+    const acted = await call("/console/api/staff/invite", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-staff-role": "admin",
+        cookie: "sm_staff=abc",
+      },
+      body: "{}",
+    });
+    expect(JSON.parse(acted.body)).toEqual({ role_seen: "admin" });
+    expect(acted.headers["x-acted-as"]).toBe("admin");
 
     const doc = await call("/console/documents/d1/content");
     expect(JSON.parse(doc.body).echo).toBe("/api/documents/d1/content");

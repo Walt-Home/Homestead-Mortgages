@@ -55,6 +55,9 @@ const FORWARDED_REQUEST_HEADERS = [
   "range",
   "x-actor-id",
   "x-actor-role",
+  // The role the console acts as, on every call; without it his API runs
+  // each act as the least role the session holds and refuses the rest.
+  "x-staff-role",
 ] as const;
 
 /** The response headers that cross back. `set-cookie` is handled apart. */
@@ -65,6 +68,9 @@ const FORWARDED_RESPONSE_HEADERS = [
   "etag",
   "location",
   "retry-after",
+  // The role his API actually ran under, which the console shows when it
+  // differs from the one asked for.
+  "x-acted-as",
 ] as const;
 
 /** The paths of his that a browser on the branded host may reach. */

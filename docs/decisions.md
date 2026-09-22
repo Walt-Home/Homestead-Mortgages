@@ -1932,6 +1932,75 @@ servicer; an alert when the morning run fails. A monitored loan whose
 servicer's platform is also reviewing it gets two verdicts a day, and that
 stays true until one of them is turned off on purpose.
 
+## Two hostnames, one front door
+
+Since 22 September 2026 the two deployments have names. `supermortgage.com`
+and `www.supermortgage.com` are the consumer app; `servicing.supermortgage.com`
+is Doug's runtime. Joe chose them the same day. Both stand behind one global
+external Application Load Balancer in our project, `infra/edge.tf`: a
+serverless network endpoint group per Cloud Run service, a host rule per
+name, one Google-managed certificate per hostname, port 80 answering only
+with a redirect to HTTPS. On the servicing host `/` redirects to `/ops`,
+because his runtime answers `/` with a JSON 404 and nothing in his tree is
+edited here. The address is `edge_ip` in the outputs, and `dns_records` is
+the three A records to set. DNS is at GoDaddy and the login is Doug's.
+
+- **The servicing hostname is behind Identity-Aware Proxy.** Doug, Drew and
+  Joe pass it as their trywalt.ai accounts (`servicing_console_members`),
+  and nobody else does; a person who is not on the list never sees his
+  console's sign-in page. IAP is switched on by one gcloud line with
+  Google's managed OAuth client, not by Terraform, because the only way
+  this provider can describe IAP is with an OAuth client made through the
+  IAP OAuth Admin API, which Google shut down in March 2026. Terraform holds
+  the members and ignores the switch.
+- **Behind IAP is his sign-in, and it is not Google's.** His console signs
+  staff in by an e-mailed six-digit code, then a password of twelve or
+  more characters, then a session; passkeys are an alternative second
+  factor. Every mail vendor in the image is a FAKE, so the code is not
+  delivered: outside production his runtime echoes it in the response and
+  the sign-in page prints it — _"FAKE e-mail (non-production): the code is
+  …"_. That is his design for a testing ground, and it means that on this
+  deployment the code proves nothing; IAP is what proves who is asking.
+- **The first admin is his bootstrap's, and only the first.** His
+  `staff-bootstrap` creates a staff row only while the table is empty, and
+  after that changes nothing but that one row's roles, upward, outside
+  production. The deploy runs it after his seed for `SERVICING_FIRST_ADMIN`
+  (Joe, unless the variable says otherwise) with all four staff roles,
+  which is his own nonprod convention. Doug and Drew are invited from the
+  console's Staff tile by that admin. The deploy cannot invite them: his
+  header-actor path, the one thing that opens the console's API without a
+  session, carries the operator roles and never `admin`.
+- **The consumer app has no admin.** Its sign-in is Google plus an
+  authenticator, open to any Google account on staging, and there is no
+  role behind it; the three sign in as anyone does. "Admin" on the
+  consumer side is a thing to design, not a switch to flip.
+- **What the front door does not close.** Both services keep ingress `all`,
+  because the API reaches his door and the deploy probes both over the
+  run.app URLs without VPC egress. A person who knows the servicing run.app
+  hostname reaches `/ops` without passing IAP, requests a code for any
+  staff e-mail, reads it in the response and sets that account's password.
+  The data behind it is his demo seed and every vendor is a FAKE, which is
+  why this is tolerable for a testing ground and not for anything else.
+  Closing it is internal-and-load-balancer ingress with Direct VPC egress
+  on the API and the review and sweep jobs, or an adapter that passes IAP
+  with `Proxy-Authorization`. Until one of those lands, the run.app
+  hostnames are not to be handed out.
+- **The cutover is three variables after the DNS change.** Once the A
+  records point at `edge_ip` and the certificates read ACTIVE:
+  `PUBLIC_ORIGIN=https://supermortgage.com` on the repo, so claim links and
+  the Plaid redirect are minted on the branded name — register that
+  redirect URI in the Plaid dashboard first, and add the origin to the
+  Google OAuth client, or the sign-in page will name the origin it is
+  missing; `SERVICING_PUBLIC_HOST=servicing.supermortgage.com`, so his
+  invitation e-mails name the console and his passkeys bind to the host
+  people reach. Unset until then, deliberately: a link minted on a hostname
+  that resolves to someone else's server is a broken link.
+- **The apex is somebody's today.** `supermortgage.com` answers a
+  Supermortgage page from Google's front end that is not ours. Pointing it
+  at this load balancer replaces whatever that is. The records are Doug's
+  to set, so that is Doug's and Joe's call, and the front door is built for
+  either answer: the consumer hostnames are a variable.
+
 ## Tests run against a real Postgres
 
 The API suite used to mock `@hm/db`. Two files did it explicitly, and the cost

@@ -343,3 +343,35 @@ variable "loan_review_schedule" {
   type        = string
   default     = "0 7 * * *"
 }
+
+variable "consumer_hostnames" {
+  description = <<-EOT
+    The hostnames the consumer app answers on. Joe's choice, 22 September
+    2026: the apex and www. Each gets a Google-managed certificate of its
+    own, and each needs an A record at the registrar pointing at `edge_ip`.
+  EOT
+  type        = list(string)
+  default     = ["supermortgage.com", "www.supermortgage.com"]
+}
+
+variable "servicing_hostname" {
+  description = "The hostname Doug's runtime answers on; `/` there redirects to his console at `/ops`."
+  type        = string
+  default     = "servicing.supermortgage.com"
+}
+
+variable "servicing_console_members" {
+  description = <<-EOT
+    Who may pass Identity-Aware Proxy on the servicing hostname, as IAM
+    members. Joe's list, 22 September 2026: Doug, Drew and Joe, signing in
+    as their trywalt.ai accounts. Passing IAP reaches his console's own
+    sign-in, not a session; the console's admins are made by his
+    staff-bootstrap and his `staff.invite`, which is a separate list.
+  EOT
+  type        = list(string)
+  default = [
+    "user:doug@trywalt.ai",
+    "user:drew@trywalt.ai",
+    "user:joe@trywalt.ai",
+  ]
+}

@@ -437,6 +437,21 @@ with no invoker bindings that 403s everything and reads exactly like a broken
 container. The deploy workflow asserts the binding afterwards and fails if it
 is missing.
 
+**Both deployments have hostnames, behind one load balancer.**
+`supermortgage.com` (and `www`) is the consumer app and
+`servicing.supermortgage.com` is Doug's runtime, through `infra/edge.tf`:
+one global external Application Load Balancer, a serverless endpoint group
+per service, a Google-managed certificate per hostname, HTTP redirected to
+HTTPS, and `/` on the servicing host redirected to his console at `/ops`.
+The servicing hostname is behind Identity-Aware Proxy for Doug, Drew and Joe
+as their trywalt.ai accounts; behind that is his console's own sign-in
+(e-mailed code, echoed on the page because the mail vendor is a FAKE, then a
+password). The deploy stands the first console admin with his
+`staff-bootstrap`; that admin invites the rest. The run.app URLs stay open
+and bypass IAP, on purpose and named. DNS is Doug's, at GoDaddy; the A
+records are `terraform output dns_records`. See `docs/decisions.md`, "Two
+hostnames, one front door".
+
 **`DEMO_PERSONAS=true` is set on staging and must never be set anywhere real.**
 It mounts `POST /api/auth/personas/:key`, which mints a real session for a
 seeded sample borrower with no Google credential. Staging runs

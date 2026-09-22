@@ -298,10 +298,46 @@ jobs:
         env:
           SERVICING_DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_SERVICING_MIGRATION_URL }}
 
+      # His console's first admin, through his own staff-bootstrap: the one
+      # row nothing else can create. Idempotent by his design — with the table
+      # not empty it creates nothing, and the only thing it will ever change
+      # is that one row's roles, upward, outside production. The rest of the
+      # team is invited by this admin from the console's Staff tile; his
+      # header-actor path carries no admin role, so the deploy cannot do it.
+      # All four staff roles, which is his own nonprod convention.
+      - name: Stand the console's first admin
+        run: |
+          set +e
+          OUT=$(docker run --rm --network host \
+            -e SERVICING_DATABASE_URL="$SERVICING_DATABASE_URL" \
+            -e SERVICING_ENVIRONMENT=nonprod \
+            -e SERVICING_INTEGRATIONS=fake \
+            -e STAFF_BOOTSTRAP_ADMIN_ROLES=admin,ops_analyst,officer,compliance \
+            "$SERVICING_IMAGE" staff-bootstrap "$FIRST_ADMIN" 2>&1)
+          code=$?
+          set -e
+          echo "$OUT"
+          test "$code" -eq 0
+          grep -q 'staff-bootstrap' <<< "$OUT"
+        env:
+          SERVICING_DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_SERVICING_MIGRATION_URL }}
+          FIRST_ADMIN: ${{ vars.SERVICING_FIRST_ADMIN || 'joe@trywalt.ai' }}
+
       # SERVICING_ENVIRONMENT=nonprod is not a choice: every vendor in the
       # image is a FAKE and his config refuses to start a production process
       # on fakes. It is also what admits the shared token at his door.
+      #
+      # SERVICING_PUBLIC_HOST is the branded hostname once DNS points at the
+      # front door (infra/edge.tf): it names the console in his invitation
+      # e-mails and is the relying-party id and origin his passkeys are bound
+      # to. Unset until then, because a passkey bound to a hostname nobody
+      # reaches is a passkey that never works.
       - name: Deploy the servicing service to Cloud Run
+        run: |
+          ENV_VARS="NODE_ENV=production,SERVICING_PORT=8080,SERVICING_ENVIRONMENT=nonprod,SERVICING_INTEGRATIONS=fake,SERVICING_LOG_FORMAT=json"
+          if [ -n "$PUBLIC_HOST" ]; then
+            ENV_VARS="$ENV_VARS,OPS_URL=https://$PUBLIC_HOST/ops,BORROWER_RP_ID=$PUBLIC_HOST,BORROWER_ORIGINS=https://$PUBLIC_HOST"
+          fi
         run: |
           gcloud run deploy ${{ env.SERVICING_SERVICE }} \
             --image "$SERVICING_IMAGE" \
@@ -309,7 +345,7 @@ jobs:
             --service-account ${{ env.SERVICING_RUNTIME_SA }} \
             --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
             --set-secrets "SERVICING_DATABASE_URL=HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING:latest,SERVICING_API_TOKEN=HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN:latest" \
-            --set-env-vars "NODE_ENV=production,SERVICING_PORT=8080,SERVICING_ENVIRONMENT=nonprod,SERVICING_INTEGRATIONS=fake,SERVICING_LOG_FORMAT=json" \
+            --set-env-vars "$ENV_VARS" \
             --allow-unauthenticated \
             --port 8080 \
             --memory 1Gi \
@@ -317,6 +353,8 @@ jobs:
             --min-instances 0 \
             --max-instances 2 \
             --timeout 300
+        env:
+          PUBLIC_HOST: ${{ vars.SERVICING_PUBLIC_HOST }}
 
       # The same absence-versus-error split the APOR job's step makes.
       - name: Point the scheduled sweep at this image
@@ -629,13 +667,19 @@ jobs:
           # Omitted rather than set empty when the URL is not resolvable yet:
           # an empty string is not nullish, so it would defeat the fallback in
           # config.ts instead of deferring to it.
-          if [ -n "$SERVICE_URL" ]; then
-            ENV_VARS="$ENV_VARS,PUBLIC_ORIGIN=$SERVICE_URL"
+          # The branded origin once DNS points at the front door
+          # (infra/edge.tf), else the run.app URL: claim links and the Plaid
+          # redirect are minted on it, so it must be a hostname that answers.
+          # Setting it is the cutover: register the new redirect URI in the
+          # Plaid dashboard and the origin on the Google OAuth client first.
+          ORIGIN="${PUBLIC_ORIGIN:-$SERVICE_URL}"
+          if [ -n "$ORIGIN" ]; then
+            ENV_VARS="$ENV_VARS,PUBLIC_ORIGIN=$ORIGIN"
             # Registered in the Plaid dashboard. Sent ONLY when the origin
             # resolved, because an unregistered redirect URI makes Plaid reject
             # every link token — not just the OAuth ones — and takes screen 3
             # down completely.
-            ENV_VARS="$ENV_VARS,PLAID_REDIRECT_URI=$SERVICE_URL/plaid/return"
+            ENV_VARS="$ENV_VARS,PLAID_REDIRECT_URI=$ORIGIN/plaid/return"
           fi
           gcloud run deploy ${{ env.SERVICE }} \
             --image "$IMAGE" \
@@ -651,6 +695,8 @@ jobs:
             --min-instances 0 \
             --max-instances 3 \
             --timeout 120
+        env:
+          PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
 
       # The scheduled fetch runs the same image with a different entrypoint.
       # Terraform owns the job's shape and ignores its image tag, so this is

@@ -33,3 +33,18 @@ output "servicing_sweep_job" {
 output "loan_review_job" {
   value = google_cloud_run_v2_job.loan_review.name
 }
+
+output "edge_ip" {
+  description = "The load balancer's address; every hostname's A record points here."
+  value       = google_compute_global_address.edge.address
+}
+
+output "dns_records" {
+  description = "What to set at the registrar, one A record per hostname."
+  value       = [for h in local.edge_hostnames : "${h}  A  ${google_compute_global_address.edge.address}"]
+}
+
+output "certificates" {
+  description = "Each hostname's Google-managed certificate; PROVISIONING until its DNS points at edge_ip."
+  value       = { for h, c in google_compute_managed_ssl_certificate.edge : h => c.name }
+}

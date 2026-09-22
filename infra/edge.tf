@@ -20,11 +20,14 @@
 # after the first apply and never touched by the deploy, which changes the
 # services and not the backend in front of them:
 #
-#   gcloud compute backend-services update homestead-mortgages-staging-console \
-#     --global --project homestead-mortgages --iap=enabled
+#   gcloud iap web enable --resource-type=backend-services \
+#     --service=homestead-mortgages-staging-console --project homestead-mortgages
 #
-# `ignore_changes` keeps Terraform from reading that as drift and turning it
-# back off. Turned on 22 September 2026.
+# The IAP-side command, not `compute backend-services update --iap=enabled`:
+# on the second backend that flag read "enabled" while nothing was enforced
+# and his API answered the world; the IAP-side enable enforced within
+# seconds. `ignore_changes` keeps Terraform from reading it as drift and
+# turning it back off. Turned on 22 September 2026.
 #
 # IAP reaches Cloud Run as a Google-managed service agent that has to be
 # provisioned once per project, and this project never had one: the first

@@ -1952,7 +1952,10 @@ the three A records to set. DNS is at GoDaddy and the login is Doug's.
   Google's managed OAuth client, not by Terraform, because the only way
   this provider can describe IAP is with an OAuth client made through the
   IAP OAuth Admin API, which Google shut down in March 2026. Terraform holds
-  the members and ignores the switch. IAP also reaches Cloud Run as a
+  the members and ignores the switch. The switch is `gcloud iap web enable`
+  on the backend, not the compute-side `--iap=enabled` flag: on the console
+  backend that flag read as on while nothing was enforced, and his API
+  answered without a sign-in until the IAP-side enable was run. IAP also reaches Cloud Run as a
   Google-managed service agent that has to be provisioned once per project
   with one more gcloud line — the first sign-in through the front door was
   answered "The IAP service account is not provisioned" until it was — and

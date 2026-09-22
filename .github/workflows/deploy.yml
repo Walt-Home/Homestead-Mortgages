@@ -338,7 +338,6 @@ jobs:
           if [ -n "$PUBLIC_HOST" ]; then
             ENV_VARS="$ENV_VARS,OPS_URL=https://$PUBLIC_HOST/ops,BORROWER_RP_ID=$PUBLIC_HOST,BORROWER_ORIGINS=https://$PUBLIC_HOST"
           fi
-        run: |
           gcloud run deploy ${{ env.SERVICING_SERVICE }} \
             --image "$SERVICING_IMAGE" \
             --region ${{ env.REGION }} \

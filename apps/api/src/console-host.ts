@@ -117,9 +117,11 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
       await pipeline(Readable.fromWeb(answer.body as never), res);
     };
 
-  // The front door of the branded host is the console.
+  // The front door of the branded host is the console. Exactly `/console`,
+  // with no slash: Express's loose matching would send `/console/` here
+  // too, ahead of the bundle, and redirect it to itself forever.
   router.get("/", (_req, res) => res.redirect(302, "/console/"));
-  router.get("/console", (_req, res) => res.redirect(302, "/console/"));
+  router.get(/^\/console$/, (_req, res) => res.redirect(302, "/console/"));
 
   // The console's calls, to his console API and his document reads.
   router.use(

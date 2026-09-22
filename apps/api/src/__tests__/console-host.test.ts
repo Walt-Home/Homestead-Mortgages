@@ -111,6 +111,12 @@ describe("the servicing hostname", () => {
     const root = await call("/");
     expect(root.status).toBe(302);
     expect(root.headers.location).toBe("/console/");
+    const bare = await call("/console");
+    expect(bare.status).toBe(302);
+    expect(bare.headers.location).toBe("/console/");
+    const home = await call("/console/");
+    expect(home.status).toBe(200);
+    expect(home.body).toContain("<title>console</title>");
     const page = await call("/console/staff/anything");
     expect(page.status).toBe(200);
     expect(page.body).toContain("<title>console</title>");

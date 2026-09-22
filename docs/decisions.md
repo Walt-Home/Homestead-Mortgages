@@ -1995,11 +1995,15 @@ the three A records to set. DNS is at GoDaddy and the login is Doug's.
   invitation e-mails name the console and his passkeys bind to the host
   people reach. Unset until then, deliberately: a link minted on a hostname
   that resolves to someone else's server is a broken link.
-- **The apex is somebody's today.** `supermortgage.com` answers a
-  Supermortgage page from Google's front end that is not ours. Pointing it
-  at this load balancer replaces whatever that is. The records are Doug's
-  to set, so that is Doug's and Joe's call, and the front door is built for
-  either answer: the consumer hostnames are a variable.
+- **The apex was somebody else's until the same afternoon.** `supermortgage.com`
+  answered a Supermortgage page from a Google front end that was not ours.
+  Doug set the three A records on 22 September, left the old one beside
+  ours for a while — during which the apex certificate could not issue,
+  because a managed certificate needs the name to resolve only to its load
+  balancer — and then removed it. All three certificates were active within
+  the hour, and every hostname answers with its own. The consumer hostnames
+  stay a variable, so the front door carries a different answer if one is
+  ever wanted.
 
 ## Tests run against a real Postgres
 

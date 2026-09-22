@@ -1952,7 +1952,11 @@ the three A records to set. DNS is at GoDaddy and the login is Doug's.
   Google's managed OAuth client, not by Terraform, because the only way
   this provider can describe IAP is with an OAuth client made through the
   IAP OAuth Admin API, which Google shut down in March 2026. Terraform holds
-  the members and ignores the switch.
+  the members and ignores the switch. IAP also reaches Cloud Run as a
+  Google-managed service agent that has to be provisioned once per project
+  with one more gcloud line — the first sign-in through the front door was
+  answered "The IAP service account is not provisioned" until it was — and
+  that agent's right to invoke the servicing service is in Terraform.
 - **Behind IAP is his sign-in, and it is not Google's.** His console signs
   staff in by an e-mailed six-digit code, then a password of twelve or
   more characters, then a session; passkeys are an alternative second

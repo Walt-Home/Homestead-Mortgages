@@ -26,6 +26,18 @@
 # `ignore_changes` keeps Terraform from reading that as drift and turning it
 # back off. Turned on 22 September 2026.
 #
+# IAP reaches Cloud Run as a Google-managed service agent that has to be
+# provisioned once per project, and this project never had one: the first
+# person through the Google sign-in was answered "The IAP service account is
+# not provisioned". One more gcloud line, run once, on the same day:
+#
+#   gcloud beta services identity create --service=iap.googleapis.com \
+#     --project homestead-mortgages
+#
+# That makes service-<project number>@gcp-sa-iap.iam.gserviceaccount.com,
+# which does not appear in `gcloud iam service-accounts list`. Its right to
+# invoke the servicing service is declared below.
+#
 # What this does NOT close: the run.app URLs. Both services keep ingress
 # `all`, because the API reaches his door and the deploy probes both over
 # those URLs without VPC egress; a person who knows the servicing run.app
@@ -103,6 +115,23 @@ resource "google_compute_backend_service" "servicing" {
   lifecycle {
     ignore_changes = [iap]
   }
+}
+
+# The project, for the IAP service agent's number.
+data "google_project" "this" {
+  project_id = var.project_id
+}
+
+# IAP's service agent invokes the servicing service on the signed-in
+# person's behalf. The service is public, so this is belt and braces today;
+# it is what keeps IAP working the day the service stops being public. By
+# name, like the endpoint groups, because the service is not in this state.
+resource "google_cloud_run_v2_service_iam_member" "iap_invokes_servicing" {
+  project  = var.project_id
+  location = var.region
+  name     = "homestead-mortgages-${var.environment}-servicing"
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-iap.iam.gserviceaccount.com"
 }
 
 # Who may pass IAP on the servicing hostname. IAM only — it grants nothing

@@ -314,7 +314,11 @@ describe("taking the invitation", () => {
     const res = await accept(theo.id, token);
 
     expect(res.status).toBe(201);
-    expect(res.body).toEqual({ loanFileId: h.fileId, borrowerId: h.borrowerId });
+    expect(res.body).toEqual({
+      kind: "co_borrower",
+      loanFileId: h.fileId,
+      borrowerId: h.borrowerId,
+    });
 
     const his = await prisma.user.findUniqueOrThrow({
       where: { id: theo.id },

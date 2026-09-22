@@ -1572,9 +1572,9 @@ places where this deliberately differs from his:
   year; a partner fact is re-asserted only when the value changed, compared
   with its keys sorted, because jsonb keeps its own order.
 
-What is not built: the claim (the signed token that turns a provisional party
-into a person), the daily review the observations exist to feed, and a second
-tape profile. `npm run partner:book -- sample northlight` loads the
+What is not built: the daily review the observations exist to feed, and a
+second tape profile. The claim is built; see "A mortgage is claimed by a
+token the servicer delivers". `npm run partner:book -- sample northlight` loads the
 twelve-loan sample book into a development database, through the same
 service the key reaches.
 
@@ -1640,6 +1640,55 @@ his beyond the servicer's own loan number. His tape import and ours are two
 readers of the same file into two models; which one a partner's tape goes
 to is the "one system of record" question the analysis left open, and this
 does not answer it.
+
+## A mortgage is claimed by a token the servicer delivers
+
+Since 22 September 2026 a mortgage a tape wrote becomes somebody's through
+`loan_claims`: a single-use token minted through the partner's key for one
+loan that is still `imported_unclaimed` (`POST
+/api/partner/book/loans/:number/claims`), handed back to the partner once
+to deliver over its own channel, and taken by whoever holds the link after
+signing in — through the same `/claim` door a co-borrower's invitation
+opens, where the token says which kind it is. Taking it is a merge and a
+move in one transaction: the claimant's party is found or minted CLAIMED,
+the tape's provisional party folds into it through `mergePartyInto` (the
+loan follows the party), the loan moves `imported_unclaimed →
+monitoring_only` as `claim_confirmed` under the claim flow's principal — a
+loan outlives its parties, and the ledger refuses a principal that dies with
+one, so the claim row is what names who took it — and the review turns on — which the database only allows now,
+because `loans_unclaimed_is_not_monitored` held it off. The persona seed
+walks the Grander row through exactly this, as the partner and then as the
+sign-in, so the sample cannot drift from the flow.
+
+- **Never an email match.** The tape carries no email and the feed contract
+  has nowhere to put one; the link is the servicer's to deliver to the person
+  its own records say the loan belongs to, and whoever holds it is whoever
+  that delivery reached. The same trust a co-borrower's link carries, and the
+  same reason: a stricter rule would refuse a person whose Google account is
+  not the address their servicer had for them.
+- **What a stranger sees is what the notice said.** The preview names the
+  servicer and the town, and nothing that names or numbers anyone. His
+  invitation names the servicer and the loan's last four before anyone has
+  proven anything, and that is the design this one refuses. Every way a link
+  can be bad — expired, taken, revoked, never real — is the same 404.
+- **Good once, for thirty days, one at a time.** A statement's cadence, not
+  an inbox's. The next mint for the same loan revokes the last, so a servicer
+  that re-sends has one live link out; a taken claim names who took it, and
+  the CHECK holds the two columns together. The token lives in the link and
+  in the row as its hash, and nothing logs it.
+- **A loan that ended first can never be claimed.** Every terminal state is
+  final, and the claim asks for `imported_unclaimed`: a payoff posted between
+  the mint and the press is a 409, and the preview goes dark with it.
+- **Still gated by counsel on policy, not on mechanism.** The decision the
+  analysis left to counsel — whether a servicer-delivered link is sufficient
+  proof, and whether an identity check belongs before the merge — is a
+  policy the mechanism can carry either way: the identity port is already
+  behind screen 2, and the claim's accept is one place to require it. What is
+  built is the shape the model always said, and the persona shows it.
+
+What it does not do: send anything (the partner delivers; there is no
+channel here), verify identity before the merge (see above), or claim a loan
+that came from anywhere but a partner's tape.
 
 ## The servicing platform is read, never joined
 

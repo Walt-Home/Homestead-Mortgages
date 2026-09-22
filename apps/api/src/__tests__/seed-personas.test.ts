@@ -118,10 +118,11 @@ describe("the seed walks every persona to its state", () => {
     for (const report of reports) {
       const story = PERSONA_STORIES.find((s) => s.key === report.key)!;
       if (!isSeeded(story)) {
-        // Stood on the sample book's first loan rather than walked anywhere.
+        // Stood on the sample book's first loan through the product's own
+        // claim, which moves it to watched.
         expect(`${report.key}: ${report.result}`).toBe(`${report.key}: seeded`);
         expect(report.loanFileId).toBeNull();
-        expect(report.loanState).toBe("imported_unclaimed");
+        expect(report.loanState).toBe("monitoring_only");
         expect(report.loanId).toEqual(expect.any(String));
         continue;
       }

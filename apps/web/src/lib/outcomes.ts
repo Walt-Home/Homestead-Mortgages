@@ -284,8 +284,7 @@ export const CLAIM_COPY = {
   thisIsMe: "Yes, this is me — continue",
   couldNotTake: "That did not work. Try the link again.",
   deadTitle: "That link is not good any more.",
-  deadBody:
-    "Invitation links work once and for seven days. Ask the person who invited you to send a new one.",
+  deadBody: "Links like this work once, and not forever. Ask whoever sent it to send a new one.",
 } as const;
 
 /** One line per co-borrower on the applicant's review screen: done, or not yet. */

@@ -25,6 +25,7 @@ import {
   partnerBookImport,
   partnerBookStatus,
 } from "../services/partner-book.js";
+import { mintLoanClaim } from "../services/loan-claims.js";
 
 export const partnerRouter = Router();
 
@@ -88,6 +89,23 @@ partnerRouter.post("/book/imports", async (req, res) => {
     return;
   }
   res.status(result.status === "loaded" ? 201 : 200).json(result);
+});
+
+/**
+ * A claim for one loan the partner's tape wrote, minted once and handed to
+ * the partner to deliver. The token is in this response and nowhere else we
+ * keep; the link is the same door a co-borrower's invitation opens. A loan
+ * that is not this partner's answers as one that does not exist, and a loan
+ * that is no longer unclaimed — claimed already, or ended first — is 409.
+ */
+partnerRouter.post("/book/loans/:number/claims", async (req, res) => {
+  const partner = req.partner!;
+  const minted = await mintLoanClaim({
+    servicerId: partner.servicerId,
+    servicerLoanNumber: String(req.params.number),
+    principalId: partner.principalId,
+  });
+  res.status(201).json(minted);
 });
 
 partnerRouter.get("/book/imports", async (req, res) => {

@@ -305,7 +305,7 @@ year's pull.
 | Scenarios, pins, and the TRID receipt  | Built — screen 2 and the signature pin the person                                                            |
 | Casefile, income and employer identity | Built — survives a re-pull; see `docs/du-readiness.md`                                                       |
 | Sample borrowers in real states        | Built — eight, walked through the real services, behind a deploy flag                                        |
-| Loans and servicing                    | Built, and a partner's tape writes it — `docs/loan-lifecycle.md`. The claim is unbuilt                       |
+| Loans and servicing                    | Built, and a partner's tape writes it — `docs/loan-lifecycle.md`. The claim is a token the servicer delivers |
 | Declarations and residences            | Built and on the production path — screen 3 writes them                                                      |
 | Assets, liabilities, owned property    | Built — the credit and bank pulls write them, per person; `docs/du-readiness.md`                             |
 | Evidence artifacts, retrieval requests | Designed                                                                                                     |

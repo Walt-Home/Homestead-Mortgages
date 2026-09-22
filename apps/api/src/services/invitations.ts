@@ -295,6 +295,7 @@ async function mintInvitation(tx: Db, loanFileId: string, borrowerId: string, to
 
 /** What a stranger holding a link is shown before signing in. No ids. */
 export interface ClaimPreview {
+  readonly kind: "co_borrower";
   readonly coBorrowerFirstName: string;
   readonly applicantFirstName: string;
   readonly propertyCity: string | null;
@@ -345,6 +346,7 @@ export async function previewClaim(token: string, db: Db = prisma): Promise<Clai
     select: { expiresAt: true },
   });
   return {
+    kind: "co_borrower",
     coBorrowerFirstName: first(invitation.partyId),
     applicantFirstName: primary ? first(primary.partyId) : "",
     propertyCity: invitation.loanFile.propertyCity ?? null,
@@ -353,6 +355,7 @@ export async function previewClaim(token: string, db: Db = prisma): Promise<Clai
 }
 
 export interface Claimed {
+  readonly kind: "co_borrower";
   readonly loanFileId: string;
   readonly borrowerId: string;
 }
@@ -446,5 +449,9 @@ export async function acceptClaim(
     undefined,
     db,
   );
-  return { loanFileId: invitation.loanFileId, borrowerId: invitation.borrowerId };
+  return {
+    kind: "co_borrower",
+    loanFileId: invitation.loanFileId,
+    borrowerId: invitation.borrowerId,
+  };
 }

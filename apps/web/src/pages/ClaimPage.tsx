@@ -1,5 +1,9 @@
 /**
- * The page a co-borrower's invitation link opens.
+ * The page a co-borrower's invitation link opens, and a mortgage's claim
+ * link: one door, and the token says which. A mortgage's claim is the link
+ * a servicer delivers to the person its tape says a loan belongs to, and
+ * taking it sends the person to the mortgage, which is now theirs and
+ * watched.
  *
  * Signed out, it shows what the email already said — who is applying, where,
  * and that the reader was named — and offers the same Google sign-in as
@@ -23,13 +27,27 @@ import { Lockup } from "../components/Wordmark.js";
 import { Footer } from "../components/Footer.js";
 import { GoogleSignIn } from "../components/GoogleSignIn.js";
 import { CLAIM_COPY } from "../lib/outcomes.js";
+import { MORTGAGE_CLAIM } from "../lib/loan-copy.js";
 
-interface ClaimPreview {
-  coBorrowerFirstName: string;
-  applicantFirstName: string;
-  propertyCity: string | null;
-  expiresAt: string;
-}
+type ClaimPreview =
+  | {
+      kind: "co_borrower";
+      coBorrowerFirstName: string;
+      applicantFirstName: string;
+      propertyCity: string | null;
+      expiresAt: string;
+    }
+  | {
+      kind: "mortgage";
+      servicerDisplayName: string | null;
+      propertyCity: string | null;
+      propertyState: string | null;
+      expiresAt: string;
+    };
+
+type Claimed =
+  | { kind: "co_borrower"; loanFileId: string; borrowerId: string }
+  | { kind: "mortgage"; loanId: string };
 
 export function ClaimPage() {
   // The token rides in the fragment, which a browser never sends to any
@@ -57,11 +75,15 @@ export function ClaimPage() {
     attempted.current = true;
     setTaking(true);
     try {
-      const claimed = await api.post<{ loanFileId: string; borrowerId: string }>(
-        "/auth/claims/accept",
-        { token },
+      const claimed = await api.post<Claimed>("/auth/claims/accept", { token });
+      // A co-borrower goes to the first screen that is theirs to state; a
+      // person who just claimed a mortgage goes to the mortgage.
+      navigate(
+        claimed.kind === "mortgage"
+          ? `/loans/${claimed.loanId}`
+          : `/f/${claimed.loanFileId}/identity`,
+        { replace: true },
       );
-      navigate(`/f/${claimed.loanFileId}/identity`, { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : CLAIM_COPY.couldNotTake);
       setTaking(false);
@@ -81,13 +103,29 @@ export function ClaimPage() {
           </>
         ) : preview.data ? (
           <>
-            <h1 className="mt-6 font-display text-3xl text-ink">
-              {CLAIM_COPY.title(preview.data.coBorrowerFirstName)}
-            </h1>
-            <p className="mt-3 text-base text-ink-soft">
-              {CLAIM_COPY.body(preview.data.applicantFirstName, preview.data.propertyCity)}
-            </p>
-            <p className="mt-2 text-sm text-ink-muted">{CLAIM_COPY.yours}</p>
+            {preview.data.kind === "mortgage" ? (
+              <>
+                <h1 className="mt-6 font-display text-3xl text-ink">{MORTGAGE_CLAIM.title}</h1>
+                <p className="mt-3 text-base text-ink-soft">
+                  {MORTGAGE_CLAIM.body(
+                    preview.data.servicerDisplayName,
+                    preview.data.propertyCity,
+                    preview.data.propertyState,
+                  )}
+                </p>
+                <p className="mt-2 text-sm text-ink-muted">{MORTGAGE_CLAIM.yours}</p>
+              </>
+            ) : (
+              <>
+                <h1 className="mt-6 font-display text-3xl text-ink">
+                  {CLAIM_COPY.title(preview.data.coBorrowerFirstName)}
+                </h1>
+                <p className="mt-3 text-base text-ink-soft">
+                  {CLAIM_COPY.body(preview.data.applicantFirstName, preview.data.propertyCity)}
+                </p>
+                <p className="mt-2 text-sm text-ink-muted">{CLAIM_COPY.yours}</p>
+              </>
+            )}
             {status === "signed-in" ? (
               <div className="mt-8">
                 {error && <p className="mb-3 text-sm text-danger">{error}</p>}
@@ -96,7 +134,11 @@ export function ClaimPage() {
                   onClick={() => void takeIt()}
                   disabled={taking || attempted.current}
                 >
-                  {taking ? CLAIM_COPY.taking : CLAIM_COPY.thisIsMe}
+                  {taking
+                    ? CLAIM_COPY.taking
+                    : preview.data.kind === "mortgage"
+                      ? MORTGAGE_CLAIM.thisIsMine
+                      : CLAIM_COPY.thisIsMe}
                 </button>
               </div>
             ) : (

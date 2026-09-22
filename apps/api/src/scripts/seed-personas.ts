@@ -93,15 +93,16 @@ import { pinTridPieces, proposeScenario } from "../services/evidence.js";
 import { acceptClaim, inviteCoBorrower } from "../services/invitations.js";
 import {
   assertFacts,
-  mergePartyInto,
   partnerPrincipal,
   partyForUser,
   principalForParty,
   recordBorrowerFacts,
+  servicePrincipal,
   staffPrincipal,
 } from "../services/party.js";
 import { importPartnerBook } from "../services/partner-book.js";
-import { toDomainLoanState } from "../services/loan-transition.js";
+import { acceptLoanClaim, mintLoanClaim } from "../services/loan-claims.js";
+import { moveLoanIfLegal, toDomainLoanState } from "../services/loan-transition.js";
 import { loadLoanFile, recordEvent, recordSnapshot } from "../services/repository.js";
 import { reconcileIncomeAndEmployment } from "../services/income.js";
 import { reconcileAssets } from "../services/assets.js";
@@ -1627,10 +1628,8 @@ async function seedPersona(story: SeededPersona): Promise<SeedReport> {
  * took the merged one with the user) is attached directly, and a loan that
  * is somebody else's stops the seed rather than sharing it.
  *
- * The loan stays `imported_unclaimed` and unmonitored: the claim's own
- * transition is not written, and the database holds that an unclaimed loan
- * is not monitored. A tester signed in as this row sees the loan and its
- * servicing record, and nothing that would need a credit request.
+ * A tester signed in as this row sees a mortgage the product is watching,
+ * and nothing that would need a credit request.
  */
 async function seedImportedPersona(story: ImportedPersona): Promise<SeedReport> {
   const servicer = await prisma.servicer.upsert({
@@ -1672,6 +1671,37 @@ async function seedImportedPersona(story: ImportedPersona): Promise<SeedReport> 
   });
   if (existing) {
     const standing = loan.parties.some((p) => p.partyId === existing.partyId);
+    // A persona stood on the loan by hand, before the claim existed, on a
+    // loan the claim never moved: finish what the claim does — the move and
+    // the review — so a deployment seeded under the old rule catches up
+    // rather than sitting unclaimed under a person forever.
+    if (standing && loanState === "imported_unclaimed") {
+      await prisma.$transaction(async (tx) => {
+        await moveLoanIfLegal(
+          {
+            id: loan.id,
+            event: "borrower_claimed",
+            actorPrincipalId: await servicePrincipal(tx, "claim_flow"),
+            reasonCode: "claim_confirmed",
+            causedBy: "persona_seed:claim_finished",
+          },
+          tx,
+        );
+        await tx.loan.update({
+          where: { id: loan.id },
+          data: { monitoringEnabled: true, nextReviewDueAt: new Date() },
+        });
+      });
+      return {
+        key: story.key,
+        result: "seeded",
+        state: null,
+        expected: null,
+        loanFileId: null,
+        loanId: loan.id,
+        loanState: "monitoring_only",
+      };
+    }
     return {
       key: story.key,
       result: standing ? "exists" : "drift",
@@ -1698,14 +1728,33 @@ async function seedImportedPersona(story: ImportedPersona): Promise<SeedReport> 
       (p) => p.party.claimStatus === "PROVISIONAL" || p.party.claimStatus === "CLAIM_PENDING",
     );
     if (provisional) {
-      await mergePartyInto(tx, provisional.partyId, partyId);
+      // The product's own claim, end to end: the token the partner would
+      // hand the person, minted as the partner, and taken as this sign-in —
+      // the same two calls the partner route and the claim page make.
+      const minted = await mintLoanClaim(
+        {
+          servicerId: servicer.id,
+          servicerLoanNumber: story.loan.servicerLoanNumber,
+          principalId: await partnerPrincipal(tx, story.loan.servicerSlug),
+        },
+        tx,
+      );
+      await acceptLoanClaim(minted.token, user.id, tx);
     } else if (loan.parties.length === 0) {
+      // A reset took the persona's party and, folded into it, the tape's.
+      // The loan cannot be claimed again — the machine has no edge back to
+      // unclaimed — so the sign-in is stood on it directly, where the claim
+      // left it.
       await tx.loanParty.create({ data: { loanId: loan.id, partyId, role: "PRIMARY_BORROWER" } });
     } else {
       throw new Error(
         `persona ${story.key}: loan ${story.loan.servicerLoanNumber} is already somebody's`,
       );
     }
+  });
+  const after = await prisma.loan.findUniqueOrThrow({
+    where: { id: loan.id },
+    select: { status: true },
   });
   return {
     key: story.key,
@@ -1714,7 +1763,7 @@ async function seedImportedPersona(story: ImportedPersona): Promise<SeedReport> 
     expected: null,
     loanFileId: null,
     loanId: loan.id,
-    loanState,
+    loanState: toDomainLoanState(after.status),
   };
 }
 

@@ -42,6 +42,11 @@ function everything(): { name: string; text: string }[] {
     { name: "openUntil", text: copy.openUntil("October 21, 2026") },
     { name: "standingWords", text: copy.standingWords("DELINQUENT", 30) },
     { name: "standingWords", text: copy.standingWords("DELINQUENT", null) },
+    { name: "MORTGAGE_CLAIM.title", text: copy.MORTGAGE_CLAIM.title },
+    { name: "MORTGAGE_CLAIM.body", text: copy.MORTGAGE_CLAIM.body("Grander", "Phoenix", "AZ") },
+    { name: "MORTGAGE_CLAIM.body", text: copy.MORTGAGE_CLAIM.body(null, null, null) },
+    { name: "MORTGAGE_CLAIM.yours", text: copy.MORTGAGE_CLAIM.yours },
+    { name: "MORTGAGE_CLAIM.thisIsMine", text: copy.MORTGAGE_CLAIM.thisIsMine },
   );
   return out;
 }

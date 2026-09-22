@@ -101,7 +101,7 @@ This is the part to be honest about.
 | A route that creates a loan                     | `POST /api/partner/book/imports`, opened by a partner key                          |
 | The tape reader                                 | `packages/partner-book`, one profile, Doug's §33.1 ported                          |
 | A loan's record, to its party                   | `GET /api/loans` and `/api/loans/:id/servicing`; the web's `/loans/:id` renders it |
-| The claim                                       | **Unbuilt** — a signed token, never an e-mail match                                |
+| The claim                                       | Built: a token the servicer delivers, never an e-mail match — `loan_claims`        |
 
 Since 21 September 2026 a servicer's tape becomes rows: one
 `partner_book_imports` row per tape read, an `imported_unclaimed` loan on a
@@ -115,10 +115,16 @@ transfer as a window with two ends and a tape reports only that it closed.
 
 Two things the import does not do, on purpose. It reads no contact from the
 supplement — the feed contract has nowhere to put an e-mail, and the claim is
-a signed token the partner delivers — and it links no row to a party somebody
-has signed in as, because a loan appearing in an account without a claim is
-the oracle the 404 rule suppresses. Every row is its own provisional party
-until the claim merges it. `docs/decisions.md`, "A book is a tape, read once".
+a token the partner delivers — and it links no row to a party somebody has
+signed in as, because a loan appearing in an account without a claim is the
+oracle the 404 rule suppresses. Every row is its own provisional party until
+the claim merges it. `docs/decisions.md`, "A book is a tape, read once".
+
+The claim is `loan_claims`: the partner mints a single-use token for one
+unclaimed loan through its key and delivers it; whoever holds the link takes
+it after signing in, the tape's party folds into theirs, the loan moves to
+`monitoring_only` as `claim_confirmed`, and the review turns on.
+`docs/decisions.md`, "A mortgage is claimed by a token the servicer delivers".
 
 Since the same day a loan answers for itself, to the party on it and to
 nobody else: `GET /api/loans/:id/servicing` is the newest observation — what
@@ -132,12 +138,12 @@ says whether it was not asked, asked and empty, or asked and unreachable.
 
 Nothing a borrower can do produces a loan, still. What renders one is the
 twelve-loan Northlight book: the persona seed loads it under its servicer at
-integration depth `API` and stands the `grander_import` sign-in on NL-100001
-by folding the tape's provisional party into the persona's claimed one — the
-merge the claim will use, minus the token — so a tester on staging can sign
-in as that row, find the mortgage leading the home page, and open `/loans/:id`
-— the tape's figures under the servicer's name and date, the platform's
-verdict, offer and readiness under ours. In a
+integration depth `API` and walks the `grander_import` sign-in through the
+claim on NL-100001 — a token minted as the partner, taken as the sign-in —
+so a tester on staging can sign in as that row, find a watched mortgage
+leading the home page, and open `/loans/:id`: the tape's figures under the
+servicer's name and date, the platform's verdict, offer and readiness under
+ours. In a
 development database, `npm run partner:book -- sample northlight` loads the
 same book with nobody standing on it.
 

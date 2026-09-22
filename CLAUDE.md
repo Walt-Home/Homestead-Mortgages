@@ -174,29 +174,24 @@ servicing platform is read, never joined".
   asset report and a county record, so an unrun pull read as the borrower
   declaring themselves clean. `buildDeclarations` is gone and a test keeps it
   gone.
-- **The Grander persona stands on a loan the sample book wrote, and the
-  claim is still unbuilt.** An imported member is a party and a loan with no
+- **The Grander persona walks the claim, and the claim is a token the
+  servicer delivers.** An imported member is a party and a loan with no
   application. A servicer's tape reaches `POST /api/partner/book/imports`
   with a partner key, `packages/partner-book` reads it onto the feed contract
   in `@hm/shared/portfolio`, and `services/partner-book.ts` turns each row
   into an `imported_unclaimed` loan on a PROVISIONAL party with the partner's
   facts, plus a `servicing_observations` row per tape. Nothing about that
-  party is retrievable and the loan is not monitored, because the claim is
-  what makes it somebody's — a signed single-use token delivered by Grander,
-  never an email match, and not written yet. The persona seed does what the
-  claim will do, minus the token: it loads the twelve-loan Northlight book
-  under its servicer at integration depth `API`, mints the `grander_import`
-  sign-in with a claimed party, and folds NL-100001's provisional party into
-  it through the same `mergePartyInto` the co-borrower claim uses. Signed in
-  as that row, a tester's home page leads with the mortgage and
-  `/loans/:id` is its page: the tape's newest observation as figures under
-  the servicer's name and date, and under ours what the servicing platform
-  concluded — the verdict in words, the offer as figures, what a refinance
-  would still need — with the three answers that are not a record ("not
-  asked", "nothing there", "could not reach it") each said as what it is.
-  No application anywhere. See
-  `docs/decisions.md`, "A book is a tape, read once" and "The servicing
-  platform is read, never joined".
+  party is retrievable and the loan is not monitored until the claim: the
+  partner mints a single-use token for one loan through its key
+  (`POST /api/partner/book/loans/:number/claims`) and delivers it, never an
+  email match; whoever holds the link takes it at `/claim` after signing in,
+  the tape's party folds into theirs through `mergePartyInto`, the loan moves
+  to `monitoring_only` as `claim_confirmed`, and the review turns on. The
+  persona seed walks the `grander_import` row through exactly that on
+  NL-100001 — minted as the partner, taken as the sign-in — so a tester's
+  home page leads with a watched mortgage and `/loans/:id` is its page. No
+  application anywhere. See `docs/decisions.md`, "A mortgage is claimed by a
+  token the servicer delivers".
 - **A sample borrower on hold needs a knob to be held.** All three connector
   fixtures screen clear, so `FixtureOptions.screening: "near_match"` is what
   makes Omar's snapshot, his `sanctionsScreenClear` column and his ledger row

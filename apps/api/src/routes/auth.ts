@@ -16,6 +16,7 @@ import {
 import { toDomainState } from "../services/transition.js";
 import { toDomainLoanState } from "../services/loan-transition.js";
 import { acceptClaim, previewClaim } from "../services/invitations.js";
+import { acceptLoanClaim, claimKindOf, previewLoanClaim } from "../services/loan-claims.js";
 import {
   ISSUER,
   beginEnrollment,
@@ -465,7 +466,13 @@ authRouter.post(
   "/claims/preview",
   asyncRoute(async (req, res) => {
     const { token } = claimSchema.parse(req.body);
-    const preview = await previewClaim(token);
+    // One door, two kinds of link: a co-borrower's invitation and a
+    // mortgage's claim share the URL and the fragment, and the token says
+    // which it is. Both previews say only what the notice already said.
+    const preview =
+      (await claimKindOf(token)) === "mortgage"
+        ? await previewLoanClaim(token)
+        : await previewClaim(token);
     if (!preview) throw new AppError(404, "That link is not good any more.", "NOT_FOUND");
     res.json(preview);
   }),
@@ -487,7 +494,10 @@ authRouter.post(
       );
     }
     const { token } = claimSchema.parse(req.body);
-    const claimed = await acceptClaim(token, req.user!.id);
+    const claimed =
+      (await claimKindOf(token)) === "mortgage"
+        ? await acceptLoanClaim(token, req.user!.id)
+        : await acceptClaim(token, req.user!.id);
     res.status(201).json(claimed);
   }),
 );

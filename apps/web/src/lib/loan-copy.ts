@@ -150,3 +150,22 @@ export const readinessStatus = (status: string) =>
     : status === "missing"
       ? "still needed"
       : status.replace(/_/g, " ");
+
+/* ── The claim ─────────────────────────────────────────────────────────── */
+
+/**
+ * The page a servicer's claim link opens. What a stranger with the link is
+ * told is what the servicer's notice already said — the servicer and the
+ * town — and nothing that names anyone or numbers anything. Taking it needs
+ * the same sign-in as everything else, and never an email match.
+ */
+export const MORTGAGE_CLAIM = {
+  title: "A mortgage was shared with you",
+  body: (servicer: string | null, city: string | null, state: string | null) => {
+    const where = [city, state].filter(Boolean).join(", ");
+    return `${servicer ?? "Your servicer"} shared a mortgage${where ? ` on a home in ${where}` : ""} with us, and this link is how the person it belongs to confirms it's theirs.`;
+  },
+  yours:
+    "Confirming it puts the mortgage in your account and starts a rate watch on it. Nothing about you is looked up until you do, and nothing here is a credit request.",
+  thisIsMine: "Yes, this is mine — continue",
+} as const;

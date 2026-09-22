@@ -2437,6 +2437,9 @@ export const TABLES_OFF_THE_WIRE = {
   co_borrower_invitations: {
     why: "The hash of a link a named co-borrower was emailed and when it stops being good; how a person reached their own half of the application, never anything about them.",
   },
+  loan_claims: {
+    why: "The hash of a link a servicer delivered for one mortgage on its tape and who took it; how a person made a mortgage theirs to watch, and a casefile describes a credit request, which a claim never is.",
+  },
   partner_credentials: {
     why: "The hash of a servicer's bearer key and when it was revoked; how a partner's machine reaches the API at all, and never a fact about a borrower or a loan.",
   },

@@ -5,9 +5,9 @@
 # serverless network endpoint group per Cloud Run service, one Google-managed
 # certificate per hostname (so a hostname whose DNS has not moved yet never
 # holds the others back), and host rules that send each name to its service.
-# HTTP redirects to HTTPS. On the servicing host, `/` redirects to `/ops`,
-# his console, because his runtime answers `/` with a JSON 404 and nothing
-# in his tree is edited here.
+# HTTP redirects to HTTPS. On the servicing host the backend is the
+# API container, which serves our ops console (apps/console) and forwards
+# his console API to his runtime; nothing in his tree is edited here.
 #
 # The servicing backend sits behind Identity-Aware Proxy, so the branded
 # hostname asks for a trywalt.ai Google sign-in before his console's own
@@ -20,7 +20,7 @@
 # after the first apply and never touched by the deploy, which changes the
 # services and not the backend in front of them:
 #
-#   gcloud compute backend-services update homestead-mortgages-staging-servicing \
+#   gcloud compute backend-services update homestead-mortgages-staging-console \
 #     --global --project homestead-mortgages --iap=enabled
 #
 # `ignore_changes` keeps Terraform from reading that as drift and turning it
@@ -95,14 +95,20 @@ resource "google_compute_backend_service" "api" {
   }
 }
 
-resource "google_compute_backend_service" "servicing" {
-  name                  = "homestead-mortgages-${var.environment}-servicing"
+# The servicing hostname's one backend: the API container, which on that
+# Host serves the ops console and forwards his console API to his runtime
+# (apps/api/src/console-host.ts). One backend because IAP keys its cookie
+# per backend, and a console on one backend calling an API on another would
+# sign in twice. His runtime's own endpoint group stays declared for the
+# day a direct route is wanted; nothing routes to it today.
+resource "google_compute_backend_service" "console" {
+  name                  = "homestead-mortgages-${var.environment}-console"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   protocol              = "HTTPS"
   enable_cdn            = false
 
   backend {
-    group = google_compute_region_network_endpoint_group.servicing.id
+    group = google_compute_region_network_endpoint_group.api.id
   }
 
   log_config {
@@ -134,11 +140,19 @@ resource "google_cloud_run_v2_service_iam_member" "iap_invokes_servicing" {
   member   = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-iap.iam.gserviceaccount.com"
 }
 
+resource "google_cloud_run_v2_service_iam_member" "iap_invokes_api" {
+  project  = var.project_id
+  location = var.region
+  name     = "homestead-mortgages-${var.environment}"
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-iap.iam.gserviceaccount.com"
+}
+
 # Who may pass IAP on the servicing hostname. IAM only — it grants nothing
 # until IAP is on, and revoking a member here is what locks a person out.
 resource "google_iap_web_backend_service_iam_member" "servicing_console" {
   for_each            = toset(var.servicing_console_members)
-  web_backend_service = google_compute_backend_service.servicing.name
+  web_backend_service = google_compute_backend_service.console.name
   role                = "roles/iap.httpsResourceAccessor"
   member              = each.value
 }
@@ -178,20 +192,11 @@ resource "google_compute_url_map" "edge" {
     default_service = google_compute_backend_service.api.id
   }
 
+  # Everything on the servicing hostname goes to the console backend; the
+  # API container decides by Host what to serve and sends `/` to `/console/`.
   path_matcher {
     name            = "servicing"
-    default_service = google_compute_backend_service.servicing.id
-
-    # His runtime answers `/` with a JSON 404; the console is `/ops`.
-    path_rule {
-      paths = ["/"]
-      url_redirect {
-        path_redirect          = "/ops"
-        https_redirect         = true
-        strip_query            = false
-        redirect_response_code = "FOUND"
-      }
-    }
+    default_service = google_compute_backend_service.console.id
   }
 }
 

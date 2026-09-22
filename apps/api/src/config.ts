@@ -115,6 +115,13 @@ export const config = {
   servicing: {
     apiUrl: process.env.SERVICING_API_URL ?? "",
     apiToken: process.env.SERVICING_API_TOKEN ?? "",
+    /**
+     * The hostname his runtime answers on for people. On that Host this
+     * process serves the ops console (apps/console) and proxies his console
+     * API to `apiUrl`; on every other Host it is the borrower app. Unset
+     * where there is no such hostname, and then nothing is mounted.
+     */
+    publicHost: process.env.SERVICING_PUBLIC_HOST || undefined,
   },
 
   /**

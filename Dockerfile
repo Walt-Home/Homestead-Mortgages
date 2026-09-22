@@ -20,6 +20,7 @@ COPY packages/brand/package.json packages/brand/
 COPY packages/db/package.json packages/db/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/console/package.json apps/console/
 COPY apps/servicing/package.json apps/servicing/
 RUN npm ci
 
@@ -40,6 +41,7 @@ RUN printf '{\n  "name": "homestead-mortgages-runtime",\n  "private": true,\n  "
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/web/dist ./apps/web/dist
+COPY --from=build /app/apps/console/dist ./apps/console/dist
 
 EXPOSE 8080
 CMD ["node", "apps/api/dist/index.js"]

@@ -41,7 +41,8 @@ packages/refi-review       the daily refinance review: Doug's §33.2 over his §
 packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5
-apps/web                   React + Vite
+apps/web                   React + Vite, the borrower app
+apps/console               React + Vite, the ops console: ours, over Doug's console API, its own design system
 apps/servicing             Doug's servicing platform, vendored whole, on its own database
 infra                      Terraform
 ```
@@ -444,13 +445,17 @@ one global external Application Load Balancer, a serverless endpoint group
 per service, a Google-managed certificate per hostname, HTTP redirected to
 HTTPS, and `/` on the servicing host redirected to his console at `/ops`.
 The servicing hostname is behind Identity-Aware Proxy for Doug, Drew and Joe
-as their trywalt.ai accounts; behind that is his console's own sign-in
-(e-mailed code, echoed on the page because the mail vendor is a FAKE, then a
-password). The deploy stands the first console admin with his
-`staff-bootstrap`; that admin invites the rest. The run.app URLs stay open
+as their trywalt.ai accounts. Its one backend is the API container, which on
+that Host serves OUR ops console (`apps/console`, at `/console`) and forwards
+the console's calls to his runtime as `/console/api/*` → his `/ops/api/*`
+(`apps/api/src/console-host.ts`); his own page is forwarded at `/ops` for
+comparison. Behind IAP is his console's own sign-in (e-mailed code, printed
+on the page because the mail vendor is a FAKE, then a password). The deploy
+stands the first console admin with his `staff-bootstrap`; that admin
+invites the rest from the console. The run.app URLs stay open
 and bypass IAP, on purpose and named. DNS is Doug's, at GoDaddy; the A
 records are `terraform output dns_records`. See `docs/decisions.md`, "Two
-hostnames, one front door".
+hostnames, one front door" and "The ops console is ours".
 
 **`DEMO_PERSONAS=true` is set on staging and must never be set anywhere real.**
 It mounts `POST /api/auth/personas/:key`, which mints a real session for a

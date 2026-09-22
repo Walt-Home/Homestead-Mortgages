@@ -75,7 +75,7 @@ jobs:
         run: npm run brand:verify
 
       - name: TypeScript
-        run: npx tsc -b packages/shared packages/kernel packages/partner-book packages/refi-review packages/requirements packages/connectors packages/underwriting packages/du-schema packages/du packages/db apps/api apps/web
+        run: npx tsc -b packages/shared packages/kernel packages/partner-book packages/refi-review packages/requirements packages/connectors packages/underwriting packages/du-schema packages/du packages/db apps/api apps/web apps/console
 
       # There was no eslint config in this repo until now — the dependencies
       # were installed and every workspace's `lint` script called eslint, but
@@ -671,6 +671,12 @@ jobs:
           # redirect are minted on it, so it must be a hostname that answers.
           # Setting it is the cutover: register the new redirect URI in the
           # Plaid dashboard and the origin on the Google OAuth client first.
+          # The servicing hostname, once it exists: on that Host the API
+          # serves the ops console and proxies his console API instead of
+          # the borrower app (apps/api/src/console-host.ts).
+          if [ -n "$SERVICING_PUBLIC_HOST" ]; then
+            ENV_VARS="$ENV_VARS,SERVICING_PUBLIC_HOST=$SERVICING_PUBLIC_HOST"
+          fi
           ORIGIN="${PUBLIC_ORIGIN:-$SERVICE_URL}"
           if [ -n "$ORIGIN" ]; then
             ENV_VARS="$ENV_VARS,PUBLIC_ORIGIN=$ORIGIN"
@@ -696,6 +702,7 @@ jobs:
             --timeout 120
         env:
           PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
+          SERVICING_PUBLIC_HOST: ${{ vars.SERVICING_PUBLIC_HOST }}
 
       # The scheduled fetch runs the same image with a different entrypoint.
       # Terraform owns the job's shape and ignores its image tag, so this is

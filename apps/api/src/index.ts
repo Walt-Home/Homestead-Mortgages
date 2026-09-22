@@ -8,6 +8,7 @@ import { personaReadOnly } from "./middleware/persona-read-only.js";
 import { sessionMiddleware } from "./middleware/session.js";
 import { assertAuthConfigured } from "./services/auth.js";
 import { serveSpa } from "./static.js";
+import { consoleHost } from "./console-host.js";
 import { providerMix } from "./services/connectors.js";
 import { authRouter } from "./routes/auth.js";
 import { healthRouter } from "./routes/health.js";
@@ -35,6 +36,11 @@ app.use(
     credentials: true,
   }),
 );
+// The servicing hostname is a different product: the ops console, and his
+// console API behind it. Mounted first so that on that Host nothing below —
+// not the partner door, not the session, not the borrower app — answers.
+const consoleMounted = consoleHost(app);
+
 // A partner is a key, not a sign-in. Mounted ABOVE the session gate because
 // the gate would refuse it — a servicer's integration has no session and no
 // second factor — and carrying its own gate, so a key opens this prefix and
@@ -105,6 +111,14 @@ app.listen(config.port, () => {
   console.log(
     `SPA: ${spaServed ? "served from apps/web/dist" : "not built (Vite serves it in dev)"}`,
   );
+  if (consoleMounted !== "not-configured") {
+    console.log(
+      `Ops console on ${config.servicing.publicHost}: ` +
+        (consoleMounted === "console"
+          ? "served from apps/console/dist"
+          : "not built; his API forwarded"),
+    );
+  }
   if (config.demoPersonasEnabled) {
     console.log("DEMO_PERSONAS is on: sample-borrower sign-in is mounted");
   }

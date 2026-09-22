@@ -31,6 +31,26 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--workspace=@hm/servicing"],
       "port": 8090
+    },
+    {
+      "name": "servicing-local",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "SERVICING_DATABASE_URL=postgresql://homestead_mortgages:homestead_mortgages@localhost:5433/hm_servicing_console",
+        "SERVICING_ENVIRONMENT=nonprod",
+        "npm",
+        "run",
+        "start",
+        "--workspace=@hm/servicing"
+      ],
+      "port": 8090
+    },
+    {
+      "name": "console",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--workspace=@hm/console"],
+      "port": 5174,
+      "url": "http://localhost:5174"
     }
   ]
 }

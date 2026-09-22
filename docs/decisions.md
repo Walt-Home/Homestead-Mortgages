@@ -2014,6 +2014,64 @@ the three A records to set. DNS is at GoDaddy and the login is Doug's.
   stay a variable, so the front door carries a different answer if one is
   ever wanted.
 
+## The ops console is ours
+
+Doug's ops console is one 129 KB file in his vendored tree, and the tree
+stays his byte for byte. So the console the team uses is a second app,
+`apps/console`, written on 22 September 2026 over his console API — the
+same JSON his page calls, at `/ops/api/*` — and served on the servicing
+hostname by the API container, which forwards those calls to his runtime
+(`apps/api/src/console-host.ts`). His page is still there at `/ops` on the
+same hostname, forwarded the same way, for comparison. Nothing of his is
+edited; nothing of his is styled.
+
+- **Its own design system, not the borrower app's.** `apps/console/src/theme.css`
+  is a workspace for operators: a near-white canvas, white surfaces,
+  hairlines rather than boxes, a system sans throughout, tabular figures,
+  and one accent — Super Red, the company's — for the thing you can act
+  on. Status is its own set of hues and never the accent. The Tailwind
+  palette is replaced with these tokens, as the brand package does for the
+  borrower app, so nothing off-system reaches a screen by accident. The
+  borrower app keeps the brand package; a consumer product and an
+  operator workspace are not the same surface, and Joe's instruction on
+  the day was to define this one ourselves.
+- **Three breakpoints, one navigation.** Under 768px the nav is a sheet
+  behind a menu button and every table is a list of cards, because a
+  nine-column table on a phone scrolls in two directions and says nothing.
+  From 768px it is a rail of icons; from 1024px a sidebar with labels,
+  section headings and the live counts. Detail opens in a sheet from the
+  right on a desktop and takes the screen on a phone.
+- **One front door, one cookie.** The console and his API are one backend
+  behind Identity-Aware Proxy on the branded hostname, because IAP keys
+  its cookie per backend and a page on one backend calling an API on
+  another would sign in twice and fail the second time from a fetch. His
+  session cookie is set by his response and passed through unchanged.
+- **His rules, said in words.** The sign-in is his: a code to the e-mail,
+  a password of twelve or more, one code opens one sign-in within ten
+  minutes, five wrong answers in an hour lock the account. On a deployment
+  whose mail vendor is a fake the code is printed on the page in as many
+  words, with a button that uses it, rather than a pretence that mail was
+  sent. The acting role is a choice in the account block and rides every
+  request; a refusal that names the roles this session could act as offers
+  them as buttons, once, rather than a dead end.
+- **What it covers.** The queue by kind with the acts that close a row;
+  work items with claim, release and close; loans with events, ledger,
+  clocks, decisions, notices and open items; people with search, the
+  account record, masked contact and identity and the unmask with a
+  reason; the partner book by partner with loans, imports and the day's
+  reviews; compliance at a glance; controls — clocks, escalations with
+  their dispositions, the outbox with requeue, the AI switches with their
+  two-person confirmation; AI conversations and the agents; staff with
+  invite, roles and disable; the access review. Passkeys, the tape upload,
+  the evidence packs, posture and the 35.7 grants are not built; his page
+  at `/ops` still does those.
+- **Tested against his runtime, not a mock.** The API's seam is held by
+  `console-host.test.ts` against a stub of his server: what crosses in
+  each direction, cookies both ways, and that nothing of the borrower app
+  answers on the servicing name. The screens were walked in a browser
+  against his runtime running locally on his demo seed, on a phone, a
+  tablet and a desktop viewport, before the first deploy.
+
 ## Tests run against a real Postgres
 
 The API suite used to mock `@hm/db`. Two files did it explicitly, and the cost

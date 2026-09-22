@@ -12,6 +12,7 @@
     { "path": "packages/du-schema" },
     { "path": "packages/du" },
     { "path": "apps/api" },
-    { "path": "apps/web" }
+    { "path": "apps/web" },
+    { "path": "apps/console" }
   ]
 }

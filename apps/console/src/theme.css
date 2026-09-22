@@ -1,0 +1,108 @@
+/*
+ * The ops console's design tokens. Ours, defined here, for an operator
+ * workspace: a near-white canvas, white surfaces, hairlines instead of
+ * boxes, a system sans throughout, tabular figures, and one accent for the
+ * thing you can act on. Status is its own set of hues and never the accent.
+ *
+ * Channel triplets rather than hex so Tailwind's opacity modifiers work
+ * (`bg-accent/10`). tailwind.config.js maps every token to a utility and
+ * replaces Tailwind's own palette, so a color that is not one of these cannot
+ * reach a component by accident.
+ *
+ * The one thing shared with the borrower app is the red: Super Red,
+ * packages/brand/tokens.mjs `red-500`, the company's accent.
+ */
+:root {
+  color-scheme: light;
+
+  /* Ground and surfaces, light to raised. */
+  --c-canvas: 250 250 250;
+  --c-surface: 255 255 255;
+  --c-surface-2: 245 245 246;
+  --c-surface-3: 236 236 238;
+
+  /* Lines: a hairline inside a surface, an edge, a boundary that means something. */
+  --c-line: 235 235 237;
+  --c-line-2: 220 220 224;
+  --c-line-3: 150 150 158;
+
+  /* Ink: read, secondary, and incidental. All clear 4.5:1 on white. */
+  --c-fg: 17 17 19;
+  --c-fg-2: 82 82 90;
+  --c-fg-3: 107 107 117;
+
+  /* The accent. Super Red, deepened for paper. */
+  --c-accent: 191 36 43;
+  --c-accent-fg: 255 255 255;
+  --c-accent-soft: 249 225 226;
+
+  /* Status. Text on white clears 4.5:1; the soft tint is the row wash. */
+  --c-ok: 22 128 61;
+  --c-ok-soft: 222 243 229;
+  --c-warn: 161 88 0;
+  --c-warn-soft: 252 236 210;
+  --c-danger: 179 30 42;
+  --c-danger-soft: 250 226 228;
+  --c-info: 29 78 216;
+  --c-info-soft: 224 234 253;
+
+  --c-focus: 17 17 19;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", Roboto, system-ui,
+    sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  --shadow-menu: 0 12px 32px rgb(17 17 19 / 0.14), 0 2px 6px rgb(17 17 19 / 0.08);
+  --shadow-sheet: -16px 0 48px rgb(17 17 19 / 0.14);
+  --shadow-card: 0 1px 2px rgb(17 17 19 / 0.04);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html {
+  background: rgb(var(--c-canvas));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-size-adjust: 100%;
+}
+
+body {
+  color: rgb(var(--c-fg));
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* Figures line up in columns everywhere; nothing here is prose. */
+body {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--c-focus));
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgb(var(--c-accent) / 0.2);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: rgb(var(--c-fg));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

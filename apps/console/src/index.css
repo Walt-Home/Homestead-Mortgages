@@ -1,0 +1,10 @@
+/*
+ * An assembly. The tokens and element defaults are theme.css; everything else
+ * is a utility or a component in src/components. Nothing here declares a
+ * color, a face or a size.
+ */
+@import "./theme.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

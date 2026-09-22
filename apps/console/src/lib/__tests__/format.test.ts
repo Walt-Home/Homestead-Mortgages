@@ -26,6 +26,8 @@ describe("parseTs", () => {
     expect(fmtRelative("2026-09-22T09:00:00Z", now)).toBe("3h ago");
     expect(fmtRelative("2026-09-25T12:00:00Z", now)).toBe("in 3d");
     expect(fmtRelative("2026-09-01", now)).toBe("21d ago");
+    expect(fmtRelative("2026-09-22", now)).toBe("today");
+    expect(fmtRelative("2026-09-24", now)).toBe("in 2d");
   });
 });
 

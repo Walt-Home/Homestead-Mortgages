@@ -56,8 +56,32 @@ export function fmtTime(s: string | null | undefined): string {
   }).format(d);
 }
 
-/** "3h ago", "in 2d", "just now". */
+/** Today's calendar date in the display zone, as [year, month, day]. */
+function todayParts(now: Date): [number, number, number] {
+  const [y, m, d] = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .format(now)
+    .split("-")
+    .map(Number);
+  return [y ?? 0, m ?? 1, d ?? 1];
+}
+
+/** "3h ago", "in 2d", "just now". A plain date counts calendar days, whatever the machine's zone. */
 export function fmtRelative(s: string | null | undefined, now: Date = new Date()): string {
+  if (typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.trim())) {
+    const [y, m, d] = s.trim().split("-").map(Number);
+    const [ty, tm, td] = todayParts(now);
+    const days = Math.round(
+      (Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1) - Date.UTC(ty, tm - 1, td)) / 86_400_000,
+    );
+    if (days === 0) return "today";
+    if (Math.abs(days) >= 30) return fmtDate(s);
+    return days < 0 ? `${-days}d ago` : `in ${days}d`;
+  }
   const d = parseTs(s);
   if (!d) return "—";
   const diff = d.getTime() - now.getTime();

@@ -1700,9 +1700,20 @@ the same figure is a disagreement waiting to happen.
   registry refuses to build the real adapter without `SERVICING_API_URL`
   rather than answer fixture verdicts under his name.
 
-What it does not do: write anything on his side, hold his loan id on ours
-(the lookup walks his imports each time, which is fine for a card and wrong
-for a batch), or reach a loan his platform services rather than watches —
+The row remembers the platform's id, with the platform's name beside it.
+The first successful read writes `servicing_provider` and
+`servicing_external_id` behind itself, so the next read — and a sweep over
+every monitored loan — goes straight to the id instead of walking the
+platform's imports for the number. The name is stored with the id because an
+id is meaningful only to the platform that minted it: the route passes the
+id only when the stored provider is the one the registry holds today, the
+adapter falls back to the number when the platform no longer answers the id
+(one extra pair of calls, never a wrong loan), and a CHECK keeps the two
+columns a pair. It is a cache of a name and not a fact about the mortgage:
+no ledger row, and a persona's read is not refused for it, because nothing
+the person sees changes.
+
+What it does not do: write anything on his side, or reach a loan his platform services rather than watches —
 the `serviced` relationship is recognized and untested, because nothing
 boarded is his and ours at once yet.
 

@@ -128,10 +128,32 @@ loanRouter.get(
       live = { status: "not_wired", integrationDepth: servicer?.integrationDepth ?? "NONE" };
     } else {
       try {
-        const r = await connectors().servicing.fetchRecord({
+        const port = connectors().servicing;
+        // The id the row remembers is passed only when the platform that
+        // minted it is the one the registry holds today; an id from another
+        // provider is not a hint, it is a different system's name.
+        const remembered =
+          loan.servicingProvider === port.capabilities.provider && loan.servicingExternalId
+            ? loan.servicingExternalId
+            : undefined;
+        const r = await port.fetchRecord({
           servicerSlug: servicer.slug,
           servicerLoanNumber: loan.servicerLoanNumber,
+          ...(remembered ? { externalLoanId: remembered } : {}),
         });
+        // Written behind the read, so the next one — and a batch — goes
+        // straight to the id. A cache of a name, not a fact about the loan:
+        // no ledger row, and nothing a persona's read-only session is
+        // refused for, because nothing the person sees changes.
+        if (
+          r &&
+          (loan.servicingProvider !== r.provider || loan.servicingExternalId !== r.externalId)
+        ) {
+          await prisma.loan.update({
+            where: { id: loan.id },
+            data: { servicingProvider: r.provider, servicingExternalId: r.externalId },
+          });
+        }
         live = r
           ? { status: "fetched", provider: r.provider, retrievedAt: r.retrievedAt, record: r.data }
           : { status: "not_held" };

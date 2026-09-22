@@ -179,6 +179,45 @@ describe("GET /loans/:id/servicing", () => {
     expect((r.body.live as { status: string }).status).toBe("fetched");
   });
 
+  it("remembers the platform's id beside the platform's name, and only as a pair", async () => {
+    const me = await createUser();
+    const s = await servicer("API");
+    const loanId = await loanFor(me.id, s.id, "NL-100001");
+    const before = await prisma.loan.findUniqueOrThrow({ where: { id: loanId } });
+    expect(before.servicingProvider).toBeNull();
+    expect(before.servicingExternalId).toBeNull();
+
+    expect((await get(me.id, loanId)).status).toBe(200);
+    const after = await prisma.loan.findUniqueOrThrow({ where: { id: loanId } });
+    expect(after.servicingProvider).toBe("fixture-servicing");
+    expect(after.servicingExternalId).toBe("fixture-servicing-nl-100001");
+
+    // An id another platform minted is not this platform's, and is replaced.
+    await prisma.loan.update({
+      where: { id: loanId },
+      data: { servicingProvider: "supermortgage", servicingExternalId: "e5852b7f-somebody-elses" },
+    });
+    expect((await get(me.id, loanId)).status).toBe(200);
+    const replaced = await prisma.loan.findUniqueOrThrow({ where: { id: loanId } });
+    expect(replaced.servicingProvider).toBe("fixture-servicing");
+    expect(replaced.servicingExternalId).toBe("fixture-servicing-nl-100001");
+
+    // The database holds the pair: a provider with no id, or an id with no provider, is refused.
+    await expect(
+      prisma.loan.update({ where: { id: loanId }, data: { servicingExternalId: null } }),
+    ).rejects.toThrow(/loans_platform_id_names_its_provider/);
+  });
+
+  it("writes nothing when the platform holds no such loan, and nothing when it is not asked", async () => {
+    const me = await createUser();
+    const s = await servicer("API");
+    const unheld = await loanFor(me.id, s.id, "NL-777777");
+    expect((await get(me.id, unheld)).status).toBe(200);
+    const row = await prisma.loan.findUniqueOrThrow({ where: { id: unheld } });
+    expect(row.servicingProvider).toBeNull();
+    expect(row.servicingExternalId).toBeNull();
+  });
+
   it("answers a stranger exactly as it answers a loan that does not exist", async () => {
     const owner = await createUser();
     const s = await servicer("API");

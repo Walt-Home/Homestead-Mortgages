@@ -785,6 +785,14 @@ export interface MailConnector {
 export interface ServicingLoanRef {
   readonly servicerSlug: string;
   readonly servicerLoanNumber: string;
+  /**
+   * The platform's own id for this loan from an earlier read, when the caller
+   * kept it (`ConnectorResult.externalId`). An adapter reads by it and falls
+   * back to the number when the platform no longer answers it, so a stale id
+   * costs one extra call rather than a wrong answer. Optional: the first read
+   * has none, and the fixture needs none.
+   */
+  readonly externalLoanId?: string;
 }
 
 export interface ServicingConnector {

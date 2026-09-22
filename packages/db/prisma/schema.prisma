@@ -1936,11 +1936,20 @@ model Loan {
   originatingApplicationId String?      @unique @map("originating_application_id") @db.Uuid
   originatingApplication   Application? @relation(fields: [originatingApplicationId], references: [id], onDelete: SetNull)
 
-  servicerId         String?   @map("servicer_id") @db.Uuid
-  servicer           Servicer? @relation(fields: [servicerId], references: [id], onDelete: Restrict)
+  servicerId          String?   @map("servicer_id") @db.Uuid
+  servicer            Servicer? @relation(fields: [servicerId], references: [id], onDelete: Restrict)
   /// The servicer's own number for the loan, which is how the next tape finds
   /// this row again. Null for a loan we originated, until a servicer names it.
-  servicerLoanNumber String?   @map("servicer_loan_number")
+  servicerLoanNumber  String?   @map("servicer_loan_number")
+  /// The servicing platform's own id for this loan, and which platform said
+  /// so, remembered from the first live read so the next one — and a batch —
+  /// reads by id rather than walking the platform's imports for the number.
+  /// A cache, not a fact about the mortgage: written behind a successful read,
+  /// rewritten when the platform answers a different id, and ignored when the
+  /// provider named beside it is not the one the registry holds today. Both
+  /// or neither, by CHECK.
+  servicingProvider   String?   @map("servicing_provider")
+  servicingExternalId String?   @map("servicing_external_id")
 
   /// The four axes. NULL means the feed did not say. A CHECK requires all four
   /// on a loan we originated, because we know our own.

@@ -124,7 +124,9 @@ lookups are: the key is the servicer's loan number, never a person, and the
 route decides "whose" with `assertLoanAccess` before it asks. The fixture
 answers what his engine answered for the twelve-loan sample book, and the
 real adapter (`SERVICING_PROVIDER=supermortgage`) is held to the same
-record by a test that replays his door. See `docs/decisions.md`, "The
+record by a test that replays his door. The first successful read writes
+the platform's id and name onto the row (`servicing_external_id`,
+`servicing_provider`, a pair by CHECK), so later reads go by id. See `docs/decisions.md`, "The
 servicing platform is read, never joined".
 
 ## Known stubs, for whoever wires the real thing

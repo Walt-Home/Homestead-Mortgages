@@ -131,6 +131,36 @@ export function supermortgageServicingConnector(options: SupermortgageOptions): 
     return obj(obj(JSON.parse(text) as unknown)["output"]);
   }
 
+  /** A loan's events and timers, or null when his door says it holds no such loan. */
+  async function eventsAndTimers(
+    loanId: string,
+  ): Promise<{ rawEvents: unknown; rawTimers: unknown } | null> {
+    try {
+      const [{ events: rawEvents }, { timers: rawTimers }] = await Promise.all([
+        call<{ events?: unknown }>("GET", `/v1/loans/${encodeURIComponent(loanId)}/events`),
+        call<{ timers?: unknown }>("GET", `/v1/loans/${encodeURIComponent(loanId)}/timers`),
+      ]);
+      return { rawEvents, rawTimers };
+    } catch (err) {
+      if (err instanceof ServicingUnavailableError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  /** The loan's id and its events, by the remembered id first and the number second. */
+  async function resolve(
+    ref: ServicingLoanRef,
+  ): Promise<{ id: string; held: { rawEvents: unknown; rawTimers: unknown } } | null> {
+    if (ref.externalLoanId) {
+      const held = await eventsAndTimers(ref.externalLoanId);
+      if (held) return { id: ref.externalLoanId, held };
+    }
+    const id = await lookup(ref.servicerLoanNumber);
+    if (!id) return null;
+    const held = await eventsAndTimers(id);
+    return held ? { id, held } : null;
+  }
+
   async function lookup(servicerLoanNumber: string): Promise<string | null> {
     const list = await call<{ imports?: unknown }>("GET", "/v1/partner-book/imports");
     const imports = Array.isArray(list.imports) ? list.imports.map(obj) : [];
@@ -153,14 +183,17 @@ export function supermortgageServicingConnector(options: SupermortgageOptions): 
     capabilities: { provider: "supermortgage", mode: "sandbox", satisfies: [] },
 
     async fetchRecord(ref: ServicingLoanRef): Promise<ConnectorResult<ServicingRecord> | null> {
-      const loanId = await lookup(ref.servicerLoanNumber);
-      if (!loanId) return null;
-
-      const [{ events: rawEvents }, { timers: rawTimers }, facts, readiness] = await Promise.all([
-        call<{ events?: unknown }>("GET", `/v1/loans/${encodeURIComponent(loanId)}/events`),
-        call<{ timers?: unknown }>("GET", `/v1/loans/${encodeURIComponent(loanId)}/timers`),
-        tool(loanId, "33.2/review.facts"),
-        tool(loanId, "33.3/readiness.read"),
+      // By the id the caller kept, when it kept one; by the number when it did
+      // not, or when the platform no longer answers the id it once gave. A
+      // stale id is one extra pair of calls, never a wrong loan: his ids are
+      // uuids he mints, and a loan he has forgotten is looked up afresh.
+      const found = await resolve(ref);
+      if (!found) return null;
+      const { id, held } = found;
+      const { rawEvents, rawTimers } = held;
+      const [facts, readiness] = await Promise.all([
+        tool(id, "33.2/review.facts"),
+        tool(id, "33.3/readiness.read"),
       ]);
 
       const events: HisEvent[] = (Array.isArray(rawEvents) ? rawEvents.map(obj) : [])
@@ -234,7 +267,7 @@ export function supermortgageServicingConnector(options: SupermortgageOptions): 
           : null;
 
       const record: ServicingRecord = {
-        externalLoanId: loanId,
+        externalLoanId: id,
         servicerLoanNumber: ref.servicerLoanNumber,
         relationship: boarded && !loaded ? "serviced" : "monitored",
         loadedAsOf: loaded ? str(loaded.payload["as_of_date"]) : null,
@@ -251,7 +284,7 @@ export function supermortgageServicingConnector(options: SupermortgageOptions): 
         data: record,
         provider: "supermortgage",
         retrievedAt: new Date().toISOString(),
-        externalId: loanId,
+        externalId: id,
       };
     },
   };

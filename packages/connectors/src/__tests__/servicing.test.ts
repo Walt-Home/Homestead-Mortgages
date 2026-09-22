@@ -315,6 +315,42 @@ describe("the adapter over his machine door", () => {
     ).rejects.toBeInstanceOf(ServicingUnavailableError);
   });
 
+  it("reads by the id the caller kept and never walks the imports for it", async () => {
+    const seen: { url: string; init: RequestInit }[] = [];
+    const port = supermortgageServicingConnector({
+      baseUrl: "http://servicing.test",
+      token: "t",
+      fetch: stubFetch({}, seen),
+    });
+    const r = await port.fetchRecord({
+      servicerSlug: "northlight",
+      servicerLoanNumber: "NL-100001",
+      externalLoanId: LOAN,
+    });
+    expect(r?.externalId).toBe(LOAN);
+    expect(r?.data.review?.verdict).toBe("candidate");
+    expect(seen.some((s) => s.url.includes("/v1/partner-book/imports"))).toBe(false);
+  });
+
+  it("falls back to the number when the platform no longer answers the id, and hands back the new one", async () => {
+    const seen: { url: string; init: RequestInit }[] = [];
+    const gone = "00000000-0000-4000-8000-000000000000";
+    const port = supermortgageServicingConnector({
+      baseUrl: "http://servicing.test",
+      token: "t",
+      fetch: stubFetch({}, seen),
+    });
+    const r = await port.fetchRecord({
+      servicerSlug: "northlight",
+      servicerLoanNumber: "NL-100001",
+      externalLoanId: gone,
+    });
+    // The stub answers 404 for a loan it does not know, which is his door's answer too.
+    expect(seen.some((s) => s.url.includes(`/v1/loans/${gone}/events`))).toBe(true);
+    expect(seen.some((s) => s.url.includes("/v1/partner-book/imports"))).toBe(true);
+    expect(r?.externalId).toBe(LOAN);
+  });
+
   it("turns his fractions into the percent strings the product uses", () => {
     expect(fractionToPct("0.06375")).toBe("6.375");
     expect(fractionToPct("0.07250")).toBe("7.250");

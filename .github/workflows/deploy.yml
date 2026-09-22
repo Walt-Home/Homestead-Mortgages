@@ -8,6 +8,11 @@ name: Deploy Homestead Mortgages
 on:
   push:
     branches: [main]
+    # A push that touches only prose changes nothing that runs, so it runs
+    # nothing: no tests, no deploy. A push that touches prose and code runs.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
 
 env:
   GCP_PROJECT: homestead-mortgages
@@ -25,6 +30,36 @@ env:
   SERVICING_RUNTIME_SA: hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com
 
 jobs:
+  # What this push touched. Doug's tree is vendored byte for byte and moves
+  # only when it is re-vendored, so his twenty-minute suite and his deploy
+  # run only when something under apps/servicing — or the lockfile his image
+  # installs from, or this file — changed. A push with no base to diff
+  # against (a new branch, a force push) runs everything.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      servicing: ${{ steps.diff.outputs.servicing }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: diff
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          if [[ "$BEFORE" =~ ^0+$ ]] || ! git fetch --no-tags --depth=1 origin "$BEFORE" 2>/dev/null; then
+            echo "::notice::No base commit to diff against; running everything."
+            echo "servicing=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED=$(git diff --name-only "$BEFORE" "$AFTER")
+          printf '%s\n' "$CHANGED"
+          if grep -qE '^(apps/servicing/|package-lock\.json$|\.github/workflows/deploy\.yml$|scripts/test-database-url\.mjs$)' <<< "$CHANGED"; then
+            echo "servicing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Nothing under apps/servicing changed; his suite and his deploy are skipped."
+            echo "servicing=false" >> "$GITHUB_OUTPUT"
+          fi
+
   check:
     runs-on: ubuntu-latest
 
@@ -40,6 +75,9 @@ jobs:
           POSTGRES_USER: homestead_mortgages
           POSTGRES_PASSWORD: homestead_mortgages
           POSTGRES_DB: homestead_mortgages
+          # Throwaway databases on a runner that is gone in an hour: fsync
+          # and synchronous commit buy nothing here and cost every write.
+          POSTGRES_INITDB_ARGS: "--set fsync=off --set synchronous_commit=off --set full_page_writes=off"
         # 5433 matches docker-compose.yml, so one DATABASE_URL works in both.
         ports:
           - 5433:5432
@@ -140,23 +178,24 @@ jobs:
           fi
           xmllint --version
 
+      # Every workspace's tests but the API's, which are thirteen minutes on
+      # one runner and five on three — see `api-tests`.
       - name: Test
-        run: npm test
+        run: npm test -- --filter=!@hm/api
 
       - name: Build
         run: npm run build
 
-  # Doug's servicing runtime, vendored whole as apps/servicing, checked and
-  # tested on a runner of its own. His tests are his — node --test, one
-  # Postgres database per file cloned from a migrated template — and his own
-  # CI shards them four ways; here they get a whole runner and their own
-  # Postgres rather than sharing `check`'s with our suite, which already
-  # takes the better part of that job. `npm test` at the root leaves this
-  # workspace out for the same reason (`turbo test --filter=!@hm/servicing`).
-  # His tsconfig is noEmit and NodeNext with .ts specifiers, which `tsc -b`
-  # cannot compose, so the typecheck runs here too, with his settings.
-  servicing:
+  # The API suite, sharded by file across three runners, each with a Postgres
+  # of its own. The suite already refuses to share a database between two
+  # runs, so a runner per shard is the shape it asks for. Dependencies build
+  # through turbo, as `npm test` would have.
+  api-tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     services:
       postgres:
         image: postgres:16-alpine
@@ -164,6 +203,58 @@ jobs:
           POSTGRES_USER: homestead_mortgages
           POSTGRES_PASSWORD: homestead_mortgages
           POSTGRES_DB: homestead_mortgages
+          POSTGRES_INITDB_ARGS: "--set fsync=off --set synchronous_commit=off --set full_page_writes=off"
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U homestead_mortgages"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://homestead_mortgages:homestead_mortgages@localhost:5433/homestead_mortgages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - name: Test database
+        run: npm run db:test:setup
+      - name: xmllint is available
+        run: |
+          if ! command -v xmllint >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+          fi
+      - name: API tests, shard ${{ matrix.shard }} of 3
+        run: npx turbo test --filter=@hm/api -- --shard=${{ matrix.shard }}/3
+
+  # Doug's servicing runtime, vendored whole as apps/servicing, checked and
+  # tested on runners of its own, and only when his tree changed. His tests
+  # are his — node --test, one Postgres database per file cloned from a
+  # migrated template — sharded four ways as his own CI does, each shard with
+  # a Postgres of its own. `npm test` at the root leaves this workspace out
+  # (`turbo test --filter=!@hm/servicing`). His tsconfig is noEmit and
+  # NodeNext with .ts specifiers, which `tsc -b` cannot compose, so the
+  # typecheck runs here too, with his settings, on the first shard.
+  servicing:
+    needs: [changes]
+    if: needs.changes.outputs.servicing == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: homestead_mortgages
+          POSTGRES_PASSWORD: homestead_mortgages
+          POSTGRES_DB: homestead_mortgages
+          POSTGRES_INITDB_ARGS: "--set fsync=off --set synchronous_commit=off --set full_page_writes=off"
         ports:
           - 5433:5432
         options: >-
@@ -197,10 +288,22 @@ jobs:
             sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
           fi
           xmllint --version
+      # Once, not four times: the typecheck and his three whole-tree checks
+      # (the audit brief, the spec name lint, his DU tables) on the first shard.
       - name: TypeScript (his settings)
+        if: matrix.shard == 1
         run: npm run typecheck -w @hm/servicing
-      - name: His tests, as his
-        run: npm run test:servicing
+      - name: His whole-tree checks
+        if: matrix.shard == 1
+        working-directory: apps/servicing
+        run: |
+          python3 tools/audit.py --check
+          python3 tools/spec_lint_names.py
+          npm run du:verify
+      # His tests as his, a quarter of the files per runner — the split his
+      # own CI uses. scripts/test.mjs is ours and hands the flag to node --test.
+      - name: His tests, as his (shard ${{ matrix.shard }} of 4)
+        run: node apps/servicing/scripts/test.mjs -- --test-shard=${{ matrix.shard }}/4
 
   # Doug's servicing runtime, deployed beside the API as a service of its
   # own: his image (apps/servicing/Dockerfile — one image, the modes his
@@ -212,7 +315,15 @@ jobs:
   # Not gated on GOOGLE_CLIENT_ID: nothing in his runtime signs anyone in
   # with Google here, and his door is a bearer.
   deploy-servicing:
-    needs: [check, servicing]
+    needs: [changes, check, api-tests, servicing]
+    # `always()` so a skipped `servicing` does not skip this by inheritance;
+    # the conditions then say exactly what must have passed.
+    if: >-
+      always() &&
+      needs.changes.outputs.servicing == 'true' &&
+      needs.check.result == 'success' &&
+      needs.api-tests.result == 'success' &&
+      needs.servicing.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -404,8 +515,8 @@ jobs:
   # deploy waits for the repo variable rather than shipping a door with no key.
   # Set it once, in the console, and re-run: `gh variable set GOOGLE_CLIENT_ID`.
   awaiting-oauth-client:
-    needs: [check, servicing]
-    if: vars.GOOGLE_CLIENT_ID == ''
+    needs: [changes, check, api-tests, servicing]
+    if: always() && vars.GOOGLE_CLIENT_ID == '' && needs.check.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Deploy skipped
@@ -417,9 +528,17 @@ jobs:
           echo "See docs/decisions.md → Google sign-in."
 
   deploy:
-    # After the servicing deploy, because the API is told where his door is.
-    needs: [check, servicing, deploy-servicing]
-    if: vars.GOOGLE_CLIENT_ID != ''
+    # After the servicing deploy when there is one, because the API is told
+    # where his door is; when his tree did not change, his suite and his
+    # deploy are skipped and this waits on nothing of his.
+    needs: [changes, check, api-tests, servicing, deploy-servicing]
+    if: >-
+      always() &&
+      vars.GOOGLE_CLIENT_ID != '' &&
+      needs.check.result == 'success' &&
+      needs.api-tests.result == 'success' &&
+      contains(fromJSON('["success","skipped"]'), needs.servicing.result) &&
+      contains(fromJSON('["success","skipped"]'), needs.deploy-servicing.result)
     runs-on: ubuntu-latest
     permissions:
       contents: read

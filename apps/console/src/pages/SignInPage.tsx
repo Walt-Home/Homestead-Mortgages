@@ -62,7 +62,9 @@ export function SignInPage() {
       case "EMAIL_INVALID":
         return setError("That doesn't look like an e-mail address.");
       case "OTP_INVALID":
-        return setError("That code didn't match. Check it and try again, or send a new one.");
+        return setError(
+          "That code didn't match. If this address hasn't been invited yet, no code will: an admin invites you from Staff & roles first. Otherwise check it and try again, or send a new one.",
+        );
       case "OTP_TOO_MANY_ATTEMPTS":
         return setError("Too many tries against that code. Send a new one.");
       case "PASSWORD_WRONG":
@@ -234,7 +236,8 @@ export function SignInPage() {
             <form onSubmit={verify} className="space-y-4">
               {fakeCode ? (
                 <Notice tone="warn" title="No mail leaves this environment">
-                  Every vendor here is a stand-in, so the code is shown instead:{" "}
+                  Every vendor here is a stand-in, so the code is shown instead, and it only works
+                  for an address that has been invited:{" "}
                   <span className="font-mono text-md font-semibold tracking-[0.2em] text-fg">
                     {fakeCode}
                   </span>

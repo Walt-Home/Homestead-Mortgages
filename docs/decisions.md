@@ -2075,6 +2075,34 @@ edited; nothing of his is styled.
   against his runtime running locally on his demo seed, on a phone, a
   tablet and a desktop viewport, before the first deploy.
 
+## The workflow runs what changed
+
+A push to main took thirty minutes to deploy, and the shape of the wait
+was structural: every push ran Doug's whole suite, twenty-two minutes on
+one runner, and both deploys waited for it, while our own API suite took
+thirteen minutes on the same kind of runner. Since 22 September 2026 the
+workflow is shaped around what a push touched.
+
+- **A docs-only push runs nothing.** `paths-ignore` on `docs/**` and every
+  Markdown file. Prose changes nothing that runs, so it runs nothing.
+- **His suite and his deploy run only when his tree changed.** A `changes`
+  job diffs the push against its base; `apps/servicing/**`, the lockfile
+  his image installs from, this workflow and the test-database helper are
+  what count. His tree is vendored byte for byte and moves only when it is
+  re-vendored, so on nearly every push his suite is skipped and the API
+  deploy waits on nothing of his. A push with no base to diff against — a
+  new branch, a force push — runs everything.
+- **Both suites are sharded.** His four ways, as his own CI does, with
+  `--test-shard` through `scripts/test.mjs`; ours three ways with vitest's
+  `--shard`, each shard on a runner with a Postgres of its own, which is the
+  shape the suite already demands. His typecheck and his three whole-tree
+  checks run once, on his first shard.
+- **Postgres in CI runs with fsync off.** The databases are thrown away with
+  the runner, so durability buys nothing and costs every write.
+
+What a normal push costs now: the check job and three API shards in
+parallel, about six minutes, then the API deploy, about four.
+
 ## Tests run against a real Postgres
 
 The API suite used to mock `@hm/db`. Two files did it explicitly, and the cost

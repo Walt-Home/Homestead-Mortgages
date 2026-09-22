@@ -479,7 +479,7 @@ you are already editing that line, so the fix never arrives as its own diff.
 ```bash
 npm run dev                  # API :8080, web :5173
 npm test                     # every workspace but apps/servicing
-npm run test:servicing       # Doug's tests, as his, on a database beside ours (its own CI job)
+npm run test:servicing       # Doug's tests, as his, on a database beside ours (CI: four shards, only when his tree changed)
 npm run check                # tsc -b + registry verify
 npm run requirements:build   # after editing data/v1-build.csv
 npm run brand:build          # after editing packages/brand/tokens.mjs

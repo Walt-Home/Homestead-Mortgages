@@ -10,6 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
+import { plainDate } from "@hm/kernel/calendar";
 import type { ReviewFacts } from "@hm/refi-review";
 import { fillReviewTokens } from "@hm/refi-review";
 import {
@@ -31,7 +32,7 @@ const FACTS: ReviewFacts = {
   upb_cents: "44096293",
   value_cents: "62000000",
   value_source: "partner_fmv",
-  value_as_of: "2026-08-15",
+  value_as_of: plainDate("2026-08-15"),
   value_confidence: "medium",
   ltv: "0.7150",
   remaining_term_months: 348,
@@ -89,7 +90,12 @@ function scriptedClient(scenes: Scene[]) {
         if (scene.text) content.push({ type: "text", text: scene.text, citations: null });
         const tools = "tools" in scene ? scene.tools : [];
         for (const t of tools) {
-          content.push({ type: "tool_use", id: `tu-${++ids}`, name: t.name, input: t.input });
+          content.push({
+            type: "tool_use",
+            id: `tu-${++ids}`,
+            name: t.name,
+            input: t.input,
+          } as Anthropic.ToolUseBlock);
         }
         return {
           id: "m",

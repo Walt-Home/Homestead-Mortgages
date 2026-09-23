@@ -2071,9 +2071,13 @@ edited; nothing of his is styled.
   reviews; compliance at a glance; controls — clocks, escalations with
   their dispositions, the outbox with requeue, the AI switches with their
   two-person confirmation; AI conversations and the agents; staff with
-  invite, roles and disable; the access review. Passkeys, the tape upload,
-  the evidence packs, posture and the 35.7 grants are not built; his page
-  at `/ops` still does those.
+  invite, roles and disable; the access review; and, since the same
+  evening, the tape upload — the partner, the as-of date, the .xlsx and its
+  supplement, with his import's report shown in place: what loaded, what
+  changed, what the tape leaves out, and his one platform-wide rule said in
+  words when it bites, that a loan number belongs to one partner's book.
+  Passkeys, the evidence packs, posture and the 35.7 grants are not built;
+  his page at `/ops` still does those.
 - **Tested against his runtime, not a mock.** The API's seam is held by
   `console-host.test.ts` against a stub of his server: what crosses in
   each direction, cookies both ways, and that nothing of the borrower app

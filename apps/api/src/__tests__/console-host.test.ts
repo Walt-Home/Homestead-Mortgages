@@ -169,6 +169,25 @@ describe("the servicing hostname", () => {
     expect(JSON.parse(acted.body)).toEqual({ role_seen: "admin", gate_seen: null });
     expect(acted.headers["x-acted-as"]).toBe("admin");
 
+    // A tape is a multipart body; it crosses whole, with its boundary.
+    const boundary = "----tape-boundary";
+    const multipart =
+      `--${boundary}\r\nContent-Disposition: form-data; name="as_of_date"\r\n\r\n2026-10-01\r\n` +
+      `--${boundary}\r\nContent-Disposition: form-data; name="tape"; filename="t.xlsx"\r\nContent-Type: application/octet-stream\r\n\r\nPK\u0003\u0004bytes\r\n--${boundary}--\r\n`;
+    seen.length = 0;
+    const tape = await call("/console/api/partner-book/imports", {
+      method: "POST",
+      headers: {
+        "content-type": `multipart/form-data; boundary=${boundary}`,
+        cookie: "sm_staff=abc",
+      },
+      body: multipart,
+    });
+    expect(tape.status).toBe(200);
+    expect(seen[0]).toMatchObject({ method: "POST", url: "/ops/api/partner-book/imports" });
+    expect(seen[0]?.headers["content-type"]).toBe(`multipart/form-data; boundary=${boundary}`);
+    expect(seen[0]?.body).toBe(multipart);
+
     const doc = await call("/console/documents/d1/content");
     expect(JSON.parse(doc.body).echo).toBe("/api/documents/d1/content");
   });

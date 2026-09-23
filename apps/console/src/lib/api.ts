@@ -111,3 +111,41 @@ export async function call<T>(path: string, init: Call = {}): Promise<Answer<T>>
 export async function api<T>(path: string, init: Call = {}): Promise<T> {
   return (await call<T>(path, init)).data;
 }
+
+/**
+ * A multipart upload — a tape and its supplement — with the acting role on
+ * it like any other call, and his refusals folded the same way. The browser
+ * sets the content type and boundary itself.
+ */
+export async function upload<T>(
+  path: string,
+  form: FormData,
+  init: { role?: string; headers?: Record<string, string> } = {},
+): Promise<T> {
+  const headers: Record<string, string> = { accept: "application/json", ...init.headers };
+  const role = init.role ?? actingRole;
+  if (role) headers["x-staff-role"] = role;
+  const response = await fetch(`/console/api${path}`, {
+    method: "POST",
+    headers,
+    body: form,
+    credentials: "same-origin",
+  });
+  const text = await response.text();
+  let body: unknown = {};
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    body = { error: text.slice(0, 200) };
+  }
+  if (!response.ok) {
+    const b = (body ?? {}) as Record<string, unknown>;
+    const code = typeof b.code === "string" ? b.code : null;
+    if (response.status === 401 && (code === "AUTH_REQUIRED" || code === "SESSION_EXPIRED")) {
+      window.dispatchEvent(new CustomEvent(SIGNED_OUT, { detail: { code } }));
+    }
+    const actAs = Array.isArray(b.act_as) ? (b.act_as as string[]) : [];
+    throw new ApiError(response.status, messageOf(b, response.status), code, actAs, b);
+  }
+  return body as T;
+}

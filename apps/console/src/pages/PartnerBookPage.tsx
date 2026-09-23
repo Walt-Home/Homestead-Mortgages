@@ -8,10 +8,20 @@ import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../components/Page.js";
 import { Table, type Column } from "../components/Table.js";
 import { Sheet } from "../components/Sheet.js";
-import { Notice, Pill, Rows, Segmented, Select, Stat, type Tone } from "../components/ui.js";
+import {
+  Button,
+  Notice,
+  Pill,
+  Rows,
+  Segmented,
+  Select,
+  Stat,
+  type Tone,
+} from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { useAuth } from "../lib/auth.js";
 import { fmtDate, fmtDateTime, fmtRelative, money, parseTs, pct, words } from "../lib/format.js";
+import { UploadTapeSheet } from "./UploadTapeSheet.js";
 
 interface Partner {
   partner_party_id: string;
@@ -109,6 +119,7 @@ export function PartnerBookPage() {
   const [tab, setTab] = useState<"loans" | "imports" | "today">("loans");
   const [verdict, setVerdict] = useState("all");
   const [selected, setSelected] = useState<BookLoan | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const partners = useQuery({
     queryKey: ["partners", role],
@@ -231,21 +242,26 @@ export function PartnerBookPage() {
       title="Partner book"
       description="The loans partners send on tape, the reviews run over them, and what each is waiting on."
       actions={
-        p.length > 1 ? (
-          <Select
-            value={partner}
-            onChange={(e) => setPartner(e.target.value)}
-            aria-label="Partner"
-            className="w-56"
-          >
-            <option value="">Every partner</option>
-            {p.map((x) => (
-              <option key={x.partner_party_id} value={x.partner_party_id}>
-                {x.legal_name}
-              </option>
-            ))}
-          </Select>
-        ) : undefined
+        <>
+          {p.length > 1 ? (
+            <Select
+              value={partner}
+              onChange={(e) => setPartner(e.target.value)}
+              aria-label="Partner"
+              className="w-56"
+            >
+              <option value="">Every partner</option>
+              {p.map((x) => (
+                <option key={x.partner_party_id} value={x.partner_party_id}>
+                  {x.legal_name}
+                </option>
+              ))}
+            </Select>
+          ) : null}
+          <Button variant="primary" icon="plus" onClick={() => setUploading(true)}>
+            Load a tape
+          </Button>
+        </>
       }
       wide
     >
@@ -465,6 +481,7 @@ export function PartnerBookPage() {
         ) : null}
       </Section>
       {selected ? <BookLoanSheet loan={selected} onClose={() => setSelected(null)} /> : null}
+      {uploading ? <UploadTapeSheet partners={p} onClose={() => setUploading(false)} /> : null}
     </Page>
   );
 }

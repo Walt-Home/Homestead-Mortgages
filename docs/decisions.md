@@ -1574,7 +1574,20 @@ places where this deliberately differs from his:
 
 What is not built: a second tape profile. The claim is built, and so is the
 daily review the observations exist to feed; see "A mortgage is claimed by a
-token the servicer delivers" and "The daily review is ours now". `npm run partner:book -- sample northlight` loads the
+token the servicer delivers" and "The daily review is ours now".
+
+Walked on staging on 23 September 2026, the way a servicer would: a key
+issued for the Northlight servicer from the API's own image (the same
+script a laptop runs, executed as the review job with its arguments
+swapped, the key read once from the execution's log); the sample book one
+month on — a payment posted on every loan, the balances down by the
+principal portion, the dates rolled — sent through `POST
+/api/partner/book/imports` as base64 JSON and answered `loaded`, twelve
+updated; the book's status reading two imports and the new as-of; the
+persona's page showing the October balance and next due; the first review
+after midnight Eastern computed over the October observation; and a claim
+minted for a second loan, its public preview naming the servicer and the
+town and nothing else, its link on the branded origin. `npm run partner:book -- sample northlight` loads the
 twelve-loan sample book into a development database, through the same
 service the key reaches.
 

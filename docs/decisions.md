@@ -3046,9 +3046,17 @@ because that is the step that turns a row on a tape into a person on a loan.
   `/partner-book/imports` through the console proxy, so its reviewer runs
   over the same book; its receipt is shown beside ours and its refusal fails
   nothing of ours. Blank, that copy is skipped and said so.
-- **Files cross as base64 in JSON, at 40 MB.** The same contract the partner
-  door carries, so one shape describes a tape whoever carries it; the router
-  parses its own body at that size and the session routes never need it.
+- **Files cross as base64 in JSON, at 40 MB, gzipped when the browser
+  can.** The same contract the partner door carries, so one shape describes
+  a tape whoever carries it; the router parses its own body at that size and
+  the session routes never need it. The first real book through the front
+  door on staging never reached the container: a ten-megabyte CSV is
+  thirteen as base64, goes up three times (review, load, the servicing
+  app's copy), and the connection closed mid-upload. The desk now gzips a
+  CSV with the browser's `CompressionStream` before the base64 — tenfold
+  smaller — and says so with `encoding: "gzip"`; an .xlsx is already a zip
+  and goes as it is; the route gunzips. The servicing app's own copy still
+  crosses as multipart, since its parser is its own.
 - **A book is written as sets, because a real one is fourteen thousand
   rows.** The first real tape (Grander's, 14,118 loans, 9.8 MB) took the
   import's one-statement-per-fact-per-row loop past the transaction's two

@@ -11,6 +11,7 @@
 
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { gzipSync } from "node:zlib";
 import express from "express";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
@@ -100,6 +101,7 @@ async function call<T = Record<string, unknown>>(
 }
 
 const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
+const gz = (bytes: Uint8Array) => ({ base64: b64(gzipSync(bytes)), encoding: "gzip" as const });
 const utf8 = (s: string) => new TextEncoder().encode(s);
 const SERVICER = { slug: NORTHLIGHT.slug, displayName: NORTHLIGHT.legal_name };
 
@@ -254,6 +256,15 @@ describe("loading a tape", () => {
       tape: { filename: "october.csv", base64: b64(utf8(toCsv(later.tapeRows))) },
     });
     expect(q.body.rows.find((r) => r.number === "NL-100001")?.change).toBe("updated");
+    // The same tape gzipped on the way up reads the same.
+    const packed = await call<{ rowsReadable: number; asOf: string }>("POST", "/preview", {
+      servicer: SERVICER,
+      profile: "m3-v1",
+      tape: { filename: "october.csv", ...gz(utf8(toCsv(later.tapeRows))) },
+    });
+    expect(packed.status).toBe(200);
+    expect(packed.body.rowsReadable).toBe(12);
+    expect(packed.body.asOf).toBe("2026-10-01");
     // The as-of is the tape's own, not the day the desk read it.
     expect(q.body.asOf).toBe("2026-10-01");
     expect(q.body.rowsReadable).toBe(12);

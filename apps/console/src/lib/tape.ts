@@ -172,28 +172,60 @@ export interface ServicingBookReceipt {
   readonly [k: string]: unknown;
 }
 
+/** A file on the wire: its name and its bytes, base64, gzipped first when the browser could. */
+export interface WireFile {
+  readonly filename: string;
+  readonly base64: string;
+  readonly encoding?: "identity" | "gzip";
+}
+
 export interface TapeFiles {
   readonly servicer: { readonly slug: string; readonly displayName: string };
   readonly profile: string;
   readonly asOf?: string;
-  readonly tape: { readonly filename: string; readonly base64: string };
-  readonly supplement?: { readonly filename: string; readonly base64: string };
+  readonly tape: WireFile;
+  readonly supplement?: WireFile;
 }
 
 export const MAX_FILE_BYTES = 30 * 1024 * 1024;
 
-/** A file as the desk sends it: its name and its bytes, base64. */
-export async function fileToWire(file: File): Promise<{ filename: string; base64: string }> {
-  if (file.size > MAX_FILE_BYTES) {
-    throw new Error(`${file.name} is larger than the desk takes (30 MB).`);
-  }
-  const bytes = new Uint8Array(await file.arrayBuffer());
+function toBase64(bytes: Uint8Array): string {
   let binary = "";
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
-  return { filename: file.name, base64: btoa(binary) };
+  return btoa(binary);
+}
+
+/**
+ * Gzip in the browser, where it can. A CSV book of fourteen thousand rows
+ * is ten megabytes and goes up three times — the review, the load, the
+ * servicing app's copy — and the front door closes a slow upload; gzipped
+ * it is one megabyte. An .xlsx is already a zip and barely shrinks, so it
+ * goes as it is, and a browser without CompressionStream sends everything
+ * as it is.
+ */
+async function gzipIfWorthIt(file: File): Promise<Uint8Array | null> {
+  if (typeof CompressionStream === "undefined") return null;
+  if (/\.xlsx?$/i.test(file.name)) return null;
+  try {
+    const stream = file.stream().pipeThrough(new CompressionStream("gzip"));
+    const packed = new Uint8Array(await new Response(stream).arrayBuffer());
+    return packed.length < file.size ? packed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A file as the desk sends it: its name and its bytes, base64. */
+export async function fileToWire(file: File): Promise<WireFile> {
+  if (file.size > MAX_FILE_BYTES) {
+    throw new Error(`${file.name} is larger than the desk takes (30 MB).`);
+  }
+  const packed = await gzipIfWorthIt(file);
+  if (packed) return { filename: file.name, base64: toBase64(packed), encoding: "gzip" };
+  return { filename: file.name, base64: toBase64(new Uint8Array(await file.arrayBuffer())) };
 }
 
 /** "Northlight Mortgage Servicing (sample partner)" → "northlight-mortgage-servicing-sample-partner". */

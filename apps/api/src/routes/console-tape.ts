@@ -12,6 +12,7 @@
  * cross the partner door — one contract for a tape, whoever carries it.
  */
 
+import { gunzipSync } from "node:zlib";
 import express, { Router } from "express";
 import { z } from "zod";
 import { asyncRoute } from "../middleware/error-handler.js";
@@ -24,11 +25,23 @@ import {
   previewTape,
 } from "../services/tape-desk.js";
 
-const FileSchema = z.object({ filename: z.string().min(1), base64: z.string().min(1) });
-const bytesOf = (f: z.infer<typeof FileSchema>) => ({
-  filename: f.filename,
-  bytes: new Uint8Array(Buffer.from(f.base64, "base64")),
+/**
+ * A file on the wire: its name and its bytes, base64, gzipped first when the
+ * desk could — a CSV tape shrinks about tenfold, and the front door closes a
+ * slow upload of tens of megabytes before it reaches us.
+ */
+const FileSchema = z.object({
+  filename: z.string().min(1),
+  base64: z.string().min(1),
+  encoding: z.enum(["identity", "gzip"]).default("identity"),
 });
+const bytesOf = (f: z.infer<typeof FileSchema>) => {
+  const raw = Buffer.from(f.base64, "base64");
+  return {
+    filename: f.filename,
+    bytes: new Uint8Array(f.encoding === "gzip" ? gunzipSync(raw) : raw),
+  };
+};
 
 const TapeBody = z
   .object({

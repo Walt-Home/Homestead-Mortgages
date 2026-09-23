@@ -10,7 +10,64 @@
     <meta name="theme-color" content="#FCFCFC" />
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      What the page shows before the script has arrived, in the same shape
+      the app draws while it signs you in, so the first paint is never a
+      blank canvas. React replaces it on mount.
+    -->
+    <style>
+      @keyframes console-splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .console-splash {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 24px;
+        background: #fafafa;
+        color: #111113;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", Roboto, system-ui,
+          sans-serif;
+        font-size: 14px;
+        line-height: 20px;
+        text-align: center;
+        -webkit-font-smoothing: antialiased;
+      }
+      .console-splash-mark {
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .console-splash-mark small {
+        font-size: 14px;
+        font-weight: 400;
+        color: #6b6b75;
+        margin-left: 6px;
+      }
+      .console-splash-ring {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 2px solid #dcdce0;
+        border-top-color: #bf242b;
+        animation: console-splash-spin 0.8s linear infinite;
+      }
+      .console-splash-text {
+        font-weight: 500;
+      }
+    </style>
+    <div id="root">
+      <div class="console-splash" role="status" aria-live="polite">
+        <div class="console-splash-mark">Supermortgage<small>Ops</small></div>
+        <div class="console-splash-ring" aria-hidden="true"></div>
+        <div class="console-splash-text">Opening the console…</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

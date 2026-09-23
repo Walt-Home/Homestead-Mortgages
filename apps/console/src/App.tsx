@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AuthProvider, roleWord, useAuth } from "./lib/auth.js";
 import { QUEUE_KINDS, type QueueKind } from "./lib/home.js";
 import { Shell } from "./components/Shell.js";
+import { Loading } from "./components/Loading.js";
 import { EmptyState } from "./components/ui.js";
 import { Page } from "./components/Page.js";
 import { SignInPage } from "./pages/SignInPage.js";
@@ -49,7 +50,7 @@ function KindRoute() {
 function Routed() {
   const { status } = useAuth();
   const { pathname } = useLocation();
-  if (status === "loading") return <div className="min-h-screen bg-canvas" />;
+  if (status === "loading") return <Loading />;
   if (status === "signed-out") return <SignInPage />;
   // The tape desk is its own experience: one job, no navigation around it.
   if (pathname === "/tape" || pathname.startsWith("/tape/")) {

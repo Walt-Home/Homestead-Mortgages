@@ -1446,8 +1446,8 @@ model Application {
   /// we watch: set when the application is born from an offer, never after.
   /// SET NULL so erasing the loan cannot erase the request. The funding move
   /// reads it to name the successor on the prior loan.
-  priorLoanId String? @map("prior_loan_id") @db.Uuid
-  priorLoan   Loan?   @relation("LoanRefinanceApplication", fields: [priorLoanId], references: [id], onDelete: SetNull)
+  priorLoanId String?    @map("prior_loan_id") @db.Uuid
+  priorLoan   Loan?      @relation("LoanRefinanceApplication", fields: [priorLoanId], references: [id], onDelete: SetNull)
   /// The offer whose "yes" opened this request, if one did.
   refiOffer   RefiOffer?
 
@@ -3395,7 +3395,7 @@ model RefiOffer {
   rateSource       String? @map("rate_source")
 
   /// When the person answered; null while open and on expiry.
-  answeredAt DateTime? @map("answered_at")
+  answeredAt    DateTime?    @map("answered_at")
   /// The refinance application "yes" opened. SET NULL: the offer outlives it.
   applicationId String?      @unique @map("application_id") @db.Uuid
   application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)

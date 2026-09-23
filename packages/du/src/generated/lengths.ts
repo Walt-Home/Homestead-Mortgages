@@ -23,7 +23,7 @@ export interface DuFormat {
 export const DU_FORMATS: Readonly<Record<string, DuFormat | null>> = {
   "MESSAGE#MISMOReferenceModelIdentifier#": {
     "kind": "string",
-    "maxLength": 31
+    "maxLength": 30
   },
   "MESSAGE/ABOUT_VERSIONS/ABOUT_VERSION#AboutVersionIdentifier#": {
     "kind": "string_enumerated"

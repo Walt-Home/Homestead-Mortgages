@@ -1442,9 +1442,19 @@ model Application {
   /// direction: the loan names the application, and survives it.
   loan            Loan?
 
+  /// The mortgage this request refinances, when it is a refinance of a loan
+  /// we watch: set when the application is born from an offer, never after.
+  /// SET NULL so erasing the loan cannot erase the request. The funding move
+  /// reads it to name the successor on the prior loan.
+  priorLoanId String? @map("prior_loan_id") @db.Uuid
+  priorLoan   Loan?   @relation("LoanRefinanceApplication", fields: [priorLoanId], references: [id], onDelete: SetNull)
+  /// The offer whose "yes" opened this request, if one did.
+  refiOffer   RefiOffer?
+
   /// The queue query this exists to make cheap: everything in one state,
   /// oldest first.
   @@index([status, statusEnteredAt])
+  @@index([priorLoanId], map: "applications_prior_loan")
   @@map("applications")
 }
 
@@ -2017,6 +2027,12 @@ model Loan {
   claims LoanClaim[]
 
   reviews LoanReview[]
+  offers  RefiOffer[]
+
+  /// Every application opened to refinance this loan. At most one of them is
+  /// open at a time (a partial unique index the migration writes); the one
+  /// that funds is the `refinancedBy` above.
+  refinanceApplications Application[] @relation("LoanRefinanceApplication")
 
   @@unique([servicerId, servicerLoanNumber], map: "loans_one_per_servicer_number")
   @@index([status, statusEnteredAt], map: "loans_status_entered")
@@ -3335,12 +3351,61 @@ model LoanReview {
   rateSource       String?       @map("rate_source")
   ruleSetVersion   String        @map("rule_set_version")
   explanation      String
+  /// The analyst's turn over this review — Doug's 33.2 rule 4, ported: the
+  /// rationale in the homeowner's words with every figure as a token, its
+  /// flags and confidence, or why the turn was skipped. Written with the row,
+  /// because the row is append-only; null only for a review recorded before
+  /// the analyst existed.
+  analyst          Json?
 
   recordedAt DateTime @default(now()) @map("recorded_at")
+
+  offers RefiOffer[]
 
   @@unique([loanId, asOf], map: "loan_reviews_one_per_loan_day")
   @@index([asOf], map: "loan_reviews_as_of")
   @@map("loan_reviews")
+}
+
+/// A refinance offer: the day's candidate review made into a thing the person
+/// can answer. Page-only — the card on their loan page is the delivery, so
+/// the offer opens the moment it is made and is good for thirty days. One open
+/// per loan (a partial unique index the migration writes). Its figures are the
+/// review's benefit disclosure, copied at the moment of offer and never
+/// rewritten; the answer moves the status once and a trigger refuses a second
+/// move. See docs/decisions.md, "An offer is a row and a card".
+model RefiOffer {
+  id       String     @id @default(uuid()) @db.Uuid
+  loanId   String     @map("loan_id") @db.Uuid
+  loan     Loan       @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  reviewId String     @map("review_id") @db.Uuid
+  review   LoanReview @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+
+  status RefiOfferStatus @default(OFFERED)
+
+  /// The review's day: when the engine found the candidate.
+  detectedOn DateTime @map("detected_on") @db.Date
+  /// When the offer opened, which with page-only delivery is when it was made.
+  offeredAt  DateTime @default(now()) @map("offered_at")
+  validUntil DateTime @map("valid_until")
+
+  /// The review's benefit disclosure, the offer's own figures from here on.
+  disclosure       Json
+  candidateRatePct Decimal @map("candidate_rate_pct") @db.Decimal(6, 3)
+  rateSource       String? @map("rate_source")
+
+  /// When the person answered; null while open and on expiry.
+  answeredAt DateTime? @map("answered_at")
+  /// The refinance application "yes" opened. SET NULL: the offer outlives it.
+  applicationId String?      @unique @map("application_id") @db.Uuid
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([loanId, offeredAt], map: "refi_offers_loan_offered")
+  @@index([status, validUntil], map: "refi_offers_status_valid_until")
+  @@map("refi_offers")
 }
 
 enum ReviewVerdict {
@@ -3348,4 +3413,14 @@ enum ReviewVerdict {
   WATCHING
   NOT_NOW
   EXCLUDED
+}
+
+/// Where an offer stands. OFFERED is the only state with a future; the other
+/// four are how it ended, and a trigger refuses a second ending.
+enum RefiOfferStatus {
+  OFFERED
+  ENGAGED
+  DECLINED
+  OPTED_OUT
+  EXPIRED
 }

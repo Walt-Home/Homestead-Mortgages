@@ -30,6 +30,8 @@ import { connectors } from "../services/connectors.js";
 import { latestLoanReview } from "../services/loan-review.js";
 import { toDomainLoanState } from "../services/loan-transition.js";
 import { assertLoanAccess } from "../services/loans.js";
+import { answerOffer, latestOffer, offerStanding } from "../services/refi-offers.js";
+import { refinanceReadiness, refinanceSeed } from "../services/refinance.js";
 
 export const loanRouter = Router();
 
@@ -59,6 +61,14 @@ loanRouter.get(
         servicer: { select: { slug: true, displayName: true, integrationDepth: true } },
       },
     });
+    // Which of them holds an open offer, so the home page can say so
+    // without reading every loan's card.
+    const now = new Date();
+    const open = await prisma.refiOffer.findMany({
+      where: { loanId: { in: loans.map((l) => l.id) }, status: "OFFERED", validUntil: { gt: now } },
+      select: { loanId: true },
+    });
+    const withOffer = new Set(open.map((o) => o.loanId));
     res.json(
       jsonSafe({
         loans: loans.map((l) => ({
@@ -74,6 +84,7 @@ loanRouter.get(
             state: l.propertyState,
             postalCode: l.propertyPostalCode,
           },
+          hasOpenOffer: withOffer.has(l.id),
         })),
       }),
     );
@@ -97,7 +108,7 @@ loanRouter.get(
     const id = z.string().uuid().parse(req.params.id);
     const loan = await assertLoanAccess(prisma, id, req.user!.id);
 
-    const [servicer, observed, review] = await Promise.all([
+    const [servicer, observed, review, offerRow] = await Promise.all([
       loan.servicerId
         ? prisma.servicer.findUnique({
             where: { id: loan.servicerId },
@@ -123,7 +134,44 @@ loanRouter.get(
       // platform's live read, never blended with it, for the same reason
       // the tape's half is kept apart: two sources, two dates.
       latestLoanReview(loan.id),
+      // The newest offer, whatever it became: the card while it is open,
+      // the answer after, so the page can say "you said not now" rather
+      // than nothing.
+      latestOffer(prisma, loan.id),
     ]);
+
+    const now = new Date();
+    const standing = offerRow ? offerStanding(offerRow, now) : null;
+    const offer = offerRow
+      ? {
+          id: offerRow.id,
+          status: standing,
+          detectedOn: offerRow.detectedOn.toISOString().slice(0, 10),
+          offeredAt: offerRow.offeredAt.toISOString(),
+          validUntil: offerRow.validUntil.toISOString(),
+          answeredAt: offerRow.answeredAt?.toISOString() ?? null,
+          disclosure: offerRow.disclosure as Record<string, unknown>,
+          candidateRatePct: offerRow.candidateRatePct.toFixed(3),
+          applicationFileId: offerRow.application?.loanFileId ?? null,
+        }
+      : null;
+    // What our engine would still ask for, on a file born from this loan:
+    // run dry, only while there is an offer to say yes to. A loan whose
+    // address or figures cannot seed a file has no readiness rather than a
+    // guessed one.
+    let readiness = null;
+    if (offerRow && standing === "offered") {
+      try {
+        const seed = await refinanceSeed(prisma, {
+          loan,
+          offer: offerRow,
+          review: offerRow.review,
+        });
+        readiness = refinanceReadiness(seed, now);
+      } catch {
+        readiness = null;
+      }
+    }
 
     let live: Live;
     const wired =
@@ -184,6 +232,8 @@ loanRouter.get(
         },
         servicer,
         review,
+        offer,
+        readiness,
         observed: observed
           ? {
               ...observed,
@@ -195,5 +245,36 @@ loanRouter.get(
         live,
       }),
     );
+  }),
+);
+
+const answerSchema = z.object({
+  answer: z.enum(["yes", "not_now", "never"]),
+  /** The one thing screen 1 asks that no tape knows. Required for a yes; the service refuses without it. */
+  statedMonthlyIncome: z.number().positive().optional(),
+});
+
+/**
+ * The person's one answer to an offer on a loan of theirs.
+ *
+ * Yes opens the refinance in our five screens and answers the file to land
+ * on, with the person as the servicer named them for screen 2 to confirm.
+ * Not now and never end the offer and change nothing else the person can
+ * see today; what they change is tomorrow's review, which reads them.
+ */
+loanRouter.post(
+  "/:id/offers/:offerId/answer",
+  asyncRoute(async (req, res) => {
+    const loanId = z.string().uuid().parse(req.params.id);
+    const offerId = z.string().uuid().parse(req.params.offerId);
+    const input = answerSchema.parse(req.body);
+    const answered = await answerOffer({
+      loanId,
+      offerId,
+      userId: req.user!.id,
+      answer: input.answer,
+      statedMonthlyIncome: input.statedMonthlyIncome,
+    });
+    res.status(answered.answer === "yes" ? 201 : 200).json(answered);
   }),
 );

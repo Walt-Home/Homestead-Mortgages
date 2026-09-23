@@ -12,7 +12,12 @@
 import { Link } from "react-router-dom";
 import { StatusPill } from "./StatusPill.js";
 import { addressLine, loanEntry, type LoanRow } from "../lib/loan.js";
-import { SEE_THIS_MORTGAGE, mortgageBody, mortgageLead } from "../lib/loan-copy.js";
+import {
+  OFFER_OPEN_ON_HOME,
+  SEE_THIS_MORTGAGE,
+  mortgageBody,
+  mortgageLead,
+} from "../lib/loan-copy.js";
 
 export function MortgageLead({ loan }: { loan: LoanRow }) {
   const entry = loanEntry(loan.state);
@@ -27,7 +32,12 @@ export function MortgageLead({ loan }: { loan: LoanRow }) {
         <p className="mt-3 max-w-measure-prose text-base text-ink-soft">
           {mortgageBody(loan.state, servicer)}
         </p>
-        <Link to={`/loans/${loan.id}`} className="super-btn super-btn-outline mt-6 inline-block">
+        {/* One line, no figure: the figures live on the page the control opens. */}
+        {loan.hasOpenOffer && <p className="mt-3 text-base text-ink">{OFFER_OPEN_ON_HOME}</p>}
+        <Link
+          to={`/loans/${loan.id}`}
+          className={`super-btn mt-6 inline-block ${loan.hasOpenOffer ? "super-btn-primary" : "super-btn-outline"}`}
+        >
           {SEE_THIS_MORTGAGE}
         </Link>
         <div className="mt-6 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-rule-soft pt-5">
@@ -49,6 +59,7 @@ export function MortgageRow({ loan }: { loan: LoanRow }) {
           {entry && <StatusPill tone={entry.tone}>{entry.pill}</StatusPill>}
           <ServicerLine loan={loan} />
         </div>
+        {loan.hasOpenOffer && <p className="mt-1 text-sm text-ink">{OFFER_OPEN_ON_HOME}</p>}
       </div>
       <Link to={`/loans/${loan.id}`} className="super-link shrink-0">
         {SEE_THIS_MORTGAGE}

@@ -2452,6 +2452,9 @@ export const TABLES_OFF_THE_WIRE = {
   loan_reviews: {
     why: "What our daily review concluded about a mortgage somebody already has — a verdict, its reasons and the benefit figures — one row per loan per day; the reason a refinance might be worth asking about, which is decided long before a casefile exists.",
   },
+  refi_offers: {
+    why: "A review's candidate made into a thing the person can answer — its figures, its window, their yes, not now or never; the application a yes opens is what reaches the wire, and it names the loan it refinances on its own row.",
+  },
   connector_links: {
     why: "Which source is linked, when it last synced and whether monitoring is on; what a link produced is a snapshot, and the snapshot is what reaches the wire.",
   },

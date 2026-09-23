@@ -471,6 +471,7 @@ const MORTGAGE: LoanRow = {
   noteRateBps: 725,
   originalPrincipalCents: "45000000",
   property: { line1: "1200 W Maple Ave", city: "Phoenix", state: "AZ", postalCode: "85013" },
+  hasOpenOffer: false,
 };
 
 describe("a mortgage on the home page", () => {

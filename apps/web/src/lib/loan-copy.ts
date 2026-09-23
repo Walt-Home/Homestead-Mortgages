@@ -149,6 +149,91 @@ export const DIFFERENCE_EACH_MONTH = "Difference each month";
 export const openUntil = (day: string) => `Open until ${day}`;
 export const about = (figure: string) => `about ${figure}`;
 
+/* ── The offer ─────────────────────────────────────────────────────────── */
+
+export const OFFER_LEAD = "A refinance is worth a look";
+export const OFFER_BODY =
+  "Worked out from this mortgage's own numbers and a current rate sheet. It's an estimate and not a commitment: the rate you'd actually get is quoted when you apply, and part of any monthly difference is the term starting over.";
+export const OFFER_OPEN_ON_HOME = "There's a refinance worth a look on this mortgage.";
+export const offerOpenUntil = (day: string) => `This stands until ${day}.`;
+export const IN_PLAIN_WORDS = "In plain words";
+export const NEW_LOAN_AMOUNT = "New loan amount";
+export const NEW_TERM = "New term";
+export const yearsWords = (months: number) =>
+  months % 12 === 0 ? `${months / 12} years` : `${months} months`;
+
+export const YES_LOOK = "Yes, let's look";
+export const NOT_NOW = "Not now";
+export const NEVER_ASK = "Don't ask again";
+export const YES_LEAD = "One thing first";
+export const YES_BODY =
+  "Your servicer's records tell us about the house and the loan, and nothing about your income. Tell us your monthly income before taxes and we'll take it from there — you'll land on the next screen with the property already filled in.";
+export const MONTHLY_INCOME = "Monthly income before taxes";
+export const START_THE_REFINANCE = "Start the refinance";
+export const NEVER_CONFIRM_LEAD = "Stop asking about a refinance on this mortgage?";
+export const NEVER_CONFIRM_BODY =
+  "We'll keep watching it for you and we'll stop suggesting a refinance. You can still start one yourself any time.";
+export const YES_STOP_ASKING = "Yes, stop asking";
+export const KEEP_ASKING = "Keep asking";
+export const ANSWERING = "Saving your answer…";
+export const OFFER_CLOSED =
+  "This offer isn't open any more. What's below is what we're watching now.";
+
+/** The card after an answer: what was said, and what happens next. */
+export function offerAnswered(
+  status: "engaged" | "declined" | "opted_out" | "expired",
+  day: string | null,
+): { readonly lead: string; readonly body: string } {
+  switch (status) {
+    case "engaged":
+      return {
+        lead: "You started a refinance from this offer",
+        body: "It's an application of its own, and it picks up where you left it.",
+      };
+    case "declined":
+      return {
+        lead: day ? `You said not now on ${day}` : "You said not now",
+        body: "We'll keep watching this mortgage and won't raise a refinance again for about three months.",
+      };
+    case "opted_out":
+      return {
+        lead: "You asked us not to suggest a refinance on this mortgage",
+        body: "We still watch it for you. You can start a refinance yourself any time.",
+      };
+    case "expired":
+      return {
+        lead: day ? `An offer here stood until ${day}` : "An earlier offer here has lapsed",
+        body: "The numbers it was built on have moved on. If a refinance is worth a look again, this page will say so.",
+      };
+  }
+}
+export const CONTINUE_THAT_APPLICATION = "Pick up that application";
+
+/* ── Readiness ─────────────────────────────────────────────────────────── */
+
+export const OUR_READINESS = "If you say yes, we'd still need";
+export const OUR_READINESS_BODY =
+  "Everything about the house and the loan is already filled in from your servicer's records. What's left is about you.";
+/** Our five screens, in the words the flow uses for them, and what each still asks. */
+export const SCREEN_READINESS: Readonly<Record<string, string>> = {
+  property: "The property — filled in from your servicer's records",
+  identity: "About you — who you are, and your OK to check your credit",
+  declarations: "A few questions — the ones every application asks",
+  bank: "Your bank — so income and savings come from your accounts, not a form",
+  review: "Review — one signature",
+};
+export const WE_HAVE_IT = "we have it";
+export const STILL_NEEDED = "still needed";
+export const NOT_CHECKED_HERE = "Not checked here";
+export const NOT_CHECKED_BODY =
+  "A servicing platform would also look at these. We don't, yet — they'd come up as the application does.";
+export const UNMAPPED_WORDS: Readonly<Record<string, string>> = {
+  contact_details: "how to reach you",
+  account_activation: "whether your account is active",
+  value_freshness: "how recent the home's value is",
+  insurance: "homeowner's insurance",
+};
+
 export const READINESS = "What a refinance would need from you";
 /** The platform's item codes, as words: `credit_authorization` → "credit authorization". */
 export const readinessItem = (item: string) => item.replace(/_/g, " ");

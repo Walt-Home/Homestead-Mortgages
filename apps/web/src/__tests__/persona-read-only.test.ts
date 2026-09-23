@@ -56,6 +56,7 @@ describe("a screen that can meet a read-only refusal", () => {
       "pages/CoBorrowerReviewPage.tsx",
       "pages/DeclarationsPage.tsx",
       "pages/IdentityPage.tsx",
+      "pages/LoanPage.tsx",
       "pages/PrivacyPage.tsx",
       "pages/ReviewPage.tsx",
     ]);

@@ -84,10 +84,20 @@ export async function casefileIdForFile(loanFileId: string, db: Db = prisma): Pr
  */
 export async function createDraftApplication(
   tx: Db,
-  args: { loanFileId: string; partyId: string; terms: ScenarioTerms },
+  args: {
+    loanFileId: string;
+    partyId: string;
+    terms: ScenarioTerms;
+    /** The loan of ours this request refinances, when it was born from an offer. Set here and never after. */
+    priorLoanId?: string;
+  },
 ): Promise<{ applicationId: string; scenarioId: string }> {
   const app = await tx.application.create({
-    data: { loanFileId: args.loanFileId, ausCasefileId: randomUUID() },
+    data: {
+      loanFileId: args.loanFileId,
+      ausCasefileId: randomUUID(),
+      priorLoanId: args.priorLoanId ?? null,
+    },
     select: { id: true },
   });
   await ensureApplicationParty(tx, app.id, args.partyId, "PRIMARY_BORROWER");

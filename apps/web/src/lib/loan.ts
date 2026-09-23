@@ -42,6 +42,8 @@ export interface LoanRow {
   readonly noteRateBps: number;
   readonly originalPrincipalCents: string;
   readonly property: LoanProperty;
+  /** An offer the person has not answered yet, and could. */
+  readonly hasOpenOffer: boolean;
 }
 
 export type ObservedStatus =
@@ -143,11 +145,83 @@ export interface LoanReviewWire {
     readonly present_same_term_first: boolean;
   } | null;
   readonly candidateRatePct: string | null;
+  /**
+   * The analyst's words for the verdict, when a model wrote them: one to
+   * three sentences with every figure already filled in from the review's
+   * own facts. Null when the turn was skipped; the reasons in words stand.
+   */
+  readonly analyst: {
+    readonly rationale: string;
+    readonly flags: readonly string[];
+    readonly confidence: number;
+  } | null;
   readonly recordedAt: string;
 }
 
+export type OfferStanding = "offered" | "engaged" | "declined" | "opted_out" | "expired";
+
+/**
+ * The offer a candidate review became: its figures (the review's benefit
+ * disclosure, copied once), its window, and where it stands. `offered` is
+ * the only standing the person can still answer.
+ */
+export interface RefiOfferWire {
+  readonly id: string;
+  readonly status: OfferStanding;
+  readonly detectedOn: string;
+  readonly offeredAt: string;
+  readonly validUntil: string;
+  readonly answeredAt: string | null;
+  readonly disclosure: {
+    readonly current_rate_pct: string;
+    readonly current_pi_cents: string;
+    readonly new_rate_pct: string;
+    readonly new_pi_cents: string;
+    readonly pi_delta_cents: string;
+    readonly rate_delta_bps: number;
+    readonly remaining_term_months: number;
+    readonly new_term_months: number;
+    readonly loan_amount_cents: string;
+    readonly same_term_months: number;
+    readonly same_term_pi_cents: string;
+    readonly present_same_term_first: boolean;
+    readonly borrower_paid_costs_cents: string;
+    readonly costs_statement: string;
+    readonly not_a_commitment: true;
+  } & Record<string, unknown>;
+  readonly candidateRatePct: string;
+  /** The file a yes opened, once it has. */
+  readonly applicationFileId: string | null;
+}
+
+/**
+ * What our requirement engine would still ask for, on a file born from this
+ * loan: the engine's screens with outstanding work, and his readiness items
+ * no requirement of ours runs.
+ */
+export interface RefinanceReadinessWire {
+  readonly byScreen: readonly { readonly screen: string; readonly outstanding: number }[];
+  readonly unmapped: readonly string[];
+}
+
+export type OfferAnswer = "yes" | "not_now" | "never";
+
+export type AnsweredOffer =
+  | {
+      readonly answer: "yes";
+      readonly fileId: string;
+      readonly prefill: {
+        readonly firstName: string | null;
+        readonly lastName: string | null;
+        readonly dateOfBirth: string | null;
+      };
+    }
+  | { readonly answer: "not_now" | "never"; readonly offerId: string };
+
 export interface ServicingResponse {
   readonly review: LoanReviewWire | null;
+  readonly offer: RefiOfferWire | null;
+  readonly readiness: RefinanceReadinessWire | null;
   readonly loan: {
     readonly id: string;
     readonly state: string;
@@ -176,6 +250,15 @@ export function useLoanServicing(loanId: string | undefined) {
     // A 404 is "not yours or not there" and will never become a 200.
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
   });
+}
+
+/** The person's one answer to an offer. A yes answers the file to land on. */
+export function answerOffer(
+  loanId: string,
+  offerId: string,
+  body: { answer: OfferAnswer; statedMonthlyIncome?: number },
+) {
+  return api.post<AnsweredOffer>(`/loans/${loanId}/offers/${offerId}/answer`, body);
 }
 
 /** The catalog's entry for a loan state: `imported_unclaimed` → the `loan_imported_unclaimed` words. */

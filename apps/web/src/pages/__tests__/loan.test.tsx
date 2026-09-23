@@ -15,21 +15,37 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { LoanPage } from "../LoanPage.js";
 import { ApiError } from "../../lib/api.js";
-import type { LiveServicing, ServicingRecordWire, ServicingResponse } from "../../lib/loan.js";
+import type {
+  LiveServicing,
+  RefiOfferWire,
+  ServicingRecordWire,
+  ServicingResponse,
+} from "../../lib/loan.js";
 import { FINDING_WHERE_YOU_STAND, TRY_AGAIN } from "../../lib/home-copy.js";
 import type { LoanReviewWire } from "../../lib/loan.js";
 import {
+  IN_PLAIN_WORDS,
+  NEVER_ASK,
+  NOT_CHECKED_HERE,
   NOT_HELD,
+  NOT_NOW,
   NOT_REVIEWED_YET,
+  OFFER_LEAD,
+  OUR_READINESS,
   PLATFORM_SAYS,
   SAME_TERM_PAYMENT,
   NOT_YOUR_MORTGAGE_LEAD,
   NO_TAPE_YET,
   READINESS,
+  STILL_NEEDED,
   UNREACHABLE,
   VERDICT,
   WATCHING,
+  WE_HAVE_IT,
+  YES_LOOK,
   notWired,
+  offerAnswered,
+  offerOpenUntil,
   reviewedOn,
   watchRateLine,
 } from "../../lib/loan-copy.js";
@@ -77,6 +93,8 @@ const RECORD: ServicingRecordWire = {
 function response(over: Partial<ServicingResponse> = {}): ServicingResponse {
   return {
     review: null,
+    offer: null,
+    readiness: null,
     loan: {
       id: ID,
       state: "imported_unclaimed",
@@ -252,6 +270,7 @@ const OUR_REVIEW: LoanReviewWire = {
     "the savings over the holding period are positive",
   ],
   facts: { note_rate_pct: "7.250", candidate_rate_pct: "6.250" },
+  analyst: null,
   offer: {
     current_rate_pct: "7.250",
     current_pi_cents: "306979",
@@ -317,5 +336,116 @@ describe("our own review on the mortgage page", () => {
     const markup = await page({ read: response() });
     expect(markup).not.toContain(PLATFORM_SAYS);
     expect(markup).toContain(VERDICT.candidate.lead);
+  });
+});
+
+/** The offer loan 1's candidate review became, as the API hands it out while it stands. */
+const OFFER: RefiOfferWire = {
+  id: "0f5a3b9e-6e2a-4d61-9c0b-2f4b1d7a8e11",
+  status: "offered",
+  detectedOn: "2026-09-22",
+  offeredAt: "2026-09-22T11:00:00.000Z",
+  validUntil: "2026-10-22T11:00:00.000Z",
+  answeredAt: null,
+  disclosure: {
+    current_rate_pct: "7.250",
+    current_pi_cents: "306979",
+    new_rate_pct: "6.250",
+    new_pi_cents: "275832",
+    pi_delta_cents: "-31147",
+    rate_delta_bps: -100,
+    remaining_term_months: 337,
+    new_term_months: 360,
+    loan_amount_cents: "44800000",
+    same_term_months: 337,
+    same_term_pi_cents: "281900",
+    present_same_term_first: false,
+    borrower_paid_costs_cents: "0",
+    costs_statement: "Closing costs are estimated and are not paid by you at closing.",
+    not_a_commitment: true,
+  },
+  candidateRatePct: "6.250",
+  applicationFileId: null,
+};
+
+describe("the offer on the mortgage page", () => {
+  it("leads with the offer's figures, the analyst's words, what we'd still need, and three answers", async () => {
+    const withAnalyst: LoanReviewWire = {
+      ...OUR_REVIEW,
+      analyst: {
+        rationale:
+          "Your rate is 7.25% and today's candidate is 6.25%, which would change your monthly payment by -$311.47.",
+        flags: [],
+        confidence: 1,
+      },
+    };
+    const markup = await page({
+      read: response({
+        review: withAnalyst,
+        offer: OFFER,
+        readiness: {
+          byScreen: [
+            { screen: "identity", outstanding: 6 },
+            { screen: "declarations", outstanding: 4 },
+            { screen: "bank", outstanding: 3 },
+            { screen: "decision", outstanding: 2 },
+          ],
+          unmapped: ["contact_details", "insurance"],
+        },
+      }),
+    });
+    expect(markup).toContain(OFFER_LEAD);
+    expect(markup).toContain("about 6.25%");
+    expect(markup).toContain("about $448,000");
+    expect(markup).toContain("30 years");
+    expect(markup).toContain(offerOpenUntil("October 22, 2026"));
+    expect(markup).toContain(IN_PLAIN_WORDS);
+    expect(markup).toContain("change your monthly payment by -$311.47");
+    // Our own readiness: the property is answered, the person's screens are not.
+    expect(markup).toContain(OUR_READINESS);
+    expect(markup).toContain(`records · <span class="text-ink-faint">${WE_HAVE_IT}`);
+    expect(markup).toContain(STILL_NEEDED);
+    expect(markup).toContain(NOT_CHECKED_HERE);
+    expect(markup).toContain("how to reach you · homeowner's insurance");
+    for (const control of [YES_LOOK, NOT_NOW, NEVER_ASK]) expect(markup).toContain(control);
+    // The analyst's sentence sits on the card, not twice.
+    expect(markup.split(IN_PLAIN_WORDS)).toHaveLength(2);
+    // Nothing the engine is written in.
+    for (const word of ["pi_delta_cents", "contact_details", "byScreen", "identity ·"]) {
+      expect(markup, word).not.toContain(word);
+    }
+  });
+
+  it("says what was answered once the offer has ended, and where a yes went", async () => {
+    const engaged = await page({
+      read: response({
+        review: OUR_REVIEW,
+        offer: {
+          ...OFFER,
+          status: "engaged",
+          answeredAt: "2026-09-23T09:00:00.000Z",
+          applicationFileId: "2a1a0b7e-3f0e-4a3d-8f8a-0d1c2b3a4e55",
+        },
+      }),
+    });
+    expect(engaged).toContain(offerAnswered("engaged", null).lead);
+    expect(engaged).toContain("/f/2a1a0b7e-3f0e-4a3d-8f8a-0d1c2b3a4e55");
+    expect(engaged).not.toContain(YES_LOOK);
+
+    const declined = await page({
+      read: response({
+        review: OUR_REVIEW,
+        offer: { ...OFFER, status: "declined", answeredAt: "2026-09-23T09:00:00.000Z" },
+      }),
+    });
+    expect(declined).toContain(offerAnswered("declined", "September 23, 2026").lead);
+    expect(declined).not.toContain(NOT_NOW);
+
+    const lapsed = await page({
+      read: response({ review: OUR_REVIEW, offer: { ...OFFER, status: "expired" } }),
+    });
+    expect(lapsed).toContain(offerAnswered("expired", "October 22, 2026").lead);
+    // With no open offer, our review's figures and the analyst's words live under "What we're watching".
+    expect(lapsed).toContain(SAME_TERM_PAYMENT);
   });
 });

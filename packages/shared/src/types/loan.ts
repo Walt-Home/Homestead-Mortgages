@@ -76,8 +76,22 @@ export interface SubjectProperty {
   readonly occupancy: OccupancyType;
   /** Purchase price, or estimated value on a refinance. */
   readonly valueOrPrice: number;
-  /** Where `valueOrPrice` came from — an ATTOM estimate is not an appraisal. */
-  readonly valuationSource: "borrower_stated" | "attom_estimate" | "appraisal" | "avm";
+  /**
+   * Where `valueOrPrice` came from — an ATTOM estimate is not an appraisal.
+   *
+   * The three `servicer_*` values are a refinance born from a loan we watch:
+   * the servicer's current market value, its broker price opinion, or the
+   * appraisal it originated on, whichever the tape carried newest. None of
+   * them is the borrower's word and none is ours.
+   */
+  readonly valuationSource:
+    | "borrower_stated"
+    | "attom_estimate"
+    | "appraisal"
+    | "avm"
+    | "servicer_fmv"
+    | "servicer_bpo"
+    | "servicer_appraisal";
   /** Count of financed properties the borrower owns. Drives reserve tiers. */
   readonly financedPropertyCount: number;
   /**

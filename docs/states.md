@@ -18,15 +18,16 @@ application side.
 
 ## Today
 
-Five fields carry something state-like, and they answer to different masters.
+Six fields carry something state-like, and they answer to different masters.
 
-| Field                                    | Where                          | Values                                                                                   | Owns                           |
-| ---------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------ |
-| `loan_files.stage`                       | Postgres enum `FlowStage`      | 11, ordered                                                                              | Which screen to resume to      |
-| `decisions.outcome`                      | `String`, append-only table    | `pending` `referred` `approved_with_conditions` `clear_to_close` `counteroffer` `denied` | What the engine last concluded |
-| `loan_conditions.status`                 | `String`, default `open`       | `open` `submitted` `cleared` `waived`                                                    | One outstanding work item      |
-| `connector_links.status`                 | `String`, default `active`     | `active` `needs_reauth` `revoked` `error`                                                | One vendor connection          |
-| `borrowers.identity_verification_status` | `String`, nullable, no default | `pending` `verified` `failed`                                                            | One hosted ID-vendor session   |
+| Field                                    | Where                           | Values                                                                                   | Owns                           |
+| ---------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------ |
+| `loan_files.stage`                       | Postgres enum `FlowStage`       | 11, ordered                                                                              | Which screen to resume to      |
+| `decisions.outcome`                      | `String`, append-only table     | `pending` `referred` `approved_with_conditions` `clear_to_close` `counteroffer` `denied` | What the engine last concluded |
+| `loan_conditions.status`                 | `String`, default `open`        | `open` `submitted` `cleared` `waived`                                                    | One outstanding work item      |
+| `connector_links.status`                 | `String`, default `active`      | `active` `needs_reauth` `revoked` `error`                                                | One vendor connection          |
+| `borrowers.identity_verification_status` | `String`, nullable, no default  | `pending` `verified` `failed`                                                            | One hosted ID-vendor session   |
+| `refi_offers.status`                     | Postgres enum `RefiOfferStatus` | `OFFERED` `ENGAGED` `DECLINED` `OPTED_OUT` `EXPIRED`                                     | Where one offer stands         |
 
 `stage` is a **high-water mark, not a cursor** — where you are is the URL, how
 far you got is the stage, and `advanceStage` refuses to move it backward. Eleven
@@ -238,6 +239,14 @@ nullable, and that nullability is load-bearing. A Grander portfolio mortgage
 has no application behind it, so the Loan hangs off Party — and deleting a
 stale application cannot erase the record of a mortgage somebody is paying.
 
+An offer has a status of its own, and it is the one status here that a
+person moves by answering: `OFFERED` is the only state with a future, and
+`ENGAGED`, `DECLINED`, `OPTED_OUT` and `EXPIRED` are how it ended. A
+trigger refuses a second ending. The answer is not a loan state — the loan
+stays `monitoring_only` throughout — and it is not an application state
+either, though a yes creates one; it is what the next morning's review
+reads. `docs/decisions.md`, "An offer is a row and a card".
+
 ---
 
 ## Stored or derived
@@ -294,25 +303,26 @@ year's pull.
 
 ## Built, or not
 
-| Piece                                  | Status                                                                                                       |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `FlowStage`, five screens, outcomes    | Built — and being replaced                                                                                   |
-| Tests against a real Postgres          | Built                                                                                                        |
-| Party, facts, principals               | Built and on the production path — screens 1 and 2 write them                                                |
-| Identity lives on Party                | Built. `party_id` NOT NULL, identity columns dropped, no fallback left                                       |
-| Authorizations and the purpose token   | Built — the connector guard takes it; `consents` still writes first                                          |
-| Applications and the transition ledger | Built — the bank, branches, screening, signature and decision each move it                                   |
-| Scenarios, pins, and the TRID receipt  | Built — screen 2 and the signature pin the person                                                            |
-| Casefile, income and employer identity | Built — survives a re-pull; see `docs/du-readiness.md`                                                       |
-| Sample borrowers in real states        | Built — eight, walked through the real services, behind a deploy flag                                        |
-| Loans and servicing                    | Built, and a partner's tape writes it — `docs/loan-lifecycle.md`. The claim is a token the servicer delivers |
-| Declarations and residences            | Built and on the production path — screen 3 writes them                                                      |
-| Assets, liabilities, owned property    | Built — the credit and bank pulls write them, per person; `docs/du-readiness.md`                             |
-| Evidence artifacts, retrieval requests | Designed                                                                                                     |
-| Rewritten decision engine (three-axis) | Designed                                                                                                     |
-| Roles and staff tooling                | Designed                                                                                                     |
-| Monitoring, notifications              | Designed, deferred                                                                                           |
-| Notice generation and delivery         | Resend integrated behind a `mail` port for one message, the co-borrower invitation; no regulatory notice yet |
+| Piece                                  | Status                                                                                                                             |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `FlowStage`, five screens, outcomes    | Built — and being replaced                                                                                                         |
+| Tests against a real Postgres          | Built                                                                                                                              |
+| Party, facts, principals               | Built and on the production path — screens 1 and 2 write them                                                                      |
+| Identity lives on Party                | Built. `party_id` NOT NULL, identity columns dropped, no fallback left                                                             |
+| Authorizations and the purpose token   | Built — the connector guard takes it; `consents` still writes first                                                                |
+| Applications and the transition ledger | Built — the bank, branches, screening, signature and decision each move it                                                         |
+| Scenarios, pins, and the TRID receipt  | Built — screen 2 and the signature pin the person                                                                                  |
+| Casefile, income and employer identity | Built — survives a re-pull; see `docs/du-readiness.md`                                                                             |
+| Sample borrowers in real states        | Built — eight, walked through the real services, behind a deploy flag                                                              |
+| Loans and servicing                    | Built, and a partner's tape writes it — `docs/loan-lifecycle.md`. The claim is a token the servicer delivers                       |
+| Refinance offers                       | Built — a candidate review becomes an offer on the loan page; a yes opens a refinance in our five screens with `prior_loan_id` set |
+| Declarations and residences            | Built and on the production path — screen 3 writes them                                                                            |
+| Assets, liabilities, owned property    | Built — the credit and bank pulls write them, per person; `docs/du-readiness.md`                                                   |
+| Evidence artifacts, retrieval requests | Designed                                                                                                                           |
+| Rewritten decision engine (three-axis) | Designed                                                                                                                           |
+| Roles and staff tooling                | Designed                                                                                                                           |
+| Monitoring, notifications              | Designed, deferred                                                                                                                 |
+| Notice generation and delivery         | Resend integrated behind a `mail` port for one message, the co-borrower invitation; no regulatory notice yet                       |
 
 The three-phase identity migration — dual-write, read-flip, drop — is finished
 and collapsed into one row above. `docs/decisions.md` keeps the phases.

@@ -287,6 +287,32 @@ variable "property_records_provider" {
   }
 }
 
+# ── The refinance analyst ────────────────────────────────────────────────────
+
+variable "refi_analyst" {
+  description = <<-EOT
+    Whether the daily review's analyst turn runs: "on" mounts the Anthropic
+    key on the review job, "off" leaves the model off and every review row
+    says so. Gated the way CoreLogic is, because a job that references a
+    secret with no version fails to start: create the secret first, then flip
+    this. Nothing about the verdict changes either way — the analyst never
+    decides.
+  EOT
+  type        = string
+  default     = "off"
+
+  validation {
+    condition     = contains(["off", "on"], var.refi_analyst)
+    error_message = "refi_analyst must be off or on."
+  }
+}
+
+variable "anthropic_api_key_secret" {
+  description = "Secret Manager secret holding the Anthropic API key the refinance analyst runs under."
+  type        = string
+  default     = "HOMESTEAD_MORTGAGES_ANTHROPIC_API_KEY"
+}
+
 # ── Doug's servicing runtime ─────────────────────────────────────────────────
 
 variable "servicing_image" {

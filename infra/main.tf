@@ -538,6 +538,23 @@ resource "google_cloud_run_v2_job" "loan_review" {
           }
         }
 
+        # The analyst's key, only when the analyst is on: a job that names a
+        # secret with no version fails to start, so the secret is created and
+        # granted first and the variable flipped after. Off, every review row
+        # records the turn as `model_off` and the verdict is the same.
+        dynamic "env" {
+          for_each = var.refi_analyst == "on" ? { ANTHROPIC_API_KEY = var.anthropic_api_key_secret } : {}
+          content {
+            name = env.key
+            value_source {
+              secret_key_ref {
+                secret  = env.value
+                version = "latest"
+              }
+            }
+          }
+        }
+
         volume_mounts {
           name       = "cloudsql"
           mount_path = "/cloudsql"

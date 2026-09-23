@@ -141,6 +141,24 @@ the seed and a Cloud Run job runs it at 07:00 Eastern. The servicing route
 carries the newest row as `review`, and the page shows ours first and the
 platform's after. See `docs/decisions.md`, "The daily review is ours now".
 
+**A candidate is an offer, and a yes walks our five screens (23 September
+2026).** `services/refi-offers.ts` turns the day's candidate into a
+`refi_offers` row with the review's disclosure copied onto it, open thirty
+days, one per loan, delivered as the card on `/loans/:id` and nowhere else
+(no mail yet). The review skips a loan holding an open offer or an open
+refinance application, and reads the person's answers as his gates: not
+now is a ninety-day cooldown, never is a standing suppression, two offers a
+year. `POST /api/loans/:id/offers/:offerId/answer` takes yes / not_now /
+never; a yes takes the stated income too and `services/refinance.ts` opens
+the application exactly as screen 1 does, prefilled from the loan and the
+tape, `applications.prior_loan_id` set at birth, landing on screen 2. The
+card's "we'd still need" is our requirement engine run dry over a file
+seeded from the loan. `services/refi-analyst.ts` is Doug's rule-4 analyst
+ported — his prompt, his two tools, his provenance guard, one regeneration
+— writing its record onto the review row; it is off without
+`ANTHROPIC_API_KEY` and never fails a review. See `docs/decisions.md`, "An
+offer is a row and a card".
+
 ## Known stubs, for whoever wires the real thing
 
 - **The property card is CoreLogic's when `PROPERTY_RECORDS_PROVIDER=corelogic`,

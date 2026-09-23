@@ -147,6 +147,20 @@ Our own newest review rides beside them as a third field, and the page shows
 it first. `docs/decisions.md`, "The servicing platform is read, never
 joined".
 
+Since 23 September a candidate is an offer, and an offer is answered. The
+review's candidate becomes a `refi_offers` row carrying the review's
+benefit disclosure as its own figures, open thirty days, one per loan at a
+time, delivered as the card on the person's loan page and nowhere else. The
+review leaves a loan with an open offer alone. Yes opens a refinance
+application in our five screens with screen 1 answered from the loan and
+the tape — the person states their income on the card, the one thing no
+tape knows — and `applications.prior_loan_id` names the loan from birth; at
+most one such application is open per loan. Not now is his ninety-day
+cooldown, never is a standing suppression, two offers per loan per year,
+and the engine reads all three off the offers. When the refinance funds,
+`retirePriorLoan` names the successor and moves the prior loan
+`refinanced_by_us`. `docs/decisions.md`, "An offer is a row and a card".
+
 Nothing a borrower can do produces a loan, still. What renders one is the
 twelve-loan Northlight book: the persona seed loads it under its servicer at
 integration depth `API` and walks the `grander_import` sign-in through the

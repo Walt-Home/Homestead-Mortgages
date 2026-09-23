@@ -29,9 +29,14 @@ async function main(): Promise<void> {
   for (const s of report.skipped) {
     console.log(`skipped ${s.servicerLoanNumber ?? s.loanId}: ${s.reason}`);
   }
+  const analystSkips = Object.entries(report.analyst.skipped)
+    .map(([why, n]) => `${n} ${why}`)
+    .join(", ");
   console.log(
     `reviewed ${report.reviewed.length} of ${report.monitored} monitored loans as of ${report.asOf}; ` +
-      `${report.alreadyReviewed} already reviewed today; ${report.skipped.length} skipped`,
+      `${report.alreadyReviewed} already reviewed today; ${report.skipped.length} skipped; ` +
+      `${report.offersOpened} offers opened, ${report.offersExpired} lapsed; ` +
+      `analyst wrote ${report.analyst.written}${analystSkips ? ` (skipped: ${analystSkips})` : ""}`,
   );
 }
 

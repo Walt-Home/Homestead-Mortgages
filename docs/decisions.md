@@ -1945,6 +1945,131 @@ servicer; an alert when the morning run fails. A monitored loan whose
 servicer's platform is also reviewing it gets two verdicts a day, and that
 stays true until one of them is turned off on purpose.
 
+## An offer is a row and a card
+
+**Decision (23 September 2026).** A candidate the daily review finds
+becomes a `refi_offers` row, the row renders as a card on the person's loan
+page, and the card is the whole delivery. A yes walks our five screens.
+Doug's program rules are kept as they are. His analyst turn is ported.
+
+Three of Joe's calls, verbatim: a refinance walks _our_ five screens rather
+than handing off to his Apply; the offer may be page-only for now, with his
+30-day, 90-day and two-a-year rules unchanged; and the LLM analyst is ported
+now rather than left out.
+
+**The offer.** One row per candidate, on `loan_reviews` by `review_id` with
+the review's benefit disclosure copied onto it as `disclosure`: the figures
+the person saw, which a later review cannot rewrite. Open for thirty days
+from the moment it is made — page-only delivery means there is no gap
+between his `offer_ready` and `offered`, so the row is born `OFFERED` and
+`offered_at` is `created_at`. One open per loan, by a partial unique index
+(`refi_offers_one_open_per_loan`) Prisma cannot model and the migration
+writes by hand. It ends once: `ENGAGED` on a yes, `DECLINED` on a not now,
+`OPTED_OUT` on a never, `EXPIRED` when the sweep finds it past `valid_until`;
+a trigger refuses a second ending and any change to what was offered. The
+route reads a lapsed `OFFERED` row as expired before the sweep has written
+it, because a page must never show a card the person can no longer answer.
+
+**The offers are the gate facts.** His engine's `not_now` gates — the
+ninety-day cooldown after a decline, two offers per loan per rolling twelve
+months, a standing "do not solicit" — read `declined_on`, `offered_at[]` and
+`refi_do_not_solicit`. `offerGateFacts` derives all three from the loan's
+offers, so a person's answer is recorded in exactly one place and the next
+morning's review names it: `cooldown`, `frequency_cap`,
+`marketing_suppression`, in the reasons the page already renders in words.
+There is no second table for a decline to be forgotten in.
+
+**The review leaves a held loan alone.** While an offer is open, or a
+refinance application opened from one is still moving, the loan is skipped
+with the reason (`open offer`, `open refinance application`) and no review
+row is written: a second verdict under an unanswered offer is a second
+answer to a question the person is still holding. Open offers past their
+validity are closed before the pass, so a loan whose offer lapsed is
+reviewed again the same morning — and, subject to the cap, offered again.
+
+**The yes.** Screen 1 is answered for the person from what the loan and the
+tape know: address, dwelling type, occupancy, the servicer's value with a
+`servicer_fmv` / `servicer_bpo` / `servicer_appraisal` valuation source
+(three new members of the union; nothing reads the field but a derivation
+log), the balance, rate and payment being paid off as `existingLoan` with
+its payment basis stated, and the amount the offer was built on. The one
+thing screen 1 asks that no tape knows is the income the person states, so
+the card asks for it before it opens — it is one of TRID's six pieces, and a
+file without it never reaches intake. `openRefinanceApplication` then does
+what `POST /files` does, in the same order and in one transaction: the
+party first (the lock order screen 1 explains), the file, the income fact,
+the reconciliation, the draft application — with `prior_loan_id` set at
+birth and never after — and the offer moved to `ENGAGED` beside it. The
+rate is quoted fresh, not copied off the offer: the disclosure says it is
+not a commitment, and a file carrying a rate nobody quoted today would
+carry it into every ratio. The person lands on screen 2. At most one open
+refinance per loan, by a second partial unique index over the states the
+machine can still move out of.
+
+The person as the servicer named them comes back with the yes, read
+through `partnerFactsFor` — the one reader that follows the claim's merge —
+and screen 2 does not take it. Screen 2 establishes who somebody is from
+their ID; a servicer's spelling of a name is not that, and the fixture's
+identity documents name three other people anyway. It is a courtesy for a
+page, never a fact the file carries.
+
+**Readiness is our engine, run dry.** Before the yes, a `LoanFile` is
+assembled in memory from the same seed the yes would write, and
+`outstandingForBorrower` says which screens still have the person's work.
+The card folds the engine's screens onto the five the flow shows and marks
+each answered or still needed — no requirement id, no count on the page.
+Screen 1 is left out on purpose: on a seeded file the engine lists two
+borrower items there, the stated income (which the card collects) and the
+first-time-homebuyer answer (which screen 2 takes), and neither is a screen
+the person walks. His four readiness items with no requirement of ours —
+contact details, account activation, value freshness, insurance — are named
+on the card as unchecked rather than faked. The freshness windows his
+thirteen items carry are not modeled; the engine has no clock, and giving
+it one is its own decision.
+
+**The analyst is his, with one guard of ours.** `services/refi-analyst.ts`
+is his §33.2 rule 4 ported: the system prompt verbatim under his version
+`33.2-p1`, the two tools (`review_facts` answers tokens and words and is
+asserted to carry no figure; `review_write` takes `{rationale, flags[]}` and
+refuses a verdict key, a figure key or a bare number as
+ANALYST_NEVER_DECIDES), his provenance guard (a digit, a spelled-out amount
+or a number word outside a `{{facts.<key>}}` token), one regeneration with
+the violation named, a second violation a skip. Ours: a token the day's
+facts do not stand behind is a violation too, because it would reach the
+borrower as braces. The record rides on the review row as `analyst` —
+written with the row, since the row is append-only — as either the
+rationale with flags, confidence (0.75 after a rewrite), model, prompt hash
+and token counts, or `{skipped}` with one of his six reasons. The route
+fills the tokens from the row's own facts and hands the page a sentence;
+the card shows it as "In plain words", and the review section shows it when
+no offer is open. The turn never fails a review. The model is off unless
+`ANTHROPIC_API_KEY` is set (`REFI_ANALYST_MODEL`, default `claude-opus-5`;
+`REFI_ANALYST_MAX_PER_DAY`, default 500); the review job mounts the key only
+when Terraform's `refi_analyst` is `on`, gated like CoreLogic because a job
+that names a secret with no version fails to start, and the deploy-time run
+reads the repository secret and records `model_off` when it is empty. The
+model driver is a manual loop over the SDK, not a runner: the turn owns its
+tool budget and its guard, and a spent budget makes the last request
+`tool_choice: none` so the model answers in text rather than being refused a
+third call. The `agent_turns` ledger, the `ai_systems` rows and the
+per-party conversation his platform writes are not ported; the review row
+is our record.
+
+**Funding retires the prior loan.** `retirePriorLoan` writes
+`refinanced_by_loan_id` and moves the loan `refinanced_by_us` as
+`internal_refinance_funded` — the trigger refuses the move without the
+successor, so the pointer goes first — and refuses an application that has
+not funded. Nothing in production calls it yet, because nothing in
+production funds; it is held by a test that walks a refinance to funded and
+originates its successor, so the edge the loan model drew has an executable
+shape.
+
+**Not done, and why.** No mail: the page is the delivery until real mail
+with a `supermortgage.com` sender is on. No console read of our offers: the
+ops console reads his API, and a view of ours is its own seam. No freshness
+on readiness. The sample borrower sees the card and is refused every
+answer, as every write is; the persona rule is the rule.
+
 ## Two hostnames, one front door
 
 Since 22 September 2026 the two deployments have names. `supermortgage.com`

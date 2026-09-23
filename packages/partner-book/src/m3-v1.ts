@@ -25,7 +25,7 @@ import { Decimal } from "@hm/kernel/money";
 import { daysInMonth } from "@hm/kernel/calendar";
 import { excelSerialToIsoDate } from "./vendored/xlsx.js";
 
-export type FactType = "text" | "money" | "rate" | "int" | "date" | "bool" | "pct";
+export type FactType = "text" | "money" | "rate" | "int" | "date" | "bool" | "pct" | "baths";
 export type ColumnDef = {
   header: string;
   key: string;
@@ -85,7 +85,7 @@ export const M3_V1_COLUMNS: readonly ColumnDef[] = [
   C("Property State", "property_state", "text", { required: true }), // H
   C("Property Zip Code", "property_zip", "text", { required: true }), // I
   C("County", "property_county", "text"), // J
-  C("Zip Toxic Ranking", "zip_toxic_ranking", "int"), // K
+  C("Zip Toxic Ranking", "zip_toxic_ranking", "pct"), // K (a decimal score: "7.2")
   C("Original Prin Bal", "original_upb_cents", "money", { required: true }), // L
   C("Interest Bearing UPB", "upb_cents", "money", { required: true }), // M
   C("UPB Deferred", "deferred_upb_cents", "money"), // N
@@ -169,11 +169,11 @@ export const M3_V1_COLUMNS: readonly ColumnDef[] = [
   C("Current Occupancy", "occupancy_current", "text"), // CN (the tape repeats the header)
   C("Property Type", "property_type", "text"), // CO
   C("Prop Bedrooms", "property_bedrooms", "int"), // CP
-  C("Prop Baths", "property_baths", "pct"), // CQ (decimal: 2.5 baths)
+  C("Prop Baths", "property_baths", "baths"), // CQ ("2.5", or "F:2/H:1" as a servicer writes it)
   C("Prop Sq. Ft.", "property_sqft", "int"), // CR
   C("Prop Garaged Parking", "property_garage", "text"), // CS
   C("Prop Lot Size", "property_lot_size", "text"), // CT
-  C("Srv Contact Expected", "contact_expected_date", "date"), // CU
+  C("Srv Contact Expected", "contact_expected", "bool"), // CU (a Y on a real tape, never a date)
   C("Srv Last Contact Date", "last_contact_date", "date"), // CV
   C("SRV Accrued Interest Balance", "accrued_interest_cents", "money"), // CW
   C("SRV Total Corporate Advance Balance", "advances_cents", "money"), // CX
@@ -194,7 +194,7 @@ export const M3_V1_COLUMNS: readonly ColumnDef[] = [
   C("Modification Flag", "modification_flag", "bool"), // DF
   C("Prepayment Penalty Ind", "prepayment_penalty_flag", "bool"), // DG
   C("Prepayment Desc", "prepayment_penalty_desc", "text"), // DH
-  C("Prepay Period", "prepayment_penalty_end_date", "date"), // DI
+  C("Prepay Period", "prepayment_penalty_months", "int"), // DI (months of penalty: "36", "0")
   C("MBA Delinquency Status", "mba_delinquency_status", "text"), // DJ
   C("MBA Pay String", "mba_pay_string", "text"), // DK
   C("Orig Maturity Date", "orig_maturity_date", "date"), // DL
@@ -277,11 +277,27 @@ function isoOf(y: number, m: number, d: number): string | null {
 }
 
 /**
- * ISO (with or without a time), yyyy/mm/dd, m/d/yyyy, m-d-yyyy, m/d/yy
- * (pivot 50), yyyymmdd, Excel serial text → "YYYY-MM-DD"; null when
- * unreadable.
+ * A two-digit year is read into the century that puts it nearest to `now`,
+ * the earlier one on a tie: on a tape in 2026, "1/1/51" is a maturity in
+ * 2051 and "1/14/98" an origination in 1998. A fixed pivot cannot serve
+ * both ends of a thirty-year note.
  */
-export function parseDateIso(cell: string): string | null {
+export function fourDigitYear(yy: number, now: Date = new Date()): number {
+  const thisYear = now.getUTCFullYear();
+  const century = Math.floor(thisYear / 100) * 100;
+  let best = century - 100 + yy;
+  for (const y of [century + yy, century + 100 + yy]) {
+    if (Math.abs(y - thisYear) < Math.abs(best - thisYear)) best = y;
+  }
+  return best;
+}
+
+/**
+ * ISO (with or without a time), yyyy/mm/dd, m/d/yyyy, m-d-yyyy, m/d/yy
+ * (each with or without a time; the two-digit year by `fourDigitYear`),
+ * yyyymmdd, Excel serial text → "YYYY-MM-DD"; null when unreadable.
+ */
+export function parseDateIso(cell: string, now: Date = new Date()): string | null {
   const s = cell.trim();
   if (!s) return null;
   let m: RegExpExecArray | null;
@@ -294,9 +310,8 @@ export function parseDateIso(cell: string): string | null {
   if ((m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[T ].*)?$/.exec(s))) {
     return isoOf(Number(m[3]), Number(m[1]), Number(m[2]));
   }
-  if ((m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/.exec(s))) {
-    const yy = Number(m[3]);
-    return isoOf(yy < 50 ? 2000 + yy : 1900 + yy, Number(m[1]), Number(m[2]));
+  if ((m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{2})(?:[T ].*)?$/.exec(s))) {
+    return isoOf(fourDigitYear(Number(m[3]), now), Number(m[1]), Number(m[2]));
   }
   if ((m = /^(\d{4})(\d{2})(\d{2})$/.exec(s))) {
     return isoOf(Number(m[1]), Number(m[2]), Number(m[3]));
@@ -347,6 +362,18 @@ export function parsePctDecimal(cell: string): string | null {
   return d === null ? null : d.toFixed(3, "HALF_UP");
 }
 
+/**
+ * "2.5" | "2" | "F:2/H:1" (full and half baths, as a servicer's system writes
+ * them) → "2.500"; null when unreadable.
+ */
+export function parseBathsDecimal(cell: string): string | null {
+  const s = cell.trim();
+  if (!s) return null;
+  const m = /^F:\s*(\d+)\s*\/\s*H:\s*(\d+)$/i.exec(s);
+  if (m) return parsePctDecimal(String(Number(m[1]) + Number(m[2]) / 2));
+  return parsePctDecimal(s);
+}
+
 /** "748" | "748.0" | "1,200" → number; null when unreadable. */
 export function parseIntCell(cell: string): number | null {
   const s = cell.trim().replace(/,/g, "");
@@ -376,6 +403,8 @@ export function parseCell(type: FactType, cell: string): Fact {
       return parseRatePct(cell);
     case "pct":
       return parsePctDecimal(cell);
+    case "baths":
+      return parseBathsDecimal(cell);
     case "int":
       return parseIntCell(cell);
     case "date":

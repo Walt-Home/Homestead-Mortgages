@@ -1678,7 +1678,11 @@ sign-in, so the sample cannot drift from the flow.
   its own records say the loan belongs to, and whoever holds it is whoever
   that delivery reached. The same trust a co-borrower's link carries, and the
   same reason: a stricter rule would refuse a person whose Google account is
-  not the address their servicer had for them.
+  not the address their servicer had for them. Since 23 September 2026 the
+  tape desk mails the link to the address the servicer's supplement carried
+  beside the loan number — the servicer's delivery, made by our hand from its
+  own record ("The tape desk is one screen, and a claim is mailed from it")
+  — and the person who signs in is still never matched to that address.
 - **What a stranger sees is what the notice said.** The preview names the
   servicer and the town, and nothing that names or numbers anyone. His
   invitation names the servicer and the loan's last four before anyone has
@@ -2990,6 +2994,92 @@ is that there is none.
 
 **His repository carries no license file.** Doug's written OK to vendor is the
 gate on this reaching `main`, and the vendoring commit says so.
+
+## The tape desk is one screen, and a claim is mailed from it
+
+**Decision (23 September 2026):** a servicer's book reaches us through one
+screen in the servicing app's console — `/console/tape` on the servicing
+host, outside the console's shell, four steps and nothing else on the page:
+files, review, load, invite. Ops staff carry it. A partner's key still opens
+the same load over `/api/partner/book/imports` for a servicer that integrates
+by machine, and both doors run `services/partner-book.ts` under the servicer's
+partner principal, so the ledger reads the same whoever carried the tape.
+Recapture is what the book is for, and the desk ends on the invitation
+because that is the step that turns a row on a tape into a person on a loan.
+
+- **Nothing is written until the review has been seen.** `previewTape` reads
+  the tape and the supplement through `@hm/partner-book` exactly as the load
+  will, and answers what loading would do: the headers matched or the ones
+  missing; every row as a loan — who, where, balance, rate, standing — and
+  whether it is new, changed or unchanged against the loan's newest
+  observation by record hash; whether the loan is already claimed; and
+  whether these same two files were loaded before, by the import's unique on
+  the two digests. The load is the same call with the write, and answers 201
+  when it wrote, 200 when this exact tape was loaded before, 422 when the
+  profile refused it.
+- **The as-of date is the tape's when the tape carries one.** The m3 profile
+  has an as-of column; when every readable row agrees, the review reports
+  that date and the desk adopts it for the import. The date typed on the
+  form is only the fallback for a tape without one, and a test holds the
+  October tape to October.
+- **The desk is gated by the servicing app's own staff session, checked with
+  it.** `/console/hm/tape` is the one prefix on the servicing host our API
+  answers itself; `services/console-staff.ts` forwards the console's cookie
+  to the servicing app's `/ops/api/me`, admits `ops_analyst`, `officer` and
+  `admin`, and refuses a header-asserted actor. A borrower's session opens
+  nothing here and a partner key opens nothing here: three doors, three
+  gates, and `console-tape.test.ts` walks a reader's session into the 403.
+- **A claim is mailed from the desk to the supplement's address.** The
+  invite step mints one claim per unclaimed loan through `mintLoanClaim` —
+  the next mint revokes the last, so a re-send leaves one live link out —
+  and mails the link through the mail port to the e-mail the supplement
+  carried beside the loan number. The address is read for that and stored
+  nowhere but `loan_claims.delivered_to`, with the mailer's answer beside it
+  (`delivered_at`, `delivery`), and only for a claim we sent. A loan with no
+  address gets its link back for delivery another way; a deployment whose
+  mail is the fixture answers "not delivered" with the link rather than
+  pretending. The match at sign-in is still never made: whoever holds the
+  link is whoever the delivery reached, exactly as when the partner delivers
+  it.
+- **The servicing app's own copy of the book is optional and separate.** With
+  an NMLSR id the desk also posts the same files to the servicing app's
+  `/partner-book/imports` through the console proxy, so its reviewer runs
+  over the same book; its receipt is shown beside ours and its refusal fails
+  nothing of ours. Blank, that copy is skipped and said so.
+- **Files cross as base64 in JSON, at 40 MB.** The same contract the partner
+  door carries, so one shape describes a tape whoever carries it; the router
+  parses its own body at that size and the session routes never need it.
+- **A book is written as sets, because a real one is fourteen thousand
+  rows.** The first real tape (Grander's, 14,118 loans, 9.8 MB) took the
+  import's one-statement-per-fact-per-row loop past the transaction's two
+  minutes, after which the nested insert of a loan's party landed on a fresh
+  connection and tripped the foreign key. The import now writes the people,
+  their facts, the loans, who is on them and the observations as `createMany`
+  in chunks of five hundred (`inChunks` in `services/db.ts`), with the ids
+  minted in the service so a loan's party is the statement after the loan
+  inside the same transaction — `createImportedLoans` keeps the single
+  constructor's rule that no loan is committed with nobody on it, and
+  `assertPartnerFactsMany` reads every live fact once and writes only what
+  differs, so a monthly tape that repeats every name is not a statement per
+  name. The state a loan stands in is read back only after a move. A row with
+  an unreadable cell loads with that fact blank and is an exception; a
+  rejected row is one that made no record, and the import row's CHECK holds
+  the counts to adding up — the same tape found the old count folding the
+  two together. Fourteen thousand rows load in seconds.
+- **What the real tape taught the profile.** Dates come as `m/d/yy`, with a
+  time on the FICO date, and a two-digit year is read into the century
+  nearest the day it is read — `1/1/51` is a maturity in 2051 and `1/14/98` an
+  origination in 1998, which no fixed pivot can serve; baths come as
+  `F:2/H:1`; the zip ranking is a decimal; "Prepay Period" is months of
+  penalty (`0`, `36`) and "Srv Contact Expected" a flag, neither a date —
+  the first was worse than unreadable, since a bare `36` read as an Excel
+  serial for a day in 1900. Five rows carry a term of zero and are refused
+  as `no_term`, by name. The review reports every
+  exception by what and where with a row count, and the first five hundred
+  row by row, rather than forty-five thousand rows for the eye.
+- **Invitations go out five hundred at a time.** The door takes five
+  thousand and a mailer is slow, so the desk sends in batches, shows how far
+  it is, and keeps what was already answered if a batch fails.
 
 ## Still outstanding
 

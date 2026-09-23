@@ -22,8 +22,9 @@ import type {
   Occupancy,
   ScenarioObjective,
 } from "@hm/db";
+import { randomUUID } from "node:crypto";
 import { AppError } from "../middleware/error-handler.js";
-import { type Db } from "./db.js";
+import { type Db, inChunks } from "./db.js";
 
 /** Terms as of origination. Everything that moves month to month is an observation. */
 export interface LoanTerms {
@@ -75,17 +76,19 @@ export interface LoanPartyInput {
  * nullable for the same reason: a record naming a servicer we have no row for
  * is a rejection the importer records, not a servicer we invent.
  */
+export interface ImportedLoanInput {
+  readonly terms: LoanTerms;
+  readonly property: LoanProperty;
+  readonly axes: LoanAxes;
+  readonly parties: readonly LoanPartyInput[];
+  readonly servicerId: string | null;
+  /** The servicer's own number for it, which is how the next tape finds it. */
+  readonly servicerLoanNumber?: string | null;
+}
+
 export async function createImportedLoan(
   tx: Db,
-  args: {
-    terms: LoanTerms;
-    property: LoanProperty;
-    axes: LoanAxes;
-    parties: readonly LoanPartyInput[];
-    servicerId: string | null;
-    /** The servicer's own number for it, which is how the next tape finds it. */
-    servicerLoanNumber?: string | null;
-  },
+  args: ImportedLoanInput,
 ): Promise<{ loanId: string }> {
   return create(tx, {
     status: "IMPORTED_UNCLAIMED",
@@ -98,6 +101,52 @@ export async function createImportedLoan(
     parties: args.parties,
     originatingApplicationId: null,
   });
+}
+
+/**
+ * A servicer's whole book at once: the same rows `createImportedLoan` makes,
+ * as a few statements rather than one per loan, because a book is thousands
+ * of rows and one transaction. The ids are minted here so the parties can be
+ * written in the statement after the loans, inside the same transaction —
+ * which keeps the one rule the single constructor holds: no loan is ever
+ * committed with nobody on it.
+ */
+export async function createImportedLoans(
+  tx: Db,
+  rows: readonly ImportedLoanInput[],
+): Promise<{ loanIds: string[] }> {
+  for (const r of rows) {
+    if (r.parties.length === 0) {
+      throw new Error(
+        "a loan is created with the people on it; there is no later step that adds them",
+      );
+    }
+  }
+  const loanIds = rows.map(() => randomUUID());
+  await inChunks(rows, (chunk, offset) =>
+    tx.loan.createMany({
+      data: chunk.map((r, i) => ({
+        id: loanIds[offset + i]!,
+        ...loanColumns({
+          status: "IMPORTED_UNCLAIMED",
+          source: "PARTNER_IMPORT",
+          servicerId: r.servicerId,
+          servicerLoanNumber: r.servicerLoanNumber ?? null,
+          axes: r.axes,
+          terms: r.terms,
+          property: r.property,
+          originatingApplicationId: null,
+        }),
+      })),
+    }),
+  );
+  await inChunks(
+    rows.flatMap((r, i) =>
+      r.parties.map((p) => ({ loanId: loanIds[i]!, partyId: p.partyId, role: p.role })),
+    ),
+    (chunk) => tx.loanParty.createMany({ data: chunk }),
+  );
+  return { loanIds };
 }
 
 /**
@@ -164,28 +213,7 @@ async function create(
   }
   const loan = await tx.loan.create({
     data: {
-      status: args.status,
-      source: args.source,
-      originatingApplicationId: args.originatingApplicationId,
-      servicerId: args.servicerId,
-      servicerLoanNumber: args.servicerLoanNumber,
-      objective: args.axes.objective ?? null,
-      program: args.axes.program ?? null,
-      lienPosition: args.axes.lienPosition ?? null,
-      occupancy: args.axes.occupancy ?? null,
-      rateType: args.terms.rateType,
-      noteRateBps: args.terms.noteRateBps,
-      termMonths: args.terms.termMonths,
-      originalPrincipalCents: args.terms.originalPrincipalCents,
-      originatedOn: args.terms.originatedOn ?? null,
-      firstPaymentOn: args.terms.firstPaymentOn ?? null,
-      maturityOn: args.terms.maturityOn ?? null,
-      propertyLine1: args.property.line1 ?? null,
-      propertyLine2: args.property.line2 ?? null,
-      propertyCity: args.property.city ?? null,
-      propertyState: args.property.state ?? null,
-      propertyPostalCode: args.property.postalCode ?? null,
-      propertyApn: args.property.apn ?? null,
+      ...loanColumns(args),
       parties: {
         create: args.parties.map((p) => ({ partyId: p.partyId, role: p.role })),
       },
@@ -193,6 +221,43 @@ async function create(
     select: { id: true },
   });
   return { loanId: loan.id };
+}
+
+/** The row's own columns, the one spelling both constructors write. */
+function loanColumns(args: {
+  status: "IMPORTED_UNCLAIMED" | "PENDING_BOARDING";
+  source: "PARTNER_IMPORT" | "ORIGINATION";
+  servicerId: string | null;
+  servicerLoanNumber: string | null;
+  axes: LoanAxes;
+  terms: LoanTerms;
+  property: LoanProperty;
+  originatingApplicationId: string | null;
+}) {
+  return {
+    status: args.status,
+    source: args.source,
+    originatingApplicationId: args.originatingApplicationId,
+    servicerId: args.servicerId,
+    servicerLoanNumber: args.servicerLoanNumber,
+    objective: args.axes.objective ?? null,
+    program: args.axes.program ?? null,
+    lienPosition: args.axes.lienPosition ?? null,
+    occupancy: args.axes.occupancy ?? null,
+    rateType: args.terms.rateType,
+    noteRateBps: args.terms.noteRateBps,
+    termMonths: args.terms.termMonths,
+    originalPrincipalCents: args.terms.originalPrincipalCents,
+    originatedOn: args.terms.originatedOn ?? null,
+    firstPaymentOn: args.terms.firstPaymentOn ?? null,
+    maturityOn: args.terms.maturityOn ?? null,
+    propertyLine1: args.property.line1 ?? null,
+    propertyLine2: args.property.line2 ?? null,
+    propertyCity: args.property.city ?? null,
+    propertyState: args.property.state ?? null,
+    propertyPostalCode: args.property.postalCode ?? null,
+    propertyApn: args.property.apn ?? null,
+  };
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   M3_V1,
   mapTapeRow,
   parseBool,
+  parseBathsDecimal,
   parseDateIso,
   parseIntCell,
   parseMoneyCents,
@@ -56,6 +57,14 @@ describe("rates", () => {
     expect(parsePctDecimal("2.5")).toBe("2.500");
     expect(parsePctDecimal(".5")).toBe("0.500");
   });
+
+  it("reads baths as a decimal or as full and half", () => {
+    expect(parseBathsDecimal("2.5")).toBe("2.500");
+    expect(parseBathsDecimal("2")).toBe("2.000");
+    expect(parseBathsDecimal("F:2/H:1")).toBe("2.500");
+    expect(parseBathsDecimal("f:0 / h:0")).toBe("0.000");
+    expect(parseBathsDecimal("two")).toBe(null);
+  });
 });
 
 describe("dates", () => {
@@ -66,9 +75,22 @@ describe("dates", () => {
     expect(parseDateIso("9/1/2026")).toBe("2026-09-01");
     expect(parseDateIso("9-1-2026")).toBe("2026-09-01");
     expect(parseDateIso("9/1/26")).toBe("2026-09-01");
-    expect(parseDateIso("9/1/49")).toBe("2049-09-01");
-    expect(parseDateIso("9/1/50")).toBe("1950-09-01");
     expect(parseDateIso("20260901")).toBe("2026-09-01");
+  });
+
+  it("reads a two-digit year into the century nearest the day it is read", () => {
+    // A real servicer's export in 2026: maturities out to the 2050s and
+    // originations back to the 1990s on the same tape, both as m/d/yy.
+    const now = new Date("2026-04-30T00:00:00Z");
+    expect(parseDateIso("1/1/51", now)).toBe("2051-01-01");
+    expect(parseDateIso("1/14/98", now)).toBe("1998-01-14");
+    expect(parseDateIso("9/1/49", now)).toBe("2049-09-01");
+    expect(parseDateIso("9/1/50", now)).toBe("2050-09-01");
+    // A tie goes to the earlier century.
+    expect(parseDateIso("9/1/76", now)).toBe("1976-09-01");
+    // The same form with a time on it, as a FICO date is written.
+    expect(parseDateIso("4/11/26 0:00", now)).toBe("2026-04-11");
+    expect(parseDateIso("4/11/2026 0:00", now)).toBe("2026-04-11");
   });
 
   it("reads an Excel serial, phantom leap day included", () => {

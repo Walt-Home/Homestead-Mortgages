@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { ReactNode } from "react";
 import { AuthProvider, roleWord, useAuth } from "./lib/auth.js";
 import { QUEUE_KINDS, type QueueKind } from "./lib/home.js";
@@ -17,6 +17,7 @@ import { ControlsPage } from "./pages/ControlsPage.js";
 import { AiPage } from "./pages/AiPage.js";
 import { StaffPage } from "./pages/StaffPage.js";
 import { AccessReviewPage } from "./pages/AccessReviewPage.js";
+import { TapePage } from "./pages/TapePage.js";
 
 const OPS = ["ops_analyst", "officer", "compliance"];
 const STAFF = [...OPS, "admin"];
@@ -47,8 +48,17 @@ function KindRoute() {
 
 function Routed() {
   const { status } = useAuth();
+  const { pathname } = useLocation();
   if (status === "loading") return <div className="min-h-screen bg-canvas" />;
   if (status === "signed-out") return <SignInPage />;
+  // The tape desk is its own experience: one job, no navigation around it.
+  if (pathname === "/tape" || pathname.startsWith("/tape/")) {
+    return (
+      <Guard roles={OPS}>
+        <TapePage />
+      </Guard>
+    );
+  }
   return (
     <Shell>
       <Routes>

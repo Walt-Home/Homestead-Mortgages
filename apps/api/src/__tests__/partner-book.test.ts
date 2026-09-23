@@ -485,3 +485,89 @@ describe("the partner's door", () => {
     }
   });
 });
+
+describe("a real book's size", () => {
+  /** The sample's twelve loans, each cloned `times` over under numbers of its own. */
+  function bigTape(times: number, override?: Parameters<typeof sampleBook>[0]): Uint8Array {
+    const book = sampleBook(override);
+    const [header, ...rows] = book.tapeRows;
+    const numberAt = M3_V1.columns.findIndex((c) => c.key === "servicer_loan_number");
+    const cloned = rows.flatMap((row) =>
+      Array.from({ length: times }, (_, k) => {
+        const copy = [...row];
+        copy[numberAt] = `${String(row[numberAt])}-${k}`;
+        return copy;
+      }),
+    );
+    return utf8(toCsv([header!, ...cloned]));
+  }
+
+  it("loads twelve hundred loans as sets, and repeats none of their facts on the next tape", async () => {
+    const who = await northlight();
+    const tape = { filename: "big.csv", bytes: bigTape(100) };
+    const first = await importPartnerBook({
+      servicerId: who.servicer.id,
+      principalId: who.principalId,
+      profile: "m3-v1",
+      tape,
+      supplement: null,
+    });
+    expect(first.status).toBe("loaded");
+    if (first.status !== "loaded") return;
+    expect(first.counts).toEqual({
+      rows_total: 1200,
+      rows_loaded: 1200,
+      rows_rejected: 0,
+      loans_created: 1200,
+      loans_updated: 0,
+      loans_unchanged: 0,
+      parties_created: 1200,
+    });
+    const where = { loan: { servicerId: who.servicer.id } };
+    expect(await prisma.loanParty.count({ where })).toBe(1200);
+    expect(await prisma.servicingObservation.count({ where })).toBe(1200);
+    // One name per person, no supplement so no date of birth.
+    const facts = () =>
+      prisma.fact.count({
+        where: { sourceKind: "PARTNER_SHARED", assertedByPrincipalId: who.principalId },
+      });
+    expect(await facts()).toBe(1200);
+
+    // The same book a month later: every loan known, every name the same,
+    // so twelve hundred observations and not one fact more.
+    const again = await importPartnerBook({
+      servicerId: who.servicer.id,
+      principalId: who.principalId,
+      profile: "m3-v1",
+      tape: {
+        filename: "big-october.csv",
+        bytes: bigTape(100, () => ({ as_of_date: "2026-10-01" })),
+      },
+      supplement: null,
+    });
+    expect(again.status).toBe("loaded");
+    if (again.status !== "loaded") return;
+    expect(again.counts.loans_created).toBe(0);
+    expect(again.counts.loans_updated + again.counts.loans_unchanged).toBe(1200);
+    expect(again.counts.parties_created).toBe(0);
+    expect(await prisma.servicingObservation.count({ where })).toBe(2400);
+    expect(await facts()).toBe(1200);
+  });
+
+  it("loads a row whose cell it cannot read, as an exception and not a rejection", async () => {
+    const who = await northlight();
+    const book = sampleBook((l) => (l.n === 2 ? { fico_current_date: "not a date" } : {}));
+    const r = await load(who, book, { csv: true });
+    expect(r.status).toBe("loaded");
+    if (r.status !== "loaded") return;
+    expect(r.counts.rows_loaded).toBe(12);
+    expect(r.counts.rows_rejected).toBe(0);
+    expect(r.report.exceptions).toEqual([
+      expect.objectContaining({
+        code: "unreadable_cell",
+        column: "Current Fico Date",
+        servicer_loan_number: "NL-100002",
+      }),
+    ]);
+  });
+});

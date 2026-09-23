@@ -22,3 +22,21 @@ export type Db = Prisma.TransactionClient;
 
 /** True when the caller passed no transaction and this call may open one. */
 export const ownsTransaction = (db: Db): boolean => db === (prisma as unknown as Db);
+
+/** Rows per `createMany`: well inside Postgres's 65,535 bound parameters at thirty columns. */
+export const CREATE_MANY_CHUNK = 500;
+
+/**
+ * Write a large set in chunks, in order. A servicer's book is thousands of
+ * rows, and one statement per row inside one transaction is minutes; one
+ * statement per five hundred is seconds.
+ */
+export async function inChunks<T>(
+  rows: readonly T[],
+  write: (chunk: T[], offset: number) => Promise<unknown>,
+  size = CREATE_MANY_CHUNK,
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += size) {
+    await write(rows.slice(i, i + size), i);
+  }
+}

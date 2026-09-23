@@ -60,6 +60,15 @@ function qs(query: Call["query"]): string {
 function messageOf(body: Record<string, unknown>, status: number): string {
   const reason = body.reason;
   if (typeof reason === "string" && reason) return reason;
+  // Our own API's envelope: `{ error: { message, code } }`.
+  const nested = body.error;
+  if (
+    nested &&
+    typeof nested === "object" &&
+    typeof (nested as { message?: unknown }).message === "string"
+  ) {
+    return (nested as { message: string }).message;
+  }
   const error = body.error;
   if (typeof error === "string" && error && error !== "refused" && error !== error.toLowerCase())
     return error;
@@ -70,12 +79,24 @@ function messageOf(body: Record<string, unknown>, status: number): string {
   return `Request failed (${status})`;
 }
 
-export async function call<T>(path: string, init: Call = {}): Promise<Answer<T>> {
+/**
+ * Where a call goes. The servicing app's console API answers `/console/api`;
+ * our own API answers `/console/hm/tape` — the tape desk — behind the same
+ * session, checked with the servicing app on every call.
+ */
+export type Door = "servicing" | "hm";
+const BASE: Record<Door, string> = { servicing: "/console/api", hm: "/console/hm/tape" };
+
+export async function call<T>(
+  path: string,
+  init: Call = {},
+  door: Door = "servicing",
+): Promise<Answer<T>> {
   const headers: Record<string, string> = { accept: "application/json" };
   const role = init.role ?? actingRole;
   if (role) headers["x-staff-role"] = role;
   if (init.body !== undefined) headers["content-type"] = "application/json";
-  const response = await fetch(`/console/api${path}${qs(init.query)}`, {
+  const response = await fetch(`${BASE[door]}${path}${qs(init.query)}`, {
     method: init.method ?? (init.body !== undefined ? "POST" : "GET"),
     headers,
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
@@ -101,8 +122,15 @@ export async function call<T>(path: string, init: Call = {}): Promise<Answer<T>>
     ) {
       window.dispatchEvent(new CustomEvent(SIGNED_OUT, { detail: { code } }));
     }
+    const nestedCode = (b.error as { code?: unknown } | undefined)?.code;
     const actAs = Array.isArray(b.act_as) ? (b.act_as as string[]) : [];
-    throw new ApiError(response.status, messageOf(b, response.status), code, actAs, b);
+    throw new ApiError(
+      response.status,
+      messageOf(b, response.status),
+      code ?? (typeof nestedCode === "string" ? nestedCode : null),
+      actAs,
+      b,
+    );
   }
   return { data: body as T, actedAs };
 }
@@ -110,6 +138,11 @@ export async function call<T>(path: string, init: Call = {}): Promise<Answer<T>>
 /** The common case: just the data. */
 export async function api<T>(path: string, init: Call = {}): Promise<T> {
   return (await call<T>(path, init)).data;
+}
+
+/** The same, at our own door. */
+export async function hm<T>(path: string, init: Call = {}): Promise<T> {
+  return (await call<T>(path, init, "hm")).data;
 }
 
 /**

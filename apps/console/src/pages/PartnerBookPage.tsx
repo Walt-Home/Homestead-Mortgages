@@ -4,6 +4,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../components/Page.js";
 import { Table, type Column } from "../components/Table.js";
@@ -21,7 +22,6 @@ import {
 import { api } from "../lib/api.js";
 import { useAuth } from "../lib/auth.js";
 import { fmtDate, fmtDateTime, fmtRelative, money, parseTs, pct, words } from "../lib/format.js";
-import { UploadTapeSheet } from "./UploadTapeSheet.js";
 
 interface Partner {
   partner_party_id: string;
@@ -114,12 +114,12 @@ const verdictTone = (v?: string): Tone =>
           : "neutral";
 
 export function PartnerBookPage() {
+  const navigate = useNavigate();
   const { role } = useAuth();
   const [partner, setPartner] = useState<string>("");
   const [tab, setTab] = useState<"loans" | "imports" | "today">("loans");
   const [verdict, setVerdict] = useState("all");
   const [selected, setSelected] = useState<BookLoan | null>(null);
-  const [uploading, setUploading] = useState(false);
 
   const partners = useQuery({
     queryKey: ["partners", role],
@@ -258,7 +258,7 @@ export function PartnerBookPage() {
               ))}
             </Select>
           ) : null}
-          <Button variant="primary" icon="plus" onClick={() => setUploading(true)}>
+          <Button variant="primary" icon="plus" onClick={() => navigate("/tape")}>
             Load a tape
           </Button>
         </>
@@ -481,7 +481,6 @@ export function PartnerBookPage() {
         ) : null}
       </Section>
       {selected ? <BookLoanSheet loan={selected} onClose={() => setSelected(null)} /> : null}
-      {uploading ? <UploadTapeSheet partners={p} onClose={() => setUploading(false)} /> : null}
     </Page>
   );
 }

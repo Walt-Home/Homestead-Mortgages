@@ -3321,6 +3321,13 @@ model LoanClaim {
   acceptedBy        Party?    @relation("LoanClaimTakenBy", fields: [acceptedByPartyId], references: [id], onDelete: SetNull)
   revokedAt         DateTime? @map("revoked_at")
 
+  /// Where the desk mailed the link, and what the mailer said — the one
+  /// place the supplement's address is kept, and only for a claim we sent.
+  /// Null for a claim the partner delivered over its own channel.
+  deliveredTo String?   @map("delivered_to")
+  deliveredAt DateTime? @map("delivered_at")
+  delivery    Json?
+
   @@index([loanId], map: "loan_claims_loan")
   @@map("loan_claims")
 }

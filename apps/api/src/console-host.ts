@@ -32,6 +32,7 @@ import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import express, { type Express, type Request, type Response, type Router } from "express";
 import { config } from "./config.js";
+import { consoleTapeRouter } from "./routes/console-tape.js";
 import {
   IDENTITY_HEADER,
   identityTokenFor,
@@ -53,6 +54,12 @@ export interface ConsoleHostOptions {
    * strips before his server looks. Null sends nothing.
    */
   readonly identityToken?: IdentityTokenProvider;
+  /**
+   * The one prefix on this host our API answers itself: the tape desk,
+   * at `/console/hm/tape`, gated by the servicing app's own session. Unset
+   * in a test that is only about the forwarding.
+   */
+  readonly tape?: Router;
 }
 
 /** The request headers that cross to his server. Nothing else does. */
@@ -142,7 +149,10 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
   router.get("/", (_req, res) => res.redirect(302, "/console/"));
   router.get(/^\/console$/, (_req, res) => res.redirect(302, "/console/"));
 
-  // The console's calls, to his console API and his document reads.
+  // Ours, before anything forwarded: the tape desk answers here.
+  if (opts.tape) router.use("/console/hm/tape", opts.tape);
+
+  // The console's calls, to the servicing app's console API and its document reads.
   router.use(
     "/console/api",
     forward((path) => `/ops/api${path}`),
@@ -207,7 +217,16 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
 export function consoleHost(app: Express): "not-configured" | "proxy-only" | "console" {
   const host = config.servicing.publicHost;
   const upstream = config.servicing.apiUrl;
-  if (!host || !upstream) return "not-configured";
+  if (!upstream) return "not-configured";
+  const identityToken = identityTokenFor(upstream);
+  const tape = consoleTapeRouter({ upstream, identityToken });
+  if (!host) {
+    // No servicing hostname: development, where the console's dev server
+    // proxies `/console/hm` here. The desk carries its own gate, so it is
+    // safe on any Host; it is mounted on one only when there is one.
+    app.use("/console/hm/tape", tape);
+    return "not-configured";
+  }
   const here = dirname(fileURLToPath(import.meta.url));
   // dist/index.js → ../../console/dist in the image; src/ → the same in the repo.
   const dist = resolve(here, "../../console/dist");
@@ -216,7 +235,8 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
     host,
     upstream,
     dist: built ? dist : undefined,
-    identityToken: identityTokenFor(upstream),
+    identityToken,
+    tape,
   });
   app.use((req, res, next) => {
     if (req.hostname === host) router(req, res, next);

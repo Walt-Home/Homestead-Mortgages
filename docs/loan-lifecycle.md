@@ -91,17 +91,17 @@ configuration change rather than a migration, which is why no state names it.
 
 This is the part to be honest about.
 
-| Piece                                           | Status                                                                             |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `LoanState`, the enum and its migration         | Built                                                                              |
-| `loans`, `loan_parties`, the cascade            | Built                                                                              |
-| `loans_terminal_is_final`, the transition guard | Built                                                                              |
-| `services/loan-transition.ts`                   | Built; the importer moves a loan a tape says ended                                 |
-| `services/loans.ts` constructor                 | Built; `services/partner-book.ts` is its first caller                              |
-| A route that creates a loan                     | `POST /api/partner/book/imports`, opened by a partner key                          |
-| The tape reader                                 | `packages/partner-book`, one profile, Doug's §33.1 ported                          |
-| A loan's record, to its party                   | `GET /api/loans` and `/api/loans/:id/servicing`; the web's `/loans/:id` renders it |
-| The claim                                       | Built: a token the servicer delivers, never an e-mail match — `loan_claims`        |
+| Piece                                           | Status                                                                                                        |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `LoanState`, the enum and its migration         | Built                                                                                                         |
+| `loans`, `loan_parties`, the cascade            | Built                                                                                                         |
+| `loans_terminal_is_final`, the transition guard | Built                                                                                                         |
+| `services/loan-transition.ts`                   | Built; the importer moves a loan a tape says ended                                                            |
+| `services/loans.ts` constructor                 | Built; `services/partner-book.ts` is its first caller                                                         |
+| A route that creates a loan                     | `POST /api/partner/book/imports`, opened by a partner key                                                     |
+| The tape reader                                 | `packages/partner-book`, one profile, Doug's §33.1 ported                                                     |
+| A loan's record, to its party                   | `GET /api/loans` and `/api/loans/:id/servicing`; the web's `/loans/:id` renders it                            |
+| The claim                                       | Built: a token the servicer delivers or the tape desk mails, never an e-mail match at sign-in — `loan_claims` |
 
 Since 21 September 2026 a servicer's tape becomes rows: one
 `partner_book_imports` row per tape read, an `imported_unclaimed` loan on a
@@ -118,13 +118,17 @@ supplement — the feed contract has nowhere to put an e-mail, and the claim is
 a token the partner delivers — and it links no row to a party somebody has
 signed in as, because a loan appearing in an account without a claim is the
 oracle the 404 rule suppresses. Every row is its own provisional party until
-the claim merges it. `docs/decisions.md`, "A book is a tape, read once".
+the claim merges it. `docs/decisions.md`, "A book is a tape, read once". The
+tape desk reads the supplement's e-mail once, for the invitation, and keeps
+it nowhere but on the claim it mailed.
 
 The claim is `loan_claims`: the partner mints a single-use token for one
-unclaimed loan through its key and delivers it; whoever holds the link takes
-it after signing in, the tape's party folds into theirs, the loan moves to
-`monitoring_only` as `claim_confirmed`, and the review turns on.
-`docs/decisions.md`, "A mortgage is claimed by a token the servicer delivers".
+unclaimed loan through its key and delivers it, or ops staff mint it from the
+tape desk and the desk mails it to the supplement's address; whoever holds the
+link takes it after signing in, the tape's party folds into theirs, the loan
+moves to `monitoring_only` as `claim_confirmed`, and the review turns on.
+`docs/decisions.md`, "A mortgage is claimed by a token the servicer delivers"
+and "The tape desk is one screen, and a claim is mailed from it".
 
 And since 22 September the review is ours. Each morning at seven Eastern a
 job reads every monitored loan off its newest observation, asks the pricing

@@ -42,37 +42,38 @@ packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5
 apps/web                   React + Vite, the borrower app
-apps/console               React + Vite, the ops console: ours, over Doug's console API, its own design system
-apps/servicing             Doug's servicing platform, vendored whole, on its own database
+apps/console               React + Vite, the ops console and the tape desk, over the servicing app's console API
+apps/servicing             the servicing app: the runtime vendored whole from doug-ludlow/Supermortgage, on its own database
 infra                      Terraform
 ```
 
-**Three trees are Doug's, byte for byte.** `packages/kernel` (his kernel and
-the timer registry it reads), `packages/partner-book/src/vendored` (his xlsx
-reader) and `apps/servicing` (his whole runtime: `src`, `db`, `spec`, `docs`,
+**Three trees are vendored byte for byte.** `packages/kernel` (the kernel and
+the timer registry it reads), `packages/partner-book/src/vendored` (the xlsx
+reader) and `apps/servicing` (the servicing app's whole runtime: `src`, `db`, `spec`, `docs`,
 `fixtures`, `tools`, `tsconfig.json`) are doug-ludlow/Supermortgage at the
 commit each tree's `VENDORED_FROM` names, and nothing in them has been edited
 here: `diff -r` against a clone at that commit reports nothing, and that is
 the property to keep. `scripts/vendor-supermortgage.mjs` re-copies all three
 from one clone so they cannot drift from each other. Lint and Prettier skip
 the trees for the same reason they skip generated files; the repo-walking
-tests in `apps/api` skip them by name. His tests are his, run under
-`node --test` rather than vitest so they stay his too. The files beside each
+tests in `apps/api` skip them by name. The vendored tests run under
+`node --test` rather than vitest so they stay a copy too. The files beside each
 tree — `packages/kernel/src/index.ts`, `apps/servicing/scripts/`, each
 `package.json` — are ours. `@hm/partner-book` is what consumes the kernel
 today.
 
-**`apps/servicing` is a testing ground and a reference, never production.**
-It runs his `src/runtime/main.ts` as he runs it, on a database that is not
-ours (his tables collide with ours by name: `loans`, `parties`, `facts`),
-reached through `scripts/run.mjs`, which maps `SERVICING_DATABASE_URL`,
-`SERVICING_PORT` and `SERVICING_API_TOKEN` onto the names his config reads.
-Every vendor in it is an in-repo FAKE. Nothing in `apps/api` imports from it
-and nothing in it imports from ours; the seam between the two is HTTP, and
-the plan for it is `docs/decisions.md`, "Doug's servicing runtime is an app in
-this repo". `npm run servicing:db:setup` makes the database and applies his
-177 migrations; `npm run seed-demo -w @hm/servicing` boards a hundred loans
-and a twelve-loan partner book to look at.
+**`apps/servicing` is the servicing app, and it is ours.** It runs
+`src/runtime/main.ts` on a database that is not the API's (its tables collide
+with ours by name: `loans`, `parties`, `facts`), reached through
+`scripts/run.mjs`, which maps `SERVICING_DATABASE_URL`, `SERVICING_PORT` and
+`SERVICING_API_TOKEN` onto the names its config reads. Every vendor in it is
+an in-repo FAKE. Nothing in `apps/api` imports from it and nothing in it
+imports from ours; the seam between the two is HTTP, and the plan for it is
+`docs/decisions.md`, "Doug's servicing runtime is an app in this repo".
+`npm run servicing:db:setup` makes the database and applies its 177
+migrations; `npm run seed-demo -w @hm/servicing` boards a hundred loans and a
+twelve-loan partner book to look at. It deploys beside the API as
+`servicing.supermortgage.com`; the tape desk is its one screen for a book.
 
 ## The borrower flow is FIVE screens; the engine has ten
 
@@ -116,24 +117,42 @@ not.** Screen 1 runs before APP-005 exists, so guarding the property lookups
 would make the flow unreachable from its own first step — the same trap the
 e-sign adapter documents. See `packages/connectors/src/ports/index.ts`.
 
-**The `servicing` port reads Doug's platform, and is keyed on a loan
+**The `servicing` port reads the servicing app, and is keyed on a loan
 number.** `GET /api/loans/:id/servicing` answers the party on a loan with
 the tape's newest observation beside what `apps/servicing` has concluded
 about the loan — the review's verdict, the offer, readiness, the open
-clocks — read over his `/v1` door when the servicer's `integrationDepth` is
+clocks — read over its `/v1` door when the servicer's `integrationDepth` is
 `API` or `SUBSERVICED`. The port is unguarded for the reason the property
 lookups are: the key is the servicer's loan number, never a person, and the
 route decides "whose" with `assertLoanAccess` before it asks. The fixture
-answers what his engine answered for the twelve-loan sample book, and the
+answers what its engine answered for the twelve-loan sample book, and the
 real adapter (`SERVICING_PROVIDER=supermortgage`) is held to the same
-record by a test that replays his door. The first successful read writes
+record by a test that replays its door. The first successful read writes
 the platform's id and name onto the row (`servicing_external_id`,
 `servicing_provider`, a pair by CHECK), so later reads go by id. See `docs/decisions.md`, "The
 servicing platform is read, never joined".
 
+**The tape desk is the servicing app's one screen for a book (23 September
+2026).** `/console/tape` on the servicing host is four steps outside the
+console's shell — files, review, load, invite — and nothing else on the
+page. It reads the tape and the supplement through `@hm/partner-book` and
+writes nothing until the review has been seen; the load is
+`services/partner-book.ts` under the servicer's partner principal, the same
+call the partner key reaches; the invite mints one claim per unclaimed loan
+and mails the link to the supplement's address through the mail port, and
+that address lands nowhere but `loan_claims.delivered_to`. The as-of is the
+tape's own when it carries one. A book is written as sets — `createMany` in
+chunks, ids minted in the service, facts written only where they differ —
+because a real one is fourteen thousand rows and one transaction. The desk is ours (`routes/console-tape.ts`,
+`services/tape-desk.ts`, `apps/console/src/pages/TapePage.tsx`), answered at
+`/console/hm/tape` — the one prefix on that host our API answers itself — and
+gated by the servicing app's own staff session, checked with it
+(`services/console-staff.ts`). See `docs/decisions.md`, "The tape desk is one
+screen, and a claim is mailed from it".
+
 **The daily review is ours since 22 September 2026.** `packages/refi-review`
-is Doug's §33.2 over his §20.1, ported pure over the kernel and held to his
-figures by its tests; `services/loan-review.ts` runs it each morning over
+is the servicing app's spec §33.2 over its §20.1, ported pure over the kernel
+and held to its figures by its tests; `services/loan-review.ts` runs it each morning over
 every monitored loan's newest observation with one 30-year fixed quoted off
 the pricing port, and keeps one append-only `loan_reviews` row per loan per
 day. `npm run review:run` is the job by hand; the deploy runs it once after
@@ -146,15 +165,15 @@ platform's after. See `docs/decisions.md`, "The daily review is ours now".
 `refi_offers` row with the review's disclosure copied onto it, open thirty
 days, one per loan, delivered as the card on `/loans/:id` and nowhere else
 (no mail yet). The review skips a loan holding an open offer or an open
-refinance application, and reads the person's answers as his gates: not
+refinance application, and reads the person's answers as the servicing app's gates: not
 now is a ninety-day cooldown, never is a standing suppression, two offers a
 year. `POST /api/loans/:id/offers/:offerId/answer` takes yes / not_now /
 never; a yes takes the stated income too and `services/refinance.ts` opens
 the application exactly as screen 1 does, prefilled from the loan and the
 tape, `applications.prior_loan_id` set at birth, landing on screen 2. The
 card's "we'd still need" is our requirement engine run dry over a file
-seeded from the loan. `services/refi-analyst.ts` is Doug's rule-4 analyst
-ported — his prompt, his two tools, his provenance guard, one regeneration
+seeded from the loan. `services/refi-analyst.ts` is the servicing app's rule-4 analyst
+ported — its prompt, its two tools, its provenance guard, one regeneration
 — writing its record onto the review row; it is off without
 `ANTHROPIC_API_KEY` and never fails a review. See `docs/decisions.md`, "An
 offer is a row and a card".
@@ -213,8 +232,9 @@ offer is a row and a card".
   facts, plus a `servicing_observations` row per tape. Nothing about that
   party is retrievable and the loan is not monitored until the claim: the
   partner mints a single-use token for one loan through its key
-  (`POST /api/partner/book/loans/:number/claims`) and delivers it, never an
-  email match; whoever holds the link takes it at `/claim` after signing in,
+  (`POST /api/partner/book/loans/:number/claims`) and delivers it, or the
+  tape desk mails it to the supplement's address — never a match at sign-in;
+  whoever holds the link takes it at `/claim` after signing in,
   the tape's party folds into theirs through `mergePartyInto`, the loan moves
   to `monitoring_only` as `claim_confirmed`, and the review turns on. The
   persona seed walks the `grander_import` row through exactly that on
@@ -432,15 +452,15 @@ Today `hm-run@` holds `cloudsql.client` and accessor on the secrets the API
 mounts, granted on the secrets themselves. `hm-github-actions@` can deploy and
 push images and nothing else. Terraform manages all of it.
 
-**Doug's servicing runtime deploys beside the API, in our project and
-nowhere else**, as `homestead-mortgages-staging-servicing`: his image
-(`apps/servicing/Dockerfile`), his migrations and demo seed applied from it
+**The servicing app deploys beside the API, in our project and
+nowhere else**, as `homestead-mortgages-staging-servicing`: its image
+(`apps/servicing/Dockerfile`), its migrations and demo seed applied from it
 through the proxy, the sweep as a Cloud Run job every five minutes, on a
 database of its own under `hm-servicing-run@`, which reads exactly its own two
 secrets. The servicing database role is a plain one made in SQL, not a `google_sql_user`,
 because an API-created user is a `cloudsqlsuperuser` and can open every
-database on the instance; his cannot open ours. The API's deploy runs after
-his and is told where his door is. See `docs/decisions.md`, "The servicing app
+database on the instance; the servicing app's cannot open ours. The API's deploy runs after
+it and is told where its door is. See `docs/decisions.md`, "The servicing app
 deploys beside the API".
 
 ## Reaching the deployed app
@@ -458,19 +478,20 @@ is missing.
 
 **Both deployments have hostnames, behind one load balancer.**
 `supermortgage.com` (and `www`) is the consumer app and
-`servicing.supermortgage.com` is Doug's runtime, through `infra/edge.tf`:
+`servicing.supermortgage.com` is the servicing app, through `infra/edge.tf`:
 one global external Application Load Balancer, a serverless endpoint group
 per service, a Google-managed certificate per hostname, HTTP redirected to
-HTTPS, and `/` on the servicing host redirected to his console at `/ops`.
+HTTPS, and `/` on the servicing host redirected to its console at `/ops`.
 The servicing hostname is behind Identity-Aware Proxy for Doug, Drew and Joe
 as their trywalt.ai accounts. Its one backend is the API container, which on
 that Host serves OUR ops console (`apps/console`, at `/console`) and forwards
-the console's calls to his runtime as `/console/api/*` → his `/ops/api/*`
-(`apps/api/src/console-host.ts`); his own page is forwarded at `/ops` for
-comparison. Behind IAP is his console's own sign-in (e-mailed code, printed
+the console's calls to the servicing app as `/console/api/*` → its `/ops/api/*`
+(`apps/api/src/console-host.ts`), and answers the tape desk's own calls at
+`/console/hm/tape/*` itself; the servicing app's own page is forwarded at `/ops` for
+comparison. Behind IAP is the servicing app's own sign-in (e-mailed code, printed
 on the page because the mail vendor is a FAKE, then a password). The deploy
-stands the first console admin with his `staff-bootstrap`; that admin
-invites the rest from the console. His service's run.app has no public
+stands the first console admin with its `staff-bootstrap`; that admin
+invites the rest from the console. The servicing app's run.app has no public
 invoker: the API's identity is the one invoker, and the adapter and the
 console proxy carry a Google identity token for it on
 `X-Serverless-Authorization` (`services/google-identity.ts`), so a bare
@@ -501,7 +522,7 @@ you are already editing that line, so the fix never arrives as its own diff.
 ```bash
 npm run dev                  # API :8080, web :5173
 npm test                     # every workspace but apps/servicing
-npm run test:servicing       # Doug's tests, as his, on a database beside ours (CI: four shards, only when his tree changed)
+npm run test:servicing       # the servicing app's vendored tests, under node --test, on a database beside ours (CI: four shards, only when its tree changed)
 npm run check                # tsc -b + registry verify
 npm run requirements:build   # after editing data/v1-build.csv
 npm run brand:build          # after editing packages/brand/tokens.mjs
@@ -510,7 +531,7 @@ npm run apor:vendor          # refresh data/ffiec-survey-table.csv from the CFPB
 npm run db:migrate           # prisma migrate dev
 npm run db:test:setup        # create <db>_test and apply migrations to it
 npm run build && npm run seed:personas   # the eight sample borrowers
-npm run servicing:db:setup   # create the servicing database and apply Doug's migrations
+npm run servicing:db:setup   # create the servicing database and apply the servicing app's migrations
 npm run seed-demo -w @hm/servicing       # his 100-loan batch and 12-loan partner book
 ```
 

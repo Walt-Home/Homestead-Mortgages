@@ -49,17 +49,16 @@ import type {
 import {
   profileById,
   readBook,
-  rowsWithExceptions,
   type BookFile,
   type GapCounts,
   type RowException,
 } from "@hm/partner-book";
 import { canonicalRecordHash, type ImportedLoanRecord } from "@hm/shared/portfolio";
-import { type Db, ownsTransaction } from "./db.js";
+import { type Db, inChunks, ownsTransaction } from "./db.js";
 import { moveLoanIfLegal } from "./loan-transition.js";
 import { toDomainLoanState } from "./loan-transition.js";
-import { createImportedLoan } from "./loans.js";
-import { assertPartnerFacts, createProvisionalParty, type PartnerFact } from "./party.js";
+import { createImportedLoans } from "./loans.js";
+import { assertPartnerFactsMany, createProvisionalParties, type PartnerFact } from "./party.js";
 
 export interface ImportBookInput {
   readonly servicerId: string;
@@ -218,27 +217,33 @@ async function load(
   const byNumber = new Map(existing.map((l) => [l.servicerLoanNumber!, l]));
 
   // Pass 2: the loans, so the report can name every id before the import row
-  // that the observations will point at is written.
-  const placed: {
+  // that the observations will point at is written. Set-based: a book is
+  // thousands of rows and one transaction, so the people, their facts, the
+  // loans and who is on them go in as a few statements each, in that order,
+  // and a loan is never committed without its party.
+  type Placed = {
     loanId: string;
     record: ImportedLoanRecord;
     facts: Record<string, unknown>;
     change: LoanChange;
     hash: string;
-  }[] = [];
-  let partiesCreated = 0;
+    /** Where the loan stands before this tape moves it. */
+    state: LoanState;
+  };
+  const fresh: { record: ImportedLoanRecord; facts: Record<string, unknown>; hash: string }[] = [];
   for (const { record, facts } of book.records) {
-    const hash = canonicalRecordHash(record);
-    const prior = byNumber.get(record.sourceLoanKey);
-    const partnerFacts = personFacts(record, asOfDate);
-    if (!prior) {
-      const partyId = await createProvisionalParty(tx, {
-        sourceFirstSeen: `partner_import:${servicer.slug}`,
-      });
-      partiesCreated += 1;
-      await assertPartnerFacts(tx, { partyId, principalId, facts: partnerFacts });
+    if (!byNumber.has(record.sourceLoanKey)) {
+      fresh.push({ record, facts, hash: canonicalRecordHash(record) });
+    }
+  }
+  const partyIds = await createProvisionalParties(tx, fresh.length, {
+    sourceFirstSeen: `partner_import:${servicer.slug}`,
+  });
+  const { loanIds } = await createImportedLoans(
+    tx,
+    fresh.map(({ record }, i) => {
       const t = record.terms;
-      const { loanId } = await createImportedLoan(tx, {
+      return {
         terms: {
           rateType: enumOf<LoanRateType>(t.rateType)!,
           noteRateBps: rateToBps(t.noteRatePct),
@@ -262,19 +267,51 @@ async function load(
           lienPosition: enumOf<LienPosition>(t.lienPosition),
           occupancy: enumOf<Occupancy>(t.occupancy),
         },
-        parties: [{ partyId, role: "PRIMARY_BORROWER" }],
+        parties: [{ partyId: partyIds[i]!, role: "PRIMARY_BORROWER" as const }],
         servicerId: servicer.id,
         servicerLoanNumber: record.sourceLoanKey,
-      });
-      placed.push({ loanId, record, facts, change: "created", hash });
-    } else {
-      const partyId = prior.parties[0]?.partyId;
-      if (partyId) await assertChangedPartnerFacts(tx, partyId, principalId, partnerFacts);
-      const change: LoanChange =
-        prior.observations[0]?.recordHash === hash ? "unchanged" : "updated";
-      placed.push({ loanId: prior.id, record, facts, change, hash });
+      };
+    }),
+  );
+  const freshByKey = new Map(fresh.map((f, i) => [f.record.sourceLoanKey, { ...f, i }]));
+
+  // The partner's spelling of every person on the tape: a new party takes all
+  // of it, a known one only what changed.
+  await assertPartnerFactsMany(tx, {
+    principalId,
+    assertions: book.records.flatMap(({ record }) => {
+      const partnerFacts = personFacts(record, asOfDate);
+      const known = freshByKey.get(record.sourceLoanKey);
+      if (known) return [{ partyId: partyIds[known.i]!, facts: partnerFacts }];
+      const partyId = byNumber.get(record.sourceLoanKey)?.parties[0]?.partyId;
+      return partyId ? [{ partyId, facts: partnerFacts }] : [];
+    }),
+  });
+
+  const placed: Placed[] = book.records.map(({ record, facts }) => {
+    const known = freshByKey.get(record.sourceLoanKey);
+    if (known) {
+      return {
+        loanId: loanIds[known.i]!,
+        record,
+        facts,
+        change: "created",
+        hash: known.hash,
+        state: "IMPORTED_UNCLAIMED",
+      };
     }
-  }
+    const prior = byNumber.get(record.sourceLoanKey)!;
+    const hash = canonicalRecordHash(record);
+    return {
+      loanId: prior.id,
+      record,
+      facts,
+      change: prior.observations[0]?.recordHash === hash ? "unchanged" : "updated",
+      hash,
+      state: prior.status,
+    };
+  });
+  const partiesCreated = fresh.length;
 
   const notOnTape = await tx.loan.findMany({
     where: {
@@ -292,9 +329,10 @@ async function load(
   const counts: ImportCounts = {
     rows_total: book.rows_total,
     rows_loaded: placed.length,
-    rows_rejected: rowsWithExceptions(
-      book.exceptions.filter((e) => e.code !== "supplement_orphan"),
-    ),
+    // A rejected row is one that made no record. A row with an unreadable
+    // cell loads with that fact blank and is an exception, not a rejection —
+    // and the CHECK on the import row holds the three counts to adding up.
+    rows_rejected: book.rows_total - book.records.length,
     loans_created: placed.filter((p) => p.change === "created").length,
     loans_updated: placed.filter((p) => p.change === "updated").length,
     loans_unchanged: placed.filter((p) => p.change === "unchanged").length,
@@ -340,15 +378,16 @@ async function load(
     } else if (p.record.servicing.status === "transferred") {
       moved = "transfer_reported:no_edge";
     }
-    const now = await tx.loan.findUniqueOrThrow({
-      where: { id: p.loanId },
-      select: { status: true },
-    });
+    // Only a move can have changed where the loan stands; the rest is known.
+    const state = event
+      ? (await tx.loan.findUniqueOrThrow({ where: { id: p.loanId }, select: { status: true } }))
+          .status
+      : p.state;
     loans.push({
       loan_id: p.loanId,
       servicer_loan_number: p.record.sourceLoanKey,
       change: p.change,
-      state: now.status,
+      state,
       moved,
     });
   }
@@ -373,26 +412,27 @@ async function load(
     select: { id: true },
   });
 
-  for (const p of placed) {
-    const sv = p.record.servicing;
-    await tx.servicingObservation.create({
-      data: {
-        loanId: p.loanId,
-        importId: row.id,
-        asOf: dateOf(sv.asOf.slice(0, 10)),
-        status: enumOf<ServicingStatus>(sv.status)!,
-        principalBalanceCents: sv.principalBalanceCents,
-        escrowBalanceCents: sv.escrowBalanceCents,
-        scheduledPaymentCents: sv.scheduledPaymentCents,
-        currentRatePct: sv.currentRatePct,
-        nextPaymentDueOn: dateOrNull(sv.nextPaymentDueOn),
-        delinquencyDays: sv.delinquencyDays,
-        facts: p.facts as Prisma.InputJsonValue,
-        recordHash: p.hash,
-      },
-      select: { id: true },
-    });
-  }
+  await inChunks(placed, (chunk) =>
+    tx.servicingObservation.createMany({
+      data: chunk.map((p) => {
+        const sv = p.record.servicing;
+        return {
+          loanId: p.loanId,
+          importId: row.id,
+          asOf: dateOf(sv.asOf.slice(0, 10)),
+          status: enumOf<ServicingStatus>(sv.status)!,
+          principalBalanceCents: sv.principalBalanceCents,
+          escrowBalanceCents: sv.escrowBalanceCents,
+          scheduledPaymentCents: sv.scheduledPaymentCents,
+          currentRatePct: sv.currentRatePct,
+          nextPaymentDueOn: dateOrNull(sv.nextPaymentDueOn),
+          delinquencyDays: sv.delinquencyDays,
+          facts: p.facts as Prisma.InputJsonValue,
+          recordHash: p.hash,
+        };
+      }),
+    }),
+  );
 
   return { status: "loaded", importId: row.id, counts, report };
 }
@@ -413,47 +453,6 @@ function personFacts(record: ImportedLoanRecord, observedAt: Date): PartnerFact[
   ];
   if (p.dateOfBirth) facts.push({ predicate: "date_of_birth", value: p.dateOfBirth, observedAt });
   return facts;
-}
-
-/** JSON with its keys sorted at every level: jsonb keeps its own order, and a name is the same name either way. */
-const stable = (v: unknown): string =>
-  JSON.stringify(v, (_, x: unknown) =>
-    x && typeof x === "object" && !Array.isArray(x)
-      ? Object.fromEntries(
-          Object.keys(x)
-            .sort()
-            .map((k) => [k, (x as Record<string, unknown>)[k]]),
-        )
-      : x,
-  );
-
-/**
- * Re-assert only what changed. A monthly tape that spells the name the same
- * way every month is not twelve statements a year; the live fact already
- * says it.
- */
-async function assertChangedPartnerFacts(
-  tx: Db,
-  partyId: string,
-  principalId: string,
-  facts: readonly PartnerFact[],
-): Promise<void> {
-  const changed: PartnerFact[] = [];
-  for (const f of facts) {
-    const live = await tx.fact.findFirst({
-      where: {
-        partyId,
-        predicate: f.predicate,
-        subjectKey: "",
-        supersededById: null,
-        retractedAt: null,
-      },
-      orderBy: { observedAt: "desc" },
-      select: { value: true },
-    });
-    if (!live || stable(live.value) !== stable(f.value)) changed.push(f);
-  }
-  if (changed.length) await assertPartnerFacts(tx, { partyId, principalId, facts: changed });
 }
 
 /** The imports a servicer has made, newest first. */

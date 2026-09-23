@@ -303,26 +303,26 @@ year's pull.
 
 ## Built, or not
 
-| Piece                                  | Status                                                                                                                             |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `FlowStage`, five screens, outcomes    | Built — and being replaced                                                                                                         |
-| Tests against a real Postgres          | Built                                                                                                                              |
-| Party, facts, principals               | Built and on the production path — screens 1 and 2 write them                                                                      |
-| Identity lives on Party                | Built. `party_id` NOT NULL, identity columns dropped, no fallback left                                                             |
-| Authorizations and the purpose token   | Built — the connector guard takes it; `consents` still writes first                                                                |
-| Applications and the transition ledger | Built — the bank, branches, screening, signature and decision each move it                                                         |
-| Scenarios, pins, and the TRID receipt  | Built — screen 2 and the signature pin the person                                                                                  |
-| Casefile, income and employer identity | Built — survives a re-pull; see `docs/du-readiness.md`                                                                             |
-| Sample borrowers in real states        | Built — eight, walked through the real services, behind a deploy flag                                                              |
-| Loans and servicing                    | Built, and a partner's tape writes it — `docs/loan-lifecycle.md`. The claim is a token the servicer delivers                       |
-| Refinance offers                       | Built — a candidate review becomes an offer on the loan page; a yes opens a refinance in our five screens with `prior_loan_id` set |
-| Declarations and residences            | Built and on the production path — screen 3 writes them                                                                            |
-| Assets, liabilities, owned property    | Built — the credit and bank pulls write them, per person; `docs/du-readiness.md`                                                   |
-| Evidence artifacts, retrieval requests | Designed                                                                                                                           |
-| Rewritten decision engine (three-axis) | Designed                                                                                                                           |
-| Roles and staff tooling                | Designed                                                                                                                           |
-| Monitoring, notifications              | Designed, deferred                                                                                                                 |
-| Notice generation and delivery         | Resend integrated behind a `mail` port for one message, the co-borrower invitation; no regulatory notice yet                       |
+| Piece                                  | Status                                                                                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `FlowStage`, five screens, outcomes    | Built — and being replaced                                                                                                           |
+| Tests against a real Postgres          | Built                                                                                                                                |
+| Party, facts, principals               | Built and on the production path — screens 1 and 2 write them                                                                        |
+| Identity lives on Party                | Built. `party_id` NOT NULL, identity columns dropped, no fallback left                                                               |
+| Authorizations and the purpose token   | Built — the connector guard takes it; `consents` still writes first                                                                  |
+| Applications and the transition ledger | Built — the bank, branches, screening, signature and decision each move it                                                           |
+| Scenarios, pins, and the TRID receipt  | Built — screen 2 and the signature pin the person                                                                                    |
+| Casefile, income and employer identity | Built — survives a re-pull; see `docs/du-readiness.md`                                                                               |
+| Sample borrowers in real states        | Built — eight, walked through the real services, behind a deploy flag                                                                |
+| Loans and servicing                    | Built, and a partner's tape writes it — `docs/loan-lifecycle.md`. The claim is a token the servicer delivers, or the tape desk mails |
+| Refinance offers                       | Built — a candidate review becomes an offer on the loan page; a yes opens a refinance in our five screens with `prior_loan_id` set   |
+| Declarations and residences            | Built and on the production path — screen 3 writes them                                                                              |
+| Assets, liabilities, owned property    | Built — the credit and bank pulls write them, per person; `docs/du-readiness.md`                                                     |
+| Evidence artifacts, retrieval requests | Designed                                                                                                                             |
+| Rewritten decision engine (three-axis) | Designed                                                                                                                             |
+| Roles and staff tooling                | Designed                                                                                                                             |
+| Monitoring, notifications              | Designed, deferred                                                                                                                   |
+| Notice generation and delivery         | Resend integrated behind a `mail` port for one message, the co-borrower invitation; no regulatory notice yet                         |
 
 The three-phase identity migration — dual-write, read-flip, drop — is finished
 and collapsed into one row above. `docs/decisions.md` keeps the phases.

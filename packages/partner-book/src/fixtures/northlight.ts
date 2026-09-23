@@ -284,11 +284,11 @@ function buildLoan(sd: Seed): SampleLoan {
     gmc_value_cents: dollars(fmv), servicer_name: NORTHLIGHT.legal_name,
     pmi_flag: sd.pmi ? "Y" : "N", pmi_rate_pct: sd.pmi ? Number(sd.pmi.rate) : 0, pmi_homeowner_payment_pct: sd.pmi ? 100 : 0, pmi_coverage_pct: sd.pmi ? Number(sd.pmi.coverage) : 0, pmi_company: sd.pmi?.company ?? "None",
     occupancy_current: OCCUPANCY_SHORT[sd.occupancy], property_type: sd.propertyType, property_bedrooms: sd.bedrooms, property_baths: Number(sd.baths), property_sqft: sd.sqft, property_garage: sd.garage, property_lot_size: sd.lot,
-    contact_expected_date: "2026-09-15", last_contact_date: "2026-08-20",
+    contact_expected: "N", last_contact_date: "2026-08-20",
     accrued_interest_cents: dollars(accrued), advances_cents: dollars(advances), recoverable_advances_cents: dollars(advances), non_recoverable_advances_cents: 0,
     escrow_balance_cents: dollars(escrowBalance), escrow_advances_cents: 0,
     reconciled_passthrough_expenses_cents: 0, reconciled_advances_cents: dollars(advances), reconciled_net_cash_flow_cents: dollars(monthly * BigInt(12 - sd.monthsBehind)),
-    modification_flag: "N", prepayment_penalty_flag: "N", prepayment_penalty_desc: "None", prepayment_penalty_end_date: null,
+    modification_flag: "N", prepayment_penalty_flag: "N", prepayment_penalty_desc: "None", prepayment_penalty_months: null,
     mba_delinquency_status: mbaStatus, mba_pay_string: mbaPayString, orig_maturity_date: maturity, dti_pct: Number(sd.dti), agency_remittance_type: sd.remittance,
   };
   return {

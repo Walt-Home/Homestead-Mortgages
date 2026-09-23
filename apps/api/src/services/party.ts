@@ -19,8 +19,9 @@
 
 import type { AuthorizationPurpose, Fact, Prisma } from "@hm/db";
 import { SHADOW_ENGINE_VERSION } from "@hm/underwriting";
+import { randomUUID } from "node:crypto";
 import { AppError } from "../middleware/error-handler.js";
-import type { Db } from "./db.js";
+import { type Db, inChunks } from "./db.js";
 
 type Tx = Db;
 
@@ -442,6 +443,26 @@ export async function createProvisionalParty(
   return party.id;
 }
 
+/** `createProvisionalParty`, `n` times, as a few statements: a book's worth of people. */
+export async function createProvisionalParties(
+  tx: Tx,
+  n: number,
+  opts: { sourceFirstSeen: string },
+): Promise<string[]> {
+  const ids = Array.from({ length: n }, () => randomUUID());
+  await inChunks(ids, (chunk) =>
+    tx.party.createMany({
+      data: chunk.map((id) => ({
+        id,
+        kind: "PERSON" as const,
+        claimStatus: "PROVISIONAL" as const,
+        sourceFirstSeen: opts.sourceFirstSeen,
+      })),
+    }),
+  );
+  return ids;
+}
+
 /**
  * The principal a partner's feed asserts as. One per partner, not one per
  * record, so "who told us this" is answerable per feed.
@@ -504,6 +525,87 @@ export interface PartnerFact {
  * `facts_partner_may_not_verify` makes anything higher impossible rather than
  * merely wrong.
  */
+/** JSON with its keys sorted at every level: jsonb keeps its own order, and a name is the same name either way. */
+export const stableJson = (v: unknown): string =>
+  JSON.stringify(v, (_, x: unknown) =>
+    x && typeof x === "object" && !Array.isArray(x)
+      ? Object.fromEntries(
+          Object.keys(x)
+            .sort()
+            .map((k) => [k, (x as Record<string, unknown>)[k]]),
+        )
+      : x,
+  );
+
+/**
+ * `assertPartnerFacts` for a whole book, and only for what changed.
+ *
+ * One read of every live row the parties hold for these predicates, then one
+ * write of the facts that differ from it — a party with no live row takes
+ * every fact, a party the tape spells the same way every month takes none —
+ * and a supersession per prior row that was replaced. A monthly tape that
+ * repeats fourteen thousand names is not fourteen thousand statements a
+ * month, and a new book is four.
+ */
+export async function assertPartnerFactsMany(
+  tx: Tx,
+  args: {
+    principalId: string;
+    assertions: readonly { readonly partyId: string; readonly facts: readonly PartnerFact[] }[];
+  },
+): Promise<{ written: number; superseded: number }> {
+  const { principalId, assertions } = args;
+  const partyIds = [...new Set(assertions.map((a) => a.partyId))];
+  const predicates = [...new Set(assertions.flatMap((a) => a.facts.map((f) => f.predicate)))];
+  const liveByKey = new Map<string, { id: string; value: unknown }>();
+  if (partyIds.length && predicates.length) {
+    await inChunks(partyIds, async (ids) => {
+      const live = await tx.fact.findMany({
+        where: {
+          partyId: { in: ids },
+          predicate: { in: predicates },
+          subjectKey: "",
+          supersededById: null,
+          retractedAt: null,
+        },
+        orderBy: { observedAt: "desc" },
+        select: { id: true, partyId: true, predicate: true, value: true },
+      });
+      for (const f of live) {
+        const key = `${f.partyId}\u0000${f.predicate}`;
+        if (!liveByKey.has(key)) liveByKey.set(key, { id: f.id, value: f.value });
+      }
+    });
+  }
+  const creates: Prisma.FactCreateManyInput[] = [];
+  const supersede: { priorId: string; byId: string }[] = [];
+  for (const a of assertions) {
+    for (const f of a.facts) {
+      const prior = liveByKey.get(`${a.partyId}\u0000${f.predicate}`);
+      if (prior && stableJson(prior.value) === stableJson(f.value)) continue;
+      const id = randomUUID();
+      creates.push({
+        id,
+        subjectType: "PARTY",
+        subjectId: a.partyId,
+        partyId: a.partyId,
+        predicate: f.predicate,
+        value: f.value,
+        sourceKind: "PARTNER_SHARED",
+        confidence: "UNVERIFIED",
+        assertedByPrincipalId: principalId,
+        observedAt: f.observedAt,
+      });
+      if (prior) supersede.push({ priorId: prior.id, byId: id });
+    }
+  }
+  await inChunks(creates, (chunk) => tx.fact.createMany({ data: chunk }));
+  for (const s of supersede) {
+    await tx.fact.update({ where: { id: s.priorId }, data: { supersededById: s.byId } });
+  }
+  return { written: creates.length, superseded: supersede.length };
+}
+
 export async function assertPartnerFacts(
   tx: Tx,
   args: {

@@ -19,6 +19,7 @@
       "runtimeArgs": [
         "DEMO_PERSONAS=true",
         "GOOGLE_CLIENT_ID=",
+        "SERVICING_API_URL=http://localhost:8090",
         "npm",
         "run",
         "dev",

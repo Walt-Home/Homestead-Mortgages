@@ -120,6 +120,11 @@ resource "google_compute_backend_service" "console" {
   protocol              = "HTTPS"
   enable_cdn            = false
 
+  # No timeout_sec here, and not by oversight: Google refuses one on a backend
+  # of serverless endpoint groups ("Timeout sec is not supported"), and the
+  # front door defers to Cloud Run's own request timeout — 300 s on the API
+  # (deploy.yml) — which is what a whole book through the tape desk gets.
+
   backend {
     group = google_compute_region_network_endpoint_group.api.id
   }

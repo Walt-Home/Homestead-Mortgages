@@ -40,7 +40,12 @@ beforeAll(async () => {
       if (req.url === "/ops/api/staff/invite") {
         res.setHeader("Content-Type", "application/json");
         res.setHeader("x-acted-as", String(req.headers["x-staff-role"] ?? "none"));
-        res.end(JSON.stringify({ role_seen: req.headers["x-staff-role"] ?? null }));
+        res.end(
+          JSON.stringify({
+            role_seen: req.headers["x-staff-role"] ?? null,
+            gate_seen: req.headers["x-serverless-authorization"] ?? null,
+          }),
+        );
         return;
       }
       if (req.url?.startsWith("/ops/api/auth/signin")) {
@@ -161,7 +166,7 @@ describe("the servicing hostname", () => {
       },
       body: "{}",
     });
-    expect(JSON.parse(acted.body)).toEqual({ role_seen: "admin" });
+    expect(JSON.parse(acted.body)).toEqual({ role_seen: "admin", gate_seen: null });
     expect(acted.headers["x-acted-as"]).toBe("admin");
 
     const doc = await call("/console/documents/d1/content");
@@ -190,6 +195,43 @@ describe("the servicing hostname", () => {
     const elsewhere = await call("/api/health", { host: "app.example.test" });
     expect(elsewhere.status).toBe(200);
     expect(JSON.parse(elsewhere.body)).toEqual({ ours: true });
+  });
+
+  it("carries a Google identity token to his door when it has one", async () => {
+    const gated = express();
+    gated.use(
+      consoleHostRouter({
+        host: HOST,
+        upstream: upstreamUrl,
+        dist: undefined,
+        identityToken: async () => "id-token-for-his-url",
+      }),
+    );
+    const s = gated.listen(0, "127.0.0.1");
+    await new Promise<void>((r) => s.once("listening", r));
+    const port = (s.address() as AddressInfo).port;
+    const res = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const req = httpRequest(
+        {
+          host: "127.0.0.1",
+          port,
+          path: "/console/api/staff/invite",
+          method: "POST",
+          agent: false,
+          headers: { host: HOST, "x-staff-role": "admin", "content-type": "application/json" },
+        },
+        (r) => {
+          let body = "";
+          r.on("data", (c) => (body += c));
+          r.on("end", () => resolve({ status: r.statusCode ?? 0, body }));
+        },
+      );
+      req.on("error", reject);
+      req.end("{}");
+    });
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body).gate_seen).toBe("Bearer id-token-for-his-url");
+    await new Promise<void>((r) => s.close(() => r()));
   });
 
   it("says so when his server is down rather than hanging", async () => {

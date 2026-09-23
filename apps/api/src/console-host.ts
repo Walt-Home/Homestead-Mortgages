@@ -32,6 +32,11 @@ import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import express, { type Express, type Request, type Response, type Router } from "express";
 import { config } from "./config.js";
+import {
+  IDENTITY_HEADER,
+  identityTokenFor,
+  type IdentityTokenProvider,
+} from "./services/google-identity.js";
 
 export interface ConsoleHostOptions {
   /** The Host this router answers. */
@@ -42,6 +47,12 @@ export interface ConsoleHostOptions {
   readonly dist?: string;
   /** Test seam: the fetch to forward with. */
   readonly fetchImpl?: typeof fetch;
+  /**
+   * A Google identity token for his URL, when his service is behind Cloud
+   * Run's own IAM gate — sent on the header Cloud Run reserves for it and
+   * strips before his server looks. Null sends nothing.
+   */
+  readonly identityToken?: IdentityTokenProvider;
 }
 
 /** The request headers that cross to his server. Nothing else does. */
@@ -89,6 +100,8 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
         const value = req.headers[name];
         if (typeof value === "string") headers.set(name, value);
       }
+      const identity = opts.identityToken ? await opts.identityToken() : null;
+      if (identity) headers.set(IDENTITY_HEADER, `Bearer ${identity}`);
       headers.set("x-forwarded-for", req.ip ?? "");
       headers.set("x-forwarded-proto", req.protocol);
       headers.set("x-forwarded-host", opts.host);
@@ -199,7 +212,12 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
   // dist/index.js → ../../console/dist in the image; src/ → the same in the repo.
   const dist = resolve(here, "../../console/dist");
   const built = existsSync(join(dist, "index.html"));
-  const router = consoleHostRouter({ host, upstream, dist: built ? dist : undefined });
+  const router = consoleHostRouter({
+    host,
+    upstream,
+    dist: built ? dist : undefined,
+    identityToken: identityTokenFor(upstream),
+  });
   app.use((req, res, next) => {
     if (req.hostname === host) router(req, res, next);
     else next();

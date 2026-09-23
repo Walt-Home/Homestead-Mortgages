@@ -30,6 +30,7 @@ import { prisma } from "@hm/db";
 import { PLACEHOLDER_INSTITUTION, placeholdersIn, type DuInstitution } from "@hm/du";
 import { ffiecAporSeriesConnector, resendMailConnector } from "@hm/connectors";
 import { config } from "../config.js";
+import { identityTokenFor } from "./google-identity.js";
 import { vendorTokenStore } from "./vendor-tokens.js";
 
 let registry: ConnectorRegistry | undefined;
@@ -332,6 +333,9 @@ export function connectors(): ConnectorRegistry {
       // Outside production his door takes the shared token; unset, it is the
       // same default his own README and apps/servicing/scripts/run.mjs use.
       token: config.servicing.apiToken || "dev-token",
+      // His service admits only this identity at Cloud Run's own gate; off
+      // Google Cloud the provider answers null and nothing extra is sent.
+      identityToken: identityTokenFor(config.servicing.apiUrl),
     });
     chosen.servicing = `supermortgage (${config.servicing.apiUrl})`;
   }

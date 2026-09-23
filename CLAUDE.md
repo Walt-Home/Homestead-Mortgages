@@ -452,8 +452,12 @@ the console's calls to his runtime as `/console/api/*` → his `/ops/api/*`
 comparison. Behind IAP is his console's own sign-in (e-mailed code, printed
 on the page because the mail vendor is a FAKE, then a password). The deploy
 stands the first console admin with his `staff-bootstrap`; that admin
-invites the rest from the console. The run.app URLs stay open
-and bypass IAP, on purpose and named. DNS is Doug's, at GoDaddy; the A
+invites the rest from the console. His service's run.app has no public
+invoker: the API's identity is the one invoker, and the adapter and the
+console proxy carry a Google identity token for it on
+`X-Serverless-Authorization` (`services/google-identity.ts`), so a bare
+request is a 403 from Cloud Run. The API's run.app is the borrower app and
+stays public. DNS is Doug's, at GoDaddy; the A
 records are `terraform output dns_records`. See `docs/decisions.md`, "Two
 hostnames, one front door" and "The ops console is ours".
 

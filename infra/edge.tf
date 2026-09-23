@@ -41,12 +41,15 @@
 # which does not appear in `gcloud iam service-accounts list`. Its right to
 # invoke the servicing service is declared below.
 #
-# What this does NOT close: the run.app URLs. Both services keep ingress
-# `all`, because the API reaches his door and the deploy probes both over
-# those URLs without VPC egress; a person who knows the servicing run.app
-# hostname reaches `/ops` without IAP. Closing that means internal-and-LB
-# ingress plus Direct VPC egress on the API and the sweep, or an adapter that
-# passes IAP with `Proxy-Authorization`. Named here so nobody thinks IAP did it.
+# His run.app URL is closed by Cloud Run's own gate, not by IAP: since
+# 22 September his service has no public invoker, `hm-run@` — the API's
+# identity — is the one member with `roles/run.invoker`, and the API's two
+# callers (the servicing adapter and the console proxy) carry a Google
+# identity token for his URL on `X-Serverless-Authorization`, which Cloud
+# Run checks and strips. A request to his run.app without one is a 403
+# before his server sees it. The API's own run.app stays public: it is the
+# borrower app, and a foreign Host on it is refused by Google's front end,
+# so the console is reachable only through the front door and IAP.
 #
 # Retiring a backend: remove it from this file and run a plain apply, or
 # `terraform state rm` it and delete it with gcloud. Never
@@ -142,12 +145,15 @@ data "google_project" "this" {
 # person's behalf. The service is public, so this is belt and braces today;
 # it is what keeps IAP working the day the service stops being public. By
 # name, like the endpoint groups, because the service is not in this state.
-resource "google_cloud_run_v2_service_iam_member" "iap_invokes_servicing" {
+# The API's identity may invoke his service, and nothing else may: the
+# deploy removes `allUsers` from it and asserts that. Declared by name, like
+# the endpoint groups, because the service is not in this state.
+resource "google_cloud_run_v2_service_iam_member" "api_invokes_servicing" {
   project  = var.project_id
   location = var.region
   name     = "homestead-mortgages-${var.environment}-servicing"
   role     = "roles/run.invoker"
-  member   = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-iap.iam.gserviceaccount.com"
+  member   = "serviceAccount:${var.service_account_email}"
 }
 
 resource "google_cloud_run_v2_service_iam_member" "iap_invokes_api" {

@@ -1981,17 +1981,23 @@ the three A records to set. DNS is at GoDaddy and the login is Doug's.
   authenticator, open to any Google account on staging, and there is no
   role behind it; the three sign in as anyone does. "Admin" on the
   consumer side is a thing to design, not a switch to flip.
-- **What the front door does not close.** Both services keep ingress `all`,
-  because the API reaches his door and the deploy probes both over the
-  run.app URLs without VPC egress. A person who knows the servicing run.app
-  hostname reaches `/ops` without passing IAP, requests a code for any
-  staff e-mail, reads it in the response and sets that account's password.
-  The data behind it is his demo seed and every vendor is a FAKE, which is
-  why this is tolerable for a testing ground and not for anything else.
-  Closing it is internal-and-load-balancer ingress with Direct VPC egress
-  on the API and the review and sweep jobs, or an adapter that passes IAP
-  with `Proxy-Authorization`. Until one of those lands, the run.app
-  hostnames are not to be handed out.
+- **His run.app door is Cloud Run's own gate, not IAP's.** Since the same
+  evening his service has no public invoker. `hm-run@`, the API's identity,
+  is the one member with the invoker role, and the API's two callers — the
+  servicing adapter and the console proxy — carry a Google identity token
+  for his URL, minted from the metadata server and sent on
+  `X-Serverless-Authorization`, the header Cloud Run reserves for a caller
+  whose `Authorization` is already spoken for; here it is spoken for by his
+  bearer, which was the reason the door was left public at first. Cloud Run
+  checks the token and strips the header before his server looks. A request
+  to his run.app with nothing is a 403 from the platform before his code
+  runs, and the deploy asserts that, asserts `allUsers` is gone, and then
+  signs in as the Grander persona and reads a live record through the
+  adapter, which only succeeds when the token was accepted. The API's own
+  run.app stays public because it is the borrower app, and a foreign Host
+  on it is refused by Google's front end, so the console is reachable only
+  through the front door and IAP. Off Google Cloud the token provider
+  answers null and a local runtime is called as before.
 - **The cutover is three variables after the DNS change.** Once the A
   records point at `edge_ip` and the certificates read ACTIVE:
   `PUBLIC_ORIGIN=https://supermortgage.com` on the repo, so claim links and

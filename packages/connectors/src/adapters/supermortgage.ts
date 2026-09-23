@@ -50,6 +50,13 @@ export interface SupermortgageOptions {
   /** The imports scanned for a loan number before giving up. */
   readonly maxImports?: number;
   readonly fetch?: typeof fetch;
+  /**
+   * A Google identity token for his URL, when his service sits behind Cloud
+   * Run's own IAM gate; sent on `X-Serverless-Authorization`, the header
+   * Cloud Run reserves for a caller whose `Authorization` is spoken for —
+   * here by his bearer. Null means send nothing, which is a local runtime.
+   */
+  readonly identityToken?: () => Promise<string | null>;
 }
 
 type Json = Record<string, unknown>;
@@ -98,11 +105,17 @@ export function supermortgageServicingConnector(options: SupermortgageOptions): 
   const maxEvents = options.maxEvents ?? 25;
   const maxImports = options.maxImports ?? 50;
 
+  async function gate(): Promise<Record<string, string>> {
+    const token = options.identityToken ? await options.identityToken() : null;
+    return token ? { "x-serverless-authorization": `Bearer ${token}` } : {};
+  }
+
   async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
     const res = await fetchImpl(`${base}${path}`, {
       method,
       headers: {
         authorization: `Bearer ${options.token}`,
+        ...(await gate()),
         ...(body !== undefined ? { "content-type": "application/json" } : {}),
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -116,7 +129,11 @@ export function supermortgageServicingConnector(options: SupermortgageOptions): 
   async function tool(loanId: string, spec: string): Promise<Json | null> {
     const res = await fetchImpl(`${base}/v1/loans/${encodeURIComponent(loanId)}/tools/${spec}`, {
       method: "POST",
-      headers: { authorization: `Bearer ${options.token}`, "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${options.token}`,
+        ...(await gate()),
+        "content-type": "application/json",
+      },
       body: JSON.stringify({ actor, input: {} }),
     });
     const text = await res.text();

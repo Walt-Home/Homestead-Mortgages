@@ -456,7 +456,7 @@ jobs:
             --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
             --set-secrets "SERVICING_DATABASE_URL=HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING:latest,SERVICING_API_TOKEN=HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN:latest" \
             --set-env-vars "$ENV_VARS" \
-            --allow-unauthenticated \
+            --no-allow-unauthenticated \
             --port 8080 \
             --memory 1Gi \
             --cpu 1 \
@@ -483,32 +483,25 @@ jobs:
             exit 1
           fi
 
-      # Public for the reason the API is, and one more: our API presents his
-      # bearer in the Authorization header, where Cloud Run's own IAM door
-      # would want an identity token, so the two cannot stack. His door is
-      # the gate, and the probe below checks it is shut.
-      - name: Confirm the servicing service is reachable and its door is shut
+      # Not public. Cloud Run's own gate is on his service: the API's identity
+      # is the one invoker, and the API's callers carry a Google identity
+      # token for his URL on X-Serverless-Authorization, which Cloud Run
+      # checks and strips before his server sees the request — so his bearer
+      # keeps the Authorization header and the two stack after all. The
+      # binding is granted here, ahead of everything; `allUsers` is removed
+      # at the end of the API's own deploy, once the API that carries the
+      # token is live, so the door is never shut on an API that cannot open
+      # it. Here: the binding, and the revision is Ready.
+      - name: Confirm the servicing revision is Ready and the API's identity may invoke it
         run: |
           gcloud run services add-iam-policy-binding ${{ env.SERVICING_SERVICE }} \
             --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
-            --member="allUsers" --role=roles/run.invoker --quiet
-          URL=$(gcloud run services describe ${{ env.SERVICING_SERVICE }} \
+            --member="serviceAccount:${{ env.RUNTIME_SA }}" --role=roles/run.invoker --quiet >/dev/null
+          READY=$(gcloud run services describe ${{ env.SERVICING_SERVICE }} \
             --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
-            --format="value(status.url)")
-          echo "checking $URL"
-          for attempt in 1 2 3 4 5 6; do
-            READY=$(curl -fsS --max-time 30 "$URL/readyz") && break
-            echo "attempt $attempt failed; retrying"
-            sleep 10
-          done
-          echo "readyz: $READY"
-          case "$READY" in
-            *'"database":"reachable"'*) echo "the servicing database is reachable from the deployed revision" ;;
-            *) echo "::error::the servicing service cannot reach its database"; exit 1 ;;
-          esac
-          DOOR=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$URL/v1/partner-book/imports")
-          echo "GET /v1 without a bearer: $DOOR"
-          test "$DOOR" = "401"
+            --format="value(status.conditions[0].status)")
+          echo "Ready: $READY"
+          test "$READY" = "True"
 
   # Deploying without a Google client id would put up a sign-in page that can
   # never succeed, and the server refuses to boot without one anyway. So the
@@ -959,3 +952,60 @@ jobs:
             *'"database":"ok"'*) echo "database reachable from the deployed revision" ;;
             *) echo "::error::deployed service cannot reach its database"; exit 1 ;;
           esac
+
+      # And the live read reaches his door, through Cloud Run's gate: the
+      # Grander persona signs in with no credential (DEMO_PERSONAS is on
+      # here), asks for its mortgage, and the servicing route answers with
+      # the platform's live record, which only happens when the adapter's
+      # identity token was accepted. Skipped where personas are off.
+      - name: The live read reaches his door
+        if: env.DEMO_PERSONAS == 'true'
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)")
+          JAR=$(mktemp)
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -c "$JAR" -X POST "$URL/api/auth/personas/grander_import")
+          test "$CODE" = "201" || { echo "::error::the Grander persona did not sign in ($CODE)"; exit 1; }
+          LOAN=$(curl -fsS --max-time 30 -b "$JAR" "$URL/api/loans" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("loans") or d)[0]["id"])')
+          LIVE=$(curl -fsS --max-time 60 -b "$JAR" "$URL/api/loans/$LOAN/servicing" | python3 -c 'import json,sys; print(json.load(sys.stdin)["live"]["status"])')
+          echo "live read of $LOAN: $LIVE"
+          test "$LIVE" = "fetched"
+
+      # Now the API that carries the identity token is live, his door closes:
+      # `allUsers` comes off his service, a bare request to his run.app is a
+      # 403 from Cloud Run before his code runs, the invokers are exactly the
+      # API's identity, and the live read is made once more through the
+      # closed door — which is the proof that the token is accepted.
+      - name: Close his door and read through it again
+        if: env.DEMO_PERSONAS == 'true'
+        run: |
+          gcloud run services remove-iam-policy-binding ${{ env.SERVICING_SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --member="allUsers" --role=roles/run.invoker --quiet >/dev/null 2>&1 || true
+          HIS=$(gcloud run services describe ${{ env.SERVICING_SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)")
+          for attempt in 1 2 3 4 5 6; do
+            DOOR=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$HIS/readyz")
+            [ "$DOOR" = "403" ] && break
+            echo "attempt $attempt: $DOOR; the binding takes a moment to settle"
+            sleep 10
+          done
+          echo "GET $HIS/readyz without an identity: $DOOR"
+          test "$DOOR" = "403"
+          MEMBERS=$(gcloud run services get-iam-policy ${{ env.SERVICING_SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --format=json \
+            | python3 -c 'import json,sys; p=json.load(sys.stdin); print(" ".join(m for b in p.get("bindings",[]) if b["role"]=="roles/run.invoker" for m in b["members"]))')
+          echo "invokers: $MEMBERS"
+          case " $MEMBERS " in *" allUsers "*) echo "::error::his service is still public"; exit 1 ;; esac
+          case " $MEMBERS " in *"serviceAccount:${{ env.RUNTIME_SA }}"*) ;; *) echo "::error::the API's identity may not invoke his service"; exit 1 ;; esac
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)")
+          JAR=$(mktemp)
+          curl -s -o /dev/null --max-time 30 -c "$JAR" -X POST "$URL/api/auth/personas/grander_import"
+          LOAN=$(curl -fsS --max-time 30 -b "$JAR" "$URL/api/loans" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("loans") or d)[0]["id"])')
+          LIVE=$(curl -fsS --max-time 60 -b "$JAR" "$URL/api/loans/$LOAN/servicing" | python3 -c 'import json,sys; print(json.load(sys.stdin)["live"]["status"])')
+          echo "live read through the closed door: $LIVE"
+          test "$LIVE" = "fetched"

@@ -104,8 +104,17 @@ export function App() {
           the way the sign-in page does while signed out, so a deep link and
           an invitation's fragment both survive it. The two public pages stay
           public; the server would refuse anything else anyway.
+
+          The frame is a PATHLESS layout route here, on purpose. Declared as
+          `path="/"` it matched the root itself, and since it has no index
+          child the root rendered the frame around an empty outlet: the
+          header with the person's email, nothing under it, and no request
+          made — which is exactly where a Google sign-in from the landing
+          page lands, because sign-in lives at `/`. Pathless, it matches only
+          when one of its two children does, and the root falls through to
+          the step.
         */}
-        <Route path="/" element={<Chrome />}>
+        <Route element={<Chrome />}>
           <Route path="privacy" element={<PrivacyPage />} />
           <Route path="brand" element={<BrandPage />} />
         </Route>

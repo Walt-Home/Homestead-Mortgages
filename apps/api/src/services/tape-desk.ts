@@ -400,18 +400,21 @@ export async function loadTape(input: TapeInput, db: Db = prisma): Promise<TapeL
   };
 }
 
-/* ── the first look ──────────────────────────────────────────────────────── */
+/* ── the first review ────────────────────────────────────────────────────── */
 
 export type VerdictCounts = Record<ReviewVerdict, number>;
 
-export interface BookAnalysis {
+export interface BookReview {
   readonly asOf: string;
-  /** Unclaimed loans on the book. */
+  /** Loans on the book nobody has claimed yet. */
   readonly unclaimed: number;
-  /** Analyzed on this run; the rest were already analyzed today or skipped. */
-  readonly analyzed: number;
+  /** Reviewed on this run; the rest were already reviewed today or skipped. */
+  readonly reviewed: number;
   readonly alreadyReviewed: number;
   readonly skipped: number;
+  /** Offers the run made, and how many of those wait for a claim to be delivered. */
+  readonly offersOpened: number;
+  readonly offersAwaitingClaim: number;
   /** Today's verdicts over the whole book, counted. */
   readonly counts: VerdictCounts;
   /** Today's verdict per servicer loan number. */
@@ -421,27 +424,25 @@ export interface BookAnalysis {
 const emptyCounts = (): VerdictCounts => ({ candidate: 0, watching: 0, not_now: 0, excluded: 0 });
 
 /**
- * The book's first look: the daily review's engine over every unclaimed
- * loan the servicer has, as analysis — a verdict per loan against today's
- * rate, no offer, no contact — so the desk can say which loans are worth
- * inviting first. Once a day, like the review; a second run the same day
- * writes nothing and still answers every verdict.
+ * The book's first review: the daily review over every loan the servicer
+ * has, run the day the book is loaded rather than the next morning. It is
+ * the same run the job makes — a verdict per loan against today's rate, an
+ * offer made for each candidate and held for the claim — so the desk can
+ * invite the candidates first. Once a day, like the review; a second run
+ * the same day writes nothing and still answers every verdict.
  */
-export async function analyzeBook(
+export async function reviewBook(
   input: { readonly servicerSlug: string },
   db: Db = prisma,
-): Promise<BookAnalysis> {
+): Promise<BookReview> {
   const slug = assertSlug(input.servicerSlug);
   const servicer = await db.servicer.findUnique({ where: { slug }, select: { id: true } });
   if (!servicer) throw new AppError(404, "No such servicer.", "NOT_FOUND");
-  const run = await reviewLoans({ servicerId: servicer.id, scope: "unclaimed", analyst: null }, db);
+  const run = await reviewLoans({ servicerId: servicer.id }, db);
   const counts = emptyCounts();
   const verdicts: Record<string, ReviewVerdict> = {};
   const today = await db.loanReview.findMany({
-    where: {
-      asOf: new Date(`${run.asOf}T00:00:00.000Z`),
-      loan: { servicerId: servicer.id, status: "IMPORTED_UNCLAIMED" },
-    },
+    where: { asOf: new Date(`${run.asOf}T00:00:00.000Z`), loan: { servicerId: servicer.id } },
     select: { verdict: true, loan: { select: { servicerLoanNumber: true } } },
   });
   for (const t of today) {
@@ -452,9 +453,11 @@ export async function analyzeBook(
   return {
     asOf: run.asOf,
     unclaimed: run.unclaimed,
-    analyzed: run.reviewed.length,
+    reviewed: run.reviewed.length,
     alreadyReviewed: run.alreadyReviewed,
     skipped: run.skipped.length,
+    offersOpened: run.offersOpened,
+    offersAwaitingClaim: run.offersAwaitingClaim,
     counts,
     verdicts,
   };

@@ -61,11 +61,11 @@ import {
   type TapeFiles,
   type TapeLoad,
   type TapePreview,
-  analyzeBook,
+  reviewBook,
   VERDICT_RANK,
   verdictWord,
   verdictTone,
-  type BookAnalysis,
+  type BookReview,
   type Verdict,
 } from "../lib/tape.js";
 
@@ -904,15 +904,15 @@ function LoadStep({
 }) {
   const [servicing, setServicing] = useState<Phase<ServicingBookReceipt>>({ state: "idle" });
   const [db, setDb] = useState<Phase<TapeLoad>>({ state: "idle" });
-  const [analysis, setAnalysis] = useState<Phase<BookAnalysis>>({ state: "idle" });
+  const [review, setReview] = useState<Phase<BookReview>>({ state: "idle" });
   const started = useRef(false);
 
-  async function analyze() {
-    setAnalysis({ state: "running" });
+  async function reviewNow() {
+    setReview({ state: "running" });
     try {
-      setAnalysis({ state: "done", value: await analyzeBook(preview.servicer.slug) });
+      setReview({ state: "done", value: await reviewBook(preview.servicer.slug) });
     } catch (err) {
-      setAnalysis({
+      setReview({
         state: "failed",
         error: err instanceof ApiError ? err : new ApiError(0, String(err), null),
       });
@@ -940,9 +940,10 @@ function LoadStep({
     try {
       const loaded = await loadTape(wire);
       setDb({ state: "done", value: loaded });
-      // The first look follows the load: today's verdict on every unclaimed
-      // loan of the book, so the invitations can go to the candidates first.
-      if (loaded.result.status !== "rejected") await analyze();
+      // The first review follows the load, today rather than tomorrow morning:
+      // a verdict and an offer on every loan of the book, so the invitations
+      // can go to the candidates first.
+      if (loaded.result.status !== "rejected") await reviewNow();
     } catch (err) {
       setDb({
         state: "failed",
@@ -1131,8 +1132,8 @@ function LoadStep({
       />
 
       <PhaseCard
-        title="The book's first look"
-        phase={analysis}
+        title="The book's first review"
+        phase={review}
         renderDone={(a) => (
           <>
             <div className="mb-2 flex items-center gap-2">
@@ -1140,11 +1141,11 @@ function LoadStep({
                 {plural(a.counts.candidate, "refinance candidate")}
               </Pill>
               <span className="text-sm text-fg-2">
-                {a.analyzed
-                  ? `${plural(a.analyzed, "unclaimed loan")} analyzed against today's rate. The verdicts wait for the claim; nobody is contacted by this.`
+                {a.reviewed
+                  ? `${plural(a.reviewed, "loan")} reviewed against today's rate and tracked from here on; ${plural(a.offersAwaitingClaim, "offer")} made and waiting for a claim. Nobody is contacted by this.`
                   : a.alreadyReviewed
-                    ? "Every loan on the book was already looked at today."
-                    : "Nothing on the book to look at."}
+                    ? "Every loan on the book was already reviewed today."
+                    : "Nothing on the book to review."}
               </span>
             </div>
             <Rows
@@ -1154,8 +1155,12 @@ function LoadStep({
                   value: `${a.counts.candidate.toLocaleString()} · ${a.counts.watching.toLocaleString()} · ${a.counts.not_now.toLocaleString()} · ${a.counts.excluded.toLocaleString()}`,
                 },
                 {
-                  label: "Analyzed now · already today · skipped",
-                  value: `${a.analyzed.toLocaleString()} · ${a.alreadyReviewed.toLocaleString()} · ${a.skipped.toLocaleString()}`,
+                  label: "Reviewed now · already today · skipped",
+                  value: `${a.reviewed.toLocaleString()} · ${a.alreadyReviewed.toLocaleString()} · ${a.skipped.toLocaleString()}`,
+                },
+                {
+                  label: "Offers made · waiting for a claim",
+                  value: `${a.offersOpened.toLocaleString()} · ${a.offersAwaitingClaim.toLocaleString()}`,
                 },
                 { label: "As of", value: fmtDate(a.asOf) },
               ]}
@@ -1165,7 +1170,7 @@ function LoadStep({
         renderFailed={(e) => (
           <div className="space-y-3">
             <Notice tone="danger">{e.message}</Notice>
-            <Button onClick={() => void analyze()}>Try again</Button>
+            <Button onClick={() => void reviewNow()}>Try again</Button>
           </div>
         )}
       />
@@ -1173,8 +1178,8 @@ function LoadStep({
       <div className="flex flex-wrap items-center gap-3">
         <Button
           variant="primary"
-          disabled={!dbDone || dbResult?.status === "rejected" || analysis.state === "running"}
-          onClick={() => onDone(analysis.state === "done" ? analysis.value.verdicts : null)}
+          disabled={!dbDone || dbResult?.status === "rejected" || review.state === "running"}
+          onClick={() => onDone(review.state === "done" ? review.value.verdicts : null)}
         >
           Invite the borrowers to claim
         </Button>
@@ -1440,8 +1445,9 @@ function InviteStep({
         </h1>
         <p className="mt-1 max-w-prose text-sm text-fg-2">
           Each loan gets one link, good for thirty days, mailed to the address the supplement
-          carried. Whoever takes it after signing in becomes the person on the loan, and the daily
-          review turns on for it. A loan with no address gets a link you can deliver another way.
+          carried. Whoever takes it after signing in becomes the person on the loan and sees what
+          the daily review has found, the offer included. A loan with no address gets a link you can
+          deliver another way.
         </p>
       </div>
 
@@ -1450,8 +1456,8 @@ function InviteStep({
           tone="info"
           title={`${plural(refiCandidates.length, "refinance candidate")} on this tape`}
         >
-          Today's analysis found them worth a look at today's rate. They are first in the list, and
-          nothing has been said to anyone yet.
+          Today's review found them worth an offer at today's rate; the offers are made and wait for
+          the claim. They are first in the list, and nothing has been said to anyone yet.
         </Notice>
       ) : null}
 

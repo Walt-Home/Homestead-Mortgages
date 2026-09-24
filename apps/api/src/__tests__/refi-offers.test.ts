@@ -108,9 +108,10 @@ describe("an offer", () => {
     const { loanId } = await claimed("NL-100001");
     const run = await review("2026-09-21");
     expect(run.reviewed.find((r) => r.claimed)?.verdict).toBe("candidate");
-    expect(run.offersOpened).toBe(1);
-    // The one claimed loan's turn is off; the eleven analyzed beside it have no card to write for.
-    expect(run.analyst).toEqual({ written: 0, skipped: { model_off: 1, unclaimed: 11 } });
+    // One delivered, to the claimed loan; the book's other candidates wait for their claims.
+    expect(run.offersOpened - run.offersAwaitingClaim).toBe(1);
+    // Every loan on the book is reviewed, and the model is off for all twelve.
+    expect(run.analyst).toEqual({ written: 0, skipped: { model_off: 12 } });
 
     const offer = await prisma.refiOffer.findFirstOrThrow({ where: { loanId } });
     const row = await prisma.loanReview.findFirstOrThrow({ where: { loanId } });
@@ -119,13 +120,13 @@ describe("an offer", () => {
     expect(offer.disclosure).toEqual(row.offer);
     expect(offer.candidateRatePct.toFixed(3)).toBe("6.250");
     expect(offer.detectedOn.toISOString().slice(0, 10)).toBe("2026-09-21");
-    expect(offer.validUntil.getTime() - offer.offeredAt.getTime()).toBe(days(OFFER_VALID_DAYS));
+    expect(offer.validUntil!.getTime() - offer.offeredAt.getTime()).toBe(days(OFFER_VALID_DAYS));
     expect((row.analyst as { skipped: string }).skipped).toBe("model_off");
 
     // Tomorrow the loan is left alone: the offer stands, and no second verdict is written under it.
     const next = await review("2026-09-22");
     expect(next.reviewed.filter((r) => r.claimed)).toEqual([]);
-    expect(next.skipped).toEqual([
+    expect(next.skipped.filter((x) => x.loanId === loanId)).toEqual([
       { loanId, servicerLoanNumber: "NL-100001", reason: "open offer" },
     ]);
     expect(await prisma.loanReview.count({ where: { loanId } })).toBe(1);
@@ -161,6 +162,7 @@ describe("an offer", () => {
           reviewId: row.id,
           detectedOn: at("2026-09-21"),
           offeredAt: at("2026-09-21", n),
+          deliveredAt: at("2026-09-21", n),
           validUntil: at("2026-10-21"),
           disclosure: {},
           candidateRatePct: "6.250",
@@ -363,7 +365,7 @@ describe("the yes", () => {
 
     // The review leaves the loan alone while the application is open.
     const held = await review("2026-09-22");
-    expect(held.skipped).toEqual([
+    expect(held.skipped.filter((x) => x.loanId === loanId)).toEqual([
       { loanId, servicerLoanNumber: "NL-100001", reason: "open refinance application" },
     ]);
   });

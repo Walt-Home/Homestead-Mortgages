@@ -25,10 +25,10 @@
 import { prisma } from "@hm/db";
 import type { Prisma, RefiOffer } from "@hm/db";
 import { APPLICATION_STATES, TERMINAL } from "@hm/shared";
-import type { GateFacts } from "@hm/refi-review";
+import { NO_GATE_FACTS, type GateFacts } from "@hm/refi-review";
 import { plainDate, type PlainDate } from "@hm/kernel/calendar";
 import { AppError } from "../middleware/error-handler.js";
-import type { Db } from "./db.js";
+import { inChunks, type Db } from "./db.js";
 import { assertLoanAccess } from "./loans.js";
 import { openRefinanceApplication, type RefinancePrefill } from "./refinance.js";
 import { recordEvent } from "./repository.js";
@@ -71,7 +71,8 @@ export function offerStanding(
 ): OfferStanding {
   switch (offer.status) {
     case "OFFERED":
-      return offer.validUntil > now ? "offered" : "expired";
+      // An offer not yet delivered has no validity to have run out.
+      return offer.validUntil === null || offer.validUntil > now ? "offered" : "expired";
     case "ENGAGED":
       return "engaged";
     case "DECLINED":
@@ -92,6 +93,40 @@ export async function expireOffers(db: Db = prisma, now: Date = new Date()): Pro
   return r.count;
 }
 
+/** What the review found, ready to be an offer row. */
+export interface OfferToOpen {
+  readonly loanId: string;
+  readonly reviewId: string;
+  readonly detectedOn: PlainDate;
+  readonly disclosure: Prisma.InputJsonValue;
+  readonly candidateRatePct: string;
+  readonly rateSource: string | null;
+  /**
+   * Whether the person can see it today. A claimed loan's offer is
+   * delivered as it is made; an unclaimed loan's waits for the claim, with
+   * no validity and no place in the cap until then.
+   */
+  readonly deliver: boolean;
+}
+
+const validityFrom = (at: Date): Date =>
+  new Date(at.getTime() + OFFER_VALID_DAYS * 24 * 60 * 60 * 1000);
+
+function offerRow(o: OfferToOpen, now: Date): Prisma.RefiOfferCreateManyInput {
+  return {
+    loanId: o.loanId,
+    reviewId: o.reviewId,
+    status: "OFFERED",
+    detectedOn: new Date(`${o.detectedOn}T00:00:00.000Z`),
+    offeredAt: now,
+    deliveredAt: o.deliver ? now : null,
+    validUntil: o.deliver ? validityFrom(now) : null,
+    disclosure: o.disclosure,
+    candidateRatePct: o.candidateRatePct,
+    rateSource: o.rateSource,
+  };
+}
+
 /**
  * Open an offer from the day's candidate review. The figures are the
  * review's, copied once. The partial unique index refuses a second open
@@ -100,33 +135,33 @@ export async function expireOffers(db: Db = prisma, now: Date = new Date()): Pro
  */
 export async function openOffer(
   db: Db,
-  args: {
-    loanId: string;
-    reviewId: string;
-    detectedOn: PlainDate;
-    disclosure: Prisma.InputJsonValue;
-    candidateRatePct: string;
-    rateSource: string | null;
-    now?: Date;
-  },
-): Promise<{ id: string; validUntil: Date }> {
+  args: Omit<OfferToOpen, "deliver"> & { deliver?: boolean; now?: Date },
+): Promise<{ id: string; validUntil: Date | null }> {
   const now = args.now ?? new Date();
-  const validUntil = new Date(now.getTime() + OFFER_VALID_DAYS * 24 * 60 * 60 * 1000);
-  const row = await db.refiOffer.create({
-    data: {
-      loanId: args.loanId,
-      reviewId: args.reviewId,
-      status: "OFFERED",
-      detectedOn: new Date(`${args.detectedOn}T00:00:00.000Z`),
-      offeredAt: now,
-      validUntil,
-      disclosure: args.disclosure,
-      candidateRatePct: args.candidateRatePct,
-      rateSource: args.rateSource,
-    },
+  return db.refiOffer.create({
+    data: offerRow({ ...args, deliver: args.deliver ?? true }, now),
     select: { id: true, validUntil: true },
   });
-  return row;
+}
+
+/** A day's offers at once: a book's worth of candidates is hundreds of rows. */
+export async function openOffers(db: Db, offers: readonly OfferToOpen[], now: Date): Promise<void> {
+  await inChunks(offers, (chunk) =>
+    db.refiOffer.createMany({ data: chunk.map((o) => offerRow(o, now)) }),
+  );
+}
+
+/**
+ * Deliver the offer waiting on a loan, the moment its person can see it:
+ * the claim. Its thirty days start now, and from now it counts in the cap.
+ * Nothing to deliver is fine — a loan claimed on a day it was watching.
+ */
+export async function deliverOpenOffer(db: Db, loanId: string, now: Date): Promise<number> {
+  const r = await db.refiOffer.updateMany({
+    where: { loanId, status: "OFFERED", deliveredAt: null },
+    data: { deliveredAt: now, validUntil: validityFrom(now) },
+  });
+  return r.count;
 }
 
 /**
@@ -140,9 +175,16 @@ export async function offerGateFacts(
 ): Promise<{ gate: GateFacts; doNotSolicit: boolean }> {
   const offers = await db.refiOffer.findMany({
     where: { loanId },
-    select: { status: true, offeredAt: true, answeredAt: true },
+    select: { status: true, deliveredAt: true, answeredAt: true },
     orderBy: { offeredAt: "asc" },
   });
+  return gateFactsOf(offers);
+}
+
+/** The engine's gates off one loan's offers: only a delivered offer counts. */
+function gateFactsOf(
+  offers: readonly { status: string; deliveredAt: Date | null; answeredAt: Date | null }[],
+): { gate: GateFacts; doNotSolicit: boolean } {
   let declined: Date | null = null;
   for (const o of offers) {
     if (o.status === "DECLINED" && o.answeredAt && (!declined || o.answeredAt > declined)) {
@@ -152,20 +194,26 @@ export async function offerGateFacts(
   return {
     gate: {
       declined_on: declined ? dayEt(declined) : null,
-      offered_at: offers.map((o) => dayEt(o.offeredAt)),
+      offered_at: offers.flatMap((o) => (o.deliveredAt ? [dayEt(o.deliveredAt)] : [])),
     },
     doNotSolicit: offers.some((o) => o.status === "OPTED_OUT"),
   };
 }
+
+export type LoanHold = "open offer" | "open refinance application";
 
 /** Whether the loan is being held by an open offer or an open refinance application, and which. */
 export async function loanIsHeld(
   db: Db,
   loanId: string,
   now: Date = new Date(),
-): Promise<"open offer" | "open refinance application" | null> {
+): Promise<LoanHold | null> {
   const offer = await db.refiOffer.findFirst({
-    where: { loanId, status: "OFFERED", validUntil: { gt: now } },
+    where: {
+      loanId,
+      status: "OFFERED",
+      OR: [{ validUntil: null }, { validUntil: { gt: now } }],
+    },
     select: { id: true },
   });
   if (offer) return "open offer";
@@ -175,6 +223,70 @@ export async function loanIsHeld(
   });
   if (application) return "open refinance application";
   return null;
+}
+
+/** What the review needs to know about a loan's offers before it looks. */
+export interface OfferState {
+  readonly held: LoanHold | null;
+  readonly gate: GateFacts;
+  readonly doNotSolicit: boolean;
+}
+
+export const NO_OFFER_STATE: OfferState = { held: null, gate: NO_GATE_FACTS, doNotSolicit: false };
+
+/**
+ * `loanIsHeld` and `offerGateFacts` for a whole book in a few statements: a
+ * read of every offer and every open refinance on these loans, chunked by
+ * five hundred, rather than three round trips per loan per morning.
+ */
+export async function offerStateFor(
+  db: Db,
+  loanIds: readonly string[],
+  now: Date,
+): Promise<Map<string, OfferState>> {
+  const out = new Map<string, OfferState>();
+  if (loanIds.length === 0) return out;
+  const offersBy = new Map<
+    string,
+    { status: string; deliveredAt: Date | null; validUntil: Date | null; answeredAt: Date | null }[]
+  >();
+  const refinancing = new Set<string>();
+  await inChunks(loanIds, async (ids) => {
+    const offers = await db.refiOffer.findMany({
+      where: { loanId: { in: ids } },
+      select: {
+        loanId: true,
+        status: true,
+        deliveredAt: true,
+        validUntil: true,
+        answeredAt: true,
+      },
+      orderBy: { offeredAt: "asc" },
+    });
+    for (const o of offers) {
+      const list = offersBy.get(o.loanId) ?? [];
+      list.push(o);
+      offersBy.set(o.loanId, list);
+    }
+    const applications = await db.application.findMany({
+      where: { priorLoanId: { in: ids }, status: { in: OPEN_APPLICATION_STATES } },
+      select: { priorLoanId: true },
+    });
+    for (const a of applications) if (a.priorLoanId) refinancing.add(a.priorLoanId);
+  });
+  for (const id of loanIds) {
+    const offers = offersBy.get(id) ?? [];
+    const open = offers.some(
+      (o) => o.status === "OFFERED" && (o.validUntil === null || o.validUntil > now),
+    );
+    const held: LoanHold | null = open
+      ? "open offer"
+      : refinancing.has(id)
+        ? "open refinance application"
+        : null;
+    out.set(id, { held, ...gateFactsOf(offers) });
+  }
+  return out;
 }
 
 /** The offer a loan page shows: the newest, whatever its standing; null before the first. */

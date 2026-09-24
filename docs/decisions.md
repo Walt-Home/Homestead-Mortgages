@@ -1668,8 +1668,10 @@ the tape's provisional party folds into it through `mergePartyInto` (the
 loan follows the party), the loan moves `imported_unclaimed →
 monitoring_only` as `claim_confirmed` under the claim flow's principal — a
 loan outlives its parties, and the ledger refuses a principal that dies with
-one, so the claim row is what names who took it — and the review turns on — which the database only allows now,
-because `loans_unclaimed_is_not_monitored` held it off. The persona seed
+one, so the claim row is what names who took it — and the offer the review
+made while nobody could see it is delivered (since 24 September the review
+has been on since the book was loaded; the claim is the door, not the
+switch — "The book is tracked from the day it is loaded"). The persona seed
 walks the Grander row through exactly this, as the partner and then as the
 sign-in, so the sample cannot drift from the flow.
 
@@ -1922,12 +1924,14 @@ the same thing by hand. The page shows it first.
   a day — the scheduled one after the deploy's — writes nothing and says
   so. `next_review_due_at` moves to the next morning, which is what the
   review's own index was shaped for.
-- **Only monitored loans, off the newest observation.** An unclaimed loan is
-  not looked at, because `loans_unclaimed_is_not_monitored` says nothing
-  about it is; the claim turns the review on, and that is the "monitored"
-  the analysis said was still to be defined. A loan the tape cannot
-  describe — no balance, no payment, no rate, no dates — is skipped with the
-  reason, reported, and never guessed at.
+- **Only monitored loans, off the newest observation.** As first built, an
+  unclaimed loan was not looked at, because `loans_unclaimed_is_not_monitored`
+  said nothing about it was, and the claim turned the review on. Superseded
+  24 September: every loan on a book is watched from the day it is loaded,
+  and the claim is the door — "The book is tracked from the day it is
+  loaded, and the claim is the door". A loan the tape cannot describe — no
+  balance, no payment, no rate, no dates — is skipped with the reason,
+  reported, and never guessed at.
 - **The reasons are his words, and the codes never render.** The engine's
   `REASON_WORDS` carries his phrase for each code; the route hands both out
   and the page reads only the words.
@@ -3089,63 +3093,71 @@ because that is the step that turns a row on a tape into a person on a loan.
   thousand and a mailer is slow, so the desk sends in batches, shows how far
   it is, and keeps what was already answered if a batch fails.
 
-## The book is analyzed before anyone claims it
+## The book is tracked from the day it is loaded, and the claim is the door
 
-**Decision (23 September 2026):** the daily review's engine runs over every
-unclaimed loan on a servicer's book, as analysis, from the day the book
-is loaded. Joe asked what happens after the tape goes up — "does the
-analysis and daily tracking start?" — and the honest answer was no: the
-review ran only over monitored loans, and the database holds that an
-unclaimed loan is never monitored. That was right about tracking and wrong
-about analysis. The book is most valuable before anyone has claimed a
-loan, because that is when a servicer decides whom to invite first, and
-recapture is what the book is for.
+**Decision (24 September 2026):** a borrower has a Supermortgage account
+from the day their servicer joins; the tape is what starts the watching;
+the claim is when the person can see it. Joe's words, correcting the day
+before: "when a loan tape is uploaded, we don't have to wait until the
+borrower claims their account to trigger the daily tracking — it should
+happen upon upload and review. So the analysis and tracking and offers
+begin immediately, and when the customer claims their account, that's when
+they can access their supermortgage account and view the information." So
+an imported loan is monitored from birth, the daily review runs over every
+loan on a book claimed or not, and the rule that held the review off until
+somebody claimed (`loans_unclaimed_is_not_monitored`) is gone.
 
-- **Analysis is not monitoring.** `reviewLoans` (once
-  `reviewMonitoredLoans`) selects monitored loans and unclaimed loans on a
-  book together and treats them differently. A monitored loan is reviewed
-  for its person: the row, an offer when it is a candidate, the analyst's
-  sentence for the card, the next review due tomorrow. An unclaimed loan is
-  analyzed: the same engine over the same tape and the same quote, the same
-  `loan_reviews` row with the engine's disclosure on a candidate — the CHECK
-  wants one — and nothing else. No `refi_offers` row, because there is
-  nobody to make it to; the analyst skipped as `unclaimed`, because there
-  is no card; `next_review_due_at` untouched and `monitoring_enabled`
-  false, because the toggle is the person's choice and
-  `loans_unclaimed_is_not_monitored` stands. The engine sees the loan as
-  `monitoring_only`, which is the loan it will be the morning after its
-  claim: that verdict is the analysis's whole point, and it is already
-  waiting when the claim turns the review on.
-- **Nobody hears about it.** The analysis reaches the desk and the ops
-  console, never a borrower: no mail, no card, no offer. The claim is still
-  the only door to a person.
-- **The desk runs it after a load, and ranks the invitations by it.**
-  `POST /console/hm/tape/analysis` runs the engine over the servicer's
-  unclaimed loans (`scope: "unclaimed"`, so a run from the desk at three in
-  the afternoon touches no monitored loan and opens no offer), once a day
-  like the review, and answers the counts and a verdict per loan number.
-  The load step shows it as the book's first look; the invite step puts the
-  candidates first, marks each loan's verdict, and offers to pick the
-  candidates alone; a later preview reads the newest verdicts back row by
-  row; the servicer's card says how many candidates the book holds as of
-  its newest look.
-- **A quote per kind of loan, not per loan — for the analysis.** The port
-  answers a rate and no price, and a sheet's 30-year fixed rate is one
-  number per product; what moves with the state, the amount and the
-  loan-to-value are price adjustments the port does not quote. So within a
-  run the analysis memoizes the quote by purpose, occupancy, property type
-  and lock, and a book of fourteen thousand loans is a dozen quotes. The
-  pricing fixture sleeps 900 ms a quote — it exists so the UI is built
-  against a connector that takes time — and a vendor is a network call, so
-  without the memo the sample book's nine unclaimed loans took eight
-  seconds and Grander's would have taken hours. An offer to a person is
-  never memoized: a monitored loan is quoted for itself, as it always was.
-  What a real vendor charges per quote is still the open cost question;
-  the memo keeps the analysis to a handful a day.
-- **Rows are written as sets.** The analyses go in as `createMany` in
-  chunks at the end of the run, the way the import writes; a monitored
-  loan's row is still written on its own, because its offer and its next
-  review hang off it.
+- **Watched from birth.** `createImportedLoans` writes `monitoring_enabled`
+  true and the next review due now; the migration turned it on for every
+  unclaimed loan already on the books. The claim still sets both, because
+  it always did and a second true is nothing.
+- **The review is one pass over every watched loan.** `reviewLoans` reads
+  every loan whose review is on, claimed loans first so the analyst's daily
+  cap serves the people who can read a card today, and writes the day's
+  rows, its offers and the next due dates as sets. Holds and gates are read
+  for the whole run in a few statements (`offerStateFor`) rather than three
+  round trips per loan. The engine sees an unclaimed loan as
+  `monitoring_only`, which is what it is: watched.
+- **An offer is made when the review finds it, and delivered when the
+  person can see it.** An offer carries thirty days and a place in the
+  two-a-year cap, and an offer that ticked while nobody could see it would
+  lapse unseen and spend the cap before the borrower ever claimed. So
+  `refi_offers` gained `delivered_at`, `valid_until` became nullable, and a
+  CHECK holds the two together: a claimed loan's offer is delivered as it
+  is made; an unclaimed loan's is made and waits, with no validity and no
+  place in the cap, and it holds the loan — the review skips a loan with an
+  open offer, delivered or not, for the same reason it always did. The
+  claim delivers it (`deliverOpenOffer`): its thirty days start that day,
+  and from that day it counts. The settle-once trigger refuses a second
+  delivery. Every offer made before this was made to somebody who could
+  see it, so the migration marked it delivered when it was offered.
+- **Nobody hears about it before the claim.** The review reaches the desk
+  and the ops console; a borrower sees the card, and the offer's clock
+  starts, only once the loan is theirs. The claim is still the only door
+  to a person.
+- **The desk runs the review the day the book lands.** `POST
+/console/hm/tape/review` is the same run the morning job makes, over one
+  servicer's book, once a day; the load step shows it as the book's first
+  review with the offers made and waiting, the invite step puts the
+  candidates first with each loan's verdict beside it and a button to pick
+  the candidates alone, a later preview reads the newest verdicts back row
+  by row, and the servicer's card says how many candidates the book holds
+  as of its newest review.
+- **A quote per kind of loan, not per loan.** The port answers a rate and
+  no price, and a sheet's 30-year fixed rate is one number per product;
+  what moves with the state, the amount and the loan-to-value are price
+  adjustments the port does not quote. So within a run the quote is
+  memoized by purpose, occupancy, property type and lock, and a book of
+  fourteen thousand loans is a dozen quotes. The pricing fixture sleeps
+  900 ms a quote — it exists so the UI is built against a connector that
+  takes time — and a vendor is a network call, so without the memo the
+  sample book took eight seconds and Grander's would have taken hours.
+  What a real vendor charges per quote is still the open cost question.
+- **What the day before got wrong.** The first cut (23 September) analyzed
+  unclaimed loans without offers or monitoring, on the reasoning that the
+  toggle was the person's choice. It was not: the servicer's joining is
+  the choice, and the person's claim is the door. The tests that pinned the
+  older rule pin the new one now.
 
 ## Still outstanding
 

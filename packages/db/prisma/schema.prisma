@@ -3391,10 +3391,14 @@ model RefiOffer {
   status RefiOfferStatus @default(OFFERED)
 
   /// The review's day: when the engine found the candidate.
-  detectedOn DateTime @map("detected_on") @db.Date
+  detectedOn  DateTime  @map("detected_on") @db.Date
   /// When the offer opened, which with page-only delivery is when it was made.
-  offeredAt  DateTime @default(now()) @map("offered_at")
-  validUntil DateTime @map("valid_until")
+  offeredAt   DateTime  @default(now()) @map("offered_at")
+  /// When the person could first see it: at the review for a claimed loan,
+  /// at the claim for one that was not. Its thirty days count from here,
+  /// and the two-a-year cap counts only delivered offers. Null until then.
+  deliveredAt DateTime? @map("delivered_at")
+  validUntil  DateTime? @map("valid_until")
 
   /// The review's benefit disclosure, the offer's own figures from here on.
   disclosure       Json

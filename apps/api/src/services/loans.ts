@@ -4,8 +4,10 @@
  * Two constructors, because there are two beginnings and the database refuses
  * every other one. A mortgage we funded is born `pending_boarding`; a mortgage
  * a servicer told us about is born `imported_unclaimed`, attached to people who
- * have never signed in. Neither is reachable from the other, and everything
- * after either is a move somebody caused, through `moveLoan`.
+ * have never signed in, and watched from that day — the tape starts the
+ * review, and the claim is the door the person opens to see it. Neither is
+ * reachable from the other, and everything after either is a move somebody
+ * caused, through `moveLoan`.
  *
  * Both write at `status_seq = 0` with no ledger row, which the deferred check
  * permits at seq 0 exactly as it does for a draft application: a birth is not a
@@ -234,9 +236,15 @@ function loanColumns(args: {
   property: LoanProperty;
   originatingApplicationId: string | null;
 }) {
+  // A loan a servicer told us about is watched from birth: the book is what
+  // starts the review, and the claim is only the door the person opens to
+  // see it. A loan we funded is watched once it is boarded.
+  const watched = args.source === "PARTNER_IMPORT";
   return {
     status: args.status,
     source: args.source,
+    monitoringEnabled: watched,
+    nextReviewDueAt: watched ? new Date() : null,
     originatingApplicationId: args.originatingApplicationId,
     servicerId: args.servicerId,
     servicerLoanNumber: args.servicerLoanNumber,

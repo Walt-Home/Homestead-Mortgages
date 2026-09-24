@@ -350,37 +350,43 @@ describe("inviting the people on a tape to claim", () => {
   });
 });
 
-describe("the book's first look", () => {
-  it("analyzes every unclaimed loan after a load, once a day, and the next preview carries the verdicts", async () => {
+describe("the book's first review", () => {
+  it("reviews every loan after a load, once a day, holds the offers for the claim, and the next preview carries the verdicts", async () => {
     const load = await call<{ result: { status: string } }>("POST", "/imports", tapeBody());
     expect(load.status).toBe(201);
 
     const first = await call<{
       asOf: string;
       unclaimed: number;
-      analyzed: number;
+      reviewed: number;
       alreadyReviewed: number;
+      offersOpened: number;
+      offersAwaitingClaim: number;
       counts: Record<string, number>;
       verdicts: Record<string, string>;
-    }>("POST", "/analysis", { servicerSlug: NORTHLIGHT.slug });
+    }>("POST", "/review", { servicerSlug: NORTHLIGHT.slug });
     expect(first.status).toBe(200);
     expect(first.body.unclaimed).toBe(12);
-    expect(first.body.analyzed).toBe(12);
+    expect(first.body.reviewed).toBe(12);
     // The fixture sheet quotes 6.25 %: loan 1 at 7.25 % is a candidate.
     expect(first.body.verdicts["NL-100001"]).toBe("candidate");
     expect(first.body.counts.candidate).toBeGreaterThanOrEqual(1);
     expect(Object.keys(first.body.verdicts)).toHaveLength(12);
-    // Analysis only: no offer, nothing monitored, no analyst sentence.
-    expect(await prisma.refiOffer.count()).toBe(0);
-    expect(await prisma.loan.count({ where: { monitoringEnabled: true } })).toBe(0);
+    // Watched from the load; the offers made and waiting, nobody contacted.
+    expect(await prisma.loan.count({ where: { monitoringEnabled: true } })).toBe(12);
+    expect(first.body.offersOpened).toBe(first.body.counts.candidate);
+    expect(first.body.offersAwaitingClaim).toBe(first.body.offersOpened);
+    expect(await prisma.refiOffer.count({ where: { deliveredAt: null } })).toBe(
+      first.body.offersOpened,
+    );
 
     // The same day again: nothing new written, every verdict still answered.
     const again = await call<{
-      analyzed: number;
+      reviewed: number;
       alreadyReviewed: number;
       verdicts: Record<string, string>;
-    }>("POST", "/analysis", { servicerSlug: NORTHLIGHT.slug });
-    expect(again.body.analyzed).toBe(0);
+    }>("POST", "/review", { servicerSlug: NORTHLIGHT.slug });
+    expect(again.body.reviewed).toBe(0);
     expect(again.body.alreadyReviewed).toBe(12);
     expect(Object.keys(again.body.verdicts)).toHaveLength(12);
     expect(await prisma.loanReview.count()).toBe(12);

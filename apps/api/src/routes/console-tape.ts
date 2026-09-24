@@ -18,12 +18,12 @@ import { z } from "zod";
 import { asyncRoute } from "../middleware/error-handler.js";
 import { consoleStaffGate, type ConsoleStaffGateOptions } from "../services/console-staff.js";
 import {
-  analyzeBook,
   deskImports,
   deskServicers,
   inviteToClaim,
   loadTape,
   previewTape,
+  reviewBook,
 } from "../services/tape-desk.js";
 
 /**
@@ -120,15 +120,15 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
     }),
   );
 
-  /** The book's first look: today's verdict on every unclaimed loan, as analysis. */
+  /** The book's first review: today's verdict and offer on every loan, run now rather than tomorrow morning. */
   router.post(
-    "/analysis",
+    "/review",
     asyncRoute(async (req, res) => {
       const body = z
         .object({ servicerSlug: z.string().min(1) })
         .strict()
         .parse(req.body);
-      res.json(await analyzeBook(body));
+      res.json(await reviewBook(body));
     }),
   );
 

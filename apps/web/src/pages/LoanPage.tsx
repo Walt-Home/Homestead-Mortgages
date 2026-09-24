@@ -396,7 +396,9 @@ function OfferCard({
           </>
         )}
         <p className="mt-4 text-xs text-ink-faint">
-          {offerOpenUntil(calendarDate(offer.validUntil.slice(0, 10)) ?? offer.validUntil)}
+          {offer.validUntil
+            ? offerOpenUntil(calendarDate(offer.validUntil.slice(0, 10)) ?? offer.validUntil)
+            : null}
         </p>
 
         {readiness && <OurReadiness readiness={readiness} />}
@@ -528,7 +530,7 @@ function AnsweredOffer({ offer }: { offer: RefiOfferWire }) {
   if (offer.status === "offered") return null;
   const day =
     offer.status === "expired"
-      ? calendarDate(offer.validUntil.slice(0, 10))
+      ? calendarDate(offer.validUntil?.slice(0, 10))
       : calendarDate(offer.answeredAt?.slice(0, 10));
   const words = offerAnswered(offer.status, day);
   return (

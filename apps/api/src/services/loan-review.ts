@@ -9,17 +9,19 @@
  * day, append-only, with the engine's facts and, for a candidate, the
  * benefit disclosure.
  *
- * Two kinds of loan go through it. A monitored loan — claimed, its person
- * signed in — is reviewed: the row, an offer when it is a candidate, the
- * analyst's sentence for the card, the next review due tomorrow. An
- * unclaimed loan on a servicer's book is analyzed: the same engine over the
- * same tape and the same quote, the same row, and nothing else — no offer,
- * because there is nobody to make it to; no analyst, because there is no
- * card; no next-review date, because monitoring is the person's choice and
- * the database holds an unclaimed loan is never monitored. The analysis is
- * for the desk: it is what says which loans on a fresh book are worth
- * inviting first, and it is the verdict already waiting the morning the
- * claim turns the review on.
+ * Every loan on a servicer's book is watched from the day the book is
+ * loaded, claimed or not: the row, an offer when it is a candidate, the
+ * analyst's sentence for the card, the next review due tomorrow. The one
+ * difference the claim makes is delivery. An offer on a claimed loan is
+ * delivered as it is made — the person can see the card today — and its
+ * thirty days run from now; an offer on an unclaimed loan is made and
+ * waits, with no validity and no place in the two-a-year cap, until the
+ * claim delivers it. The desk runs this the day a book lands so the
+ * invitations can go to the candidates first.
+ *
+ * Quotes are memoized per kind of loan for the run: the port answers a
+ * rate and no price, and a sheet's 30-year fixed rate is one number per
+ * product, so a book of fourteen thousand loans is a dozen quotes.
  *
  * What is lawful here is what the loan model said it would be: a rate
  * comparison against a published sheet over our own servicing data, which
@@ -38,12 +40,12 @@
  * reason.
  */
 
+import { randomUUID } from "node:crypto";
 import { prisma } from "@hm/db";
 import type { Prisma } from "@hm/db";
 import { UnquotableScenarioError, type PricingConnector } from "@hm/connectors";
 import type { PlainDate } from "@hm/kernel/calendar";
 import {
-  NO_GATE_FACTS,
   buildCandidate,
   fillReviewTokens,
   reasonsInWords,
@@ -68,7 +70,14 @@ import {
   type AnalystModel,
   type AnalystRecord,
 } from "./refi-analyst.js";
-import { dayEt, expireOffers, loanIsHeld, offerGateFacts, openOffer } from "./refi-offers.js";
+import {
+  NO_OFFER_STATE,
+  dayEt,
+  expireOffers,
+  offerStateFor,
+  openOffers,
+  type OfferToOpen,
+} from "./refi-offers.js";
 
 /** Today in the creditor's zone, as the engine's day. */
 export const todayEt = (now: Date = new Date()): PlainDate => dayEt(now);
@@ -92,16 +101,14 @@ const PROPERTY: Record<EnginePropertyType, PropertyType> = {
  * or a stack the port cannot choose from without a policy it does not own.
  */
 /**
- * For the analysis of a book: one quote per kind of loan per run, not one
- * per loan. The port answers a rate and no price, and a sheet's 30-year
- * fixed rate is one number per product — what moves with the state, the
- * amount and the loan-to-value are price adjustments the port does not
- * quote. So every unclaimed loan of one purpose, occupancy, property type
- * and lock gets the sheet's one rate, and a book of fourteen thousand loans
- * is a dozen quotes rather than fourteen thousand: the fixture sleeps 900 ms
- * a quote and a vendor is a network call, which is the difference between
- * seconds and hours. An offer to a person is never memoized: a monitored
- * loan is quoted for itself, as it always was.
+ * One quote per kind of loan per run, not one per loan. The port answers a
+ * rate and no price, and a sheet's 30-year fixed rate is one number per
+ * product — what moves with the state, the amount and the loan-to-value are
+ * price adjustments the port does not quote. So every loan of one purpose,
+ * occupancy, property type and lock gets the sheet's one rate, and a book
+ * of fourteen thousand loans is a dozen quotes rather than fourteen
+ * thousand: the fixture sleeps 900 ms a quote and a vendor is a network
+ * call, which is the difference between seconds and hours.
  */
 export type QuoteMemo = Map<string, CandidateRate | null>;
 
@@ -161,15 +168,15 @@ export interface ReviewedLoan {
   readonly verdict: Review["verdict"];
   readonly reasons: readonly string[];
   readonly candidateRatePct: string | null;
-  /** Reviewed for its person (true) or analyzed for the desk (false). */
+  /** Whether somebody has claimed the loan and can see the result today. */
   readonly claimed: boolean;
 }
 
 export interface ReviewRunReport {
   readonly asOf: PlainDate;
-  /** Loans whose review is on: claimed, and reviewed for their person. */
+  /** Loans whose review is on: every loan on a book, claimed or not. */
   readonly monitored: number;
-  /** Unclaimed loans on a servicer's book, analyzed and nothing more. */
+  /** Of those, the loans on a book nobody has claimed yet. */
   readonly unclaimed: number;
   readonly reviewed: readonly ReviewedLoan[];
   readonly alreadyReviewed: number;
@@ -180,6 +187,8 @@ export interface ReviewRunReport {
   }[];
   /** Offers opened for the day's candidates, and open offers that lapsed before the pass. */
   readonly offersOpened: number;
+  /** Of those, made on an unclaimed loan and waiting for the claim to be delivered. */
+  readonly offersAwaitingClaim: number;
   readonly offersExpired: number;
   /** The analyst's turns: written, and skipped by reason. */
   readonly analyst: { readonly written: number; readonly skipped: Record<string, number> };
@@ -213,8 +222,6 @@ export async function reviewLoans(
     loanIds?: readonly string[];
     /** One servicer's book only. */
     servicerId?: string;
-    /** `unclaimed` analyzes the book and touches no monitored loan; the desk's run. */
-    scope?: "all" | "unclaimed";
     pricing?: PricingConnector;
     /** The analyst's model; undefined reads the environment, null is the model off. */
     analyst?: AnalystModel | null;
@@ -229,17 +236,10 @@ export async function reviewLoans(
   const analyst = opts.analyst === undefined ? analystModelFromEnv() : opts.analyst;
   const maxPerDay = opts.analystMaxPerDay ?? analystMaxPerDay();
   const day = new Date(`${asOf}T00:00:00.000Z`);
-  const scope = opts.scope ?? "all";
-  const offersExpired = scope === "all" ? await expireOffers(db, now) : 0;
-  const unclaimedOnABook: Prisma.LoanWhereInput = {
-    status: "IMPORTED_UNCLAIMED",
-    servicerId: { not: null },
-  };
+  const offersExpired = await expireOffers(db, now);
   const loans = await db.loan.findMany({
     where: {
-      ...(scope === "unclaimed"
-        ? unclaimedOnABook
-        : { OR: [{ monitoringEnabled: true }, unclaimedOnABook] }),
+      monitoringEnabled: true,
       ...(opts.loanIds ? { id: { in: [...opts.loanIds] } } : {}),
       ...(opts.servicerId ? { servicerId: opts.servicerId } : {}),
     },
@@ -247,7 +247,6 @@ export async function reviewLoans(
     select: {
       id: true,
       status: true,
-      monitoringEnabled: true,
       rateType: true,
       noteRateBps: true,
       termMonths: true,
@@ -277,30 +276,38 @@ export async function reviewLoans(
       reviews: { where: { asOf: day }, select: { id: true }, take: 1 },
     },
   });
+  const unclaimed = (l: { status: (typeof loans)[number]["status"] }) =>
+    toDomainLoanState(l.status) === "imported_unclaimed";
+  // The people who can read a card today come first, so the analyst's daily
+  // cap serves them before the book that is still waiting to be claimed.
+  const due = loans
+    .filter((l) => l.reviews.length === 0)
+    .sort((a, b) => Number(unclaimed(a)) - Number(unclaimed(b)));
+  const alreadyReviewed = loans.length - due.length;
+  const offerStates = await offerStateFor(
+    db,
+    due.map((l) => l.id),
+    now,
+  );
 
   const reviewed: ReviewedLoan[] = [];
   const skipped: { loanId: string; servicerLoanNumber: string | null; reason: string }[] = [];
   const quotes: QuoteMemo = new Map();
-  /** The analyses, written as sets at the end: a book is thousands of rows. */
-  const analyses: Prisma.LoanReviewCreateManyInput[] = [];
-  let alreadyReviewed = 0;
-  let offersOpened = 0;
+  // Written as sets at the end: a book is thousands of rows and one morning.
+  const rows: Prisma.LoanReviewCreateManyInput[] = [];
+  const offers: OfferToOpen[] = [];
+  const reviewedIds: string[] = [];
   let analystTurns = 0;
   const analystReport = { written: 0, skipped: {} as Record<string, number> };
-  for (const loan of loans) {
-    if (loan.reviews.length > 0) {
-      alreadyReviewed += 1;
-      continue;
-    }
-    // Claimed and monitored, or on a book and unclaimed: the database allows
-    // no third thing (`loans_unclaimed_is_not_monitored`).
-    const claimed = loan.monitoringEnabled;
-    // An unclaimed loan can hold no offer and no refinance application —
-    // both start from a person's answer — so its holds and gates are known
-    // without asking.
-    const held = claimed ? await loanIsHeld(db, loan.id, now) : null;
-    if (held) {
-      skipped.push({ loanId: loan.id, servicerLoanNumber: loan.servicerLoanNumber, reason: held });
+  for (const loan of due) {
+    const claimed = !unclaimed(loan);
+    const state = offerStates.get(loan.id) ?? NO_OFFER_STATE;
+    if (state.held) {
+      skipped.push({
+        loanId: loan.id,
+        servicerLoanNumber: loan.servicerLoanNumber,
+        reason: state.held,
+      });
       continue;
     }
     const obs = loan.observations[0];
@@ -315,8 +322,9 @@ export async function reviewLoans(
     const u = universeLoanOf(
       {
         loan_id: loan.id,
-        // An unclaimed loan is analyzed as the watched loan it would be the
-        // morning after its claim: that verdict is the analysis's whole point.
+        // An unclaimed loan is watched from the day its book was loaded; the
+        // engine's word for a watched loan is `monitoring_only`, and the
+        // claim is the door, not the switch.
         state: claimed ? toDomainLoanState(loan.status) : "monitoring_only",
         rate_type: loan.rateType === "ARM" ? "arm" : "fixed",
         note_rate_bps: loan.noteRateBps,
@@ -349,35 +357,32 @@ export async function reviewLoans(
       });
       continue;
     }
-    // The gates read off the offers: a decline within ninety days, two
-    // offers in twelve months, or a standing never, each a `not_now` the
+    // The gates read off the delivered offers: a decline within ninety days,
+    // two offers in twelve months, or a standing never, each a `not_now` the
     // engine names, so the person's answer is what keeps the loan quiet.
-    const gates = claimed
-      ? await offerGateFacts(db, loan.id)
-      : { gate: NO_GATE_FACTS, doNotSolicit: false };
-    const row: UniverseLoan = gates.doNotSolicit ? { ...u.row, refi_do_not_solicit: true } : u.row;
-    const rate = await candidateRateFor(pricing, row, asOf, claimed ? undefined : quotes);
-    const review = reviewLoan(row, { as_of: asOf, rate, gate_facts: gates.gate });
-    const turn: AnalystRecord = claimed
-      ? await analystTurn(
-          analyst,
-          {
-            loan_id: loan.id,
-            as_of_date: asOf,
-            verdict: review.verdict,
-            reasons: review.reasons,
-            facts: review.facts,
-          },
-          { turnsToday: analystTurns, maxPerDay },
-        )
-      : { skipped: "unclaimed", prompt_version: "none" };
+    const row: UniverseLoan = state.doNotSolicit ? { ...u.row, refi_do_not_solicit: true } : u.row;
+    const rate = await candidateRateFor(pricing, row, asOf, quotes);
+    const review = reviewLoan(row, { as_of: asOf, rate, gate_facts: state.gate });
+    const turn: AnalystRecord = await analystTurn(
+      analyst,
+      {
+        loan_id: loan.id,
+        as_of_date: asOf,
+        verdict: review.verdict,
+        reasons: review.reasons,
+        facts: review.facts,
+      },
+      { turnsToday: analystTurns, maxPerDay },
+    );
     if (analystModelRan(turn)) analystTurns += 1;
     if ("skipped" in turn) {
       analystReport.skipped[turn.skipped] = (analystReport.skipped[turn.skipped] ?? 0) + 1;
     } else {
       analystReport.written += 1;
     }
-    const rowData: Prisma.LoanReviewCreateManyInput = {
+    const reviewId = randomUUID();
+    rows.push({
+      id: reviewId,
       loanId: loan.id,
       asOf: day,
       observationId: obs.id,
@@ -390,55 +395,43 @@ export async function reviewLoans(
       ruleSetVersion: `${review.rule_set_version} (${review.port_version})`,
       explanation: review.explanation,
       analyst: turn as unknown as Prisma.InputJsonValue,
-    };
-    if (!claimed) {
-      analyses.push(rowData);
-      reviewed.push({
-        loanId: loan.id,
-        servicerLoanNumber: loan.servicerLoanNumber,
-        verdict: review.verdict,
-        reasons: review.reasons,
-        candidateRatePct: rate?.note_rate_pct ?? null,
-        claimed: false,
-      });
-      continue;
-    }
-    const written = await db.loanReview.create({ data: rowData, select: { id: true } });
+    });
     if (review.verdict === "candidate" && review.offer && rate) {
-      await openOffer(db, {
+      offers.push({
         loanId: loan.id,
-        reviewId: written.id,
+        reviewId,
         detectedOn: asOf,
         disclosure: review.offer as unknown as Prisma.InputJsonValue,
         candidateRatePct: rate.note_rate_pct,
         rateSource: rate.source,
-        now,
+        deliver: claimed,
       });
-      offersOpened += 1;
     }
-    await db.loan.update({
-      where: { id: loan.id },
-      data: { nextReviewDueAt: new Date(day.getTime() + 24 * 60 * 60 * 1000) },
-    });
+    reviewedIds.push(loan.id);
     reviewed.push({
       loanId: loan.id,
       servicerLoanNumber: loan.servicerLoanNumber,
       verdict: review.verdict,
       reasons: review.reasons,
       candidateRatePct: rate?.note_rate_pct ?? null,
-      claimed: true,
+      claimed,
     });
   }
-  await inChunks(analyses, (chunk) => db.loanReview.createMany({ data: chunk }));
-  const monitored = loans.filter((l) => l.monitoringEnabled).length;
+  await inChunks(rows, (chunk) => db.loanReview.createMany({ data: chunk }));
+  await openOffers(db, offers, now);
+  const tomorrow = new Date(day.getTime() + 24 * 60 * 60 * 1000);
+  await inChunks(reviewedIds, (chunk) =>
+    db.loan.updateMany({ where: { id: { in: chunk } }, data: { nextReviewDueAt: tomorrow } }),
+  );
   return {
     asOf,
-    monitored,
-    unclaimed: loans.length - monitored,
+    monitored: loans.length,
+    unclaimed: loans.filter(unclaimed).length,
     reviewed,
     alreadyReviewed,
     skipped,
-    offersOpened,
+    offersOpened: offers.length,
+    offersAwaitingClaim: offers.filter((o) => !o.deliver).length,
     offersExpired,
     analyst: analystReport,
   };

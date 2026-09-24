@@ -96,10 +96,10 @@ describe("the first tape", () => {
       expect(loan.status).toBe("IMPORTED_UNCLAIMED");
       expect(loan.source).toBe("PARTNER_IMPORT");
       expect(loan.servicerLoanNumber).toMatch(/^NL-1000\d\d$/);
-      // Not monitored: the database holds that nothing about an unclaimed
-      // loan is, and the claim is what turns the review on.
-      expect(loan.monitoringEnabled).toBe(false);
-      expect(loan.nextReviewDueAt).toBeNull();
+      // Watched from birth: the book is what starts the review, and the
+      // claim is the door the person opens to see it.
+      expect(loan.monitoringEnabled).toBe(true);
+      expect(loan.nextReviewDueAt).not.toBeNull();
       expect(loan.originatingApplicationId).toBeNull();
       expect(loan.parties).toHaveLength(1);
       const party = loan.parties[0]!.party;

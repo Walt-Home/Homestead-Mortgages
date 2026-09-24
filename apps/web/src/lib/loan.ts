@@ -170,7 +170,8 @@ export interface RefiOfferWire {
   readonly status: OfferStanding;
   readonly detectedOn: string;
   readonly offeredAt: string;
-  readonly validUntil: string;
+  /** Null until the offer is delivered, which a loan of yours always is. */
+  readonly validUntil: string | null;
   readonly answeredAt: string | null;
   readonly disclosure: {
     readonly current_rate_pct: string;

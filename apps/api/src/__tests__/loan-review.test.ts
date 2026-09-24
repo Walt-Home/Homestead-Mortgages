@@ -58,7 +58,7 @@ describe("the daily review", () => {
   it("reviews the monitored loans once for the day, off the fixture's sheet, and keeps the verdicts", async () => {
     const { owners } = await claimedBook(["NL-100001", "NL-100008", "NL-100009", "NL-100011"]);
     const run = await reviewLoans({ asOf: AS_OF });
-    expect(run.monitored).toBe(4);
+    expect(run.monitored).toBe(12);
     expect(run.skipped).toEqual([]);
     const by = new Map(run.reviewed.map((r) => [r.servicerLoanNumber, r]));
     // The fixture sheet quotes one 30-year fixed at 6.25 %: 100 bps under loan 1's 7.25 %.
@@ -71,11 +71,11 @@ describe("the daily review", () => {
     // 5.875 % against 6.25 % is a rate move the wrong way: watching, with the rate it would need.
     expect(by.get("NL-100009")?.verdict).toBe("watching");
 
-    // The eight unclaimed loans were analyzed beside them, as rows and nothing more.
+    // The eight unclaimed loans were reviewed beside them; their offers wait.
     expect(run.unclaimed).toBe(8);
     expect(run.reviewed.filter((r) => !r.claimed)).toHaveLength(8);
     const rows = await prisma.loanReview.findMany({
-      where: { loan: { monitoringEnabled: true } },
+      where: { loan: { status: { not: "IMPORTED_UNCLAIMED" } } },
       orderBy: { recordedAt: "asc" },
     });
     expect(rows).toHaveLength(4);
@@ -107,33 +107,56 @@ describe("the daily review", () => {
     expect(loan.nextReviewDueAt?.toISOString().slice(0, 10)).toBe("2026-09-22");
   });
 
-  it("analyzes an unclaimed loan on a book — a row with its verdict — and does nothing else to it", async () => {
-    await claimedBook(["NL-100002"]);
+  it("reviews an unclaimed loan like any other, and holds its offer until the claim delivers it", async () => {
+    const { servicer } = await claimedBook(["NL-100002"]);
     const run = await reviewLoans({ asOf: AS_OF });
-    expect(run.monitored).toBe(1);
+    expect(run.monitored).toBe(12);
     expect(run.unclaimed).toBe(11);
     expect(run.reviewed.filter((r) => r.claimed).map((r) => r.servicerLoanNumber)).toEqual([
       "NL-100002",
     ]);
     expect(run.reviewed.filter((r) => !r.claimed)).toHaveLength(11);
     expect(await prisma.loanReview.count()).toBe(12);
-    // The unclaimed candidate: the verdict and the engine's disclosure on
-    // the row, the analyst skipped by name, no offer, monitoring untouched.
+    // The unclaimed candidate: reviewed, its offer made — and not delivered,
+    // so it has no validity to run out and no place in the cap yet.
     const one = await prisma.loanReview.findFirstOrThrow({
       where: { loan: { servicerLoanNumber: "NL-100001" } },
       include: { loan: true },
     });
     expect(one.verdict).toBe("CANDIDATE");
-    expect(one.offer).not.toBeNull();
-    expect(one.analyst).toEqual({ skipped: "unclaimed", prompt_version: "none" });
-    expect(one.loan.monitoringEnabled).toBe(false);
-    expect(one.loan.nextReviewDueAt).toBeNull();
-    expect(await prisma.refiOffer.count({ where: { loanId: one.loanId } })).toBe(0);
-    // Analysis alone, the desk's run, touches no monitored loan.
-    const again = await reviewLoans({ asOf: plainDate("2026-09-22"), scope: "unclaimed" });
-    expect(again.monitored).toBe(0);
-    expect(again.reviewed).toHaveLength(11);
-    expect(again.reviewed.every((r) => !r.claimed)).toBe(true);
+    expect(one.loan.monitoringEnabled).toBe(true);
+    expect(one.loan.nextReviewDueAt?.toISOString().slice(0, 10)).toBe("2026-09-22");
+    const waiting = await prisma.refiOffer.findFirstOrThrow({ where: { loanId: one.loanId } });
+    expect(waiting.status).toBe("OFFERED");
+    expect(waiting.deliveredAt).toBeNull();
+    expect(waiting.validUntil).toBeNull();
+    expect(run.offersAwaitingClaim).toBeGreaterThanOrEqual(1);
+    // The next morning the offer still stands, undelivered, and holds the loan.
+    const next = await reviewLoans({ asOf: plainDate("2026-09-22") });
+    expect(next.skipped.find((x) => x.loanId === one.loanId)?.reason).toBe("open offer");
+
+    // The claim is the door: the offer is delivered, its thirty days start now.
+    const principalId = await partnerPrincipal(prisma, servicer.slug);
+    const minted = await mintLoanClaim({
+      servicerId: servicer.id,
+      servicerLoanNumber: "NL-100001",
+      principalId,
+    });
+    const user = await createUser();
+    const at = new Date("2026-10-05T15:00:00.000Z");
+    const before = Date.now();
+    await acceptLoanClaim(minted.token, user.id);
+    const delivered = await prisma.refiOffer.findUniqueOrThrow({ where: { id: waiting.id } });
+    expect(delivered.deliveredAt).not.toBeNull();
+    expect(delivered.deliveredAt!.getTime()).toBeGreaterThanOrEqual(before);
+    expect(delivered.validUntil!.getTime() - delivered.deliveredAt!.getTime()).toBe(
+      30 * 24 * 60 * 60 * 1000,
+    );
+    void at;
+    // Delivered once: the row will not take a second delivery.
+    await expect(
+      prisma.refiOffer.update({ where: { id: waiting.id }, data: { deliveredAt: new Date() } }),
+    ).rejects.toThrow(/delivered once/);
   });
 
   it("keeps a review as written: the row is append-only, and a candidate is the only row with an offer", async () => {

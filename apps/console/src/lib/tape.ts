@@ -32,7 +32,7 @@ export interface PreviewRow {
   readonly loanState: string | null;
   readonly claimed: boolean;
   readonly email: string | null;
-  /** The newest analysis of the loan, when the book has been looked at. */
+  /** The newest review of the loan, when the book has been reviewed. */
   readonly review: { readonly verdict: Verdict; readonly asOf: string } | null;
   readonly exceptions: readonly RowException[];
 }
@@ -90,18 +90,20 @@ export interface DeskServicer {
       readonly total: number;
       readonly byState: Record<string, number | undefined>;
     };
-    /** The newest day the book was analyzed, and how the verdicts fell. */
+    /** The newest day the book was reviewed, and how the verdicts fell. */
     readonly analysis: { readonly asOf: string; readonly verdicts: VerdictCounts } | null;
   };
 }
 
-/** The book's first look, as the desk asks for it after a load. */
-export interface BookAnalysis {
+/** The book's first review, as the desk asks for it after a load. */
+export interface BookReview {
   readonly asOf: string;
   readonly unclaimed: number;
-  readonly analyzed: number;
+  readonly reviewed: number;
   readonly alreadyReviewed: number;
   readonly skipped: number;
+  readonly offersOpened: number;
+  readonly offersAwaitingClaim: number;
   readonly counts: VerdictCounts;
   readonly verdicts: Record<string, Verdict>;
 }
@@ -280,8 +282,8 @@ export const previewTape = (files: TapeFiles, init: Call = {}) =>
 export const loadTape = (files: TapeFiles, init: Call = {}) =>
   hm<TapeLoad>("/imports", { ...init, body: files });
 
-export const analyzeBook = (servicerSlug: string, init: Call = {}) =>
-  hm<BookAnalysis>("/analysis", { ...init, body: { servicerSlug } });
+export const reviewBook = (servicerSlug: string, init: Call = {}) =>
+  hm<BookReview>("/review", { ...init, body: { servicerSlug } });
 
 /** Candidates first, then the rest in the engine's order; a loan never analyzed last. */
 export const VERDICT_RANK: Record<Verdict, number> = {

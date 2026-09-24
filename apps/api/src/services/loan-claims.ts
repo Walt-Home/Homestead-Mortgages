@@ -35,6 +35,7 @@ import { ownsTransaction, type Db } from "./db.js";
 import { claimUrl, hashInvitationToken, mintInvitationToken } from "./invitations.js";
 import { moveLoanIfLegal, toDomainLoanState } from "./loan-transition.js";
 import { mergePartyInto, partyForUser, servicePrincipal } from "./party.js";
+import { deliverOpenOffer } from "./refi-offers.js";
 
 /** Thirty days: a servicer's notice is read on a statement's cadence, not an inbox's. */
 export const LOAN_CLAIM_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -222,15 +223,19 @@ export async function acceptLoanClaim(
   if ("skipped" in moved) {
     throw new AppError(409, "This mortgage can no longer be claimed.", "NOT_CLAIMABLE");
   }
-  // The review turns on with the claim, and the database only allows it now:
-  // `loans_unclaimed_is_not_monitored` held it off while nobody had claimed.
+  // The review has been on since the book was loaded; the claim is the door.
+  // What it opens: the offer the review made while nobody could see it is
+  // delivered now, and its thirty days start today. The review is due again
+  // tomorrow either way.
+  const now = new Date();
   await db.loan.update({
     where: { id: claim.loanId },
-    data: { monitoringEnabled: true, nextReviewDueAt: new Date() },
+    data: { monitoringEnabled: true, nextReviewDueAt: now },
   });
+  await deliverOpenOffer(db, claim.loanId, now);
   await db.loanClaim.update({
     where: { id: claim.id },
-    data: { acceptedAt: new Date(), acceptedByPartyId: claimant },
+    data: { acceptedAt: now, acceptedByPartyId: claimant },
   });
   return { kind: "mortgage", loanId: claim.loanId };
 }

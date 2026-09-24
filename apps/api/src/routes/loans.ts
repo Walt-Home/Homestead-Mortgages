@@ -65,7 +65,12 @@ loanRouter.get(
     // without reading every loan's card.
     const now = new Date();
     const open = await prisma.refiOffer.findMany({
-      where: { loanId: { in: loans.map((l) => l.id) }, status: "OFFERED", validUntil: { gt: now } },
+      where: {
+        loanId: { in: loans.map((l) => l.id) },
+        status: "OFFERED",
+        deliveredAt: { not: null },
+        validUntil: { gt: now },
+      },
       select: { loanId: true },
     });
     const withOffer = new Set(open.map((o) => o.loanId));
@@ -148,7 +153,7 @@ loanRouter.get(
           status: standing,
           detectedOn: offerRow.detectedOn.toISOString().slice(0, 10),
           offeredAt: offerRow.offeredAt.toISOString(),
-          validUntil: offerRow.validUntil.toISOString(),
+          validUntil: offerRow.validUntil?.toISOString() ?? null,
           answeredAt: offerRow.answeredAt?.toISOString() ?? null,
           disclosure: offerRow.disclosure as Record<string, unknown>,
           candidateRatePct: offerRow.candidateRatePct.toFixed(3),

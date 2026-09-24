@@ -142,8 +142,9 @@ call the partner key reaches; the invite mints one claim per unclaimed loan
 and mails the link to the supplement's address through the mail port, and
 that address lands nowhere but `loan_claims.delivered_to`. The as-of is the
 tape's own when it carries one. After the load the desk runs the book's
-first look — today's verdict on every unclaimed loan, as analysis — and
-the invite step puts the candidates first. A book is written as sets — `createMany` in
+first review — the daily review over the servicer's book, today rather than
+tomorrow morning, its offers made and waiting for the claim — and the
+invite step puts the candidates first. A book is written as sets — `createMany` in
 chunks, ids minted in the service, facts written only where they differ —
 because a real one is fourteen thousand rows and one transaction. The desk is ours (`routes/console-tape.ts`,
 `services/tape-desk.ts`, `apps/console/src/pages/TapePage.tsx`), answered at
@@ -157,12 +158,15 @@ is the servicing app's spec §33.2 over its §20.1, ported pure over the kernel
 and held to its figures by its tests; `services/loan-review.ts` runs it each morning over
 every monitored loan's newest observation with one 30-year fixed quoted off
 the pricing port, and keeps one append-only `loan_reviews` row per loan per
-day. Since 23 September it also runs over every unclaimed loan on a
-servicer's book, as analysis: the same row, no offer, no analyst, nothing
-monitored, nobody contacted — it is what the tape desk ranks the
-invitations by, and the verdict already waiting when a claim turns the
-review on. Quotes are memoized per run by kind of loan, not per loan. See
-`docs/decisions.md`, "The book is analyzed before anyone claims it". `npm run review:run` is the job by hand; the deploy runs it once after
+day. Since 24 September every loan on a servicer's book is watched from
+the day the book is loaded, claimed or not: the review runs over all of
+them, one batched pass, claimed loans first. The one thing the claim
+changes is delivery — an offer on a claimed loan is delivered as it is
+made, an offer on an unclaimed loan is made and waits with no validity and
+no place in the cap until the claim delivers it (`refi_offers.delivered_at`).
+Quotes are memoized per run by kind of loan, not per loan. See
+`docs/decisions.md`, "The book is tracked from the day it is loaded, and
+the claim is the door". `npm run review:run` is the job by hand; the deploy runs it once after
 the seed and a Cloud Run job runs it at 07:00 Eastern. The servicing route
 carries the newest row as `review`, and the page shows ours first and the
 platform's after. See `docs/decisions.md`, "The daily review is ours now".
@@ -236,14 +240,15 @@ offer is a row and a card".
   with a partner key, `packages/partner-book` reads it onto the feed contract
   in `@hm/shared/portfolio`, and `services/partner-book.ts` turns each row
   into an `imported_unclaimed` loan on a PROVISIONAL party with the partner's
-  facts, plus a `servicing_observations` row per tape. Nothing about that
-  party is retrievable and the loan is not monitored until the claim: the
+  facts, plus a `servicing_observations` row per tape, watched from that
+  day. Nothing about that party is retrievable until the claim: the
   partner mints a single-use token for one loan through its key
   (`POST /api/partner/book/loans/:number/claims`) and delivers it, or the
   tape desk mails it to the supplement's address — never a match at sign-in;
   whoever holds the link takes it at `/claim` after signing in,
   the tape's party folds into theirs through `mergePartyInto`, the loan moves
-  to `monitoring_only` as `claim_confirmed`, and the review turns on. The
+  to `monitoring_only` as `claim_confirmed`, and the offer the review made
+  while nobody could see it is delivered. The
   persona seed walks the `grander_import` row through exactly that on
   NL-100001 — minted as the partner, taken as the sign-in — so a tester's
   home page leads with a watched mortgage and `/loans/:id` is its page. No

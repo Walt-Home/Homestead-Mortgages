@@ -116,7 +116,10 @@ export const config = {
     apiUrl: process.env.SERVICING_API_URL ?? "",
     apiToken: process.env.SERVICING_API_TOKEN ?? "",
     /**
-     * The hostnames the servicing app answers on for people, comma-separated.
+     * The hostnames the servicing app answers on for people, separated by
+     * spaces (or commas or semicolons — `gcloud run deploy` splits its own
+     * flag on commas, which is how a comma-separated list once broke a
+     * deploy).
      * On any of those Hosts this process serves the ops console
      * (apps/console) and proxies the servicing app's console API to
      * `apiUrl`; on every other Host it is the borrower app. Unset where
@@ -126,7 +129,7 @@ export const config = {
      * beside the root while the roots are still this stack's.
      */
     publicHosts: (process.env.SERVICING_PUBLIC_HOST ?? "")
-      .split(",")
+      .split(/[\s,;]+/)
       .map((h) => h.trim())
       .filter((h) => h !== ""),
     get publicHost(): string | undefined {

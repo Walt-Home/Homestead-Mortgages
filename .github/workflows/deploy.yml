@@ -446,9 +446,10 @@ jobs:
       - name: Deploy the servicing service to Cloud Run
         run: |
           ENV_VARS="NODE_ENV=production,SERVICING_PORT=8080,SERVICING_ENVIRONMENT=nonprod,SERVICING_INTEGRATIONS=fake,SERVICING_LOG_FORMAT=json"
-          # The variable may name several hosts (the API answers on all of
-          # them); the servicing app's own is the first, the canonical one.
-          PUBLIC_HOST="${PUBLIC_HOST%%,*}"
+          # The variable may name several hosts, space-separated (the API
+          # answers on all of them; a comma would break gcloud's own flag);
+          # the servicing app's own is the first, the canonical one.
+          PUBLIC_HOST=$(printf '%s' "$PUBLIC_HOST" | tr ',;' '  ' | awk '{print $1}')
           if [ -n "$PUBLIC_HOST" ]; then
             ENV_VARS="$ENV_VARS,OPS_URL=https://$PUBLIC_HOST/ops,BORROWER_RP_ID=$PUBLIC_HOST,BORROWER_ORIGINS=https://$PUBLIC_HOST"
           fi

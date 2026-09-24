@@ -3212,8 +3212,8 @@ an environment owns and what every environment shares, and stood up twice.
   keep the `-staging-` in their names, because renaming a global address
   is a new IP.
 - **Production's instance is its own, and its secrets are `_PROD`.**
-  `homestead-mortgages-prod-db`, `homestead_mortgages_prod` and
-  `homestead_servicing_prod`; `HOMESTEAD_MORTGAGES_DATABASE_URL_PROD`,
+  `homestead-mortgages-prod-db`, `homestead_mortgages_production` and
+  `homestead_servicing_production`; `HOMESTEAD_MORTGAGES_DATABASE_URL_PROD`,
   `_SERVICING_DATABASE_URL_PROD`, `_SERVICING_API_TOKEN_PROD`,
   `_SESSION_SECRET_PROD` and `_VENDOR_TOKEN_KEY_PROD`, each generated on the
   day and read by exactly the identity that needs it. The API's role and

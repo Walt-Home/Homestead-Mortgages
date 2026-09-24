@@ -357,6 +357,14 @@ resource "google_cloud_run_v2_job" "servicing_sweep" {
   lifecycle {
     ignore_changes = [template[0].template[0].containers[0].image]
   }
+
+  # A job that names a secret its identity cannot read fails to create; the
+  # grants must land first, and on a fresh environment they are made in the
+  # same apply.
+  depends_on = [
+    google_secret_manager_secret_iam_member.servicing_run_reads_database_url,
+    google_secret_manager_secret_iam_member.servicing_run_reads_api_token,
+  ]
 }
 
 # ── Their schedules ──────────────────────────────────────────────────────────

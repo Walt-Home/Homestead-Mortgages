@@ -58,6 +58,13 @@
 # is dark until they are recreated. That cost three minutes on
 # 22 September 2026.
 #
+# 24 September 2026: staging names. This stack is staging, and the roots are
+# production's the day a production stack exists; until then it answers on
+# staging.supermortgage.com and staging.servicing.supermortgage.com beside
+# the roots, each with a certificate of its own, so the cutover is a change
+# of variables and two DNS records rather than a rebuild. See
+# docs/decisions.md, "Two hostnames, one front door".
+#
 # The certificates provision only after DNS points each hostname at
 # `edge_ip`; until then each sits at PROVISIONING / FAILED_NOT_VISIBLE and
 # retries on its own. `dns_records` in outputs.tf is what to hand whoever
@@ -179,7 +186,7 @@ resource "google_iap_web_backend_service_iam_member" "servicing_console" {
 }
 
 locals {
-  edge_hostnames = concat(var.consumer_hostnames, [var.servicing_hostname])
+  edge_hostnames = concat(var.consumer_hostnames, var.servicing_hostnames)
 }
 
 # One certificate per hostname: a Google-managed certificate provisions only
@@ -204,7 +211,7 @@ resource "google_compute_url_map" "edge" {
   }
 
   host_rule {
-    hosts        = [var.servicing_hostname]
+    hosts        = var.servicing_hostnames
     path_matcher = "servicing"
   }
 

@@ -375,15 +375,27 @@ variable "consumer_hostnames" {
     The hostnames the consumer app answers on. Joe's choice, 22 September
     2026: the apex and www. Each gets a Google-managed certificate of its
     own, and each needs an A record at the registrar pointing at `edge_ip`.
+
+    24 September: `staging.supermortgage.com` joins the list, because what
+    this stack serves is staging, and the roots are production's the day a
+    production stack exists. Until then the staging stack answers on both,
+    so the roots never go dark; the roots leave this list at the cutover.
   EOT
   type        = list(string)
-  default     = ["supermortgage.com", "www.supermortgage.com"]
+  default     = ["supermortgage.com", "www.supermortgage.com", "staging.supermortgage.com"]
 }
 
-variable "servicing_hostname" {
-  description = "The hostname Doug's runtime answers on; `/` there redirects to his console at `/ops`."
-  type        = string
-  default     = "servicing.supermortgage.com"
+variable "servicing_hostnames" {
+  description = <<-EOT
+    The hostnames the servicing app answers on; `/` there redirects to its
+    console. The first is the canonical one — the deploy hands it to the
+    servicing app as its OPS_URL and passkey relying-party id — and the API
+    treats every name here as the servicing host. 24 September:
+    `staging.servicing.supermortgage.com` joins, on the same terms as the
+    consumer staging name.
+  EOT
+  type        = list(string)
+  default     = ["servicing.supermortgage.com", "staging.servicing.supermortgage.com"]
 }
 
 variable "servicing_console_members" {

@@ -116,12 +116,22 @@ export const config = {
     apiUrl: process.env.SERVICING_API_URL ?? "",
     apiToken: process.env.SERVICING_API_TOKEN ?? "",
     /**
-     * The hostname his runtime answers on for people. On that Host this
-     * process serves the ops console (apps/console) and proxies his console
-     * API to `apiUrl`; on every other Host it is the borrower app. Unset
-     * where there is no such hostname, and then nothing is mounted.
+     * The hostnames the servicing app answers on for people, comma-separated.
+     * On any of those Hosts this process serves the ops console
+     * (apps/console) and proxies the servicing app's console API to
+     * `apiUrl`; on every other Host it is the borrower app. Unset where
+     * there is no such hostname, and then nothing is mounted. The first is
+     * the canonical one, which the deploy hands to the servicing app as its
+     * own; the rest are the same door under other names — the staging name
+     * beside the root while the roots are still this stack's.
      */
-    publicHost: process.env.SERVICING_PUBLIC_HOST || undefined,
+    publicHosts: (process.env.SERVICING_PUBLIC_HOST ?? "")
+      .split(",")
+      .map((h) => h.trim())
+      .filter((h) => h !== ""),
+    get publicHost(): string | undefined {
+      return this.publicHosts[0];
+    },
   },
 
   /**

@@ -111,7 +111,9 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
       if (identity) headers.set(IDENTITY_HEADER, `Bearer ${identity}`);
       headers.set("x-forwarded-for", req.ip ?? "");
       headers.set("x-forwarded-proto", req.protocol);
-      headers.set("x-forwarded-host", opts.host);
+      // The name the person actually used, so a link the servicing app
+      // builds from it comes back to the same door.
+      headers.set("x-forwarded-host", req.hostname || opts.host);
       const hasBody = req.method !== "GET" && req.method !== "HEAD";
       let answer: globalThis.Response;
       try {
@@ -215,6 +217,7 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
  * answer. Returns what was mounted, for the start-up log.
  */
 export function consoleHost(app: Express): "not-configured" | "proxy-only" | "console" {
+  const hosts = new Set(config.servicing.publicHosts);
   const host = config.servicing.publicHost;
   const upstream = config.servicing.apiUrl;
   if (!upstream) return "not-configured";
@@ -239,7 +242,7 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
     tape,
   });
   app.use((req, res, next) => {
-    if (req.hostname === host) router(req, res, next);
+    if (hosts.has(req.hostname)) router(req, res, next);
     else next();
   });
   return built ? "console" : "proxy-only";

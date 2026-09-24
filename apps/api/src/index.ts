@@ -113,7 +113,7 @@ app.listen(config.port, () => {
   );
   if (consoleMounted !== "not-configured") {
     console.log(
-      `Ops console on ${config.servicing.publicHost}: ` +
+      `Ops console on ${config.servicing.publicHosts.join(", ")}: ` +
         (consoleMounted === "console"
           ? "served from apps/console/dist"
           : "not built; his API forwarded"),

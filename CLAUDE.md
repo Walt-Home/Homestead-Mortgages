@@ -488,8 +488,13 @@ with no invoker bindings that 403s everything and reads exactly like a broken
 container. The deploy workflow asserts the binding afterwards and fails if it
 is missing.
 
-**Both deployments have hostnames, behind one load balancer.**
-`supermortgage.com` (and `www`) is the consumer app and
+**Both deployments have hostnames, behind one load balancer — and every
+one of them is staging today.** There is one stack, `environment =
+"staging"`, one Cloud SQL instance with two staging databases, and no
+production anything yet; the roots are production's the day a production
+stack exists, and until then the staging stack answers on
+`staging.supermortgage.com` and `staging.servicing.supermortgage.com` beside
+them (24 September 2026). `supermortgage.com` (and `www`) is the consumer app and
 `servicing.supermortgage.com` is the servicing app, through `infra/edge.tf`:
 one global external Application Load Balancer, a serverless endpoint group
 per service, a Google-managed certificate per hostname, HTTP redirected to

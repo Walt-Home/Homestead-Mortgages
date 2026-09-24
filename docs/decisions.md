@@ -2169,6 +2169,27 @@ the three A records to set. DNS is at GoDaddy and the login is Doug's.
   stay a variable, so the front door carries a different answer if one is
   ever wanted.
 
+**Addendum, 24 September 2026 — the staging names.** Joe: "we should start
+building the domain mapping to staging so we don't add junk to prod as we
+test." What is deployed is one stack, `environment = "staging"`, and it
+serves the roots: one Cloud SQL instance holding `homestead_mortgages_staging`
+and `homestead_servicing_staging`, two Cloud Run services and three jobs all
+named `-staging`, secrets suffixed `_STAGING`. There is no production
+database and no production service. So the roots are production's the day a
+production stack exists, and the staging stack now answers on
+`staging.supermortgage.com` and `staging.servicing.supermortgage.com` beside
+them: two more Google-managed certificates, two more host rules on the same
+load balancer, two more A records at the registrar. The API treats every
+name in `SERVICING_PUBLIC_HOST` (now comma-separated) as the servicing host
+and forwards the name the person actually used; the servicing app's own
+host — its OPS_URL and passkey relying party — is the first, the root, until
+the cutover. Nothing about the roots changes today, so nothing goes dark.
+The cutover, when production exists: the roots leave the staging stack's
+hostname lists, `PUBLIC_ORIGIN` and `SERVICING_PUBLIC_HOST` on the staging
+deploy become the staging names (with the Plaid redirect and the Google
+OAuth origin registered for them first), and the production stack takes the
+roots with its own database, secrets, personas off and real mail.
+
 ## The ops console is ours
 
 Doug's ops console is one 129 KB file in his vendored tree, and the tree

@@ -2179,7 +2179,9 @@ database and no production service. So the roots are production's the day a
 production stack exists, and the staging stack now answers on
 `staging.supermortgage.com` and `staging.servicing.supermortgage.com` beside
 them: two more Google-managed certificates, two more host rules on the same
-load balancer, two more A records at the registrar. The API treats every
+load balancer, two more A records at the registrar (Joe added them the same
+afternoon; both certificates were ACTIVE within the hour and both names
+answered — the consumer app on one, IAP on the other). The API treats every
 name in `SERVICING_PUBLIC_HOST` (now comma-separated) as the servicing host
 and forwards the name the person actually used; the servicing app's own
 host — its OPS_URL and passkey relying party — is the first, the root, until

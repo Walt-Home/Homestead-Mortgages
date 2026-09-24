@@ -349,3 +349,49 @@ describe("inviting the people on a tape to claim", () => {
     expect(taken.loanId).toBe(loan.id);
   });
 });
+
+describe("the book's first look", () => {
+  it("analyzes every unclaimed loan after a load, once a day, and the next preview carries the verdicts", async () => {
+    const load = await call<{ result: { status: string } }>("POST", "/imports", tapeBody());
+    expect(load.status).toBe(201);
+
+    const first = await call<{
+      asOf: string;
+      unclaimed: number;
+      analyzed: number;
+      alreadyReviewed: number;
+      counts: Record<string, number>;
+      verdicts: Record<string, string>;
+    }>("POST", "/analysis", { servicerSlug: NORTHLIGHT.slug });
+    expect(first.status).toBe(200);
+    expect(first.body.unclaimed).toBe(12);
+    expect(first.body.analyzed).toBe(12);
+    // The fixture sheet quotes 6.25 %: loan 1 at 7.25 % is a candidate.
+    expect(first.body.verdicts["NL-100001"]).toBe("candidate");
+    expect(first.body.counts.candidate).toBeGreaterThanOrEqual(1);
+    expect(Object.keys(first.body.verdicts)).toHaveLength(12);
+    // Analysis only: no offer, nothing monitored, no analyst sentence.
+    expect(await prisma.refiOffer.count()).toBe(0);
+    expect(await prisma.loan.count({ where: { monitoringEnabled: true } })).toBe(0);
+
+    // The same day again: nothing new written, every verdict still answered.
+    const again = await call<{
+      analyzed: number;
+      alreadyReviewed: number;
+      verdicts: Record<string, string>;
+    }>("POST", "/analysis", { servicerSlug: NORTHLIGHT.slug });
+    expect(again.body.analyzed).toBe(0);
+    expect(again.body.alreadyReviewed).toBe(12);
+    expect(Object.keys(again.body.verdicts)).toHaveLength(12);
+    expect(await prisma.loanReview.count()).toBe(12);
+
+    // A later preview of the same book reads the verdicts back, row by row.
+    const p = await call<{ rows: { number: string; review: { verdict: string } | null }[] }>(
+      "POST",
+      "/preview",
+      tapeBody(),
+    );
+    expect(p.body.rows.find((r) => r.number === "NL-100001")?.review?.verdict).toBe("candidate");
+    expect(p.body.rows.every((r) => r.review !== null)).toBe(true);
+  });
+});

@@ -1,5 +1,6 @@
 /**
- * Review every monitored loan for the day, once.
+ * Review every monitored loan for the day, once, and analyze every
+ * unclaimed loan on a servicer's book beside it.
  *
  *   npm run review:run                 today, in the creditor's zone
  *   npm run review:run -- 2026-09-22   a named day (a re-run writes nothing)
@@ -14,16 +15,16 @@
 
 import { prisma } from "@hm/db";
 import { plainDate } from "@hm/kernel/calendar";
-import { reviewMonitoredLoans, todayEt } from "../services/loan-review.js";
+import { reviewLoans, todayEt } from "../services/loan-review.js";
 
 async function main(): Promise<void> {
   const arg = process.argv[2];
   const asOf = arg ? plainDate(arg) : todayEt();
-  const report = await reviewMonitoredLoans({ asOf });
+  const report = await reviewLoans({ asOf });
   for (const r of report.reviewed) {
     const rate = r.candidateRatePct ? ` at ${r.candidateRatePct}` : "";
     console.log(
-      `review ${r.servicerLoanNumber ?? r.loanId} ${r.verdict}${rate} [${r.reasons.join(", ")}]`,
+      `${r.claimed ? "review" : "analysis"} ${r.servicerLoanNumber ?? r.loanId} ${r.verdict}${rate} [${r.reasons.join(", ")}]`,
     );
   }
   for (const s of report.skipped) {
@@ -33,7 +34,8 @@ async function main(): Promise<void> {
     .map(([why, n]) => `${n} ${why}`)
     .join(", ");
   console.log(
-    `reviewed ${report.reviewed.length} of ${report.monitored} monitored loans as of ${report.asOf}; ` +
+    `reviewed ${report.reviewed.filter((r) => r.claimed).length} of ${report.monitored} monitored loans ` +
+      `and analyzed ${report.reviewed.filter((r) => !r.claimed).length} of ${report.unclaimed} unclaimed as of ${report.asOf}; ` +
       `${report.alreadyReviewed} already reviewed today; ${report.skipped.length} skipped; ` +
       `${report.offersOpened} offers opened, ${report.offersExpired} lapsed; ` +
       `analyst wrote ${report.analyst.written}${analystSkips ? ` (skipped: ${analystSkips})` : ""}`,

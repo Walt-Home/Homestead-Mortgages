@@ -131,7 +131,10 @@ moves to `monitoring_only` as `claim_confirmed`, and the review turns on.
 and "The tape desk is one screen, and a claim is mailed from it".
 
 And since 22 September the review is ours. Each morning at seven Eastern a
-job reads every monitored loan off its newest observation, asks the pricing
+job reads every monitored loan off its newest observation — and, since
+23 September, every unclaimed loan on a servicer's book beside it, as
+analysis with no offer and no contact, so the desk can invite the
+candidates first — asks the pricing
 port for one 30-year fixed on the candidate, and runs the ported engine —
 Doug's §33.2 over his §20.1, `packages/refi-review` — writing one
 `loan_reviews` row per loan per day, append-only, with the verdict, its

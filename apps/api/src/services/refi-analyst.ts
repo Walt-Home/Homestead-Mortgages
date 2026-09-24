@@ -67,7 +67,14 @@ export interface AnalystReviewInput {
 }
 
 export type AnalystSkipReason =
-  "provenance" | "model_off" | "rate_limited" | "cap" | "refused" | "error";
+  | "provenance"
+  | "model_off"
+  | "rate_limited"
+  | "cap"
+  | "refused"
+  | "error"
+  /** The loan is on a servicer's book and nobody has claimed it: there is no card to write for. */
+  | "unclaimed";
 
 /** What the review row keeps: the turn as written, or why there is none. */
 export type AnalystRecord =

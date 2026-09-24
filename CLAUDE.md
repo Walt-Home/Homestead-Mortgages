@@ -141,7 +141,9 @@ writes nothing until the review has been seen; the load is
 call the partner key reaches; the invite mints one claim per unclaimed loan
 and mails the link to the supplement's address through the mail port, and
 that address lands nowhere but `loan_claims.delivered_to`. The as-of is the
-tape's own when it carries one. A book is written as sets — `createMany` in
+tape's own when it carries one. After the load the desk runs the book's
+first look — today's verdict on every unclaimed loan, as analysis — and
+the invite step puts the candidates first. A book is written as sets — `createMany` in
 chunks, ids minted in the service, facts written only where they differ —
 because a real one is fourteen thousand rows and one transaction. The desk is ours (`routes/console-tape.ts`,
 `services/tape-desk.ts`, `apps/console/src/pages/TapePage.tsx`), answered at
@@ -155,7 +157,12 @@ is the servicing app's spec §33.2 over its §20.1, ported pure over the kernel
 and held to its figures by its tests; `services/loan-review.ts` runs it each morning over
 every monitored loan's newest observation with one 30-year fixed quoted off
 the pricing port, and keeps one append-only `loan_reviews` row per loan per
-day. `npm run review:run` is the job by hand; the deploy runs it once after
+day. Since 23 September it also runs over every unclaimed loan on a
+servicer's book, as analysis: the same row, no offer, no analyst, nothing
+monitored, nobody contacted — it is what the tape desk ranks the
+invitations by, and the verdict already waiting when a claim turns the
+review on. Quotes are memoized per run by kind of loan, not per loan. See
+`docs/decisions.md`, "The book is analyzed before anyone claims it". `npm run review:run` is the job by hand; the deploy runs it once after
 the seed and a Cloud Run job runs it at 07:00 Eastern. The servicing route
 carries the newest row as `review`, and the page shows ours first and the
 platform's after. See `docs/decisions.md`, "The daily review is ours now".

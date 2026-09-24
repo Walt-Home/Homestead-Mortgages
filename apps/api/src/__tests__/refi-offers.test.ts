@@ -17,7 +17,7 @@ import { NORTHLIGHT, sampleBook, toCsv } from "@hm/partner-book";
 import { plainDate } from "@hm/kernel/calendar";
 import { loanRouter } from "../routes/loans.js";
 import { acceptLoanClaim, mintLoanClaim } from "../services/loan-claims.js";
-import { reviewMonitoredLoans } from "../services/loan-review.js";
+import { reviewLoans } from "../services/loan-review.js";
 import { createOriginatedLoan } from "../services/loans.js";
 import { importPartnerBook } from "../services/partner-book.js";
 import {
@@ -70,7 +70,7 @@ async function claimed(number: string) {
 }
 
 const review = (asOf: string, now?: Date) =>
-  reviewMonitoredLoans({ asOf: plainDate(asOf), analyst: null, now: now ?? at(asOf) });
+  reviewLoans({ asOf: plainDate(asOf), analyst: null, now: now ?? at(asOf) });
 
 /** The first of the month after `day`: what a servicer's tape says is next due. */
 function firstOfNextMonth(day: string): string {
@@ -107,9 +107,10 @@ describe("an offer", () => {
   it("opens from the day's candidate with the review's own figures, and holds the loan while it stands", async () => {
     const { loanId } = await claimed("NL-100001");
     const run = await review("2026-09-21");
-    expect(run.reviewed[0]?.verdict).toBe("candidate");
+    expect(run.reviewed.find((r) => r.claimed)?.verdict).toBe("candidate");
     expect(run.offersOpened).toBe(1);
-    expect(run.analyst).toEqual({ written: 0, skipped: { model_off: 1 } });
+    // The one claimed loan's turn is off; the eleven analyzed beside it have no card to write for.
+    expect(run.analyst).toEqual({ written: 0, skipped: { model_off: 1, unclaimed: 11 } });
 
     const offer = await prisma.refiOffer.findFirstOrThrow({ where: { loanId } });
     const row = await prisma.loanReview.findFirstOrThrow({ where: { loanId } });
@@ -123,7 +124,7 @@ describe("an offer", () => {
 
     // Tomorrow the loan is left alone: the offer stands, and no second verdict is written under it.
     const next = await review("2026-09-22");
-    expect(next.reviewed).toEqual([]);
+    expect(next.reviewed.filter((r) => r.claimed)).toEqual([]);
     expect(next.skipped).toEqual([
       { loanId, servicerLoanNumber: "NL-100001", reason: "open offer" },
     ]);
@@ -199,13 +200,16 @@ describe("an offer", () => {
 
     // The next morning the engine reads the decline: not now, cooldown, no new offer.
     const cooled = await review("2026-09-23");
-    expect(cooled.reviewed[0]).toMatchObject({ verdict: "not_now", reasons: ["cooldown"] });
+    expect(cooled.reviewed.find((r) => r.claimed)).toMatchObject({
+      verdict: "not_now",
+      reasons: ["cooldown"],
+    });
     expect(cooled.offersOpened).toBe(0);
     // Ninety days on — with a tape that says the loan is still current — the
     // loan is a candidate again and a second offer opens.
     await laterTape(servicer, "2026-12-01");
     const reopened = await review("2026-12-22");
-    expect(reopened.reviewed[0]?.verdict).toBe("candidate");
+    expect(reopened.reviewed.find((r) => r.claimed)?.verdict).toBe("candidate");
     expect(reopened.offersOpened).toBe(1);
 
     // Never: the offer ends, and every later review says the person asked not to be solicited.
@@ -221,7 +225,7 @@ describe("an offer", () => {
     });
     expect((await offerGateFacts(prisma, loanId)).doNotSolicit).toBe(true);
     const suppressed = await review("2026-12-24");
-    expect(suppressed.reviewed[0]).toMatchObject({
+    expect(suppressed.reviewed.find((r) => r.claimed)).toMatchObject({
       verdict: "not_now",
       reasons: ["marketing_suppression"],
     });
@@ -243,12 +247,15 @@ describe("an offer", () => {
     expect(await prisma.refiOffer.count({ where: { loanId } })).toBe(2);
     await laterTape(servicer, "2026-05-01");
     const capped = await review("2026-05-15");
-    expect(capped.reviewed[0]).toMatchObject({ verdict: "not_now", reasons: ["frequency_cap"] });
+    expect(capped.reviewed.find((r) => r.claimed)).toMatchObject({
+      verdict: "not_now",
+      reasons: ["frequency_cap"],
+    });
     expect(capped.offersOpened).toBe(0);
     // A year after the first, the cap has room again.
     await laterTape(servicer, "2027-01-01");
     const room = await review("2027-01-10");
-    expect(room.reviewed[0]?.verdict).toBe("candidate");
+    expect(room.reviewed.find((r) => r.claimed)?.verdict).toBe("candidate");
     expect(room.offersOpened).toBe(1);
   });
 });

@@ -38,6 +38,7 @@ import {
   type RowException,
   type TapeProfile,
 } from "@hm/partner-book";
+import type { ReviewVerdict } from "@hm/refi-review";
 import { canonicalRecordHash } from "@hm/shared/portfolio";
 import { config } from "../config.js";
 import { AppError } from "../middleware/error-handler.js";
@@ -45,6 +46,7 @@ import { connectors } from "./connectors.js";
 import type { Db } from "./db.js";
 import { claimUrl, hashInvitationToken } from "./invitations.js";
 import { mintLoanClaim } from "./loan-claims.js";
+import { reviewLoans } from "./loan-review.js";
 import { toDomainLoanState } from "./loan-transition.js";
 import {
   importPartnerBook,
@@ -129,6 +131,8 @@ export interface PreviewRow {
   readonly loanState: string | null;
   readonly claimed: boolean;
   readonly email: string | null;
+  /** The newest analysis of the loan, when the book has been looked at. */
+  readonly review: { readonly verdict: ReviewVerdict; readonly asOf: string } | null;
   readonly exceptions: readonly RowException[];
 }
 
@@ -208,6 +212,30 @@ function asOfOfTape(book: ReturnType<typeof readBook>): string | null {
   return dates.size === 1 ? [...dates][0]! : null;
 }
 
+const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
+const verdictOf = (v: string): ReviewVerdict => v.toLowerCase() as ReviewVerdict;
+
+/** Every loan's verdict from the book's newest day of analysis, by loan id. */
+async function newestVerdicts(
+  db: Db,
+  servicerId: string | null,
+): Promise<Map<string, { verdict: ReviewVerdict; asOf: string }>> {
+  const out = new Map<string, { verdict: ReviewVerdict; asOf: string }>();
+  if (!servicerId) return out;
+  const latest = await db.loanReview.aggregate({
+    _max: { asOf: true },
+    where: { loan: { servicerId } },
+  });
+  const day = latest._max.asOf;
+  if (!day) return out;
+  const rows = await db.loanReview.findMany({
+    where: { asOf: day, loan: { servicerId } },
+    select: { loanId: true, verdict: true },
+  });
+  for (const r of rows) out.set(r.loanId, { verdict: verdictOf(r.verdict), asOf: isoDay(day) });
+  return out;
+}
+
 export async function previewTape(input: TapeInput, db: Db = prisma): Promise<TapePreview> {
   const profile = tapeProfile(input.profile);
   const slug = assertSlug(input.servicer.slug);
@@ -238,6 +266,7 @@ export async function previewTape(input: TapeInput, db: Db = prisma): Promise<Ta
     ? await db.loan.findMany({
         where: { servicerId: servicer.id, servicerLoanNumber: { in: numbers } },
         select: {
+          id: true,
           servicerLoanNumber: true,
           status: true,
           observations: {
@@ -249,6 +278,7 @@ export async function previewTape(input: TapeInput, db: Db = prisma): Promise<Ta
       })
     : [];
   const byNumber = new Map(held.map((l) => [l.servicerLoanNumber!, l]));
+  const verdictByLoan = await newestVerdicts(db, servicer?.id ?? null);
 
   const rows: PreviewRow[] = book.records.map(({ row, record }) => {
     const prior = byNumber.get(row.servicer_loan_number);
@@ -277,6 +307,7 @@ export async function previewTape(input: TapeInput, db: Db = prisma): Promise<Ta
       loanState: state,
       claimed: state !== null && state !== "imported_unclaimed",
       email: emails.get(row.servicer_loan_number) ?? null,
+      review: prior ? (verdictByLoan.get(prior.id) ?? null) : null,
       exceptions: row.exceptions,
     };
   });
@@ -366,6 +397,66 @@ export async function loadTape(input: TapeInput, db: Db = prisma): Promise<TapeL
   return {
     servicer: { slug, displayName, id: servicer.id, created: existing === null },
     result,
+  };
+}
+
+/* ── the first look ──────────────────────────────────────────────────────── */
+
+export type VerdictCounts = Record<ReviewVerdict, number>;
+
+export interface BookAnalysis {
+  readonly asOf: string;
+  /** Unclaimed loans on the book. */
+  readonly unclaimed: number;
+  /** Analyzed on this run; the rest were already analyzed today or skipped. */
+  readonly analyzed: number;
+  readonly alreadyReviewed: number;
+  readonly skipped: number;
+  /** Today's verdicts over the whole book, counted. */
+  readonly counts: VerdictCounts;
+  /** Today's verdict per servicer loan number. */
+  readonly verdicts: Record<string, ReviewVerdict>;
+}
+
+const emptyCounts = (): VerdictCounts => ({ candidate: 0, watching: 0, not_now: 0, excluded: 0 });
+
+/**
+ * The book's first look: the daily review's engine over every unclaimed
+ * loan the servicer has, as analysis — a verdict per loan against today's
+ * rate, no offer, no contact — so the desk can say which loans are worth
+ * inviting first. Once a day, like the review; a second run the same day
+ * writes nothing and still answers every verdict.
+ */
+export async function analyzeBook(
+  input: { readonly servicerSlug: string },
+  db: Db = prisma,
+): Promise<BookAnalysis> {
+  const slug = assertSlug(input.servicerSlug);
+  const servicer = await db.servicer.findUnique({ where: { slug }, select: { id: true } });
+  if (!servicer) throw new AppError(404, "No such servicer.", "NOT_FOUND");
+  const run = await reviewLoans({ servicerId: servicer.id, scope: "unclaimed", analyst: null }, db);
+  const counts = emptyCounts();
+  const verdicts: Record<string, ReviewVerdict> = {};
+  const today = await db.loanReview.findMany({
+    where: {
+      asOf: new Date(`${run.asOf}T00:00:00.000Z`),
+      loan: { servicerId: servicer.id, status: "IMPORTED_UNCLAIMED" },
+    },
+    select: { verdict: true, loan: { select: { servicerLoanNumber: true } } },
+  });
+  for (const t of today) {
+    const v = verdictOf(t.verdict);
+    counts[v] += 1;
+    if (t.loan.servicerLoanNumber) verdicts[t.loan.servicerLoanNumber] = v;
+  }
+  return {
+    asOf: run.asOf,
+    unclaimed: run.unclaimed,
+    analyzed: run.reviewed.length,
+    alreadyReviewed: run.alreadyReviewed,
+    skipped: run.skipped.length,
+    counts,
+    verdicts,
   };
 }
 

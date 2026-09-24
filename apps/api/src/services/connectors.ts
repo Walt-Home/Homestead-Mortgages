@@ -150,7 +150,13 @@ export function duInstitutionFromConfig(): DuInstitution {
 export function connectors(): ConnectorRegistry {
   if (registry) return registry;
 
-  const fixtures = fixtureRegistry({ persona: config.fixturePersona as PersonaId });
+  const fixtures = fixtureRegistry({
+    persona: config.fixturePersona as PersonaId,
+    // 900 ms a call by default, so the UI is built against a connector that
+    // takes time; zero under the test suite, where a fixture that sleeps is
+    // a minute of nothing per file.
+    latencyMs: config.fixtureLatencyMs,
+  });
   const chosen: Record<string, string> = Object.fromEntries(
     Object.entries(fixtures).map(([k, v]) => [
       k,

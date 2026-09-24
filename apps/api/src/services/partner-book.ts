@@ -501,9 +501,25 @@ export async function partnerBookStatus(servicerId: string, db: Db = prisma) {
   ]);
   const byState: Partial<Record<string, number>> = {};
   for (const g of loans) byState[toDomainLoanState(g.status)] = g._count._all;
+  // The newest day the book was looked at, and how the verdicts fell.
+  const newest = await db.loanReview.aggregate({
+    _max: { asOf: true },
+    where: { loan: { servicerId } },
+  });
+  const verdicts = { candidate: 0, watching: 0, not_now: 0, excluded: 0 };
+  if (newest._max.asOf) {
+    const groups = await db.loanReview.groupBy({
+      by: ["verdict"],
+      where: { asOf: newest._max.asOf, loan: { servicerId } },
+      _count: { _all: true },
+    });
+    for (const g of groups)
+      verdicts[g.verdict.toLowerCase() as keyof typeof verdicts] = g._count._all;
+  }
   return {
     imports,
     lastAsOf: latest ? isoDay(latest.asOf) : null,
     loans: { total: loans.reduce((n, g) => n + g._count._all, 0), byState },
+    analysis: newest._max.asOf ? { asOf: isoDay(newest._max.asOf), verdicts } : null,
   };
 }

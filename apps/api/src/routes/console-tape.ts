@@ -18,6 +18,7 @@ import { z } from "zod";
 import { asyncRoute } from "../middleware/error-handler.js";
 import { consoleStaffGate, type ConsoleStaffGateOptions } from "../services/console-staff.js";
 import {
+  analyzeBook,
   deskImports,
   deskServicers,
   inviteToClaim,
@@ -116,6 +117,18 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
       const status =
         loaded.result.status === "rejected" ? 422 : loaded.result.status === "loaded" ? 201 : 200;
       res.status(status).json({ ...loaded, loadedBy: req.staff!.id });
+    }),
+  );
+
+  /** The book's first look: today's verdict on every unclaimed loan, as analysis. */
+  router.post(
+    "/analysis",
+    asyncRoute(async (req, res) => {
+      const body = z
+        .object({ servicerSlug: z.string().min(1) })
+        .strict()
+        .parse(req.body);
+      res.json(await analyzeBook(body));
     }),
   );
 

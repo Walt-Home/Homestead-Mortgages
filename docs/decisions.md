@@ -3089,6 +3089,64 @@ because that is the step that turns a row on a tape into a person on a loan.
   thousand and a mailer is slow, so the desk sends in batches, shows how far
   it is, and keeps what was already answered if a batch fails.
 
+## The book is analyzed before anyone claims it
+
+**Decision (23 September 2026):** the daily review's engine runs over every
+unclaimed loan on a servicer's book, as analysis, from the day the book
+is loaded. Joe asked what happens after the tape goes up — "does the
+analysis and daily tracking start?" — and the honest answer was no: the
+review ran only over monitored loans, and the database holds that an
+unclaimed loan is never monitored. That was right about tracking and wrong
+about analysis. The book is most valuable before anyone has claimed a
+loan, because that is when a servicer decides whom to invite first, and
+recapture is what the book is for.
+
+- **Analysis is not monitoring.** `reviewLoans` (once
+  `reviewMonitoredLoans`) selects monitored loans and unclaimed loans on a
+  book together and treats them differently. A monitored loan is reviewed
+  for its person: the row, an offer when it is a candidate, the analyst's
+  sentence for the card, the next review due tomorrow. An unclaimed loan is
+  analyzed: the same engine over the same tape and the same quote, the same
+  `loan_reviews` row with the engine's disclosure on a candidate — the CHECK
+  wants one — and nothing else. No `refi_offers` row, because there is
+  nobody to make it to; the analyst skipped as `unclaimed`, because there
+  is no card; `next_review_due_at` untouched and `monitoring_enabled`
+  false, because the toggle is the person's choice and
+  `loans_unclaimed_is_not_monitored` stands. The engine sees the loan as
+  `monitoring_only`, which is the loan it will be the morning after its
+  claim: that verdict is the analysis's whole point, and it is already
+  waiting when the claim turns the review on.
+- **Nobody hears about it.** The analysis reaches the desk and the ops
+  console, never a borrower: no mail, no card, no offer. The claim is still
+  the only door to a person.
+- **The desk runs it after a load, and ranks the invitations by it.**
+  `POST /console/hm/tape/analysis` runs the engine over the servicer's
+  unclaimed loans (`scope: "unclaimed"`, so a run from the desk at three in
+  the afternoon touches no monitored loan and opens no offer), once a day
+  like the review, and answers the counts and a verdict per loan number.
+  The load step shows it as the book's first look; the invite step puts the
+  candidates first, marks each loan's verdict, and offers to pick the
+  candidates alone; a later preview reads the newest verdicts back row by
+  row; the servicer's card says how many candidates the book holds as of
+  its newest look.
+- **A quote per kind of loan, not per loan — for the analysis.** The port
+  answers a rate and no price, and a sheet's 30-year fixed rate is one
+  number per product; what moves with the state, the amount and the
+  loan-to-value are price adjustments the port does not quote. So within a
+  run the analysis memoizes the quote by purpose, occupancy, property type
+  and lock, and a book of fourteen thousand loans is a dozen quotes. The
+  pricing fixture sleeps 900 ms a quote — it exists so the UI is built
+  against a connector that takes time — and a vendor is a network call, so
+  without the memo the sample book's nine unclaimed loans took eight
+  seconds and Grander's would have taken hours. An offer to a person is
+  never memoized: a monitored loan is quoted for itself, as it always was.
+  What a real vendor charges per quote is still the open cost question;
+  the memo keeps the analysis to a handful a day.
+- **Rows are written as sets.** The analyses go in as `createMany` in
+  chunks at the end of the run, the way the import writes; a monitored
+  loan's row is still written on its own, because its offer and its next
+  review hang off it.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

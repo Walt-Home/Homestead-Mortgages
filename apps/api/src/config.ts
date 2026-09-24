@@ -283,6 +283,14 @@ export const config = {
   fixturePersona: process.env.FIXTURE_PERSONA ?? "clean_w2",
 
   /**
+   * How long a fixture connector takes to answer, in milliseconds. 900 by
+   * default so a screen is built against a connector that takes time; the
+   * test suite sets 0, because a fixture that sleeps is a minute of nothing
+   * per file, and a batch over a book multiplies it.
+   */
+  fixtureLatencyMs: parseInt(process.env.FIXTURE_LATENCY_MS ?? "900", 10),
+
+  /**
    * The product a new file is quoted against.
    *
    * Drew's sheet has no product or rate selection screen — the borrower never

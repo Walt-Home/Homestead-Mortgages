@@ -39,7 +39,9 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     setupFiles: ["./src/__tests__/support/setup.ts"],
-    env: { DATABASE_URL: testDatabaseUrl() },
+    // The fixtures sleep 900 ms a call so a screen is built against a
+    // connector that takes time; a test is not a screen.
+    env: { DATABASE_URL: testDatabaseUrl(), FIXTURE_LATENCY_MS: "0" },
     // The suite truncates shared tables between tests, so files cannot run
     // concurrently against one database. That covers files within one run;
     // `support/exclusive.ts` is what covers two runs, which this setting says

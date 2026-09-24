@@ -8,6 +8,10 @@ import { hm, upload, type Call } from "./api.js";
 
 export type PreviewChange = "created" | "updated" | "unchanged";
 
+/** The daily review's word on a loan, as `@hm/refi-review` spells it. */
+export type Verdict = "candidate" | "watching" | "not_now" | "excluded";
+export type VerdictCounts = Record<Verdict, number>;
+
 export interface RowException {
   readonly row: number;
   readonly code: string;
@@ -28,6 +32,8 @@ export interface PreviewRow {
   readonly loanState: string | null;
   readonly claimed: boolean;
   readonly email: string | null;
+  /** The newest analysis of the loan, when the book has been looked at. */
+  readonly review: { readonly verdict: Verdict; readonly asOf: string } | null;
   readonly exceptions: readonly RowException[];
 }
 
@@ -84,7 +90,20 @@ export interface DeskServicer {
       readonly total: number;
       readonly byState: Record<string, number | undefined>;
     };
+    /** The newest day the book was analyzed, and how the verdicts fell. */
+    readonly analysis: { readonly asOf: string; readonly verdicts: VerdictCounts } | null;
   };
+}
+
+/** The book's first look, as the desk asks for it after a load. */
+export interface BookAnalysis {
+  readonly asOf: string;
+  readonly unclaimed: number;
+  readonly analyzed: number;
+  readonly alreadyReviewed: number;
+  readonly skipped: number;
+  readonly counts: VerdictCounts;
+  readonly verdicts: Record<string, Verdict>;
 }
 
 export interface DeskImport {
@@ -260,6 +279,29 @@ export const previewTape = (files: TapeFiles, init: Call = {}) =>
 
 export const loadTape = (files: TapeFiles, init: Call = {}) =>
   hm<TapeLoad>("/imports", { ...init, body: files });
+
+export const analyzeBook = (servicerSlug: string, init: Call = {}) =>
+  hm<BookAnalysis>("/analysis", { ...init, body: { servicerSlug } });
+
+/** Candidates first, then the rest in the engine's order; a loan never analyzed last. */
+export const VERDICT_RANK: Record<Verdict, number> = {
+  candidate: 0,
+  watching: 1,
+  not_now: 2,
+  excluded: 3,
+};
+
+export const verdictWord = (v: Verdict): string =>
+  v === "candidate"
+    ? "Candidate"
+    : v === "watching"
+      ? "Watching"
+      : v === "not_now"
+        ? "Not now"
+        : "Excluded";
+
+export const verdictTone = (v: Verdict): "ok" | "info" | "neutral" | "warn" =>
+  v === "candidate" ? "ok" : v === "watching" ? "info" : v === "not_now" ? "warn" : "neutral";
 
 /** Invitations go in batches: the door takes 5,000 and a mailer is slow. */
 export const INVITE_BATCH = 500;

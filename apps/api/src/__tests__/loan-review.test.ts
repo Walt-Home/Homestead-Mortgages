@@ -15,7 +15,7 @@ import { NORTHLIGHT, sampleBook } from "@hm/partner-book";
 import { plainDate } from "@hm/kernel/calendar";
 import { loanRouter } from "../routes/loans.js";
 import { acceptLoanClaim, mintLoanClaim } from "../services/loan-claims.js";
-import { latestLoanReview, reviewMonitoredLoans } from "../services/loan-review.js";
+import { latestLoanReview, reviewLoans } from "../services/loan-review.js";
 import { importPartnerBook } from "../services/partner-book.js";
 import { partnerPrincipal } from "../services/party.js";
 import { createUser } from "./support/factories.js";
@@ -57,7 +57,7 @@ async function claimedBook(numbers: readonly string[]) {
 describe("the daily review", () => {
   it("reviews the monitored loans once for the day, off the fixture's sheet, and keeps the verdicts", async () => {
     const { owners } = await claimedBook(["NL-100001", "NL-100008", "NL-100009", "NL-100011"]);
-    const run = await reviewMonitoredLoans({ asOf: AS_OF });
+    const run = await reviewLoans({ asOf: AS_OF });
     expect(run.monitored).toBe(4);
     expect(run.skipped).toEqual([]);
     const by = new Map(run.reviewed.map((r) => [r.servicerLoanNumber, r]));
@@ -71,7 +71,13 @@ describe("the daily review", () => {
     // 5.875 % against 6.25 % is a rate move the wrong way: watching, with the rate it would need.
     expect(by.get("NL-100009")?.verdict).toBe("watching");
 
-    const rows = await prisma.loanReview.findMany({ orderBy: { recordedAt: "asc" } });
+    // The eight unclaimed loans were analyzed beside them, as rows and nothing more.
+    expect(run.unclaimed).toBe(8);
+    expect(run.reviewed.filter((r) => !r.claimed)).toHaveLength(8);
+    const rows = await prisma.loanReview.findMany({
+      where: { loan: { monitoringEnabled: true } },
+      orderBy: { recordedAt: "asc" },
+    });
     expect(rows).toHaveLength(4);
     const one = rows.find((r) => r.loanId === owners.get("NL-100001")!.loanId)!;
     expect(one.verdict).toBe("CANDIDATE");
@@ -87,11 +93,12 @@ describe("the daily review", () => {
     expect((nine.facts as { watch_rate_pct?: string }).watch_rate_pct).toBe("5.625");
     expect(nine.offer).toBeNull();
 
-    // Once a day: a second run writes nothing and says so.
-    const again = await reviewMonitoredLoans({ asOf: AS_OF });
+    // Once a day: a second run writes nothing and says so — for the four
+    // reviewed and the eight analyzed alike.
+    const again = await reviewLoans({ asOf: AS_OF });
     expect(again.reviewed).toEqual([]);
-    expect(again.alreadyReviewed).toBe(4);
-    expect(await prisma.loanReview.count()).toBe(4);
+    expect(again.alreadyReviewed).toBe(12);
+    expect(await prisma.loanReview.count()).toBe(12);
 
     // The review's own clock moved to the next day.
     const loan = await prisma.loan.findUniqueOrThrow({
@@ -100,17 +107,38 @@ describe("the daily review", () => {
     expect(loan.nextReviewDueAt?.toISOString().slice(0, 10)).toBe("2026-09-22");
   });
 
-  it("reviews only loans whose review is on: an unclaimed loan is not looked at", async () => {
+  it("analyzes an unclaimed loan on a book — a row with its verdict — and does nothing else to it", async () => {
     await claimedBook(["NL-100002"]);
-    const run = await reviewMonitoredLoans({ asOf: AS_OF });
+    const run = await reviewLoans({ asOf: AS_OF });
     expect(run.monitored).toBe(1);
-    expect(run.reviewed.map((r) => r.servicerLoanNumber)).toEqual(["NL-100002"]);
-    expect(await prisma.loanReview.count()).toBe(1);
+    expect(run.unclaimed).toBe(11);
+    expect(run.reviewed.filter((r) => r.claimed).map((r) => r.servicerLoanNumber)).toEqual([
+      "NL-100002",
+    ]);
+    expect(run.reviewed.filter((r) => !r.claimed)).toHaveLength(11);
+    expect(await prisma.loanReview.count()).toBe(12);
+    // The unclaimed candidate: the verdict and the engine's disclosure on
+    // the row, the analyst skipped by name, no offer, monitoring untouched.
+    const one = await prisma.loanReview.findFirstOrThrow({
+      where: { loan: { servicerLoanNumber: "NL-100001" } },
+      include: { loan: true },
+    });
+    expect(one.verdict).toBe("CANDIDATE");
+    expect(one.offer).not.toBeNull();
+    expect(one.analyst).toEqual({ skipped: "unclaimed", prompt_version: "none" });
+    expect(one.loan.monitoringEnabled).toBe(false);
+    expect(one.loan.nextReviewDueAt).toBeNull();
+    expect(await prisma.refiOffer.count({ where: { loanId: one.loanId } })).toBe(0);
+    // Analysis alone, the desk's run, touches no monitored loan.
+    const again = await reviewLoans({ asOf: plainDate("2026-09-22"), scope: "unclaimed" });
+    expect(again.monitored).toBe(0);
+    expect(again.reviewed).toHaveLength(11);
+    expect(again.reviewed.every((r) => !r.claimed)).toBe(true);
   });
 
   it("keeps a review as written: the row is append-only, and a candidate is the only row with an offer", async () => {
     const { owners } = await claimedBook(["NL-100001"]);
-    await reviewMonitoredLoans({ asOf: AS_OF });
+    await reviewLoans({ asOf: AS_OF });
     const row = await prisma.loanReview.findFirstOrThrow({
       where: { loanId: owners.get("NL-100001")!.loanId },
     });
@@ -147,7 +175,7 @@ describe("the daily review", () => {
     expect(before.status).toBe(200);
     expect(before.body.review).toBeNull();
 
-    await reviewMonitoredLoans({ asOf: AS_OF });
+    await reviewLoans({ asOf: AS_OF });
     const after = await callAs<Record<string, unknown>>(
       userId,
       [loanRouter],

@@ -14,7 +14,15 @@
  * session the servicing app holds.
  */
 
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "../components/Icon.js";
@@ -53,6 +61,12 @@ import {
   type TapeFiles,
   type TapeLoad,
   type TapePreview,
+  analyzeBook,
+  VERDICT_RANK,
+  verdictWord,
+  verdictTone,
+  type BookAnalysis,
+  type Verdict,
 } from "../lib/tape.js";
 
 type Step = "files" | "review" | "load" | "invite";
@@ -161,6 +175,8 @@ export function TapePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<TapePreview | null>(null);
+  /** Today's verdicts by loan number, from the load step's first look. */
+  const [verdicts, setVerdicts] = useState<Record<string, Verdict> | null>(null);
   const [wire, setWire] = useState<TapeFiles | null>(null);
 
   // One servicer to begin with picks itself; a new one is typed.
@@ -220,6 +236,7 @@ export function TapePage() {
   function startOver() {
     setStep("files");
     setPreview(null);
+    setVerdicts(null);
     setWire(null);
     setError(null);
   }
@@ -382,6 +399,14 @@ export function TapePage() {
                   <Rows
                     rows={[
                       { label: "Tapes loaded", value: chosen.book.imports.toLocaleString() },
+                      ...(chosen.book.analysis
+                        ? [
+                            {
+                              label: `Candidates as of ${fmtDate(chosen.book.analysis.asOf)}`,
+                              value: chosen.book.analysis.verdicts.candidate.toLocaleString(),
+                            },
+                          ]
+                        : []),
                       {
                         label: "Latest as of",
                         value: chosen.book.lastAsOf ? fmtDate(chosen.book.lastAsOf) : "—",
@@ -442,7 +467,8 @@ export function TapePage() {
               tape,
               supplement,
             }}
-            onDone={() => {
+            onDone={(v) => {
+              setVerdicts(v);
               for (const key of [
                 ["desk-servicers"],
                 ["desk-imports"],
@@ -462,6 +488,7 @@ export function TapePage() {
         {step === "invite" && preview && (
           <InviteStep
             preview={preview}
+            verdicts={verdicts}
             onDone={() => navigate("/partner-book")}
             onAnother={() => {
               setTape(null);
@@ -624,6 +651,16 @@ function ReviewStep({
       { key: "number", header: "Loan", render: (r) => r.number, mono: true, primary: true },
       { key: "borrower", header: "Borrower", render: (r) => r.borrower ?? "—" },
       { key: "property", header: "Property", render: (r) => r.property ?? "—" },
+      {
+        key: "refi",
+        header: "Refi",
+        render: (r) =>
+          r.review ? (
+            <Pill tone={verdictTone(r.review.verdict)}>{verdictWord(r.review.verdict)}</Pill>
+          ) : (
+            <span className="text-fg-3">—</span>
+          ),
+      },
       { key: "balance", header: "Balance", render: (r) => money(r.balanceCents), align: "right" },
       { key: "rate", header: "Rate", render: (r) => pct(r.ratePct), align: "right" },
       {
@@ -862,12 +899,25 @@ function LoadStep({
   wire: TapeFiles;
   preview: TapePreview;
   book: { legalName: string; nmlsrId: string; asOf: string; tape: File; supplement: File | null };
-  onDone: () => void;
+  onDone: (verdicts: Record<string, Verdict> | null) => void;
   onBack: () => void;
 }) {
   const [servicing, setServicing] = useState<Phase<ServicingBookReceipt>>({ state: "idle" });
   const [db, setDb] = useState<Phase<TapeLoad>>({ state: "idle" });
+  const [analysis, setAnalysis] = useState<Phase<BookAnalysis>>({ state: "idle" });
   const started = useRef(false);
+
+  async function analyze() {
+    setAnalysis({ state: "running" });
+    try {
+      setAnalysis({ state: "done", value: await analyzeBook(preview.servicer.slug) });
+    } catch (err) {
+      setAnalysis({
+        state: "failed",
+        error: err instanceof ApiError ? err : new ApiError(0, String(err), null),
+      });
+    }
+  }
 
   async function loadServicing(role?: string) {
     setServicing({ state: "running" });
@@ -888,7 +938,11 @@ function LoadStep({
   async function loadDb() {
     setDb({ state: "running" });
     try {
-      setDb({ state: "done", value: await loadTape(wire) });
+      const loaded = await loadTape(wire);
+      setDb({ state: "done", value: loaded });
+      // The first look follows the load: today's verdict on every unclaimed
+      // loan of the book, so the invitations can go to the candidates first.
+      if (loaded.result.status !== "rejected") await analyze();
     } catch (err) {
       setDb({
         state: "failed",
@@ -1076,11 +1130,51 @@ function LoadStep({
         )}
       />
 
+      <PhaseCard
+        title="The book's first look"
+        phase={analysis}
+        renderDone={(a) => (
+          <>
+            <div className="mb-2 flex items-center gap-2">
+              <Pill tone={a.counts.candidate ? "ok" : "neutral"}>
+                {plural(a.counts.candidate, "refinance candidate")}
+              </Pill>
+              <span className="text-sm text-fg-2">
+                {a.analyzed
+                  ? `${plural(a.analyzed, "unclaimed loan")} analyzed against today's rate. The verdicts wait for the claim; nobody is contacted by this.`
+                  : a.alreadyReviewed
+                    ? "Every loan on the book was already looked at today."
+                    : "Nothing on the book to look at."}
+              </span>
+            </div>
+            <Rows
+              rows={[
+                {
+                  label: "Candidates · watching · not now · excluded",
+                  value: `${a.counts.candidate.toLocaleString()} · ${a.counts.watching.toLocaleString()} · ${a.counts.not_now.toLocaleString()} · ${a.counts.excluded.toLocaleString()}`,
+                },
+                {
+                  label: "Analyzed now · already today · skipped",
+                  value: `${a.analyzed.toLocaleString()} · ${a.alreadyReviewed.toLocaleString()} · ${a.skipped.toLocaleString()}`,
+                },
+                { label: "As of", value: fmtDate(a.asOf) },
+              ]}
+            />
+          </>
+        )}
+        renderFailed={(e) => (
+          <div className="space-y-3">
+            <Notice tone="danger">{e.message}</Notice>
+            <Button onClick={() => void analyze()}>Try again</Button>
+          </div>
+        )}
+      />
+
       <div className="flex flex-wrap items-center gap-3">
         <Button
           variant="primary"
-          disabled={!dbDone || dbResult?.status === "rejected"}
-          onClick={onDone}
+          disabled={!dbDone || dbResult?.status === "rejected" || analysis.state === "running"}
+          onClick={() => onDone(analysis.state === "done" ? analysis.value.verdicts : null)}
         >
           Invite the borrowers to claim
         </Button>
@@ -1154,12 +1248,39 @@ function InviteStep({
   preview,
   onDone,
   onAnother,
+  verdicts,
 }: {
   preview: TapePreview;
   onDone: () => void;
   onAnother: () => void;
+  /** Today's verdicts by loan number, from the load step; the preview's own stand in. */
+  verdicts: Record<string, Verdict> | null;
 }) {
-  const candidates = useMemo(() => preview.rows.filter((r) => !r.claimed), [preview]);
+  const verdictOf = useCallback(
+    (r: PreviewRow): Verdict | null => verdicts?.[r.number] ?? r.review?.verdict ?? null,
+    [verdicts],
+  );
+  // Unclaimed loans, the refinance candidates first: those are the ones
+  // worth a servicer's invitation today.
+  const candidates = useMemo(
+    () =>
+      preview.rows
+        .filter((r) => !r.claimed)
+        .map((r, i) => ({ r, i }))
+        .sort((a, b) => {
+          const va = verdictOf(a.r);
+          const vb = verdictOf(b.r);
+          const ra = va ? VERDICT_RANK[va] : 9;
+          const rb = vb ? VERDICT_RANK[vb] : 9;
+          return ra - rb || a.i - b.i;
+        })
+        .map(({ r }) => r),
+    [preview, verdictOf],
+  );
+  const refiCandidates = useMemo(
+    () => candidates.filter((r) => verdictOf(r) === "candidate"),
+    [candidates, verdictOf],
+  );
   const [picked, setPicked] = useState<Set<string>>(
     () => new Set(candidates.filter((r) => r.email).map((r) => r.number)),
   );
@@ -1234,6 +1355,18 @@ function InviteStep({
       { key: "borrower", header: "Borrower", render: (r) => r.borrower ?? "—" },
       { key: "property", header: "Property", render: (r) => r.property ?? "—" },
       {
+        key: "refi",
+        header: "Refi",
+        render: (r) => {
+          const v = verdictOf(r);
+          return v ? (
+            <Pill tone={verdictTone(v)}>{verdictWord(v)}</Pill>
+          ) : (
+            <span className="text-fg-3">—</span>
+          );
+        },
+      },
+      {
         key: "email",
         header: "Send to",
         render: (r) =>
@@ -1246,7 +1379,7 @@ function InviteStep({
           ),
       },
     ],
-    [picked],
+    [picked, verdictOf],
   );
 
   const outcomeColumns = useMemo<Column<InvitationOutcome>[]>(
@@ -1311,6 +1444,16 @@ function InviteStep({
           review turns on for it. A loan with no address gets a link you can deliver another way.
         </p>
       </div>
+
+      {!outcomes && refiCandidates.length ? (
+        <Notice
+          tone="info"
+          title={`${plural(refiCandidates.length, "refinance candidate")} on this tape`}
+        >
+          Today's analysis found them worth a look at today's rate. They are first in the list, and
+          nothing has been said to anyone yet.
+        </Notice>
+      ) : null}
 
       {outcomes ? (
         <>
@@ -1383,6 +1526,14 @@ function InviteStep({
             >
               {picked.size === candidates.length ? "Pick none" : "Pick all"}
             </Button>
+            {refiCandidates.length ? (
+              <Button
+                variant="ghost"
+                onClick={() => setPicked(new Set(refiCandidates.map((r) => r.number)))}
+              >
+                Pick the {plural(refiCandidates.length, "candidate")}
+              </Button>
+            ) : null}
             <Button variant="ghost" onClick={onDone}>
               Skip for now
             </Button>

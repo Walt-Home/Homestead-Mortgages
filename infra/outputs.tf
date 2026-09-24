@@ -1,37 +1,19 @@
-output "service_url" {
-  value = google_cloud_run_v2_service.api.uri
-}
-
-output "instance_connection_name" {
-  value = google_sql_database_instance.homestead-mortgages.connection_name
-}
-
-output "database_name" {
-  value = google_sql_database.homestead-mortgages.name
-}
-
-output "apor_fetch_job" {
-  value = google_cloud_run_v2_job.apor_fetch.name
-}
-
-output "servicing_service_url" {
-  value = google_cloud_run_v2_service.servicing.uri
-}
-
-output "servicing_database_name" {
-  value = google_sql_database.servicing.name
-}
-
-output "servicing_service_account" {
-  value = google_service_account.servicing_run.email
-}
-
-output "servicing_sweep_job" {
-  value = google_cloud_run_v2_job.servicing_sweep.name
-}
-
-output "loan_review_job" {
-  value = google_cloud_run_v2_job.loan_review.name
+output "stacks" {
+  description = "Each environment's instance, databases, jobs and backends."
+  value = {
+    for k, m in module.stack : k => {
+      instance_connection_name = m.instance_connection_name
+      instance_name            = m.instance_name
+      api_database             = m.api_database_name
+      servicing_database       = m.servicing_database_name
+      apor_fetch_job           = m.apor_fetch_job
+      loan_review_job          = m.loan_review_job
+      servicing_sweep_job      = m.servicing_sweep_job
+      console_backend          = m.console_backend_name
+      consumer_hostnames       = var.stacks[k].consumer_hostnames
+      servicing_hostnames      = var.stacks[k].servicing_hostnames
+    }
+  }
 }
 
 output "edge_ip" {

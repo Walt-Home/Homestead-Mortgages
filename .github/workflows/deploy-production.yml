@@ -1,0 +1,371 @@
+name: Deploy to production
+
+# Production is deployed by hand, from main, behind an approval: the
+# `production` GitHub environment requires Joe's review before any step
+# that touches it runs. It promotes the image the staging deploy built and
+# tested for the same commit rather than building again — what runs in
+# production is byte for byte what ran on staging — and it differs from the
+# staging pipeline in what it refuses to do: no sample borrowers, no demo
+# book, no persona sign-in, and a health check that fails if any of them
+# reached the service. See docs/decisions.md, "Two environments, one
+# configuration".
+#
+# Order: the servicing app first (the API is told where its door is), then
+# the API. Both read `_PROD` secrets; both connect to the production
+# instance; the jobs are pointed at the same image.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "The commit to promote. It must have deployed to staging, so its image exists."
+        required: false
+        default: ""
+
+env:
+  GCP_PROJECT: homestead-mortgages
+  REGION: us-central1
+  ARTIFACT_REPO: homestead-mortgages
+  ENVIRONMENT: production
+  SERVICE: homestead-mortgages-production
+  SERVICING_SERVICE: homestead-mortgages-production-servicing
+  SQL_INSTANCE: homestead-mortgages-prod-db
+  # The image names are staging's: one image per commit, promoted, never
+  # rebuilt. The tag is the commit.
+  STAGING_SERVICE: homestead-mortgages-staging
+  RUNTIME_SA: hm-run@homestead-mortgages.iam.gserviceaccount.com
+  SERVICING_RUNTIME_SA: hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.pick.outputs.sha }}
+      image: ${{ steps.pick.outputs.image }}
+      servicing_image: ${{ steps.pick.outputs.servicing_image }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      # The commit to promote must be on main and must have an image: the
+      # staging deploy is what builds one, so a commit staging never deployed
+      # cannot reach production. The servicing image is built only when its
+      # tree changed, so its tag is the newest commit at or before this one
+      # that has one.
+      - id: pick
+        run: |
+          SHA="${{ github.event.inputs.sha }}"
+          if [ -z "$SHA" ]; then SHA=$(git rev-parse HEAD); fi
+          SHA=$(git rev-parse "$SHA")
+          git merge-base --is-ancestor "$SHA" origin/main || { echo "::error::$SHA is not on main"; exit 1; }
+          REPO=${{ env.REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.ARTIFACT_REPO }}
+          IMAGE="$REPO/${{ env.STAGING_SERVICE }}:$SHA"
+          gcloud artifacts docker images describe "$IMAGE" --project ${{ env.GCP_PROJECT }} >/dev/null 2>&1 \
+            || { echo "::error::no image for $SHA; deploy it to staging first"; exit 1; }
+          SERVICING_IMAGE=""
+          for c in $(git rev-list --max-count=200 "$SHA"); do
+            CANDIDATE="$REPO/${{ env.STAGING_SERVICE }}-servicing:$c"
+            if gcloud artifacts docker images describe "$CANDIDATE" --project ${{ env.GCP_PROJECT }} >/dev/null 2>&1; then
+              SERVICING_IMAGE="$CANDIDATE"; break
+            fi
+          done
+          test -n "$SERVICING_IMAGE" || { echo "::error::no servicing image at or before $SHA"; exit 1; }
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "servicing_image=$SERVICING_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "promoting $IMAGE and $SERVICING_IMAGE"
+
+  deploy-servicing:
+    needs: resolve
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SERVICING_IMAGE: ${{ needs.resolve.outputs.servicing_image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      - name: Start Cloud SQL Auth Proxy
+        run: |
+          curl -sSo cloud-sql-proxy \
+            https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy --port 5432 \
+            ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} &
+          for i in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1 && break
+            sleep 1
+          done
+      - name: Apply the servicing app's migrations
+        run: |
+          set +e
+          OUT=$(docker run --rm --network host \
+            -e SERVICING_DATABASE_URL="$SERVICING_DATABASE_URL" \
+            "$SERVICING_IMAGE" migrate 2>&1)
+          code=$?
+          set -e
+          echo "$OUT" | grep -v '^skip ' || true
+          echo "skipped: $(grep -c '^skip ' <<< "$OUT"), applied: $(grep -c '^apply ' <<< "$OUT")"
+          test "$code" -eq 0
+        env:
+          SERVICING_DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_SERVICING_MIGRATION_URL }}
+      # No demo seed: production holds no hundred-loan batch and no sample
+      # book. The first admin is the one row nothing else can create.
+      - name: Stand the console's first admin
+        run: |
+          set +e
+          OUT=$(docker run --rm --network host \
+            -e SERVICING_DATABASE_URL="$SERVICING_DATABASE_URL" \
+            -e SERVICING_ENVIRONMENT=nonprod \
+            -e SERVICING_INTEGRATIONS=fake \
+            -e STAFF_BOOTSTRAP_ADMIN_ROLES=admin,ops_analyst,officer,compliance \
+            "$SERVICING_IMAGE" staff-bootstrap "$FIRST_ADMIN" 2>&1)
+          code=$?
+          set -e
+          echo "$OUT"
+          test "$code" -eq 0
+          grep -q 'staff-bootstrap' <<< "$OUT"
+        env:
+          SERVICING_DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_SERVICING_MIGRATION_URL }}
+          FIRST_ADMIN: ${{ vars.SERVICING_FIRST_ADMIN || 'joe@trywalt.ai' }}
+      # SERVICING_ENVIRONMENT stays `nonprod` and the integrations `fake` even
+      # here: every vendor in the servicing app is a FAKE, its config refuses
+      # to start a production process on fakes, and `nonprod` is what admits
+      # the shared token at its door. That is the honest state of the
+      # servicing app until a real vendor is wired into it.
+      - name: Deploy the servicing service to Cloud Run
+        run: |
+          ENV_VARS="NODE_ENV=production,SERVICING_PORT=8080,SERVICING_ENVIRONMENT=nonprod,SERVICING_INTEGRATIONS=fake,SERVICING_LOG_FORMAT=json"
+          PUBLIC_HOST=$(printf '%s' "$PUBLIC_HOST" | tr ',;' '  ' | awk '{print $1}')
+          if [ -n "$PUBLIC_HOST" ]; then
+            ENV_VARS="$ENV_VARS,OPS_URL=https://$PUBLIC_HOST/ops,BORROWER_RP_ID=$PUBLIC_HOST,BORROWER_ORIGINS=https://$PUBLIC_HOST"
+          fi
+          gcloud run deploy ${{ env.SERVICING_SERVICE }} \
+            --image "$SERVICING_IMAGE" \
+            --region ${{ env.REGION }} \
+            --service-account ${{ env.SERVICING_RUNTIME_SA }} \
+            --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
+            --set-secrets "SERVICING_DATABASE_URL=HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_PROD:latest,SERVICING_API_TOKEN=HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN_PROD:latest" \
+            --set-env-vars "$ENV_VARS" \
+            --no-allow-unauthenticated \
+            --port 8080 \
+            --memory 1Gi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --timeout 300
+        env:
+          PUBLIC_HOST: ${{ vars.SERVICING_PUBLIC_HOST }}
+      - name: Point the scheduled sweep at this image
+        run: |
+          gcloud run jobs update ${{ env.SERVICING_SERVICE }}-sweep \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --image "$SERVICING_IMAGE" --quiet
+      - name: Confirm the servicing revision is Ready and only the API's identity may invoke it
+        run: |
+          gcloud run services add-iam-policy-binding ${{ env.SERVICING_SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --member="serviceAccount:${{ env.RUNTIME_SA }}" --role=roles/run.invoker --quiet >/dev/null
+          gcloud run services remove-iam-policy-binding ${{ env.SERVICING_SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --member="allUsers" --role=roles/run.invoker --quiet >/dev/null 2>&1 || true
+          READY=$(gcloud run services describe ${{ env.SERVICING_SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.conditions[0].status)")
+          echo "Ready: $READY"
+          test "$READY" = "True"
+          MEMBERS=$(gcloud run services get-iam-policy ${{ env.SERVICING_SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --format=json \
+            | python3 -c 'import json,sys; p=json.load(sys.stdin); print(" ".join(m for b in p.get("bindings",[]) if b["role"]=="roles/run.invoker" for m in b["members"]))')
+          echo "invokers: $MEMBERS"
+          case " $MEMBERS " in *" allUsers "*) echo "::error::the servicing service is public"; exit 1 ;; esac
+
+  deploy:
+    needs: [resolve, deploy-servicing]
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE: ${{ needs.resolve.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Start Cloud SQL Auth Proxy
+        run: |
+          curl -sSo cloud-sql-proxy \
+            https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy --port 5432 \
+            ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} &
+          for i in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1 && break
+            sleep 1
+          done
+      - name: Apply migrations
+        run: |
+          npm ci
+          npm run db:generate
+          npm run migrate:deploy --workspace=@hm/db
+        env:
+          DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
+      - name: Fetch the average prime offer rates
+        run: |
+          set +e
+          OUT=$(docker run --rm --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e APOR_PROVIDER=ffiec \
+            "$IMAGE" node apps/api/dist/scripts/fetch-apor.js 2>&1)
+          code=$?
+          set -e
+          echo "$OUT"
+          test "$code" -eq 0
+          grep -q 'covers this week: true' <<< "$OUT"
+        env:
+          DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
+      # No sample borrowers. `seed-personas` would refuse anyway — it runs
+      # only with DEMO_PERSONAS=true in its own environment — and nothing
+      # here sets it.
+      - name: Review the watched loans
+        run: |
+          set +e
+          OUT=$(docker run --rm --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            "$IMAGE" node apps/api/dist/scripts/review-loans.js 2>&1)
+          code=$?
+          set -e
+          echo "$OUT"
+          test "$code" -eq 0
+          grep -qE '^reviewed [0-9]+ of [0-9]+ monitored loans' <<< "$OUT"
+        env:
+          DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
+      - name: Resolve the service URLs
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)" 2>/dev/null || true)
+          echo "SERVICE_URL=$URL" >> "$GITHUB_ENV"
+          SURL=$(gcloud run services describe ${{ env.SERVICING_SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)")
+          test -n "$SURL"
+          echo "SERVICING_URL=$SURL" >> "$GITHUB_ENV"
+      # What differs from staging, and why: no DEMO_PERSONAS (the sample
+      # sign-in is never mounted here, and the health check below fails if
+      # it is), no STATE_GALLERY, and every secret is the `_PROD` one. The
+      # vendors are the same sandbox vendors staging has until production
+      # keys exist; PUBLIC_ORIGIN and SERVICING_PUBLIC_HOST are the
+      # environment's variables and empty until the roots are cut over.
+      - name: Deploy to Cloud Run
+        run: |
+          ENV_VARS="NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture"
+          ENV_VARS="$ENV_VARS,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}"
+          ENV_VARS="$ENV_VARS,BANK_PROVIDER=plaid,PLAID_ENV=sandbox,PLAID_PRODUCT=assets"
+          ENV_VARS="$ENV_VARS,PLAID_CLIENT_ID=${{ vars.PLAID_CLIENT_ID }}"
+          ENV_VARS="$ENV_VARS,IDENTITY_PROVIDER=stripe,PROPERTY_DATA_PROVIDER=google_places"
+          SECRETS="DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_PROD:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET_PROD:latest,PLAID_SECRET=HOMESTEAD_MORTGAGES_PLAID_SECRET:latest,VENDOR_TOKEN_KEY=HOMESTEAD_MORTGAGES_VENDOR_TOKEN_KEY_PROD:latest,STRIPE_SECRET_KEY_SANDBOX=HOMESTEAD_MORTGAGES_STRIPE_SECRET_KEY_SANDBOX:latest,GOOGLE_PLACES_API_KEY=HOMESTEAD_MORTGAGES_GOOGLE_PLACES_API_KEY:latest"
+          if [ "${{ vars.PROPERTY_RECORDS_PROVIDER }}" = "corelogic" ]; then
+            ENV_VARS="$ENV_VARS,PROPERTY_RECORDS_PROVIDER=corelogic"
+            SECRETS="$SECRETS,CORELOGIC_CLIENT_KEY=HOMESTEAD_MORTGAGES_CORELOGIC_CLIENT_KEY:latest,CORELOGIC_CLIENT_SECRET=HOMESTEAD_MORTGAGES_CORELOGIC_CLIENT_SECRET:latest"
+          fi
+          ENV_VARS="$ENV_VARS,APOR_PROVIDER=ffiec"
+          ENV_VARS="$ENV_VARS,SERVICING_PROVIDER=supermortgage,SERVICING_API_URL=$SERVICING_URL"
+          SECRETS="$SECRETS,SERVICING_API_TOKEN=HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN_PROD:latest"
+          if [ -n "$SERVICING_PUBLIC_HOST" ]; then
+            ENV_VARS="$ENV_VARS,SERVICING_PUBLIC_HOST=$SERVICING_PUBLIC_HOST"
+          fi
+          ORIGIN="${PUBLIC_ORIGIN:-$SERVICE_URL}"
+          if [ -n "$ORIGIN" ]; then
+            ENV_VARS="$ENV_VARS,PUBLIC_ORIGIN=$ORIGIN"
+            ENV_VARS="$ENV_VARS,PLAID_REDIRECT_URI=$ORIGIN/plaid/return"
+          fi
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image "$IMAGE" \
+            --region ${{ env.REGION }} \
+            --service-account ${{ env.RUNTIME_SA }} \
+            --add-cloudsql-instances ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} \
+            --set-secrets "$SECRETS" \
+            --set-env-vars "$ENV_VARS" \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 1Gi \
+            --cpu 1 \
+            --min-instances 1 \
+            --max-instances 3 \
+            --timeout 300
+        env:
+          PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
+          SERVICING_PUBLIC_HOST: ${{ vars.SERVICING_PUBLIC_HOST }}
+      - name: Point the scheduled jobs at this image
+        run: |
+          for JOB in ${{ env.SERVICE }}-apor-fetch ${{ env.SERVICE }}-loan-review; do
+            gcloud run jobs update "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$IMAGE" --quiet
+          done
+      - name: Confirm the service is reachable and is production
+        run: |
+          gcloud run services add-iam-policy-binding ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --member="allUsers" --role=roles/run.invoker --quiet >/dev/null
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)")
+          for attempt in 1 2 3 4 5 6; do
+            BODY=$(curl -fsS --max-time 30 "$URL/api/health") && break
+            echo "attempt $attempt failed; retrying"
+            sleep 10
+          done
+          echo "$BODY"
+          case "$BODY" in
+            *'"database":"ok"'*) echo "ok: database reachable" ;;
+            *) echo "::error::the deployed service cannot reach its database"; exit 1 ;;
+          esac
+          case "$BODY" in
+            *'"personas":"enabled"'*) echo "::error::sample borrowers are mounted on production"; exit 1 ;;
+            *) echo "ok: no sample sign-in" ;;
+          esac
+          case "$BODY" in
+            *"stripe-identity (LIVE)"*) echo "::warning::LIVE Stripe identity is on" ;;
+          esac
+          case "$BODY" in
+            *"supermortgage ($SERVICING_URL)"*) echo "ok: the servicing port reads $SERVICING_URL" ;;
+            *) echo "::error::the servicing port is not reading the production servicing service"; exit 1 ;;
+          esac
+          case "$BODY" in
+            *'"coversThisWeek":true'*) echo "ok: the APOR series covers this week" ;;
+            *) echo "::error::the APOR series does not cover this week"; exit 1 ;;
+          esac

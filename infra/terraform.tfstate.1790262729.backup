@@ -1,0 +1,1969 @@
+{
+  "version": 4,
+  "terraform_version": "1.5.7",
+  "serial": 85,
+  "lineage": "8b694e66-c18e-ce55-df40-e33985dc77ec",
+  "outputs": {
+    "apor_fetch_job": {
+      "value": "homestead-mortgages-staging-apor-fetch",
+      "type": "string"
+    },
+    "certificates": {
+      "value": {
+        "servicing.supermortgage.com": "homestead-mortgages-staging-servicing-supermortgage-com",
+        "staging.servicing.supermortgage.com": "homestead-mortgages-staging-staging-servicing-supermortgage-com",
+        "staging.supermortgage.com": "homestead-mortgages-staging-staging-supermortgage-com",
+        "supermortgage.com": "homestead-mortgages-staging-supermortgage-com",
+        "www.supermortgage.com": "homestead-mortgages-staging-www-supermortgage-com"
+      },
+      "type": [
+        "object",
+        {
+          "servicing.supermortgage.com": "string",
+          "staging.servicing.supermortgage.com": "string",
+          "staging.supermortgage.com": "string",
+          "supermortgage.com": "string",
+          "www.supermortgage.com": "string"
+        }
+      ]
+    },
+    "database_name": {
+      "value": null,
+      "type": "string"
+    },
+    "dns_records": {
+      "value": [
+        "supermortgage.com  A  34.107.186.225",
+        "www.supermortgage.com  A  34.107.186.225",
+        "servicing.supermortgage.com  A  34.107.186.225"
+      ],
+      "type": [
+        "tuple",
+        [
+          "string",
+          "string",
+          "string"
+        ]
+      ]
+    },
+    "edge_ip": {
+      "value": "34.107.186.225",
+      "type": "string"
+    },
+    "instance_connection_name": {
+      "value": "homestead-mortgages:us-central1:homestead-mortgages-db",
+      "type": "string"
+    },
+    "loan_review_job": {
+      "value": "homestead-mortgages-staging-loan-review",
+      "type": "string"
+    },
+    "service_url": {
+      "value": null,
+      "type": "string"
+    },
+    "servicing_database_name": {
+      "value": "homestead_servicing_staging",
+      "type": "string"
+    },
+    "servicing_service_account": {
+      "value": "hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com",
+      "type": "string"
+    },
+    "servicing_sweep_job": {
+      "value": "homestead-mortgages-staging-servicing-sweep",
+      "type": "string"
+    }
+  },
+  "resources": [
+    {
+      "mode": "data",
+      "type": "google_project",
+      "name": "this",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "auto_create_network": null,
+            "billing_account": "018EFB-8252A5-192332",
+            "deletion_policy": "DELETE",
+            "effective_labels": {},
+            "folder_id": "",
+            "id": "projects/homestead-mortgages",
+            "labels": {},
+            "name": "Homestead Mortgages",
+            "number": "193197012613",
+            "org_id": "601394808997",
+            "project_id": "homestead-mortgages",
+            "skip_delete": null,
+            "terraform_labels": {}
+          },
+          "sensitive_attributes": []
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_cloud_run_v2_service_iam_member",
+      "name": "api_invokes_servicing",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwZcHkB2oSo=",
+            "id": "projects/homestead-mortgages/locations/us-central1/services/homestead-mortgages-staging-servicing/roles/run.invoker/serviceAccount:hm-run@homestead-mortgages.iam.gserviceaccount.com",
+            "location": "us-central1",
+            "member": "serviceAccount:hm-run@homestead-mortgages.iam.gserviceaccount.com",
+            "name": "projects/homestead-mortgages/locations/us-central1/services/homestead-mortgages-staging-servicing",
+            "project": "homestead-mortgages",
+            "role": "roles/run.invoker"
+          },
+          "sensitive_attributes": [],
+          "private": "bnVsbA=="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_cloud_run_v2_service_iam_member",
+      "name": "iap_invokes_api",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwZcGS3udyI=",
+            "id": "projects/homestead-mortgages/locations/us-central1/services/homestead-mortgages-staging/roles/run.invoker/serviceAccount:service-193197012613@gcp-sa-iap.iam.gserviceaccount.com",
+            "location": "us-central1",
+            "member": "serviceAccount:service-193197012613@gcp-sa-iap.iam.gserviceaccount.com",
+            "name": "projects/homestead-mortgages/locations/us-central1/services/homestead-mortgages-staging",
+            "project": "homestead-mortgages",
+            "role": "roles/run.invoker"
+          },
+          "sensitive_attributes": [],
+          "private": "bnVsbA==",
+          "dependencies": [
+            "data.google_project.this"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_backend_service",
+      "name": "api",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 1,
+          "attributes": {
+            "affinity_cookie_ttl_sec": 0,
+            "backend": [
+              {
+                "balancing_mode": "UTILIZATION",
+                "capacity_scaler": 1,
+                "description": "",
+                "group": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/regions/us-central1/networkEndpointGroups/homestead-mortgages-staging-api",
+                "max_connections": 0,
+                "max_connections_per_endpoint": 0,
+                "max_connections_per_instance": 0,
+                "max_rate": 0,
+                "max_rate_per_endpoint": 0,
+                "max_rate_per_instance": 0,
+                "max_utilization": 0
+              }
+            ],
+            "cdn_policy": [],
+            "circuit_breakers": [],
+            "compression_mode": "",
+            "connection_draining_timeout_sec": 300,
+            "consistent_hash": [],
+            "creation_timestamp": "2026-09-22T09:38:26.606-07:00",
+            "custom_request_headers": [],
+            "custom_response_headers": [],
+            "description": "",
+            "edge_security_policy": "",
+            "enable_cdn": false,
+            "fingerprint": "Z_Gxw2jHsys=",
+            "generated_id": 6757207852942561773,
+            "health_checks": [],
+            "iap": [],
+            "id": "projects/homestead-mortgages/global/backendServices/homestead-mortgages-staging-api",
+            "load_balancing_scheme": "EXTERNAL_MANAGED",
+            "locality_lb_policies": [],
+            "locality_lb_policy": "",
+            "log_config": [
+              {
+                "enable": true,
+                "sample_rate": 1
+              }
+            ],
+            "name": "homestead-mortgages-staging-api",
+            "outlier_detection": [],
+            "port_name": "http",
+            "project": "homestead-mortgages",
+            "protocol": "HTTPS",
+            "security_policy": "",
+            "security_settings": [],
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/backendServices/homestead-mortgages-staging-api",
+            "service_lb_policy": "",
+            "session_affinity": "NONE",
+            "timeout_sec": 30,
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH0sInNjaGVtYV92ZXJzaW9uIjoiMSJ9",
+          "dependencies": [
+            "google_compute_region_network_endpoint_group.api"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_backend_service",
+      "name": "console",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 1,
+          "attributes": {
+            "affinity_cookie_ttl_sec": 0,
+            "backend": [
+              {
+                "balancing_mode": "UTILIZATION",
+                "capacity_scaler": 1,
+                "description": "",
+                "group": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/regions/us-central1/networkEndpointGroups/homestead-mortgages-staging-api",
+                "max_connections": 0,
+                "max_connections_per_endpoint": 0,
+                "max_connections_per_instance": 0,
+                "max_rate": 0,
+                "max_rate_per_endpoint": 0,
+                "max_rate_per_instance": 0,
+                "max_utilization": 0
+              }
+            ],
+            "cdn_policy": [],
+            "circuit_breakers": [],
+            "compression_mode": "",
+            "connection_draining_timeout_sec": 300,
+            "consistent_hash": [],
+            "creation_timestamp": "2026-09-22T14:38:11.196-07:00",
+            "custom_request_headers": [],
+            "custom_response_headers": [],
+            "description": "",
+            "edge_security_policy": "",
+            "enable_cdn": false,
+            "fingerprint": "m__aZnurHFA=",
+            "generated_id": 3052606712543398828,
+            "health_checks": [],
+            "iap": [
+              {
+                "oauth2_client_id": "",
+                "oauth2_client_secret": "",
+                "oauth2_client_secret_sha256": ""
+              }
+            ],
+            "id": "projects/homestead-mortgages/global/backendServices/homestead-mortgages-staging-console",
+            "load_balancing_scheme": "EXTERNAL_MANAGED",
+            "locality_lb_policies": [],
+            "locality_lb_policy": "",
+            "log_config": [
+              {
+                "enable": true,
+                "sample_rate": 1
+              }
+            ],
+            "name": "homestead-mortgages-staging-console",
+            "outlier_detection": [],
+            "port_name": "http",
+            "project": "homestead-mortgages",
+            "protocol": "HTTPS",
+            "security_policy": "",
+            "security_settings": [],
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/backendServices/homestead-mortgages-staging-console",
+            "service_lb_policy": "",
+            "session_affinity": "NONE",
+            "timeout_sec": 30,
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH0sInNjaGVtYV92ZXJzaW9uIjoiMSJ9",
+          "dependencies": [
+            "google_compute_region_network_endpoint_group.api"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_global_address",
+      "name": "edge",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "address": "34.107.186.225",
+            "address_type": "EXTERNAL",
+            "creation_timestamp": "2026-09-22T09:38:12.377-07:00",
+            "description": "",
+            "effective_labels": {},
+            "id": "projects/homestead-mortgages/global/addresses/homestead-mortgages-staging-edge",
+            "ip_version": "",
+            "label_fingerprint": "42WmSpB8rSM=",
+            "labels": {},
+            "name": "homestead-mortgages-staging-edge",
+            "network": "",
+            "prefix_length": 0,
+            "project": "homestead-mortgages",
+            "purpose": "",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/addresses/homestead-mortgages-staging-edge",
+            "terraform_labels": {},
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_global_forwarding_rule",
+      "name": "edge_http",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "base_forwarding_rule": "",
+            "description": "",
+            "effective_labels": {},
+            "id": "projects/homestead-mortgages/global/forwardingRules/homestead-mortgages-staging-edge-http",
+            "ip_address": "34.107.186.225",
+            "ip_protocol": "TCP",
+            "ip_version": "",
+            "label_fingerprint": "42WmSpB8rSM=",
+            "labels": null,
+            "load_balancing_scheme": "EXTERNAL_MANAGED",
+            "metadata_filters": [],
+            "name": "homestead-mortgages-staging-edge-http",
+            "network": "",
+            "no_automate_dns_zone": null,
+            "port_range": "80-80",
+            "project": "homestead-mortgages",
+            "psc_connection_id": "",
+            "psc_connection_status": "",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/forwardingRules/homestead-mortgages-staging-edge-http",
+            "service_directory_registrations": [],
+            "source_ip_ranges": null,
+            "subnetwork": "",
+            "target": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/targetHttpProxies/homestead-mortgages-staging-edge",
+            "terraform_labels": {},
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19",
+          "dependencies": [
+            "google_compute_global_address.edge",
+            "google_compute_target_http_proxy.edge",
+            "google_compute_url_map.edge_http"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_global_forwarding_rule",
+      "name": "edge_https",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "base_forwarding_rule": "",
+            "description": "",
+            "effective_labels": {},
+            "id": "projects/homestead-mortgages/global/forwardingRules/homestead-mortgages-staging-edge-https",
+            "ip_address": "34.107.186.225",
+            "ip_protocol": "TCP",
+            "ip_version": "",
+            "label_fingerprint": "42WmSpB8rSM=",
+            "labels": null,
+            "load_balancing_scheme": "EXTERNAL_MANAGED",
+            "metadata_filters": [],
+            "name": "homestead-mortgages-staging-edge-https",
+            "network": "",
+            "no_automate_dns_zone": null,
+            "port_range": "443-443",
+            "project": "homestead-mortgages",
+            "psc_connection_id": "",
+            "psc_connection_status": "",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/forwardingRules/homestead-mortgages-staging-edge-https",
+            "service_directory_registrations": [],
+            "source_ip_ranges": null,
+            "subnetwork": "",
+            "target": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/targetHttpsProxies/homestead-mortgages-staging-edge",
+            "terraform_labels": {},
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19",
+          "dependencies": [
+            "google_compute_global_address.edge",
+            "google_compute_managed_ssl_certificate.edge",
+            "google_compute_target_https_proxy.edge",
+            "google_compute_url_map.edge"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_managed_ssl_certificate",
+      "name": "edge",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": "servicing.supermortgage.com",
+          "schema_version": 0,
+          "attributes": {
+            "certificate_id": 3201458227344511003,
+            "creation_timestamp": "2026-09-22T09:38:14.138-07:00",
+            "description": "",
+            "expire_time": "2026-12-21T09:55:40.000-08:00",
+            "id": "projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-servicing-supermortgage-com",
+            "managed": [
+              {
+                "domains": [
+                  "servicing.supermortgage.com"
+                ]
+              }
+            ],
+            "name": "homestead-mortgages-staging-servicing-supermortgage-com",
+            "project": "homestead-mortgages",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-servicing-supermortgage-com",
+            "subject_alternative_names": [
+              "servicing.supermortgage.com"
+            ],
+            "timeouts": null,
+            "type": "MANAGED"
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxODAwMDAwMDAwMDAwLCJkZWxldGUiOjE4MDAwMDAwMDAwMDB9fQ=="
+        },
+        {
+          "index_key": "staging.servicing.supermortgage.com",
+          "schema_version": 0,
+          "attributes": {
+            "certificate_id": 6034968853981201480,
+            "creation_timestamp": "2026-09-24T07:58:47.573-07:00",
+            "description": "",
+            "expire_time": "",
+            "id": "projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-staging-servicing-supermortgage-com",
+            "managed": [
+              {
+                "domains": [
+                  "staging.servicing.supermortgage.com"
+                ]
+              }
+            ],
+            "name": "homestead-mortgages-staging-staging-servicing-supermortgage-com",
+            "project": "homestead-mortgages",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-staging-servicing-supermortgage-com",
+            "subject_alternative_names": [],
+            "timeouts": null,
+            "type": "MANAGED"
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxODAwMDAwMDAwMDAwLCJkZWxldGUiOjE4MDAwMDAwMDAwMDB9fQ=="
+        },
+        {
+          "index_key": "staging.supermortgage.com",
+          "schema_version": 0,
+          "attributes": {
+            "certificate_id": 5682852398374618184,
+            "creation_timestamp": "2026-09-24T07:58:47.136-07:00",
+            "description": "",
+            "expire_time": "",
+            "id": "projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-staging-supermortgage-com",
+            "managed": [
+              {
+                "domains": [
+                  "staging.supermortgage.com"
+                ]
+              }
+            ],
+            "name": "homestead-mortgages-staging-staging-supermortgage-com",
+            "project": "homestead-mortgages",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-staging-supermortgage-com",
+            "subject_alternative_names": [],
+            "timeouts": null,
+            "type": "MANAGED"
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxODAwMDAwMDAwMDAwLCJkZWxldGUiOjE4MDAwMDAwMDAwMDB9fQ=="
+        },
+        {
+          "index_key": "supermortgage.com",
+          "schema_version": 0,
+          "attributes": {
+            "certificate_id": 3872128370026156059,
+            "creation_timestamp": "2026-09-22T09:38:13.728-07:00",
+            "description": "",
+            "expire_time": "2026-12-21T09:56:00.000-08:00",
+            "id": "projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-supermortgage-com",
+            "managed": [
+              {
+                "domains": [
+                  "supermortgage.com"
+                ]
+              }
+            ],
+            "name": "homestead-mortgages-staging-supermortgage-com",
+            "project": "homestead-mortgages",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-supermortgage-com",
+            "subject_alternative_names": [
+              "supermortgage.com"
+            ],
+            "timeouts": null,
+            "type": "MANAGED"
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxODAwMDAwMDAwMDAwLCJkZWxldGUiOjE4MDAwMDAwMDAwMDB9fQ=="
+        },
+        {
+          "index_key": "www.supermortgage.com",
+          "schema_version": 0,
+          "attributes": {
+            "certificate_id": 2552562482226860059,
+            "creation_timestamp": "2026-09-22T09:38:12.280-07:00",
+            "description": "",
+            "expire_time": "2026-12-21T09:55:22.000-08:00",
+            "id": "projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-www-supermortgage-com",
+            "managed": [
+              {
+                "domains": [
+                  "www.supermortgage.com"
+                ]
+              }
+            ],
+            "name": "homestead-mortgages-staging-www-supermortgage-com",
+            "project": "homestead-mortgages",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-www-supermortgage-com",
+            "subject_alternative_names": [
+              "www.supermortgage.com"
+            ],
+            "timeouts": null,
+            "type": "MANAGED"
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxODAwMDAwMDAwMDAwLCJkZWxldGUiOjE4MDAwMDAwMDAwMDB9fQ=="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_region_network_endpoint_group",
+      "name": "api",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "app_engine": [],
+            "cloud_function": [],
+            "cloud_run": [
+              {
+                "service": "homestead-mortgages-staging",
+                "tag": "",
+                "url_mask": ""
+              }
+            ],
+            "description": "",
+            "id": "projects/homestead-mortgages/regions/us-central1/networkEndpointGroups/homestead-mortgages-staging-api",
+            "name": "homestead-mortgages-staging-api",
+            "network": "",
+            "network_endpoint_type": "SERVERLESS",
+            "project": "homestead-mortgages",
+            "psc_target_service": "",
+            "region": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/regions/us-central1",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/regions/us-central1/networkEndpointGroups/homestead-mortgages-staging-api",
+            "subnetwork": "",
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDB9fQ=="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_region_network_endpoint_group",
+      "name": "servicing",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "app_engine": [],
+            "cloud_function": [],
+            "cloud_run": [
+              {
+                "service": "homestead-mortgages-staging-servicing",
+                "tag": "",
+                "url_mask": ""
+              }
+            ],
+            "description": "",
+            "id": "projects/homestead-mortgages/regions/us-central1/networkEndpointGroups/homestead-mortgages-staging-servicing",
+            "name": "homestead-mortgages-staging-servicing",
+            "network": "",
+            "network_endpoint_type": "SERVERLESS",
+            "project": "homestead-mortgages",
+            "psc_target_service": "",
+            "region": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/regions/us-central1",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/regions/us-central1/networkEndpointGroups/homestead-mortgages-staging-servicing",
+            "subnetwork": "",
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDB9fQ=="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_target_http_proxy",
+      "name": "edge",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "creation_timestamp": "2026-09-22T09:38:24.855-07:00",
+            "description": "",
+            "http_keep_alive_timeout_sec": 0,
+            "id": "projects/homestead-mortgages/global/targetHttpProxies/homestead-mortgages-staging-edge",
+            "name": "homestead-mortgages-staging-edge",
+            "project": "homestead-mortgages",
+            "proxy_bind": false,
+            "proxy_id": 8103544370682073583,
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/targetHttpProxies/homestead-mortgages-staging-edge",
+            "timeouts": null,
+            "url_map": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/urlMaps/homestead-mortgages-staging-edge-http"
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19",
+          "dependencies": [
+            "google_compute_url_map.edge_http"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_target_https_proxy",
+      "name": "edge",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "certificate_manager_certificates": [],
+            "certificate_map": "",
+            "creation_timestamp": "2026-09-22T14:49:59.483-07:00",
+            "description": "",
+            "http_keep_alive_timeout_sec": 0,
+            "id": "projects/homestead-mortgages/global/targetHttpsProxies/homestead-mortgages-staging-edge",
+            "name": "homestead-mortgages-staging-edge",
+            "project": "homestead-mortgages",
+            "proxy_bind": false,
+            "proxy_id": 3170265353047459560,
+            "quic_override": "NONE",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/targetHttpsProxies/homestead-mortgages-staging-edge",
+            "server_tls_policy": "",
+            "ssl_certificates": [
+              "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-servicing-supermortgage-com",
+              "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-staging-servicing-supermortgage-com",
+              "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-staging-supermortgage-com",
+              "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-supermortgage-com",
+              "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/sslCertificates/homestead-mortgages-staging-www-supermortgage-com"
+            ],
+            "ssl_policy": "",
+            "timeouts": null,
+            "tls_early_data": "DISABLED",
+            "url_map": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/urlMaps/homestead-mortgages-staging-edge"
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19",
+          "dependencies": [
+            "google_compute_backend_service.api",
+            "google_compute_backend_service.console",
+            "google_compute_managed_ssl_certificate.edge",
+            "google_compute_url_map.edge"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_url_map",
+      "name": "edge",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "creation_timestamp": "2026-09-22T09:40:52.746-07:00",
+            "default_route_action": [],
+            "default_service": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/backendServices/homestead-mortgages-staging-api",
+            "default_url_redirect": [],
+            "description": "",
+            "fingerprint": "zs5UQfVKAy0=",
+            "header_action": [],
+            "host_rule": [
+              {
+                "description": "",
+                "hosts": [
+                  "servicing.supermortgage.com",
+                  "staging.servicing.supermortgage.com"
+                ],
+                "path_matcher": "servicing"
+              },
+              {
+                "description": "",
+                "hosts": [
+                  "staging.supermortgage.com",
+                  "supermortgage.com",
+                  "www.supermortgage.com"
+                ],
+                "path_matcher": "consumer"
+              }
+            ],
+            "id": "projects/homestead-mortgages/global/urlMaps/homestead-mortgages-staging-edge",
+            "map_id": 5479257483822174588,
+            "name": "homestead-mortgages-staging-edge",
+            "path_matcher": [
+              {
+                "default_route_action": [],
+                "default_service": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/backendServices/homestead-mortgages-staging-api",
+                "default_url_redirect": [],
+                "description": "",
+                "header_action": [],
+                "name": "consumer",
+                "path_rule": [],
+                "route_rules": []
+              },
+              {
+                "default_route_action": [],
+                "default_service": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/backendServices/homestead-mortgages-staging-console",
+                "default_url_redirect": [],
+                "description": "",
+                "header_action": [],
+                "name": "servicing",
+                "path_rule": [],
+                "route_rules": []
+              }
+            ],
+            "project": "homestead-mortgages",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/urlMaps/homestead-mortgages-staging-edge",
+            "test": [],
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19",
+          "dependencies": [
+            "google_compute_backend_service.api",
+            "google_compute_backend_service.console"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_compute_url_map",
+      "name": "edge_http",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "creation_timestamp": "2026-09-22T09:38:12.374-07:00",
+            "default_route_action": [],
+            "default_service": "",
+            "default_url_redirect": [
+              {
+                "host_redirect": "",
+                "https_redirect": true,
+                "path_redirect": "",
+                "prefix_redirect": "",
+                "redirect_response_code": "MOVED_PERMANENTLY_DEFAULT",
+                "strip_query": false
+              }
+            ],
+            "description": "",
+            "fingerprint": "B1GKU7yHgu4=",
+            "header_action": [],
+            "host_rule": [],
+            "id": "projects/homestead-mortgages/global/urlMaps/homestead-mortgages-staging-edge-http",
+            "map_id": 3522456777308180507,
+            "name": "homestead-mortgages-staging-edge-http",
+            "path_matcher": [],
+            "project": "homestead-mortgages",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/homestead-mortgages/global/urlMaps/homestead-mortgages-staging-edge-http",
+            "test": [],
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_iap_web_backend_service_iam_member",
+      "name": "servicing_console",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": "user:doug@trywalt.ai",
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwZcGTW/tbA=",
+            "id": "projects/homestead-mortgages/iap_web/compute/services/homestead-mortgages-staging-console/roles/iap.httpsResourceAccessor/user:doug@trywalt.ai",
+            "member": "user:doug@trywalt.ai",
+            "project": "homestead-mortgages",
+            "role": "roles/iap.httpsResourceAccessor",
+            "web_backend_service": "projects/homestead-mortgages/iap_web/compute/services/homestead-mortgages-staging-console"
+          },
+          "sensitive_attributes": [],
+          "private": "bnVsbA==",
+          "dependencies": [
+            "google_compute_backend_service.console",
+            "google_compute_region_network_endpoint_group.api"
+          ]
+        },
+        {
+          "index_key": "user:drew@trywalt.ai",
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwZcGTW/tbA=",
+            "id": "projects/homestead-mortgages/iap_web/compute/services/homestead-mortgages-staging-console/roles/iap.httpsResourceAccessor/user:drew@trywalt.ai",
+            "member": "user:drew@trywalt.ai",
+            "project": "homestead-mortgages",
+            "role": "roles/iap.httpsResourceAccessor",
+            "web_backend_service": "projects/homestead-mortgages/iap_web/compute/services/homestead-mortgages-staging-console"
+          },
+          "sensitive_attributes": [],
+          "private": "bnVsbA==",
+          "dependencies": [
+            "google_compute_backend_service.console",
+            "google_compute_region_network_endpoint_group.api"
+          ]
+        },
+        {
+          "index_key": "user:joe@trywalt.ai",
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwZcGTW/tbA=",
+            "id": "projects/homestead-mortgages/iap_web/compute/services/homestead-mortgages-staging-console/roles/iap.httpsResourceAccessor/user:joe@trywalt.ai",
+            "member": "user:joe@trywalt.ai",
+            "project": "homestead-mortgages",
+            "role": "roles/iap.httpsResourceAccessor",
+            "web_backend_service": "projects/homestead-mortgages/iap_web/compute/services/homestead-mortgages-staging-console"
+          },
+          "sensitive_attributes": [],
+          "private": "bnVsbA==",
+          "dependencies": [
+            "google_compute_backend_service.console",
+            "google_compute_region_network_endpoint_group.api"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_monitoring_notification_channel",
+      "name": "alerts",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "description": "",
+            "display_name": "Homestead Mortgages alerts",
+            "enabled": true,
+            "force_delete": false,
+            "id": "projects/homestead-mortgages/notificationChannels/9032533210169702267",
+            "labels": {
+              "email_address": "joe@trywalt.ai"
+            },
+            "name": "projects/homestead-mortgages/notificationChannels/9032533210169702267",
+            "project": "homestead-mortgages",
+            "sensitive_labels": [],
+            "timeouts": null,
+            "type": "email",
+            "user_labels": null,
+            "verification_status": ""
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_project_iam_member",
+      "name": "servicing_run_cloudsql",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwZcAy0Dgxc=",
+            "id": "homestead-mortgages/roles/cloudsql.client/serviceAccount:hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com",
+            "member": "serviceAccount:hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com",
+            "project": "homestead-mortgages",
+            "role": "roles/cloudsql.client"
+          },
+          "sensitive_attributes": [],
+          "private": "bnVsbA==",
+          "dependencies": [
+            "google_service_account.servicing_run"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_secret_manager_secret_iam_member",
+      "name": "api_reads_servicing_api_token",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwZcAyuOanA=",
+            "id": "projects/homestead-mortgages/secrets/HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN/roles/secretmanager.secretAccessor/serviceAccount:hm-run@homestead-mortgages.iam.gserviceaccount.com",
+            "member": "serviceAccount:hm-run@homestead-mortgages.iam.gserviceaccount.com",
+            "project": "homestead-mortgages",
+            "role": "roles/secretmanager.secretAccessor",
+            "secret_id": "projects/homestead-mortgages/secrets/HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN"
+          },
+          "sensitive_attributes": [],
+          "private": "bnVsbA=="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_secret_manager_secret_iam_member",
+      "name": "servicing_run_reads_api_token",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwZcAyzNh4E=",
+            "id": "projects/homestead-mortgages/secrets/HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN/roles/secretmanager.secretAccessor/serviceAccount:hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com",
+            "member": "serviceAccount:hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com",
+            "project": "homestead-mortgages",
+            "role": "roles/secretmanager.secretAccessor",
+            "secret_id": "projects/homestead-mortgages/secrets/HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN"
+          },
+          "sensitive_attributes": [],
+          "private": "bnVsbA==",
+          "dependencies": [
+            "google_service_account.servicing_run"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_service_account",
+      "name": "scheduler",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "account_id": "hm-scheduler",
+            "create_ignore_already_exists": null,
+            "description": "Invokes Cloud Run jobs on a schedule. Holds run.invoker on those jobs and nothing else.",
+            "disabled": false,
+            "display_name": "Cloud Scheduler for Homestead Mortgages jobs",
+            "email": "hm-scheduler@homestead-mortgages.iam.gserviceaccount.com",
+            "id": "projects/homestead-mortgages/serviceAccounts/hm-scheduler@homestead-mortgages.iam.gserviceaccount.com",
+            "member": "serviceAccount:hm-scheduler@homestead-mortgages.iam.gserviceaccount.com",
+            "name": "projects/homestead-mortgages/serviceAccounts/hm-scheduler@homestead-mortgages.iam.gserviceaccount.com",
+            "project": "homestead-mortgages",
+            "timeouts": null,
+            "unique_id": "117947661499946339418"
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDB9fQ=="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "google_service_account",
+      "name": "servicing_run",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "account_id": "hm-servicing-run",
+            "create_ignore_already_exists": null,
+            "description": "Runs the servicing service and its sweep job. cloudsql.client, plus accessor on its own database URL and the door token, granted on the secrets themselves; nothing on the API's secrets.",
+            "disabled": false,
+            "display_name": "Runtime identity for the servicing app",
+            "email": "hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com",
+            "id": "projects/homestead-mortgages/serviceAccounts/hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com",
+            "member": "serviceAccount:hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com",
+            "name": "projects/homestead-mortgages/serviceAccounts/hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com",
+            "project": "homestead-mortgages",
+            "timeouts": null,
+            "unique_id": "113026860917393082483"
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDB9fQ=="
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_cloud_run_v2_job",
+      "name": "apor_fetch",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "annotations": null,
+            "binary_authorization": [],
+            "client": "",
+            "client_version": "",
+            "conditions": [],
+            "create_time": "2026-09-16T19:04:07.504696Z",
+            "creator": "joe@trywalt.ai",
+            "delete_time": "",
+            "effective_annotations": {},
+            "effective_labels": {},
+            "etag": "\"CKfQq9UGEMCZ1PAB/cHJvamVjdHMvaG9tZXN0ZWFkLW1vcnRnYWdlcy9sb2NhdGlvbnMvdXMtY2VudHJhbDEvam9icy9ob21lc3RlYWQtbW9ydGdhZ2VzLXN0YWdpbmctYXBvci1mZXRjaA\"",
+            "execution_count": 0,
+            "expire_time": "",
+            "generation": "1",
+            "id": "projects/homestead-mortgages/locations/us-central1/jobs/homestead-mortgages-staging-apor-fetch",
+            "labels": null,
+            "last_modifier": "joe@trywalt.ai",
+            "latest_created_execution": [],
+            "launch_stage": "GA",
+            "location": "us-central1",
+            "name": "homestead-mortgages-staging-apor-fetch",
+            "observed_generation": "1",
+            "project": "homestead-mortgages",
+            "reconciling": false,
+            "template": [
+              {
+                "annotations": null,
+                "labels": null,
+                "parallelism": 0,
+                "task_count": 1,
+                "template": [
+                  {
+                    "containers": [
+                      {
+                        "args": [
+                          "apps/api/dist/scripts/fetch-apor.js"
+                        ],
+                        "command": [
+                          "node"
+                        ],
+                        "env": [
+                          {
+                            "name": "NODE_ENV",
+                            "value": "production",
+                            "value_source": []
+                          },
+                          {
+                            "name": "APOR_PROVIDER",
+                            "value": "ffiec",
+                            "value_source": []
+                          },
+                          {
+                            "name": "DATABASE_URL",
+                            "value": "",
+                            "value_source": [
+                              {
+                                "secret_key_ref": [
+                                  {
+                                    "secret": "HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING",
+                                    "version": "latest"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ],
+                        "image": "us-central1-docker.pkg.dev/homestead-mortgages/homestead-mortgages/homestead-mortgages-staging:d49140de0a2c0868562ac2e3a2dbc92fce9d2550",
+                        "name": "",
+                        "ports": [],
+                        "resources": [
+                          {
+                            "limits": {
+                              "cpu": "1",
+                              "memory": "512Mi"
+                            }
+                          }
+                        ],
+                        "volume_mounts": [
+                          {
+                            "mount_path": "/cloudsql",
+                            "name": "cloudsql"
+                          }
+                        ],
+                        "working_dir": ""
+                      }
+                    ],
+                    "encryption_key": "",
+                    "execution_environment": "EXECUTION_ENVIRONMENT_GEN2",
+                    "max_retries": 1,
+                    "service_account": "hm-run@homestead-mortgages.iam.gserviceaccount.com",
+                    "timeout": "300s",
+                    "volumes": [
+                      {
+                        "cloud_sql_instance": [
+                          {
+                            "instances": [
+                              "homestead-mortgages:us-central1:homestead-mortgages-db"
+                            ]
+                          }
+                        ],
+                        "name": "cloudsql",
+                        "secret": []
+                      }
+                    ],
+                    "vpc_access": []
+                  }
+                ]
+              }
+            ],
+            "terminal_condition": [
+              {
+                "execution_reason": "",
+                "last_transition_time": "2026-09-16T19:04:08.020443Z",
+                "message": "",
+                "reason": "",
+                "revision_reason": "",
+                "severity": "",
+                "state": "CONDITION_SUCCEEDED",
+                "type": "Ready"
+              }
+            ],
+            "terraform_labels": {},
+            "timeouts": null,
+            "uid": "766ab8b8-daf7-4a2f-8545-7be2afae89af",
+            "update_time": "2026-09-16T19:04:07.504696Z"
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_cloud_run_v2_job",
+      "name": "loan_review",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "annotations": null,
+            "binary_authorization": [],
+            "client": "",
+            "client_version": "",
+            "conditions": [],
+            "create_time": "2026-09-22T16:02:54.948968Z",
+            "creator": "joe@trywalt.ai",
+            "delete_time": "",
+            "effective_annotations": {},
+            "effective_labels": {},
+            "etag": "\"CK7NytUGEMC0wMQD/cHJvamVjdHMvaG9tZXN0ZWFkLW1vcnRnYWdlcy9sb2NhdGlvbnMvdXMtY2VudHJhbDEvam9icy9ob21lc3RlYWQtbW9ydGdhZ2VzLXN0YWdpbmctbG9hbi1yZXZpZXc\"",
+            "execution_count": 0,
+            "expire_time": "",
+            "generation": "1",
+            "id": "projects/homestead-mortgages/locations/us-central1/jobs/homestead-mortgages-staging-loan-review",
+            "labels": null,
+            "last_modifier": "joe@trywalt.ai",
+            "latest_created_execution": [],
+            "launch_stage": "GA",
+            "location": "us-central1",
+            "name": "homestead-mortgages-staging-loan-review",
+            "observed_generation": "1",
+            "project": "homestead-mortgages",
+            "reconciling": false,
+            "template": [
+              {
+                "annotations": null,
+                "labels": null,
+                "parallelism": 0,
+                "task_count": 1,
+                "template": [
+                  {
+                    "containers": [
+                      {
+                        "args": [
+                          "apps/api/dist/scripts/review-loans.js"
+                        ],
+                        "command": [
+                          "node"
+                        ],
+                        "env": [
+                          {
+                            "name": "NODE_ENV",
+                            "value": "production",
+                            "value_source": []
+                          },
+                          {
+                            "name": "DATABASE_URL",
+                            "value": "",
+                            "value_source": [
+                              {
+                                "secret_key_ref": [
+                                  {
+                                    "secret": "HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING",
+                                    "version": "latest"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ],
+                        "image": "us-central1-docker.pkg.dev/homestead-mortgages/homestead-mortgages/homestead-mortgages-staging:d49140de0a2c0868562ac2e3a2dbc92fce9d2550",
+                        "name": "",
+                        "ports": [],
+                        "resources": [
+                          {
+                            "limits": {
+                              "cpu": "1",
+                              "memory": "512Mi"
+                            }
+                          }
+                        ],
+                        "volume_mounts": [
+                          {
+                            "mount_path": "/cloudsql",
+                            "name": "cloudsql"
+                          }
+                        ],
+                        "working_dir": ""
+                      }
+                    ],
+                    "encryption_key": "",
+                    "execution_environment": "EXECUTION_ENVIRONMENT_GEN2",
+                    "max_retries": 1,
+                    "service_account": "hm-run@homestead-mortgages.iam.gserviceaccount.com",
+                    "timeout": "600s",
+                    "volumes": [
+                      {
+                        "cloud_sql_instance": [
+                          {
+                            "instances": [
+                              "homestead-mortgages:us-central1:homestead-mortgages-db"
+                            ]
+                          }
+                        ],
+                        "name": "cloudsql",
+                        "secret": []
+                      }
+                    ],
+                    "vpc_access": []
+                  }
+                ]
+              }
+            ],
+            "terminal_condition": [
+              {
+                "execution_reason": "",
+                "last_transition_time": "2026-09-22T16:02:55.394374Z",
+                "message": "",
+                "reason": "",
+                "revision_reason": "",
+                "severity": "",
+                "state": "CONDITION_SUCCEEDED",
+                "type": "Ready"
+              }
+            ],
+            "terraform_labels": {},
+            "timeouts": null,
+            "uid": "7692d0f0-d207-48c8-8589-d4c966700e1e",
+            "update_time": "2026-09-22T16:02:54.948968Z"
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_cloud_run_v2_job",
+      "name": "servicing_sweep",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "annotations": null,
+            "binary_authorization": [],
+            "client": "",
+            "client_version": "",
+            "conditions": [],
+            "create_time": "2026-09-21T19:53:59.153137Z",
+            "creator": "joe@trywalt.ai",
+            "delete_time": "",
+            "effective_annotations": {},
+            "effective_labels": {},
+            "etag": "\"CNeWxtUGEOjegkk/cHJvamVjdHMvaG9tZXN0ZWFkLW1vcnRnYWdlcy9sb2NhdGlvbnMvdXMtY2VudHJhbDEvam9icy9ob21lc3RlYWQtbW9ydGdhZ2VzLXN0YWdpbmctc2VydmljaW5nLXN3ZWVw\"",
+            "execution_count": 0,
+            "expire_time": "",
+            "generation": "1",
+            "id": "projects/homestead-mortgages/locations/us-central1/jobs/homestead-mortgages-staging-servicing-sweep",
+            "labels": null,
+            "last_modifier": "joe@trywalt.ai",
+            "latest_created_execution": [],
+            "launch_stage": "GA",
+            "location": "us-central1",
+            "name": "homestead-mortgages-staging-servicing-sweep",
+            "observed_generation": "1",
+            "project": "homestead-mortgages",
+            "reconciling": false,
+            "template": [
+              {
+                "annotations": null,
+                "labels": null,
+                "parallelism": 0,
+                "task_count": 1,
+                "template": [
+                  {
+                    "containers": [
+                      {
+                        "args": [
+                          "sweep"
+                        ],
+                        "command": null,
+                        "env": [
+                          {
+                            "name": "NODE_ENV",
+                            "value": "production",
+                            "value_source": []
+                          },
+                          {
+                            "name": "SERVICING_ENVIRONMENT",
+                            "value": "nonprod",
+                            "value_source": []
+                          },
+                          {
+                            "name": "SERVICING_INTEGRATIONS",
+                            "value": "fake",
+                            "value_source": []
+                          },
+                          {
+                            "name": "SERVICING_LOG_FORMAT",
+                            "value": "json",
+                            "value_source": []
+                          },
+                          {
+                            "name": "SERVICING_DATABASE_URL",
+                            "value": "",
+                            "value_source": [
+                              {
+                                "secret_key_ref": [
+                                  {
+                                    "secret": "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING",
+                                    "version": "latest"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "name": "SERVICING_API_TOKEN",
+                            "value": "",
+                            "value_source": [
+                              {
+                                "secret_key_ref": [
+                                  {
+                                    "secret": "HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN",
+                                    "version": "latest"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ],
+                        "image": "us-central1-docker.pkg.dev/homestead-mortgages/homestead-mortgages/homestead-mortgages-staging-servicing:84149f1d0c0ab67a2625637d31a8b8725d8e21ad",
+                        "name": "",
+                        "ports": [],
+                        "resources": [
+                          {
+                            "limits": {
+                              "cpu": "1",
+                              "memory": "1Gi"
+                            }
+                          }
+                        ],
+                        "volume_mounts": [
+                          {
+                            "mount_path": "/cloudsql",
+                            "name": "cloudsql"
+                          }
+                        ],
+                        "working_dir": ""
+                      }
+                    ],
+                    "encryption_key": "",
+                    "execution_environment": "EXECUTION_ENVIRONMENT_GEN2",
+                    "max_retries": 0,
+                    "service_account": "hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com",
+                    "timeout": "600s",
+                    "volumes": [
+                      {
+                        "cloud_sql_instance": [
+                          {
+                            "instances": [
+                              "homestead-mortgages:us-central1:homestead-mortgages-db"
+                            ]
+                          }
+                        ],
+                        "name": "cloudsql",
+                        "secret": []
+                      }
+                    ],
+                    "vpc_access": []
+                  }
+                ]
+              }
+            ],
+            "terminal_condition": [
+              {
+                "execution_reason": "",
+                "last_transition_time": "2026-09-21T19:53:59.579517Z",
+                "message": "",
+                "reason": "",
+                "revision_reason": "",
+                "severity": "",
+                "state": "CONDITION_SUCCEEDED",
+                "type": "Ready"
+              }
+            ],
+            "terraform_labels": {},
+            "timeouts": null,
+            "uid": "54069f56-5eab-4124-b841-3a523f846ac2",
+            "update_time": "2026-09-21T19:53:59.153137Z"
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_cloud_run_v2_job_iam_member",
+      "name": "scheduler_runs_apor_fetch",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwZbnlWhIDg=",
+            "id": "projects/homestead-mortgages/locations/us-central1/jobs/homestead-mortgages-staging-apor-fetch/roles/run.invoker/serviceAccount:hm-scheduler@homestead-mortgages.iam.gserviceaccount.com",
+            "location": "us-central1",
+            "member": "serviceAccount:hm-scheduler@homestead-mortgages.iam.gserviceaccount.com",
+            "name": "projects/homestead-mortgages/locations/us-central1/jobs/homestead-mortgages-staging-apor-fetch",
+            "project": "homestead-mortgages",
+            "role": "roles/run.invoker"
+          },
+          "sensitive_attributes": [],
+          "private": "bnVsbA=="
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_cloud_run_v2_job_iam_member",
+      "name": "scheduler_runs_loan_review",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwZcFICWNx0=",
+            "id": "projects/homestead-mortgages/locations/us-central1/jobs/homestead-mortgages-staging-loan-review/roles/run.invoker/serviceAccount:hm-scheduler@homestead-mortgages.iam.gserviceaccount.com",
+            "location": "us-central1",
+            "member": "serviceAccount:hm-scheduler@homestead-mortgages.iam.gserviceaccount.com",
+            "name": "projects/homestead-mortgages/locations/us-central1/jobs/homestead-mortgages-staging-loan-review",
+            "project": "homestead-mortgages",
+            "role": "roles/run.invoker"
+          },
+          "sensitive_attributes": [],
+          "private": "bnVsbA=="
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_cloud_run_v2_job_iam_member",
+      "name": "scheduler_runs_servicing_sweep",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwZcA50bG3U=",
+            "id": "projects/homestead-mortgages/locations/us-central1/jobs/homestead-mortgages-staging-servicing-sweep/roles/run.invoker/serviceAccount:hm-scheduler@homestead-mortgages.iam.gserviceaccount.com",
+            "location": "us-central1",
+            "member": "serviceAccount:hm-scheduler@homestead-mortgages.iam.gserviceaccount.com",
+            "name": "projects/homestead-mortgages/locations/us-central1/jobs/homestead-mortgages-staging-servicing-sweep",
+            "project": "homestead-mortgages",
+            "role": "roles/run.invoker"
+          },
+          "sensitive_attributes": [],
+          "private": "bnVsbA=="
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_cloud_scheduler_job",
+      "name": "apor_fetch",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "app_engine_http_target": [],
+            "attempt_deadline": "180s",
+            "description": "Fetch the CFPB survey and append this week's average prime offer rates.",
+            "http_target": [
+              {
+                "body": "",
+                "headers": null,
+                "http_method": "POST",
+                "oauth_token": [
+                  {
+                    "scope": "https://www.googleapis.com/auth/cloud-platform",
+                    "service_account_email": "hm-scheduler@homestead-mortgages.iam.gserviceaccount.com"
+                  }
+                ],
+                "oidc_token": [],
+                "uri": "https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/homestead-mortgages/jobs/homestead-mortgages-staging-apor-fetch:run"
+              }
+            ],
+            "id": "projects/homestead-mortgages/locations/us-central1/jobs/homestead-mortgages-staging-apor-fetch",
+            "name": "homestead-mortgages-staging-apor-fetch",
+            "paused": false,
+            "project": "homestead-mortgages",
+            "pubsub_target": [],
+            "region": "us-central1",
+            "retry_config": [
+              {
+                "max_backoff_duration": "3600s",
+                "max_doublings": 5,
+                "max_retry_duration": "0s",
+                "min_backoff_duration": "5s",
+                "retry_count": 2
+              }
+            ],
+            "schedule": "0 12 * * *",
+            "state": "ENABLED",
+            "time_zone": "Etc/UTC",
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_cloud_scheduler_job",
+      "name": "loan_review",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "app_engine_http_target": [],
+            "attempt_deadline": "180s",
+            "description": "Review every monitored loan against today's sheet.",
+            "http_target": [
+              {
+                "body": "",
+                "headers": null,
+                "http_method": "POST",
+                "oauth_token": [
+                  {
+                    "scope": "https://www.googleapis.com/auth/cloud-platform",
+                    "service_account_email": "hm-scheduler@homestead-mortgages.iam.gserviceaccount.com"
+                  }
+                ],
+                "oidc_token": [],
+                "uri": "https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/homestead-mortgages/jobs/homestead-mortgages-staging-loan-review:run"
+              }
+            ],
+            "id": "projects/homestead-mortgages/locations/us-central1/jobs/homestead-mortgages-staging-loan-review",
+            "name": "homestead-mortgages-staging-loan-review",
+            "paused": false,
+            "project": "homestead-mortgages",
+            "pubsub_target": [],
+            "region": "us-central1",
+            "retry_config": [
+              {
+                "max_backoff_duration": "3600s",
+                "max_doublings": 5,
+                "max_retry_duration": "0s",
+                "min_backoff_duration": "5s",
+                "retry_count": 2
+              }
+            ],
+            "schedule": "0 7 * * *",
+            "state": "ENABLED",
+            "time_zone": "America/New_York",
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_cloud_scheduler_job",
+      "name": "servicing_sweep",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "app_engine_http_target": [],
+            "attempt_deadline": "180s",
+            "description": "One pass of every scheduled job in the servicing runtime.",
+            "http_target": [
+              {
+                "body": "",
+                "headers": null,
+                "http_method": "POST",
+                "oauth_token": [
+                  {
+                    "scope": "https://www.googleapis.com/auth/cloud-platform",
+                    "service_account_email": "hm-scheduler@homestead-mortgages.iam.gserviceaccount.com"
+                  }
+                ],
+                "oidc_token": [],
+                "uri": "https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/homestead-mortgages/jobs/homestead-mortgages-staging-servicing-sweep:run"
+              }
+            ],
+            "id": "projects/homestead-mortgages/locations/us-central1/jobs/homestead-mortgages-staging-servicing-sweep",
+            "name": "homestead-mortgages-staging-servicing-sweep",
+            "paused": false,
+            "project": "homestead-mortgages",
+            "pubsub_target": [],
+            "region": "us-central1",
+            "retry_config": [],
+            "schedule": "*/5 * * * *",
+            "state": "ENABLED",
+            "time_zone": "America/New_York",
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_monitoring_alert_policy",
+      "name": "apor_fetch_failed",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "alert_strategy": [],
+            "combiner": "OR",
+            "conditions": [
+              {
+                "condition_absent": [],
+                "condition_matched_log": [],
+                "condition_monitoring_query_language": [],
+                "condition_prometheus_query_language": [],
+                "condition_threshold": [
+                  {
+                    "aggregations": [
+                      {
+                        "alignment_period": "3600s",
+                        "cross_series_reducer": "",
+                        "group_by_fields": null,
+                        "per_series_aligner": "ALIGN_SUM"
+                      }
+                    ],
+                    "comparison": "COMPARISON_GT",
+                    "denominator_aggregations": [],
+                    "denominator_filter": "",
+                    "duration": "0s",
+                    "evaluation_missing_data": "",
+                    "filter": "resource.type = \"cloud_run_job\" AND resource.labels.job_name = \"homestead-mortgages-staging-apor-fetch\" AND metric.type = \"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result = \"failed\"",
+                    "forecast_options": [],
+                    "threshold_value": 0,
+                    "trigger": []
+                  }
+                ],
+                "display_name": "a scheduled fetch of the average prime offer rate exited non-zero",
+                "name": "projects/homestead-mortgages/alertPolicies/15861152915956141158/conditions/15861152915956137993"
+              }
+            ],
+            "creation_record": [
+              {
+                "mutate_time": "2026-09-16T19:04:10.530461964Z",
+                "mutated_by": "joe@trywalt.ai"
+              }
+            ],
+            "display_name": "APOR fetch failed (staging)",
+            "documentation": [
+              {
+                "content": "The scheduled fetch of the CFPB's average prime offer rate table failed. Until it succeeds, every decision computed in a week the stored series does not reach blocks UW-008 and ends referred. Read the job's logs; if the CFPB has published and the fetch still fails, the file has changed shape.",
+                "links": [],
+                "mime_type": "text/markdown",
+                "subject": ""
+              }
+            ],
+            "enabled": true,
+            "id": "projects/homestead-mortgages/alertPolicies/15861152915956141158",
+            "name": "projects/homestead-mortgages/alertPolicies/15861152915956141158",
+            "notification_channels": [
+              "projects/homestead-mortgages/notificationChannels/9032533210169702267"
+            ],
+            "project": "homestead-mortgages",
+            "severity": "",
+            "timeouts": null,
+            "user_labels": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_secret_manager_secret_iam_member",
+      "name": "servicing_run_reads_database_url",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwZcAyzLtzw=",
+            "id": "projects/homestead-mortgages/secrets/HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING/roles/secretmanager.secretAccessor/serviceAccount:hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com",
+            "member": "serviceAccount:hm-servicing-run@homestead-mortgages.iam.gserviceaccount.com",
+            "project": "homestead-mortgages",
+            "role": "roles/secretmanager.secretAccessor",
+            "secret_id": "projects/homestead-mortgages/secrets/HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING"
+          },
+          "sensitive_attributes": [],
+          "private": "bnVsbA==",
+          "dependencies": [
+            "google_service_account.servicing_run"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_sql_database",
+      "name": "servicing",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "charset": "UTF8",
+            "collation": "en_US.UTF8",
+            "deletion_policy": "DELETE",
+            "id": "projects/homestead-mortgages/instances/homestead-mortgages-db/databases/homestead_servicing_staging",
+            "instance": "homestead-mortgages-db",
+            "name": "homestead_servicing_staging",
+            "project": "homestead-mortgages",
+            "self_link": "https://sqladmin.googleapis.com/sql/v1beta4/projects/homestead-mortgages/instances/homestead-mortgages-db/databases/homestead_servicing_staging",
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "module": "module.stack[\"staging\"]",
+      "mode": "managed",
+      "type": "google_sql_database_instance",
+      "name": "this",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "available_maintenance_versions": [
+              "POSTGRES_16_15.R20260712.01_10"
+            ],
+            "clone": [],
+            "connection_name": "homestead-mortgages:us-central1:homestead-mortgages-db",
+            "database_version": "POSTGRES_16",
+            "deletion_protection": true,
+            "dns_name": "",
+            "encryption_key_name": null,
+            "first_ip_address": "34.173.230.85",
+            "id": "homestead-mortgages-db",
+            "instance_type": "CLOUD_SQL_INSTANCE",
+            "ip_address": [
+              {
+                "ip_address": "34.173.230.85",
+                "time_to_retire": "",
+                "type": "PRIMARY"
+              },
+              {
+                "ip_address": "35.254.65.89",
+                "time_to_retire": "",
+                "type": "OUTGOING"
+              }
+            ],
+            "maintenance_version": "POSTGRES_16_14.R20260712.01_06",
+            "master_instance_name": "",
+            "name": "homestead-mortgages-db",
+            "private_ip_address": "",
+            "project": "homestead-mortgages",
+            "psc_service_attachment_link": "",
+            "public_ip_address": "34.173.230.85",
+            "region": "us-central1",
+            "replica_configuration": [],
+            "restore_backup_context": [],
+            "root_password": null,
+            "self_link": "https://sqladmin.googleapis.com/sql/v1beta4/projects/homestead-mortgages/instances/homestead-mortgages-db",
+            "server_ca_cert": [
+              {
+                "cert": "-----BEGIN CERTIFICATE-----\nMIIDcTCCAlmgAwIBAgIBADANBgkqhkiG9w0BAQsFADBwMS0wKwYDVQQuEyQzNDdj\nYWRmMS0wNGExLTQxZTAtODgwZS04OGE0MmJiOTEzNGIxHDAaBgNVBAMTE0Nsb3Vk\nIFNRTCBTZXJ2ZXIgQ0ExFDASBgNVBAoTC0dvb2dsZSwgSW5jMQswCQYDVQQGEwJV\nUzAeFw0yNjA5MDExNzE4MTNaFw0zNjA4MjkxNzE5MTNaMHAxLTArBgNVBC4TJDM0\nN2NhZGYxLTA0YTEtNDFlMC04ODBlLTg4YTQyYmI5MTM0YjEcMBoGA1UEAxMTQ2xv\ndWQgU1FMIFNlcnZlciBDQTEUMBIGA1UEChMLR29vZ2xlLCBJbmMxCzAJBgNVBAYT\nAlVTMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmUgWcYkDWALPteLn\nj9v2Wawu1rQf7dCo395JdS5umoHPKz0NyHuk8TrJIMsAiRy3h6yOQpZ1SPjijjcO\nfy/lk06Gn+tCjbM7JpS7mAtDSAlWNcV47AqKK6tzHWAVi3mP7d+8FqyJDUQJVc7m\nKtmEsJJPX20iZ7VfSpPqn4j6esx5/QffQeGZUuyukqHLV0SsTDkf/XfltLR46+R0\nfc5Khk5pMbxbHXtngJOrEQyxp5r/VACY81bRL5DIsisW3qvdbsaBTblLlsySUd2l\nU52csH37vuCoSmnCyErpmYNIjaTNaoiDUCRT+TZuUuqAKGDIiOgzamzRITEdy2qa\nWUaspwIDAQABoxYwFDASBgNVHRMBAf8ECDAGAQH/AgEAMA0GCSqGSIb3DQEBCwUA\nA4IBAQAxqIu4Rci7mdRfxxVGr5B1pzFzIfQm+rY4sJf1XCJEeE5zfMM5iBWTLa2d\nKa2uh1/rg6e7zN6rJYXDtAvL1gc+hxar4XEjPsCxuCwLXWZX19rQ27W5T6QEy15R\nWe/OIQidaVto7HCArXiLUkKT66efV37jSvTwn8nrjPyHQFFUYGMi41/G+LvKB2GX\nobz9mKxR6hDK4oXU3Bk7/btp6Z7LN8yGL4Ylk3NdwERM5EEUhpv7RBTJ3m0ybp3K\nDVI5xlLSzads5+iQqk7Ku24JGA7/rSvUFSOY2blh8Y6IHJjX4/Pf8J3jEMY1tX6S\np744OxdE+Iz10Xes/Ig9wqY2bAi8\n-----END CERTIFICATE-----",
+                "common_name": "C=US,O=Google\\, Inc,CN=Cloud SQL Server CA,dnQualifier=347cadf1-04a1-41e0-880e-88a42bb9134b",
+                "create_time": "2026-09-01T17:18:13.469Z",
+                "expiration_time": "2036-08-29T17:19:13.469Z",
+                "sha1_fingerprint": "69002e142fe127f0750cd56ee13f445ba71a8c18"
+              }
+            ],
+            "service_account_email_address": "p193197012613-gixbrp@gcp-sa-cloud-sql.iam.gserviceaccount.com",
+            "settings": [
+              {
+                "activation_policy": "ALWAYS",
+                "active_directory_config": [],
+                "advanced_machine_features": [],
+                "availability_type": "ZONAL",
+                "backup_configuration": [
+                  {
+                    "backup_retention_settings": [
+                      {
+                        "retained_backups": 7,
+                        "retention_unit": "COUNT"
+                      }
+                    ],
+                    "binary_log_enabled": false,
+                    "enabled": true,
+                    "location": "",
+                    "point_in_time_recovery_enabled": true,
+                    "start_time": "07:00",
+                    "transaction_log_retention_days": 7
+                  }
+                ],
+                "collation": "",
+                "connector_enforcement": "NOT_REQUIRED",
+                "data_cache_config": [],
+                "database_flags": [],
+                "deletion_protection_enabled": false,
+                "deny_maintenance_period": [],
+                "disk_autoresize": true,
+                "disk_autoresize_limit": 0,
+                "disk_size": 10,
+                "disk_type": "PD_SSD",
+                "edition": "ENTERPRISE",
+                "enable_dataplex_integration": true,
+                "enable_google_ml_integration": false,
+                "insights_config": [],
+                "ip_configuration": [
+                  {
+                    "allocated_ip_range": "",
+                    "authorized_networks": [],
+                    "enable_private_path_for_google_cloud_services": false,
+                    "ipv4_enabled": true,
+                    "private_network": "",
+                    "psc_config": [],
+                    "require_ssl": false,
+                    "server_ca_mode": "GOOGLE_MANAGED_INTERNAL_CA",
+                    "ssl_mode": "ENCRYPTED_ONLY"
+                  }
+                ],
+                "location_preference": [
+                  {
+                    "follow_gae_application": "",
+                    "secondary_zone": "",
+                    "zone": "us-central1-a"
+                  }
+                ],
+                "maintenance_window": [],
+                "password_validation_policy": [],
+                "pricing_plan": "PER_USE",
+                "sql_server_audit_config": [],
+                "tier": "db-g1-small",
+                "time_zone": "",
+                "user_labels": {},
+                "version": 62
+              }
+            ],
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo1NDAwMDAwMDAwMDAwLCJkZWxldGUiOjU0MDAwMDAwMDAwMDAsInVwZGF0ZSI6NTQwMDAwMDAwMDAwMH19"
+        }
+      ]
+    }
+  ],
+  "check_results": null
+}

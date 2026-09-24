@@ -464,6 +464,23 @@ Today `hm-run@` holds `cloudsql.client` and accessor on the secrets the API
 mounts, granted on the secrets themselves. `hm-github-actions@` can deploy and
 push images and nothing else. Terraform manages all of it.
 
+**Two environments, one configuration (24 September 2026).** `infra/` is
+a per-environment module, `modules/stack`, instantiated from `var.stacks`
+for `staging` and `production`: each has its own Cloud SQL instance
+(`homestead-mortgages-db`, `homestead-mortgages-prod-db`), two databases,
+three jobs with schedules and alerts, its secret grants and its two backends
+on the shared front door. The root holds the shared pieces: the service
+accounts, the alert channel, the edge (one address, a certificate per
+hostname, one URL map whose host rules come from the stacks map — moving a
+hostname between environments is moving a string there). The Cloud Run
+services are the deploy's and are declared nowhere. Terraform is applied by
+hand with local state and always `-target`. Staging deploys on every push
+to main (`deploy.yml`); production deploys by `deploy-production.yml`, a
+manual run behind the `production` GitHub environment's approval, which
+promotes the image staging built for that commit and refuses sample data.
+Production's secrets are `_PROD`. See `docs/decisions.md`, "Two
+environments, one configuration".
+
 **The servicing app deploys beside the API, in our project and
 nowhere else**, as `homestead-mortgages-staging-servicing`: its image
 (`apps/servicing/Dockerfile`), its migrations and demo seed applied from it

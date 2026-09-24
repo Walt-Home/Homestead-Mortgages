@@ -3180,6 +3180,71 @@ somebody claimed (`loans_unclaimed_is_not_monitored`) is gone.
   the choice, and the person's claim is the door. The tests that pinned the
   older rule pin the new one now.
 
+## Two environments, one configuration
+
+**Decision (24 September 2026):** production is a second instance of the
+same Terraform configuration, not a second copy of it. Joe: "we should
+start building the domain mapping to staging so we don't add junk to prod
+as we test" — and there was no prod to keep clean: one stack, named
+staging, served the roots, on one Cloud SQL instance, with sample
+sign-ins on and a fixture mailer. So the configuration was split into what
+an environment owns and what every environment shares, and stood up twice.
+
+- **`modules/stack` is an environment.** Its own Cloud SQL instance (Cloud
+  SQL users are instance-scoped, so two environments on one instance could
+  open each other's databases; and production's point-in-time recovery,
+  maintenance window and CPU should be production's), its two databases,
+  its three jobs and their schedules, its alerts, the secret grants its two
+  identities need, and its two backends on the front door. The root keeps
+  what is shared: the three service accounts, the alert channel, and the
+  front door — one address, one certificate per hostname, one URL map
+  whose host rules are built from `var.stacks`. Moving a hostname between
+  environments is moving a string in that map; the certificate is the
+  hostname's, so the roots pass from staging to production without one
+  being recreated. The Cloud Run services are declared nowhere: they are
+  the deploy's, as they always were, and Terraform owns the shape around a
+  service and never the service or its image.
+- **Staging did not move.** Its resources were moved in _state_ into
+  `module.stack["staging"]` — twenty-six `terraform state mv`, one import
+  of the API database that had never been in state — and the plan
+  afterwards changed nothing of staging's but the URL map's matcher names
+  and two `gcloud` metadata fields on the jobs. The shared edge resources
+  keep the `-staging-` in their names, because renaming a global address
+  is a new IP.
+- **Production's instance is its own, and its secrets are `_PROD`.**
+  `homestead-mortgages-prod-db`, `homestead_mortgages_prod` and
+  `homestead_servicing_prod`; `HOMESTEAD_MORTGAGES_DATABASE_URL_PROD`,
+  `_SERVICING_DATABASE_URL_PROD`, `_SERVICING_API_TOKEN_PROD`,
+  `_SESSION_SECRET_PROD` and `_VENDOR_TOKEN_KEY_PROD`, each generated on the
+  day and read by exactly the identity that needs it. The API's role and
+  the servicing role are made the way staging's were — the first through
+  the Cloud SQL API, the second in SQL as `LOGIN CREATEROLE` owning its one
+  database, `CONNECT` on the API's database revoked from `PUBLIC`, the two
+  extensions created once by hand — because Terraform can only make the
+  kind of user the boundary needs the servicing role not to be.
+- **Production deploys by hand, behind an approval, and promotes what
+  staging tested.** `.github/workflows/deploy-production.yml` is a
+  `workflow_dispatch` on a commit of main; its jobs run in the GitHub
+  environment `production`, which requires Joe's review and accepts only
+  main. It does not build: it takes the image the staging deploy built for
+  that commit (and the newest servicing image at or before it), so what
+  runs in production is byte for byte what ran on staging. It migrates the
+  production instance, fetches the APOR series, reviews the watched loans,
+  stands the console's first admin, and deploys both services with the
+  `_PROD` secrets. What it refuses: no sample borrowers, no demo book, no
+  persona sign-in, no state gallery — and its health check fails the deploy
+  if `personas` reads enabled. The API runs with one warm instance.
+- **What production is not yet.** Its vendors are staging's sandbox
+  vendors until production keys exist; the servicing app runs `nonprod`
+  with fake integrations, because its config refuses to start a production
+  process on fakes and every vendor in it is a fake; its mailer is the
+  fixture until a Resend key is set, so the tape desk's invitations report
+  "not delivered" with the link. It answers on no hostname until the
+  cutover: the roots leave `stacks.staging` for `stacks.production`, the
+  staging deploy's `PUBLIC_ORIGIN` and `SERVICING_PUBLIC_HOST` become the
+  staging names, and production's become the roots. IAP on production's
+  console backend is enabled by hand, as staging's was.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

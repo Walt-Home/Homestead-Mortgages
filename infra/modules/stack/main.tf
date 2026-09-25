@@ -186,7 +186,9 @@ resource "google_cloud_run_v2_job" "apor_fetch" {
   }
 
   lifecycle {
-    ignore_changes = [template[0].template[0].containers[0].image]
+    # The image is the deploy's, and gcloud stamps its client on every
+    # update; neither is ours to put back.
+    ignore_changes = [template[0].template[0].containers[0].image, client, client_version]
   }
 }
 
@@ -265,7 +267,9 @@ resource "google_cloud_run_v2_job" "loan_review" {
   }
 
   lifecycle {
-    ignore_changes = [template[0].template[0].containers[0].image]
+    # The image is the deploy's, and gcloud stamps its client on every
+    # update; neither is ours to put back.
+    ignore_changes = [template[0].template[0].containers[0].image, client, client_version]
   }
 }
 
@@ -355,7 +359,9 @@ resource "google_cloud_run_v2_job" "servicing_sweep" {
   }
 
   lifecycle {
-    ignore_changes = [template[0].template[0].containers[0].image]
+    # The image is the deploy's, and gcloud stamps its client on every
+    # update; neither is ours to put back.
+    ignore_changes = [template[0].template[0].containers[0].image, client, client_version]
   }
 
   # A job that names a secret its identity cannot read fails to create; the

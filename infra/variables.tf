@@ -85,7 +85,7 @@ variable "stacks" {
       # staging.supermortgage.com served for a day and was retired the
       # afternoon the new name went live.
       consumer_hostnames            = ["staging.app.supermortgage.com"]
-      servicing_hostnames           = ["servicing.supermortgage.com", "staging.servicing.supermortgage.com"]
+      servicing_hostnames           = ["staging.servicing.supermortgage.com"]
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING"
       servicing_api_token_secret    = "HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN"
@@ -96,8 +96,10 @@ variable "stacks" {
       # consumer app lives at app.supermortgage.com in production and
       # staging.app.supermortgage.com in staging. The roots are the marketing
       # site's and answer on no stack here.
+      # servicing.supermortgage.com moved here from staging on 25 September,
+      # once production's console backend had IAP and its members.
       consumer_hostnames            = ["app.supermortgage.com"]
-      servicing_hostnames           = []
+      servicing_hostnames           = ["servicing.supermortgage.com"]
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_PROD"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_PROD"
       servicing_api_token_secret    = "HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN_PROD"

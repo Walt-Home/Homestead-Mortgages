@@ -3274,7 +3274,20 @@ then. The apex went that afternoon: `supermortgage.com` resolved to the
 marketing host before the day was out, and its certificate and host rule
 left our front door with it; `www` followed by evening, the same way. The
 front door is four names, two per environment, and nothing of the roots is
-ours. Before either environment's `PUBLIC_ORIGIN` moves to its new name,
+ours. That evening `servicing.supermortgage.com` moved to the production
+stack — Joe: "move servicing to production". `gcloud iap web enable` was
+run on production's console backend first (its compute-side flag already
+read on, and the record above says what that is worth); IAP's agent held
+invoker on the production API from the first deploy; then the host rule
+moved with one string in `var.stacks`, and every path on the name answered
+with the Google sign-in before anything else was touched.
+`SERVICING_PUBLIC_HOST` became per environment the same way `PUBLIC_ORIGIN`
+is: the `production` environment's variable is the branded host, the
+repository's is staging's, and each deploy was rerun to read its own.
+Staging's servicing app was pointed at its own name by hand, because its
+deploy runs only when its tree changes. Production's book is empty until a
+tape is loaded at `servicing.supermortgage.com/console/tape`; the staging
+book stays at `staging.servicing.supermortgage.com`. Before either environment's `PUBLIC_ORIGIN` moves to its new name,
 Plaid has to hold that origin's redirect (`/plaid/return`; a link token
 asked for with an unregistered one is refused for every product, not
 only OAuth) and the Google OAuth client its origin — checked on the day:

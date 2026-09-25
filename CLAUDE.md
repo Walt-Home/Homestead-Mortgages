@@ -482,7 +482,8 @@ Production's secrets are `_PROD`. See `docs/decisions.md`, "Two
 environments, one configuration".
 
 **The servicing app deploys beside the API, in our project and
-nowhere else**, as `homestead-mortgages-staging-servicing`: its image
+nowhere else**, as `homestead-mortgages-staging-servicing` and
+`homestead-mortgages-production-servicing`: its image
 (`apps/servicing/Dockerfile`), its migrations and demo seed applied from it
 through the proxy, the sweep as a Cloud Run job every five minutes, on a
 database of its own under `hm-servicing-run@`, which reads exactly its own two
@@ -511,15 +512,17 @@ in staging; the servicing app is `servicing.supermortgage.com` in production
 and `staging.servicing.supermortgage.com` in staging — the product is the
 second label, the environment the prefix. The roots, `supermortgage.com` and
 `www`, are the marketing site's (Doug's) and answer on no stack here;
-`staging.supermortgage.com` served for a day and is gone. Until production's
-console is stood up, `servicing.supermortgage.com` still reaches the staging
-servicing app beside its staging name. All of it is `infra/edge.tf`, and
+`staging.supermortgage.com` served for a day and is gone. All of it is `infra/edge.tf`, and
 a hostname moves between environments by moving a string in `var.stacks`:
 one global external Application Load Balancer, a serverless endpoint group
 per service, a Google-managed certificate per hostname, HTTP redirected to
 HTTPS, and `/` on the servicing host redirected to its console at `/ops`.
 The servicing hostnames are behind Identity-Aware Proxy for Doug, Drew and
-Joe as their supermortgage.com accounts. Its one backend is the API container, which on
+Joe as their supermortgage.com accounts; the switch is `gcloud iap web
+enable` on the console backend, and Terraform holds the members only.
+`SERVICING_PUBLIC_HOST` is per environment — the `production` GitHub
+environment's variable names the branded host, the repository's names
+staging's. Its one backend is the API container, which on
 that Host serves OUR ops console (`apps/console`, at `/console`) and forwards
 the console's calls to the servicing app as `/console/api/*` → its `/ops/api/*`
 (`apps/api/src/console-host.ts`), and answers the tape desk's own calls at

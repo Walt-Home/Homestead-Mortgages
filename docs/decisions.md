@@ -3255,6 +3255,22 @@ an environment owns and what every environment shares, and stood up twice.
   staging names, and production's become the roots. IAP on production's
   console backend is enabled by hand, as staging's was.
 
+**Addendum, 25 September 2026 — the hostnames, revised.** Doug is taking
+the roots (`supermortgage.com`, `www`) for the marketing site, so the
+consumer app is `app.supermortgage.com` in production and
+`staging.supermortgage.com` in staging; the servicing app stays
+`servicing.supermortgage.com` in production (at the cutover) and
+`staging.servicing.supermortgage.com` in staging. `app.supermortgage.com`
+was added to the production stack the same day — its certificate
+provisions once its A record points at the edge — and the roots stay on
+the staging stack's list only until the marketing site's DNS takes them,
+so nothing goes dark in between; their certificates come out of the map
+then. Before either environment's `PUBLIC_ORIGIN` moves to its new name,
+Plaid has to hold that origin's redirect (`/plaid/return`; a link token
+asked for with an unregistered one is refused for every product, not
+only OAuth) and the Google OAuth client its origin — checked on the day:
+the root's redirect is registered, the staging and app ones are not yet.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

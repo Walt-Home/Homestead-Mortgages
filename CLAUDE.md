@@ -511,8 +511,14 @@ one of them is staging today.** There is one stack, `environment =
 production anything yet; the roots are production's the day a production
 stack exists, and until then the staging stack answers on
 `staging.supermortgage.com` and `staging.servicing.supermortgage.com` beside
-them (24 September 2026). `supermortgage.com` (and `www`) is the consumer app and
-`servicing.supermortgage.com` is the servicing app, through `infra/edge.tf`:
+them (24 September 2026). 25 September: the roots are the marketing
+site's (Doug's); the consumer app is `app.supermortgage.com` in production
+and `staging.supermortgage.com` in staging, the servicing app
+`servicing.supermortgage.com` in production and
+`staging.servicing.supermortgage.com` in staging, and the roots leave our
+front door when the marketing site's DNS takes them. Until the cutover
+`supermortgage.com` (and `www`) still reach the staging consumer app and
+`servicing.supermortgage.com` the staging servicing app, through `infra/edge.tf`:
 one global external Application Load Balancer, a serverless endpoint group
 per service, a Google-managed certificate per hostname, HTTP redirected to
 HTTPS, and `/` on the servicing host redirected to its console at `/ops`.

@@ -3261,7 +3261,9 @@ consumer app is `app.supermortgage.com` in production and
 `staging.app.supermortgage.com` in staging (Joe's refinement the same
 day, for consistency: the product is the second label and the environment
 the prefix, as `staging.servicing` already was; `staging.supermortgage.com`
-stays only until the new name is live); the servicing app stays
+served for the day and was retired the afternoon `staging.app` answered —
+its host rule and certificate left the front door, and its OAuth origin
+and Plaid redirect are Joe's to drop); the servicing app stays
 `servicing.supermortgage.com` in production (at the cutover) and
 `staging.servicing.supermortgage.com` in staging. `app.supermortgage.com`
 was added to the production stack the same day — its certificate

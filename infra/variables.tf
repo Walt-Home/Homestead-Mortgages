@@ -82,8 +82,9 @@ variable "stacks" {
       # points at Doug's host now); www stays here until his DNS takes it.
       # staging.app.supermortgage.com is the name (the product is the second
       # label, the environment the prefix, as staging.servicing is);
-      # staging.supermortgage.com stays only until the new name is live.
-      consumer_hostnames            = ["www.supermortgage.com", "staging.supermortgage.com", "staging.app.supermortgage.com"]
+      # staging.supermortgage.com served for a day and was retired the
+      # afternoon the new name went live.
+      consumer_hostnames            = ["www.supermortgage.com", "staging.app.supermortgage.com"]
       servicing_hostnames           = ["servicing.supermortgage.com", "staging.servicing.supermortgage.com"]
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING"
@@ -93,8 +94,8 @@ variable "stacks" {
       instance_name = "homestead-mortgages-prod-db"
       # 25 September: the roots go to the marketing site (Doug's), and the
       # consumer app lives at app.supermortgage.com in production and
-      # staging.supermortgage.com in staging. The roots stay on the staging
-      # stack's list only until Doug's DNS takes them, so they never go dark.
+      # staging.app.supermortgage.com in staging. www stays on the staging
+      # stack's list only until Doug's DNS takes it, so it never goes dark.
       consumer_hostnames            = ["app.supermortgage.com"]
       servicing_hostnames           = []
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_PROD"

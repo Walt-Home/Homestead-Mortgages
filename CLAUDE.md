@@ -510,10 +510,11 @@ one of them is staging today.** There is one stack, `environment =
 "staging"`, one Cloud SQL instance with two staging databases, and no
 production anything yet; the roots are production's the day a production
 stack exists, and until then the staging stack answers on
-`staging.supermortgage.com` and `staging.servicing.supermortgage.com` beside
-them (24 September 2026). 25 September: the roots are the marketing
+`staging.app.supermortgage.com` and `staging.servicing.supermortgage.com`
+beside them (24–25 September 2026; the product is the second label, the
+environment the prefix). 25 September: the roots are the marketing
 site's (Doug's); the consumer app is `app.supermortgage.com` in production
-and `staging.supermortgage.com` in staging, the servicing app
+and `staging.app.supermortgage.com` in staging, the servicing app
 `servicing.supermortgage.com` in production and
 `staging.servicing.supermortgage.com` in staging, and the roots leave our
 front door when the marketing site's DNS takes them. Until the cutover

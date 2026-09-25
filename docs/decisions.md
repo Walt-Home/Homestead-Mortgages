@@ -3258,7 +3258,10 @@ an environment owns and what every environment shares, and stood up twice.
 **Addendum, 25 September 2026 — the hostnames, revised.** Doug is taking
 the roots (`supermortgage.com`, `www`) for the marketing site, so the
 consumer app is `app.supermortgage.com` in production and
-`staging.supermortgage.com` in staging; the servicing app stays
+`staging.app.supermortgage.com` in staging (Joe's refinement the same
+day, for consistency: the product is the second label and the environment
+the prefix, as `staging.servicing` already was; `staging.supermortgage.com`
+stays only until the new name is live); the servicing app stays
 `servicing.supermortgage.com` in production (at the cutover) and
 `staging.servicing.supermortgage.com` in staging. `app.supermortgage.com`
 was added to the production stack the same day — its certificate

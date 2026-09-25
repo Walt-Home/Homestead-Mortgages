@@ -54,9 +54,10 @@ variable "stacks" {
     since the start; `production` was stood up the same day. 25 September,
     Joe: the roots (supermortgage.com, www) are the marketing site's, not
     ours; the consumer app is app.supermortgage.com in production and
-    staging.supermortgage.com in staging, and the servicing app is
+    staging.app.supermortgage.com in staging, and the servicing app is
     servicing.supermortgage.com in production and
-    staging.servicing.supermortgage.com in staging. Moving a hostname
+    staging.servicing.supermortgage.com in staging — the product is the
+    second label, the environment the prefix. Moving a hostname
     between stacks is moving a string here — the certificates are the
     hostnames' and the address is shared.
 
@@ -79,7 +80,10 @@ variable "stacks" {
       instance_name = "homestead-mortgages-db"
       # The apex left for the marketing site on 25 September (its A record
       # points at Doug's host now); www stays here until his DNS takes it.
-      consumer_hostnames            = ["www.supermortgage.com", "staging.supermortgage.com"]
+      # staging.app.supermortgage.com is the name (the product is the second
+      # label, the environment the prefix, as staging.servicing is);
+      # staging.supermortgage.com stays only until the new name is live.
+      consumer_hostnames            = ["www.supermortgage.com", "staging.supermortgage.com", "staging.app.supermortgage.com"]
       servicing_hostnames           = ["servicing.supermortgage.com", "staging.servicing.supermortgage.com"]
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING"

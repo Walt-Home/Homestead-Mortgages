@@ -168,14 +168,19 @@ variable "servicing_console_members" {
   description = <<-EOT
     Who may pass Identity-Aware Proxy on a servicing hostname, as IAM
     members, in every environment. Joe's list, 22 September 2026: Doug, Drew
-    and Joe, signing in as their trywalt.ai accounts. Passing IAP reaches
-    the console's own sign-in, not a session; the console's admins are made
-    by staff-bootstrap and its own invitations, which is a separate list.
+    and Joe. Spelled by the accounts' PRIMARY e-mail, which is what IAM
+    reads a member back as: the three were trywalt.ai accounts, and on
+    25 September Google reported them as supermortgage.com — the Workspace
+    had moved its primary domain — and Terraform, writing one spelling and
+    reading the other, dropped every member from state as "present, but now
+    absent". A member spelled by an alias will do that again. Passing IAP
+    reaches the console's own sign-in, not a session; the console's admins
+    are made by staff-bootstrap and its own invitations, a separate list.
   EOT
   type        = list(string)
   default = [
-    "user:doug@trywalt.ai",
-    "user:drew@trywalt.ai",
-    "user:joe@trywalt.ai",
+    "user:doug@supermortgage.com",
+    "user:drew@supermortgage.com",
+    "user:joe@supermortgage.com",
   ]
 }

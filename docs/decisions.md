@@ -3236,6 +3236,14 @@ an environment owns and what every environment shares, and stood up twice.
   `_PROD` secrets. What it refuses: no sample borrowers, no demo book, no
   persona sign-in, no state gallery — and its health check fails the deploy
   if `personas` reads enabled. The API runs with one warm instance.
+- **First deployed 25 September 2026** (run 36021689532, from the commit
+  staging had deployed the evening before): 177 servicing migrations, the
+  console's first admin, the API's migrations, the APOR series covering
+  the week, a review over an empty book, both services up — the API
+  reporting `personas: disabled`, its servicing port reading the
+  production servicing service, and that service answering 403 to anyone
+  without the API's identity. The `production` environment gates each job
+  that names it, so one run asks for two approvals.
 - **What production is not yet.** Its vendors are staging's sandbox
   vendors until production keys exist; the servicing app runs `nonprod`
   with fake integrations, because its config refuses to start a production

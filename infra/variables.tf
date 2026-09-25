@@ -51,10 +51,14 @@ variable "stacks" {
     else an environment has is derived from its name.
 
     24 September 2026: two. `staging` is the stack that has been deployed
-    since the start and still answers on the roots; `production` is being
-    stood up and answers on no hostname yet. The cutover moves the roots
-    from the one list to the other — and nothing else, because the
-    certificates are the hostnames' and the address is shared.
+    since the start; `production` was stood up the same day. 25 September,
+    Joe: the roots (supermortgage.com, www) are the marketing site's, not
+    ours; the consumer app is app.supermortgage.com in production and
+    staging.supermortgage.com in staging, and the servicing app is
+    servicing.supermortgage.com in production and
+    staging.servicing.supermortgage.com in staging. Moving a hostname
+    between stacks is moving a string here — the certificates are the
+    hostnames' and the address is shared.
 
     A secret named here must exist and be granted before the plan that
     references it is applied; Terraform grants the servicing pair and the
@@ -80,8 +84,12 @@ variable "stacks" {
       servicing_api_token_secret    = "HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN"
     }
     production = {
-      instance_name                 = "homestead-mortgages-prod-db"
-      consumer_hostnames            = []
+      instance_name = "homestead-mortgages-prod-db"
+      # 25 September: the roots go to the marketing site (Doug's), and the
+      # consumer app lives at app.supermortgage.com in production and
+      # staging.supermortgage.com in staging. The roots stay on the staging
+      # stack's list only until Doug's DNS takes them, so they never go dark.
+      consumer_hostnames            = ["app.supermortgage.com"]
       servicing_hostnames           = []
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_PROD"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_PROD"

@@ -505,26 +505,21 @@ with no invoker bindings that 403s everything and reads exactly like a broken
 container. The deploy workflow asserts the binding afterwards and fails if it
 is missing.
 
-**Both deployments have hostnames, behind one load balancer — and every
-one of them is staging today.** There is one stack, `environment =
-"staging"`, one Cloud SQL instance with two staging databases, and no
-production anything yet; the roots are production's the day a production
-stack exists, and until then the staging stack answers on
-`staging.app.supermortgage.com` and `staging.servicing.supermortgage.com`
-beside them (24–25 September 2026; the product is the second label, the
-environment the prefix). 25 September: the roots are the marketing
-site's (Doug's); the consumer app is `app.supermortgage.com` in production
-and `staging.app.supermortgage.com` in staging, the servicing app
-`servicing.supermortgage.com` in production and
-`staging.servicing.supermortgage.com` in staging, and the roots leave our
-front door when the marketing site's DNS takes them. Until the cutover
-`supermortgage.com` (and `www`) still reach the staging consumer app and
-`servicing.supermortgage.com` the staging servicing app, through `infra/edge.tf`:
+**Four hostnames, one front door (25 September 2026).** The consumer app
+is `app.supermortgage.com` in production and `staging.app.supermortgage.com`
+in staging; the servicing app is `servicing.supermortgage.com` in production
+and `staging.servicing.supermortgage.com` in staging — the product is the
+second label, the environment the prefix. The roots, `supermortgage.com` and
+`www`, are the marketing site's (Doug's) and answer on no stack here;
+`staging.supermortgage.com` served for a day and is gone. Until production's
+console is stood up, `servicing.supermortgage.com` still reaches the staging
+servicing app beside its staging name. All of it is `infra/edge.tf`, and
+a hostname moves between environments by moving a string in `var.stacks`:
 one global external Application Load Balancer, a serverless endpoint group
 per service, a Google-managed certificate per hostname, HTTP redirected to
 HTTPS, and `/` on the servicing host redirected to its console at `/ops`.
-The servicing hostname is behind Identity-Aware Proxy for Doug, Drew and Joe
-as their trywalt.ai accounts. Its one backend is the API container, which on
+The servicing hostnames are behind Identity-Aware Proxy for Doug, Drew and
+Joe as their supermortgage.com accounts. Its one backend is the API container, which on
 that Host serves OUR ops console (`apps/console`, at `/console`) and forwards
 the console's calls to the servicing app as `/console/api/*` → its `/ops/api/*`
 (`apps/api/src/console-host.ts`), and answers the tape desk's own calls at

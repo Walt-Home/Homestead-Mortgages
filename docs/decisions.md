@@ -3272,8 +3272,9 @@ the staging stack's list only until the marketing site's DNS takes them,
 so nothing goes dark in between; their certificates come out of the map
 then. The apex went that afternoon: `supermortgage.com` resolved to the
 marketing host before the day was out, and its certificate and host rule
-left our front door with it; `www` still points here and stays listed
-until it moves. Before either environment's `PUBLIC_ORIGIN` moves to its new name,
+left our front door with it; `www` followed by evening, the same way. The
+front door is four names, two per environment, and nothing of the roots is
+ours. Before either environment's `PUBLIC_ORIGIN` moves to its new name,
 Plaid has to hold that origin's redirect (`/plaid/return`; a link token
 asked for with an unregistered one is refused for every product, not
 only OAuth) and the Google OAuth client its origin — checked on the day:

@@ -78,13 +78,13 @@ variable "stacks" {
   default = {
     staging = {
       instance_name = "homestead-mortgages-db"
-      # The apex left for the marketing site on 25 September (its A record
-      # points at Doug's host now); www stays here until his DNS takes it.
+      # The roots left for the marketing site on 25 September (the apex in
+      # the afternoon, www by evening; both A records point at Doug's host).
       # staging.app.supermortgage.com is the name (the product is the second
       # label, the environment the prefix, as staging.servicing is);
       # staging.supermortgage.com served for a day and was retired the
       # afternoon the new name went live.
-      consumer_hostnames            = ["www.supermortgage.com", "staging.app.supermortgage.com"]
+      consumer_hostnames            = ["staging.app.supermortgage.com"]
       servicing_hostnames           = ["servicing.supermortgage.com", "staging.servicing.supermortgage.com"]
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING"
@@ -94,8 +94,8 @@ variable "stacks" {
       instance_name = "homestead-mortgages-prod-db"
       # 25 September: the roots go to the marketing site (Doug's), and the
       # consumer app lives at app.supermortgage.com in production and
-      # staging.app.supermortgage.com in staging. www stays on the staging
-      # stack's list only until Doug's DNS takes it, so it never goes dark.
+      # staging.app.supermortgage.com in staging. The roots are the marketing
+      # site's and answer on no stack here.
       consumer_hostnames            = ["app.supermortgage.com"]
       servicing_hostnames           = []
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_PROD"

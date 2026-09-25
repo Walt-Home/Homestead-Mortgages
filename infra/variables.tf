@@ -76,8 +76,10 @@ variable "stacks" {
   }))
   default = {
     staging = {
-      instance_name                 = "homestead-mortgages-db"
-      consumer_hostnames            = ["supermortgage.com", "www.supermortgage.com", "staging.supermortgage.com"]
+      instance_name = "homestead-mortgages-db"
+      # The apex left for the marketing site on 25 September (its A record
+      # points at Doug's host now); www stays here until his DNS takes it.
+      consumer_hostnames            = ["www.supermortgage.com", "staging.supermortgage.com"]
       servicing_hostnames           = ["servicing.supermortgage.com", "staging.servicing.supermortgage.com"]
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING"

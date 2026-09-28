@@ -66,14 +66,10 @@ variable "stacks" {
     deploy mounts the rest.
   EOT
   type = map(object({
-    instance_name       = string
-    db_tier             = optional(string, "db-g1-small")
-    consumer_hostnames  = list(string)
-    servicing_hostnames = list(string)
-    # The partner portal: a servicer's team and their book. Reaches the API
-    # backend like the consumer names (no IAP: they are not our accounts),
-    # and the API serves the portal by Host.
-    partner_hostnames             = list(string)
+    instance_name                 = string
+    db_tier                       = optional(string, "db-g1-small")
+    consumer_hostnames            = list(string)
+    servicing_hostnames           = list(string)
     database_url_secret           = string
     servicing_database_url_secret = string
     servicing_api_token_secret    = string
@@ -90,7 +86,6 @@ variable "stacks" {
       # afternoon the new name went live.
       consumer_hostnames            = ["staging.app.supermortgage.com"]
       servicing_hostnames           = ["staging.servicing.supermortgage.com"]
-      partner_hostnames             = ["staging.partners.supermortgage.com"]
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING"
       servicing_api_token_secret    = "HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN"
@@ -105,7 +100,6 @@ variable "stacks" {
       # once production's console backend had IAP and its members.
       consumer_hostnames            = ["app.supermortgage.com"]
       servicing_hostnames           = ["servicing.supermortgage.com"]
-      partner_hostnames             = ["partners.supermortgage.com"]
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_PROD"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_PROD"
       servicing_api_token_secret    = "HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN_PROD"

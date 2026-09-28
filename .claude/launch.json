@@ -20,6 +20,7 @@
         "DEMO_PERSONAS=true",
         "GOOGLE_CLIENT_ID=",
         "SERVICING_API_URL=http://localhost:8090",
+        "INTERNAL_EMAIL_DOMAINS=supermortgage.com,trywalt.ai,example.test",
         "npm",
         "run",
         "dev",
@@ -52,13 +53,6 @@
       "runtimeArgs": ["run", "dev", "--workspace=@hm/console"],
       "port": 5174,
       "url": "http://localhost:5174"
-    },
-    {
-      "name": "partners",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:partners", "--workspace=@hm/console"],
-      "port": 5175,
-      "url": "http://localhost:5175"
     }
   ]
 }

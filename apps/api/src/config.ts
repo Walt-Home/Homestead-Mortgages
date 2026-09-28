@@ -135,31 +135,30 @@ export const config = {
     get publicHost(): string | undefined {
       return this.publicHosts[0];
     },
+    /**
+     * Where the console is reached — and the partner portal inside it, at
+     * `/console/portal`. A servicer's invitation links are minted on it.
+     * Unset in development, where Vite serves the console on 5174 and
+     * proxies the portal's door here.
+     */
+    get consoleOrigin(): string {
+      const explicit = process.env.CONSOLE_PUBLIC_ORIGIN;
+      if (explicit) return explicit.replace(/\/$/, "");
+      const host = this.publicHosts[0];
+      return host ? `https://${host}` : "http://localhost:5174";
+    },
   },
 
   /**
-   * The partner portal: where a servicer's team signs in to see their book.
-   * On this Host — and only on it — the API serves the portal bundle
-   * (apps/console built for `/`) and its own door, `/api/servicer`; the
-   * borrower app answers nowhere on it. Unset in development, where Vite
-   * serves the portal on 5175 and proxies the door here. The origin is
-   * where invitation links point.
+   * The e-mail domains that are ours. The console's one sign-in page sends
+   * an address on one of these to the staff door and every other address
+   * to the servicer door — a rule, not a lookup, so asking tells nobody
+   * whether an address is on a team.
    */
-  partners: {
-    publicHosts: (process.env.PARTNERS_PUBLIC_HOST ?? "")
-      .split(/[\s,;]+/)
-      .map((h) => h.trim())
-      .filter((h) => h !== ""),
-    get publicHost(): string | undefined {
-      return this.publicHosts[0];
-    },
-    get origin(): string {
-      const explicit = process.env.PARTNERS_PUBLIC_ORIGIN;
-      if (explicit) return explicit.replace(/\/$/, "");
-      const host = this.publicHosts[0];
-      return host ? `https://${host}` : "http://localhost:5175";
-    },
-  },
+  internalEmailDomains: (process.env.INTERNAL_EMAIL_DOMAINS ?? "supermortgage.com,trywalt.ai")
+    .split(/[\s,;]+/)
+    .map((d) => d.trim().toLowerCase())
+    .filter((d) => d !== ""),
 
   /**
    * Desktop Underwriter. Five values, none of them with a default.

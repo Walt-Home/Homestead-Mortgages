@@ -1,8 +1,9 @@
 /**
- * Taking an invitation: the link is the first factor, the password chosen
- * here the second, and the person is signed in on the spot. The token
- * rides in the URL's fragment, which a browser never sends to a server, so
- * the page reads it off `location.hash` and posts it in a body.
+ * Taking an invitation, at `/console/accept#<token>`: the link is the first
+ * factor, the password chosen here the second, and the person is signed in
+ * on the spot. The token rides in the URL's fragment, which a browser never
+ * sends to a server, so the page reads it off `location.hash` and posts it
+ * in a body.
  */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -55,8 +56,7 @@ export function AcceptPage() {
     try {
       await portal("/auth/accept", { body: { token, password } });
       await refresh();
-      window.history.replaceState(null, "", "/");
-      navigate("/", { replace: true });
+      navigate("/portal", { replace: true });
     } catch (err) {
       const code = err instanceof PortalError ? err.code : null;
       setError(

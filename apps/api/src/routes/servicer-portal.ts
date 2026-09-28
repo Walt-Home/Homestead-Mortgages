@@ -17,10 +17,12 @@
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "@hm/db";
+import { config } from "../config.js";
 import { asyncRoute, AppError } from "../middleware/error-handler.js";
 import { requireServicerUser } from "../middleware/require-servicer.js";
 import {
   acceptServicerInvitation,
+  inviteServicerTeam,
   listServicerTeam,
   previewServicerInvitation,
   requestSignInCode,
@@ -63,6 +65,11 @@ async function signedIn(userId: string) {
 }
 
 /* ── open: the door ────────────────────────────────────────────────────────── */
+
+/** Which door an address belongs at: ours go to the staff door, every other to this one. Company domains, not a secret. */
+servicerPortalRouter.get("/auth/door", (_req, res) => {
+  res.json({ internalDomains: config.internalEmailDomains });
+});
 
 servicerPortalRouter.post(
   "/auth/code",
@@ -182,5 +189,29 @@ servicerPortalRouter.get(
   "/team",
   asyncRoute(async (req, res) => {
     res.json({ team: await listServicerTeam(req.servicerUser!.servicerId) });
+  }),
+);
+
+/** A member invites colleagues onto their own team: the servicer comes off the session, never off the body. */
+servicerPortalRouter.post(
+  "/team",
+  asyncRoute(async (req, res) => {
+    const body = z
+      .object({
+        invitations: z
+          .array(z.object({ email: z.string().min(3), name: z.string().max(200).nullish() }))
+          .min(1)
+          .max(50),
+      })
+      .strict()
+      .parse(req.body);
+    const me = req.servicerUser!;
+    res.status(201).json({
+      outcomes: await inviteServicerTeam({
+        servicerSlug: me.servicer.slug,
+        invitations: body.invitations,
+        invitedBy: `member:${me.id}`,
+      }),
+    });
   }),
 );

@@ -164,6 +164,13 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
     forward((path) => `/api/documents${path}`),
   );
 
+  // Ours, and never forwarded: the partner portal's door. A servicer's
+  // team signs in on this host too — the console's one sign-in page sends
+  // them here — so this one prefix leaves this router for the chain below,
+  // where the body parser, the session and the door are. Everything else
+  // under `/api` on this host is the servicing app's, as before.
+  router.use("/api/servicer", (_req, _res, next) => next("router"));
+
   // His own console and what it calls, forwarded as they are. Express hands
   // the remainder as "/" or "/?query" for the bare prefix; his server wants
   // the prefix itself.

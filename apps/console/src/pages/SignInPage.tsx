@@ -33,10 +33,21 @@ interface VerifyAnswer {
   roles: string[];
 }
 
-export function SignInPage() {
+export function SignInPage({
+  initialEmail,
+  onBack,
+  onServicer,
+}: {
+  /** The address the entry page took; the code goes out as the page opens. */
+  initialEmail?: string;
+  /** Back to the entry page's one field. Without it, this page's own e-mail step. */
+  onBack?: () => void;
+  /** The same address, at the servicer door instead. */
+  onServicer?: () => void;
+} = {}) {
   const { refresh, endedBecause } = useAuth();
-  const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState("");
+  const [step, setStep] = useState<Step>(initialEmail ? "code" : "email");
+  const [email, setEmail] = useState(initialEmail ?? "");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
@@ -52,6 +63,15 @@ export function SignInPage() {
   useEffect(() => {
     first.current?.focus();
   }, [step]);
+
+  const sent = useRef(false);
+  useEffect(() => {
+    if (!initialEmail || sent.current) return;
+    sent.current = true;
+    void sendCode();
+  }, []);
+
+  const startOver = () => (onBack ? onBack() : setStep("email"));
 
   const fail = (err: unknown) => {
     const e = err instanceof ApiError ? err : null;
@@ -279,11 +299,7 @@ export function SignInPage() {
                 Continue
               </Button>
               <div className="flex items-center justify-between text-sm">
-                <button
-                  type="button"
-                  className="text-fg-2 hover:text-fg"
-                  onClick={() => setStep("email")}
-                >
+                <button type="button" className="text-fg-2 hover:text-fg" onClick={startOver}>
                   Different e-mail
                 </button>
                 <button
@@ -294,6 +310,19 @@ export function SignInPage() {
                   Send a new code
                 </button>
               </div>
+              {onServicer ? (
+                <p className="text-sm text-fg-3">
+                  On a servicer&rsquo;s team?{" "}
+                  <button
+                    type="button"
+                    className="text-fg-2 underline hover:text-fg"
+                    onClick={onServicer}
+                  >
+                    Sign in at the servicer door
+                  </button>
+                  .
+                </p>
+              ) : null}
             </form>
           ) : null}
 
@@ -352,11 +381,7 @@ export function SignInPage() {
                 {changing ? "Change password and sign in" : "Sign in"}
               </Button>
               <div className="flex items-center justify-between text-sm">
-                <button
-                  type="button"
-                  className="text-fg-2 hover:text-fg"
-                  onClick={() => setStep("email")}
-                >
+                <button type="button" className="text-fg-2 hover:text-fg" onClick={startOver}>
                   Start over
                 </button>
                 <button

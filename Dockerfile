@@ -42,7 +42,6 @@ COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=build /app/apps/console/dist ./apps/console/dist
-COPY --from=build /app/apps/console/dist-partners ./apps/console/dist-partners
 
 EXPOSE 8080
 CMD ["node", "apps/api/dist/index.js"]

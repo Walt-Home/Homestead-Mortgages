@@ -1,6 +1,7 @@
 /**
- * Sign in to the portal: e-mail, the code sent to it, the password. One
- * card, one step at a time — the ops console's door, against our own.
+ * The servicer door of the console's one sign-in: the entry page took the
+ * e-mail; this is the code sent to it, then the password. One card, one
+ * step at a time — the staff door's shape, against our own API.
  *
  * The code is the possession factor and opens exactly one sign-in within
  * ten minutes; five wrong passwords in an hour lock the account for
@@ -16,7 +17,7 @@ import { portal, PortalError } from "../api.js";
 import { usePortalAuth } from "../auth.js";
 import { PortalWordmark } from "../Shell.js";
 
-type Step = "email" | "code" | "password";
+type Step = "code" | "password";
 
 interface CodeAnswer {
   delivery: string;
@@ -24,10 +25,21 @@ interface CodeAnswer {
   fake_code?: string;
 }
 
-export function SignInPage() {
+export function ServicerSignInPage({
+  initialEmail,
+  onBack,
+  onStaff,
+}: {
+  /** The address the entry page took; the code goes out as the page opens. */
+  initialEmail: string;
+  /** Back to the one field. */
+  onBack: () => void;
+  /** The same address, at the staff door instead. */
+  onStaff: () => void;
+}) {
   const { refresh } = usePortalAuth();
-  const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState("");
+  const [step, setStep] = useState<Step>("code");
+  const [email] = useState(initialEmail);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [fakeCode, setFakeCode] = useState<string | null>(null);
@@ -39,6 +51,13 @@ export function SignInPage() {
   useEffect(() => {
     first.current?.focus();
   }, [step]);
+
+  const sent = useRef(false);
+  useEffect(() => {
+    if (sent.current) return;
+    sent.current = true;
+    void sendCode();
+  }, []);
 
   const fail = (err: unknown) => {
     const e = err instanceof PortalError ? err : null;
@@ -116,8 +135,7 @@ export function SignInPage() {
     }
   };
 
-  const heading =
-    step === "email" ? "Sign in" : step === "code" ? "Check your e-mail" : "Your password";
+  const heading = step === "code" ? "Check your e-mail" : "Your password";
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
@@ -125,7 +143,6 @@ export function SignInPage() {
         <PortalWordmark />
         <h1 className="mt-8 text-2xl font-semibold tracking-tight text-fg">{heading}</h1>
         <p className="mt-1.5 text-base text-fg-2">
-          {step === "email" && "Your servicing book on Supermortgage."}
           {step === "code" && (
             <>
               A six-digit code was sent to <span className="font-medium text-fg">{email}</span>. It
@@ -136,27 +153,6 @@ export function SignInPage() {
         </p>
 
         <div className="mt-6 rounded-xl border border-line-2 bg-surface p-5 shadow-card sm:p-6">
-          {step === "email" ? (
-            <form onSubmit={sendCode} className="space-y-4">
-              <Field label="Work e-mail" htmlFor="email">
-                <Input
-                  ref={first}
-                  id="email"
-                  type="email"
-                  autoComplete="username"
-                  inputMode="email"
-                  placeholder="you@yourservicer.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </Field>
-              <Button type="submit" variant="primary" className="w-full" loading={busy}>
-                Continue
-              </Button>
-            </form>
-          ) : null}
-
           {step === "code" ? (
             <form onSubmit={verify} className="space-y-4">
               {fakeCode ? (
@@ -203,11 +199,7 @@ export function SignInPage() {
                 Continue
               </Button>
               <div className="flex items-center justify-between text-sm">
-                <button
-                  type="button"
-                  className="text-fg-2 hover:text-fg"
-                  onClick={() => setStep("email")}
-                >
+                <button type="button" className="text-fg-2 hover:text-fg" onClick={onBack}>
                   Different e-mail
                 </button>
                 <button
@@ -218,6 +210,17 @@ export function SignInPage() {
                   Send a new code
                 </button>
               </div>
+              <p className="text-sm text-fg-3">
+                Supermortgage staff?{" "}
+                <button
+                  type="button"
+                  className="text-fg-2 underline hover:text-fg"
+                  onClick={onStaff}
+                >
+                  Sign in at the staff door
+                </button>
+                .
+              </p>
             </form>
           ) : null}
 
@@ -238,11 +241,7 @@ export function SignInPage() {
                 Sign in
               </Button>
               <div className="flex items-center justify-between text-sm">
-                <button
-                  type="button"
-                  className="text-fg-2 hover:text-fg"
-                  onClick={() => setStep("email")}
-                >
+                <button type="button" className="text-fg-2 hover:text-fg" onClick={onBack}>
                   Start over
                 </button>
               </div>

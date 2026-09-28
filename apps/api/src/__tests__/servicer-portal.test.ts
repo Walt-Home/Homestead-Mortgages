@@ -335,6 +335,44 @@ describe("the two sessions never cross", () => {
   });
 });
 
+describe("a member's team", () => {
+  it("is theirs to grow: an invitation from a member lands on their own servicer, signed as theirs", async () => {
+    const { call } = await member();
+    const before = outbox().length;
+    const r = await call<{ outcomes: { email: string; status: string }[] }>(
+      "POST",
+      "/api/servicer/team",
+      { invitations: [{ email: "colleague@northlight.example", name: "Col" }] },
+    );
+    expect(r.status).toBe(201);
+    expect(r.body.outcomes[0]!.status).toBe("sent");
+    expect(outbox().length).toBe(before + 1);
+    expect(outbox().at(-1)!.text).toContain("/console/accept#");
+    const row = await prisma.servicerUser.findUniqueOrThrow({
+      where: { email: "colleague@northlight.example" },
+      include: { servicer: { select: { slug: true } } },
+    });
+    expect(row.servicer.slug).toBe(NORTHLIGHT.slug);
+    expect(row.invitedBy).toMatch(/^member:/);
+    const team = await call<{ team: { email: string; standing: string }[] }>(
+      "GET",
+      "/api/servicer/team",
+    );
+    expect(team.body.team.map((m) => m.standing).sort()).toEqual(["active", "invited"]);
+    // Nobody signed out can.
+    const stranger = await agent()("POST", "/api/servicer/team", {
+      invitations: [{ email: "x@y.example" }],
+    });
+    expect(stranger.status).toBe(401);
+  });
+
+  it("says which door an address belongs at without looking anything up", async () => {
+    const r = await agent()<{ internalDomains: string[] }>("GET", "/api/servicer/auth/door");
+    expect(r.status).toBe(200);
+    expect(r.body.internalDomains).toContain("supermortgage.com");
+  });
+});
+
 describe("passwords", () => {
   it("are scrypt with a salt, never the text", async () => {
     const a = await hashPassword(PASSWORD);

@@ -9,7 +9,6 @@ import { sessionMiddleware } from "./middleware/session.js";
 import { assertAuthConfigured } from "./services/auth.js";
 import { serveSpa } from "./static.js";
 import { consoleHost } from "./console-host.js";
-import { partnersHost } from "./partners-host.js";
 import { providerMix } from "./services/connectors.js";
 import { authRouter } from "./routes/auth.js";
 import { healthRouter } from "./routes/health.js";
@@ -42,10 +41,6 @@ app.use(
 // console API behind it. Mounted first so that on that Host nothing below —
 // not the partner door, not the session, not the borrower app — answers.
 const consoleMounted = consoleHost(app);
-// The partner portal's hostname is a third product: a servicer's team and
-// their book. On that Host the API serves the portal bundle and answers
-// only the portal's own door and health; the borrower app is not there.
-const partnersMounted = partnersHost(app);
 
 // A partner is a key, not a sign-in. Mounted ABOVE the session gate because
 // the gate would refuse it — a servicer's integration has no session and no
@@ -67,7 +62,9 @@ app.use("/api/auth", authRouter);
 // `requireServicerUser` reads `session.servicerUserId`, which `requireAuth`
 // never does, so neither session opens the other's routes. Above the
 // borrower gate for the same reason the partner door is: that gate would
-// refuse it. `servicer-portal.test.ts` holds both directions.
+// refuse it. Answers on the servicing host too — the console's one sign-in
+// sends a servicer's people here, and `console-host.ts` lets this one
+// prefix through. `servicer-portal.test.ts` holds both directions.
 app.use("/api/servicer", servicerPortalRouter);
 
 // Everything past this point requires a signed-in user. Mounted as one gate
@@ -130,12 +127,6 @@ app.listen(config.port, () => {
         (consoleMounted === "console"
           ? "served from apps/console/dist"
           : "not built; his API forwarded"),
-    );
-  }
-  if (partnersMounted !== "not-configured") {
-    console.log(
-      `Partner portal on ${config.partners.publicHosts.join(", ")}: ` +
-        (partnersMounted === "served" ? "served from apps/console/dist-partners" : "not built"),
     );
   }
   if (config.demoPersonasEnabled) {

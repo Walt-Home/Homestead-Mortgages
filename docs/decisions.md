@@ -3296,17 +3296,23 @@ the root's redirect is registered, the staging and app ones are not yet.
 ## A servicer's team signs in with a code and a password
 
 **Decision (28 September 2026).** A servicer's people get accounts of their
-own on our side — `servicer_users` — and a portal of their own,
-`partners.supermortgage.com` (`staging.partners` in staging), where they
-see their book: every loan we hold for them, the newest review's verdict,
-the offer if one was made, and where each homeowner's invitation stands.
-Ops invites them from the tape desk, in a Team step between the load and
-the borrower invitations; each takes a mailed link that sets their
-password, and from then on signs in with a six-digit code to that address
-and the password. Joe's three answers set the shape: we send the borrower
-e-mails, not the servicer; sign-in is e-mail code plus password; and roles
-are kept simple, which here means none — every member sees the whole book
-and changes nothing.
+own on our side — `servicer_users` — and a view of their own inside the
+console, at `servicing.supermortgage.com/console/portal`
+(`staging.servicing` in staging): their book — every loan we hold for them,
+the newest review's verdict, the offer if one was made, and where each
+homeowner's invitation stands — and their team. One hostname and one
+sign-in page for both products: the entry page takes an e-mail and sends
+it to the staff door or the servicer door by its domain, and whichever
+session comes back decides what renders — the ops console for staff, the
+portal for a servicer's team. Ops invites a servicer's first people from
+the tape desk, in a Team step between the load and the borrower
+invitations, and from then on a member invites colleagues from the portal;
+each takes a mailed link that sets their password, and afterwards signs in
+with a six-digit code to that address and the password. Joe set the shape
+in three answers and one revision: we send the borrower e-mails, not the
+servicer; sign-in is e-mail code plus password; roles are kept simple,
+which here means none; and the servicing hostname is the door for both
+kinds of account, with members inviting members.
 
 **Why our side, not the servicing app's partner portal.** The vendored
 runtime carries a partner portal (its §36: partner users, three roles, a
@@ -3320,15 +3326,29 @@ alone; a first sign-in that sets the password; five wrong passwords in an
 hour locking the account for fifteen minutes; a dead link, a wrong code and
 an unknown address answering alike — and the data stays ours.
 
-**Why a hostname of its own.** The console host sits behind Identity-Aware
+**Why one hostname, and IAP off.** The first cut gave the portal a
+hostname of its own because the servicing host sat behind Identity-Aware
 Proxy for our three Google accounts, and a servicer's staff are not those.
-The partner hostname reaches the API backend like the consumer names do —
-no IAP — and the container decides by Host what to serve: on that name,
-the portal (apps/console built a second time, `--mode partners`, for `/`)
-and of the API only `/api/servicer` and health. The borrower app answers
-nowhere on it, so a cookie minted there is a servicer's and nothing else.
-Moving the name between environments is the same one string in
-`var.stacks` as every other hostname.
+Joe wanted one door with the account type deciding the dashboard, which
+IAP cannot do: it walls the whole backend before any page loads. So IAP
+came off the console backend the same day (`gcloud iap web disable`, the
+same by-hand switch that turned it on), and what protects the servicing
+host now is what was always behind IAP: the servicing app's staff door and
+our servicer door, each two factors, each built for the open internet,
+with the servicing app's `/ops` and `/ops/api` doors internet-reachable
+behind its own sign-in as its spec §34.1 intends. On that host `/api/*` is
+the servicing app's, except the one prefix `console-host.ts` lets through
+to ourselves: `/api/servicer`. The partner hostnames, their certificates,
+the second console build and its host router lasted an afternoon and are
+gone; the DNS records Joe added for them can go too.
+
+**Which door, without a lookup.** The entry page sends an address to the
+staff door when its domain is one of ours (`INTERNAL_EMAIL_DOMAINS`,
+`supermortgage.com` and `trywalt.ai` by default, read off
+`GET /api/servicer/auth/door`) and to the servicer door otherwise. A rule
+rather than a lookup, so typing an address tells nobody whether it is on a
+team; each door carries a link to the other for the odd address the rule
+gets wrong.
 
 **The two sessions never cross.** A servicer session carries
 `servicerUserId` and a borrower session carries `userId`; `requireAuth`
@@ -3352,11 +3372,12 @@ staging today the tape desk's team invitations report "not delivered" with
 the link to hand over, for the same reason the borrower claims do.
 
 **What is deliberately not here.** One address belongs to one servicer.
-No roles. No member invites another; ops does. No password change or
-recovery beyond a fresh invitation. No borrower invitations from the
-servicer's side — Joe: "we send the borrower emails". Each is a column or
-a route away, and none was worth guessing at before a servicer's team has
-used the thing.
+No roles: every member sees the whole book and changes nothing but its
+team. No removing a member from the portal; ops re-invites or disables.
+No password change or recovery beyond a fresh invitation. No borrower
+invitations from the servicer's side — Joe: "we send the borrower emails".
+Each is a column or a route away, and none was worth guessing at before a
+servicer's team has used the thing.
 
 ## Still outstanding
 

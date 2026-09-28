@@ -2440,6 +2440,12 @@ export const TABLES_OFF_THE_WIRE = {
   loan_claims: {
     why: "The hash of a link a servicer delivered for one mortgage on its tape and who took it; how a person made a mortgage theirs to watch, and a casefile describes a credit request, which a claim never is.",
   },
+  servicer_users: {
+    why: "A servicer's team member — the hash of their password, the hash of the link that invited them, the lock on guessing — which is how a person on the servicer's side signs in to read the book; a casefile says who the borrower is and never who at the servicer looked.",
+  },
+  servicer_signin_codes: {
+    why: "The hash of a six-digit code mailed to a servicer's team member for one sign-in, and how many times it was tried; the same kind of row as user_authenticators, and nothing about any loan.",
+  },
   partner_credentials: {
     why: "The hash of a servicer's bearer key and when it was revoked; how a partner's machine reaches the API at all, and never a fact about a borrower or a loan.",
   },

@@ -11,8 +11,8 @@
  *
  * What is deliberately simple, for now: one address belongs to one
  * servicer; there are no roles, every member sees the servicer's whole book
- * and changes nothing; and only ops invites, never a member. Each of those
- * is a column away when it is wanted.
+ * and changes nothing but its team — a member invites colleagues as ops
+ * does. Each of those is a column away when it is wanted.
  *
  * Existence is not a signal. Asking for a code answers the same for an
  * address that is not on any team, and a wrong code and a dead code answer
@@ -101,7 +101,7 @@ export function assertPasswordStrength(password: string): void {
 
 /** The link in the invitation. The token rides in the fragment, as a claim's does: a fragment never reaches a request log. */
 export function servicerInvitationUrl(token: string): string {
-  return `${config.partners.origin}/accept#${token}`;
+  return `${config.servicing.consoleOrigin}/console/accept#${token}`;
 }
 
 export function servicerInvitationMessage(input: {
@@ -181,7 +181,7 @@ export async function inviteServicerTeam(
   input: {
     readonly servicerSlug: string;
     readonly invitations: readonly { readonly email: string; readonly name?: string | null }[];
-    /** The console staff id that sent them — recorded, never trusted for anything. */
+    /** Who sent them — a console staff id, or `member:<id>` — recorded, never trusted for anything. */
     readonly invitedBy: string | null;
   },
   db: Db = prisma,

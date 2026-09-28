@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:partners": "vite --mode partners",
-    "build": "tsc -b && vite build && vite build --mode partners",
+    "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run --passWithNoTests"

@@ -1,7 +1,8 @@
 /**
- * The portal's frame: the servicer's name where the ops console has its
- * wordmark, two links, and who is signed in. One bar, no rail: a servicer's
- * team has two things to look at.
+ * The portal's frame, inside the console's bundle at `/console/portal`: the
+ * servicer's name where the ops console has its wordmark, two links, and
+ * who is signed in. One bar, no rail: a servicer's team has two things to
+ * look at.
  */
 
 import type { ReactNode } from "react";
@@ -33,10 +34,10 @@ export function PortalShell({ children }: { children: ReactNode }) {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3">
           <PortalWordmark servicer={me?.servicer.displayName} />
           <nav className="flex items-center gap-1" aria-label="Portal">
-            <NavLink to="/" end className={link}>
+            <NavLink to="/portal" end className={link}>
               Book
             </NavLink>
-            <NavLink to="/team" className={link}>
+            <NavLink to="/portal/team" className={link}>
               Team
             </NavLink>
           </nav>

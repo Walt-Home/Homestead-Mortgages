@@ -24,7 +24,6 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/**",
-      "**/dist-partners/**",
       "**/node_modules/**",
       "**/.turbo/**",
       "**/coverage/**",

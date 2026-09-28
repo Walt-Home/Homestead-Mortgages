@@ -154,18 +154,22 @@ gated by the servicing app's own staff session, checked with it
 (`services/console-staff.ts`). See `docs/decisions.md`, "The tape desk is one
 screen, and a claim is mailed from it".
 
-**A servicer's team has a portal, and ops invites them (28 September
-2026).** `partners.supermortgage.com` (`staging.partners` in staging) is
-apps/console built a second time (`--mode partners`, served at `/` from
-`dist-partners` by `apps/api/src/partners-host.ts`) against our own door,
-`/api/servicer`: a servicer's people sign in with a code to their e-mail
-and a password — `services/servicer-team.ts`, `servicer_users` — and see
-their book read-only: every loan, the newest verdict, the offer, where the
-homeowner's invitation stands, and their own team. The desk's Team step
-mails the invitation; the link sets the password. No roles, one address
-per servicer, and only ops invites. The two sessions never cross:
-`requireServicerUser` reads `servicerUserId`, `requireAuth` reads `userId`,
-and `servicer-portal.test.ts` holds both directions. See
+**A servicer's team has a portal inside the console, and one sign-in
+serves both (28 September 2026).** `servicing.supermortgage.com/console`
+opens on an entry page that takes an e-mail and sends it to the staff door
+(the servicing app's, proxied) or the servicer door (`/api/servicer`, ours)
+by its domain (`INTERNAL_EMAIL_DOMAINS`); whichever session comes back
+decides what renders — the ops console, or the portal at
+`/console/portal`. A servicer's people — `services/servicer-team.ts`,
+`servicer_users` — sign in with a code to their e-mail and a password, and
+see their book read-only: every loan, the newest verdict, the offer, where
+the homeowner's invitation stands, and their team, which they can grow.
+The desk's Team step mails the first invitations; the link
+(`/console/accept#token`) sets the password. No roles, one address per
+servicer. IAP is off the servicing host for this: a servicer's staff are
+not our Google accounts, and both doors are two factors. The two sessions
+never cross: `requireServicerUser` reads `servicerUserId`, `requireAuth`
+reads `userId`, and `servicer-portal.test.ts` holds both directions. See
 `docs/decisions.md`, "A servicer's team signs in with a code and a
 password".
 
@@ -522,23 +526,23 @@ with no invoker bindings that 403s everything and reads exactly like a broken
 container. The deploy workflow asserts the binding afterwards and fails if it
 is missing.
 
-**Six hostnames, one front door (25–28 September 2026).** The consumer app
+**Four hostnames, one front door (25 September 2026).** The consumer app
 is `app.supermortgage.com` in production and `staging.app.supermortgage.com`
 in staging; the servicing app is `servicing.supermortgage.com` in production
-and `staging.servicing.supermortgage.com` in staging; the partner portal is
-`partners.supermortgage.com` and `staging.partners.supermortgage.com` — the
-product is the second label, the environment the prefix. The partner names
-reach the API backend like the consumer names (no IAP: a servicer's team
-are not our accounts) and the container serves the portal by Host. The roots, `supermortgage.com` and
+and `staging.servicing.supermortgage.com` in staging — the product is the
+second label, the environment the prefix. The partner portal lives inside
+the console on the servicing names. The roots, `supermortgage.com` and
 `www`, are the marketing site's (Doug's) and answer on no stack here;
 `staging.supermortgage.com` served for a day and is gone. All of it is `infra/edge.tf`, and
 a hostname moves between environments by moving a string in `var.stacks`:
 one global external Application Load Balancer, a serverless endpoint group
 per service, a Google-managed certificate per hostname, HTTP redirected to
 HTTPS, and `/` on the servicing host redirected to its console at `/ops`.
-The servicing hostnames are behind Identity-Aware Proxy for Doug, Drew and
-Joe as their supermortgage.com accounts; the switch is `gcloud iap web
-enable` on the console backend, and Terraform holds the members only.
+The servicing hostnames were behind Identity-Aware Proxy for Doug, Drew
+and Joe until 28 September; IAP is off now, because a servicer's team
+signs in on the same host and they are not our Google accounts. The
+switch is `gcloud iap web enable`/`disable` on the console backend, and
+Terraform holds the members only.
 `SERVICING_PUBLIC_HOST` is per environment — the `production` GitHub
 environment's variable names the branded host, the repository's names
 staging's. Its one backend is the API container, which on
@@ -579,7 +583,6 @@ you are already editing that line, so the fix never arrives as its own diff.
 
 ```bash
 npm run dev                  # API :8080, web :5173
-npm run dev:partners -w @hm/console   # the partner portal on :5175, against the API
 npm test                     # every workspace but apps/servicing
 npm run test:servicing       # the servicing app's vendored tests, under node --test, on a database beside ours (CI: four shards, only when its tree changed)
 npm run check                # tsc -b + registry verify

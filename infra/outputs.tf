@@ -12,6 +12,7 @@ output "stacks" {
       console_backend          = m.console_backend_name
       consumer_hostnames       = var.stacks[k].consumer_hostnames
       servicing_hostnames      = var.stacks[k].servicing_hostnames
+      partner_hostnames        = var.stacks[k].partner_hostnames
     }
   }
 }

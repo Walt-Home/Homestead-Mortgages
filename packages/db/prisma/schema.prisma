@@ -1747,8 +1747,72 @@ model Servicer {
   loans       Loan[]
   credentials PartnerCredential[]
   imports     PartnerBookImport[]
+  users       ServicerUser[]
 
   @@map("servicers")
+}
+
+/// A person on a servicer's team, with a sign-in of their own: a code to
+/// this address and a password, two factors, never one. Ops invites them
+/// from the tape desk; the invitation is a token that lives in the mailed
+/// link and nowhere else, and taking it is what sets the password. One
+/// address belongs to one servicer. No roles yet: every member sees the
+/// servicer's whole book and changes nothing.
+model ServicerUser {
+  id         String   @id @default(uuid()) @db.Uuid
+  servicerId String   @map("servicer_id") @db.Uuid
+  servicer   Servicer @relation(fields: [servicerId], references: [id], onDelete: Cascade)
+
+  /// Normalized: trimmed, lower-cased.
+  email String  @unique
+  name  String?
+
+  /// scrypt, `scrypt$N$r$p$salt$key`; null until the invitation is taken.
+  passwordHash String? @map("password_hash")
+
+  invitedAt DateTime @default(now()) @map("invited_at")
+  /// The console staff id that sent the invitation — the servicing app's, not one of ours.
+  invitedBy String?  @map("invited_by")
+
+  /// The live invitation, if any: sha256 of the token in the mailed link.
+  inviteTokenHash   String?   @unique @map("invite_token_hash")
+  inviteExpiresAt   DateTime? @map("invite_expires_at")
+  inviteDeliveredTo String?   @map("invite_delivered_to")
+  inviteDeliveredAt DateTime? @map("invite_delivered_at")
+  inviteDelivery    Json?     @map("invite_delivery")
+
+  acceptedAt DateTime? @map("accepted_at")
+  disabledAt DateTime? @map("disabled_at")
+
+  /// Five wrong passwords in an hour lock the account for fifteen minutes.
+  failedPasswordCount Int       @default(0) @map("failed_password_count")
+  failedPasswordAt    DateTime? @map("failed_password_at")
+  lockedUntil         DateTime? @map("locked_until")
+  lastSignedInAt      DateTime? @map("last_signed_in_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  signInCodes ServicerSignInCode[]
+
+  @@index([servicerId], map: "servicer_users_servicer")
+  @@map("servicer_users")
+}
+
+/// One six-digit code, mailed, good for ten minutes and one sign-in. The
+/// row holds a hash; the code is in the mail and nowhere else.
+model ServicerSignInCode {
+  id     String       @id @default(uuid()) @db.Uuid
+  userId String       @map("user_id") @db.Uuid
+  user   ServicerUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  codeHash   String    @map("code_hash")
+  expiresAt  DateTime  @map("expires_at")
+  attempts   Int       @default(0)
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([userId], map: "servicer_signin_codes_user")
+  @@map("servicer_signin_codes")
 }
 
 /// One tape, read once. Append-only: the same two files land once, and a

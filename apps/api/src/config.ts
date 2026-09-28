@@ -138,6 +138,30 @@ export const config = {
   },
 
   /**
+   * The partner portal: where a servicer's team signs in to see their book.
+   * On this Host — and only on it — the API serves the portal bundle
+   * (apps/console built for `/`) and its own door, `/api/servicer`; the
+   * borrower app answers nowhere on it. Unset in development, where Vite
+   * serves the portal on 5175 and proxies the door here. The origin is
+   * where invitation links point.
+   */
+  partners: {
+    publicHosts: (process.env.PARTNERS_PUBLIC_HOST ?? "")
+      .split(/[\s,;]+/)
+      .map((h) => h.trim())
+      .filter((h) => h !== ""),
+    get publicHost(): string | undefined {
+      return this.publicHosts[0];
+    },
+    get origin(): string {
+      const explicit = process.env.PARTNERS_PUBLIC_ORIGIN;
+      if (explicit) return explicit.replace(/\/$/, "");
+      const host = this.publicHosts[0];
+      return host ? `https://${host}` : "http://localhost:5175";
+    },
+  },
+
+  /**
    * Desktop Underwriter. Five values, none of them with a default.
    *
    * Every one of these is in the DU integration agreement rather than in the

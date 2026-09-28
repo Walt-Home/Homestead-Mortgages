@@ -134,17 +134,26 @@ describe("what the access primitive did not copy", () => {
 });
 
 describe("nothing about a loan is reachable without a session", () => {
-  it("keeps sign-in the only way in for a person, with three routers above the gate", async () => {
-    // Health, auth and partner, and nothing else, sit above `app.use("/api",
-    // requireAuth)`. Whatever a loan route a PERSON reaches eventually is, it
-    // goes below it — and this is the line that has to move for that to stop
-    // being true. The partner router is above it because a servicer's key is
-    // not a session; it carries a gate of its own that reads the bearer
-    // header and never the session, so it hands nothing to a person, signed
-    // in or not — `partner-credential.test.ts` walks both refusals.
+  it("keeps sign-in the only way in for a person, with four routers above the gate", async () => {
+    // Health, auth, partner and the partner portal's door, and nothing else,
+    // sit above `app.use("/api", requireAuth)`. Whatever a loan route a
+    // PERSON reaches eventually is, it goes below it — and this is the line
+    // that has to move for that to stop being true. The partner router is
+    // above it because a servicer's key is not a session; it carries a gate
+    // of its own that reads the bearer header and never the session, so it
+    // hands nothing to a person, signed in or not — `partner-credential.test.ts`
+    // walks both refusals. The portal's door is above it because a servicer's
+    // team member is not a borrower: its gate reads `servicerUserId` and never
+    // `userId`, so a person's session opens nothing there either —
+    // `servicer-portal.test.ts` walks both directions.
     const index = readFileSync(resolve(src, "index.ts"), "utf8");
     const above = index.slice(0, index.indexOf('app.use("/api", requireAuth)'));
     const routers = [...above.matchAll(/app\.use\([^)]*?(\w+Router)\)/g)].map((m) => m[1]);
-    expect(routers).toEqual(["partnerRouter", "healthRouter", "authRouter"]);
+    expect(routers).toEqual([
+      "partnerRouter",
+      "healthRouter",
+      "authRouter",
+      "servicerPortalRouter",
+    ]);
   });
 });

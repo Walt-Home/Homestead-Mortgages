@@ -303,10 +303,12 @@ describe("the gate", () => {
     expect(partner).toBeGreaterThan(-1);
     expect(gate).toBeGreaterThan(-1);
     expect(partner).toBeLessThan(gate);
-    // Everything mounted above the gate is one of: health, auth, partner.
+    // Everything mounted above the gate is one of: health, auth, partner,
+    // and the partner portal's door — which carries a gate of its own
+    // (`requireServicerUser`), held by servicer-portal.test.ts.
     const above = index.slice(0, gate).match(/app\.use\("\/api\/[^"]*"/g) ?? [];
     expect(above.map((m) => m.slice(9, -1)).sort()).toEqual(
-      ["/api/auth", "/api/health", "/api/partner"].sort(),
+      ["/api/auth", "/api/health", "/api/partner", "/api/servicer"].sort(),
     );
   });
 });

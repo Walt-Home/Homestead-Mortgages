@@ -29,6 +29,16 @@ declare module "express-session" {
      */
     secondFactor?: "verified" | "exempt";
     /**
+     * A servicer's team member, signed in at the partner portal. A session
+     * carries this OR `userId`, never both: `requireAuth` reads only
+     * `userId`, so a servicer session opens nothing of the borrower app,
+     * and `requireServicerUser` reads only this, so a borrower session opens
+     * nothing of the portal.
+     */
+    servicerUserId?: string;
+    /** The code accepted, the password not yet given: who, and until when. */
+    servicerStep?: { userId: string; until: number };
+    /**
      * An enrollment in progress: the secret the QR code encodes, held here
      * and not in a row until a code from it has been seen. A half-enrolled
      * row would lock its owner out with an authenticator they never finished

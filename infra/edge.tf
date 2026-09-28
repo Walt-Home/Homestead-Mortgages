@@ -39,7 +39,7 @@ resource "google_compute_global_address" "edge" {
 
 locals {
   edge_hostnames = distinct(flatten([
-    for k, s in var.stacks : concat(s.consumer_hostnames, s.servicing_hostnames)
+    for k, s in var.stacks : concat(s.consumer_hostnames, s.servicing_hostnames, s.partner_hostnames)
   ]))
 }
 
@@ -60,8 +60,14 @@ resource "google_compute_url_map" "edge" {
   name            = "homestead-mortgages-staging-edge"
   default_service = module.stack[var.default_stack].api_backend_id
 
+  # The consumer names and the partner portal's reach the API backend: the
+  # container decides by Host which of the two products to serve.
   dynamic "host_rule" {
-    for_each = { for k, s in var.stacks : k => s.consumer_hostnames if length(s.consumer_hostnames) > 0 }
+    for_each = {
+      for k, s in var.stacks :
+      k => concat(s.consumer_hostnames, s.partner_hostnames)
+      if length(concat(s.consumer_hostnames, s.partner_hostnames)) > 0
+    }
     content {
       hosts        = host_rule.value
       path_matcher = "${host_rule.key}-consumer"
@@ -77,7 +83,10 @@ resource "google_compute_url_map" "edge" {
   }
 
   dynamic "path_matcher" {
-    for_each = { for k, s in var.stacks : k => s if length(s.consumer_hostnames) > 0 }
+    for_each = {
+      for k, s in var.stacks :
+      k => s if length(concat(s.consumer_hostnames, s.partner_hostnames)) > 0
+    }
     content {
       name            = "${path_matcher.key}-consumer"
       default_service = module.stack[path_matcher.key].api_backend_id

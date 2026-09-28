@@ -366,3 +366,70 @@ export const changeTone = (c: PreviewChange): "ok" | "info" | "neutral" =>
 
 export const changeWord = (c: PreviewChange): string =>
   c === "created" ? "New" : c === "updated" ? "Changed" : "Unchanged";
+
+/* ── the servicer's team ───────────────────────────────────────────────────── */
+
+export type TeamStanding = "invited" | "active" | "disabled" | "expired";
+export interface TeamMember {
+  readonly id: string;
+  readonly email: string;
+  readonly name: string | null;
+  readonly standing: TeamStanding;
+  readonly invitedAt: string;
+  readonly inviteExpiresAt: string | null;
+  readonly inviteDeliveredAt: string | null;
+  readonly acceptedAt: string | null;
+  readonly lastSignedInAt: string | null;
+}
+export type TeamInvitationOutcome =
+  | { readonly email: string; readonly status: "sent"; readonly expiresAt: string }
+  | {
+      readonly email: string;
+      readonly status: "not_delivered";
+      readonly reason: string;
+      readonly link: string;
+      readonly expiresAt: string;
+    }
+  | { readonly email: string; readonly status: "already_member" }
+  | { readonly email: string; readonly status: "on_another_team" }
+  | { readonly email: string; readonly status: "invalid" };
+
+export const deskTeam = (servicerSlug: string, init: Call = {}) =>
+  hm<{ team: TeamMember[] }>("/team", { ...init, query: { servicer: servicerSlug } }).then(
+    (r) => r.team,
+  );
+
+export const inviteTeam = (
+  body: { servicerSlug: string; invitations: { email: string; name?: string | null }[] },
+  init: Call = {},
+) => hm<{ outcomes: TeamInvitationOutcome[] }>("/team", { ...init, body }).then((r) => r.outcomes);
+
+/**
+ * One person per line, as people paste them: `Name <address>`, `address,
+ * Name`, `Name, address`, or a bare address. Blank lines are skipped;
+ * what has no address at all is kept so the desk can say so.
+ */
+export function parseTeamLines(text: string): { email: string; name: string | null }[] {
+  const out: { email: string; name: string | null }[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const angled = line.match(/^(.*?)\s*<([^>]+)>\s*$/);
+    if (angled) {
+      out.push({ email: angled[2]!.trim(), name: angled[1]!.trim() || null });
+      continue;
+    }
+    const parts = line
+      .split(/[,;\t]/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length > 1) {
+      const email = parts.find((p) => p.includes("@"));
+      const name = parts.filter((p) => p !== email).join(" ") || null;
+      out.push({ email: email ?? parts[0]!, name });
+      continue;
+    }
+    out.push({ email: line, name: null });
+  }
+  return out;
+}

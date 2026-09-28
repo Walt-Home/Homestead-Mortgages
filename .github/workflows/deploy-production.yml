@@ -309,6 +309,11 @@ jobs:
           if [ -n "$SERVICING_PUBLIC_HOST" ]; then
             ENV_VARS="$ENV_VARS,SERVICING_PUBLIC_HOST=$SERVICING_PUBLIC_HOST"
           fi
+          # The partner portal's hostname, once it exists: on that Host the
+          # API serves the portal and its own door (apps/api/src/partners-host.ts).
+          if [ -n "$PARTNERS_PUBLIC_HOST" ]; then
+            ENV_VARS="$ENV_VARS,PARTNERS_PUBLIC_HOST=$PARTNERS_PUBLIC_HOST"
+          fi
           ORIGIN="${PUBLIC_ORIGIN:-$SERVICE_URL}"
           if [ -n "$ORIGIN" ]; then
             ENV_VARS="$ENV_VARS,PUBLIC_ORIGIN=$ORIGIN"
@@ -331,6 +336,7 @@ jobs:
         env:
           PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
           SERVICING_PUBLIC_HOST: ${{ vars.SERVICING_PUBLIC_HOST }}
+          PARTNERS_PUBLIC_HOST: ${{ vars.PARTNERS_PUBLIC_HOST }}
       - name: Point the scheduled jobs at this image
         run: |
           for JOB in ${{ env.SERVICE }}-apor-fetch ${{ env.SERVICE }}-loan-review; do

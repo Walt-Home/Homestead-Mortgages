@@ -11,6 +11,7 @@ packages/du/src/generated/
 
 # Build output and lockfiles.
 dist/
+dist-partners/
 **/dist/
 package-lock.json
 

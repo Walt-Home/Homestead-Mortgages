@@ -15,8 +15,10 @@
 import { gunzipSync } from "node:zlib";
 import express, { Router } from "express";
 import { z } from "zod";
+import { prisma } from "@hm/db";
 import { asyncRoute } from "../middleware/error-handler.js";
 import { consoleStaffGate, type ConsoleStaffGateOptions } from "../services/console-staff.js";
+import { inviteServicerTeam, listServicerTeam } from "../services/servicer-team.js";
 import {
   deskImports,
   deskServicers,
@@ -61,6 +63,16 @@ const InviteBody = z
       .array(z.object({ number: z.string().min(1), email: z.string().email().nullable() }))
       .min(1)
       .max(5000),
+  })
+  .strict();
+
+const TeamBody = z
+  .object({
+    servicerSlug: z.string().min(1),
+    invitations: z
+      .array(z.object({ email: z.string().min(3), name: z.string().max(200).nullish() }))
+      .min(1)
+      .max(200),
   })
   .strict();
 
@@ -129,6 +141,27 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
         .strict()
         .parse(req.body);
       res.json(await reviewBook(body));
+    }),
+  );
+
+  /** The servicer's team: who has been invited, who has taken it. */
+  router.get(
+    "/team",
+    asyncRoute(async (req, res) => {
+      const slug = z.string().min(1).parse(req.query.servicer);
+      const servicer = await prisma.servicer.findUnique({ where: { slug }, select: { id: true } });
+      res.json({ team: servicer ? await listServicerTeam(servicer.id) : [] });
+    }),
+  );
+
+  /** Invite people onto the servicer's team: one link each, mailed; every address answers. */
+  router.post(
+    "/team",
+    asyncRoute(async (req, res) => {
+      const body = TeamBody.parse(req.body);
+      res
+        .status(201)
+        .json({ outcomes: await inviteServicerTeam({ ...body, invitedBy: req.staff!.id }) });
     }),
   );
 

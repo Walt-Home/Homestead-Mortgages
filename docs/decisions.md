@@ -3293,6 +3293,71 @@ asked for with an unregistered one is refused for every product, not
 only OAuth) and the Google OAuth client its origin — checked on the day:
 the root's redirect is registered, the staging and app ones are not yet.
 
+## A servicer's team signs in with a code and a password
+
+**Decision (28 September 2026).** A servicer's people get accounts of their
+own on our side — `servicer_users` — and a portal of their own,
+`partners.supermortgage.com` (`staging.partners` in staging), where they
+see their book: every loan we hold for them, the newest review's verdict,
+the offer if one was made, and where each homeowner's invitation stands.
+Ops invites them from the tape desk, in a Team step between the load and
+the borrower invitations; each takes a mailed link that sets their
+password, and from then on signs in with a six-digit code to that address
+and the password. Joe's three answers set the shape: we send the borrower
+e-mails, not the servicer; sign-in is e-mail code plus password; and roles
+are kept simple, which here means none — every member sees the whole book
+and changes nothing.
+
+**Why our side, not the servicing app's partner portal.** The vendored
+runtime carries a partner portal (its §36: partner users, three roles, a
+two-factor door), and it was the pattern, not the place. Its tenant is the
+servicing app's copy of the book, which the desk makes only when an NMLSR
+id is typed, and its analysis is the servicing app's own — not the daily
+review that makes our offers and fills the borrower's page. What Joe wants
+a servicer's team to see is "the analysis we ran", and that lives in our
+database. So the pattern is borrowed — a code and a password, never one
+alone; a first sign-in that sets the password; five wrong passwords in an
+hour locking the account for fifteen minutes; a dead link, a wrong code and
+an unknown address answering alike — and the data stays ours.
+
+**Why a hostname of its own.** The console host sits behind Identity-Aware
+Proxy for our three Google accounts, and a servicer's staff are not those.
+The partner hostname reaches the API backend like the consumer names do —
+no IAP — and the container decides by Host what to serve: on that name,
+the portal (apps/console built a second time, `--mode partners`, for `/`)
+and of the API only `/api/servicer` and health. The borrower app answers
+nowhere on it, so a cookie minted there is a servicer's and nothing else.
+Moving the name between environments is the same one string in
+`var.stacks` as every other hostname.
+
+**The two sessions never cross.** A servicer session carries
+`servicerUserId` and a borrower session carries `userId`; `requireAuth`
+reads only the latter and `requireServicerUser` only the former, so neither
+opens the other's routes. `/api/servicer` is the fourth thing mounted above
+the borrower gate — with health, auth and the partner key — because that
+gate would refuse it, and it carries its own. The session is regenerated
+when the password lands, so a cookie minted before sign-in is not the one
+that carries it. `servicer-portal.test.ts` holds all of this against
+Postgres, both directions.
+
+**The invitation is a token in a fragment, and the code is echoed only
+where no mail leaves.** The link's token rides after `#`, as a claim's
+does, so it reaches no request log; the row holds its hash; a re-send
+kills the last link. Where the mailer is the fixture and the deployment is
+not a real one — development, or staging with its sample sign-ins — the
+sign-in code comes back in the answer and the page says so in as many
+words; on production the fixture sends nothing, echoes nothing, and the
+door does not work until a mailer is configured, which is the truth. On
+staging today the tape desk's team invitations report "not delivered" with
+the link to hand over, for the same reason the borrower claims do.
+
+**What is deliberately not here.** One address belongs to one servicer.
+No roles. No member invites another; ops does. No password change or
+recovery beyond a fresh invitation. No borrower invitations from the
+servicer's side — Joe: "we send the borrower emails". Each is a column or
+a route away, and none was worth guessing at before a servicer's team has
+used the thing.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

@@ -14,6 +14,8 @@ export class AppError extends Error {
     readonly statusCode: number,
     message: string,
     readonly code?: string,
+    /** Machine-readable facts beside the code, e.g. when a lock lifts. Never a message. */
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "AppError";
@@ -107,7 +109,9 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     return;
   }
   if (err instanceof AppError) {
-    res.status(err.statusCode).json({ error: { message: err.message, code: err.code } });
+    res
+      .status(err.statusCode)
+      .json({ error: { message: err.message, code: err.code, ...(err.details ?? {}) } });
     return;
   }
   // The machine has no such edge from where the file is. The routes ask

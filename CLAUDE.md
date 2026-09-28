@@ -138,7 +138,8 @@ console's shell — files, review, load, invite — and nothing else on the
 page. It reads the tape and the supplement through `@hm/partner-book` and
 writes nothing until the review has been seen; the load is
 `services/partner-book.ts` under the servicer's partner principal, the same
-call the partner key reaches; the invite mints one claim per unclaimed loan
+call the partner key reaches; a Team step invites the servicer's own people
+(below); the invite mints one claim per unclaimed loan
 and mails the link to the supplement's address through the mail port, and
 that address lands nowhere but `loan_claims.delivered_to`. The as-of is the
 tape's own when it carries one. After the load the desk runs the book's
@@ -152,6 +153,21 @@ because a real one is fourteen thousand rows and one transaction. The desk is ou
 gated by the servicing app's own staff session, checked with it
 (`services/console-staff.ts`). See `docs/decisions.md`, "The tape desk is one
 screen, and a claim is mailed from it".
+
+**A servicer's team has a portal, and ops invites them (28 September
+2026).** `partners.supermortgage.com` (`staging.partners` in staging) is
+apps/console built a second time (`--mode partners`, served at `/` from
+`dist-partners` by `apps/api/src/partners-host.ts`) against our own door,
+`/api/servicer`: a servicer's people sign in with a code to their e-mail
+and a password — `services/servicer-team.ts`, `servicer_users` — and see
+their book read-only: every loan, the newest verdict, the offer, where the
+homeowner's invitation stands, and their own team. The desk's Team step
+mails the invitation; the link sets the password. No roles, one address
+per servicer, and only ops invites. The two sessions never cross:
+`requireServicerUser` reads `servicerUserId`, `requireAuth` reads `userId`,
+and `servicer-portal.test.ts` holds both directions. See
+`docs/decisions.md`, "A servicer's team signs in with a code and a
+password".
 
 **The daily review is ours since 22 September 2026.** `packages/refi-review`
 is the servicing app's spec §33.2 over its §20.1, ported pure over the kernel
@@ -506,11 +522,14 @@ with no invoker bindings that 403s everything and reads exactly like a broken
 container. The deploy workflow asserts the binding afterwards and fails if it
 is missing.
 
-**Four hostnames, one front door (25 September 2026).** The consumer app
+**Six hostnames, one front door (25–28 September 2026).** The consumer app
 is `app.supermortgage.com` in production and `staging.app.supermortgage.com`
 in staging; the servicing app is `servicing.supermortgage.com` in production
-and `staging.servicing.supermortgage.com` in staging — the product is the
-second label, the environment the prefix. The roots, `supermortgage.com` and
+and `staging.servicing.supermortgage.com` in staging; the partner portal is
+`partners.supermortgage.com` and `staging.partners.supermortgage.com` — the
+product is the second label, the environment the prefix. The partner names
+reach the API backend like the consumer names (no IAP: a servicer's team
+are not our accounts) and the container serves the portal by Host. The roots, `supermortgage.com` and
 `www`, are the marketing site's (Doug's) and answer on no stack here;
 `staging.supermortgage.com` served for a day and is gone. All of it is `infra/edge.tf`, and
 a hostname moves between environments by moving a string in `var.stacks`:
@@ -560,6 +579,7 @@ you are already editing that line, so the fix never arrives as its own diff.
 
 ```bash
 npm run dev                  # API :8080, web :5173
+npm run dev:partners -w @hm/console   # the partner portal on :5175, against the API
 npm test                     # every workspace but apps/servicing
 npm run test:servicing       # the servicing app's vendored tests, under node --test, on a database beside ours (CI: four shards, only when its tree changed)
 npm run check                # tsc -b + registry verify

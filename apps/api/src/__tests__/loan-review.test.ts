@@ -107,6 +107,21 @@ describe("the daily review", () => {
     expect(loan.nextReviewDueAt?.toISOString().slice(0, 10)).toBe("2026-09-22");
   });
 
+  it("reads the loans in pages and answers the same, because a relation load carries one parameter per loan", async () => {
+    // Twelve loans in pages of five is three queries; a whole book in one
+    // query is what died at 65,535 parameters on a real deployment.
+    await claimedBook(["NL-100001"]);
+    const paged = await reviewLoans({ asOf: AS_OF, fetchChunk: 5 });
+    expect(paged.monitored).toBe(12);
+    expect(paged.reviewed.length + paged.skipped.length).toBe(12);
+    expect(paged.reviewed.length).toBeGreaterThan(0);
+    // Reviewed once for the day: the default read finds every one done.
+    const again = await reviewLoans({ asOf: AS_OF });
+    expect(again.monitored).toBe(12);
+    expect(again.alreadyReviewed).toBe(paged.reviewed.length);
+    expect(again.reviewed).toHaveLength(0);
+  });
+
   it("reviews an unclaimed loan like any other, and holds its offer until the claim delivers it", async () => {
     const { servicer } = await claimedBook(["NL-100002"]);
     const run = await reviewLoans({ asOf: AS_OF });

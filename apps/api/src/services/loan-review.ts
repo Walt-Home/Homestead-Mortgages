@@ -217,6 +217,13 @@ export interface ReviewRunReport {
  * has room; its record, or the reason it was skipped, is written with the
  * row. A turn never fails a review.
  */
+/**
+ * Loans read per query in the review. Each relation on the read is a query
+ * with one parameter per loan, and Postgres allows 65,535; two thousand
+ * leaves that limit far away whatever the select grows to.
+ */
+export const REVIEW_FETCH_CHUNK = 2000;
+
 export async function reviewLoans(
   opts: {
     asOf?: PlainDate;
@@ -230,6 +237,8 @@ export async function reviewLoans(
     now?: Date;
     /** Told every hundred loans, and as the verdicts land; see progress.ts. */
     onProgress?: OnProgress;
+    /** How many loans are read per query; a test seam, the default is the point. */
+    fetchChunk?: number;
   } = {},
   db: Db = prisma,
 ): Promise<ReviewRunReport> {
@@ -240,45 +249,64 @@ export async function reviewLoans(
   const maxPerDay = opts.analystMaxPerDay ?? analystMaxPerDay();
   const day = new Date(`${asOf}T00:00:00.000Z`);
   const offersExpired = await expireOffers(db, now);
-  const loans = await db.loan.findMany({
-    where: {
-      monitoringEnabled: true,
-      ...(opts.loanIds ? { id: { in: [...opts.loanIds] } } : {}),
-      ...(opts.servicerId ? { servicerId: opts.servicerId } : {}),
-    },
-    orderBy: { createdAt: "asc" },
-    select: {
-      id: true,
-      status: true,
-      rateType: true,
-      noteRateBps: true,
-      termMonths: true,
-      originalPrincipalCents: true,
-      originatedOn: true,
-      firstPaymentOn: true,
-      maturityOn: true,
-      occupancy: true,
-      propertyState: true,
-      servicerLoanNumber: true,
-      observations: {
-        orderBy: [{ asOf: "desc" }, { recordedAt: "desc" }],
-        take: 1,
-        select: {
-          id: true,
-          asOf: true,
-          status: true,
-          principalBalanceCents: true,
-          escrowBalanceCents: true,
-          scheduledPaymentCents: true,
-          currentRatePct: true,
-          nextPaymentDueOn: true,
-          delinquencyDays: true,
-          facts: true,
-        },
+  // The ids first, then the rows in pages. A relation on a `findMany` is a
+  // second query with one parameter per parent, and Postgres takes 65,535
+  // parameters at most: three servicers' books on one deployment crossed
+  // that, and the morning's review died before it read a loan (P2029).
+  // Nothing about the review changes; only how many loans one query holds.
+  const where = {
+    monitoringEnabled: true,
+    ...(opts.loanIds ? { id: { in: [...opts.loanIds] } } : {}),
+    ...(opts.servicerId ? { servicerId: opts.servicerId } : {}),
+  };
+  const select = {
+    id: true,
+    status: true,
+    rateType: true,
+    noteRateBps: true,
+    termMonths: true,
+    originalPrincipalCents: true,
+    originatedOn: true,
+    firstPaymentOn: true,
+    maturityOn: true,
+    occupancy: true,
+    propertyState: true,
+    servicerLoanNumber: true,
+    observations: {
+      orderBy: [{ asOf: "desc" as const }, { recordedAt: "desc" as const }],
+      take: 1,
+      select: {
+        id: true,
+        asOf: true,
+        status: true,
+        principalBalanceCents: true,
+        escrowBalanceCents: true,
+        scheduledPaymentCents: true,
+        currentRatePct: true,
+        nextPaymentDueOn: true,
+        delinquencyDays: true,
+        facts: true,
       },
-      reviews: { where: { asOf: day }, select: { id: true }, take: 1 },
     },
-  });
+    reviews: { where: { asOf: day }, select: { id: true }, take: 1 },
+  } satisfies Prisma.LoanSelect;
+  type LoanRow = Prisma.LoanGetPayload<{ select: typeof select }>;
+  const ids = (
+    await db.loan.findMany({ where, orderBy: { createdAt: "asc" }, select: { id: true } })
+  ).map((l) => l.id);
+  const loans: LoanRow[] = [];
+  await inChunks(
+    ids,
+    async (page) => {
+      const rows = await db.loan.findMany({
+        where: { id: { in: page } },
+        orderBy: { createdAt: "asc" },
+        select,
+      });
+      loans.push(...rows);
+    },
+    opts.fetchChunk ?? REVIEW_FETCH_CHUNK,
+  );
   const unclaimed = (l: { status: (typeof loans)[number]["status"] }) =>
     toDomainLoanState(l.status) === "imported_unclaimed";
   // The people who can read a card today come first, so the analyst's daily

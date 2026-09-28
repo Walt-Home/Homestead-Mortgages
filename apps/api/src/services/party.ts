@@ -447,18 +447,22 @@ export async function createProvisionalParty(
 export async function createProvisionalParties(
   tx: Tx,
   n: number,
-  opts: { sourceFirstSeen: string },
+  opts: { sourceFirstSeen: string; onProgress?: (done: number, total: number) => void },
 ): Promise<string[]> {
   const ids = Array.from({ length: n }, () => randomUUID());
-  await inChunks(ids, (chunk) =>
-    tx.party.createMany({
-      data: chunk.map((id) => ({
-        id,
-        kind: "PERSON" as const,
-        claimStatus: "PROVISIONAL" as const,
-        sourceFirstSeen: opts.sourceFirstSeen,
-      })),
-    }),
+  await inChunks(
+    ids,
+    (chunk) =>
+      tx.party.createMany({
+        data: chunk.map((id) => ({
+          id,
+          kind: "PERSON" as const,
+          claimStatus: "PROVISIONAL" as const,
+          sourceFirstSeen: opts.sourceFirstSeen,
+        })),
+      }),
+    undefined,
+    opts.onProgress,
   );
   return ids;
 }
@@ -552,6 +556,7 @@ export async function assertPartnerFactsMany(
   args: {
     principalId: string;
     assertions: readonly { readonly partyId: string; readonly facts: readonly PartnerFact[] }[];
+    onProgress?: (done: number, total: number) => void;
   },
 ): Promise<{ written: number; superseded: number }> {
   const { principalId, assertions } = args;
@@ -599,7 +604,12 @@ export async function assertPartnerFactsMany(
       if (prior) supersede.push({ priorId: prior.id, byId: id });
     }
   }
-  await inChunks(creates, (chunk) => tx.fact.createMany({ data: chunk }));
+  await inChunks(
+    creates,
+    (chunk) => tx.fact.createMany({ data: chunk }),
+    undefined,
+    args.onProgress,
+  );
   for (const s of supersede) {
     await tx.fact.update({ where: { id: s.priorId }, data: { supersededById: s.byId } });
   }

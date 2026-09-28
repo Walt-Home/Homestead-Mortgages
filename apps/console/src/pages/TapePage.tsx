@@ -24,6 +24,7 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
+import clsx from "clsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "../components/Icon.js";
 import { Wordmark } from "../components/Shell.js";
@@ -59,8 +60,12 @@ import {
   INVITE_BATCH,
   inviteToClaim,
   loadIntoServicingBook,
-  loadTape,
+  loadTapeWithProgress,
   previewTape,
+  progressPercent,
+  reviewBookWithProgress,
+  STAGE_WORDS,
+  type Progress,
   slugify,
   todayEt,
   type InvitationOutcome,
@@ -69,7 +74,6 @@ import {
   type TapeFiles,
   type TapeLoad,
   type TapePreview,
-  reviewBook,
   VERDICT_FILTERS,
   VERDICT_RANK,
   verdictWord,
@@ -912,10 +916,50 @@ function ReviewStep({
 
 type Phase<T> =
   | { state: "idle" }
-  | { state: "running" }
+  | { state: "running"; progress?: Progress }
   | { state: "done"; value: T }
   | { state: "failed"; error: ApiError }
   | { state: "skipped"; why: string };
+
+/**
+ * A long write, drawn as it goes: one bar that only ever advances, the
+ * stage in words, and the count of what that stage is writing. Without a
+ * total yet — the tape still being read — the bar breathes instead.
+ */
+function Meter({ progress }: { progress: Progress }) {
+  const { doing, noun } = STAGE_WORDS[progress.stage];
+  const known = progress.total > 0;
+  const pct = progressPercent(progress);
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
+        <span className="text-fg-2">{doing}…</span>
+        <span className="tabular-nums text-fg">
+          {known
+            ? `${progress.done.toLocaleString()} of ${progress.total.toLocaleString()} ${noun}`
+            : ""}
+        </span>
+      </div>
+      <div
+        className="h-2 w-full overflow-hidden rounded-full bg-surface-3"
+        role="progressbar"
+        aria-label={doing}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+      >
+        <div
+          className={clsx(
+            "h-full rounded-full bg-accent transition-[width] duration-500 ease-out",
+            !known && "animate-pulse",
+          )}
+          style={{ width: `${known ? Math.max(pct, 2) : 12}%` }}
+        />
+      </div>
+      <p className="text-xs tabular-nums text-fg-3">{pct}%</p>
+    </div>
+  );
+}
 
 function LoadStep({
   wire,
@@ -938,7 +982,12 @@ function LoadStep({
   async function reviewNow() {
     setReview({ state: "running" });
     try {
-      setReview({ state: "done", value: await reviewBook(preview.servicer.slug) });
+      setReview({
+        state: "done",
+        value: await reviewBookWithProgress(preview.servicer.slug, (progress) =>
+          setReview({ state: "running", progress }),
+        ),
+      });
     } catch (err) {
       setReview({
         state: "failed",
@@ -966,7 +1015,9 @@ function LoadStep({
   async function loadDb() {
     setDb({ state: "running" });
     try {
-      const loaded = await loadTape(wire);
+      const loaded = await loadTapeWithProgress(wire, (progress) =>
+        setDb({ state: "running", progress }),
+      );
       setDb({ state: "done", value: loaded });
       // The first review follows the load, today rather than tomorrow morning:
       // a verdict and an offer on every loan of the book, so the invitations
@@ -1259,9 +1310,13 @@ function PhaseCard<T>({
         </Pill>
       </div>
       {phase.state === "running" ? (
-        <div className="flex items-center gap-2 text-sm text-fg-2">
-          <Icon name="loader" size={16} className="animate-spin" /> Writing…
-        </div>
+        phase.progress ? (
+          <Meter progress={phase.progress} />
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-fg-2">
+            <Icon name="loader" size={16} className="animate-spin" /> Writing…
+          </div>
+        )
       ) : phase.state === "done" ? (
         renderDone(phase.value)
       ) : phase.state === "failed" ? (

@@ -4,7 +4,7 @@
  * spelled here once for the screen.
  */
 
-import { hm, upload, type Call } from "./api.js";
+import { hm, upload, type Call, stream } from "./api.js";
 
 export type PreviewChange = "created" | "updated" | "unchanged";
 
@@ -284,6 +284,61 @@ export const loadTape = (files: TapeFiles, init: Call = {}) =>
 
 export const reviewBook = (servicerSlug: string, init: Call = {}) =>
   hm<BookReview>("/review", { ...init, body: { servicerSlug } });
+
+/* ── a long write, told as it goes ─────────────────────────────────────────── */
+
+/** The stages the load and the first review report, in the order they come. */
+export type ProgressStage =
+  "reading" | "people" | "loans" | "facts" | "observations" | "reviewing" | "verdicts";
+
+export interface Progress {
+  readonly stage: ProgressStage;
+  readonly done: number;
+  readonly total: number;
+}
+
+/** What the meter says under each stage, and what it counts. */
+export const STAGE_WORDS: Record<ProgressStage, { doing: string; noun: string }> = {
+  reading: { doing: "Reading the tape", noun: "rows" },
+  people: { doing: "Writing the people", noun: "people" },
+  loans: { doing: "Writing the loans", noun: "loans" },
+  facts: { doing: "Writing what the tape says about each person", noun: "facts" },
+  observations: { doing: "Recording each loan's balance and standing", noun: "loans" },
+  reviewing: { doing: "Reviewing each loan against today's rate", noun: "loans" },
+  verdicts: { doing: "Writing the verdicts", noun: "verdicts" },
+};
+
+/**
+ * How far along the whole write is, as one number that only ever grows.
+ * The stages differ in size, so the bar is weighted by roughly how long
+ * each takes on a big book; the exact count is in the words beside it.
+ */
+const LOAD_WEIGHTS: Record<ProgressStage, number> = {
+  reading: 5,
+  people: 15,
+  loans: 25,
+  facts: 35,
+  observations: 20,
+  reviewing: 80,
+  verdicts: 20,
+};
+const LOAD_ORDER: ProgressStage[] = ["reading", "people", "loans", "facts", "observations"];
+const REVIEW_ORDER: ProgressStage[] = ["reviewing", "verdicts"];
+
+export function progressPercent(p: Progress): number {
+  const order = REVIEW_ORDER.includes(p.stage) ? REVIEW_ORDER : LOAD_ORDER;
+  const at = order.indexOf(p.stage);
+  const before = order.slice(0, at).reduce((n, st) => n + LOAD_WEIGHTS[st], 0);
+  const within = p.total > 0 ? Math.min(1, p.done / p.total) : 0;
+  const all = order.reduce((n, st) => n + LOAD_WEIGHTS[st], 0);
+  return Math.round(((before + LOAD_WEIGHTS[p.stage] * within) / all) * 100);
+}
+
+export const loadTapeWithProgress = (files: TapeFiles, onProgress: (p: Progress) => void) =>
+  stream<TapeLoad, Progress>("/imports/stream", files, onProgress);
+
+export const reviewBookWithProgress = (servicerSlug: string, onProgress: (p: Progress) => void) =>
+  stream<BookReview, Progress>("/review/stream", { servicerSlug }, onProgress);
 
 /** Candidates first, then the rest in the engine's order; a loan never analyzed last. */
 export const VERDICT_RANK: Record<Verdict, number> = {

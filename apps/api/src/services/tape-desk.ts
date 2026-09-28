@@ -47,6 +47,7 @@ import type { Db } from "./db.js";
 import { claimUrl, hashInvitationToken } from "./invitations.js";
 import { mintLoanClaim } from "./loan-claims.js";
 import { reviewLoans } from "./loan-review.js";
+import type { OnProgress } from "./progress.js";
 import { toDomainLoanState } from "./loan-transition.js";
 import {
   importPartnerBook,
@@ -364,7 +365,11 @@ export interface TapeLoad {
  * The row is made on first sight at the depth the servicing app holds the
  * book, because a tape reaching this desk has already been loaded there.
  */
-export async function loadTape(input: TapeInput, db: Db = prisma): Promise<TapeLoad> {
+export async function loadTape(
+  input: TapeInput,
+  db: Db = prisma,
+  onProgress?: OnProgress,
+): Promise<TapeLoad> {
   tapeProfile(input.profile);
   const slug = assertSlug(input.servicer.slug);
   const displayName = input.servicer.displayName.trim();
@@ -389,6 +394,7 @@ export async function loadTape(input: TapeInput, db: Db = prisma): Promise<TapeL
         supplement: input.supplement ?? null,
       },
       db,
+      onProgress,
     );
   } catch (err) {
     if (err instanceof RangeError) throw new AppError(400, err.message, "UNKNOWN_PROFILE");
@@ -434,11 +440,12 @@ const emptyCounts = (): VerdictCounts => ({ candidate: 0, watching: 0, not_now: 
 export async function reviewBook(
   input: { readonly servicerSlug: string },
   db: Db = prisma,
+  onProgress?: OnProgress,
 ): Promise<BookReview> {
   const slug = assertSlug(input.servicerSlug);
   const servicer = await db.servicer.findUnique({ where: { slug }, select: { id: true } });
   if (!servicer) throw new AppError(404, "No such servicer.", "NOT_FOUND");
-  const run = await reviewLoans({ servicerId: servicer.id }, db);
+  const run = await reviewLoans({ servicerId: servicer.id, onProgress }, db);
   const counts = emptyCounts();
   const verdicts: Record<string, ReviewVerdict> = {};
   const today = await db.loanReview.findMany({

@@ -55,6 +55,7 @@ import {
 } from "@hm/partner-book";
 import { canonicalRecordHash, type ImportedLoanRecord } from "@hm/shared/portfolio";
 import { type Db, inChunks, ownsTransaction } from "./db.js";
+import { stageProgress, type OnProgress } from "./progress.js";
 import { moveLoanIfLegal } from "./loan-transition.js";
 import { toDomainLoanState } from "./loan-transition.js";
 import { createImportedLoans } from "./loans.js";
@@ -148,6 +149,8 @@ export const rateToBps = (pct: string): number => Math.round(Number(pct) * 100);
 export async function importPartnerBook(
   input: ImportBookInput,
   db: Db = prisma,
+  /** Told as each chunk lands; see progress.ts. */
+  onProgress?: OnProgress,
 ): Promise<ImportBookResult> {
   const profile = profileById(input.profile);
   const servicer = await db.servicer.findUniqueOrThrow({
@@ -155,8 +158,10 @@ export async function importPartnerBook(
     select: { id: true, slug: true },
   });
   const asOfDefault = input.asOf ?? isoDay(new Date());
+  onProgress?.({ stage: "reading", done: 0, total: 0 });
   const book = readBook(profile, servicer.slug, asOfDefault, input.tape, input.supplement ?? null);
   if (book.rejected) return { status: "rejected", missing_headers: book.rejected.missing_headers };
+  onProgress?.({ stage: "reading", done: book.rows_total, total: book.rows_total });
 
   const already = await db.partnerBookImport.findUnique({
     where: {
@@ -180,7 +185,8 @@ export async function importPartnerBook(
       .at(-1) ??
     asOfDefault;
 
-  const run = (tx: Db) => load(tx, { servicer, principalId: input.principalId, asOf, book });
+  const run = (tx: Db) =>
+    load(tx, { servicer, principalId: input.principalId, asOf, book }, onProgress);
   return ownsTransaction(db)
     ? prisma.$transaction(run, { maxWait: 10_000, timeout: 120_000 })
     : run(db);
@@ -194,6 +200,7 @@ async function load(
     asOf: string;
     book: ReturnType<typeof readBook>;
   },
+  onProgress?: OnProgress,
 ): Promise<ImportBookResult> {
   const { servicer, principalId, asOf, book } = args;
   const asOfDate = dateOf(asOf);
@@ -236,9 +243,12 @@ async function load(
       fresh.push({ record, facts, hash: canonicalRecordHash(record) });
     }
   }
+  onProgress?.({ stage: "people", done: 0, total: fresh.length });
   const partyIds = await createProvisionalParties(tx, fresh.length, {
     sourceFirstSeen: `partner_import:${servicer.slug}`,
+    onProgress: stageProgress(onProgress, "people"),
   });
+  onProgress?.({ stage: "loans", done: 0, total: fresh.length });
   const { loanIds } = await createImportedLoans(
     tx,
     fresh.map(({ record }, i) => {
@@ -272,13 +282,16 @@ async function load(
         servicerLoanNumber: record.sourceLoanKey,
       };
     }),
+    { onProgress: stageProgress(onProgress, "loans") },
   );
   const freshByKey = new Map(fresh.map((f, i) => [f.record.sourceLoanKey, { ...f, i }]));
 
   // The partner's spelling of every person on the tape: a new party takes all
   // of it, a known one only what changed.
+  onProgress?.({ stage: "facts", done: 0, total: 0 });
   await assertPartnerFactsMany(tx, {
     principalId,
+    onProgress: stageProgress(onProgress, "facts"),
     assertions: book.records.flatMap(({ record }) => {
       const partnerFacts = personFacts(record, asOfDate);
       const known = freshByKey.get(record.sourceLoanKey);
@@ -412,26 +425,31 @@ async function load(
     select: { id: true },
   });
 
-  await inChunks(placed, (chunk) =>
-    tx.servicingObservation.createMany({
-      data: chunk.map((p) => {
-        const sv = p.record.servicing;
-        return {
-          loanId: p.loanId,
-          importId: row.id,
-          asOf: dateOf(sv.asOf.slice(0, 10)),
-          status: enumOf<ServicingStatus>(sv.status)!,
-          principalBalanceCents: sv.principalBalanceCents,
-          escrowBalanceCents: sv.escrowBalanceCents,
-          scheduledPaymentCents: sv.scheduledPaymentCents,
-          currentRatePct: sv.currentRatePct,
-          nextPaymentDueOn: dateOrNull(sv.nextPaymentDueOn),
-          delinquencyDays: sv.delinquencyDays,
-          facts: p.facts as Prisma.InputJsonValue,
-          recordHash: p.hash,
-        };
+  onProgress?.({ stage: "observations", done: 0, total: placed.length });
+  await inChunks(
+    placed,
+    (chunk) =>
+      tx.servicingObservation.createMany({
+        data: chunk.map((p) => {
+          const sv = p.record.servicing;
+          return {
+            loanId: p.loanId,
+            importId: row.id,
+            asOf: dateOf(sv.asOf.slice(0, 10)),
+            status: enumOf<ServicingStatus>(sv.status)!,
+            principalBalanceCents: sv.principalBalanceCents,
+            escrowBalanceCents: sv.escrowBalanceCents,
+            scheduledPaymentCents: sv.scheduledPaymentCents,
+            currentRatePct: sv.currentRatePct,
+            nextPaymentDueOn: dateOrNull(sv.nextPaymentDueOn),
+            delinquencyDays: sv.delinquencyDays,
+            facts: p.facts as Prisma.InputJsonValue,
+            recordHash: p.hash,
+          };
+        }),
       }),
-    }),
+    undefined,
+    stageProgress(onProgress, "observations"),
   );
 
   return { status: "loaded", importId: row.id, counts, report };

@@ -203,6 +203,69 @@ describe("previewing a tape", () => {
   });
 });
 
+/** The streaming routes: every line parsed, in order. */
+async function streamLines(path: string, body: unknown): Promise<Record<string, unknown>[]> {
+  const r = await fetch(`http://127.0.0.1:${port}/console/hm/tape${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      cookie: STAFF_COOKIE,
+      "x-staff-role": "ops_analyst",
+    },
+    body: JSON.stringify(body),
+  });
+  expect(r.status).toBe(200);
+  expect(r.headers.get("content-type")).toContain("application/x-ndjson");
+  const text = await r.text();
+  return text
+    .split("\n")
+    .filter((l) => l.trim() !== "")
+    .map((l) => JSON.parse(l) as Record<string, unknown>);
+}
+
+describe("a load told as it goes", () => {
+  it("streams a line per stage as the chunks land, then the plain route's answer", async () => {
+    const lines = await streamLines("/imports/stream", tapeBody());
+    const progress = lines.filter((l) => l.kind === "progress");
+    const stages = [...new Set(progress.map((l) => l.stage))];
+    expect(stages).toEqual(["reading", "people", "loans", "facts", "observations"]);
+    expect(progress.filter((l) => l.stage === "loans").at(-1)).toMatchObject({
+      done: 12,
+      total: 12,
+    });
+    expect(progress.filter((l) => l.stage === "observations").at(-1)).toMatchObject({
+      done: 12,
+      total: 12,
+    });
+    const last = lines.at(-1)!;
+    expect(last.kind).toBe("done");
+    expect(last.status).toBe(201);
+    expect((last.value as { result: { status: string } }).result.status).toBe("loaded");
+    expect((last.value as { loadedBy: string }).loadedBy).toBe("staff-1");
+
+    const review = await streamLines("/review/stream", { servicerSlug: NORTHLIGHT.slug });
+    const reviewing = review.filter((l) => l.kind === "progress" && l.stage === "reviewing");
+    expect(reviewing.at(-1)).toMatchObject({ done: 12, total: 12 });
+    expect(
+      review.filter((l) => l.kind === "progress" && l.stage === "verdicts").length,
+    ).toBeGreaterThan(0);
+    const end = review.at(-1)!;
+    expect(end.kind).toBe("done");
+    expect((end.value as { reviewed: number }).reviewed).toBe(12);
+  });
+
+  it("carries a refusal as the last line rather than a broken stream", async () => {
+    const lines = await streamLines("/imports/stream", {
+      ...tapeBody(),
+      profile: "no-such-profile",
+    });
+    const last = lines.at(-1)!;
+    expect(last.kind).toBe("error");
+    expect(last.status).toBe(400);
+    expect(last.code).toBe("UNKNOWN_PROFILE");
+  });
+});
+
 describe("loading a tape", () => {
   it("makes the servicer on first sight, loads once, and the preview then reads what is held", async () => {
     const first = await call<{

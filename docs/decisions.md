@@ -3116,6 +3116,22 @@ because that is the step that turns a row on a tape into a person on a loan.
   thousand and a mailer is slow, so the desk sends in batches, shows how far
   it is, and keeps what was already answered if a batch fails.
 
+**Addendum, 28 September 2026 — a long write is told as it goes.** Joe,
+watching fourteen thousand rows load behind a spinner: "we should have an
+animated meter that displays the number of loans loaded as it progresses."
+The load is set-based and one transaction, so the counts have to come from
+inside it: `inChunks` now tells a listener after each chunk, the people,
+loans, facts and observations each report through it, the review reports
+every hundred loans and then the verdicts, and two routes beside the plain
+ones — `/imports/stream`, `/review/stream` — write each report as a line
+of newline-delimited JSON with the plain answer, or the refusal, as the
+last line (the headers are gone by the time a load can fail, so the
+refusal rides in the body). The desk draws one bar that only ever
+advances, weighted by roughly how long each stage takes on a big book, with
+the stage in words and the exact count beside it. Nothing about what is
+written changed, and the plain routes stay for anything that wants one
+answer.
+
 ## The book is tracked from the day it is loaded, and the claim is the door
 
 **Decision (24 September 2026):** a borrower has a Supermortgage account

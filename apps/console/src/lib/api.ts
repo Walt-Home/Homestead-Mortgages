@@ -182,3 +182,95 @@ export async function upload<T>(
   }
   return body as T;
 }
+
+/**
+ * A long write at our own door, told as it goes: the server answers
+ * newline-delimited JSON — a line per progress report, then the plain
+ * answer or the refusal as the last line — and each progress line reaches
+ * `onProgress` as it arrives. Resolves with the last line's value; a
+ * refusal, on the last line or before the stream started, is an ApiError
+ * like any other call's.
+ */
+export async function stream<T, P>(
+  path: string,
+  body: unknown,
+  onProgress: (progress: P) => void,
+  init: { role?: string; signal?: AbortSignal } = {},
+): Promise<T> {
+  const headers: Record<string, string> = {
+    accept: "application/x-ndjson, application/json",
+    "content-type": "application/json",
+  };
+  const role = init.role ?? actingRole;
+  if (role) headers["x-staff-role"] = role;
+  const response = await fetch(`${BASE.hm}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    credentials: "same-origin",
+    signal: init.signal,
+  });
+  if (!response.ok || !response.body) {
+    const text = await response.text();
+    let b: Record<string, unknown> = {};
+    try {
+      b = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    } catch {
+      b = { error: text.slice(0, 200) };
+    }
+    const nestedCode = (b.error as { code?: unknown } | undefined)?.code;
+    const code = typeof b.code === "string" ? b.code : null;
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent(SIGNED_OUT, { detail: { code } }));
+    }
+    throw new ApiError(
+      response.status,
+      messageOf(b, response.status),
+      code ?? (typeof nestedCode === "string" ? nestedCode : null),
+      [],
+      b,
+    );
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  let last: Record<string, unknown> | null = null;
+  const take = (line: string) => {
+    if (!line.trim()) return;
+    const event = JSON.parse(line) as Record<string, unknown>;
+    if (event.kind === "progress") {
+      const { kind: _kind, ...progress } = event;
+      void _kind;
+      onProgress(progress as P);
+    } else {
+      last = event;
+    }
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffered += decoder.decode(value, { stream: true });
+    let at: number;
+    while ((at = buffered.indexOf("\n")) >= 0) {
+      take(buffered.slice(0, at));
+      buffered = buffered.slice(at + 1);
+    }
+  }
+  buffered += decoder.decode();
+  take(buffered);
+  if (!last) throw new ApiError(0, "The stream ended without an answer.", "STREAM_ENDED");
+  const end = last as Record<string, unknown>;
+  if (end.kind === "error") {
+    throw new ApiError(
+      Number(end.status) || 500,
+      String(end.message ?? "Something went wrong."),
+      typeof end.code === "string" ? end.code : null,
+    );
+  }
+  const status = Number(end.status) || 200;
+  if (status >= 400) {
+    const value = (end.value ?? {}) as Record<string, unknown>;
+    throw new ApiError(status, messageOf(value, status), null, [], value);
+  }
+  return end.value as T;
+}

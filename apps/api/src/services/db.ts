@@ -35,8 +35,11 @@ export async function inChunks<T>(
   rows: readonly T[],
   write: (chunk: T[], offset: number) => Promise<unknown>,
   size = CREATE_MANY_CHUNK,
+  /** Told after each chunk lands: how many rows so far, of how many. */
+  onChunk?: (done: number, total: number) => void,
 ): Promise<void> {
   for (let i = 0; i < rows.length; i += size) {
     await write(rows.slice(i, i + size), i);
+    onChunk?.(Math.min(i + size, rows.length), rows.length);
   }
 }

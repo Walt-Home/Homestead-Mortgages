@@ -13,10 +13,11 @@
  */
 
 import { gunzipSync } from "node:zlib";
-import express, { Router } from "express";
+import express, { Router, type Response } from "express";
 import { z } from "zod";
 import { prisma } from "@hm/db";
-import { asyncRoute } from "../middleware/error-handler.js";
+import type { Progress } from "../services/progress.js";
+import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { consoleStaffGate, type ConsoleStaffGateOptions } from "../services/console-staff.js";
 import { inviteServicerTeam, listServicerTeam } from "../services/servicer-team.js";
 import {
@@ -76,6 +77,54 @@ const TeamBody = z
   })
   .strict();
 
+/**
+ * A long write, told as it goes: newline-delimited JSON, one line per
+ * progress report and a last line that is the answer the plain route
+ * gives — or the refusal, since the headers are gone by the time a load
+ * can fail. The desk draws a meter from the lines.
+ */
+type StreamEvent =
+  | ({ readonly kind: "progress" } & Progress)
+  | { readonly kind: "done"; readonly status: number; readonly value: unknown }
+  | {
+      readonly kind: "error";
+      readonly status: number;
+      readonly message: string;
+      readonly code: string;
+    };
+
+function ndjson(res: Response): (event: StreamEvent) => void {
+  res.status(200);
+  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  // Never buffer a progress line behind a proxy that would rather batch.
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  return (event) => {
+    res.write(`${JSON.stringify(event)}\n`);
+  };
+}
+
+async function streamed(
+  res: Response,
+  work: (send: (p: Progress) => void) => Promise<{ status: number; value: unknown }>,
+): Promise<void> {
+  const send = ndjson(res);
+  try {
+    const done = await work((p) => send({ kind: "progress", ...p }));
+    send({ kind: "done", ...done });
+  } catch (err) {
+    const e = err instanceof AppError ? err : null;
+    send({
+      kind: "error",
+      status: e?.statusCode ?? 500,
+      message: e?.message ?? "Something went wrong.",
+      code: e?.code ?? "INTERNAL",
+    });
+  }
+  res.end();
+}
+
 export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
   const router = Router();
   router.use(express.json({ limit: "40mb" }));
@@ -129,6 +178,46 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
       const status =
         loaded.result.status === "rejected" ? 422 : loaded.result.status === "loaded" ? 201 : 200;
       res.status(status).json({ ...loaded, loadedBy: req.staff!.id });
+    }),
+  );
+
+  /** The load, told as it goes: progress lines, then the plain route's answer as the last line. */
+  router.post(
+    "/imports/stream",
+    asyncRoute(async (req, res) => {
+      const body = TapeBody.parse(req.body);
+      const staffId = req.staff!.id;
+      await streamed(res, async (send) => {
+        const loaded = await loadTape(
+          {
+            servicer: body.servicer,
+            profile: body.profile,
+            asOf: body.asOf ?? null,
+            tape: bytesOf(body.tape),
+            supplement: body.supplement ? bytesOf(body.supplement) : null,
+          },
+          prisma,
+          send,
+        );
+        const status =
+          loaded.result.status === "rejected" ? 422 : loaded.result.status === "loaded" ? 201 : 200;
+        return { status, value: { ...loaded, loadedBy: staffId } };
+      });
+    }),
+  );
+
+  /** The first review, told as it goes. */
+  router.post(
+    "/review/stream",
+    asyncRoute(async (req, res) => {
+      const body = z
+        .object({ servicerSlug: z.string().min(1) })
+        .strict()
+        .parse(req.body);
+      await streamed(res, async (send) => ({
+        status: 200,
+        value: await reviewBook(body, prisma, send),
+      }));
     }),
   );
 

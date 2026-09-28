@@ -147,7 +147,10 @@ first review — the daily review over the servicer's book, today rather than
 tomorrow morning, its offers made and waiting for the claim — and the
 invite step puts the candidates first. A book is written as sets — `createMany` in
 chunks, ids minted in the service, facts written only where they differ —
-because a real one is fourteen thousand rows and one transaction. The desk is ours (`routes/console-tape.ts`,
+because a real one is fourteen thousand rows and one transaction; the load
+and the first review report each chunk as it lands (`services/progress.ts`),
+the desk reads them over `/imports/stream` and `/review/stream` as
+newline-delimited JSON, and draws one meter that only ever advances. The desk is ours (`routes/console-tape.ts`,
 `services/tape-desk.ts`, `apps/console/src/pages/TapePage.tsx`), answered at
 `/console/hm/tape` — the one prefix on that host our API answers itself — and
 gated by the servicing app's own staff session, checked with it

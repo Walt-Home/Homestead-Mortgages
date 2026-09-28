@@ -116,6 +116,7 @@ export async function createImportedLoan(
 export async function createImportedLoans(
   tx: Db,
   rows: readonly ImportedLoanInput[],
+  opts: { onProgress?: (done: number, total: number) => void } = {},
 ): Promise<{ loanIds: string[] }> {
   for (const r of rows) {
     if (r.parties.length === 0) {
@@ -125,22 +126,26 @@ export async function createImportedLoans(
     }
   }
   const loanIds = rows.map(() => randomUUID());
-  await inChunks(rows, (chunk, offset) =>
-    tx.loan.createMany({
-      data: chunk.map((r, i) => ({
-        id: loanIds[offset + i]!,
-        ...loanColumns({
-          status: "IMPORTED_UNCLAIMED",
-          source: "PARTNER_IMPORT",
-          servicerId: r.servicerId,
-          servicerLoanNumber: r.servicerLoanNumber ?? null,
-          axes: r.axes,
-          terms: r.terms,
-          property: r.property,
-          originatingApplicationId: null,
-        }),
-      })),
-    }),
+  await inChunks(
+    rows,
+    (chunk, offset) =>
+      tx.loan.createMany({
+        data: chunk.map((r, i) => ({
+          id: loanIds[offset + i]!,
+          ...loanColumns({
+            status: "IMPORTED_UNCLAIMED",
+            source: "PARTNER_IMPORT",
+            servicerId: r.servicerId,
+            servicerLoanNumber: r.servicerLoanNumber ?? null,
+            axes: r.axes,
+            terms: r.terms,
+            property: r.property,
+            originatingApplicationId: null,
+          }),
+        })),
+      }),
+    undefined,
+    opts.onProgress,
   );
   await inChunks(
     rows.flatMap((r, i) =>

@@ -60,6 +60,7 @@ import {
 import type { OccupancyType, PricingScenario, PropertyType } from "@hm/shared";
 import { connectors } from "./connectors.js";
 import { inChunks, type Db } from "./db.js";
+import { stageProgress, type OnProgress } from "./progress.js";
 import { toDomainLoanState } from "./loan-transition.js";
 import { QUOTED_LOCK_DAYS } from "./pricing.js";
 import {
@@ -227,6 +228,8 @@ export async function reviewLoans(
     analyst?: AnalystModel | null;
     analystMaxPerDay?: number;
     now?: Date;
+    /** Told every hundred loans, and as the verdicts land; see progress.ts. */
+    onProgress?: OnProgress;
   } = {},
   db: Db = prisma,
 ): Promise<ReviewRunReport> {
@@ -299,7 +302,14 @@ export async function reviewLoans(
   const reviewedIds: string[] = [];
   let analystTurns = 0;
   const analystReport = { written: 0, skipped: {} as Record<string, number> };
+  const onProgress = opts.onProgress;
+  onProgress?.({ stage: "reviewing", done: 0, total: due.length });
+  let seen = 0;
   for (const loan of due) {
+    seen += 1;
+    if (seen % 100 === 0 || seen === due.length) {
+      onProgress?.({ stage: "reviewing", done: seen, total: due.length });
+    }
     const claimed = !unclaimed(loan);
     const state = offerStates.get(loan.id) ?? NO_OFFER_STATE;
     if (state.held) {
@@ -417,7 +427,13 @@ export async function reviewLoans(
       claimed,
     });
   }
-  await inChunks(rows, (chunk) => db.loanReview.createMany({ data: chunk }));
+  onProgress?.({ stage: "verdicts", done: 0, total: rows.length });
+  await inChunks(
+    rows,
+    (chunk) => db.loanReview.createMany({ data: chunk }),
+    undefined,
+    stageProgress(onProgress, "verdicts"),
+  );
   await openOffers(db, offers, now);
   const tomorrow = new Date(day.getTime() + 24 * 60 * 60 * 1000);
   await inChunks(reviewedIds, (chunk) =>

@@ -31,6 +31,7 @@ import { Table, type Column } from "../components/Table.js";
 import {
   Button,
   Field,
+  FilterPill,
   Input,
   Notice,
   Pill,
@@ -45,6 +46,7 @@ import { fmtDate, fmtDateTime, money, pct, plural, words } from "../lib/format.j
 import {
   changeTone,
   changeWord,
+  countVerdicts,
   deskImports,
   deskServicers,
   fileToWire,
@@ -62,11 +64,13 @@ import {
   type TapeLoad,
   type TapePreview,
   reviewBook,
+  VERDICT_FILTERS,
   VERDICT_RANK,
   verdictWord,
   verdictTone,
   type BookReview,
   type Verdict,
+  type VerdictFilter,
 } from "../lib/tape.js";
 
 type Step = "files" | "review" | "load" | "invite";
@@ -91,15 +95,20 @@ function PagedTable<Row>({
   rowKey,
   searchable,
   noun,
+  toolbar,
 }: {
   columns: Column<Row>[];
   rows: readonly Row[];
   rowKey: (r: Row) => string;
   searchable?: (r: Row) => readonly (string | null | undefined)[];
   noun: string;
+  /** Filters beside the search box; with one, the search and the count stay whatever the rows number. */
+  toolbar?: ReactNode;
 }) {
   const [q, setQ] = useState("");
   const [shown, setShown] = useState(PAGE);
+  // A new set of rows (a filter changed) starts the paging over.
+  useEffect(() => setShown(PAGE), [rows]);
   const needle = q.trim().toLowerCase();
   const matching = useMemo(
     () =>
@@ -109,20 +118,25 @@ function PagedTable<Row>({
     [rows, needle, searchable],
   );
   const visible = matching.slice(0, shown);
-  const paged = rows.length > PAGE;
+  const paged = rows.length > PAGE || toolbar !== undefined;
   return (
     <div className="space-y-3">
-      {paged && searchable ? (
-        <Input
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setShown(PAGE);
-          }}
-          placeholder={`Find a ${noun} by number, name or place`}
-          aria-label={`Find a ${noun}`}
-          className="max-w-md"
-        />
+      {(paged && searchable) || toolbar ? (
+        <div className="flex flex-wrap items-center gap-3">
+          {paged && searchable ? (
+            <Input
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setShown(PAGE);
+              }}
+              placeholder={`Find a ${noun} by number, name or place`}
+              aria-label={`Find a ${noun}`}
+              className="w-full max-w-md"
+            />
+          ) : null}
+          {toolbar}
+        </div>
       ) : null}
       <Table columns={columns} rows={visible} rowKey={rowKey} dense />
       {paged ? (
@@ -1286,6 +1300,15 @@ function InviteStep({
     () => candidates.filter((r) => verdictOf(r) === "candidate"),
     [candidates, verdictOf],
   );
+  // The verdicts as filters: an analyst wants "the candidates" or "the
+  // excluded", not fourteen thousand rows at once.
+  const [filter, setFilter] = useState<VerdictFilter | null>(null);
+  const counts = useMemo(() => countVerdicts(candidates, verdictOf), [candidates, verdictOf]);
+  const shownRows = useMemo(
+    () =>
+      filter === null ? candidates : candidates.filter((r) => (verdictOf(r) ?? "none") === filter),
+    [candidates, filter, verdictOf],
+  );
   const [picked, setPicked] = useState<Set<string>>(
     () => new Set(candidates.filter((r) => r.email).map((r) => r.number)),
   );
@@ -1437,6 +1460,82 @@ function InviteStep({
 
   const sent = outcomes?.filter((o) => o.status === "sent").length ?? 0;
 
+  // Picking acts on the rows shown: with a filter on, "all" is the filtered
+  // set, and the button says so.
+  const allShownPicked = shownRows.length > 0 && shownRows.every((r) => picked.has(r.number));
+  const pickShown = (on: boolean) =>
+    setPicked((s) => {
+      const next = new Set(s);
+      for (const r of shownRows) {
+        if (on) next.add(r.number);
+        else next.delete(r.number);
+      }
+      return next;
+    });
+  // The same controls above the table and below it: a book is fourteen
+  // thousand rows, and the send button should not be a scroll away.
+  const controls = (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button
+        variant="primary"
+        loading={busy}
+        disabled={picked.size === 0}
+        onClick={() => void send()}
+      >
+        Send {plural(picked.size, "invitation")}
+      </Button>
+      <Button
+        variant="ghost"
+        disabled={shownRows.length === 0}
+        onClick={() => pickShown(!allShownPicked)}
+      >
+        {filter === null
+          ? allShownPicked
+            ? "Pick none"
+            : "Pick all"
+          : allShownPicked
+            ? `Unpick the ${shownRows.length.toLocaleString()} shown`
+            : `Pick the ${shownRows.length.toLocaleString()} shown`}
+      </Button>
+      {refiCandidates.length ? (
+        <Button
+          variant="ghost"
+          onClick={() => setPicked(new Set(refiCandidates.map((r) => r.number)))}
+        >
+          Pick the {plural(refiCandidates.length, "candidate")}
+        </Button>
+      ) : null}
+      <Button variant="ghost" onClick={onDone}>
+        Skip for now
+      </Button>
+    </div>
+  );
+  const filters = (
+    <div
+      className="flex flex-wrap items-center gap-2"
+      role="group"
+      aria-label="Show loans by refinance verdict"
+    >
+      <FilterPill
+        pressed={filter === null}
+        onClick={() => setFilter(null)}
+        count={candidates.length}
+      >
+        All
+      </FilterPill>
+      {VERDICT_FILTERS.filter((f) => f !== "none" || counts.none > 0).map((f) => (
+        <FilterPill
+          key={f}
+          pressed={filter === f}
+          onClick={() => setFilter(filter === f ? null : f)}
+          count={counts[f]}
+        >
+          {f === "none" ? "Not reviewed" : verdictWord(f)}
+        </FilterPill>
+      ))}
+    </div>
+  );
+
   return (
     <div className="mt-8 space-y-6">
       <div>
@@ -1503,47 +1602,17 @@ function InviteStep({
         </>
       ) : (
         <>
+          {controls}
           <PagedTable
             columns={columns}
-            rows={candidates}
+            rows={shownRows}
             rowKey={(r) => r.number}
             searchable={(r) => [r.number, r.borrower, r.property, r.email]}
             noun="loan"
+            toolbar={filters}
           />
           {error ? <Notice tone="danger">{error}</Notice> : null}
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              variant="primary"
-              loading={busy}
-              disabled={picked.size === 0}
-              onClick={() => void send()}
-            >
-              Send {plural(picked.size, "invitation")}
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() =>
-                setPicked((s) =>
-                  s.size === candidates.length
-                    ? new Set()
-                    : new Set(candidates.map((r) => r.number)),
-                )
-              }
-            >
-              {picked.size === candidates.length ? "Pick none" : "Pick all"}
-            </Button>
-            {refiCandidates.length ? (
-              <Button
-                variant="ghost"
-                onClick={() => setPicked(new Set(refiCandidates.map((r) => r.number)))}
-              >
-                Pick the {plural(refiCandidates.length, "candidate")}
-              </Button>
-            ) : null}
-            <Button variant="ghost" onClick={onDone}>
-              Skip for now
-            </Button>
-          </div>
+          {controls}
         </>
       )}
     </div>

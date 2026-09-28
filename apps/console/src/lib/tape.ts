@@ -293,6 +293,32 @@ export const VERDICT_RANK: Record<Verdict, number> = {
   excluded: 3,
 };
 
+/** A verdict as a filter, plus the loans the review has not reached. */
+export type VerdictFilter = Verdict | "none";
+/** In the engine's order, the unreviewed last — the order the pills read in. */
+export const VERDICT_FILTERS: readonly VerdictFilter[] = [
+  "candidate",
+  "watching",
+  "not_now",
+  "excluded",
+  "none",
+];
+
+export const countVerdicts = <Row>(
+  rows: readonly Row[],
+  verdictOf: (r: Row) => Verdict | null,
+): Record<VerdictFilter, number> => {
+  const out: Record<VerdictFilter, number> = {
+    candidate: 0,
+    watching: 0,
+    not_now: 0,
+    excluded: 0,
+    none: 0,
+  };
+  for (const r of rows) out[verdictOf(r) ?? "none"] += 1;
+  return out;
+};
+
 export const verdictWord = (v: Verdict): string =>
   v === "candidate"
     ? "Candidate"

@@ -124,6 +124,44 @@ export function Pill({
   );
 }
 
+/**
+ * One toggle in a row of filters. Pressed is ink on paper so it reads as
+ * chosen rather than as the action; the accent stays for the button that does
+ * something.
+ */
+export function FilterPill({
+  pressed,
+  onClick,
+  count,
+  children,
+}: {
+  pressed: boolean;
+  onClick: () => void;
+  count?: number;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={clsx(
+        "inline-flex h-8 select-none items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-sm font-medium transition-colors duration-150",
+        pressed
+          ? "border-fg bg-fg text-surface"
+          : "border-line-2 bg-surface text-fg-2 hover:border-line-3 hover:bg-surface-2 hover:text-fg",
+      )}
+    >
+      {children}
+      {count !== undefined ? (
+        <span className={clsx("tabular-nums", pressed ? "text-surface/70" : "text-fg-3")}>
+          {count.toLocaleString()}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
 /** A small count beside a nav item or a heading. */
 export function Count({ n, tone = "neutral" }: { n: number | null | undefined; tone?: Tone }) {
   if (n === null || n === undefined) return null;

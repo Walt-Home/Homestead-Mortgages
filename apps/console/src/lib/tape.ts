@@ -83,6 +83,8 @@ export interface DeskServicer {
   readonly slug: string;
   readonly displayName: string;
   readonly integrationDepth: string;
+  /** Who on their side can see the book: signed in, and invited but not yet in. */
+  readonly team: { readonly active: number; readonly invited: number };
   readonly book: {
     readonly imports: number;
     readonly lastAsOf: string | null;

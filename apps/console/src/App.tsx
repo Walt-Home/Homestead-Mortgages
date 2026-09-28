@@ -18,6 +18,7 @@ import { LoansPage } from "./pages/LoansPage.js";
 import { LoanPage } from "./pages/LoanPage.js";
 import { PeoplePage } from "./pages/PeoplePage.js";
 import { PartnerBookPage } from "./pages/PartnerBookPage.js";
+import { ServicerPage, ServicersPage } from "./pages/ServicersPage.js";
 import { CompliancePage } from "./pages/CompliancePage.js";
 import { ControlsPage } from "./pages/ControlsPage.js";
 import { AiPage } from "./pages/AiPage.js";
@@ -27,6 +28,8 @@ import { TapePage } from "./pages/TapePage.js";
 
 const OPS = ["ops_analyst", "officer", "compliance"];
 const STAFF = [...OPS, "admin"];
+/** The tape desk's roles, which its door checks with the servicing app. */
+const DESK = ["ops_analyst", "officer", "admin"];
 
 /** A page some roles open; the others are told which. */
 function Guard({ roles, children }: { roles: readonly string[]; children: ReactNode }) {
@@ -127,6 +130,22 @@ function Routed() {
           element={
             <Guard roles={OPS}>
               <PartnerBookPage />
+            </Guard>
+          }
+        />
+        <Route
+          path="/servicers"
+          element={
+            <Guard roles={DESK}>
+              <ServicersPage />
+            </Guard>
+          }
+        />
+        <Route
+          path="/servicers/:slug"
+          element={
+            <Guard roles={DESK}>
+              <ServicerPage />
             </Guard>
           }
         />

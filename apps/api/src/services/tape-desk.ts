@@ -617,12 +617,25 @@ export async function deskServicers(db: Db = prisma) {
     select: { id: true, slug: true, displayName: true, integrationDepth: true },
   });
   return Promise.all(
-    rows.map(async (s) => ({
-      slug: s.slug,
-      displayName: s.displayName,
-      integrationDepth: s.integrationDepth,
-      book: await partnerBookStatus(s.id, db),
-    })),
+    rows.map(async (s) => {
+      const people = await db.servicerUser.findMany({
+        where: { servicerId: s.id, disabledAt: null },
+        select: { acceptedAt: true, inviteExpiresAt: true },
+      });
+      const now = Date.now();
+      return {
+        slug: s.slug,
+        displayName: s.displayName,
+        integrationDepth: s.integrationDepth,
+        team: {
+          active: people.filter((p) => p.acceptedAt !== null).length,
+          invited: people.filter(
+            (p) => p.acceptedAt === null && (p.inviteExpiresAt?.getTime() ?? 0) > now,
+          ).length,
+        },
+        book: await partnerBookStatus(s.id, db),
+      };
+    }),
   );
 }
 

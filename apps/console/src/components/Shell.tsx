@@ -32,6 +32,7 @@ interface NavGroup {
 
 const OPS = ["ops_analyst", "officer", "compliance"] as const;
 const STAFF = ["ops_analyst", "officer", "compliance", "admin"] as const;
+const DESK = ["ops_analyst", "officer", "admin"] as const;
 
 const KIND_ICON: Record<QueueKind, IconName> = {
   escalation: "alert",
@@ -85,6 +86,7 @@ function useNav(): NavGroup[] {
         { to: "/loans", label: "Loans", icon: "home", roles: OPS },
         { to: "/people", label: "People", icon: "users", roles: OPS },
         { to: "/partner-book", label: "Partner book", icon: "book", roles: OPS },
+        { to: "/servicers", label: "Servicers", icon: "badge", roles: DESK },
       ],
     },
     {

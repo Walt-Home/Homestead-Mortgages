@@ -167,8 +167,11 @@ decides what renders — the ops console, or the portal at
 `servicer_users` — sign in with a code to their e-mail and a password, and
 see their book read-only: every loan, the newest verdict, the offer, where
 the homeowner's invitation stands, and their team, which they can grow.
-The desk's Team step mails the first invitations; the link
-(`/console/accept#token`) sets the password. No roles, one address per
+The desk's Team step mails the first invitations, and the Servicers page
+(`/console/servicers`, ours: `pages/ServicersPage.tsx` over the desk's
+`/servicers` and `/team` routes) is where a servicer's team is managed any
+day after, without walking a load; the link (`/console/accept#token`) sets
+the password. No roles, one address per
 servicer. IAP is off the servicing host for this: a servicer's staff are
 not our Google accounts, and both doors are two factors. The two sessions
 never cross: `requireServicerUser` reads `servicerUserId`, `requireAuth`

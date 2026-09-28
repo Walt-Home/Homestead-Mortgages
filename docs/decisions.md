@@ -3387,6 +3387,13 @@ door does not work until a mailer is configured, which is the truth. On
 staging today the tape desk's team invitations report "not delivered" with
 the link to hand over, for the same reason the borrower claims do.
 
+**Where the team is managed.** The desk's Team step is the first
+invitation, right after a load; the Servicers page in the console —
+every servicer we hold a book for, its loans, its last tape and review,
+and its team behind each row — is the same panel any day after, because
+Joe went looking for it on a book that was already loaded and found only
+the desk. Members grow their own team from the portal.
+
 **What is deliberately not here.** One address belongs to one servicer.
 No roles: every member sees the whole book and changes nothing but its
 team. No removing a member from the portal; ops re-invites or disables.

@@ -3430,6 +3430,98 @@ on a domain it has not verified, and verifying one is DNS at GoDaddy, which
 is Doug's; a wrong default would fail every send and say so only in the
 outcome. A deployment with the key and no sender stays honest instead.
 
+## A servicer is billed off its tape
+
+**Decision (29 September 2026).** The console has a Billing section, and
+what it shows is what Doug's price sheet — version 1.0 of 28 September,
+kept at `docs/Supermortgage-Price-Sheet-v1.0.pdf` and as data in
+`packages/billing` — says a servicer's book consumes. The sheet's one rule
+for a book is the foot of its section A: a monitored loan on a partner's
+book consumes the self-improving mortgage row and offer touches from the
+day it is loaded, and the servicing rows start the day the loan boards. A
+servicer's own book never boards here, so the monthly charge is one
+balance-driven line plus a count of touches, and never the 25 basis-point
+cycle. On the twelve-loan sample book that is $782.53 a month, 21 basis
+points a year, against $927.85 if the whole cycle were charged.
+
+Nine questions were put to Joe and answered with the defaults offered:
+
+- **The basis is the sheet's rule**, 1,750 tokens per $100,000 per
+  loan-month, and nothing else until a loan boards.
+- **The balance is the interest-bearing UPB** the newest tape on or before
+  the month's end reported — what we store, and what the servicer's own
+  fee is earned on — never the total that carries deferred principal.
+- **A loan-month is pro-rated by calendar day from the load day**, and
+  stops the day a tape reports the loan paid off, transferred, charged off
+  or matured.
+- **No delinquency charge.** Section D is priced on top of the cycle, and
+  the cycle is not running on a monitored book.
+- **The claim invitation is not a touch.** A touch is an offer sent to the
+  homeowner; offers are a card and no mail today, so the line shows zero
+  and the meter takes the count when there is one.
+- **The annual token pool is a field on the servicer**, shown and drawn
+  against when set, never required.
+- **Every servicer row is billed**, because a tape is what creates one.
+- **The console has one role** — the entry after this one.
+- **Screen only.** No PDF and no mail yet; the closed rows are what a
+  document would be generated from.
+
+**The sheet is data, and its arithmetic is a test.** `packages/billing`
+carries every row with its section, its process references, the sheet's
+own word for when it fires and its tokens; a test holds that section A
+sums to 25,000, the standard refinance run to 60,000, the purchase run to
+58,500 and 60,000 with mortgage insurance, and the five worked examples in
+section E to the token — the way `data/v1-build.csv` is held. A token is a
+cent, and the meter's arithmetic is integer: a loan's tokens for the month
+are balance × rate × days over $100,000 × days in the month, rounded
+half-up once per loan, and every total is a sum of lines.
+
+**A month has three standings.** _Running_ — this month, computed through
+today, what has been consumed and not what would be. _Open_ — ended and
+not yet closed, computed live through the month's end. _Closed_ — one
+`billing_statements` row per servicer per month, written by the
+`billing-close` Cloud Run job at 06:00 Eastern on the first (`npm run
+billing:close` by hand, or the console's button on an open month), holding
+the whole statement as JSON beside its totals, and answered verbatim from
+then on. The row is append-only by trigger, and its month is the first of
+the month by CHECK: a statement that was invoiced must not change under a
+later tape, and a corrected month is a credit on the next one.
+
+**The meter reads two queries, neither carrying a parameter per loan.** A
+book is thousands of rows, and a relation load would name each one; the
+loans and the observations on or before the month's end are read as two
+sets and joined in memory, the way the review reads its pages.
+
+**The door is ours and admin's.** `/console/hm/billing` is mounted beside
+the tape desk on the servicing host, gated by the servicing app's own
+session through the same `consoleStaffGate`, which now takes the roles a
+door opens for; billing's is admin alone. `console-billing.test.ts` holds
+the gate, the sample book metered from its load day, the close, its
+idempotence, and the trigger.
+
+## The console has one role
+
+**Decision (29 September 2026).** "Right now we have all these different
+roles in the ops tool but really only need admin (full access for now)."
+So the console shows one word, Admin, and gates no page by role: every
+section is in the nav for everyone signed in, `Guard` is gone from
+`App.tsx`, and the acting-role picker is gone from the account block.
+
+**The four roles underneath are the servicing app's, not ours.** Its
+console API gates every read and act by role on its side, and `admin`
+alone opens neither loans, nor people, nor the partner book there. So
+"one role" is spelled to it as all four: an invitation from the Staff page
+grants `ops_analyst`, `officer`, `compliance` and `admin` together
+(`ADMIN_GRANT`), an account invited before there was one role shows what
+it holds and can be made an admin with a reason, and the access review
+still reviews the underlying grants. No acting role rides a call any
+more. The servicing app runs a read under the least of the held roles that
+opens it, and an act asked for under no role is asked for under the least
+held role and refused with the roles that would do; `useAct` sends such an
+act again, once, as the first role named, and only a refusal that survives
+that is offered as buttons. The few calls that name their role themselves
+— inviting staff as admin, unmasking as compliance — still do.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

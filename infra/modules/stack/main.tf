@@ -437,6 +437,100 @@ resource "google_cloud_scheduler_job" "loan_review" {
   depends_on = [google_cloud_run_v2_job_iam_member.scheduler_runs_loan_review]
 }
 
+# The billing month closed: one statement per servicer for the month that
+# has ended, computed off the tape by the price sheet and kept for good
+# (billing_statements is append-only). Runs on the first; a second run in a
+# month writes nothing.
+resource "google_cloud_run_v2_job" "billing_close" {
+  name     = "homestead-mortgages-${var.environment}-billing-close"
+  location = var.region
+
+  template {
+    template {
+      service_account = var.service_account_email
+      max_retries     = 1
+      timeout         = "600s"
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.this.connection_name]
+        }
+      }
+
+      containers {
+        image   = var.image
+        command = ["node"]
+        args    = ["apps/api/dist/scripts/close-billing.js"]
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "512Mi"
+          }
+        }
+
+        env {
+          name  = "NODE_ENV"
+          value = "production"
+        }
+
+        env {
+          name = "DATABASE_URL"
+          value_source {
+            secret_key_ref {
+              secret  = var.database_url_secret
+              version = "latest"
+            }
+          }
+        }
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    # The image is the deploy's, and gcloud stamps its client on every
+    # update; neither is ours to put back.
+    ignore_changes = [template[0].template[0].containers[0].image, client, client_version]
+  }
+}
+
+resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_billing_close" {
+  project  = google_cloud_run_v2_job.billing_close.project
+  location = google_cloud_run_v2_job.billing_close.location
+  name     = google_cloud_run_v2_job.billing_close.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${var.scheduler_service_account_email}"
+}
+
+resource "google_cloud_scheduler_job" "billing_close" {
+  name        = "homestead-mortgages-${var.environment}-billing-close"
+  description = "Close the billing month: one statement per servicer, off the tape."
+  schedule    = var.billing_close_schedule
+  time_zone   = "America/New_York"
+  region      = var.region
+
+  retry_config {
+    retry_count = 2
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.billing_close.name}:run"
+
+    oauth_token {
+      service_account_email = var.scheduler_service_account_email
+    }
+  }
+
+  depends_on = [google_cloud_run_v2_job_iam_member.scheduler_runs_billing_close]
+}
+
 resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_servicing_sweep" {
   project  = google_cloud_run_v2_job.servicing_sweep.project
   location = google_cloud_run_v2_job.servicing_sweep.location
@@ -523,6 +617,32 @@ resource "google_monitoring_alert_policy" "servicing_sweep_failed" {
 
   documentation {
     content = "A scheduled sweep of the servicing runtime (apps/servicing) failed. A firing that found the lease held exits 0 as skipped, so this is a pass that threw: read the job's logs for the sweep_runs row it left as failed. Until a sweep completes, no timer breaches, no offer goes out, and the partner-book reviews our API reads through the servicing port stop moving."
+  }
+}
+
+resource "google_monitoring_alert_policy" "billing_close_failed" {
+  count        = var.notification_channel_id == null ? 0 : 1
+  display_name = "Billing close failed (${var.environment})"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "a scheduled close of the billing month exited non-zero"
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_job\" AND resource.labels.job_name = \"${google_cloud_run_v2_job.billing_close.name}\" AND metric.type = \"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result = \"failed\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      aggregations {
+        alignment_period   = "3600s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+
+  notification_channels = [var.notification_channel_id]
+
+  documentation {
+    content = "The scheduled close of the billing month failed, so no servicer has a statement for the month that just ended. The console's Billing page still shows the month computed live; an admin can close it by hand from there, or run `npm run billing:close` against the environment. Read the job's logs."
   }
 }
 

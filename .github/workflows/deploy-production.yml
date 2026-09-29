@@ -342,7 +342,7 @@ jobs:
           MAIL_FROM: ${{ vars.MAIL_FROM }}
       - name: Point the scheduled jobs at this image
         run: |
-          for JOB in ${{ env.SERVICE }}-apor-fetch ${{ env.SERVICE }}-loan-review; do
+          for JOB in ${{ env.SERVICE }}-apor-fetch ${{ env.SERVICE }}-loan-review ${{ env.SERVICE }}-billing-close; do
             gcloud run jobs update "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$IMAGE" --quiet
           done
       - name: Confirm the service is reachable and is production

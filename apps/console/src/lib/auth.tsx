@@ -1,10 +1,13 @@
 /**
- * Who is signed in, which roles they hold, and which one they are acting as.
+ * Who is signed in.
  *
  * The server is the authority: `/me` on load, and again after anything that
- * changes a session. The acting role is the one choice the client owns —
- * his API runs every read under the least role that opens it unless told
- * otherwise — and it is remembered per person in this browser.
+ * changes a session. The console has one role — admin, full access — and
+ * the four roles the servicing app spells (`STAFF_ROLES`) are what an admin
+ * holds underneath: an invitation grants all four, no acting role rides a
+ * call, the servicing app runs each read as the least of them that opens
+ * it, and an act it refuses is sent again as the role it names (`act.ts`).
+ * `holds` and `role` remain for the few calls that name a role themselves.
  */
 
 import {
@@ -17,10 +20,18 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, setActingRole, SIGNED_OUT } from "./api.js";
+import { api, ApiError, SIGNED_OUT } from "./api.js";
 
+/** The servicing app's four staff roles: how an admin's access is spelled to it. */
 export const STAFF_ROLES = ["ops_analyst", "officer", "compliance", "admin"] as const;
 export type StaffRole = (typeof STAFF_ROLES)[number];
+
+/** What an invitation grants: all four, because the console has one role. */
+export const ADMIN_GRANT: readonly string[] = STAFF_ROLES;
+
+/** Holds every role there is — an admin, in the console's one word. */
+export const isAdmin = (roles: readonly string[]): boolean =>
+  STAFF_ROLES.every((r) => roles.includes(r));
 
 export const ROLE_WORDS: Record<string, string> = {
   ops_analyst: "Ops analyst",
@@ -39,6 +50,12 @@ export const ROLE_WORDS: Record<string, string> = {
   fraud_officer: "Fraud officer",
 };
 export const roleWord = (r: string): string => ROLE_WORDS[r] ?? r.replace(/_/g, " ");
+
+/** "Admin" for the full grant; otherwise what is held, for an account invited before there was one role. */
+export function rolesWord(roles: readonly string[]): string {
+  if (isAdmin(roles)) return "Admin";
+  return roles.map(roleWord).join(" · ") || "No role";
+}
 
 export interface Me {
   staff_user_id: string;
@@ -61,9 +78,8 @@ type Status = "loading" | "signed-out" | "signed-in";
 interface Auth {
   status: Status;
   me: Me | null;
-  /** The role requests are sent under. */
+  /** The session's default role, as the server reports it; nothing is sent under it. */
   role: string | null;
-  setRole: (role: string) => void;
   /** Why the last session ended, for the sign-in page's one line. */
   endedBecause: "expired" | "signed-out" | null;
   refresh: () => Promise<void>;
@@ -73,32 +89,18 @@ interface Auth {
 
 const AuthContext = createContext<Auth | null>(null);
 
-const roleKey = (id: string) => `console.role.${id}`;
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>("loading");
   const [me, setMe] = useState<Me | null>(null);
-  const [role, setRoleState] = useState<string | null>(null);
   const [endedBecause, setEnded] = useState<Auth["endedBecause"]>(null);
   const queries = useQueryClient();
 
   const adopt = useCallback((who: Me | null) => {
     setMe(who);
     if (!who) {
-      setRoleState(null);
-      setActingRole(null);
       setStatus("signed-out");
       return;
     }
-    let remembered: string | null = null;
-    try {
-      remembered = localStorage.getItem(roleKey(who.staff_user_id));
-    } catch {
-      remembered = null;
-    }
-    const chosen = remembered && who.roles.includes(remembered) ? remembered : who.role;
-    setRoleState(chosen);
-    setActingRole(chosen);
     setStatus("signed-in");
     setEnded(null);
   }, []);
@@ -135,22 +137,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(SIGNED_OUT, onSignedOut);
   }, [adopt, queries]);
 
-  const setRole = useCallback(
-    (next: string) => {
-      setRoleState(next);
-      setActingRole(next);
-      if (me) {
-        try {
-          localStorage.setItem(roleKey(me.staff_user_id), next);
-        } catch {
-          // A browser without storage still works; it just forgets.
-        }
-      }
-      void queries.invalidateQueries();
-    },
-    [me, queries],
-  );
-
   const signOut = useCallback(async () => {
     try {
       await api("/auth/signout", { body: {} });
@@ -165,14 +151,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       status,
       me,
-      role,
-      setRole,
+      role: me?.role ?? null,
       endedBecause,
       refresh,
       signOut,
       holds: (...roles) => !!me && roles.some((r) => me.roles.includes(r)),
     }),
-    [status, me, role, setRole, endedBecause, refresh, signOut],
+    [status, me, endedBecause, refresh, signOut],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

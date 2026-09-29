@@ -113,6 +113,7 @@ module "stack" {
 
   apor_fetch_schedule      = var.apor_fetch_schedule
   loan_review_schedule     = var.loan_review_schedule
+  billing_close_schedule   = var.billing_close_schedule
   servicing_sweep_schedule = var.servicing_sweep_schedule
 
   notification_channel_id   = var.alert_email == "" ? null : google_monitoring_notification_channel.alerts[0].id

@@ -22,6 +22,10 @@ output "loan_review_job" {
   value = google_cloud_run_v2_job.loan_review.name
 }
 
+output "billing_close_job" {
+  value = google_cloud_run_v2_job.billing_close.name
+}
+
 output "servicing_sweep_job" {
   value = google_cloud_run_v2_job.servicing_sweep.name
 }

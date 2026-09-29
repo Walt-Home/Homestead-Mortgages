@@ -143,6 +143,17 @@ variable "loan_review_schedule" {
   default     = "0 7 * * *"
 }
 
+variable "billing_close_schedule" {
+  description = <<-EOT
+    When the billing month is closed, as a cron expression in
+    America/New_York: one statement per servicer for the month that has just
+    ended, off the tape by the price sheet. The first of the month, after the
+    review has run; a run in any other month, or a second run, writes nothing.
+  EOT
+  type        = string
+  default     = "0 6 1 * *"
+}
+
 variable "servicing_sweep_schedule" {
   description = <<-EOT
     When the servicing app's sweep runs, as a cron expression in

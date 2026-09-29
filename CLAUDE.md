@@ -215,6 +215,25 @@ ported — its prompt, its two tools, its provenance guard, one regeneration
 `ANTHROPIC_API_KEY` and never fails a review. See `docs/decisions.md`, "An
 offer is a row and a card".
 
+**A servicer is billed off its tape, and the console has one role (29
+September 2026).** `packages/billing` is Doug's price sheet as data —
+version 1.0, `docs/Supermortgage-Price-Sheet-v1.0.pdf`, every row, held to
+its own sums by tests — and the tape meter over it: a monitored loan on a
+partner's book consumes the self-improving mortgage row (1,750 tokens per
+$100,000 of interest-bearing UPB per loan-month, a token a cent) and offer
+touches from the day it is loaded, pro-rated by calendar day, and nothing
+else until it boards, which a servicer's own book never does here.
+`services/billing.ts` feeds it and keeps one append-only
+`billing_statements` row per servicer per month, closed by the
+`billing-close` job on the first at 06:00 Eastern (`npm run billing:close`)
+or by hand; the running month is computed through today on read. The
+door is `/console/hm/billing`, beside the tape desk, and it opens for
+admin alone. The console itself has one role: every page opens for every
+admin, an invitation grants the servicing app's four roles together, no
+acting role rides a call, and `useAct` resends a refused act once as the
+role the servicing app names. See `docs/decisions.md`, "A servicer is
+billed off its tape" and "The console has one role".
+
 ## Known stubs, for whoever wires the real thing
 
 - **The property card is CoreLogic's when `PROPERTY_RECORDS_PROVIDER=corelogic`,
@@ -605,6 +624,7 @@ npm run db:test:setup        # create <db>_test and apply migrations to it
 npm run build && npm run seed:personas   # the eight sample borrowers
 npm run servicing:db:setup   # create the servicing database and apply the servicing app's migrations
 npm run seed-demo -w @hm/servicing       # his 100-loan batch and 12-loan partner book
+npm run billing:close        # close the billing month that has ended (-- 2026-09 for a named one)
 ```
 
 `seed:personas` refuses to run unless `DEMO_PERSONAS=true` is in its own

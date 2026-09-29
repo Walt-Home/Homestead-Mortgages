@@ -25,12 +25,6 @@ export class ApiError extends Error {
 /** Fired when the server says there is no session any more. */
 export const SIGNED_OUT = "console:signed-out";
 
-let actingRole: string | null = null;
-/** Set by the auth context; read by every request. */
-export function setActingRole(role: string | null): void {
-  actingRole = role;
-}
-
 export interface Call {
   readonly method?: "GET" | "POST" | "PUT" | "DELETE";
   readonly body?: unknown;
@@ -38,6 +32,8 @@ export interface Call {
   /** Act as this role for this one call, e.g. after ROLE_REQUIRED. */
   readonly role?: string;
   readonly signal?: AbortSignal;
+  /** Which door, when a hook that takes a path cannot say: billing's, say. */
+  readonly door?: Door;
 }
 
 export interface Answer<T> {
@@ -81,11 +77,16 @@ function messageOf(body: Record<string, unknown>, status: number): string {
 
 /**
  * Where a call goes. The servicing app's console API answers `/console/api`;
- * our own API answers `/console/hm/tape` — the tape desk — behind the same
- * session, checked with the servicing app on every call.
+ * our own API answers `/console/hm/tape` — the tape desk — and
+ * `/console/hm/billing`, behind the same session, checked with the
+ * servicing app on every call.
  */
-export type Door = "servicing" | "hm";
-const BASE: Record<Door, string> = { servicing: "/console/api", hm: "/console/hm/tape" };
+export type Door = "servicing" | "hm" | "billing";
+const BASE: Record<Door, string> = {
+  servicing: "/console/api",
+  hm: "/console/hm/tape",
+  billing: "/console/hm/billing",
+};
 
 export async function call<T>(
   path: string,
@@ -93,10 +94,13 @@ export async function call<T>(
   door: Door = "servicing",
 ): Promise<Answer<T>> {
   const headers: Record<string, string> = { accept: "application/json" };
-  const role = init.role ?? actingRole;
-  if (role) headers["x-staff-role"] = role;
+  // The console has one role. No acting role rides a call unless the call
+  // names one: the servicing app runs a read as the least of the four roles
+  // an admin holds that opens it, and an act it refuses is sent again as
+  // the role it names (`act.ts`).
+  if (init.role) headers["x-staff-role"] = init.role;
   if (init.body !== undefined) headers["content-type"] = "application/json";
-  const response = await fetch(`${BASE[door]}${path}${qs(init.query)}`, {
+  const response = await fetch(`${BASE[init.door ?? door]}${path}${qs(init.query)}`, {
     method: init.method ?? (init.body !== undefined ? "POST" : "GET"),
     headers,
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
@@ -156,8 +160,7 @@ export async function upload<T>(
   init: { role?: string; headers?: Record<string, string> } = {},
 ): Promise<T> {
   const headers: Record<string, string> = { accept: "application/json", ...init.headers };
-  const role = init.role ?? actingRole;
-  if (role) headers["x-staff-role"] = role;
+  if (init.role) headers["x-staff-role"] = init.role;
   const response = await fetch(`/console/api${path}`, {
     method: "POST",
     headers,
@@ -201,8 +204,7 @@ export async function stream<T, P>(
     accept: "application/x-ndjson, application/json",
     "content-type": "application/json",
   };
-  const role = init.role ?? actingRole;
-  if (role) headers["x-staff-role"] = role;
+  if (init.role) headers["x-staff-role"] = init.role;
   const response = await fetch(`${BASE.hm}${path}`, {
     method: "POST",
     headers,

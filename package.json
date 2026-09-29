@@ -29,6 +29,7 @@
     "apor:verify": "node scripts/build-apor.mjs --verify",
     "apor:fetch": "tsx apps/api/src/scripts/fetch-apor.ts",
     "review:run": "tsx apps/api/src/scripts/review-loans.ts",
+    "billing:close": "tsx apps/api/src/scripts/close-billing.ts",
     "apor:vendor": "tsx apps/api/src/scripts/fetch-apor.ts --vendor && node scripts/build-apor.mjs",
     "servicing:db:setup": "npm run db:setup -w @hm/servicing",
     "test:servicing": "npm_config_node_options=\"--experimental-strip-types --disable-warning=ExperimentalWarning\" npm run test -w @hm/servicing --"

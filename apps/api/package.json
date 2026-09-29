@@ -13,6 +13,7 @@
     "partner:key": "tsx src/scripts/partner-key.ts"
   },
   "dependencies": {
+    "@hm/billing": "*",
     "@hm/connectors": "*",
     "@hm/db": "*",
     "@hm/du": "*",

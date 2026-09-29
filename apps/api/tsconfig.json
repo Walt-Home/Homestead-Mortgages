@@ -18,6 +18,7 @@
       "@hm/shared/decision-figures": ["../../packages/shared/src/decision-figures.ts"],
       "@hm/partner-book": ["../../packages/partner-book/src/index.ts"],
       "@hm/refi-review": ["../../packages/refi-review/src/index.ts"],
+      "@hm/billing": ["../../packages/billing/src/index.ts"],
       "@hm/kernel/calendar": ["../../packages/kernel/src/kernel/calendar/index.ts"]
     }
   },
@@ -34,6 +35,9 @@
     },
     {
       "path": "../../packages/refi-review"
+    },
+    {
+      "path": "../../packages/billing"
     },
     {
       "path": "../../packages/requirements"

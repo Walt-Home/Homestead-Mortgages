@@ -18,7 +18,7 @@ import {
 } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { useAct } from "../lib/act.js";
-import { roleWord, STAFF_ROLES, useAuth } from "../lib/auth.js";
+import { roleWord, rolesWord, STAFF_ROLES, useAuth } from "../lib/auth.js";
 import { fmtDate, fmtDateTime, fmtRelative, words } from "../lib/format.js";
 import type { StaffUser } from "./StaffPage.js";
 
@@ -125,7 +125,7 @@ export function AccessReviewPage() {
                           {u.legal_name ?? u.email_masked}
                         </div>
                         <div className="text-sm text-fg-2">
-                          {u.roles.map(roleWord).join(", ")} · {u.open_sessions} open session
+                          {rolesWord(u.roles)} · {u.open_sessions} open session
                           {u.open_sessions === 1 ? "" : "s"} · enrolled{" "}
                           {u.enrolled_at ? fmtDate(u.enrolled_at) : "—"}
                         </div>

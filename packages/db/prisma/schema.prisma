@@ -1742,14 +1742,59 @@ model Servicer {
   displayName      String           @map("display_name")
   integrationDepth IntegrationDepth @default(NONE) @map("integration_depth")
 
+  /// The annual token pool the servicer committed to, when one has been
+  /// set: the price sheet's "a customer commits to an annual token pool
+  /// and is invoiced monthly on what its loans consume". Null until
+  /// somebody sets it; the statements are what they are either way.
+  annualTokenPool BigInt? @map("annual_token_pool")
+
   createdAt DateTime @default(now()) @map("created_at")
 
   loans       Loan[]
   credentials PartnerCredential[]
   imports     PartnerBookImport[]
   users       ServicerUser[]
+  statements  BillingStatement[]
 
   @@map("servicers")
+}
+
+/// What a servicer's book consumed in a month, closed: one row per servicer
+/// per month, written by the month-close job (or by hand from the console)
+/// once the month has ended, and never updated — a statement that was
+/// invoiced must not change under a later tape, for the same reason a
+/// decision and a snapshot are append-only. The month still running is
+/// computed on read and has no row. See docs/decisions.md, "A servicer is
+/// billed off its tape".
+model BillingStatement {
+  id         String   @id @default(uuid()) @db.Uuid
+  servicerId String   @map("servicer_id") @db.Uuid
+  servicer   Servicer @relation(fields: [servicerId], references: [id], onDelete: Restrict)
+
+  /// The first day of the month billed.
+  month DateTime @db.Date
+
+  /// The price sheet the figures were computed on.
+  sheetVersion String @map("sheet_version")
+
+  loansBilled  Int     @map("loans_billed")
+  /// Loan-days over days in the month, to two places.
+  loanMonths   Decimal @map("loan_months") @db.Decimal(12, 2)
+  balanceCents BigInt  @map("balance_cents")
+  tokens       BigInt
+  cents        BigInt
+
+  /// The whole statement as the console reads it: the lines, the per-loan
+  /// charges, the period. The columns above are its totals, for a list.
+  statement Json
+
+  closedAt DateTime @default(now()) @map("closed_at")
+  /// "job", or the console staff id that closed it by hand.
+  closedBy String   @map("closed_by")
+
+  @@unique([servicerId, month], map: "billing_statements_one_per_servicer_month")
+  @@index([month], map: "billing_statements_month")
+  @@map("billing_statements")
 }
 
 /// A person on a servicer's team, with a sign-in of their own: a code to

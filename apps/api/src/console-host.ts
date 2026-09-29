@@ -32,6 +32,7 @@ import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import express, { type Express, type Request, type Response, type Router } from "express";
 import { config } from "./config.js";
+import { consoleBillingRouter } from "./routes/console-billing.js";
 import { consoleTapeRouter } from "./routes/console-tape.js";
 import {
   IDENTITY_HEADER,
@@ -55,11 +56,13 @@ export interface ConsoleHostOptions {
    */
   readonly identityToken?: IdentityTokenProvider;
   /**
-   * The one prefix on this host our API answers itself: the tape desk,
-   * at `/console/hm/tape`, gated by the servicing app's own session. Unset
-   * in a test that is only about the forwarding.
+   * The prefixes on this host our API answers itself: the tape desk, at
+   * `/console/hm/tape`, and billing, at `/console/hm/billing`, each gated
+   * by the servicing app's own session. Unset in a test that is only about
+   * the forwarding.
    */
   readonly tape?: Router;
+  readonly billing?: Router;
 }
 
 /** The request headers that cross to his server. Nothing else does. */
@@ -151,8 +154,9 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
   router.get("/", (_req, res) => res.redirect(302, "/console/"));
   router.get(/^\/console$/, (_req, res) => res.redirect(302, "/console/"));
 
-  // Ours, before anything forwarded: the tape desk answers here.
+  // Ours, before anything forwarded: the tape desk and billing answer here.
   if (opts.tape) router.use("/console/hm/tape", opts.tape);
+  if (opts.billing) router.use("/console/hm/billing", opts.billing);
 
   // The console's calls, to the servicing app's console API and its document reads.
   router.use(
@@ -230,11 +234,13 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
   if (!upstream) return "not-configured";
   const identityToken = identityTokenFor(upstream);
   const tape = consoleTapeRouter({ upstream, identityToken });
+  const billing = consoleBillingRouter({ upstream, identityToken });
   if (!host) {
     // No servicing hostname: development, where the console's dev server
-    // proxies `/console/hm` here. The desk carries its own gate, so it is
+    // proxies `/console/hm` here. Each door carries its own gate, so it is
     // safe on any Host; it is mounted on one only when there is one.
     app.use("/console/hm/tape", tape);
+    app.use("/console/hm/billing", billing);
     return "not-configured";
   }
   const here = dirname(fileURLToPath(import.meta.url));
@@ -247,6 +253,7 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
     dist: built ? dist : undefined,
     identityToken,
     tape,
+    billing,
   });
   app.use((req, res, next) => {
     if (hosts.has(req.hostname)) router(req, res, next);

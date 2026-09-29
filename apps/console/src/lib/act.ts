@@ -1,7 +1,10 @@
 /**
  * Doing something: one hook that runs an act, refreshes what it changed,
- * tells the person, and — when his API answers ROLE_REQUIRED with the roles
- * this session could act as — offers to send it again under one of them.
+ * tells the person, and — when the servicing app answers ROLE_REQUIRED with
+ * the roles this session could act as — sends it again as the first of
+ * them, once, because the console has one role and the four underneath are
+ * the servicing app's spelling of it. A refusal that survives that is
+ * offered as buttons, as it always was.
  */
 
 import { useCallback, useState } from "react";
@@ -27,19 +30,30 @@ export function useAct(opts: { invalidate?: readonly (readonly unknown[])[]; don
     async <T>(path: string, init: Call = {}): Promise<T | null> => {
       setState({ busy: true, error: null, actAs: [] });
       setLast({ path, init });
-      try {
-        const { data } = await call<T>(path, init);
-        setState({ busy: false, error: null, actAs: [] });
-        for (const key of opts.invalidate ?? []) void queries.invalidateQueries({ queryKey: key });
-        if (opts.done) toast({ tone: "ok", title: opts.done });
-        return data;
-      } catch (err) {
-        const e = err instanceof ApiError ? err : new ApiError(0, String(err), null);
-        setState({ busy: false, error: e, actAs: e.actAs });
-        if (e.actAs.length === 0) {
-          toast({ tone: "danger", title: "That didn't go through", body: e.message });
+      let attempt = init;
+      for (let sent = 0; ; sent += 1) {
+        try {
+          const { data } = await call<T>(path, attempt);
+          setState({ busy: false, error: null, actAs: [] });
+          for (const key of opts.invalidate ?? [])
+            void queries.invalidateQueries({ queryKey: key });
+          if (opts.done) toast({ tone: "ok", title: opts.done });
+          return data;
+        } catch (err) {
+          const e = err instanceof ApiError ? err : new ApiError(0, String(err), null);
+          // An act asked for under no role is asked for under the least the
+          // account holds; when the route wants another, send it as that one.
+          const again = e.actAs[0];
+          if (again && sent === 0 && !attempt.role) {
+            attempt = { ...attempt, role: again };
+            continue;
+          }
+          setState({ busy: false, error: e, actAs: e.actAs });
+          if (e.actAs.length === 0) {
+            toast({ tone: "danger", title: "That didn't go through", body: e.message });
+          }
+          return null;
         }
-        return null;
       }
     },
     [opts.invalidate, opts.done, queries, toast],

@@ -95,6 +95,10 @@ variable "loan_review_schedule" {
   type = string
 }
 
+variable "billing_close_schedule" {
+  type = string
+}
+
 variable "servicing_sweep_schedule" {
   type = string
 }

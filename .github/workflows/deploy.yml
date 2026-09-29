@@ -878,6 +878,23 @@ jobs:
             exit 1
           fi
 
+      # And the month-close, the same way.
+      - name: Point the scheduled billing close at this image
+        run: |
+          JOB=${{ env.SERVICE }}-billing-close
+          set +e
+          ERR=$(gcloud run jobs describe "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --format="value(name)" 2>&1 >/dev/null)
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            gcloud run jobs update "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$IMAGE" --quiet
+          elif grep -qiE "NOT_FOUND|not found|does not exist|cannot find" <<< "$ERR"; then
+            echo "::warning::Cloud Run job $JOB does not exist yet; apply infra/ to schedule the billing close. Billing is still computed live in the console."
+          else
+            echo "::error::could not describe Cloud Run job $JOB: $ERR"
+            exit 1
+          fi
+
       # Belt and braces, and not redundant: --allow-unauthenticated fails
       # SILENTLY when the org policy blocks it. Asserting the binding
       # afterwards and reading it back turns that into a red build instead of a

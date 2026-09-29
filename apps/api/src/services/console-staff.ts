@@ -44,6 +44,10 @@ export interface ConsoleStaffGateOptions {
   readonly upstream: string;
   readonly fetchImpl?: typeof fetch;
   readonly identityToken?: IdentityTokenProvider;
+  /** The roles that open this door; the tape desk's unless a router says otherwise. */
+  readonly roles?: readonly string[];
+  /** What the door is for, in the refusal: "Loading a tape", "Billing". */
+  readonly what?: string;
 }
 
 function refuse(res: Response, status: number, code: string, message: string): void {
@@ -52,6 +56,8 @@ function refuse(res: Response, status: number, code: string, message: string): v
 
 export function consoleStaffGate(opts: ConsoleStaffGateOptions) {
   const doFetch = opts.fetchImpl ?? fetch;
+  const opens: readonly string[] = opts.roles ?? TAPE_ROLES;
+  const what = opts.what ?? "Loading a tape";
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const cookie = req.headers.cookie;
     if (!cookie) {
@@ -90,10 +96,10 @@ export function consoleStaffGate(opts: ConsoleStaffGateOptions) {
       return;
     }
     const roles = Array.isArray(me.roles) ? me.roles.map(String) : [];
-    if (!roles.some((r) => (TAPE_ROLES as readonly string[]).includes(r))) {
+    if (!roles.some((r) => opens.includes(r))) {
       res.status(403).json({
         error: {
-          message: `Loading a tape needs one of ${TAPE_ROLES.join(", ")}.`,
+          message: `${what} needs one of ${opens.join(", ")}.`,
           code: "ROLE_REQUIRED",
         },
         act_as: [],

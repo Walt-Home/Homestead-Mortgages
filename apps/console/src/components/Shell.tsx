@@ -12,15 +12,14 @@ import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import clsx from "clsx";
 import { Icon, type IconName } from "./Icon.js";
-import { Count, IconButton, Select } from "./ui.js";
-import { roleWord, useAuth } from "../lib/auth.js";
+import { Count, IconButton } from "./ui.js";
+import { rolesWord, useAuth } from "../lib/auth.js";
 import { KIND_WORDS, QUEUE_KINDS, useHome, type QueueKind } from "../lib/home.js";
 
 interface NavItem {
   to: string;
   label: string;
   icon: IconName;
-  roles?: readonly string[];
   count?: number | null;
   countTone?: "neutral" | "danger" | "warn";
   end?: boolean;
@@ -29,10 +28,6 @@ interface NavGroup {
   label: string;
   items: NavItem[];
 }
-
-const OPS = ["ops_analyst", "officer", "compliance"] as const;
-const STAFF = ["ops_analyst", "officer", "compliance", "admin"] as const;
-const DESK = ["ops_analyst", "officer", "admin"] as const;
 
 const KIND_ICON: Record<QueueKind, IconName> = {
   escalation: "alert",
@@ -51,8 +46,8 @@ export function Wordmark({ className }: { className?: string }) {
   );
 }
 
+/** The console has one role, so every section is every admin's; the sections are the nav. */
 function useNav(): NavGroup[] {
-  const { holds } = useAuth();
   const home = useHome();
   const byKind = home.data?.my_queue?.by_kind;
   const clocks = home.data?.clocks?.counts;
@@ -73,46 +68,46 @@ function useNav(): NavGroup[] {
           to: `/work/${k}`,
           label: KIND_WORDS[k],
           icon: KIND_ICON[k],
-          roles: OPS,
           count: kindCount(k),
           countTone: k === "breached_timer" || k === "escalation" ? "danger" : "neutral",
         })),
-        { to: "/work-items", label: "Work items", icon: "sliders", roles: STAFF },
+        { to: "/work-items", label: "Work items", icon: "sliders" },
       ],
     },
     {
       label: "Records",
       items: [
-        { to: "/loans", label: "Loans", icon: "home", roles: OPS },
-        { to: "/people", label: "People", icon: "users", roles: OPS },
-        { to: "/partner-book", label: "Partner book", icon: "book", roles: OPS },
-        { to: "/servicers", label: "Servicers", icon: "badge", roles: DESK },
+        { to: "/loans", label: "Loans", icon: "home" },
+        { to: "/people", label: "People", icon: "users" },
+        { to: "/partner-book", label: "Partner book", icon: "book" },
+        { to: "/servicers", label: "Servicers", icon: "badge" },
       ],
     },
     {
       label: "Oversight",
       items: [
-        { to: "/oversight/compliance", label: "Compliance", icon: "shield", roles: OPS },
-        { to: "/oversight/controls", label: "Controls", icon: "sliders", roles: STAFF },
-        { to: "/oversight/ai", label: "AI", icon: "sparkles", roles: OPS },
+        { to: "/oversight/compliance", label: "Compliance", icon: "shield" },
+        { to: "/oversight/controls", label: "Controls", icon: "sliders" },
+        { to: "/oversight/ai", label: "AI", icon: "sparkles" },
       ],
+    },
+    {
+      label: "Billing",
+      items: [{ to: "/billing", label: "Billing", icon: "receipt" }],
     },
     {
       label: "Staff",
       items: [
-        { to: "/staff", label: "Staff & roles", icon: "badge", roles: ["admin"] },
+        { to: "/staff", label: "Staff", icon: "badge" },
         {
           to: "/staff/access-review",
           label: "Access review",
           icon: "key",
-          roles: ["compliance", "admin"],
         },
       ],
     },
   ];
-  return groups
-    .map((g) => ({ ...g, items: g.items.filter((i) => !i.roles || holds(...i.roles)) }))
-    .filter((g) => g.items.length > 0);
+  return groups;
 }
 
 function NavList({ groups, labels }: { groups: NavGroup[]; labels: boolean }) {
@@ -165,7 +160,7 @@ function NavList({ groups, labels }: { groups: NavGroup[]; labels: boolean }) {
 }
 
 function Account({ compact }: { compact?: boolean }) {
-  const { me, role, setRole, signOut } = useAuth();
+  const { me, signOut } = useAuth();
   if (!me) return null;
   const initials = (me.legal_name ?? "?")
     .split(/\s+/)
@@ -177,7 +172,7 @@ function Account({ compact }: { compact?: boolean }) {
     return (
       <div className="flex flex-col items-center gap-2 border-t border-line p-2">
         <div
-          title={`${me.legal_name ?? "Staff"} · acting as ${roleWord(role ?? me.role)}`}
+          title={`${me.legal_name ?? "Staff"} · ${rolesWord(me.roles)}`}
           className="flex h-8 w-8 items-center justify-center rounded-full bg-fg text-xs font-semibold text-surface"
         >
           {initials}
@@ -194,7 +189,7 @@ function Account({ compact }: { compact?: boolean }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-base font-medium text-fg">{me.legal_name ?? "Staff"}</div>
-          <div className="truncate text-xs text-fg-3">{me.roles.map(roleWord).join(" · ")}</div>
+          <div className="truncate text-xs text-fg-3">{rolesWord(me.roles)}</div>
         </div>
         <IconButton
           label="Sign out"
@@ -203,22 +198,6 @@ function Account({ compact }: { compact?: boolean }) {
           className="-mr-1"
         />
       </div>
-      {me.roles.length > 1 ? (
-        <label className="mt-3 block">
-          <span className="mb-1 block text-xs font-medium text-fg-3">Acting as</span>
-          <Select
-            value={role ?? me.role}
-            onChange={(e) => setRole(e.target.value)}
-            className="h-9 text-sm"
-          >
-            {me.roles.map((r) => (
-              <option key={r} value={r}>
-                {roleWord(r)}
-              </option>
-            ))}
-          </Select>
-        </label>
-      ) : null}
     </div>
   );
 }

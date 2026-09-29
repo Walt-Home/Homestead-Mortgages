@@ -8,6 +8,7 @@ output "stacks" {
       servicing_database       = m.servicing_database_name
       apor_fetch_job           = m.apor_fetch_job
       loan_review_job          = m.loan_review_job
+      billing_close_job        = m.billing_close_job
       servicing_sweep_job      = m.servicing_sweep_job
       console_backend          = m.console_backend_name
       consumer_hostnames       = var.stacks[k].consumer_hostnames

@@ -1,6 +1,9 @@
 /**
- * Staff and roles (his 34.1): who can sign in, with which roles; inviting
- * someone new; changing roles with a reason; disabling.
+ * Staff (the servicing app's 34.1): who can sign in; inviting someone new;
+ * disabling. The console has one role — admin, full access — so an
+ * invitation grants the four the servicing app spells, and an account
+ * invited before there was one role can be made an admin here, with a
+ * reason.
  */
 
 import { useState } from "react";
@@ -8,20 +11,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../components/Page.js";
 import { Table } from "../components/Table.js";
 import { Sheet } from "../components/Sheet.js";
-import {
-  Button,
-  Checkbox,
-  Field,
-  Input,
-  Notice,
-  Pill,
-  Rows,
-  Textarea,
-  type Tone,
-} from "../components/ui.js";
+import { Button, Field, Input, Notice, Pill, Rows, Textarea, type Tone } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { useAct } from "../lib/act.js";
-import { roleWord, STAFF_ROLES, useAuth } from "../lib/auth.js";
+import { ADMIN_GRANT, isAdmin, rolesWord, useAuth } from "../lib/auth.js";
 import { fmtDateTime, fmtRelative, words } from "../lib/format.js";
 
 export interface StaffUser {
@@ -52,8 +45,8 @@ export function StaffPage() {
   });
   return (
     <Page
-      title="Staff & roles"
-      description="Who can sign in here, and as what."
+      title="Staff"
+      description="Who can sign in here. Everyone who can is an admin."
       actions={
         <Button variant="primary" icon="plus" onClick={() => setInviting(true)}>
           Invite
@@ -82,13 +75,9 @@ export function StaffPage() {
               },
               {
                 key: "roles",
-                header: "Roles",
+                header: "Access",
                 render: (u) => (
-                  <span className="flex flex-wrap gap-1">
-                    {u.roles.map((r) => (
-                      <Pill key={r}>{roleWord(r)}</Pill>
-                    ))}
-                  </span>
+                  <Pill tone={isAdmin(u.roles) ? "ok" : "warn"}>{rolesWord(u.roles)}</Pill>
                 ),
               },
               {
@@ -135,35 +124,17 @@ export function StaffPage() {
   );
 }
 
-function RolePicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      {STAFF_ROLES.map((r) => (
-        <Checkbox
-          key={r}
-          label={roleWord(r)}
-          checked={value.includes(r)}
-          onChange={(e) =>
-            onChange(e.target.checked ? [...value, r] : value.filter((x) => x !== r))
-          }
-        />
-      ))}
-    </div>
-  );
-}
-
 function InviteSheet({ onClose }: { onClose: () => void }) {
   const act = useAct({ invalidate: [["staff"]], done: "Invited" });
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [roles, setRoles] = useState<string[]>(["ops_analyst"]);
   const [rationale, setRationale] = useState("");
   const invite = async () => {
     const ok = await act.run("/staff/invite", {
       body: {
         email: email.trim(),
         legal_name: name.trim() || undefined,
-        roles,
+        roles: [...ADMIN_GRANT],
         rationale: rationale || undefined,
       },
       role: "admin",
@@ -184,7 +155,7 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
           <Button
             variant="primary"
             loading={act.busy}
-            disabled={!email.includes("@") || roles.length === 0}
+            disabled={!email.includes("@")}
             onClick={() => void invite()}
           >
             Send invitation
@@ -205,9 +176,10 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
         <Field label="Name" htmlFor="inv-name" hint="As it should appear on what they do.">
           <Input id="inv-name" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="Roles" hint="Admin invites and changes roles; the other three do the work.">
-          <RolePicker value={roles} onChange={setRoles} />
-        </Field>
+        <Notice tone="neutral" title="Admin, full access">
+          The console has one role. The servicing app underneath spells it as four, and the
+          invitation grants all of them.
+        </Notice>
         <Field label="Why (optional)" htmlFor="inv-why">
           <Textarea id="inv-why" value={rationale} onChange={(e) => setRationale(e.target.value)} />
         </Field>
@@ -230,14 +202,13 @@ function PersonSheet({
   self: boolean;
 }) {
   const act = useAct({ invalidate: [["staff"]], done: "Saved" });
-  const [roles, setRoles] = useState<string[]>(user.roles);
   const [rationale, setRationale] = useState("");
   const [disabling, setDisabling] = useState(false);
-  const changed = roles.length !== user.roles.length || roles.some((r) => !user.roles.includes(r));
+  const admin = isAdmin(user.roles);
   const save = async () => {
     const ok = await act.run(`/staff/${user.staff_user_id}/roles`, {
       method: "PUT",
-      body: { roles, rationale },
+      body: { roles: [...ADMIN_GRANT], rationale },
       role: "admin",
     });
     if (ok) onClose();
@@ -282,14 +253,16 @@ function PersonSheet({
                 Disable…
               </Button>
             ) : null}
-            <Button
-              variant="primary"
-              loading={act.busy}
-              disabled={!changed || !rationale.trim() || self}
-              onClick={() => void save()}
-            >
-              Save roles
-            </Button>
+            {!admin && !self ? (
+              <Button
+                variant="primary"
+                loading={act.busy}
+                disabled={!rationale.trim()}
+                onClick={() => void save()}
+              >
+                Make admin
+              </Button>
+            ) : null}
           </>
         )
       }
@@ -318,20 +291,27 @@ function PersonSheet({
       ) : null}
       {!self ? (
         <div className="mt-5 space-y-4">
-          <Field label="Roles">
-            <RolePicker value={roles} onChange={setRoles} />
-          </Field>
-          <Field
-            label={disabling ? "Why disable" : "Why the change"}
-            htmlFor="why"
-            hint="Recorded with your name."
-          >
-            <Textarea id="why" value={rationale} onChange={(e) => setRationale(e.target.value)} />
-          </Field>
+          {admin ? (
+            <Notice tone="ok">Admin, full access.</Notice>
+          ) : (
+            <Notice tone="warn" title={`Holds ${rolesWord(user.roles)}`}>
+              Invited before the console had one role. Making them an admin grants the four the
+              servicing app spells.
+            </Notice>
+          )}
+          {!admin || disabling ? (
+            <Field
+              label={disabling ? "Why disable" : "Why the change"}
+              htmlFor="why"
+              hint="Recorded with your name."
+            >
+              <Textarea id="why" value={rationale} onChange={(e) => setRationale(e.target.value)} />
+            </Field>
+          ) : null}
         </div>
       ) : (
         <Notice tone="neutral" className="mt-4">
-          Your own roles are changed by another admin, never by you.
+          Your own access is changed by another admin, never by you.
         </Notice>
       )}
       {act.error ? (

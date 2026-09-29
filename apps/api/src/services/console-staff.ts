@@ -80,7 +80,11 @@ export function consoleStaffGate(opts: ConsoleStaffGateOptions) {
     try {
       const r = await doFetch(`${opts.upstream}/ops/api/me`, {
         headers,
-        signal: AbortSignal.timeout(5000),
+        // A cold servicing app takes the better part of a minute to answer
+        // its first request, and five seconds here turned that into a 502
+        // on every console page behind this gate. Its deploys keep one
+        // instance warm now; this is the allowance for the day they don't.
+        signal: AbortSignal.timeout(30_000),
       });
       if (!r.ok) {
         refuse(res, 401, "STAFF_SIGN_IN_REQUIRED", "Sign in to the console to continue.");

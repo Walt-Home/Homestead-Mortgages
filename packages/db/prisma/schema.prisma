@@ -2099,6 +2099,10 @@ model Loan {
   refinanceApplications Application[] @relation("LoanRefinanceApplication")
 
   @@unique([servicerId, servicerLoanNumber], map: "loans_one_per_servicer_number")
+  /// The self-reference's foreign key: without this, deleting a loan scans
+  /// the whole table for loans that name it, and a book of thousands takes
+  /// an hour to remove.
+  @@index([refinancedByLoanId], map: "loans_refinanced_by")
   @@index([status, statusEnteredAt], map: "loans_status_entered")
   @@index([monitoringEnabled, nextReviewDueAt], map: "loans_review_due")
   @@index([originatingApplicationId], map: "loans_originating_app")

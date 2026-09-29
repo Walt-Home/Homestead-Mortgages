@@ -3439,6 +3439,9 @@ model LoanReview {
 
   @@unique([loanId, asOf], map: "loan_reviews_one_per_loan_day")
   @@index([asOf], map: "loan_reviews_as_of")
+  /// The observation's foreign key: without this, removing an observation
+  /// scans every review for the one that read it, thirty milliseconds a row.
+  @@index([observationId], map: "loan_reviews_observation")
   @@map("loan_reviews")
 }
 

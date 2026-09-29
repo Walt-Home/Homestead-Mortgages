@@ -38,6 +38,9 @@ describe("money", () => {
     expect(money(-5n)).toBe("−$0.05");
     expect(money(null)).toBe("—");
     expect(money("59300000", { compact: true })).toBe("$593.0K");
+    expect(money("2463350212", { compact: true })).toBe("$24.63M");
+    // A whole book's balance: fourteen thousand loans at a quarter-million each.
+    expect(money("348071384889", { compact: true })).toBe("$3.48B");
   });
   it("shows a percent without trailing zeros", () => {
     expect(pct("6.625")).toBe("6.625%");

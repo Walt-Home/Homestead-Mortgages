@@ -80,9 +80,14 @@ export function BillingPage() {
       },
       {
         key: "balance",
-        header: "Balance billed",
+        header: "Balance on the meter",
         align: "right",
-        render: (s) => <span className="tabular-nums">{money(s.running.balanceCents)}</span>,
+        render: (s) => (
+          <span className="flex flex-col items-end">
+            <span className="tabular-nums">{money(s.running.balanceCents, { compact: true })}</span>
+            <span className="text-xs text-fg-3">interest-bearing UPB, summed</span>
+          </span>
+        ),
       },
       {
         key: "month",
@@ -424,9 +429,16 @@ export function BillingServicerPage() {
               hint={`${s.loanDays.toLocaleString()} loan-days of ${s.daysInMonth}`}
             />
             <Stat
-              label="Balance billed"
-              value={money(s.balanceCents)}
-              hint="interest-bearing UPB"
+              label="Balance on the meter"
+              value={money(s.balanceCents, { compact: true })}
+              hint={
+                s.loansBilled > 0
+                  ? `interest-bearing UPB, summed; ${money(
+                      BigInt(s.balanceCents) / BigInt(s.loansBilled),
+                      { compact: true },
+                    )} a loan on average`
+                  : "interest-bearing UPB, summed"
+              }
             />
           </div>
 

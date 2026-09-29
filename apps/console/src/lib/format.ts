@@ -121,9 +121,11 @@ export function money(
   if (opts.compact && whole >= 1000n) {
     const dollars = Number(whole);
     const s =
-      dollars >= 1_000_000
-        ? `${(dollars / 1_000_000).toFixed(2)}M`
-        : `${(dollars / 1_000).toFixed(1)}K`;
+      dollars >= 1_000_000_000
+        ? `${(dollars / 1_000_000_000).toFixed(2)}B`
+        : dollars >= 1_000_000
+          ? `${(dollars / 1_000_000).toFixed(2)}M`
+          : `${(dollars / 1_000).toFixed(1)}K`;
     return `${negative ? "−" : ""}$${s}`;
   }
   return `${negative ? "−" : ""}$${whole.toLocaleString("en-US")}.${frac.toString().padStart(2, "0")}`;

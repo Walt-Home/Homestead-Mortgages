@@ -47,6 +47,10 @@ export function resendMailConnector(options: ResendOptions): MailConnector {
         headers: {
           authorization: `Bearer ${options.apiKey}`,
           "content-type": "application/json",
+          // Resend sits behind Cloudflare, whose bot wall answers a bare
+          // client library's default agent with 403 (error 1010); a name
+          // that says what this is goes through.
+          "user-agent": "supermortgage-api/1.0",
         },
         body: JSON.stringify({
           from: options.from,

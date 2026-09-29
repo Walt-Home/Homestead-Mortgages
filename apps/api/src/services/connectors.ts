@@ -332,6 +332,7 @@ export function connectors(): ConnectorRegistry {
     if (config.demoPersonasEnabled) {
       mail = fencedMailConnector(mail, {
         allowedDomains: [...config.internalEmailDomains, ...config.mail.extraAllowedDomains],
+        allowedAddresses: config.mail.allowedAddresses,
       });
       chosen.mail = mail.capabilities.provider;
     }

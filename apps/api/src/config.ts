@@ -230,6 +230,11 @@ export const config = {
       .split(/[\s,;]+/)
       .map((d) => d.trim().toLowerCase())
       .filter((d) => d !== ""),
+    /** Whole addresses the fence lets through as well: a tester's own inbox, never a whole domain. */
+    allowedAddresses: (process.env.MAIL_ALLOWED_ADDRESSES ?? "")
+      .split(/[\s,;]+/)
+      .map((a) => a.trim().toLowerCase())
+      .filter((a) => a !== ""),
   },
 
   /**

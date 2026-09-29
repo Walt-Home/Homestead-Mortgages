@@ -20,12 +20,20 @@ describe("the mail fence", () => {
     expect((await mail.send(message("Drew@TryWalt.ai"))).status).toBe("sent");
     expect(inner.outbox).toHaveLength(2);
 
+    const tester = fencedMailConnector(inner, {
+      allowedDomains: ["supermortgage.com"],
+      allowedAddresses: ["JBaki91@yahoo.com"],
+    });
+    expect((await tester.send(message("jbaki91@yahoo.com"))).status).toBe("sent");
+    expect((await tester.send(message("someone.else@yahoo.com"))).status).toBe("not_delivered");
+    expect(inner.outbox).toHaveLength(3);
+
     const refused = await mail.send(message("maria.garcia@example.com"));
     expect(refused.status).toBe("not_delivered");
     expect(refused).toMatchObject({
       reason: expect.stringContaining("supermortgage.com, trywalt.ai"),
     });
-    expect(inner.outbox).toHaveLength(2);
+    expect(inner.outbox).toHaveLength(3);
   });
 
   it("names the fence in what the deployment discloses, and refuses to be built with nothing allowed", () => {

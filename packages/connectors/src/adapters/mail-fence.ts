@@ -21,6 +21,8 @@ import type {
 export interface MailFenceOptions {
   /** Domains mail may go to, e.g. ["supermortgage.com", "trywalt.ai"]. */
   readonly allowedDomains: readonly string[];
+  /** Whole addresses that may have mail too — a tester's personal inbox, never a domain. */
+  readonly allowedAddresses?: readonly string[];
 }
 
 export function domainOf(address: string): string {
@@ -40,6 +42,9 @@ export function fencedMailConnector(
   const allowed = new Set(
     options.allowedDomains.map((d) => d.trim().toLowerCase()).filter(Boolean),
   );
+  const addresses = new Set(
+    (options.allowedAddresses ?? []).map((a) => a.trim().toLowerCase()).filter(Boolean),
+  );
   if (allowed.size === 0)
     throw new Error("fencedMailConnector: at least one allowed domain is required");
   const list = [...allowed].sort().join(", ");
@@ -50,7 +55,8 @@ export function fencedMailConnector(
   return {
     capabilities,
     async send(message: MailMessage): Promise<MailOutcome> {
-      if (!allowed.has(domainOf(message.to))) {
+      const to = message.to.trim().toLowerCase();
+      if (!allowed.has(domainOf(to)) && !addresses.has(to)) {
         return {
           status: "not_delivered",
           reason: `This deployment sends mail only to ${list} addresses.`,

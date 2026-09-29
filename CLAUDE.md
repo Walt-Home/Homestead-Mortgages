@@ -313,8 +313,12 @@ offer is a row and a card".
   then. The vesting on the review screen has no such gap: it is asked.
 - **A co-borrower walks their own half, and the engine reads everybody.**
   Screen 2 names one,
-  the applicant sends them a link (Resend when `MAIL_PROVIDER=resend`;
-  otherwise an in-memory outbox that only a test reads, and the route refuses
+  the applicant sends them a link (Resend when `MAIL_PROVIDER=resend`,
+  which the deploys set once the `MAIL_FROM` variable names a verified
+  sender; on staging the real mailer is fenced to our own domains because
+  staging holds a servicer's real book — `docs/decisions.md`, "Mail is
+  Resend, and staging writes only to our own domains"; otherwise an
+  in-memory outbox that only a test reads, and the route refuses
   in production rather than pretend), `/claim/:token` takes it after Google
   sign-in, and the claim is a merge — the trigger lets a PROVISIONAL party go
   to `CLAIM_PENDING` or `MERGED` and nowhere else. From there the co-borrower

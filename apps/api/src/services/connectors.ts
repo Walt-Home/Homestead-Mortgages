@@ -14,9 +14,10 @@
  */
 
 import {
-  duConnector,
-  fixtureRegistry,
   coreLogicConnector,
+  duConnector,
+  fencedMailConnector,
+  fixtureRegistry,
   googlePlacesConnector,
   mismoAusResponseReader,
   plaidConnector,
@@ -323,6 +324,17 @@ export function connectors(): ConnectorRegistry {
   if (config.providers.mail === "resend") {
     mail = resendMailConnector({ apiKey: config.mail.resendApiKey, from: config.mail.from });
     chosen.mail = "resend";
+    // A deployment with sample sign-ins is staging, and staging holds a
+    // servicer's real book with the homeowners' addresses on the supplement.
+    // A real mailer there writes only to our own domains; everyone else gets
+    // "not delivered" and the desk shows the link to hand over, as it does
+    // with no mailer at all.
+    if (config.demoPersonasEnabled) {
+      mail = fencedMailConnector(mail, {
+        allowedDomains: [...config.internalEmailDomains, ...config.mail.extraAllowedDomains],
+      });
+      chosen.mail = mail.capabilities.provider;
+    }
   }
 
   // The servicing platform. Its fixture answers what his engine answered for

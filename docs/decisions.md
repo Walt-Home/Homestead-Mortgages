@@ -3402,6 +3402,34 @@ invitations from the servicer's side — Joe: "we send the borrower emails".
 Each is a column or a route away, and none was worth guessing at before a
 servicer's team has used the thing.
 
+## Mail is Resend, and staging writes only to our own domains
+
+**Decision (29 September 2026).** Outbound mail — a co-borrower's link, a
+homeowner's claim, a servicer team member's invitation and their sign-in
+code — goes through Resend once a verified sender is named. The key is
+`HOMESTEAD_MORTGAGES_RESEND_API_KEY` in Secret Manager (Joe's, one for
+both environments, readable by `hm-run@`), and the switch is the `MAIL_FROM`
+variable: "Name <address>" on a domain Resend has verified, set per
+environment like the origin is. Unset, the mailer is the stand-in and every
+invitation reports "not delivered" with the link to hand over, which is
+what Joe saw when a team invitation reached nobody: nothing was connected.
+
+**Staging is fenced.** Staging holds a servicer's real book, with the
+homeowners' addresses on the supplement, and the desk's invitations would
+reach them the moment staging had a mailer. So on a deployment with sample
+sign-ins — the flag that already marks staging and never production — the
+real mailer is wrapped (`fencedMailConnector`): a message to one of our
+domains (`INTERNAL_EMAIL_DOMAINS`, plus `MAIL_ALLOWED_DOMAINS`) goes; every
+other address is answered "not delivered" with the reason and never leaves,
+and the desk shows the link exactly as it does with no mailer. Health
+discloses it: `mail: resend (supermortgage.com, trywalt.ai only)`.
+Production sends to anyone. The fence is a test in `mail-fence.test.ts`.
+
+**Why the sender is a variable and not a default.** Resend refuses a From
+on a domain it has not verified, and verifying one is DNS at GoDaddy, which
+is Doug's; a wrong default would fail every send and say so only in the
+outcome. A deployment with the key and no sender stays honest instead.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

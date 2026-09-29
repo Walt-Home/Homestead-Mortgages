@@ -1,6 +1,7 @@
 export * from "./ports/index.js";
 export * from "./guard.js";
 export * from "./adapters/fixture.js";
+export * from "./adapters/mail-fence.js";
 export * from "./adapters/servicing-fixture.js";
 export * from "./adapters/supermortgage.js";
 export * from "./adapters/google-places.js";

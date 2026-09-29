@@ -221,6 +221,15 @@ export const config = {
     resendApiKey: process.env.RESEND_API_KEY ?? "",
     /** A verified sender on the Resend account, "Name <address>". */
     from: process.env.MAIL_FROM ?? "",
+    /**
+     * Domains a deployment with sample sign-ins (staging) may write to, on
+     * top of our own: it holds a servicer's real book, so a real mailer there
+     * is fenced to these and every other address gets the link to hand over.
+     */
+    extraAllowedDomains: (process.env.MAIL_ALLOWED_DOMAINS ?? "")
+      .split(/[\s,;]+/)
+      .map((d) => d.trim().toLowerCase())
+      .filter((d) => d !== ""),
   },
 
   /**

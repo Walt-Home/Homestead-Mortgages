@@ -2452,6 +2452,9 @@ export const TABLES_OFF_THE_WIRE = {
   partner_book_imports: {
     why: "One tape read once: the file hashes, the counts and the per-row report of a servicer's book; our record of an import, and a casefile describes a credit request, not a servicing feed.",
   },
+  billing_statements: {
+    why: "What a servicer's book consumed in a month, priced off the tape by the price sheet and closed once; a bill to the servicer, and a casefile describes a credit request, which is never what a customer of ours owes us.",
+  },
   servicing_observations: {
     why: "What a servicer said a loan looked like on a date — balance, rate, next due, delinquency — appended per tape; a mortgage somebody already has, which is the one thing a new casefile is not about.",
   },

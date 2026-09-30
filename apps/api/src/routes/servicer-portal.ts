@@ -10,24 +10,38 @@
  * until the password lands, and the session is regenerated then so a
  * cookie minted before sign-in is not the one that carries it.
  *
- * What they see is their servicer's book and nothing else: `servicerId`
- * comes off the session's user on every read, never off a request.
+ * What they see is their servicer's and nothing else — the loans on their
+ * book and each one's page, what the book is billed, and their team:
+ * `servicerId` comes off the session's user on every read and every write,
+ * never off a request, and an id that belongs to another servicer is a 404
+ * like one that belongs to nobody.
  */
 
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "@hm/db";
+import { PRICE_SHEET } from "@hm/billing";
+import { startOfMonth } from "@hm/kernel/calendar";
 import { config } from "../config.js";
 import { asyncRoute, AppError } from "../middleware/error-handler.js";
 import { requireServicerUser } from "../middleware/require-servicer.js";
+import {
+  listStatements,
+  monthFromKey,
+  statementFor,
+  type StatementAnswer,
+} from "../services/billing.js";
+import { dayEt } from "../services/refi-offers.js";
 import {
   acceptServicerInvitation,
   inviteServicerTeam,
   listServicerTeam,
   previewServicerInvitation,
+  removeServicerMember,
   requestSignInCode,
   servicerBook,
   servicerBookImports,
+  servicerBookLoan,
   servicerBookLoans,
   SERVICER_BOOK_PAGE,
   SIGN_IN_CODE_TTL_MS,
@@ -178,6 +192,17 @@ servicerPortalRouter.get(
   }),
 );
 
+/** One loan's page. Another servicer's loan, and no loan at all, answer alike. */
+servicerPortalRouter.get(
+  "/book/loans/:id",
+  asyncRoute(async (req, res) => {
+    const id = z.string().uuid().safeParse(req.params.id);
+    const loan = id.success ? await servicerBookLoan(req.servicerUser!.servicerId, id.data) : null;
+    if (!loan) throw new AppError(404, "No loan by that id on your book.", "NOT_FOUND");
+    res.json({ loan });
+  }),
+);
+
 servicerPortalRouter.get(
   "/book/imports",
   asyncRoute(async (req, res) => {
@@ -185,10 +210,65 @@ servicerPortalRouter.get(
   }),
 );
 
+/* ── signed in: what the book is billed ────────────────────────────────────── */
+
+/**
+ * A statement as the servicer's own team reads it: the month's lines and
+ * the loans under them, and when it was closed — not who at Supermortgage
+ * closed it, which is ours to know.
+ */
+const statementForMember = (a: StatementAnswer) => ({
+  statement: a.statement,
+  standing: a.standing,
+  closedAt: a.closed?.closedAt ?? null,
+});
+
+/** This month so far, and every month already invoiced. */
+servicerPortalRouter.get(
+  "/billing",
+  asyncRoute(async (req, res) => {
+    const { slug } = req.servicerUser!.servicer;
+    const today = dayEt(new Date());
+    const [current, statements] = await Promise.all([
+      statementFor({ slug, month: startOfMonth(today) }),
+      listStatements(slug),
+    ]);
+    res.json({
+      sheet: { version: PRICE_SHEET.version, date: PRICE_SHEET.date },
+      today,
+      servicer: {
+        displayName: current.servicer.displayName,
+        annualTokenPool: current.servicer.annualTokenPool,
+        since: current.servicer.since,
+      },
+      current: statementForMember(current),
+      invoices: statements.map(({ closedBy: _closedBy, ...invoice }) => {
+        void _closedBy;
+        return invoice;
+      }),
+    });
+  }),
+);
+
+/** One month's statement: the invoice once it is closed, the meter run live before. */
+servicerPortalRouter.get(
+  "/billing/statements/:month",
+  asyncRoute(async (req, res) => {
+    const month = monthFromKey(z.string().parse(req.params.month));
+    res.json(
+      statementForMember(await statementFor({ slug: req.servicerUser!.servicer.slug, month })),
+    );
+  }),
+);
+
+/* ── signed in: the team ───────────────────────────────────────────────────── */
+
+/** Everyone on the team and everyone invited. Somebody removed is gone from it. */
 servicerPortalRouter.get(
   "/team",
   asyncRoute(async (req, res) => {
-    res.json({ team: await listServicerTeam(req.servicerUser!.servicerId) });
+    const team = await listServicerTeam(req.servicerUser!.servicerId);
+    res.json({ team: team.filter((m) => m.standing !== "disabled") });
   }),
 );
 
@@ -213,5 +293,33 @@ servicerPortalRouter.post(
         invitedBy: `member:${me.id}`,
       }),
     });
+  }),
+);
+
+/**
+ * A member removes a colleague, or an invitation not yet taken. Never
+ * themselves: whoever is asking is still on the team afterwards, so a team
+ * cannot remove its way down to nobody, and the last member's way out is
+ * Supermortgage.
+ */
+servicerPortalRouter.delete(
+  "/team/:id",
+  asyncRoute(async (req, res) => {
+    const me = req.servicerUser!;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) throw new AppError(404, "Nobody by that id on this team.", "NOT_FOUND");
+    if (id.data === me.id) {
+      throw new AppError(
+        409,
+        "You cannot remove yourself. Ask a colleague, or Supermortgage.",
+        "CANNOT_REMOVE_SELF",
+      );
+    }
+    await removeServicerMember({
+      servicerId: me.servicerId,
+      memberId: id.data,
+      removedBy: `member:${me.id}`,
+    });
+    res.status(204).end();
   }),
 );

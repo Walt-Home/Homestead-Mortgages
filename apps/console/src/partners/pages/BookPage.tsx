@@ -1,10 +1,12 @@
 /**
  * The servicer's book as their team sees it: every loan we hold for them,
  * what the newest review found, the offer if one was made, and where the
- * homeowner's invitation stands. Read-only, a page at a time.
+ * homeowner's invitation stands. Read-only, a page at a time, and each row
+ * opens the loan's own page.
  */
 
 import { useMemo, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Page } from "../../components/Page.js";
 import { Table, type Column } from "../../components/Table.js";
@@ -21,7 +23,7 @@ const STATE_WORDS: Record<string, string> = {
   paid_off: "Paid off",
   refinanced: "Refinanced",
 };
-const stateWord = (s: string) => STATE_WORDS[s] ?? s.replace(/_/g, " ");
+export const stateWord = (s: string) => STATE_WORDS[s] ?? s.replace(/_/g, " ");
 
 const money = (cents: string | null) =>
   cents === null
@@ -32,7 +34,7 @@ const money = (cents: string | null) =>
         maximumFractionDigits: 0,
       }).format(Number(cents) / 100);
 
-function offerCell(o: PortalLoan["offer"]): ReactNode {
+export function offerCell(o: PortalLoan["offer"]): ReactNode {
   if (!o) return <span className="text-fg-3">—</span>;
   switch (o.status) {
     case "offered":
@@ -54,7 +56,7 @@ function offerCell(o: PortalLoan["offer"]): ReactNode {
   }
 }
 
-function claimCell(c: PortalLoan["claim"], state: string): ReactNode {
+export function claimCell(c: PortalLoan["claim"], state: string): ReactNode {
   if (state !== "imported_unclaimed" && c?.acceptedAt) return <Pill tone="ok">Taken</Pill>;
   if (state !== "imported_unclaimed") return <Pill tone="ok">Claimed</Pill>;
   if (!c) return <span className="text-fg-3">Not invited</span>;
@@ -64,6 +66,7 @@ function claimCell(c: PortalLoan["claim"], state: string): ReactNode {
 }
 
 export function BookPage() {
+  const navigate = useNavigate();
   const book = useQuery({ queryKey: ["portal-book"], queryFn: () => portal<PortalBook>("/book") });
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
@@ -118,7 +121,7 @@ export function BookPage() {
   if (book.isPending) return <Loading what="Opening your book" />;
   if (book.isError || !book.data) {
     return (
-      <Page title="Your book">
+      <Page title="Loans">
         <Notice tone="danger" title="The book could not be read">
           {book.error instanceof Error ? book.error.message : "Try again in a moment."}
         </Notice>
@@ -133,10 +136,10 @@ export function BookPage() {
 
   return (
     <Page
-      title={`${book.data.servicer.displayName}'s book`}
+      title="Loans"
       description={
         b.lastAsOf
-          ? `${plural(b.loans.total, "loan")} · tape as of ${fmtDate(b.lastAsOf)}${
+          ? `${plural(b.loans.total, "loan")} on ${book.data.servicer.displayName}'s book · tape as of ${fmtDate(b.lastAsOf)}${
               b.analysis ? ` · reviewed ${fmtDate(b.analysis.asOf)}` : ""
             }`
           : "No tape loaded yet."
@@ -177,7 +180,13 @@ export function BookPage() {
           <Notice tone="danger">The loans could not be read. Try again.</Notice>
         ) : (
           <>
-            <Table columns={columns} rows={loans.data.rows} rowKey={(r) => r.id} dense />
+            <Table
+              columns={columns}
+              rows={loans.data.rows}
+              rowKey={(r) => r.id}
+              onRowClick={(r) => navigate(`/portal/loans/${r.id}`)}
+              dense
+            />
             <div className="flex flex-wrap items-center gap-3 text-sm text-fg-2">
               <span>
                 {total === 0

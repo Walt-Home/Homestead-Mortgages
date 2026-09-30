@@ -461,6 +461,14 @@ export const inviteTeam = (
   init: Call = {},
 ) => hm<{ outcomes: TeamInvitationOutcome[] }>("/team", { ...init, body }).then((r) => r.outcomes);
 
+/** Take somebody off a servicer's team: their sign-in stops, an untaken link dies. */
+export const removeFromTeam = (servicerSlug: string, memberId: string, init: Call = {}) =>
+  hm<unknown>(`/team/${memberId}`, {
+    ...init,
+    method: "DELETE",
+    query: { servicer: servicerSlug },
+  });
+
 /**
  * One person per line, as people paste them: `Name <address>`, `address,
  * Name`, `Name, address`, or a bare address. Blank lines are skipped;

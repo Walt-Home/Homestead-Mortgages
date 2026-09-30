@@ -3396,8 +3396,10 @@ the desk. Members grow their own team from the portal.
 
 **What is deliberately not here.** One address belongs to one servicer.
 No roles: every member sees the whole book and changes nothing but its
-team. No removing a member from the portal; ops re-invites or disables.
-No password change or recovery beyond a fresh invitation. No borrower
+team. No removing a member from the portal; ops re-invites or disables
+(removing came two days later, from both sides: "A servicer's team has a
+portal of its own"). No password change or recovery beyond a fresh
+invitation. No borrower
 invitations from the servicer's side — Joe: "we send the borrower emails".
 Each is a column or a route away, and none was worth guessing at before a
 servicer's team has used the thing.
@@ -3521,6 +3523,74 @@ held role and refused with the roles that would do; `useAct` sends such an
 act again, once, as the first role named, and only a refusal that survives
 that is offered as buttons. The few calls that name their role themselves
 — inviting staff as admin, unmasking as compliance — still do.
+
+## A servicer's team has a portal of its own
+
+**Decision (30 September 2026).** Joe invited a test address onto
+Northlight's team on staging, took the link, and landed in the ops console
+with the queue, the escalations and the staff page in front of him. "They
+should NOT have access to the internal ops dashboard that we have access
+to. They should only have access to a simple dashboard designed
+specifically for the servicing team that shows the loans uploaded, a loan
+detail page for each loan, a billing page that shows their invoices, and a
+team page that shows their team and the ability to add/remove members."
+
+**What he saw was his own staff session, and the console preferring it.**
+The member never had access: the servicing app's console API answers its
+own `sm_staff` cookie and no other, the tape desk and billing check that
+same cookie with it, and a member's session is a different cookie that
+opens `/api/servicer` and nothing else. But the two cookies live side by
+side in one browser, Joe was signed in as staff in the browser he took the
+invitation in, and `App.tsx` rendered the portal only when there was no
+staff session — so the invitation "signed him in" to the console he was
+already in. That read exactly like a leak, which is reason enough to fix
+it. Now a servicer's session always renders the portal, whatever else the
+browser holds, and the staff session found beside it is signed out
+(`stepAside`), so signing out of the portal lands on the sign-in page and
+not back in the ops console. One browser, one of the two. Every ops route
+redirects a member to `/portal`.
+
+**The door is shared, so it stopped saying "Ops".** The splash, the
+loading screen, the entry page and the tab title carried the ops console's
+mark before anybody knew who was arriving. They carry the bare word now;
+"Ops" appears once a staff session says so, and a member's tab is named
+for their servicer.
+
+**The portal is four things.** _Loans_ — the book, as before, and each row
+opens the loan. _A loan's page_ — what their tape said at load and what
+each tape since has said, each morning's verdict with its reasons in the
+engine's words, every offer with the rate and payment the homeowner is
+shown, and where the homeowner's invitation stands. It is
+`servicerBookLoan`, scoped by the session's servicer, and another
+servicer's loan is a 404 exactly as a loan that does not exist is. Nothing
+on it comes from the homeowner's side of a claim: no sign-in, no
+application, no answer beyond where an offer stands. _Billing_ — this month
+so far and an invoice for every month already closed, which is the same
+`billing_statements` row the console reads, drawn by the same component
+(`StatementTables`) so an invoice reads alike on both sides, without who at
+Supermortgage closed it. Read-only: the pool and the close stay ours.
+_Team_ — everyone on it, the invitation box, and Remove.
+
+**Removing is a mark, not a delete.** `disabled_at` had been on the row
+since the team existed and nothing wrote it. Removing sets it, with
+`disabled_by` beside it in the two shapes `invited_by` holds, and clears a
+live invitation: the person's session fails on its next request
+(`requireServicerUser` reads the mark every time), an untaken link is
+dead, no code is sent, and a fresh invitation is the way back. A member
+removes a colleague and never themselves, so a team cannot remove its way
+down to nobody and the last member's way out is us — the Servicers page in
+the console has the same button, under the staff id that pressed it.
+Somebody on another servicer's team is a 404. The portal's list drops a
+removed member; ours keeps the row and says Removed, because the row is
+the record.
+
+**Held by tests.** `servicer-portal.test.ts` holds the loan page and its
+404, billing theirs alone and free of the closer's id, and removal in every
+direction — the session ending, the link dying, oneself refused, another
+team unreachable; `console-tape.test.ts` holds the desk's side. The
+two-session rule is the console's and was walked by hand against a local
+servicing app: a staff session, an invitation taken beside it, the portal
+rendered, the staff session gone, every ops call a 401.
 
 ## Still outstanding
 

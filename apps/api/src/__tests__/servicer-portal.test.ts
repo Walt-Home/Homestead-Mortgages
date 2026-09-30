@@ -2,7 +2,8 @@
  * The partner portal's door, end to end against Postgres: ops invites a
  * servicer's person, the link sets a password and signs them in, a later
  * sign-in is a code and the password, and what they see is their book and
- * nobody else's.
+ * nobody else's — the loans, each loan's page, what the book is billed —
+ * and a team they can grow and prune.
  *
  * And the two sessions never cross: a borrower's session opens nothing of
  * the portal, a member's opens nothing of the borrower app. `index.ts`
@@ -10,6 +11,7 @@
  * probes both sides.
  */
 
+import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
@@ -21,6 +23,7 @@ import { NORTHLIGHT, sampleBook } from "@hm/partner-book";
 import { errorHandler } from "../middleware/error-handler.js";
 import { requireAuth } from "../middleware/require-auth.js";
 import { servicerPortalRouter } from "../routes/servicer-portal.js";
+import { closeBillingMonth } from "../services/billing.js";
 import { connectors } from "../services/connectors.js";
 import {
   inviteServicerTeam,
@@ -28,7 +31,7 @@ import {
   verifyPassword,
   hashPassword,
 } from "../services/servicer-team.js";
-import { loadTape } from "../services/tape-desk.js";
+import { loadTape, reviewBook } from "../services/tape-desk.js";
 import { createUser } from "./support/factories.js";
 
 let server: Server;
@@ -370,6 +373,234 @@ describe("a member's team", () => {
     const r = await agent()<{ internalDomains: string[] }>("GET", "/api/servicer/auth/door");
     expect(r.status).toBe(200);
     expect(r.body.internalDomains).toContain("supermortgage.com");
+  });
+});
+
+/** A second servicer with one member, signed in: the stranger every "theirs and no other" test needs. */
+async function strangerAt(slug = "other") {
+  await prisma.servicer.create({ data: { slug, displayName: "Other Servicing" } });
+  const token = await invite(`bob@${slug}.example`, slug);
+  const bob = agent();
+  expect(
+    (await bob("POST", "/api/servicer/auth/accept", { token, password: PASSWORD })).status,
+  ).toBe(201);
+  return bob;
+}
+
+interface LoanPage {
+  loan: {
+    id: string;
+    number: string;
+    borrower: string | null;
+    state: string;
+    watchedSince: string;
+    address: { line1: string | null; city: string | null; state: string | null };
+    terms: { noteRatePct: string; termMonths: number; originalPrincipalCents: string };
+    tapes: { asOf: string; status: string; principalBalanceCents: string }[];
+    reviews: {
+      asOf: string;
+      verdict: string;
+      reasons: string[];
+      candidateRatePct: string | null;
+    }[];
+    offers: { status: string; deliveredAt: string | null; newRatePct: string }[];
+    claim: { deliveredTo: string | null } | null;
+  };
+}
+
+describe("a loan's page", () => {
+  it("carries the tape, the reviews and the offer for a loan on their book", async () => {
+    const { call } = await member();
+    await reviewBook({ servicerSlug: NORTHLIGHT.slug });
+    const list = await call<{ rows: { id: string; number: string }[] }>(
+      "GET",
+      "/api/servicer/book/loans",
+    );
+    const row = list.body.rows.find((r) => r.number === "NL-100001")!;
+    const page = await call<LoanPage>("GET", `/api/servicer/book/loans/${row.id}`);
+    expect(page.status).toBe(200);
+    const { loan } = page.body;
+    expect(loan.number).toBe("NL-100001");
+    expect(loan.borrower).toBeTruthy();
+    expect(loan.state).toBe("imported_unclaimed");
+    expect(loan.watchedSince).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(loan.address.line1).toBeTruthy();
+    expect(loan.terms.noteRatePct).toBe("7.250");
+    expect(loan.tapes).toHaveLength(1);
+    expect(loan.tapes[0]!.status).toBe("current");
+    expect(Number(loan.tapes[0]!.principalBalanceCents)).toBeGreaterThan(0);
+    // The fixture sheet quotes 6.25 %: loan 1 at 7.25 % is a candidate, its
+    // reasons in words, its offer made and waiting for the claim.
+    expect(loan.reviews).toHaveLength(1);
+    expect(loan.reviews[0]!.verdict).toBe("candidate");
+    expect(loan.reviews[0]!.reasons.length).toBeGreaterThan(0);
+    expect(loan.reviews[0]!.reasons.every((r) => !r.includes("_"))).toBe(true);
+    expect(loan.offers).toHaveLength(1);
+    expect(loan.offers[0]!.status).toBe("offered");
+    expect(loan.offers[0]!.deliveredAt).toBeNull();
+    expect(loan.offers[0]!.newRatePct).toBe(loan.reviews[0]!.candidateRatePct);
+    expect(loan.claim).toBeNull();
+  });
+
+  it("is a 404 for another servicer's loan, exactly as for a loan that does not exist", async () => {
+    const { call } = await member();
+    const list = await call<{ rows: { id: string }[] }>("GET", "/api/servicer/book/loans");
+    const theirs = list.body.rows[0]!.id;
+    const bob = await strangerAt();
+    const stranger = await bob<{ error: { code: string } }>(
+      "GET",
+      `/api/servicer/book/loans/${theirs}`,
+    );
+    const missing = await bob<{ error: { code: string } }>(
+      "GET",
+      `/api/servicer/book/loans/${randomUUID()}`,
+    );
+    expect(stranger.status).toBe(404);
+    expect(stranger.body).toEqual(missing.body);
+    expect((await call("GET", "/api/servicer/book/loans/not-an-id")).status).toBe(404);
+    expect((await agent()("GET", `/api/servicer/book/loans/${theirs}`)).status).toBe(401);
+  });
+});
+
+interface BillingPage {
+  servicer: { displayName: string; since: string | null };
+  current: {
+    standing: string;
+    closedAt: string | null;
+    statement: { month: string; loansOnBook: number; loans: unknown[] };
+  };
+  invoices: { month: string; tokens: string; cents: string; closedAt: string }[];
+}
+
+describe("what the book is billed", () => {
+  it("is this month running and every closed month, theirs alone, without who closed it", async () => {
+    const { call } = await member();
+    const bob = await strangerAt();
+    const closed = await closeBillingMonth({ closedBy: "staff-who-closed-it" });
+
+    const mine = await call<BillingPage>("GET", "/api/servicer/billing");
+    expect(mine.status).toBe(200);
+    expect(mine.body.servicer.displayName).toBe(NORTHLIGHT.legal_name);
+    expect(mine.body.current.standing).toBe("running");
+    expect(mine.body.current.closedAt).toBeNull();
+    expect(mine.body.current.statement.loansOnBook).toBe(12);
+    expect(mine.body.invoices.map((i) => i.month)).toEqual([closed.month]);
+    expect(JSON.stringify(mine.body)).not.toContain("staff-who-closed-it");
+    expect(JSON.stringify(mine.body)).not.toContain("closedBy");
+
+    const invoice = await call<BillingPage["current"]>(
+      "GET",
+      `/api/servicer/billing/statements/${closed.month}`,
+    );
+    expect(invoice.status).toBe(200);
+    expect(invoice.body.standing).toBe("closed");
+    expect(invoice.body.closedAt).toMatch(/^\d{4}-/);
+    expect(invoice.body.statement.month).toBe(closed.month);
+    expect(JSON.stringify(invoice.body)).not.toContain("staff-who-closed-it");
+
+    // The other servicer's member reads the other servicer's, which has no book.
+    const theirs = await bob<BillingPage>("GET", "/api/servicer/billing");
+    expect(theirs.body.servicer.displayName).toBe("Other Servicing");
+    expect(theirs.body.current.statement.loansOnBook).toBe(0);
+    expect(theirs.body.current.statement.loans).toEqual([]);
+
+    expect((await call("GET", "/api/servicer/billing/statements/last-month")).status).toBe(400);
+    expect((await agent()("GET", "/api/servicer/billing")).status).toBe(401);
+  });
+});
+
+describe("removing a member", () => {
+  /** Ada, signed in, and a colleague she invited who took the link. */
+  async function pair() {
+    const ada = await member();
+    await ada.call("POST", "/api/servicer/team", {
+      invitations: [{ email: "col@northlight.example", name: "Col" }],
+    });
+    const token = outbox()
+      .at(-1)!
+      .text.match(/https?:\/\/\S+/)![0]
+      .split("#")[1]!;
+    const col = agent();
+    expect(
+      (await col("POST", "/api/servicer/auth/accept", { token, password: PASSWORD })).status,
+    ).toBe(201);
+    const team = await ada.call<{ team: { id: string; email: string }[] }>(
+      "GET",
+      "/api/servicer/team",
+    );
+    const id = (email: string) => team.body.team.find((m) => m.email === email)!.id;
+    return { ada: ada.call, col, adaId: id(ada.email), colId: id("col@northlight.example") };
+  }
+
+  it("ends their session at once, takes them off the list, and records who did it", async () => {
+    const { ada, col, adaId, colId } = await pair();
+    expect((await col("GET", "/api/servicer/book")).status).toBe(200);
+
+    expect((await ada("DELETE", `/api/servicer/team/${colId}`)).status).toBe(204);
+
+    expect((await col("GET", "/api/servicer/book")).status).toBe(401);
+    expect((await col("GET", "/api/servicer/me")).status).toBe(401);
+    const team = await ada<{ team: { email: string }[] }>("GET", "/api/servicer/team");
+    expect(team.body.team.map((m) => m.email)).toEqual(["ada@northlight.example"]);
+    const row = await prisma.servicerUser.findUniqueOrThrow({ where: { id: colId } });
+    expect(row.disabledAt).not.toBeNull();
+    expect(row.disabledBy).toBe(`member:${adaId}`);
+    // No code for somebody removed, and the door answers as it does a stranger.
+    const asked = await agent()("POST", "/api/servicer/auth/code", {
+      email: "col@northlight.example",
+    });
+    expect(asked.status).toBe(200);
+    expect(asked.body.fake_code).toBeUndefined();
+    // Gone is gone: a second removal finds nobody.
+    expect((await ada("DELETE", `/api/servicer/team/${colId}`)).status).toBe(404);
+  });
+
+  it("kills an invitation that was not yet taken, and a fresh one is the way back", async () => {
+    const { call } = await member();
+    await call("POST", "/api/servicer/team", {
+      invitations: [{ email: "late@northlight.example" }],
+    });
+    const token = outbox()
+      .at(-1)!
+      .text.match(/https?:\/\/\S+/)![0]
+      .split("#")[1]!;
+    const row = await prisma.servicerUser.findUniqueOrThrow({
+      where: { email: "late@northlight.example" },
+    });
+    expect((await call("DELETE", `/api/servicer/team/${row.id}`)).status).toBe(204);
+    expect((await agent()("POST", "/api/servicer/auth/invitation", { token })).status).toBe(404);
+    expect(
+      (await agent()("POST", "/api/servicer/auth/accept", { token, password: PASSWORD })).status,
+    ).toBe(404);
+
+    const again = await call<{ outcomes: { status: string }[] }>("POST", "/api/servicer/team", {
+      invitations: [{ email: "late@northlight.example" }],
+    });
+    expect(again.body.outcomes[0]!.status).toBe("sent");
+    const back = await prisma.servicerUser.findUniqueOrThrow({ where: { id: row.id } });
+    expect(back.disabledAt).toBeNull();
+    expect(back.disabledBy).toBeNull();
+  });
+
+  it("is never of oneself, so a team cannot remove its way down to nobody", async () => {
+    const { ada, adaId } = await pair();
+    const self = await ada<{ error: { code: string } }>("DELETE", `/api/servicer/team/${adaId}`);
+    expect(self.status).toBe(409);
+    expect(self.body.error.code).toBe("CANNOT_REMOVE_SELF");
+    expect((await ada("GET", "/api/servicer/me")).status).toBe(200);
+  });
+
+  it("reaches nobody on another servicer's team, and says only that nobody is there", async () => {
+    const { ada, colId } = await pair();
+    const bob = await strangerAt();
+    const crossed = await bob("DELETE", `/api/servicer/team/${colId}`);
+    expect(crossed.status).toBe(404);
+    expect(crossed.body).toEqual((await bob("DELETE", `/api/servicer/team/${randomUUID()}`)).body);
+    expect((await bob("DELETE", "/api/servicer/team/not-an-id")).status).toBe(404);
+    const row = await prisma.servicerUser.findUniqueOrThrow({ where: { id: colId } });
+    expect(row.disabledAt).toBeNull();
+    expect((await agent()("DELETE", `/api/servicer/team/${colId}`)).status).toBe(401);
+    expect((await ada("GET", "/api/servicer/team")).status).toBe(200);
   });
 });
 

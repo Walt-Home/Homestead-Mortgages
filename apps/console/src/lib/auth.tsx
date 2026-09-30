@@ -84,6 +84,13 @@ interface Auth {
   endedBecause: "expired" | "signed-out" | null;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * End this session and leave the rest of the page alone: what the app
+   * asks for when it finds a staff session beside a servicer member's.
+   * No reason is recorded and no query is dropped — the portal is already
+   * drawing, and its reads are not this session's to clear.
+   */
+  stepAside: () => Promise<void>;
   holds: (...roles: readonly string[]) => boolean;
 }
 
@@ -147,6 +154,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [adopt, queries]);
 
+  const stepAside = useCallback(async () => {
+    try {
+      await api("/auth/signout", { body: {} });
+    } finally {
+      adopt(null);
+    }
+  }, [adopt]);
+
   const value = useMemo<Auth>(
     () => ({
       status,
@@ -155,9 +170,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       endedBecause,
       refresh,
       signOut,
+      stepAside,
       holds: (...roles) => !!me && roles.some((r) => me.roles.includes(r)),
     }),
-    [status, me, endedBecause, refresh, signOut],
+    [status, me, endedBecause, refresh, signOut, stepAside],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

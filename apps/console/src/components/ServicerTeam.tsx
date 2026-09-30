@@ -1,8 +1,9 @@
 /**
- * A servicer's team, and the way to grow it: who can open their book at the
- * partner portal, where each invitation stands, and a box to paste more
- * addresses into. One panel, used in two places — the desk's Team step
- * right after a load, and the Servicers page any day after.
+ * A servicer's team, and the way to grow and prune it: who can open their
+ * book at the partner portal, where each invitation stands, a box to paste
+ * more addresses into, and a way to take somebody off. One panel, used in
+ * two places — the desk's Team step right after a load, and the Servicers
+ * page any day after.
  */
 
 import { useMemo, useState } from "react";
@@ -15,6 +16,7 @@ import {
   deskTeam,
   inviteTeam,
   parseTeamLines,
+  removeFromTeam,
   type TeamInvitationOutcome,
   type TeamMember,
 } from "../lib/tape.js";
@@ -23,8 +25,67 @@ export const STANDING_WORDS: Record<TeamMember["standing"], { word: string; tone
   active: { word: "Active", tone: "ok" },
   invited: { word: "Invited", tone: "info" },
   expired: { word: "Invitation expired", tone: "warn" },
-  disabled: { word: "Disabled", tone: "neutral" },
+  disabled: { word: "Removed", tone: "neutral" },
 };
+
+/** Remove, asked twice: the first press arms the row, the second does it. */
+function RemoveMember({
+  servicerSlug,
+  member,
+  onRemoved,
+}: {
+  servicerSlug: string;
+  member: TeamMember;
+  onRemoved: () => void;
+}) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove() {
+    setBusy(true);
+    setError(null);
+    try {
+      await removeFromTeam(servicerSlug, member.id);
+      onRemoved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  }
+
+  if (!armed) {
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => setArmed(true)}
+        aria-label={`Remove ${member.name ?? member.email}`}
+      >
+        Remove
+      </Button>
+    );
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center justify-end gap-2">
+      {error ? <span className="text-sm text-danger">{error}</span> : null}
+      <Button
+        size="sm"
+        variant="danger"
+        loading={busy}
+        title={
+          member.standing === "active" ? "Ends their sign-in now" : "Kills the invitation link"
+        }
+        onClick={() => void remove()}
+      >
+        Remove
+      </Button>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => setArmed(false)}>
+        Keep
+      </Button>
+    </span>
+  );
+}
 
 export function CopyLink({ link }: { link: string }) {
   const [copied, setCopied] = useState(false);
@@ -87,8 +148,17 @@ export function ServicerTeam({
 
   const memberColumns = useMemo<Column<TeamMember>[]>(
     () => [
-      { key: "name", header: "Name", render: (m) => m.name ?? "—", primary: true },
-      { key: "email", header: "E-mail", render: (m) => m.email, mono: true },
+      {
+        key: "member",
+        header: "Member",
+        primary: true,
+        render: (m) => (
+          <span className="flex min-w-0 flex-col">
+            <span className="text-fg">{m.name ?? m.email}</span>
+            {m.name ? <span className="font-mono text-xs text-fg-3">{m.email}</span> : null}
+          </span>
+        ),
+      },
       {
         key: "standing",
         header: "Standing",
@@ -116,8 +186,26 @@ export function ServicerTeam({
         header: "Last signed in",
         render: (m) => (m.lastSignedInAt ? fmtDateTime(m.lastSignedInAt) : "—"),
       },
+      {
+        key: "remove",
+        header: <span className="sr-only">Remove</span>,
+        align: "right",
+        // Wide enough for the second press, so arming a row moves nothing.
+        width: "w-44",
+        render: (m) =>
+          m.standing === "disabled" ? null : (
+            <RemoveMember
+              servicerSlug={servicer.slug}
+              member={m}
+              onRemoved={() => {
+                void queries.invalidateQueries({ queryKey: ["desk-team", servicer.slug] });
+                void queries.invalidateQueries({ queryKey: ["desk-servicers"] });
+              }}
+            />
+          ),
+      },
     ],
-    [],
+    [queries, servicer.slug],
   );
 
   const outcomeColumns = useMemo<Column<TeamInvitationOutcome>[]>(

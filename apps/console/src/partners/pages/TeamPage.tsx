@@ -1,7 +1,9 @@
 /**
- * Who on the servicer's side can see the book, and the way to add more:
- * a member invites colleagues the same way ops does from the desk, and the
- * link works the same way. Standing is the server's word.
+ * Who on the servicer's side can see the book, and the way to add and
+ * remove them: a member invites colleagues the same way ops does from the
+ * desk, and the link works the same way; a member removes a colleague, or
+ * an invitation not yet taken, and that person's sign-in stops at once.
+ * Nobody removes themselves. Standing is the server's word.
  */
 
 import { useMemo, useState } from "react";
@@ -13,6 +15,7 @@ import { Loading } from "../../components/Loading.js";
 import { fmtDate, fmtDateTime, plural } from "../../lib/format.js";
 import { parseTeamLines, type TeamInvitationOutcome } from "../../lib/tape.js";
 import { portal, type PortalTeamMember } from "../api.js";
+import { usePortalAuth } from "../auth.js";
 
 const STANDING: Record<
   PortalTeamMember["standing"],
@@ -21,7 +24,7 @@ const STANDING: Record<
   active: { word: "Active", tone: "ok" },
   invited: { word: "Invited", tone: "info" },
   expired: { word: "Invitation expired", tone: "warn" },
-  disabled: { word: "Disabled", tone: "neutral" },
+  disabled: { word: "Removed", tone: "neutral" },
 };
 
 function CopyLink({ link }: { link: string }) {
@@ -46,8 +49,56 @@ function CopyLink({ link }: { link: string }) {
   );
 }
 
+/** Remove, asked twice: the first press arms the row, the second does it. */
+function RemoveMember({ member, onRemoved }: { member: PortalTeamMember; onRemoved: () => void }) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const who = member.name ?? member.email;
+
+  async function remove() {
+    setBusy(true);
+    setError(null);
+    try {
+      await portal(`/team/${member.id}`, { method: "DELETE" });
+      onRemoved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  }
+
+  if (!armed) {
+    return (
+      <Button size="sm" variant="ghost" onClick={() => setArmed(true)} aria-label={`Remove ${who}`}>
+        Remove
+      </Button>
+    );
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center justify-end gap-2">
+      {error ? <span className="text-sm text-danger">{error}</span> : null}
+      <Button
+        size="sm"
+        variant="danger"
+        loading={busy}
+        title={
+          member.standing === "active" ? "Ends their sign-in now" : "Kills the invitation link"
+        }
+        onClick={() => void remove()}
+      >
+        Remove
+      </Button>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => setArmed(false)}>
+        Keep
+      </Button>
+    </span>
+  );
+}
+
 export function TeamPage() {
   const queries = useQueryClient();
+  const { me } = usePortalAuth();
   const team = useQuery({
     queryKey: ["portal-team"],
     queryFn: () => portal<{ team: PortalTeamMember[] }>("/team").then((r) => r.team),
@@ -78,8 +129,17 @@ export function TeamPage() {
 
   const columns = useMemo<Column<PortalTeamMember>[]>(
     () => [
-      { key: "name", header: "Name", render: (m) => m.name ?? "—", primary: true },
-      { key: "email", header: "E-mail", render: (m) => m.email, mono: true },
+      {
+        key: "member",
+        header: "Member",
+        primary: true,
+        render: (m) => (
+          <span className="flex min-w-0 flex-col">
+            <span className="text-fg">{m.name ?? m.email}</span>
+            {m.name ? <span className="font-mono text-xs text-fg-3">{m.email}</span> : null}
+          </span>
+        ),
+      },
       {
         key: "standing",
         header: "Standing",
@@ -105,8 +165,24 @@ export function TeamPage() {
         header: "Last signed in",
         render: (m) => (m.lastSignedInAt ? fmtDateTime(m.lastSignedInAt) : "—"),
       },
+      {
+        key: "remove",
+        header: <span className="sr-only">Remove</span>,
+        align: "right",
+        // Wide enough for the second press, so arming a row moves nothing.
+        width: "w-44",
+        render: (m) =>
+          m.id === me?.user.id ? (
+            <span className="text-sm text-fg-3">You</span>
+          ) : (
+            <RemoveMember
+              member={m}
+              onRemoved={() => void queries.invalidateQueries({ queryKey: ["portal-team"] })}
+            />
+          ),
+      },
     ],
-    [],
+    [me?.user.id, queries],
   );
 
   const outcomeColumns = useMemo<Column<TeamInvitationOutcome>[]>(
@@ -166,7 +242,10 @@ export function TeamPage() {
   );
 
   return (
-    <Page title="Your team" description="Everyone who can open this book, and how to add more.">
+    <Page
+      title="Team"
+      description="Everyone who can open this book. Add a colleague with an invitation; remove one and their sign-in stops at once."
+    >
       {team.isPending ? (
         <Loading what="Reading the team" />
       ) : team.isError ? (

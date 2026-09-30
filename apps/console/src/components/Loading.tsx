@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from "react";
 import { loadingLine } from "../lib/loading.js";
-import { Wordmark } from "./Shell.js";
+import { PortalWordmark } from "../partners/Shell.js";
 
 /** Seconds since the screen appeared, ticking once a second. */
 function useElapsedSeconds(): number {
@@ -36,7 +36,8 @@ export function Loading({ what = "Signing you in" }: { what?: string }) {
       aria-live="polite"
       className="flex min-h-screen flex-col items-center justify-center gap-6 bg-canvas px-4 text-center"
     >
-      <Wordmark />
+      {/* The bare mark: this screen comes before anybody knows whether staff or a servicer is arriving. */}
+      <PortalWordmark />
       <span
         aria-hidden="true"
         className="h-7 w-7 animate-spin rounded-full border-2 border-line-2 border-t-accent"

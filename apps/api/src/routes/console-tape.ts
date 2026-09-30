@@ -19,7 +19,11 @@ import { prisma } from "@hm/db";
 import type { Progress } from "../services/progress.js";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { consoleStaffGate, type ConsoleStaffGateOptions } from "../services/console-staff.js";
-import { inviteServicerTeam, listServicerTeam } from "../services/servicer-team.js";
+import {
+  inviteServicerTeam,
+  listServicerTeam,
+  removeServicerMember,
+} from "../services/servicer-team.js";
 import {
   deskImports,
   deskServicers,
@@ -251,6 +255,25 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
       res
         .status(201)
         .json({ outcomes: await inviteServicerTeam({ ...body, invitedBy: req.staff!.id }) });
+    }),
+  );
+
+  /** Take somebody off the servicer's team, under the staff id that asked. A fresh invitation is the way back. */
+  router.delete(
+    "/team/:id",
+    asyncRoute(async (req, res) => {
+      const slug = z.string().min(1).parse(req.query.servicer);
+      const id = z.string().uuid().safeParse(req.params.id);
+      const servicer = await prisma.servicer.findUnique({ where: { slug }, select: { id: true } });
+      if (!servicer || !id.success) {
+        throw new AppError(404, "Nobody by that id on this team.", "NOT_FOUND");
+      }
+      await removeServicerMember({
+        servicerId: servicer.id,
+        memberId: id.data,
+        removedBy: req.staff!.id,
+      });
+      res.status(204).end();
     }),
   );
 

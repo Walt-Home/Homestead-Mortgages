@@ -14,6 +14,7 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../components/Page.js";
 import { Table, type Column } from "../components/Table.js";
+import { StatementLines, StatementLoans } from "../components/StatementTables.js";
 import {
   Button,
   EmptyState,
@@ -39,9 +40,7 @@ import {
   type BillingServicerCard,
   type BillingServicerPage as ServicerBilling,
   type CloseReport,
-  type LoanCharge,
   type StatementAnswer,
-  type StatementLine,
   type StatementStanding,
 } from "../lib/billing.js";
 
@@ -162,17 +161,6 @@ export function BillingPage() {
   );
 }
 
-const rateWord = (l: StatementLine): string =>
-  l.basis === "per_100k"
-    ? `${l.tokensEach.toLocaleString("en-US")} tokens per $100,000 per loan-month`
-    : `${l.tokensEach.toLocaleString("en-US")} tokens ${l.fires}`;
-
-function quantityWord(l: StatementLine): string {
-  const q = l.quantity;
-  if (q.kind === "events") return plural(q.count, "touch", "touches");
-  return `${q.loanMonths} loan-months on ${money(q.balanceCents)} across ${plural(q.loans, "loan")}`;
-}
-
 function PoolEditor({ slug, pool }: { slug: string; pool: string | null }) {
   const act = useAct({
     invalidate: [["billing-servicer", slug], ["billing-servicers"]],
@@ -241,93 +229,6 @@ export function BillingServicerPage() {
     invalidate: [["billing-servicer", slug], ["billing-statement", slug], ["billing-servicers"]],
     done: "Closed",
   });
-
-  const lineColumns = useMemo<Column<StatementLine>[]>(
-    () => [
-      {
-        key: "action",
-        header: "Action",
-        primary: true,
-        render: (l) => (
-          <span className="flex flex-col gap-0.5">
-            <span className="text-fg">{l.action}</span>
-            <span className="text-xs text-fg-3">{rateWord(l)}</span>
-          </span>
-        ),
-      },
-      { key: "quantity", header: "This month", render: (l) => quantityWord(l) },
-      {
-        key: "tokens",
-        header: "Tokens",
-        align: "right",
-        render: (l) => (
-          <span className="tabular-nums">{Number(l.tokens).toLocaleString("en-US")}</span>
-        ),
-      },
-      {
-        key: "cents",
-        header: "Charge",
-        align: "right",
-        render: (l) => <span className="tabular-nums font-medium text-fg">{money(l.cents)}</span>,
-      },
-    ],
-    [],
-  );
-
-  const loanColumns = useMemo<Column<LoanCharge>[]>(
-    () => [
-      { key: "number", header: "Loan", primary: true, mono: true, render: (c) => c.number },
-      { key: "from", header: "Watched from", render: (c) => fmtDate(c.watchedFrom) },
-      {
-        key: "days",
-        header: "Days",
-        align: "right",
-        render: (c) => (
-          <span className="tabular-nums">
-            {c.days}
-            {c.endedOn ? (
-              <span className="ml-1 text-xs text-fg-3">ended {fmtDate(c.endedOn)}</span>
-            ) : null}
-          </span>
-        ),
-      },
-      {
-        key: "balance",
-        header: "Balance",
-        align: "right",
-        render: (c) =>
-          c.basis ? (
-            <span className="flex flex-col items-end">
-              <span className="tabular-nums">{money(c.basis.principalBalanceCents)}</span>
-              <span className="text-xs text-fg-3">as of {fmtDate(c.basis.asOf)}</span>
-            </span>
-          ) : (
-            <span className="text-fg-3">—</span>
-          ),
-      },
-      {
-        key: "tokens",
-        header: "Tokens",
-        align: "right",
-        render: (c) => (
-          <span className="tabular-nums">
-            {(Number(c.tokens) + Number(c.touchTokens)).toLocaleString("en-US")}
-          </span>
-        ),
-      },
-      {
-        key: "cents",
-        header: "Charge",
-        align: "right",
-        render: (c) => (
-          <span className="tabular-nums font-medium text-fg">
-            {money(String(Number(c.tokens) + Number(c.touchTokens)))}
-          </span>
-        ),
-      },
-    ],
-    [],
-  );
 
   if (page.isPending) return <Loading what="Reading the servicer" />;
   if (page.isError || !page.data) {
@@ -443,16 +344,7 @@ export function BillingServicerPage() {
           </div>
 
           <Section title={`Statement for ${monthLabel(s.month)}`} className="mt-8">
-            <div className="overflow-hidden rounded-lg border border-line-2 bg-surface">
-              <Table columns={lineColumns} rows={s.lines} rowKey={(l) => l.code} dense />
-              <div className="flex items-center justify-between border-t border-line-2 px-4 py-3 text-base">
-                <span className="font-medium text-fg">Total</span>
-                <span className="flex items-baseline gap-4">
-                  <span className="text-sm text-fg-3">{tokensWord(s.tokens)}</span>
-                  <span className="tabular-nums font-semibold text-fg">{money(s.cents)}</span>
-                </span>
-              </div>
-            </div>
+            <StatementLines statement={s} />
           </Section>
 
           <Section
@@ -464,19 +356,7 @@ export function BillingServicerPage() {
             }
             className="mt-8"
           >
-            <div className="overflow-hidden rounded-lg border border-line-2 bg-surface">
-              <Table
-                columns={loanColumns}
-                rows={s.loans}
-                rowKey={(c) => c.loanId}
-                dense
-                empty={{
-                  icon: "receipt",
-                  title: "Nothing consumed this month",
-                  body: "No loan on the book was watched during it.",
-                }}
-              />
-            </div>
+            <StatementLoans statement={s} />
           </Section>
         </>
       )}

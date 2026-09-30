@@ -12,7 +12,8 @@
  * What is deliberately simple, for now: one address belongs to one
  * servicer; there are no roles, every member sees the servicer's whole book
  * and changes nothing but its team — a member invites colleagues as ops
- * does. Each of those is a column away when it is wanted.
+ * does, and removes one, though never themselves. Each of those is a
+ * column away when it is wanted.
  *
  * Existence is not a signal. Asking for a code answers the same for an
  * address that is not on any team, and a wrong code and a dead code answer
@@ -36,8 +37,10 @@ import { AppError } from "../middleware/error-handler.js";
 import { connectors } from "./connectors.js";
 import { ownsTransaction, type Db } from "./db.js";
 import { hashInvitationToken, mintInvitationToken } from "./invitations.js";
+import { reasonsInWords } from "@hm/refi-review";
 import { listPartnerBookImports, partnerBookStatus } from "./partner-book.js";
 import { toDomainLoanState } from "./loan-transition.js";
+import { dayEt, offerStanding } from "./refi-offers.js";
 
 const scrypt = (
   password: string,
@@ -226,8 +229,9 @@ export async function inviteServicerTeam(
       inviteDeliveredTo: null,
       inviteDeliveredAt: null,
       inviteDelivery: Prisma.JsonNull,
-      // A disabled member re-invited is a member again once they take it.
+      // A removed member re-invited is a member again once they take it.
       disabledAt: null,
+      disabledBy: null,
       acceptedAt: null,
       passwordHash: null,
       ...(name ? { name } : {}),
@@ -316,6 +320,39 @@ export async function listServicerTeam(servicerId: string, db: Db = prisma): Pro
     acceptedAt: u.acceptedAt?.toISOString() ?? null,
     lastSignedInAt: u.lastSignedInAt?.toISOString() ?? null,
   }));
+}
+
+/**
+ * Take somebody off a servicer's team. The row stays, marked: their sign-in
+ * stops on the next request (`requireServicerUser` reads the mark every
+ * time), an invitation not yet taken dies with its link, and a fresh
+ * invitation is the way back. Somebody on another servicer's team, or
+ * nobody at all, is a 404 — the id is never confirmed to a stranger.
+ */
+export async function removeServicerMember(
+  input: {
+    readonly servicerId: string;
+    readonly memberId: string;
+    /** Who removed them — a console staff id, or `member:<id>` — recorded, never trusted for anything. */
+    readonly removedBy: string;
+  },
+  db: Db = prisma,
+): Promise<void> {
+  const gone = await db.servicerUser.updateMany({
+    where: { id: input.memberId, servicerId: input.servicerId, disabledAt: null },
+    data: {
+      disabledAt: new Date(),
+      disabledBy: input.removedBy,
+      inviteTokenHash: null,
+      inviteExpiresAt: null,
+    },
+  });
+  if (gone.count === 0) throw new AppError(404, "Nobody by that id on this team.", "NOT_FOUND");
+  // A code already mailed opens nothing for them now; spend it anyway.
+  await db.servicerSignInCode.updateMany({
+    where: { userId: input.memberId, consumedAt: null },
+    data: { consumedAt: new Date() },
+  });
 }
 
 /* ── the invitation, taken ─────────────────────────────────────────────────── */
@@ -549,6 +586,38 @@ export interface ServicerBookLoan {
 
 export const SERVICER_BOOK_PAGE = 100;
 
+/** The borrower's name, off the primary party's newest `legal_name` fact. */
+const BORROWER_NAME = {
+  where: { role: "PRIMARY_BORROWER" },
+  take: 1,
+  select: {
+    party: {
+      select: {
+        facts: {
+          where: { predicate: "legal_name", supersededById: null, retractedAt: null },
+          orderBy: { observedAt: "desc" },
+          take: 1,
+          select: { value: true },
+        },
+      },
+    },
+  },
+} as const satisfies Prisma.Loan$partiesArgs;
+
+function borrowerName(parties: readonly { party: { facts: { value: unknown }[] } }[]) {
+  const name = (parties[0]?.party.facts[0]?.value ?? null) as {
+    given?: string;
+    first?: string;
+    surname?: string;
+    last?: string;
+  } | null;
+  return name
+    ? [name.given ?? name.first, name.surname ?? name.last].filter(Boolean).join(" ") || null
+    : null;
+}
+
+const day = (d: Date): string => d.toISOString().slice(0, 10);
+
 /** The servicer's loans, a page at a time, newest review and offer and claim beside each. */
 export async function servicerBookLoans(
   servicerId: string,
@@ -581,22 +650,7 @@ export async function servicerBookLoans(
         noteRateBps: true,
         propertyCity: true,
         propertyState: true,
-        parties: {
-          where: { role: "PRIMARY_BORROWER" },
-          take: 1,
-          select: {
-            party: {
-              select: {
-                facts: {
-                  where: { predicate: "legal_name", supersededById: null, retractedAt: null },
-                  orderBy: { observedAt: "desc" },
-                  take: 1,
-                  select: { value: true },
-                },
-              },
-            },
-          },
-        },
+        parties: BORROWER_NAME,
         observations: {
           orderBy: [{ asOf: "desc" }, { recordedAt: "desc" }],
           take: 1,
@@ -620,15 +674,7 @@ export async function servicerBookLoans(
   return {
     total,
     rows: loans.map((l) => {
-      const name = (l.parties[0]?.party.facts[0]?.value ?? null) as {
-        given?: string;
-        first?: string;
-        surname?: string;
-        last?: string;
-      } | null;
-      const borrower = name
-        ? [name.given ?? name.first, name.surname ?? name.last].filter(Boolean).join(" ") || null
-        : null;
+      const borrower = borrowerName(l.parties);
       const review = l.reviews[0];
       const offer = l.offers[0];
       const claim = l.claims[0];
@@ -640,9 +686,7 @@ export async function servicerBookLoans(
         state: toDomainLoanState(l.status),
         noteRatePct: (l.noteRateBps / 100).toFixed(3),
         balanceCents: l.observations[0]?.principalBalanceCents.toString() ?? null,
-        review: review
-          ? { verdict: review.verdict.toLowerCase(), asOf: review.asOf.toISOString().slice(0, 10) }
-          : null,
+        review: review ? { verdict: review.verdict.toLowerCase(), asOf: day(review.asOf) } : null,
         offer: offer
           ? {
               status: offer.status.toLowerCase(),
@@ -660,6 +704,211 @@ export async function servicerBookLoans(
           : null,
       };
     }),
+  };
+}
+
+/** How much of a loan's history one page carries: two years of monthly tapes, a quarter of daily reviews. */
+export const SERVICER_LOAN_TAPES = 24;
+export const SERVICER_LOAN_REVIEWS = 90;
+
+export interface ServicerLoanDetail {
+  readonly id: string;
+  readonly number: string;
+  readonly borrower: string | null;
+  readonly state: string;
+  /** The day the loan was first loaded, which is the day we began watching it. */
+  readonly watchedSince: string;
+  readonly address: {
+    readonly line1: string | null;
+    readonly line2: string | null;
+    readonly city: string | null;
+    readonly state: string | null;
+    readonly postalCode: string | null;
+  };
+  readonly terms: {
+    readonly rateType: string;
+    readonly noteRatePct: string;
+    readonly termMonths: number;
+    readonly originalPrincipalCents: string;
+    readonly originatedOn: string | null;
+    readonly firstPaymentOn: string | null;
+    readonly maturityOn: string | null;
+  };
+  /** What each tape said about the loan, newest first. */
+  readonly tapes: readonly {
+    readonly asOf: string;
+    readonly status: string;
+    readonly principalBalanceCents: string;
+    readonly escrowBalanceCents: string | null;
+    readonly scheduledPaymentCents: string | null;
+    readonly currentRatePct: string | null;
+    readonly nextPaymentDueOn: string | null;
+    readonly delinquencyDays: number | null;
+  }[];
+  /** The daily review's verdicts, newest first, each with its reasons in words. */
+  readonly reviews: readonly {
+    readonly asOf: string;
+    readonly verdict: string;
+    readonly reasons: readonly string[];
+    readonly candidateRatePct: string | null;
+  }[];
+  /** Every offer made on the loan, newest first, with the figures the homeowner is shown. */
+  readonly offers: readonly {
+    readonly id: string;
+    readonly status: string;
+    readonly detectedOn: string;
+    readonly deliveredAt: string | null;
+    readonly validUntil: string | null;
+    readonly answeredAt: string | null;
+    readonly currentRatePct: string | null;
+    readonly newRatePct: string;
+    readonly currentPaymentCents: string | null;
+    readonly newPaymentCents: string | null;
+    readonly monthlySavingsCents: string | null;
+  }[];
+  readonly claim: ServicerBookLoan["claim"];
+}
+
+/**
+ * One loan on the servicer's book, as their team sees it: what their own
+ * tapes said, what each morning's review concluded, the offers it made and
+ * where the homeowner's invitation stands. Null for a loan that is not on
+ * this servicer's book — a stranger's loan is a missing one.
+ *
+ * Nothing here comes from the homeowner's side of a claim: no sign-in, no
+ * application, no answer beyond where an offer stands.
+ */
+export async function servicerBookLoan(
+  servicerId: string,
+  loanId: string,
+  db: Db = prisma,
+  now: Date = new Date(),
+): Promise<ServicerLoanDetail | null> {
+  const l = await db.loan.findFirst({
+    where: { id: loanId, servicerId, servicerLoanNumber: { not: null } },
+    select: {
+      id: true,
+      servicerLoanNumber: true,
+      status: true,
+      createdAt: true,
+      rateType: true,
+      noteRateBps: true,
+      termMonths: true,
+      originalPrincipalCents: true,
+      originatedOn: true,
+      firstPaymentOn: true,
+      maturityOn: true,
+      propertyLine1: true,
+      propertyLine2: true,
+      propertyCity: true,
+      propertyState: true,
+      propertyPostalCode: true,
+      parties: BORROWER_NAME,
+      observations: {
+        orderBy: [{ asOf: "desc" }, { recordedAt: "desc" }],
+        take: SERVICER_LOAN_TAPES,
+        select: {
+          asOf: true,
+          status: true,
+          principalBalanceCents: true,
+          escrowBalanceCents: true,
+          scheduledPaymentCents: true,
+          currentRatePct: true,
+          nextPaymentDueOn: true,
+          delinquencyDays: true,
+        },
+      },
+      reviews: {
+        orderBy: [{ asOf: "desc" }, { recordedAt: "desc" }],
+        take: SERVICER_LOAN_REVIEWS,
+        select: { asOf: true, verdict: true, reasons: true, candidateRatePct: true },
+      },
+      offers: {
+        orderBy: [{ offeredAt: "desc" }, { createdAt: "desc" }],
+        select: {
+          id: true,
+          status: true,
+          detectedOn: true,
+          deliveredAt: true,
+          validUntil: true,
+          answeredAt: true,
+          candidateRatePct: true,
+          disclosure: true,
+        },
+      },
+      claims: {
+        where: { revokedAt: null },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { deliveredTo: true, deliveredAt: true, acceptedAt: true, expiresAt: true },
+      },
+    },
+  });
+  if (!l) return null;
+  const claim = l.claims[0];
+  const text = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+  return {
+    id: l.id,
+    number: l.servicerLoanNumber ?? "",
+    borrower: borrowerName(l.parties),
+    state: toDomainLoanState(l.status),
+    watchedSince: dayEt(l.createdAt),
+    address: {
+      line1: l.propertyLine1,
+      line2: l.propertyLine2,
+      city: l.propertyCity,
+      state: l.propertyState,
+      postalCode: l.propertyPostalCode,
+    },
+    terms: {
+      rateType: l.rateType.toLowerCase(),
+      noteRatePct: (l.noteRateBps / 100).toFixed(3),
+      termMonths: l.termMonths,
+      originalPrincipalCents: l.originalPrincipalCents.toString(),
+      originatedOn: l.originatedOn ? day(l.originatedOn) : null,
+      firstPaymentOn: l.firstPaymentOn ? day(l.firstPaymentOn) : null,
+      maturityOn: l.maturityOn ? day(l.maturityOn) : null,
+    },
+    tapes: l.observations.map((o) => ({
+      asOf: day(o.asOf),
+      status: o.status.toLowerCase(),
+      principalBalanceCents: o.principalBalanceCents.toString(),
+      escrowBalanceCents: o.escrowBalanceCents?.toString() ?? null,
+      scheduledPaymentCents: o.scheduledPaymentCents?.toString() ?? null,
+      currentRatePct: o.currentRatePct?.toFixed(3) ?? null,
+      nextPaymentDueOn: o.nextPaymentDueOn ? day(o.nextPaymentDueOn) : null,
+      delinquencyDays: o.delinquencyDays,
+    })),
+    reviews: l.reviews.map((r) => ({
+      asOf: day(r.asOf),
+      verdict: r.verdict.toLowerCase(),
+      reasons: reasonsInWords(Array.isArray(r.reasons) ? (r.reasons as string[]) : []),
+      candidateRatePct: r.candidateRatePct?.toFixed(3) ?? null,
+    })),
+    offers: l.offers.map((o) => {
+      const d = (o.disclosure ?? {}) as Record<string, unknown>;
+      return {
+        id: o.id,
+        status: offerStanding(o, now),
+        detectedOn: day(o.detectedOn),
+        deliveredAt: o.deliveredAt?.toISOString() ?? null,
+        validUntil: o.validUntil?.toISOString() ?? null,
+        answeredAt: o.answeredAt?.toISOString() ?? null,
+        currentRatePct: text(d.current_rate_pct),
+        newRatePct: o.candidateRatePct.toFixed(3),
+        currentPaymentCents: text(d.current_pi_cents),
+        newPaymentCents: text(d.new_pi_cents),
+        monthlySavingsCents: text(d.pi_delta_cents),
+      };
+    }),
+    claim: claim
+      ? {
+          deliveredTo: claim.deliveredTo,
+          deliveredAt: claim.deliveredAt?.toISOString() ?? null,
+          acceptedAt: claim.acceptedAt?.toISOString() ?? null,
+          expiresAt: claim.expiresAt.toISOString(),
+        }
+      : null,
   };
 }
 

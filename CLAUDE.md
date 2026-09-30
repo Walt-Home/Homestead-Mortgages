@@ -165,19 +165,31 @@ by its domain (`INTERNAL_EMAIL_DOMAINS`); whichever session comes back
 decides what renders — the ops console, or the portal at
 `/console/portal`. A servicer's people — `services/servicer-team.ts`,
 `servicer_users` — sign in with a code to their e-mail and a password, and
-see their book read-only: every loan, the newest verdict, the offer, where
-the homeowner's invitation stands, and their team, which they can grow.
+see four things, read-only but for the last (30 September): their loans, a
+page for each loan (its tapes, each morning's verdict and why, its offers,
+the homeowner's invitation), billing (this month so far and an invoice per
+closed month — the same `billing_statements` row the console reads, drawn
+by the same `StatementTables`), and their team, which they grow and prune.
+Removing is a mark, not a delete (`disabled_at`, `disabled_by`): the
+session dies on its next request, an untaken link dies, nobody removes
+themselves, and another servicer's member or loan is a 404.
+**A member never sees the ops console**: a servicer's session always
+renders the portal, and a staff session found beside it in the same
+browser is signed out — the two cookies coexist, and the console once
+preferred the staff one, which read as a leak and was not. The shared
+door (splash, loading, entry page, tab title) says "Ops" nowhere until a
+staff session does.
 The desk's Team step mails the first invitations, and the Servicers page
 (`/console/servicers`, ours: `pages/ServicersPage.tsx` over the desk's
 `/servicers` and `/team` routes) is where a servicer's team is managed any
-day after, without walking a load; the link (`/console/accept#token`) sets
-the password. No roles, one address per
+day after, without walking a load — invited and removed; the link
+(`/console/accept#token`) sets the password. No roles, one address per
 servicer. IAP is off the servicing host for this: a servicer's staff are
 not our Google accounts, and both doors are two factors. The two sessions
 never cross: `requireServicerUser` reads `servicerUserId`, `requireAuth`
 reads `userId`, and `servicer-portal.test.ts` holds both directions. See
 `docs/decisions.md`, "A servicer's team signs in with a code and a
-password".
+password" and "A servicer's team has a portal of its own".
 
 **The daily review is ours since 22 September 2026.** `packages/refi-review`
 is the servicing app's spec §33.2 over its §20.1, ported pure over the kernel

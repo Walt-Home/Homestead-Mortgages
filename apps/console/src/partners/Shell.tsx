@@ -1,12 +1,13 @@
 /**
  * The portal's frame, inside the console's bundle at `/console/portal`: the
- * servicer's name where the ops console has its wordmark, two links, and
- * who is signed in. One bar, no rail: a servicer's team has two things to
- * look at.
+ * servicer's name where the ops console has its wordmark, three links, and
+ * who is signed in. One bar, no rail: a servicer's team has three things to
+ * look at — their loans, what the book is billed, and their team — and
+ * nothing of the ops console is among them.
  */
 
 import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import clsx from "clsx";
 import { Button } from "../components/ui.js";
 import { usePortalAuth } from "./auth.js";
@@ -28,14 +29,20 @@ const link = ({ isActive }: { isActive: boolean }) =>
 
 export function PortalShell({ children }: { children: ReactNode }) {
   const { me, signOut } = usePortalAuth();
+  const { pathname } = useLocation();
+  // The list and each loan's page are one place in the bar.
+  const onLoans = pathname === "/portal" || pathname.startsWith("/portal/loans");
   return (
     <div className="min-h-screen bg-canvas">
       <header className="border-b border-line-2 bg-surface">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3">
+        <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 md:px-8">
           <PortalWordmark servicer={me?.servicer.displayName} />
           <nav className="flex items-center gap-1" aria-label="Portal">
-            <NavLink to="/portal" end className={link}>
-              Book
+            <NavLink to="/portal" end className={() => link({ isActive: onLoans })}>
+              Loans
+            </NavLink>
+            <NavLink to="/portal/billing" className={link}>
+              Billing
             </NavLink>
             <NavLink to="/portal/team" className={link}>
               Team
@@ -49,7 +56,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
+      {/* Each page brings its own measure and gutters (`Page`); the bar above matches them. */}
+      <main>{children}</main>
     </div>
   );
 }

@@ -10,9 +10,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Field, Input, Notice } from "../components/ui.js";
-import { Wordmark } from "../components/Shell.js";
 import { useAuth } from "../lib/auth.js";
 import { portal } from "../partners/api.js";
+import { PortalWordmark } from "../partners/Shell.js";
 import { ServicerSignInPage } from "../partners/pages/SignInPage.js";
 import { SignInPage } from "./SignInPage.js";
 
@@ -67,10 +67,13 @@ export function EntryPage() {
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
       <div className="mx-auto flex w-full max-w-[420px] flex-1 flex-col justify-center px-5 py-12">
-        <Wordmark className="mb-8" />
+        {/* The bare mark: this page is a servicer's team's as much as ours. */}
+        <div className="mb-8">
+          <PortalWordmark />
+        </div>
         <h1 className="text-2xl font-semibold tracking-tight text-fg">Sign in</h1>
         <p className="mt-1.5 text-base text-fg-2">
-          Supermortgage servicing: the operator console, and a servicer&rsquo;s view of their book.
+          Supermortgage servicing. Your e-mail decides where you land.
         </p>
 
         {endedBecause === "expired" ? (

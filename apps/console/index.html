@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Supermortgage Ops</title>
+    <title>Supermortgage</title>
     <meta name="robots" content="noindex" />
     <!-- No web fonts, deliberately: the brand is Georgia and Helvetica Neue as installed. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -13,7 +13,9 @@
     <!--
       What the page shows before the script has arrived, in the same shape
       the app draws while it signs you in, so the first paint is never a
-      blank canvas. React replaces it on mount.
+      blank canvas. React replaces it on mount. The mark carries no "Ops":
+      this door is a servicer's team's too, and nobody knows yet which of
+      the two is arriving.
     -->
     <style>
       @keyframes console-splash-spin {
@@ -43,12 +45,6 @@
         font-weight: 600;
         letter-spacing: -0.01em;
       }
-      .console-splash-mark small {
-        font-size: 14px;
-        font-weight: 400;
-        color: #6b6b75;
-        margin-left: 6px;
-      }
       .console-splash-ring {
         width: 28px;
         height: 28px;
@@ -63,9 +59,9 @@
     </style>
     <div id="root">
       <div class="console-splash" role="status" aria-live="polite">
-        <div class="console-splash-mark">Supermortgage<small>Ops</small></div>
+        <div class="console-splash-mark">Supermortgage</div>
         <div class="console-splash-ring" aria-hidden="true"></div>
-        <div class="console-splash-text">Opening the console…</div>
+        <div class="console-splash-text">Signing you in…</div>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

@@ -1827,7 +1827,11 @@ model ServicerUser {
   inviteDelivery    Json?     @map("invite_delivery")
 
   acceptedAt DateTime? @map("accepted_at")
+  /// Removed from the team: the row stays as the record, the sign-in and any
+  /// live invitation die with it, and a fresh invitation clears both.
   disabledAt DateTime? @map("disabled_at")
+  /// Who removed them — a console staff id, or `member:<id>` — as `invitedBy` is spelled.
+  disabledBy String?   @map("disabled_by")
 
   /// Five wrong passwords in an hour lock the account for fifteen minutes.
   failedPasswordCount Int       @default(0) @map("failed_password_count")

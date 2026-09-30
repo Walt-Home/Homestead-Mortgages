@@ -5,6 +5,8 @@
  * ...facts } }`, folded into one error the pages can read.
  */
 
+import type { Statement, StatementStanding } from "../lib/billing.js";
+
 export class PortalError extends Error {
   constructor(
     readonly status: number,
@@ -110,6 +112,94 @@ export interface PortalLoan {
     acceptedAt: string | null;
     expiresAt: string;
   } | null;
+}
+
+/** One loan's page: `servicerBookLoan` in `apps/api`. */
+export interface PortalLoanDetail {
+  id: string;
+  number: string;
+  borrower: string | null;
+  state: string;
+  watchedSince: string;
+  address: {
+    line1: string | null;
+    line2: string | null;
+    city: string | null;
+    state: string | null;
+    postalCode: string | null;
+  };
+  terms: {
+    rateType: string;
+    noteRatePct: string;
+    termMonths: number;
+    originalPrincipalCents: string;
+    originatedOn: string | null;
+    firstPaymentOn: string | null;
+    maturityOn: string | null;
+  };
+  tapes: PortalTape[];
+  reviews: PortalReview[];
+  offers: PortalOffer[];
+  claim: PortalLoan["claim"];
+}
+
+export interface PortalTape {
+  asOf: string;
+  status: string;
+  principalBalanceCents: string;
+  escrowBalanceCents: string | null;
+  scheduledPaymentCents: string | null;
+  currentRatePct: string | null;
+  nextPaymentDueOn: string | null;
+  delinquencyDays: number | null;
+}
+
+export interface PortalReview {
+  asOf: string;
+  verdict: string;
+  reasons: string[];
+  candidateRatePct: string | null;
+}
+
+export interface PortalOffer {
+  id: string;
+  status: string;
+  detectedOn: string;
+  deliveredAt: string | null;
+  validUntil: string | null;
+  answeredAt: string | null;
+  currentRatePct: string | null;
+  newRatePct: string;
+  currentPaymentCents: string | null;
+  newPaymentCents: string | null;
+  monthlySavingsCents: string | null;
+}
+
+/** A month's statement as the servicer's team reads it: closed is an invoice. */
+export interface PortalStatement {
+  statement: Statement;
+  standing: StatementStanding;
+  closedAt: string | null;
+}
+
+export interface PortalInvoice {
+  id: string;
+  month: string;
+  sheetVersion: string;
+  loansBilled: number;
+  loanMonths: string;
+  balanceCents: string;
+  tokens: string;
+  cents: string;
+  closedAt: string;
+}
+
+export interface PortalBilling {
+  sheet: { version: string; date: string };
+  today: string;
+  servicer: { displayName: string; annualTokenPool: string | null; since: string | null };
+  current: PortalStatement;
+  invoices: PortalInvoice[];
 }
 
 export interface PortalTeamMember {

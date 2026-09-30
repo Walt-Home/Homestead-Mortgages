@@ -464,3 +464,43 @@ describe("the book's first review", () => {
     expect(p.body.rows.every((r) => r.review !== null)).toBe(true);
   });
 });
+
+describe("the servicer's team, from the desk", () => {
+  it("is invited, listed, and pruned under the staff id that asked", async () => {
+    expect((await call("POST", "/imports", tapeBody())).status).toBe(201);
+    const invited = await call<{ outcomes: { status: string }[] }>("POST", "/team", {
+      servicerSlug: NORTHLIGHT.slug,
+      invitations: [{ email: "ada@northlight.example", name: "Ada" }],
+    });
+    expect(invited.status).toBe(201);
+    expect(invited.body.outcomes[0]!.status).toBe("sent");
+    const team = await call<{ team: { id: string; standing: string }[] }>(
+      "GET",
+      `/team?servicer=${NORTHLIGHT.slug}`,
+    );
+    expect(team.body.team.map((m) => m.standing)).toEqual(["invited"]);
+    const id = team.body.team[0]!.id;
+
+    const remove = (path: string, cookie: string | null = STAFF_COOKIE) =>
+      fetch(`http://127.0.0.1:${port}/console/hm/tape${path}`, {
+        method: "DELETE",
+        headers: cookie ? { cookie } : {},
+      });
+    // Nobody signed out, and nobody under another servicer's name.
+    expect((await remove(`/team/${id}?servicer=${NORTHLIGHT.slug}`, null)).status).toBe(401);
+    expect((await remove(`/team/${id}?servicer=somebody-else`)).status).toBe(404);
+    expect((await remove(`/team/${id}?servicer=${NORTHLIGHT.slug}`)).status).toBe(204);
+
+    const row = await prisma.servicerUser.findUniqueOrThrow({ where: { id } });
+    expect(row.disabledAt).not.toBeNull();
+    expect(row.disabledBy).toBe("staff-1");
+    expect(row.inviteTokenHash).toBeNull();
+    // The desk still shows them, as removed; the record is the row.
+    const after = await call<{ team: { standing: string }[] }>(
+      "GET",
+      `/team?servicer=${NORTHLIGHT.slug}`,
+    );
+    expect(after.body.team.map((m) => m.standing)).toEqual(["disabled"]);
+    expect((await remove(`/team/${id}?servicer=${NORTHLIGHT.slug}`)).status).toBe(404);
+  });
+});

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth.js";
 import { QUEUE_KINDS, type QueueKind } from "./lib/home.js";
@@ -8,6 +9,8 @@ import { PortalAuthProvider, usePortalAuth } from "./partners/auth.js";
 import { PortalShell } from "./partners/Shell.js";
 import { AcceptPage } from "./partners/pages/AcceptPage.js";
 import { BookPage } from "./partners/pages/BookPage.js";
+import { PortalLoanPage } from "./partners/pages/LoanPage.js";
+import { PortalBillingPage, PortalInvoicePage } from "./partners/pages/BillingPage.js";
 import { TeamPage } from "./partners/pages/TeamPage.js";
 import { QueuePage } from "./pages/QueuePage.js";
 import { WorkItemsPage } from "./pages/WorkItemsPage.js";
@@ -38,21 +41,47 @@ function KindRoute() {
  * partner portal (`/portal`) for a servicer's team. An invitation link
  * (`/accept`) needs no session at all.
  *
+ * One browser, one of the two. A servicer's session always renders the
+ * portal and never the ops console, whatever else the browser holds: the
+ * two cookies are separate, so somebody on our staff who takes a
+ * servicer's invitation in the browser they work in holds both, and the
+ * console used to show them ops under the member's name. Now the member's
+ * session wins, and the staff session it was found beside is signed out —
+ * so signing out of the portal lands on the sign-in page, not in the ops
+ * console. Nothing about access rides on this: the servicing app's API
+ * answers its own cookie and no other, and a member's cookie is not it.
+ *
  * The console has one role. Every page opens for every admin, and the
  * servicing app's own API is the gate on what each call may do; a page it
  * refuses says so in place.
  */
 function Routed() {
-  const { status } = useAuth();
+  const { status, stepAside } = useAuth();
   const portal = usePortalAuth();
   const { pathname } = useLocation();
+  const both = status === "signed-in" && portal.status === "signed-in";
+  useEffect(() => {
+    if (both) void stepAside().catch(() => undefined);
+  }, [both, stepAside]);
+  // The door is shared, so nothing says "Ops" until a staff session says so.
+  const servicerName = portal.status === "signed-in" ? portal.me?.servicer.displayName : null;
+  useEffect(() => {
+    document.title = servicerName
+      ? `${servicerName} · Supermortgage`
+      : status === "signed-in"
+        ? "Supermortgage Ops"
+        : "Supermortgage";
+  }, [servicerName, status]);
   if (pathname === "/accept") return <AcceptPage />;
   if (status === "loading" || portal.status === "loading") return <Loading />;
-  if (status !== "signed-in" && portal.status === "signed-in") {
+  if (portal.status === "signed-in") {
     return (
       <PortalShell>
         <Routes>
           <Route path="/portal" element={<BookPage />} />
+          <Route path="/portal/loans/:id" element={<PortalLoanPage />} />
+          <Route path="/portal/billing" element={<PortalBillingPage />} />
+          <Route path="/portal/billing/:month" element={<PortalInvoicePage />} />
           <Route path="/portal/team" element={<TeamPage />} />
           <Route path="*" element={<Navigate to="/portal" replace />} />
         </Routes>

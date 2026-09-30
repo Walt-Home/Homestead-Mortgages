@@ -253,8 +253,9 @@ is `InvoicingConnector` in `@hm/connectors` (`stripe-invoicing.ts`, the
 official SDK with its API version pinned; `fixture-invoicing.ts` for tests,
 which a deployed service refuses to issue through). `services/billing-invoices.ts`
 holds the profile a draft cannot be made without, the acts (draft, send,
-void, paid by hand, sync), the inbox for Stripe's deliveries and the
-reconciliation; `/api/webhooks/invoicing` is the one door above the body
+void, paid by hand, sync, and a credit note against what was sent or paid,
+settled one way on a paid invoice), the inbox for Stripe's deliveries and
+the reconciliation; `/api/webhooks/invoicing` is the one door above the body
 parser besides the partner key, because the signature is over the raw
 bytes. Every write is idempotent on our invoice id and a draft is found
 before it is made; the hosted link is never stored; an event is acted on

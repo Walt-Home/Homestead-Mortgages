@@ -2467,6 +2467,9 @@ export const TABLES_OFF_THE_WIRE = {
   billing_provider_events: {
     why: "The inbox for the payment provider's deliveries — an event id, its type and whether we acted on it; how a redelivery becomes a no-op, and nothing DU asks for.",
   },
+  billing_credit_notes: {
+    why: "A correction to an invoice a servicer was sent — a credit issued by a named admin, and how it was settled; money between us and our customer, which no loan submission carries.",
+  },
   servicing_observations: {
     why: "What a servicer said a loan looked like on a date — balance, rate, next due, delinquency — appended per tape; a mortgage somebody already has, which is the one thing a new casefile is not about.",
   },

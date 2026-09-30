@@ -17,10 +17,12 @@
 
 import type {
   ConnectorCapabilities,
+  CreditNoteInput,
   InvoiceDraftInput,
   InvoicingConnector,
   InvoicingCustomerInput,
   InvoicingEvent,
+  ProviderCreditNote,
   ProviderInvoice,
   ProviderInvoiceStatus,
 } from "../ports/index.js";
@@ -33,7 +35,13 @@ import {
 /** The one signature the fixture's `readEvent` accepts. */
 export const FIXTURE_INVOICING_SIGNATURE = "fixture-signature";
 
-type Act = "upsertCustomer" | "draftInvoice" | "sendInvoice" | "voidInvoice" | "retrieveInvoice";
+type Act =
+  | "upsertCustomer"
+  | "draftInvoice"
+  | "sendInvoice"
+  | "voidInvoice"
+  | "retrieveInvoice"
+  | "issueCreditNote";
 
 export interface FixtureInvoicingConnector extends InvoicingConnector {
   /** Every customer made, by the provider's id. */
@@ -46,16 +54,22 @@ export interface FixtureInvoicingConnector extends InvoicingConnector {
   reopen(providerInvoiceId: string): void;
   /** The next call of this kind fails as a provider outage would. */
   failNext(act: Act): void;
-  /** A signed delivery about an invoice, as a request body and its signature. */
+  /** A signed delivery about an invoice, or a credit note, as a request body and its signature. */
   event(
     type: string,
     providerInvoiceId: string | null,
     id?: string,
+    providerCreditNoteId?: string | null,
   ): { readonly body: string; readonly signature: string };
 }
 
 interface Held {
   invoice: ProviderInvoice;
+  ourId: string;
+}
+
+interface HeldNote {
+  note: ProviderCreditNote;
   ourId: string;
 }
 
@@ -69,6 +83,7 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
   };
   const customers = new Map<string, InvoicingCustomerInput>();
   const invoices = new Map<string, Held>();
+  const notes = new Map<string, HeldNote>();
   const writes: string[] = [];
   const failing = new Set<Act>();
   let sequence = 0;
@@ -234,6 +249,98 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
       return h ? fresh(h.invoice) : null;
     },
 
+    async issueCreditNote(input: CreditNoteInput) {
+      maybeFail("issueCreditNote");
+      for (const h of notes.values()) if (h.ourId === input.creditNoteId) return h.note;
+      const h = held(input.providerInvoiceId);
+      const inv = h.invoice;
+      if (inv.status !== "open" && inv.status !== "paid" && inv.status !== "uncollectible") {
+        throw new InvoicingProviderError(
+          `A credit note cannot be issued against an invoice that is ${inv.status}.`,
+          "invoice_not_editable",
+          400,
+        );
+      }
+      if (inv.status === "paid" && input.settlement === null) {
+        throw new InvoicingProviderError(
+          "A credit note on a paid invoice must say how it is settled.",
+          "parameter_missing",
+          400,
+        );
+      }
+      const ceiling = inv.status === "paid" ? inv.amountPaidCents : inv.amountRemainingCents;
+      if (input.amountCents <= 0n || input.amountCents > ceiling) {
+        throw new InvoicingProviderError(
+          `A credit note must be between 1 and ${ceiling} cents on this invoice.`,
+          "parameter_invalid_integer",
+          400,
+        );
+      }
+      writes.push(invoicingKey(input.creditNoteId, "credit-create"));
+      const id = `cn_fixture_${String(notes.size + 1).padStart(4, "0")}`;
+      const note: ProviderCreditNote = {
+        id,
+        invoiceId: inv.id,
+        number: `${inv.number ?? "FIX"}-CN${String(notes.size + 1).padStart(2, "0")}`,
+        status: "issued",
+        amountCents: input.amountCents,
+        refundedCents: input.settlement === "refund" ? input.amountCents : 0n,
+        creditedToBalance: input.settlement === "customer_balance",
+        outOfBandCents: input.settlement === "out_of_band" ? input.amountCents : 0n,
+        createdAt: new Date().toISOString(),
+        voidedAt: null,
+        pdfUrl: `https://invoice.fixture.test/${id}.pdf`,
+        livemode: false,
+        metadata: { ...input.metadata, hm_credit_note_id: input.creditNoteId },
+      };
+      notes.set(id, { note, ourId: input.creditNoteId });
+      // On an open invoice the credit lowers what is due; at nothing it is paid.
+      if (inv.status !== "paid") {
+        const remaining = inv.amountRemainingCents - input.amountCents;
+        h.invoice = {
+          ...inv,
+          amountDueCents: inv.amountDueCents - input.amountCents,
+          amountRemainingCents: remaining,
+          ...(remaining === 0n
+            ? { status: "paid" as const, paidAt: new Date().toISOString() }
+            : {}),
+        };
+      }
+      return note;
+    },
+
+    async voidCreditNote(providerCreditNoteId, creditNoteId) {
+      const h = notes.get(providerCreditNoteId);
+      if (!h) {
+        throw new InvoicingProviderError(
+          `No such credit note: ${providerCreditNoteId}`,
+          "resource_missing",
+          404,
+        );
+      }
+      if (h.note.status === "void") return h.note;
+      const inv = held(h.note.invoiceId);
+      if (inv.invoice.status !== "open") {
+        throw new InvoicingProviderError(
+          "A credit note can be voided only while its invoice is open.",
+          "credit_note_not_voidable",
+          400,
+        );
+      }
+      writes.push(invoicingKey(creditNoteId, "credit-void"));
+      h.note = { ...h.note, status: "void", voidedAt: new Date().toISOString() };
+      inv.invoice = {
+        ...inv.invoice,
+        amountDueCents: inv.invoice.amountDueCents + h.note.amountCents,
+        amountRemainingCents: inv.invoice.amountRemainingCents + h.note.amountCents,
+      };
+      return h.note;
+    },
+
+    async retrieveCreditNote(providerCreditNoteId) {
+      return notes.get(providerCreditNoteId)?.note ?? null;
+    },
+
     readEvent(rawBody, signature) {
       if (signature !== FIXTURE_INVOICING_SIGNATURE) throw new InvoicingSignatureError();
       const text = typeof rawBody === "string" ? rawBody : rawBody.toString("utf8");
@@ -251,6 +358,7 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
         livemode: false,
         apiVersion: null,
         invoiceId: parsed.invoiceId ?? null,
+        creditNoteId: parsed.creditNoteId ?? null,
       };
     },
 
@@ -278,7 +386,7 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
       failing.add(act);
     },
 
-    event(type, providerInvoiceId, id) {
+    event(type, providerInvoiceId, id, providerCreditNoteId = null) {
       const event: InvoicingEvent = {
         id: id ?? `evt_fixture_${String(++events).padStart(4, "0")}`,
         type,
@@ -286,6 +394,7 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
         livemode: false,
         apiVersion: null,
         invoiceId: providerInvoiceId,
+        creditNoteId: providerCreditNoteId,
       };
       return { body: JSON.stringify(event), signature: FIXTURE_INVOICING_SIGNATURE };
     },

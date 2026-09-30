@@ -6,13 +6,14 @@
  * Read-only: the pool and the close are Supermortgage's to set.
  */
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../../components/Page.js";
 import { Table, type Column } from "../../components/Table.js";
 import { StatementLines, StatementLoans } from "../../components/StatementTables.js";
 import { Button, Notice, Pill, Rows, Stat, type Tone } from "../../components/ui.js";
+import { Sheet } from "../../components/Sheet.js";
 import { Loading } from "../../components/Loading.js";
 import { useToast } from "../../components/Toast.js";
 import { fmtDate, money, plural } from "../../lib/format.js";
@@ -27,6 +28,7 @@ import {
   portal,
   PortalError,
   type PortalBilling,
+  type PortalCreditNote,
   type PortalInvoice,
   type PortalStatement,
 } from "../api.js";
@@ -81,9 +83,69 @@ function StatementStats({ answer }: { answer: PortalStatement }) {
   );
 }
 
+/** The credit notes issued against one invoice, each with its PDF. */
+function PortalCreditNotes({ invoice, onClose }: { invoice: PortalInvoice; onClose: () => void }) {
+  const toast = useToast();
+  const notes = useQuery({
+    queryKey: ["portal-credit-notes", invoice.issued?.id ?? ""],
+    queryFn: () =>
+      portal<{ creditNotes: PortalCreditNote[] }>(
+        `/billing/invoices/${invoice.issued!.id}/credit-notes`,
+      ).then((r) => r.creditNotes),
+  });
+  const openPdf = async (id: string) => {
+    const tab = window.open("", "_blank", "noopener");
+    try {
+      const { pdfUrl } = await portal<{ pdfUrl: string }>(`/billing/credit-notes/${id}/link`);
+      if (tab) tab.location.href = pdfUrl;
+      else window.location.assign(pdfUrl);
+    } catch (err) {
+      tab?.close();
+      toast({ tone: "danger", title: "The PDF could not be opened", body: (err as Error).message });
+    }
+  };
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title={`Credits on ${monthLabel(invoice.month)}`}
+      subtitle={invoice.issued?.number ?? undefined}
+    >
+      {notes.isPending ? (
+        <Loading what="Reading the credit notes" />
+      ) : notes.isError || !notes.data ? (
+        <Notice tone="danger">The credit notes could not be read.</Notice>
+      ) : (
+        <ul className="divide-y divide-line rounded-lg border border-line-2">
+          {notes.data.map((n) => (
+            <li key={n.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+              <span className="flex min-w-0 flex-col">
+                <span className="font-medium text-fg">
+                  {money(n.amountCents)}
+                  {n.number ? (
+                    <span className="ml-2 font-mono text-xs text-fg-3">{n.number}</span>
+                  ) : null}
+                </span>
+                <span className="text-xs text-fg-3">
+                  {n.memo}
+                  {n.issuedAt ? ` · ${fmtDate(n.issuedAt)}` : ""}
+                </span>
+              </span>
+              <Button size="sm" variant="secondary" onClick={() => void openPdf(n.id)}>
+                PDF
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Sheet>
+  );
+}
+
 export function PortalBillingPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const [credits, setCredits] = useState<PortalInvoice | null>(null);
   const page = useQuery({
     queryKey: ["portal-billing"],
     queryFn: () => portal<PortalBilling>("/billing"),
@@ -166,7 +228,23 @@ export function PortalBillingPage() {
         key: "cents",
         header: "Amount",
         align: "right",
-        render: (i) => <span className="tabular-nums font-medium text-fg">{money(i.cents)}</span>,
+        render: (i) => (
+          <span className="flex flex-col items-end">
+            <span className="tabular-nums font-medium text-fg">{money(i.cents)}</span>
+            {i.issued && BigInt(i.issued.creditedCents) > 0n ? (
+              <button
+                type="button"
+                className="text-xs text-fg-2 underline hover:text-fg"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCredits(i);
+                }}
+              >
+                {money(i.issued.creditedCents)} credited
+              </button>
+            ) : null}
+          </span>
+        ),
       },
       { key: "closed", header: "Closed", render: (i) => fmtDate(i.closedAt) },
       {
@@ -280,6 +358,7 @@ export function PortalBillingPage() {
       <Notice tone="neutral" className="mt-8">
         {BASIS}
       </Notice>
+      {credits ? <PortalCreditNotes invoice={credits} onClose={() => setCredits(null)} /> : null}
     </Page>
   );
 }

@@ -896,14 +896,69 @@ export interface ProviderInvoice {
   readonly metadata: Readonly<Record<string, string>>;
 }
 
+/**
+ * A credit note: the correction to an invoice that has been sent or paid,
+ * which is never edited and never voided once money has moved.
+ *
+ * On an open invoice a credit lowers what is due, and an invoice credited
+ * to nothing is paid. On a paid invoice the credit has to be settled, and
+ * the settlement is a choice: a credit on the customer's balance that
+ * comes off the next invoice, a refund of the payment through the
+ * provider, or a refund made outside it. One kind per note, so the history
+ * says which.
+ */
+export type CreditNoteReason =
+  "duplicate" | "fraudulent" | "order_change" | "product_unsatisfactory";
+export type CreditNoteSettlement = "customer_balance" | "refund" | "out_of_band";
+
+export interface CreditNoteInput {
+  /** Ours. Every write about this note is idempotent on it. */
+  readonly creditNoteId: string;
+  readonly providerInvoiceId: string;
+  readonly amountCents: bigint;
+  readonly reason: CreditNoteReason;
+  /** Shown to the customer on the note. */
+  readonly memo: string;
+  /** What the note prints as its line. */
+  readonly description: string;
+  /** How a credit on a paid invoice is settled; null on an open one, where it lowers what is due. */
+  readonly settlement: CreditNoteSettlement | null;
+  readonly metadata: Readonly<Record<string, string>>;
+}
+
+export type ProviderCreditNoteStatus = "issued" | "void";
+
+export interface ProviderCreditNote {
+  readonly id: string;
+  readonly invoiceId: string;
+  readonly number: string;
+  readonly status: ProviderCreditNoteStatus;
+  readonly amountCents: bigint;
+  /** How it was settled, as the provider reports it. */
+  readonly refundedCents: bigint;
+  readonly creditedToBalance: boolean;
+  readonly outOfBandCents: bigint;
+  readonly createdAt: string;
+  readonly voidedAt: string | null;
+  /** The note's PDF. Read it fresh; never store it. */
+  readonly pdfUrl: string | null;
+  readonly livemode: boolean;
+  readonly metadata: Readonly<Record<string, string>>;
+}
+
 export interface InvoicingEvent {
   readonly id: string;
   readonly type: string;
   readonly createdAt: string;
   readonly livemode: boolean;
   readonly apiVersion: string | null;
-  /** The provider's id of the invoice the event is about; null when it is about something else. */
+  /**
+   * The provider's id of the invoice the event is about, null when it is
+   * about something else. A credit note's event names its invoice here too.
+   */
   readonly invoiceId: string | null;
+  /** The provider's id of the credit note the event is about, when it is about one. */
+  readonly creditNoteId: string | null;
 }
 
 export interface InvoicingConnector {
@@ -930,6 +985,12 @@ export interface InvoicingConnector {
   markUncollectible(providerInvoiceId: string, invoiceId: string): Promise<ProviderInvoice>;
   /** The invoice as it stands now; null when the provider holds no such invoice. */
   retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice | null>;
+  /** Issue a credit note, found rather than made again when an earlier attempt got that far. */
+  issueCreditNote(input: CreditNoteInput): Promise<ProviderCreditNote>;
+  /** Void a credit note. The provider allows it only while the invoice is still open. */
+  voidCreditNote(providerCreditNoteId: string, creditNoteId: string): Promise<ProviderCreditNote>;
+  /** The credit note as it stands now; null when the provider holds no such note. */
+  retrieveCreditNote(providerCreditNoteId: string): Promise<ProviderCreditNote | null>;
   /**
    * Verify a delivery against the raw request body and say what it is
    * about. Throws `InvoicingSignatureError` when the signature does not

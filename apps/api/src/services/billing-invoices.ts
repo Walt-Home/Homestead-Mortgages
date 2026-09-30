@@ -47,9 +47,18 @@
 
 import { randomUUID } from "node:crypto";
 import { prisma } from "@hm/db";
-import type { BillingInvoice, BillingInvoiceStatus, Prisma } from "@hm/db";
+import type {
+  BillingCreditNote,
+  BillingCreditSettlement,
+  BillingInvoice,
+  BillingInvoiceStatus,
+  Prisma,
+} from "@hm/db";
 import {
   InvoicingProviderError,
+  type CreditNoteReason,
+  type CreditNoteSettlement,
+  type ProviderCreditNote,
   type InvoiceLineInput,
   type InvoicingConnector,
   type InvoicingEvent,
@@ -865,6 +874,8 @@ export interface MemberInvoice {
   readonly standing: Exclude<InvoiceStandingWord, "draft" | "void">;
   readonly amountCents: string;
   readonly amountRemainingCents: string;
+  /** What has been credited back against it, summed over the notes issued. */
+  readonly creditedCents: string;
   readonly dueAt: string | null;
   readonly sentAt: string | null;
   readonly paidAt: string | null;
@@ -881,7 +892,10 @@ export async function memberInvoices(
 ): Promise<MemberInvoice[]> {
   const rows = await db.billingInvoice.findMany({
     where: { servicerId, status: { in: ["OPEN", "PAID", "UNCOLLECTIBLE"] } },
-    include: WITH_MONTH,
+    include: {
+      ...WITH_MONTH,
+      creditNotes: { where: { status: "ISSUED" }, select: { amountCents: true } },
+    },
     orderBy: { statement: { month: "desc" } },
   });
   return rows.map((r) => {
@@ -893,11 +907,317 @@ export async function memberInvoices(
       standing: v.standing as MemberInvoice["standing"],
       amountCents: v.amountCents,
       amountRemainingCents: v.amountRemainingCents,
+      creditedCents: r.creditNotes.reduce((n, c) => n + c.amountCents, 0n).toString(),
       dueAt: v.dueAt,
       sentAt: v.sentAt,
       paidAt: v.paidAt,
     };
   });
+}
+
+/* ── credit notes ────────────────────────────────────────────────────────── */
+
+export type CreditNoteStandingWord = "pending" | "issued" | "void";
+
+export interface CreditNoteView {
+  readonly id: string;
+  readonly invoiceId: string;
+  readonly number: string | null;
+  readonly standing: CreditNoteStandingWord;
+  /** False while our row waits for the provider to answer. */
+  readonly atProvider: boolean;
+  readonly amountCents: string;
+  readonly reason: CreditNoteReason;
+  readonly memo: string;
+  readonly settlement: BillingCreditSettlement;
+  readonly createdAt: string;
+  readonly createdBy: string;
+  readonly issuedAt: string | null;
+  readonly voidedAt: string | null;
+  readonly voidedBy: string | null;
+}
+
+const noteView = (n: BillingCreditNote): CreditNoteView => ({
+  id: n.id,
+  invoiceId: n.invoiceId,
+  number: n.number,
+  standing: n.status.toLowerCase() as CreditNoteStandingWord,
+  atProvider: n.providerCreditNoteId !== null,
+  amountCents: n.amountCents.toString(),
+  reason: n.reason as CreditNoteReason,
+  memo: n.memo,
+  settlement: n.settlement,
+  createdAt: n.createdAt.toISOString(),
+  createdBy: n.createdBy,
+  issuedAt: day(n.issuedAt),
+  voidedAt: day(n.voidedAt),
+  voidedBy: n.voidedBy,
+});
+
+const CREDIT_REASONS: readonly CreditNoteReason[] = [
+  "duplicate",
+  "fraudulent",
+  "order_change",
+  "product_unsatisfactory",
+];
+
+const SETTLEMENT_OF: Record<CreditNoteSettlement, BillingCreditSettlement> = {
+  customer_balance: "CUSTOMER_BALANCE",
+  refund: "REFUND",
+  out_of_band: "OUT_OF_BAND",
+};
+const SETTLEMENT_WORD: Partial<Record<BillingCreditSettlement, CreditNoteSettlement>> = {
+  CUSTOMER_BALANCE: "customer_balance",
+  REFUND: "refund",
+  OUT_OF_BAND: "out_of_band",
+};
+
+/** Every credit note on an invoice, newest first. */
+export async function listCreditNotes(
+  invoiceId: string,
+  db: Db = prisma,
+): Promise<CreditNoteView[]> {
+  const rows = await db.billingCreditNote.findMany({
+    where: { invoiceId },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map(noteView);
+}
+
+/** What the provider says onto our note. */
+async function applyCreditNote(
+  note: BillingCreditNote,
+  p: ProviderCreditNote,
+  db: Db,
+): Promise<BillingCreditNote> {
+  return db.billingCreditNote.update({
+    where: { id: note.id },
+    data: {
+      providerCreditNoteId: p.id,
+      number: p.number,
+      status: p.status === "void" ? "VOID" : "ISSUED",
+      livemode: p.livemode,
+      issuedAt: note.issuedAt ?? new Date(p.createdAt),
+      voidedAt: instant(p.voidedAt),
+      lastSyncedAt: new Date(),
+    },
+  });
+}
+
+/** Ask the provider for a note our row already describes, and write back what it answered. */
+async function issueAtProvider(
+  note: BillingCreditNote,
+  invoice: BillingInvoice,
+  db: Db,
+): Promise<BillingCreditNote> {
+  const invoicing = connectors().invoicing;
+  const p = await invoicing.issueCreditNote({
+    creditNoteId: note.id,
+    providerInvoiceId: invoice.providerInvoiceId!,
+    amountCents: note.amountCents,
+    reason: note.reason as CreditNoteReason,
+    memo: note.memo,
+    description: `Credit against invoice ${invoice.number ?? invoice.id}`,
+    settlement: SETTLEMENT_WORD[note.settlement] ?? null,
+    metadata: { hm_invoice_id: invoice.id, hm_servicer_id: invoice.servicerId },
+  });
+  return applyCreditNote(note, p, db);
+}
+
+/** Bring every note we hold on an invoice in line with the provider. */
+async function syncCreditNotesOf(invoiceId: string, cause: string, db: Db): Promise<void> {
+  void cause;
+  const invoicing = connectors().invoicing;
+  const notes = await db.billingCreditNote.findMany({
+    where: { invoiceId, providerCreditNoteId: { not: null } },
+  });
+  for (const note of notes) {
+    const p = await invoicing.retrieveCreditNote(note.providerCreditNoteId!);
+    if (p) await applyCreditNote(note, p, db);
+  }
+}
+
+/** A line in the invoice's history that is not a change of status: a credit issued or voided. */
+async function noteInHistory(
+  invoice: BillingInvoice,
+  cause: string,
+  note: string,
+  db: Db,
+): Promise<void> {
+  await db.billingInvoiceTransition.create({
+    data: {
+      invoiceId: invoice.id,
+      fromStatus: invoice.status,
+      toStatus: invoice.status,
+      cause,
+      note,
+    },
+  });
+}
+
+export interface IssueCreditNoteArgs {
+  readonly invoiceId: string;
+  readonly amountCents: bigint;
+  readonly reason: CreditNoteReason;
+  readonly memo: string;
+  /** Required on a paid invoice; must be absent on an open one. */
+  readonly settlement: CreditNoteSettlement | null;
+  readonly staffId: string;
+}
+
+/**
+ * Issue a credit note. On an open invoice it lowers what is due, and at
+ * nothing the invoice is paid; on a paid invoice it is settled the one way
+ * asked. Our row is written first, then the provider is asked under the
+ * row's id; a provider that does not answer leaves the row pending, and
+ * the reconciliation asks again.
+ */
+export async function issueCreditNote(
+  args: IssueCreditNoteArgs,
+  db: Db = prisma,
+): Promise<CreditNoteView> {
+  const invoice = await invoiceRow(args.invoiceId, db);
+  if (!invoice.providerInvoiceId || invoice.status === "DRAFT" || invoice.status === "VOID") {
+    throw new AppError(
+      409,
+      `An invoice that is ${invoiceStanding(invoice)} cannot be credited; a credit corrects one that was sent.`,
+      "NOT_CREDITABLE",
+    );
+  }
+  if (!CREDIT_REASONS.includes(args.reason)) {
+    throw new AppError(400, `A reason is one of ${CREDIT_REASONS.join(", ")}.`, "BAD_REASON");
+  }
+  const paid = invoice.status === "PAID";
+  if (paid && args.settlement === null) {
+    throw new AppError(
+      409,
+      "A credit on a paid invoice has to say how it is settled: the customer's balance, a refund, or a wire made outside Stripe.",
+      "SETTLEMENT_REQUIRED",
+    );
+  }
+  if (!paid && args.settlement !== null) {
+    throw new AppError(
+      409,
+      "A credit on an open invoice lowers what is due; it is not settled.",
+      "SETTLEMENT_NOT_ALLOWED",
+    );
+  }
+  // What is already credited: an issued note is in the provider's own
+  // figures for an open invoice and not for a paid one; a pending note is
+  // in neither yet, and counts against both.
+  const [issued, pending] = await Promise.all([
+    db.billingCreditNote.aggregate({
+      where: { invoiceId: invoice.id, status: "ISSUED" },
+      _sum: { amountCents: true },
+    }),
+    db.billingCreditNote.aggregate({
+      where: { invoiceId: invoice.id, status: "PENDING" },
+      _sum: { amountCents: true },
+    }),
+  ]);
+  const pendingCents = pending._sum.amountCents ?? 0n;
+  const ceiling = paid
+    ? invoice.amountPaidCents - (issued._sum.amountCents ?? 0n) - pendingCents
+    : invoice.amountRemainingCents - pendingCents;
+  if (args.amountCents <= 0n || args.amountCents > ceiling) {
+    throw new AppError(
+      409,
+      `A credit on this invoice is between $0.01 and ${dollars(ceiling)}.`,
+      "BAD_CREDIT_AMOUNT",
+      { ceilingCents: ceiling.toString() },
+    );
+  }
+  const row = await db.billingCreditNote.create({
+    data: {
+      invoiceId: invoice.id,
+      servicerId: invoice.servicerId,
+      provider: invoice.provider,
+      livemode: invoice.livemode,
+      status: "PENDING",
+      amountCents: args.amountCents,
+      reason: args.reason,
+      memo: args.memo,
+      settlement: args.settlement === null ? "REDUCES_AMOUNT_DUE" : SETTLEMENT_OF[args.settlement],
+      createdBy: args.staffId,
+    },
+  });
+  const cause = `staff:${args.staffId}`;
+  const issuedNote = await atProvider(() => issueAtProvider(row, invoice, db));
+  await noteInHistory(
+    invoice,
+    cause,
+    `credit note ${issuedNote.number ?? issuedNote.id} issued for ${dollars(args.amountCents)}: ${args.memo}`,
+    db,
+  );
+  // The invoice follows: less due, or paid at nothing.
+  await syncInvoice({ invoiceId: invoice.id, cause }, db);
+  return noteView(issuedNote);
+}
+
+/** Void a credit note. The provider allows it only while the invoice is still open. */
+export async function voidCreditNote(
+  args: { readonly creditNoteId: string; readonly staffId: string; readonly reason: string },
+  db: Db = prisma,
+): Promise<CreditNoteView> {
+  const note = await db.billingCreditNote.findUnique({
+    where: { id: args.creditNoteId },
+    include: { invoice: true },
+  });
+  if (!note) throw new AppError(404, "No such credit note.", "NOT_FOUND");
+  if (note.status !== "ISSUED" || !note.providerCreditNoteId) {
+    throw new AppError(
+      409,
+      `A credit note that is ${note.status.toLowerCase()} cannot be voided.`,
+      "NOT_VOIDABLE",
+    );
+  }
+  if (note.invoice.status !== "OPEN") {
+    throw new AppError(
+      409,
+      "A credit note can be voided only while its invoice is open; once the invoice is paid, the credit stands.",
+      "NOT_VOIDABLE",
+    );
+  }
+  const invoicing = connectors().invoicing;
+  const p = await atProvider(() => invoicing.voidCreditNote(note.providerCreditNoteId!, note.id));
+  const updated = await db.billingCreditNote.update({
+    where: { id: note.id },
+    data: {
+      status: p.status === "void" ? "VOID" : "ISSUED",
+      voidedAt: instant(p.voidedAt) ?? new Date(),
+      voidedBy: args.staffId,
+      lastSyncedAt: new Date(),
+    },
+  });
+  const cause = `staff:${args.staffId}`;
+  await noteInHistory(
+    note.invoice,
+    cause,
+    `credit note ${note.number ?? note.id} voided: ${args.reason}`,
+    db,
+  );
+  await syncInvoice({ invoiceId: note.invoiceId, cause }, db);
+  return noteView(updated);
+}
+
+/** The note's PDF, read fresh. `servicerId` narrows it to a servicer's own; a stranger's is a 404. */
+export async function creditNoteLink(
+  args: { readonly creditNoteId: string; readonly servicerId?: string },
+  db: Db = prisma,
+): Promise<{ readonly pdfUrl: string }> {
+  const note = await db.billingCreditNote.findUnique({ where: { id: args.creditNoteId } });
+  if (
+    !note ||
+    (args.servicerId !== undefined && note.servicerId !== args.servicerId) ||
+    !note.providerCreditNoteId
+  ) {
+    throw new AppError(404, "No such credit note.", "NOT_FOUND");
+  }
+  const invoicing = connectors().invoicing;
+  const p = await atProvider(() => invoicing.retrieveCreditNote(note.providerCreditNoteId!));
+  if (!p?.pdfUrl)
+    throw new AppError(502, "The provider has no PDF for this credit note.", "INVOICING_PROVIDER");
+  return { pdfUrl: p.pdfUrl };
 }
 
 /* ── the provider's deliveries ───────────────────────────────────────────── */
@@ -945,6 +1265,9 @@ async function processEvent(
     const extra: Prisma.BillingInvoiceUpdateInput =
       row.type === "invoice.sent" && ours.sentAt === null ? { sentAt: row.providerCreatedAt } : {};
     await apply(ours, p, `event:${row.eventId}`, extra, row.type, db);
+    // A credit note's event: bring every note we hold on the invoice in line too.
+    if (row.type.startsWith("credit_note."))
+      await syncCreditNotesOf(ours.id, `event:${row.eventId}`, db);
     return await done("applied");
   } catch (err) {
     await db.billingProviderEvent.update({
@@ -1021,6 +1344,8 @@ export interface ReconcileReport {
     readonly changed: number;
     readonly failed: number;
   };
+  /** Pending notes asked for again, and issued notes on open invoices re-read. */
+  readonly creditNotes: { readonly retried: number; readonly checked: number };
   /** Rows the provider never answered for, older than a quarter of an hour. */
   readonly stranded: readonly string[];
 }
@@ -1077,6 +1402,34 @@ export async function reconcileInvoices(
     }
   }
 
+  // Credit notes: a pending one is asked for again under the same id, and
+  // an issued one on an invoice still open is re-read, since it could have
+  // been voided at the provider.
+  let notesRetried = 0;
+  const pendingNotes = await db.billingCreditNote.findMany({
+    where: { status: "PENDING", createdAt: { lt: new Date(now.getTime() - 60_000) } },
+    include: { invoice: true },
+  });
+  for (const note of pendingNotes) {
+    try {
+      await issueAtProvider(note, note.invoice, db);
+      notesRetried += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  const openNotes = await db.billingCreditNote.findMany({
+    where: { status: "ISSUED", providerCreditNoteId: { not: null }, invoice: { status: "OPEN" } },
+  });
+  for (const note of openNotes) {
+    try {
+      const p = await invoicing.retrieveCreditNote(note.providerCreditNoteId!);
+      if (p) await applyCreditNote(note, p, db);
+    } catch {
+      failed += 1;
+    }
+  }
+
   const stranded = await db.billingInvoice.findMany({
     where: {
       providerInvoiceId: null,
@@ -1088,6 +1441,7 @@ export async function reconcileInvoices(
   return {
     events: { retried: pending.length, settled, stillFailing: pending.length - settled },
     invoices: { checked: moving.length, changed, failed },
+    creditNotes: { retried: notesRetried, checked: openNotes.length },
     stranded: stranded.map((r) => r.id),
   };
 }

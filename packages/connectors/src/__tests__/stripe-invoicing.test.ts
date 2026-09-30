@@ -442,6 +442,7 @@ describe("a delivered event", () => {
       livemode: false,
       apiVersion: STRIPE_INVOICING_API_VERSION,
       invoiceId: "in_1",
+      creditNoteId: null,
     });
   });
 
@@ -462,6 +463,24 @@ describe("a delivered event", () => {
     expect(() => c.readEvent(payload, header(payload))).toThrow(InvoicingNotConfiguredError);
   });
 
+  it("names both the note and its invoice when it is about a credit note", () => {
+    const note = JSON.stringify({
+      id: "evt_3",
+      object: "event",
+      api_version: STRIPE_INVOICING_API_VERSION,
+      created: 1_790_000_000,
+      livemode: false,
+      type: "credit_note.created",
+      data: { object: { id: "cn_1", object: "credit_note", invoice: "in_1" } },
+    });
+    const c = stripeInvoicingConnector({ apiKey: KEY, webhookSecret: SECRET });
+    expect(c.readEvent(note, header(note))).toMatchObject({
+      type: "credit_note.created",
+      invoiceId: "in_1",
+      creditNoteId: "cn_1",
+    });
+  });
+
   it("names no invoice when it is about something else", () => {
     const other = JSON.stringify({
       id: "evt_2",
@@ -474,5 +493,144 @@ describe("a delivered event", () => {
     });
     const c = stripeInvoicingConnector({ apiKey: KEY, webhookSecret: SECRET });
     expect(c.readEvent(other, header(other)).invoiceId).toBeNull();
+  });
+});
+
+describe("a credit note", () => {
+  const OUR_NOTE = "5d2c1e0a-2222-4333-8444-555566667777";
+  const noteJson = (over: Record<string, unknown> = {}) => ({
+    id: "cn_1",
+    object: "credit_note",
+    invoice: "in_1",
+    number: "ABCD-0001-CN01",
+    status: "issued",
+    amount: 1000,
+    refunds: [],
+    customer_balance_transaction: null,
+    out_of_band_amount: null,
+    created: 1_790_000_000,
+    voided_at: null,
+    pdf: "https://pay.stripe.com/credit_notes/x/pdf",
+    livemode: false,
+    metadata: { hm_credit_note_id: OUR_NOTE },
+    ...over,
+  });
+  const emptyNotes = { object: "list", data: [], has_more: false, url: "/v1/credit_notes" };
+  const base = {
+    creditNoteId: OUR_NOTE,
+    providerInvoiceId: "in_1",
+    amountCents: 1000n,
+    reason: "order_change" as const,
+    memo: "Two loans were double counted.",
+    description: "Credit against invoice ABCD-0001",
+    metadata: { hm_invoice_id: "our-invoice" },
+  };
+
+  it("lowers an open invoice with a custom line, under our key, and is found before it is made again", async () => {
+    const { seen, fetchImpl } = stub((req) =>
+      req.method === "GET" ? { json: emptyNotes } : { json: noteJson() },
+    );
+    const c = stripeInvoicingConnector({ apiKey: KEY, fetchImpl });
+    const made = await c.issueCreditNote({ ...base, settlement: null });
+    expect(seen.map((r) => `${r.method} ${r.path}`)).toEqual([
+      "GET /v1/credit_notes",
+      "POST /v1/credit_notes",
+    ]);
+    expect(seen[0]!.query.get("invoice")).toBe("in_1");
+    const create = seen[1]!;
+    expect(create.headers.get("idempotency-key")).toBe(`hm-invoice-${OUR_NOTE}-credit-create`);
+    expect(create.body.get("invoice")).toBe("in_1");
+    expect(create.body.get("lines[0][type]")).toBe("custom_line_item");
+    expect(create.body.get("lines[0][description]")).toBe("Credit against invoice ABCD-0001");
+    expect(create.body.get("lines[0][unit_amount]")).toBe("1000");
+    expect(create.body.get("lines[0][quantity]")).toBe("1");
+    expect(create.body.get("reason")).toBe("order_change");
+    expect(create.body.get("memo")).toBe("Two loans were double counted.");
+    expect(create.body.get("metadata[hm_credit_note_id]")).toBe(OUR_NOTE);
+    expect(create.body.get("metadata[hm_invoice_id]")).toBe("our-invoice");
+    // An open invoice's credit is not settled: nothing is refunded or credited.
+    for (const k of ["credit_amount", "refund_amount", "out_of_band_amount"]) {
+      expect(create.body.has(k)).toBe(false);
+    }
+    expect(made).toMatchObject({
+      id: "cn_1",
+      invoiceId: "in_1",
+      number: "ABCD-0001-CN01",
+      status: "issued",
+      amountCents: 1000n,
+      refundedCents: 0n,
+      creditedToBalance: false,
+      outOfBandCents: 0n,
+      pdfUrl: "https://pay.stripe.com/credit_notes/x/pdf",
+    });
+
+    const again = stub(() => ({ json: { ...emptyNotes, data: [noteJson()] } }));
+    const d = stripeInvoicingConnector({ apiKey: KEY, fetchImpl: again.fetchImpl });
+    expect((await d.issueCreditNote({ ...base, settlement: null })).id).toBe("cn_1");
+    expect(again.seen.map((r) => r.method)).toEqual(["GET"]);
+  });
+
+  it("settles a paid invoice's credit the one way asked: the balance, a refund, or outside", async () => {
+    for (const [settlement, field] of [
+      ["customer_balance", "credit_amount"],
+      ["refund", "refund_amount"],
+      ["out_of_band", "out_of_band_amount"],
+    ] as const) {
+      const { seen, fetchImpl } = stub((req) =>
+        req.method === "GET" ? { json: emptyNotes } : { json: noteJson() },
+      );
+      const c = stripeInvoicingConnector({ apiKey: KEY, fetchImpl });
+      await c.issueCreditNote({ ...base, settlement });
+      const create = seen[1]!;
+      expect(create.body.get(field)).toBe("1000");
+      for (const other of ["credit_amount", "refund_amount", "out_of_band_amount"]) {
+        if (other !== field) expect(create.body.has(other)).toBe(false);
+      }
+    }
+  });
+
+  it("reads the settlement back as Stripe reports it", async () => {
+    const { fetchImpl } = stub(() => ({
+      json: noteJson({
+        refunds: [{ amount_refunded: 600 }],
+        out_of_band_amount: 400,
+        customer_balance_transaction: null,
+      }),
+    }));
+    const c = stripeInvoicingConnector({ apiKey: KEY, fetchImpl });
+    const read = await c.retrieveCreditNote("cn_1");
+    expect(read).toMatchObject({
+      refundedCents: 600n,
+      outOfBandCents: 400n,
+      creditedToBalance: false,
+    });
+    const credited = stub(() => ({ json: noteJson({ customer_balance_transaction: "cbtxn_1" }) }));
+    const d = stripeInvoicingConnector({ apiKey: KEY, fetchImpl: credited.fetchImpl });
+    expect((await d.retrieveCreditNote("cn_1"))?.creditedToBalance).toBe(true);
+  });
+
+  it("voids under its own key, and answers null for a note Stripe does not hold", async () => {
+    const { seen, fetchImpl } = stub(() => ({
+      json: noteJson({ status: "void", voided_at: 1_790_100_000 }),
+    }));
+    const c = stripeInvoicingConnector({ apiKey: KEY, fetchImpl });
+    const voided = await c.voidCreditNote("cn_1", OUR_NOTE);
+    expect(`${seen[0]!.method} ${seen[0]!.path}`).toBe("POST /v1/credit_notes/cn_1/void");
+    expect(seen[0]!.headers.get("idempotency-key")).toBe(`hm-invoice-${OUR_NOTE}-credit-void`);
+    expect(voided.status).toBe("void");
+    expect(voided.voidedAt).toBe(new Date(1_790_100_000 * 1000).toISOString());
+
+    const missing = stub(() => ({
+      status: 404,
+      json: {
+        error: {
+          type: "invalid_request_error",
+          code: "resource_missing",
+          message: "No such credit note",
+        },
+      },
+    }));
+    const d = stripeInvoicingConnector({ apiKey: KEY, fetchImpl: missing.fetchImpl });
+    expect(await d.retrieveCreditNote("cn_nope")).toBeNull();
   });
 });

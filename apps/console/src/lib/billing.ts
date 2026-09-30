@@ -183,6 +183,41 @@ export interface InvoiceView {
   readonly lastSyncedAt: string | null;
 }
 
+export type CreditNoteReason =
+  "duplicate" | "fraudulent" | "order_change" | "product_unsatisfactory";
+export type CreditNoteSettlement = "customer_balance" | "refund" | "out_of_band";
+
+export const CREDIT_REASON_WORDS: Record<CreditNoteReason, string> = {
+  duplicate: "Charged twice",
+  order_change: "The charge changed",
+  product_unsatisfactory: "The service fell short",
+  fraudulent: "Fraudulent",
+};
+
+export const SETTLEMENT_WORDS: Record<string, string> = {
+  REDUCES_AMOUNT_DUE: "Less due on this invoice",
+  CUSTOMER_BALANCE: "Credit on the next invoice",
+  REFUND: "Refunded through Stripe",
+  OUT_OF_BAND: "Refunded outside Stripe",
+};
+
+export interface CreditNoteView {
+  readonly id: string;
+  readonly invoiceId: string;
+  readonly number: string | null;
+  readonly standing: "pending" | "issued" | "void";
+  readonly atProvider: boolean;
+  readonly amountCents: string;
+  readonly reason: CreditNoteReason;
+  readonly memo: string;
+  readonly settlement: "REDUCES_AMOUNT_DUE" | "CUSTOMER_BALANCE" | "REFUND" | "OUT_OF_BAND";
+  readonly createdAt: string;
+  readonly createdBy: string;
+  readonly issuedAt: string | null;
+  readonly voidedAt: string | null;
+  readonly voidedBy: string | null;
+}
+
 export interface InvoicingStanding {
   readonly provider: string;
   readonly mode: "fixture" | "sandbox" | "production";

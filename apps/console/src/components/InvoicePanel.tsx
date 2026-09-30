@@ -7,7 +7,9 @@
  */
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Sheet } from "./Sheet.js";
+import { CreditNoteList, CreditNoteSheet } from "./CreditNotes.js";
 import { Button, Notice, Pill, Rows, Textarea, type Tone } from "./ui.js";
 import { useAct } from "../lib/act.js";
 import { useToast } from "./Toast.js";
@@ -20,6 +22,7 @@ import {
   paymentMethodWord,
   tokensWord,
   type BillingProfile,
+  type CreditNoteView,
   type InvoiceLink,
   type InvoiceStandingWord,
   type InvoiceView,
@@ -201,9 +204,34 @@ export function InvoicePanel({
   const paid = useAct({ invalidate, done: "Recorded" });
   const sync = useAct({ invalidate, done: "Read again" });
   const toast = useToast();
-  const [sheet, setSheet] = useState<"review" | "void" | "paid" | null>(null);
+  const [sheet, setSheet] = useState<"review" | "void" | "paid" | "credit" | null>(null);
 
   const live = invoice && invoice.standing !== "void" ? invoice : null;
+  const creditable =
+    live?.atProvider === true &&
+    ["open", "sent", "past_due", "paid", "uncollectible"].includes(live.standing);
+  const notes = useQuery({
+    queryKey: ["billing-credit-notes", live?.id ?? "none"],
+    queryFn: () =>
+      billing<{ creditNotes: CreditNoteView[] }>(`/invoices/${live!.id}/credit-notes`).then(
+        (r) => r.creditNotes,
+      ),
+    enabled: creditable,
+  });
+  const noteList = notes.data ?? [];
+  // What can still be credited: what is due on an open invoice, or what was
+  // paid less what is already credited on a paid one; a pending note counts.
+  const creditedCents = noteList
+    .filter((n) => n.standing !== "void")
+    .reduce((sum, n) => sum + BigInt(n.amountCents), 0n);
+  const ceilingCents = live
+    ? live.standing === "paid"
+      ? BigInt(live.amountPaidCents) - creditedCents
+      : BigInt(live.amountRemainingCents) -
+        noteList
+          .filter((n) => n.standing === "pending")
+          .reduce((sum, n) => sum + BigInt(n.amountCents), 0n)
+    : 0n;
   const nothing = BigInt(statement.cents) <= 0n;
   const tooMuch = BigInt(statement.cents) > BigInt(invoicing.maxInvoiceCents);
   const cannotDraft = !invoicing.canIssue
@@ -293,6 +321,11 @@ export function InvoicePanel({
               </Button>
             </>
           ) : null}
+          {creditable && ceilingCents > 0n ? (
+            <Button variant="secondary" onClick={() => setSheet("credit")}>
+              Credit…
+            </Button>
+          ) : null}
           {live?.atProvider && live.standing !== "draft" ? (
             <Button
               variant="ghost"
@@ -316,6 +349,9 @@ export function InvoicePanel({
           <Rows
             rows={[
               { label: "Amount", value: money(live.amountCents) },
+              ...(creditedCents > 0n
+                ? [{ label: "Credited", value: money(creditedCents.toString()) }]
+                : []),
               ...(live.standing !== "draft"
                 ? [
                     {
@@ -350,6 +386,7 @@ export function InvoicePanel({
                 : []),
             ]}
           />
+          {live.atProvider ? <CreditNoteList slug={slug} invoice={live} notes={noteList} /> : null}
         </div>
       ) : cannotDraft && !nothing ? (
         <Notice tone="neutral" className="mt-4">
@@ -399,6 +436,14 @@ export function InvoicePanel({
               })
               .then((ok) => ok && setSheet(null))
           }
+        />
+      ) : null}
+      {sheet === "credit" && live ? (
+        <CreditNoteSheet
+          slug={slug}
+          invoice={live}
+          ceilingCents={ceilingCents}
+          onClose={() => setSheet(null)}
         />
       ) : null}
       {sheet === "paid" && live ? (

@@ -3574,7 +3574,27 @@ row. Paid is not terminal.
 
 **Refused, by design.** A month that consumed nothing. A month above
 $999,999.99, Stripe's ceiling on a single bank payment. Voiding a paid
-invoice, which is a credit note and a refund and not built. Sending twice.
+invoice, which is a credit note. Sending twice.
+
+**A credit note corrects what was sent or paid (30 September, later the
+same day).** An invoice that has been sent is never edited and one that has
+been paid is never voided; the correction is a credit note, issued by a
+named admin with one of Stripe's four reasons and a memo the customer
+reads, and Stripe sends the customer the note. On an open invoice it
+lowers what is due, and an invoice credited to nothing is paid. On a paid
+invoice the money has moved, so the credit is settled one way, chosen at
+issue and recorded: a credit on the customer's balance that comes off
+their next invoice, a refund of the payment through Stripe, or a refund
+made outside it by wire. A note can be voided only while its invoice is
+still open, which is Stripe's rule and ours. `billing_credit_notes` holds
+each note; our row is written first as `PENDING` and the provider is asked
+under the row's id, so a provider that did not answer is asked again by
+the reconciliation under the same key and the adapter finds the note it
+already made. The ceiling on a credit counts pending notes, so two
+presses cannot over-credit. Each issue and void is a line on the invoice's
+history. The servicer's team sees what was credited and each note's PDF.
+Stripe's sandbox walked it (`billing:smoke`): issued, found again on
+retry, voided, the amount due down and back.
 
 **Held to.** `stripe-invoicing.test.ts` asserts the wire against a stub of
 Stripe's API: every parameter, the version header, each idempotency key,

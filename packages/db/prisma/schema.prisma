@@ -1907,11 +1907,68 @@ model BillingInvoice {
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   transitions BillingInvoiceTransition[]
+  creditNotes BillingCreditNote[]
 
   @@unique([statementId, attempt], map: "billing_invoices_statement_attempt")
   @@index([servicerId], map: "billing_invoices_servicer")
   @@index([status], map: "billing_invoices_status")
   @@map("billing_invoices")
+}
+
+/// Where a credit note stands. PENDING is ours alone: the row is written
+/// before the provider is asked, and stays that way when the provider did
+/// not answer, so the reconciliation can ask again under the same id.
+enum BillingCreditNoteStatus {
+  PENDING
+  ISSUED
+  VOID
+}
+
+/// How a credit note is settled. On an open invoice it lowers what is
+/// due; on a paid one the money has moved, and the credit goes to the
+/// customer's balance (off the next invoice), back as a refund through the
+/// provider, or back by a wire made outside it. One kind per note.
+enum BillingCreditSettlement {
+  REDUCES_AMOUNT_DUE
+  CUSTOMER_BALANCE
+  REFUND
+  OUT_OF_BAND
+}
+
+/// The correction to an invoice that has been sent or paid, which is never
+/// edited and never voided once money has moved: a credit note, issued by
+/// a named admin with a reason the customer reads. Read back from the
+/// provider like the invoice is; the invoice's own row follows.
+model BillingCreditNote {
+  id         String         @id @default(uuid()) @db.Uuid
+  invoiceId  String         @map("invoice_id") @db.Uuid
+  invoice    BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  servicerId String         @map("servicer_id") @db.Uuid
+
+  provider             String
+  livemode             Boolean
+  providerCreditNoteId String? @unique @map("provider_credit_note_id")
+  number               String?
+
+  status      BillingCreditNoteStatus @default(PENDING)
+  amountCents BigInt                  @map("amount_cents")
+  /// The provider's reason vocabulary: duplicate, fraudulent, order_change, product_unsatisfactory.
+  reason      String
+  /// What the customer reads on the note.
+  memo        String
+  settlement  BillingCreditSettlement
+
+  createdBy    String    @map("created_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  issuedAt     DateTime? @map("issued_at")
+  voidedAt     DateTime? @map("voided_at")
+  voidedBy     String?   @map("voided_by")
+  lastSyncedAt DateTime? @map("last_synced_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([invoiceId], map: "billing_credit_notes_invoice")
+  @@index([servicerId], map: "billing_credit_notes_servicer")
+  @@map("billing_credit_notes")
 }
 
 /// Every change of an invoice's status, and what caused it: a staff id, a

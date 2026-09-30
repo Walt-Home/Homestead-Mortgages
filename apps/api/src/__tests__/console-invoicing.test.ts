@@ -27,6 +27,7 @@ import {
   invoiceLink,
   memberInvoices,
   reconcileInvoices,
+  type CreditNoteView,
   type InvoiceView,
 } from "../services/billing-invoices.js";
 import { connectors } from "../services/connectors.js";
@@ -575,5 +576,228 @@ describe("the provider's deliveries", () => {
     expect(row.paidOutOfBand).toBe(false);
     const synced = await call<{ invoice: InvoiceView }>("POST", `/invoices/${invoice.id}/sync`);
     expect(synced.body.invoice.standing).toBe("sent");
+  });
+});
+
+describe("a credit note", () => {
+  async function sentInvoice() {
+    const made = await profiled();
+    const invoice = (await draftAugust()).body.invoice;
+    await call("POST", `/invoices/${invoice.id}/send`);
+    const row = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    return { ...made, invoice, providerId: row.providerInvoiceId!, cents: BigInt(made.cents) };
+  }
+  const credit = (invoiceId: string, body: Record<string, unknown>) =>
+    call<{ creditNote: CreditNoteView; error?: { code: string; message: string } }>(
+      "POST",
+      `/invoices/${invoiceId}/credit-notes`,
+      body,
+    );
+
+  it("lowers an open invoice, is on its history, and the servicer's team sees the credit", async () => {
+    const { invoice, servicer, cents } = await sentInvoice();
+    const r = await credit(invoice.id, {
+      amountCents: "1000",
+      reason: "order_change",
+      memo: "One loan was on the tape twice.",
+    });
+    expect(r.status).toBe(201);
+    expect(r.body.creditNote).toMatchObject({
+      standing: "issued",
+      atProvider: true,
+      amountCents: "1000",
+      reason: "order_change",
+      settlement: "REDUCES_AMOUNT_DUE",
+      createdBy: "staff-admin",
+      number: expect.stringMatching(/-CN01$/),
+    });
+    const after = await call<{ invoices: InvoiceView[] }>("GET", `/servicers/${SLUG}`);
+    expect(after.body.invoices[0]).toMatchObject({
+      standing: "sent",
+      amountCents: cents.toString(),
+      amountRemainingCents: (cents - 1000n).toString(),
+    });
+    const history = await call<{ history: { to: string; note: string | null }[] }>(
+      "GET",
+      `/invoices/${invoice.id}/history`,
+    );
+    expect(history.body.history.at(-1)?.note).toMatch(
+      /^credit note .* issued for \$10\.00: One loan/,
+    );
+    const list = await call<{ creditNotes: CreditNoteView[] }>(
+      "GET",
+      `/invoices/${invoice.id}/credit-notes`,
+    );
+    expect(list.body.creditNotes).toHaveLength(1);
+    const link = await call<{ pdfUrl: string }>(
+      "GET",
+      `/credit-notes/${r.body.creditNote.id}/link`,
+    );
+    expect(link.body.pdfUrl).toMatch(/\.pdf$/);
+    expect((await memberInvoices(servicer.id))[0]).toMatchObject({ creditedCents: "1000" });
+  });
+
+  it("credits an open invoice to nothing, and the invoice is paid", async () => {
+    const { invoice, cents } = await sentInvoice();
+    const r = await credit(invoice.id, {
+      amountCents: cents.toString(),
+      reason: "product_unsatisfactory",
+      memo: "The month is waived.",
+    });
+    expect(r.status).toBe(201);
+    const row = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(row.status).toBe("PAID");
+    expect(row.amountRemainingCents).toBe(0n);
+  });
+
+  it("refuses more than is owed, a settlement on an open invoice, and any credit on a draft", async () => {
+    const { invoice, cents } = await sentInvoice();
+    const over = await credit(invoice.id, {
+      amountCents: (cents + 1n).toString(),
+      reason: "order_change",
+      memo: "Too much.",
+    });
+    expect(over.status).toBe(409);
+    expect(over.body.error?.code).toBe("BAD_CREDIT_AMOUNT");
+    const settled = await credit(invoice.id, {
+      amountCents: "100",
+      reason: "order_change",
+      memo: "Wrongly settled.",
+      settlement: "refund",
+    });
+    expect(settled.body.error?.code).toBe("SETTLEMENT_NOT_ALLOWED");
+    expect(
+      (await credit(invoice.id, { amountCents: "100", reason: "nope", memo: "Bad reason." }))
+        .status,
+    ).toBe(400);
+    expect(await prisma.billingCreditNote.count()).toBe(0);
+
+    await call("POST", `/invoices/${invoice.id}/void`, { reason: "Start over." });
+    const draft = (await draftAugust()).body.invoice;
+    const onDraft = await credit(draft.id, {
+      amountCents: "100",
+      reason: "order_change",
+      memo: "On a draft.",
+    });
+    expect(onDraft.status).toBe(409);
+    expect(onDraft.body.error?.code).toBe("NOT_CREDITABLE");
+  });
+
+  it("settles a credit on a paid invoice the one way asked, and never beyond what was paid", async () => {
+    const { invoice, providerId, cents } = await sentInvoice();
+    fixture().settle(providerId);
+    await reconcileInvoices();
+    const unsettled = await credit(invoice.id, {
+      amountCents: "500",
+      reason: "duplicate",
+      memo: "Charged twice.",
+    });
+    expect(unsettled.status).toBe(409);
+    expect(unsettled.body.error?.code).toBe("SETTLEMENT_REQUIRED");
+    const balance = await credit(invoice.id, {
+      amountCents: "500",
+      reason: "duplicate",
+      memo: "Charged twice; off the next invoice.",
+      settlement: "customer_balance",
+    });
+    expect(balance.status).toBe(201);
+    expect(balance.body.creditNote.settlement).toBe("CUSTOMER_BALANCE");
+    // The invoice stays paid, and the credit stands: it cannot be voided now.
+    const row = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(row.status).toBe("PAID");
+    const voidIt = await call<{ error: { code: string } }>(
+      "POST",
+      `/credit-notes/${balance.body.creditNote.id}/void`,
+      { reason: "Changed my mind." },
+    );
+    expect(voidIt.status).toBe(409);
+    // What was paid, less what has been credited, is the ceiling.
+    const rest = await credit(invoice.id, {
+      amountCents: cents.toString(),
+      reason: "duplicate",
+      memo: "All of it.",
+      settlement: "out_of_band",
+    });
+    expect(rest.status).toBe(409);
+    expect(rest.body.error?.code).toBe("BAD_CREDIT_AMOUNT");
+  });
+
+  it("is voided while the invoice is open, and the invoice's amount comes back", async () => {
+    const { invoice, cents } = await sentInvoice();
+    const note = (
+      await credit(invoice.id, { amountCents: "1000", reason: "order_change", memo: "Oops." })
+    ).body.creditNote;
+    const voided = await call<{ creditNote: CreditNoteView }>(
+      "POST",
+      `/credit-notes/${note.id}/void`,
+      {
+        reason: "Issued against the wrong month.",
+      },
+    );
+    expect(voided.status).toBe(200);
+    expect(voided.body.creditNote).toMatchObject({ standing: "void", voidedBy: "staff-admin" });
+    const row = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(row.amountRemainingCents).toBe(cents);
+    expect((await call("POST", `/credit-notes/${note.id}/void`, { reason: "Again." })).status).toBe(
+      409,
+    );
+  });
+
+  it("stays pending when the provider does not answer, and the reconciliation issues it", async () => {
+    const { invoice, cents } = await sentInvoice();
+    fixture().failNext("issueCreditNote");
+    const failed = await credit(invoice.id, {
+      amountCents: "1000",
+      reason: "order_change",
+      memo: "Pending.",
+    });
+    expect(failed.status).toBe(502);
+    const pending = await prisma.billingCreditNote.findFirstOrThrow();
+    expect(pending.status).toBe("PENDING");
+    expect(pending.providerCreditNoteId).toBeNull();
+    // A pending note counts against the ceiling, so it cannot be issued twice by hand.
+    const twice = await credit(invoice.id, {
+      amountCents: cents.toString(),
+      reason: "order_change",
+      memo: "Twice.",
+    });
+    expect(twice.body.error?.code).toBe("BAD_CREDIT_AMOUNT");
+
+    await prisma.billingCreditNote.update({
+      where: { id: pending.id },
+      data: { createdAt: new Date(Date.now() - 5 * 60_000) },
+    });
+    const report = await reconcileInvoices();
+    expect(report.creditNotes.retried).toBe(1);
+    const issued = await prisma.billingCreditNote.findUniqueOrThrow({ where: { id: pending.id } });
+    expect(issued.status).toBe("ISSUED");
+    expect(issued.providerCreditNoteId).not.toBeNull();
+    expect(fixture().writes.filter((w) => w.endsWith(`${pending.id}-credit-create`))).toHaveLength(
+      1,
+    );
+  });
+
+  it("follows a credit note the provider voided, by its delivery", async () => {
+    const { invoice } = await sentInvoice();
+    const note = (
+      await credit(invoice.id, {
+        amountCents: "1000",
+        reason: "order_change",
+        memo: "Voided at Stripe.",
+      })
+    ).body.creditNote;
+    const row = await prisma.billingCreditNote.findUniqueOrThrow({ where: { id: note.id } });
+    await fixture().voidCreditNote(row.providerCreditNoteId!, note.id);
+    const inv = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    const ev = fixture().event(
+      "credit_note.voided",
+      inv.providerInvoiceId,
+      undefined,
+      row.providerCreditNoteId,
+    );
+    expect((await deliver(ev.body, ev.signature)).body.outcome).toBe("applied");
+    const after = await prisma.billingCreditNote.findUniqueOrThrow({ where: { id: note.id } });
+    expect(after.status).toBe("VOID");
+    expect(after.voidedAt).not.toBeNull();
   });
 });

@@ -200,10 +200,19 @@ export interface PortalInvoice {
     standing: "open" | "sent" | "past_due" | "paid" | "uncollectible";
     amountCents: string;
     amountRemainingCents: string;
+    creditedCents: string;
     dueAt: string | null;
     sentAt: string | null;
     paidAt: string | null;
   } | null;
+}
+
+export interface PortalCreditNote {
+  id: string;
+  number: string | null;
+  amountCents: string;
+  memo: string;
+  issuedAt: string | null;
 }
 
 export interface PortalBilling {

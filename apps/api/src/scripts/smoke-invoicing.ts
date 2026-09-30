@@ -82,11 +82,51 @@ async function main(): Promise<void> {
   const read = await invoicing.retrieveInvoice(draft.id);
   console.log(`read       ${read?.status} remaining=${read?.amountRemainingCents}`);
 
+  // A credit on the open invoice lowers what is due; voided, it comes back.
+  const noteId = randomUUID();
+  const note = await invoicing.issueCreditNote({
+    creditNoteId: noteId,
+    providerInvoiceId: draft.id,
+    amountCents: 234n,
+    reason: "order_change",
+    memo: "Smoke test: a credit.",
+    description: "Credit against the smoke-test invoice",
+    settlement: null,
+    metadata: { hm_smoke_test: "true" },
+  });
+  console.log(
+    `credit     ${note.id} ${note.status} number=${note.number} amount=${note.amountCents} pdf=${note.pdfUrl ? "yes" : "no"}`,
+  );
+  if (note.status !== "issued" || note.amountCents !== 234n) throw new Error("credit is wrong");
+  const lessDue = await invoicing.retrieveInvoice(draft.id);
+  if (lessDue?.amountRemainingCents !== 1000n)
+    throw new Error(`remaining should be 1000, is ${lessDue?.amountRemainingCents}`);
+  console.log(`less due   remaining=${lessDue.amountRemainingCents}`);
+  const noteAgain = await invoicing.issueCreditNote({
+    creditNoteId: noteId,
+    providerInvoiceId: draft.id,
+    amountCents: 234n,
+    reason: "order_change",
+    memo: "Smoke test: a credit.",
+    description: "Credit against the smoke-test invoice",
+    settlement: null,
+    metadata: { hm_smoke_test: "true" },
+  });
+  if (noteAgain.id !== note.id) throw new Error("a retry made a second credit note");
+  console.log(`retry      found ${noteAgain.id} again, no second credit note`);
+  const noteVoided = await invoicing.voidCreditNote(note.id, noteId);
+  const backDue = await invoicing.retrieveInvoice(draft.id);
+  console.log(`credit void ${noteVoided.status}; remaining=${backDue?.amountRemainingCents}`);
+  if (noteVoided.status !== "void" || backDue?.amountRemainingCents !== 1234n)
+    throw new Error("credit void is wrong");
+
   const voided = await invoicing.voidInvoice(draft.id, run);
   console.log(`voided     ${voided.status} at ${voided.voidedAt}`);
   if (voided.status !== "void") throw new Error("void is wrong");
 
-  console.log("the walk held: customer, draft, idempotent retry, send, read, void");
+  console.log(
+    "the walk held: customer, draft, idempotent retry, send, read, credit, idempotent retry, credit void, void",
+  );
 }
 
 main().catch((err: unknown) => {

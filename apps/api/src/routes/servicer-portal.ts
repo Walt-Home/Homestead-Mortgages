@@ -31,7 +31,12 @@ import {
   statementFor,
   type StatementAnswer,
 } from "../services/billing.js";
-import { invoiceLink, memberInvoices } from "../services/billing-invoices.js";
+import {
+  creditNoteLink,
+  invoiceLink,
+  listCreditNotes,
+  memberInvoices,
+} from "../services/billing-invoices.js";
 import { dayEt } from "../services/refi-offers.js";
 import {
   acceptServicerInvitation,
@@ -275,6 +280,40 @@ servicerPortalRouter.get(
     res.json(
       statementForMember(await statementFor({ slug: req.servicerUser!.servicer.slug, month })),
     );
+  }),
+);
+
+/** The credit notes issued against one of their own invoices; a stranger's invoice is a 404. */
+servicerPortalRouter.get(
+  "/billing/invoices/:id/credit-notes",
+  asyncRoute(async (req, res) => {
+    const invoiceId = z.string().uuid().parse(req.params.id);
+    const own = await prisma.billingInvoice.findFirst({
+      where: { id: invoiceId, servicerId: req.servicerUser!.servicer.id, status: { not: "DRAFT" } },
+      select: { id: true },
+    });
+    if (!own) throw new AppError(404, "No such invoice.", "NOT_FOUND");
+    const notes = await listCreditNotes(invoiceId);
+    res.json({
+      creditNotes: notes
+        .filter((n) => n.standing === "issued")
+        .map((n) => ({
+          id: n.id,
+          number: n.number,
+          amountCents: n.amountCents,
+          memo: n.memo,
+          issuedAt: n.issuedAt,
+        })),
+    });
+  }),
+);
+
+/** The credit note's PDF, read fresh from the provider. */
+servicerPortalRouter.get(
+  "/billing/credit-notes/:id/link",
+  asyncRoute(async (req, res) => {
+    const creditNoteId = z.string().uuid().parse(req.params.id);
+    res.json(await creditNoteLink({ creditNoteId, servicerId: req.servicerUser!.servicer.id }));
   }),
 );
 

@@ -36,11 +36,14 @@
 import Stripe from "stripe";
 import type {
   ConnectorCapabilities,
+  CreditNoteInput,
   InvoiceDraftInput,
   InvoicePaymentMethod,
   InvoicingConnector,
   InvoicingCustomerInput,
   InvoicingEvent,
+  ProviderCreditNote,
+  ProviderCreditNoteStatus,
   ProviderInvoice,
   ProviderInvoiceStatus,
 } from "../ports/index.js";
@@ -59,6 +62,8 @@ export const STRIPE_MAX_INVOICE_CENTS = 99_999_999n;
 
 /** The metadata key that names our invoice on Stripe's. */
 const OUR_ID = "hm_invoice_id";
+/** The metadata key that names our credit note on Stripe's. */
+const OUR_NOTE_ID = "hm_credit_note_id";
 
 export interface StripeInvoicingOptions {
   /** A restricted key (`rk_…`) scoped to customers and invoices, or a secret key. */
@@ -118,6 +123,32 @@ function mapInvoice(i: Stripe.Invoice): ProviderInvoice {
     pdfUrl: i.invoice_pdf ?? null,
     livemode: i.livemode,
     metadata: i.metadata ?? {},
+  };
+}
+
+function mapCreditNote(n: Stripe.CreditNote): ProviderCreditNote {
+  const status: ProviderCreditNoteStatus | null =
+    n.status === "issued" ? "issued" : n.status === "void" ? "void" : null;
+  if (status === null) {
+    throw new InvoicingProviderError(
+      `Stripe answered a credit note status this system does not know: ${String(n.status)}`,
+      "unknown_status",
+    );
+  }
+  return {
+    id: n.id,
+    invoiceId: typeof n.invoice === "string" ? n.invoice : n.invoice.id,
+    number: n.number,
+    status,
+    amountCents: BigInt(n.amount),
+    refundedCents: (n.refunds ?? []).reduce((sum, r) => sum + BigInt(r.amount_refunded), 0n),
+    creditedToBalance: n.customer_balance_transaction !== null,
+    outOfBandCents: BigInt(n.out_of_band_amount ?? 0),
+    createdAt: new Date(n.created * 1000).toISOString(),
+    voidedAt: iso(n.voided_at),
+    pdfUrl: n.pdf ?? null,
+    livemode: n.livemode,
+    metadata: n.metadata ?? {},
   };
 }
 
@@ -191,6 +222,17 @@ export function stripeInvoicingConnector(options: StripeInvoicingOptions): Invoi
   async function findOurs(customerId: string, invoiceId: string): Promise<Stripe.Invoice | null> {
     for await (const invoice of stripe.invoices.list({ customer: customerId, limit: 100 })) {
       if (invoice.metadata?.[OUR_ID] === invoiceId) return invoice;
+    }
+    return null;
+  }
+
+  /** Our credit note on this invoice, when an earlier attempt already issued it. */
+  async function findOurNote(
+    providerInvoiceId: string,
+    creditNoteId: string,
+  ): Promise<Stripe.CreditNote | null> {
+    for await (const note of stripe.creditNotes.list({ invoice: providerInvoiceId, limit: 100 })) {
+      if (note.metadata?.[OUR_NOTE_ID] === creditNoteId) return note;
     }
     return null;
   }
@@ -374,6 +416,61 @@ export function stripeInvoicingConnector(options: StripeInvoicingOptions): Invoi
       }
     },
 
+    async issueCreditNote(input: CreditNoteInput) {
+      try {
+        const found = await findOurNote(input.providerInvoiceId, input.creditNoteId);
+        if (found) return mapCreditNote(found);
+        const amount = Number(input.amountCents);
+        const created = await stripe.creditNotes.create(
+          {
+            invoice: input.providerInvoiceId,
+            lines: [
+              {
+                type: "custom_line_item",
+                description: input.description,
+                quantity: 1,
+                unit_amount: amount,
+              },
+            ],
+            reason: input.reason,
+            memo: input.memo,
+            metadata: { ...input.metadata, [OUR_NOTE_ID]: input.creditNoteId },
+            // A paid invoice's credit has to be settled; an open one's lowers what is due.
+            ...(input.settlement === "customer_balance" ? { credit_amount: amount } : {}),
+            ...(input.settlement === "refund" ? { refund_amount: amount } : {}),
+            ...(input.settlement === "out_of_band" ? { out_of_band_amount: amount } : {}),
+          },
+          { idempotencyKey: invoicingKey(input.creditNoteId, "credit-create") },
+        );
+        return mapCreditNote(created);
+      } catch (err) {
+        throw refusal(err);
+      }
+    },
+
+    async voidCreditNote(providerCreditNoteId, creditNoteId) {
+      try {
+        return mapCreditNote(
+          await stripe.creditNotes.voidCreditNote(
+            providerCreditNoteId,
+            {},
+            { idempotencyKey: invoicingKey(creditNoteId, "credit-void") },
+          ),
+        );
+      } catch (err) {
+        throw refusal(err);
+      }
+    },
+
+    async retrieveCreditNote(providerCreditNoteId) {
+      try {
+        return mapCreditNote(await stripe.creditNotes.retrieve(providerCreditNoteId));
+      } catch (err) {
+        if (isMissing(err)) return null;
+        throw refusal(err);
+      }
+    },
+
     readEvent(rawBody, signature): InvoicingEvent {
       if (!options.webhookSecret) throw new InvoicingNotConfiguredError();
       if (!signature) throw new InvoicingSignatureError("The delivery carries no signature.");
@@ -385,14 +482,24 @@ export function stripeInvoicingConnector(options: StripeInvoicingOptions): Invoi
           err instanceof Error ? err.message : "The event's signature did not verify.",
         );
       }
-      const object = event.data.object as { object?: string; id?: string };
+      const object = event.data.object as {
+        object?: string;
+        id?: string;
+        invoice?: string | { id?: string };
+      };
+      const isInvoice = object.object === "invoice" && Boolean(object.id);
+      const isNote = object.object === "credit_note" && Boolean(object.id);
+      // A credit note's event names its invoice too, so the invoice is re-read as well.
+      const noteInvoice =
+        typeof object.invoice === "string" ? object.invoice : (object.invoice?.id ?? null);
       return {
         id: event.id,
         type: event.type,
         createdAt: new Date(event.created * 1000).toISOString(),
         livemode: event.livemode,
         apiVersion: event.api_version,
-        invoiceId: object.object === "invoice" && object.id ? object.id : null,
+        invoiceId: isInvoice ? object.id! : isNote ? noteInvoice : null,
+        creditNoteId: isNote ? object.id! : null,
       };
     },
   };

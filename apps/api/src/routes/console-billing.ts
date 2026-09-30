@@ -24,7 +24,11 @@ import {
 } from "../services/billing.js";
 import {
   billingProfile,
+  creditNoteLink,
   draftInvoice,
+  issueCreditNote,
+  listCreditNotes,
+  voidCreditNote,
   invoiceHistory,
   invoiceLink,
   invoicingStanding,
@@ -81,6 +85,16 @@ const ProfileBody = z
   .strict();
 
 const ReasonBody = z.object({ reason: z.string().trim().min(3).max(500) }).strict();
+
+/** A credit against a sent or paid invoice: how much, why, what the customer reads, and how a paid one is settled. */
+const CreditNoteBody = z
+  .object({
+    amountCents: z.string().regex(/^\d{1,12}$/),
+    reason: z.enum(["duplicate", "fraudulent", "order_change", "product_unsatisfactory"]),
+    memo: z.string().trim().min(3).max(500),
+    settlement: z.enum(["customer_balance", "refund", "out_of_band"]).nullable().default(null),
+  })
+  .strict();
 const NoteBody = z.object({ note: z.string().trim().min(3).max(500) }).strict();
 const InvoiceId = z.string().uuid();
 
@@ -216,6 +230,52 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
     "/invoices/:id/link",
     asyncRoute(async (req, res) => {
       res.json(await invoiceLink({ invoiceId: InvoiceId.parse(req.params.id) }));
+    }),
+  );
+
+  /** The credit notes on an invoice, newest first. */
+  router.get(
+    "/invoices/:id/credit-notes",
+    asyncRoute(async (req, res) => {
+      res.json({ creditNotes: await listCreditNotes(InvoiceId.parse(req.params.id)) });
+    }),
+  );
+
+  /** Issue a credit note: less due on an open invoice, a settlement on a paid one. */
+  router.post(
+    "/invoices/:id/credit-notes",
+    asyncRoute(async (req, res) => {
+      const invoiceId = InvoiceId.parse(req.params.id);
+      const body = CreditNoteBody.parse(req.body);
+      const creditNote = await issueCreditNote({
+        invoiceId,
+        amountCents: BigInt(body.amountCents),
+        reason: body.reason,
+        memo: body.memo,
+        settlement: body.settlement,
+        staffId: staffOf(req).id,
+      });
+      res.status(201).json({ creditNote });
+    }),
+  );
+
+  /** Void a credit note, while its invoice is still open. */
+  router.post(
+    "/credit-notes/:id/void",
+    asyncRoute(async (req, res) => {
+      const creditNoteId = InvoiceId.parse(req.params.id);
+      const { reason } = ReasonBody.parse(req.body);
+      res.json({
+        creditNote: await voidCreditNote({ creditNoteId, staffId: staffOf(req).id, reason }),
+      });
+    }),
+  );
+
+  /** The credit note's PDF, read fresh. */
+  router.get(
+    "/credit-notes/:id/link",
+    asyncRoute(async (req, res) => {
+      res.json(await creditNoteLink({ creditNoteId: InvoiceId.parse(req.params.id) }));
     }),
   );
 

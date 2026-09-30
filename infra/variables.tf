@@ -94,7 +94,11 @@ variable "stacks" {
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING"
       servicing_api_token_secret    = "HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN"
-      billing_key_secret            = "HOMESTEAD_MORTGAGES_STRIPE_BILLING_KEY_SANDBOX"
+      # 30 September 2026: staging invoices through the HMX Stripe account's
+      # test mode — a sandbox invoice has a page and moves no money — until
+      # the entity that invoices, and so the account, is decided.
+      invoicing          = "sandbox"
+      billing_key_secret = "HOMESTEAD_MORTGAGES_STRIPE_BILLING_KEY_SANDBOX"
     }
     production = {
       instance_name = "homestead-mortgages-prod-db"

@@ -126,22 +126,31 @@ describe("where the read-only gate is mounted", () => {
   });
 
   it("is mounted before every router that can be written to", () => {
-    // The four above the gate are above it on purpose — health for the
+    // The five above the gate are above it on purpose — health for the
     // probes, auth so that signing in and out stays possible, partner
     // because a servicer's key is not a session and the session gate would
-    // refuse it, and the partner portal's door because a servicer's team
-    // member is not a borrower and the gate would refuse them too. Neither
-    // is a route a sample borrower could write to: the partner gate reads
-    // the bearer header and never the session (`partner-credential.test.ts`
-    // holds that a signed-in person is refused there), and the portal's gate
-    // reads `servicerUserId` and never `userId` (`servicer-portal.test.ts`
-    // holds that a borrower's session is refused there). Anything else
-    // mounted above this gate would be a route a sample borrower could
-    // write to.
+    // refuse it, the payment provider's webhook door because a provider has
+    // no session and its body must arrive unparsed, and the partner portal's
+    // door because a servicer's team member is not a borrower and the gate
+    // would refuse them too. None is a route a sample borrower could write
+    // to: the partner gate reads the bearer header and never the session
+    // (`partner-credential.test.ts` holds that a signed-in person is refused
+    // there), the webhook door believes only a delivery signed with the
+    // provider's secret and reads no session at all (`console-invoicing.test.ts`
+    // holds that an unsigned delivery is refused), and the portal's gate reads
+    // `servicerUserId` and never `userId` (`servicer-portal.test.ts` holds that
+    // a borrower's session is refused there). Anything else mounted above this
+    // gate would be a route a sample borrower could write to.
     const above = [...INDEX.slice(0, gateAt).matchAll(/app\.use\("(\/api\/[^"]*)"/g)].map(
       (m) => m[1],
     );
-    expect(above).toEqual(["/api/partner", "/api/health", "/api/auth", "/api/servicer"]);
+    expect(above).toEqual([
+      "/api/partner",
+      "/api/webhooks",
+      "/api/health",
+      "/api/auth",
+      "/api/servicer",
+    ]);
   });
 });
 

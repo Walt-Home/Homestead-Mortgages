@@ -74,6 +74,11 @@ variable "stacks" {
     servicing_database_url_secret = string
     servicing_api_token_secret    = string
     refi_analyst                  = optional(string, "off")
+    # off, sandbox or live: whether billing issues through Stripe, and
+    # under which kind of key. The secret is made and named first; live
+    # also needs the deploy's STRIPE_ALLOW_LIVE_BILLING variable.
+    invoicing          = optional(string, "off")
+    billing_key_secret = optional(string, "")
   }))
   default = {
     staging = {
@@ -89,6 +94,7 @@ variable "stacks" {
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_STAGING"
       servicing_api_token_secret    = "HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN"
+      billing_key_secret            = "HOMESTEAD_MORTGAGES_STRIPE_BILLING_KEY_SANDBOX"
     }
     production = {
       instance_name = "homestead-mortgages-prod-db"
@@ -103,6 +109,7 @@ variable "stacks" {
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_PROD"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_PROD"
       servicing_api_token_secret    = "HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN_PROD"
+      billing_key_secret            = "HOMESTEAD_MORTGAGES_STRIPE_BILLING_KEY_PROD"
     }
   }
 }
@@ -152,6 +159,17 @@ variable "billing_close_schedule" {
   EOT
   type        = string
   default     = "0 6 1 * *"
+}
+
+variable "billing_reconcile_schedule" {
+  description = <<-EOT
+    When invoices are reconciled with the payment provider, as a cron
+    expression in America/New_York: deliveries that could not be acted on
+    are retried and every invoice that can still move is read again. Hourly,
+    off the hour so it never races the month's close.
+  EOT
+  type        = string
+  default     = "17 * * * *"
 }
 
 variable "servicing_sweep_schedule" {

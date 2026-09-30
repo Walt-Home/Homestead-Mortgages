@@ -50,12 +50,7 @@ import { centsOfTokens, PRICE_SHEET, priceRow, type PriceRow } from "./price-she
 
 /** What a tape may say a loan's standing is, in the feed contract's words. */
 export type ObservedStatus =
-  | "current"
-  | "delinquent"
-  | "paid_off"
-  | "charged_off"
-  | "matured"
-  | "transferred";
+  "current" | "delinquent" | "paid_off" | "charged_off" | "matured" | "transferred";
 
 /** The standings after which a loan is no longer watched, and no longer billed. */
 export const ENDED_STATUSES: ReadonlySet<ObservedStatus> = new Set([
@@ -260,7 +255,10 @@ export function meterMonth(
   const billed = charges.filter((c) => c.notBilled === null);
 
   const loanDays = billed.reduce((n, c) => n + c.days, 0);
-  const balanceCents = billed.reduce((n, c) => n + (c.days > 0 ? (c.basis?.principalBalanceCents ?? 0n) : 0n), 0n);
+  const balanceCents = billed.reduce(
+    (n, c) => n + (c.days > 0 ? (c.basis?.principalBalanceCents ?? 0n) : 0n),
+    0n,
+  );
   const rateTokens = billed.reduce((n, c) => n + c.tokens, 0n);
   const touches = billed.reduce((n, c) => n + c.touches, 0);
   const touchTokens = billed.reduce((n, c) => n + c.touchTokens, 0n);
@@ -322,7 +320,11 @@ export interface LoanChargeWire {
   readonly watchedFrom: string;
   readonly endedOn: string | null;
   readonly days: number;
-  readonly basis: { readonly asOf: string; readonly status: ObservedStatus; readonly principalBalanceCents: string } | null;
+  readonly basis: {
+    readonly asOf: string;
+    readonly status: ObservedStatus;
+    readonly principalBalanceCents: string;
+  } | null;
   readonly tokens: string;
   readonly touches: number;
   readonly touchTokens: string;

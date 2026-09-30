@@ -765,6 +765,21 @@ jobs:
             ENV_VARS="$ENV_VARS,PROPERTY_RECORDS_PROVIDER=corelogic"
             SECRETS="$SECRETS,CORELOGIC_CLIENT_KEY=HOMESTEAD_MORTGAGES_CORELOGIC_CLIENT_KEY:latest,CORELOGIC_CLIENT_SECRET=HOMESTEAD_MORTGAGES_CORELOGIC_CLIENT_SECRET:latest"
           fi
+          # Invoicing through Stripe once the repository variable
+          # INVOICING_PROVIDER is "stripe": a restricted TEST key on staging
+          # (a sandbox invoice has a page and moves no money), and the webhook
+          # endpoint's signing secret once one has been registered
+          # (BILLING_WEBHOOK=on). Gated on the variables for the reason
+          # CoreLogic is: a revision naming a secret that does not exist fails
+          # to start. Off, the fixture answers and a deployed service refuses
+          # to issue through it.
+          if [ "${{ vars.INVOICING_PROVIDER }}" = "stripe" ]; then
+            ENV_VARS="$ENV_VARS,INVOICING_PROVIDER=stripe"
+            SECRETS="$SECRETS,STRIPE_BILLING_KEY_SANDBOX=HOMESTEAD_MORTGAGES_STRIPE_BILLING_KEY_SANDBOX:latest"
+            if [ "${{ vars.BILLING_WEBHOOK }}" = "on" ]; then
+              SECRETS="$SECRETS,STRIPE_BILLING_WEBHOOK_SECRET=HOMESTEAD_MORTGAGES_STRIPE_BILLING_WEBHOOK_SECRET_STAGING:latest"
+            fi
+          fi
           # Reported by /health; the service itself never fetches — the step
           # above and the scheduled job write the table it reads.
           ENV_VARS="$ENV_VARS,APOR_PROVIDER=ffiec"
@@ -900,6 +915,23 @@ jobs:
             gcloud run jobs update "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$IMAGE" --quiet
           elif grep -qiE "NOT_FOUND|not found|does not exist|cannot find" <<< "$ERR"; then
             echo "::warning::Cloud Run job $JOB does not exist yet; apply infra/ to schedule the billing close. Billing is still computed live in the console."
+          else
+            echo "::error::could not describe Cloud Run job $JOB: $ERR"
+            exit 1
+          fi
+
+      # And the hourly reconciliation with the payment provider.
+      - name: Point the scheduled billing reconciliation at this image
+        run: |
+          JOB=${{ env.SERVICE }}-billing-reconcile
+          set +e
+          ERR=$(gcloud run jobs describe "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --format="value(name)" 2>&1 >/dev/null)
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            gcloud run jobs update "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$IMAGE" --quiet
+          elif grep -qiE "NOT_FOUND|not found|does not exist|cannot find" <<< "$ERR"; then
+            echo "::warning::Cloud Run job $JOB does not exist yet; apply infra/ to schedule the billing reconciliation. Deliveries still land on the API's webhook door."
           else
             echo "::error::could not describe Cloud Run job $JOB: $ERR"
             exit 1

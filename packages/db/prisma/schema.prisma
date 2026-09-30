@@ -1750,11 +1750,13 @@ model Servicer {
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  loans       Loan[]
-  credentials PartnerCredential[]
-  imports     PartnerBookImport[]
-  users       ServicerUser[]
-  statements  BillingStatement[]
+  loans          Loan[]
+  credentials    PartnerCredential[]
+  imports        PartnerBookImport[]
+  users          ServicerUser[]
+  statements     BillingStatement[]
+  billingProfile ServicerBillingProfile?
+  invoices       BillingInvoice[]
 
   @@map("servicers")
 }
@@ -1792,9 +1794,172 @@ model BillingStatement {
   /// "job", or the console staff id that closed it by hand.
   closedBy String   @map("closed_by")
 
+  invoices BillingInvoice[]
+
   @@unique([servicerId, month], map: "billing_statements_one_per_servicer_month")
   @@index([month], map: "billing_statements_month")
   @@map("billing_statements")
+}
+
+/// Who a servicer is when it is invoiced: the legal entity, where the
+/// invoice goes, and the terms. Every column is nullable on purpose —
+/// nothing here is guessed, and an invoice cannot be drafted until the
+/// ones it needs are filled in (`profileGaps` names what is missing). The
+/// provider's customer is remembered once it has been made, so a second
+/// invoice bills the same customer.
+model ServicerBillingProfile {
+  servicerId String   @id @map("servicer_id") @db.Uuid
+  servicer   Servicer @relation(fields: [servicerId], references: [id], onDelete: Cascade)
+
+  legalName     String? @map("legal_name")
+  /// Where the provider mails the invoice.
+  billingEmail  String? @map("billing_email")
+  addressLine1  String? @map("address_line1")
+  addressLine2  String? @map("address_line2")
+  city          String?
+  state         String? @db.VarChar(2)
+  postalCode    String? @map("postal_code")
+  country       String  @default("US") @db.VarChar(2)
+  /// The servicer's employer identification number, as printed on the
+  /// invoice. A business identifier, not a person's.
+  ein           String?
+  /// Days from issue until due, from the contract. Null until it is known.
+  netDays       Int?    @map("net_days")
+  purchaseOrder String? @map("purchase_order")
+
+  /// The provider that holds this customer, and its id there. Both or
+  /// neither, by CHECK.
+  provider           String?
+  providerCustomerId String? @unique @map("provider_customer_id")
+
+  /// The console staff id that last saved it.
+  updatedBy String   @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("servicer_billing_profiles")
+}
+
+/// The provider's word for where an invoice stands. "Sent" is not one of
+/// them: it is `OPEN` with `sent_at` set, and "past due" is `OPEN` with a
+/// due date behind us. `PAID` is not terminal — a payment can be taken
+/// back, and the row follows.
+enum BillingInvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+/// A closed statement, issued for payment. One live invoice per statement
+/// (a partial unique index the migration writes); a voided one leaves the
+/// statement free to be issued again as the next `attempt`. The row is a
+/// read model of the provider's invoice — every status on it was read from
+/// the provider, never inferred — and `billing_invoice_transitions` is the
+/// history of how it got there. The hosted link is never stored: it
+/// expires, and is read fresh when somebody asks.
+model BillingInvoice {
+  id          String           @id @default(uuid()) @db.Uuid
+  statementId String           @map("statement_id") @db.Uuid
+  statement   BillingStatement @relation(fields: [statementId], references: [id], onDelete: Restrict)
+  servicerId  String           @map("servicer_id") @db.Uuid
+  servicer    Servicer         @relation(fields: [servicerId], references: [id], onDelete: Restrict)
+  /// 1 for the first invoice of a statement, 2 for the one issued after
+  /// the first was voided.
+  attempt     Int
+
+  provider           String
+  /// True only for an invoice that moves real money.
+  livemode           Boolean
+  providerCustomerId String  @map("provider_customer_id")
+  /// Null between our row being written and the provider answering; a row
+  /// left that way is resumed, under the same idempotency key, not remade.
+  providerInvoiceId  String? @unique @map("provider_invoice_id")
+  number             String?
+
+  status               BillingInvoiceStatus @default(DRAFT)
+  currency             String               @default("usd")
+  /// What the statement said was owed, and so what was asked for.
+  amountCents          BigInt               @map("amount_cents")
+  amountDueCents       BigInt               @map("amount_due_cents")
+  amountPaidCents      BigInt               @default(0) @map("amount_paid_cents")
+  amountRemainingCents BigInt               @map("amount_remaining_cents")
+
+  netDays Int       @map("net_days")
+  dueAt   DateTime? @map("due_at")
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  finalizedAt     DateTime? @map("finalized_at")
+  sentAt          DateTime? @map("sent_at")
+  sentBy          String?   @map("sent_by")
+  paidAt          DateTime? @map("paid_at")
+  /// Paid by a wire that reached us outside the provider, and marked so by hand.
+  paidOutOfBand   Boolean   @default(false) @map("paid_out_of_band")
+  voidedAt        DateTime? @map("voided_at")
+  voidedBy        String?   @map("voided_by")
+  uncollectibleAt DateTime? @map("uncollectible_at")
+
+  /// The last time the row was brought in line with the provider's invoice.
+  lastSyncedAt DateTime? @map("last_synced_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  transitions BillingInvoiceTransition[]
+
+  @@unique([statementId, attempt], map: "billing_invoices_statement_attempt")
+  @@index([servicerId], map: "billing_invoices_servicer")
+  @@index([status], map: "billing_invoices_status")
+  @@map("billing_invoices")
+}
+
+/// Every change of an invoice's status, and what caused it: a staff id, a
+/// provider event, or the reconciliation. Append-only, so "who sent this
+/// and when was it paid" is a read and never a reconstruction.
+model BillingInvoiceTransition {
+  id        String         @id @default(uuid()) @db.Uuid
+  invoiceId String         @map("invoice_id") @db.Uuid
+  invoice   BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  fromStatus BillingInvoiceStatus? @map("from_status")
+  toStatus   BillingInvoiceStatus  @map("to_status")
+  /// "staff:<id>", "event:<provider event id>", or "reconcile".
+  cause      String
+  note       String?
+  at         DateTime              @default(now())
+
+  @@index([invoiceId, at], map: "billing_invoice_transitions_invoice_at")
+  @@map("billing_invoice_transitions")
+}
+
+/// The inbox for the provider's deliveries: one row per event id, written
+/// before the delivery is answered, which is what makes a redelivery a
+/// no-op. The event's body is not kept — it may be stale by the time it is
+/// read, and the invoice is fetched fresh instead — only what it was about
+/// and whether we have acted on it. A row not yet processed is retried by
+/// the reconciliation.
+model BillingProviderEvent {
+  id                String   @id @default(uuid()) @db.Uuid
+  provider          String
+  eventId           String   @map("event_id")
+  type              String
+  livemode          Boolean
+  apiVersion        String?  @map("api_version")
+  providerCreatedAt DateTime @map("provider_created_at")
+  /// The provider's id of the invoice the event is about, when it is about one.
+  providerInvoiceId String?  @map("provider_invoice_id")
+
+  receivedAt  DateTime  @default(now()) @map("received_at")
+  processedAt DateTime? @map("processed_at")
+  /// "applied", "not_ours", "ignored" — what processing concluded.
+  outcome     String?
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error")
+
+  @@unique([provider, eventId], map: "billing_provider_events_once")
+  @@index([processedAt], map: "billing_provider_events_unprocessed")
+  @@map("billing_provider_events")
 }
 
 /// A person on a servicer's team, with a sign-in of their own: a code to

@@ -15,6 +15,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../components/Page.js";
 import { Table, type Column } from "../components/Table.js";
 import { StatementLines, StatementLoans } from "../components/StatementTables.js";
+import { BillingProfileForm } from "../components/BillingProfileForm.js";
+import { INVOICE_WORDS, InvoicePanel } from "../components/InvoicePanel.js";
 import {
   Button,
   EmptyState,
@@ -35,11 +37,13 @@ import {
   monthLabel,
   monthOf,
   monthsSince,
+  paymentMethodWord,
   tokensWord,
   type BillingList,
   type BillingServicerCard,
   type BillingServicerPage as ServicerBilling,
   type CloseReport,
+  type InvoiceView,
   type StatementAnswer,
   type StatementStanding,
 } from "../lib/billing.js";
@@ -240,8 +244,14 @@ export function BillingServicerPage() {
       </Page>
     );
   }
-  const { servicer, today, sheet, statements } = page.data;
+  const { servicer, today, sheet, statements, profile, profileGaps, invoices, invoicing } =
+    page.data;
   const months = monthsSince(servicer.since, today);
+  // The month's invoice: the live one if there is one, else the last voided.
+  const invoiceFor = (m: string): InvoiceView | null => {
+    const mine = invoices.filter((i) => i.month === m);
+    return mine.find((i) => i.standing !== "void") ?? mine[0] ?? null;
+  };
   const answer = statement.data ?? null;
   const s = answer?.statement ?? null;
   const standing = answer ? STANDING_WORDS[answer.standing] : null;
@@ -257,7 +267,9 @@ export function BillingServicerPage() {
       description="Billed off the tape they loaded, by the price sheet."
       meta={`Price sheet ${sheet.version} of ${fmtDate(sheet.date)} · ${
         servicer.since ? `watched since ${fmtDate(servicer.since)}` : "no book yet"
-      }`}
+      } · invoiced through ${invoicing.provider}, payable by ${invoicing.paymentMethods
+        .map(paymentMethodWord)
+        .join(" or ")}`}
       actions={
         <>
           <Select
@@ -343,6 +355,20 @@ export function BillingServicerPage() {
             />
           </div>
 
+          {answer.standing === "closed" && month ? (
+            <Section title="Invoice" className="mt-8">
+              <InvoicePanel
+                slug={slug}
+                month={month}
+                statement={s}
+                invoice={invoiceFor(month)}
+                profile={profile}
+                gaps={profileGaps}
+                invoicing={invoicing}
+              />
+            </Section>
+          ) : null}
+
           <Section title={`Statement for ${monthLabel(s.month)}`} className="mt-8">
             <StatementLines statement={s} />
           </Section>
@@ -360,6 +386,83 @@ export function BillingServicerPage() {
           </Section>
         </>
       )}
+
+      <Section title="Billing profile" className="mt-8">
+        <BillingProfileForm
+          key={profile.updatedAt ?? "new"}
+          slug={slug}
+          profile={profile}
+          gaps={profileGaps}
+        />
+      </Section>
+
+      {invoices.length > 0 ? (
+        <Section title="Invoices" className="mt-8">
+          <div className="overflow-hidden rounded-lg border border-line-2 bg-surface">
+            <Table
+              dense
+              columns={[
+                {
+                  key: "month",
+                  header: "Month",
+                  primary: true,
+                  render: (i) => (
+                    <button
+                      type="button"
+                      className="font-medium text-fg hover:underline"
+                      onClick={() => setChosen(i.month)}
+                    >
+                      {monthLabel(i.month)}
+                      {i.attempt > 1 ? ` · attempt ${i.attempt}` : ""}
+                    </button>
+                  ),
+                },
+                {
+                  key: "number",
+                  header: "Number",
+                  mono: true,
+                  render: (i) => i.number ?? "—",
+                },
+                {
+                  key: "standing",
+                  header: "Standing",
+                  render: (i) => (
+                    <Pill tone={INVOICE_WORDS[i.standing].tone}>
+                      {INVOICE_WORDS[i.standing].word}
+                    </Pill>
+                  ),
+                },
+                {
+                  key: "amount",
+                  header: "Amount",
+                  align: "right",
+                  render: (i) => (
+                    <span className="font-medium text-fg">{money(i.amountCents)}</span>
+                  ),
+                },
+                {
+                  key: "due",
+                  header: "Due",
+                  render: (i) => (i.dueAt ? fmtDate(i.dueAt) : "—"),
+                },
+                {
+                  key: "sent",
+                  header: "Sent",
+                  render: (i) => (i.sentAt ? fmtDate(i.sentAt) : "—"),
+                },
+                {
+                  key: "paid",
+                  header: "Paid",
+                  render: (i) =>
+                    i.paidAt ? `${fmtDate(i.paidAt)}${i.paidOutOfBand ? " · outside" : ""}` : "—",
+                },
+              ]}
+              rows={invoices}
+              rowKey={(i) => i.id}
+            />
+          </div>
+        </Section>
+      ) : null}
 
       <Section title="Annual token pool" className="mt-8">
         <div className="space-y-4 rounded-lg border border-line-2 bg-surface p-4">

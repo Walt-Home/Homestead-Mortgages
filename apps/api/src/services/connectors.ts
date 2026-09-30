@@ -22,9 +22,11 @@ import {
   mismoAusResponseReader,
   plaidConnector,
   stripeIdentityConnector,
+  stripeInvoicingConnector,
   supermortgageServicingConnector,
   type ConnectorRegistry,
   type DuCredential,
+  type InvoicePaymentMethod,
   type PersonaId,
 } from "@hm/connectors";
 import { prisma } from "@hm/db";
@@ -359,7 +361,40 @@ export function connectors(): ConnectorRegistry {
     chosen.servicing = `supermortgage (${config.servicing.apiUrl})`;
   }
 
-  registry = { ...fixtures, propertyData, identity, bank, aporSeries, du, mail, servicing };
+  // Invoicing. The fixture's invoices live in memory and nobody can pay
+  // them, so a deployment that asked for Stripe and has no key is a boot
+  // failure rather than a console that looks like it bills. A live key is
+  // refused by the adapter unless STRIPE_ALLOW_LIVE_BILLING says so.
+  let invoicing = fixtures.invoicing;
+  if (config.providers.invoicing === "stripe") {
+    if (!config.billing.stripeKey) {
+      throw new Error(
+        "INVOICING_PROVIDER=stripe but no billing key is set. Set STRIPE_BILLING_KEY_SANDBOX " +
+          "(a restricted test key), or STRIPE_BILLING_KEY with STRIPE_ALLOW_LIVE_BILLING=true.",
+      );
+    }
+    invoicing = stripeInvoicingConnector({
+      apiKey: config.billing.stripeKey,
+      ...(config.billing.webhookSecret ? { webhookSecret: config.billing.webhookSecret } : {}),
+      allowLiveMode: config.billing.allowLive,
+      autoAdvance: config.billing.autoAdvance,
+    });
+    chosen.invoicing = invoicing.verifiesEvents
+      ? invoicing.capabilities.provider
+      : `${invoicing.capabilities.provider}, no webhook secret`;
+  }
+
+  registry = {
+    ...fixtures,
+    propertyData,
+    identity,
+    bank,
+    aporSeries,
+    du,
+    mail,
+    servicing,
+    invoicing,
+  };
   mix = chosen;
   // Read off the registry that was just assembled, not off `config`. The
   // configuration is the intent and the registry is the outcome, and every
@@ -379,4 +414,28 @@ export function connectors(): ConnectorRegistry {
     ]),
   );
   return registry;
+}
+
+const PAYMENT_METHODS: readonly InvoicePaymentMethod[] = [
+  "customer_balance",
+  "us_bank_account",
+  "card",
+];
+
+/**
+ * What an invoice may be paid with, from `BILLING_PAYMENT_METHODS`. A word
+ * this system does not know is a boot-time error in the one place it is
+ * read, rather than an invoice issued with a method nobody chose.
+ */
+export function invoicePaymentMethods(): readonly InvoicePaymentMethod[] {
+  const unknown = config.billing.paymentMethods.filter(
+    (m) => !(PAYMENT_METHODS as readonly string[]).includes(m),
+  );
+  if (unknown.length > 0 || config.billing.paymentMethods.length === 0) {
+    throw new Error(
+      `BILLING_PAYMENT_METHODS names ${unknown.join(", ") || "nothing"}; it is a list of ` +
+        `${PAYMENT_METHODS.join(", ")}.`,
+    );
+  }
+  return config.billing.paymentMethods as InvoicePaymentMethod[];
 }

@@ -800,6 +800,144 @@ export interface ServicingConnector {
   fetchRecord(ref: ServicingLoanRef): Promise<ConnectorResult<ServicingRecord> | null>;
 }
 
+/**
+ * Invoicing: a servicer's closed month, issued as an invoice somebody can
+ * pay, and the word on what became of it.
+ *
+ * Our meter is the source of truth for what is owed; the provider issues,
+ * hosts, collects and tells us. So the port is small and one-directional:
+ * a customer, a draft built from lines we computed, the acts a person takes
+ * on it, a fresh read, and a verified event. Nothing here computes an
+ * amount.
+ *
+ * Unguarded, and listed as such in the guard test: the key is a servicer —
+ * a company that is our customer — never a person, and nothing a borrower
+ * authorized or did not authorize is read or sent.
+ *
+ * Three rules every adapter keeps, because a wrong invoice is money:
+ *
+ *   - **Every write is idempotent on OUR invoice id.** A retry after a
+ *     timeout must find the first attempt, never make a second invoice.
+ *   - **A hosted link is never kept.** It expires; a caller reads the
+ *     invoice fresh and hands the link straight to a person.
+ *   - **An event proves only that something changed.** `readEvent` verifies
+ *     the signature over the raw bytes and says which invoice; the caller
+ *     reads that invoice again rather than trusting the event's copy, since
+ *     events arrive late, twice and out of order.
+ */
+export type InvoicePaymentMethod = "customer_balance" | "us_bank_account" | "card";
+
+export interface InvoicingAddress {
+  readonly line1: string;
+  readonly line2: string | null;
+  readonly city: string;
+  readonly state: string;
+  readonly postalCode: string;
+  /** ISO 3166-1 alpha-2. */
+  readonly country: string;
+}
+
+export interface InvoicingCustomerInput {
+  /** Ours; carried on the provider's object so either side can find the other. */
+  readonly servicerId: string;
+  readonly servicerSlug: string;
+  readonly legalName: string;
+  /** Where the provider mails the invoice. */
+  readonly email: string;
+  readonly address: InvoicingAddress | null;
+  /** A US employer identification number, printed on the invoice; null when none was given. */
+  readonly ein: string | null;
+}
+
+export interface InvoiceLineInput {
+  readonly description: string;
+  readonly amountCents: bigint;
+  readonly metadata: Readonly<Record<string, string>>;
+}
+
+export interface InvoiceDraftInput {
+  /** Ours. Every write about this invoice is idempotent on it. */
+  readonly invoiceId: string;
+  /** The provider's customer, from `upsertCustomer`. */
+  readonly customerId: string;
+  /** Days from issue until due. */
+  readonly netDays: number;
+  readonly memo: string;
+  readonly purchaseOrder: string | null;
+  readonly paymentMethods: readonly InvoicePaymentMethod[];
+  readonly lines: readonly InvoiceLineInput[];
+  readonly metadata: Readonly<Record<string, string>>;
+}
+
+/** The provider's own word for where an invoice stands. "Sent" is an event, not a status. */
+export type ProviderInvoiceStatus = "draft" | "open" | "paid" | "void" | "uncollectible";
+
+export interface ProviderInvoice {
+  readonly id: string;
+  readonly customerId: string;
+  readonly number: string | null;
+  readonly status: ProviderInvoiceStatus;
+  readonly currency: string;
+  readonly totalCents: bigint;
+  readonly amountDueCents: bigint;
+  readonly amountPaidCents: bigint;
+  readonly amountRemainingCents: bigint;
+  /** ISO instants; null until the thing has happened. */
+  readonly dueAt: string | null;
+  readonly finalizedAt: string | null;
+  readonly paidAt: string | null;
+  readonly voidedAt: string | null;
+  readonly markedUncollectibleAt: string | null;
+  /** Where the customer views and pays. Expires: read it fresh, never store it. */
+  readonly hostedUrl: string | null;
+  readonly pdfUrl: string | null;
+  /** True only for an invoice that moves real money. */
+  readonly livemode: boolean;
+  readonly metadata: Readonly<Record<string, string>>;
+}
+
+export interface InvoicingEvent {
+  readonly id: string;
+  readonly type: string;
+  readonly createdAt: string;
+  readonly livemode: boolean;
+  readonly apiVersion: string | null;
+  /** The provider's id of the invoice the event is about; null when it is about something else. */
+  readonly invoiceId: string | null;
+}
+
+export interface InvoicingConnector {
+  readonly capabilities: ConnectorCapabilities;
+  /** The most one invoice may carry: the provider's ceiling on a single payment. */
+  readonly maxInvoiceCents: bigint;
+  /** Whether a delivered event can be verified at all: a signing secret is held. */
+  readonly verifiesEvents: boolean;
+  /** Create the customer, or bring an existing one in line with the profile. */
+  upsertCustomer(
+    input: InvoicingCustomerInput,
+    existingCustomerId: string | null,
+  ): Promise<{ readonly customerId: string }>;
+  /** A draft with its lines, found rather than made again when an earlier attempt got that far. */
+  draftInvoice(input: InvoiceDraftInput): Promise<ProviderInvoice>;
+  /** Finalize and send. From here the amount cannot change. */
+  sendInvoice(providerInvoiceId: string, invoiceId: string): Promise<ProviderInvoice>;
+  /** Cancel a finalized invoice, keeping the paper trail. */
+  voidInvoice(providerInvoiceId: string, invoiceId: string): Promise<ProviderInvoice>;
+  /** Remove a draft that was never finalized. */
+  deleteDraft(providerInvoiceId: string): Promise<void>;
+  /** Record a payment that reached us outside the provider. No charge is made. */
+  markPaidOutOfBand(providerInvoiceId: string, invoiceId: string): Promise<ProviderInvoice>;
+  markUncollectible(providerInvoiceId: string, invoiceId: string): Promise<ProviderInvoice>;
+  /** The invoice as it stands now; null when the provider holds no such invoice. */
+  retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice | null>;
+  /**
+   * Verify a delivery against the raw request body and say what it is
+   * about. Throws `InvoicingSignatureError` when the signature does not
+   * verify and `InvoicingNotConfiguredError` when no secret is held.
+   */
+  readEvent(rawBody: Buffer | string, signature: string | undefined): InvoicingEvent;
+}
+
 export interface ConnectorRegistry {
   readonly identity: IdentityConnector;
   readonly credit: CreditConnector;
@@ -815,4 +953,5 @@ export interface ConnectorRegistry {
   readonly aporSeries: AporSeriesConnector;
   readonly mail: MailConnector;
   readonly servicing: ServicingConnector;
+  readonly invoicing: InvoicingConnector;
 }

@@ -303,6 +303,21 @@ jobs:
             ENV_VARS="$ENV_VARS,PROPERTY_RECORDS_PROVIDER=corelogic"
             SECRETS="$SECRETS,CORELOGIC_CLIENT_KEY=HOMESTEAD_MORTGAGES_CORELOGIC_CLIENT_KEY:latest,CORELOGIC_CLIENT_SECRET=HOMESTEAD_MORTGAGES_CORELOGIC_CLIENT_SECRET:latest"
           fi
+          # Invoicing through Stripe once the production environment's
+          # INVOICING_PROVIDER is "stripe". The key is production's own
+          # (_PROD), and a LIVE key is refused by the adapter — the service
+          # will not start — unless the environment's STRIPE_ALLOW_LIVE_BILLING
+          # is "true": issuing real invoices is a decision, not a default.
+          if [ "${{ vars.INVOICING_PROVIDER }}" = "stripe" ]; then
+            ENV_VARS="$ENV_VARS,INVOICING_PROVIDER=stripe"
+            SECRETS="$SECRETS,STRIPE_BILLING_KEY=HOMESTEAD_MORTGAGES_STRIPE_BILLING_KEY_PROD:latest"
+            if [ "${{ vars.STRIPE_ALLOW_LIVE_BILLING }}" = "true" ]; then
+              ENV_VARS="$ENV_VARS,STRIPE_ALLOW_LIVE_BILLING=true"
+            fi
+            if [ "${{ vars.BILLING_WEBHOOK }}" = "on" ]; then
+              SECRETS="$SECRETS,STRIPE_BILLING_WEBHOOK_SECRET=HOMESTEAD_MORTGAGES_STRIPE_BILLING_WEBHOOK_SECRET_PROD:latest"
+            fi
+          fi
           ENV_VARS="$ENV_VARS,APOR_PROVIDER=ffiec"
           ENV_VARS="$ENV_VARS,SERVICING_PROVIDER=supermortgage,SERVICING_API_URL=$SERVICING_URL"
           SECRETS="$SECRETS,SERVICING_API_TOKEN=HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN_PROD:latest"
@@ -352,7 +367,7 @@ jobs:
           MAIL_ALLOWED_DOMAINS: ${{ vars.MAIL_ALLOWED_DOMAINS }}
       - name: Point the scheduled jobs at this image
         run: |
-          for JOB in ${{ env.SERVICE }}-apor-fetch ${{ env.SERVICE }}-loan-review ${{ env.SERVICE }}-billing-close; do
+          for JOB in ${{ env.SERVICE }}-apor-fetch ${{ env.SERVICE }}-loan-review ${{ env.SERVICE }}-billing-close ${{ env.SERVICE }}-billing-reconcile; do
             gcloud run jobs update "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$IMAGE" --quiet
           done
       - name: Confirm the service is reachable and is production

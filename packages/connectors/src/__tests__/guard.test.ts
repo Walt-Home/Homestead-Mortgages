@@ -186,6 +186,8 @@ type GuardedPort = (typeof GUARDED_PORTS)[number];
 // `servicing` is keyed on a loan number and reads the servicing platform's
 // own conclusions about a mortgage it already holds; the port's comment has
 // the argument, and the route that hands the answer out is where "whose" is.
+// `invoicing` is keyed on a servicer — a company that is our customer —
+// and carries what we computed it owes; no person's data is read or sent.
 const UNGUARDED_PORTS = [
   "identity",
   "esign",
@@ -193,6 +195,7 @@ const UNGUARDED_PORTS = [
   "aporSeries",
   "mail",
   "servicing",
+  "invoicing",
 ] as const;
 
 describe("a token is for one kind of data", () => {

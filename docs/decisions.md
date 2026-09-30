@@ -3501,6 +3501,99 @@ door opens for; billing's is admin alone. `console-billing.test.ts` holds
 the gate, the sample book metered from its load day, the close, its
 idempotence, and the trigger.
 
+## An invoice is the provider's to collect and ours to decide
+
+**Decision (30 September 2026).** A closed statement becomes an invoice
+somebody can pay through Stripe, and Stripe tells us what became of it.
+Joe's brief: hook billing up to Stripe to generate a payment link, accept a
+payment, and track the invoice's status, best in class, with no
+assumptions. Three of his answers are still open — which legal entity
+invoices and owns the Stripe account, the contract terms per servicer, and
+who approves an invoice before it goes out — so the build is shaped so
+none is baked in: the profile that holds the entity and the terms is empty
+until somebody fills it, the review before a send is a separate press by
+a named admin, and every knob a decision would turn is a variable.
+
+**One-off invoices, not Stripe Billing.** Our meter is the source of truth
+for what a month cost. Stripe's own documentation, read 30 September,
+says its meters and credit grants do not model commitments or drawdown
+and points that model to Metronome; one-off invoices carry the Invoicing
+fee alone. So Stripe does what it is for: issue the document, host the
+page, collect the money, say what happened. The amount is never computed
+on Stripe's side, and no status is inferred on ours — every status on a
+row was read from Stripe.
+
+**The port is small and one-directional** (`InvoicingConnector`, in
+`@hm/connectors`): a customer, a draft from lines we computed, the acts a
+person takes, a fresh read, a verified event. `stripe-invoicing.ts` is the
+official SDK with the API version it was generated for pinned
+(`2026-08-26.dahlia`), retries with the same idempotency key, a restricted
+key expected, a live key refused unless `STRIPE_ALLOW_LIVE_BILLING=true`
+(the identity adapter's pattern), and `auto_advance` off so Stripe sends
+no reminder and writes nothing off until a late policy says so. The
+fixture keeps the same rules in memory, and a deployed service refuses to
+issue through it. Both are unguarded, listed as such in the guard test:
+the key is a company that is our customer, never a person.
+
+**Three rules, each against a failure that costs money.**
+
+- _Every write is idempotent on our invoice id._ Our row is written
+  first; Stripe is asked under `hm-invoice-<id>-create`; a timeout leaves a
+  row with no Stripe id, and Draft again resumes it. Because Stripe forgets
+  keys after a day, the adapter also finds a draft before making one, by
+  the id it stamped in metadata. The lines go on in one `add_lines` call,
+  and a draft whose total is not the statement's is refused, not sent.
+- _A hosted link is never stored._ It expires thirty days after the due
+  date. Both doors read it fresh and hand it straight to the person.
+- _An event proves only that something changed._ The webhook door
+  (`/api/webhooks/invoicing`, above the body parser because the signature
+  is over the raw bytes, above the session because Stripe has none)
+  verifies the signature, writes the event to an inbox unique on its id,
+  answers 200, and acts by reading the invoice again from Stripe — never
+  from the event's copy, since events arrive late, twice and out of order.
+  A delivery that could not be acted on stays in the inbox; the hourly
+  `billing-reconcile` job retries it, then re-reads every invoice that can
+  still move, including recently paid ones, because a payment can be taken
+  back and Stripe retries deliveries for only three days.
+
+**What is kept.** `servicer_billing_profiles`: the legal entity, where the
+invoice goes, the address, the EIN, the terms, a PO number, and Stripe's
+customer once made — all nullable, and `profileGaps` names what a draft
+still needs. `billing_invoices`: one live invoice per statement (a partial
+unique index), a voided one freeing the month to be issued as the next
+attempt, the amounts and timestamps as Stripe reported them, who drafted,
+sent and voided. `billing_invoice_transitions`: every change of status and
+its cause — a staff id, a Stripe event id, or the reconciliation —
+append-only by trigger. `billing_provider_events`: the inbox, event id
+unique, without the body.
+
+**Standings in a person's words.** Stripe's statuses are draft, open,
+paid, void and uncollectible; "sent" is an event and "past due" is an open
+invoice whose due date has passed, so the console derives both from the
+row. Paid is not terminal.
+
+**Refused, by design.** A month that consumed nothing. A month above
+$999,999.99, Stripe's ceiling on a single bank payment. Voiding a paid
+invoice, which is a credit note and a refund and not built. Sending twice.
+
+**Held to.** `stripe-invoicing.test.ts` asserts the wire against a stub of
+Stripe's API: every parameter, the version header, each idempotency key,
+the signature check both ways. `console-invoicing.test.ts` holds
+everything above the port against Postgres: the gaps, the draft, the
+resume, the send, the void and reissue, the payment by hand, what a
+servicer's team may see, duplicate and out-of-order deliveries, the
+deferred delivery the reconciliation finishes, the payment taken back.
+`npm run billing:smoke` walked one invoice through a real Stripe sandbox
+the day this landed: customer, draft, an idempotent retry that found the
+same draft, send with a hosted page, read, void.
+
+**Not decided, and where each waits.** Payment methods: bank transfer and
+ACH debit on, cards off, is the recommendation, and `BILLING_PAYMENT_METHODS`
+is where it changes. Reminders and write-off: `BILLING_AUTO_ADVANCE`.
+Tax: nothing is computed; Stripe Tax would need a registration. Credit
+notes, an accounting export and the servicer-side receipt are the next
+pieces once the first invoice has been paid.
+
 ## The console has one role
 
 **Decision (29 September 2026).** "Right now we have all these different

@@ -19,7 +19,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@hm/shared": "*"
+    "@hm/shared": "*",
+    "stripe": "^22.6.2"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

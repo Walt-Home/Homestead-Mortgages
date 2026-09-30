@@ -31,6 +31,7 @@ import {
   statementFor,
   type StatementAnswer,
 } from "../services/billing.js";
+import { invoiceLink, memberInvoices } from "../services/billing-invoices.js";
 import { dayEt } from "../services/refi-offers.js";
 import {
   acceptServicerInvitation,
@@ -227,11 +228,12 @@ const statementForMember = (a: StatementAnswer) => ({
 servicerPortalRouter.get(
   "/billing",
   asyncRoute(async (req, res) => {
-    const { slug } = req.servicerUser!.servicer;
+    const { slug, id: servicerId } = req.servicerUser!.servicer;
     const today = dayEt(new Date());
-    const [current, statements] = await Promise.all([
+    const [current, statements, issued] = await Promise.all([
       statementFor({ slug, month: startOfMonth(today) }),
       listStatements(slug),
+      memberInvoices(servicerId),
     ]);
     res.json({
       sheet: { version: PRICE_SHEET.version, date: PRICE_SHEET.date },
@@ -244,9 +246,24 @@ servicerPortalRouter.get(
       current: statementForMember(current),
       invoices: statements.map(({ closedBy: _closedBy, ...invoice }) => {
         void _closedBy;
-        return invoice;
+        // What has been issued for the month and where it stands; null
+        // until an invoice has actually been sent.
+        return { ...invoice, issued: issued.find((i) => i.month === invoice.month) ?? null };
       }),
     });
+  }),
+);
+
+/**
+ * Where one of their own invoices is viewed and paid, read fresh from the
+ * provider because the link expires. Another servicer's invoice, a draft
+ * and an id that names nothing all answer 404.
+ */
+servicerPortalRouter.get(
+  "/billing/invoices/:id/link",
+  asyncRoute(async (req, res) => {
+    const invoiceId = z.string().uuid().parse(req.params.id);
+    res.json(await invoiceLink({ invoiceId, servicerId: req.servicerUser!.servicer.id }));
   }),
 );
 

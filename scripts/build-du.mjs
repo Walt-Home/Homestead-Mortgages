@@ -2455,6 +2455,18 @@ export const TABLES_OFF_THE_WIRE = {
   billing_statements: {
     why: "What a servicer's book consumed in a month, priced off the tape by the price sheet and closed once; a bill to the servicer, and a casefile describes a credit request, which is never what a customer of ours owes us.",
   },
+  servicer_billing_profiles: {
+    why: "Who a servicer is when we invoice it — its legal name, where the invoice goes, its terms, the payment provider's id for it; our customer's billing details, and a casefile describes a borrower's credit request.",
+  },
+  billing_invoices: {
+    why: "A closed statement issued for payment, and where the payment provider says it stands; what a servicer owes us and whether it has paid, which no loan submission carries.",
+  },
+  billing_invoice_transitions: {
+    why: "The history of an invoice's status and what caused each change; our audit trail for money a customer owes us, never a fact about a borrower or a loan.",
+  },
+  billing_provider_events: {
+    why: "The inbox for the payment provider's deliveries — an event id, its type and whether we acted on it; how a redelivery becomes a no-op, and nothing DU asks for.",
+  },
   servicing_observations: {
     why: "What a servicer said a loan looked like on a date — balance, rate, next due, delinquency — appended per tape; a mortgage somebody already has, which is the one thing a new casefile is not about.",
   },

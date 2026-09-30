@@ -99,6 +99,26 @@ variable "billing_close_schedule" {
   type = string
 }
 
+variable "billing_reconcile_schedule" {
+  type = string
+}
+
+variable "invoicing" {
+  description = "off, sandbox or live: whether the billing jobs issue through Stripe, and under which kind of key."
+  type        = string
+  default     = "off"
+  validation {
+    condition     = contains(["off", "sandbox", "live"], var.invoicing)
+    error_message = "invoicing is off, sandbox or live."
+  }
+}
+
+variable "billing_key_secret" {
+  description = "The Secret Manager secret holding this stack's Stripe billing key. Read only when invoicing is not off."
+  type        = string
+  default     = ""
+}
+
 variable "servicing_sweep_schedule" {
   type = string
 }

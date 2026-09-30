@@ -246,6 +246,25 @@ acting role rides a call, and `useAct` resends a refused act once as the
 role the servicing app names. See `docs/decisions.md`, "A servicer is
 billed off its tape" and "The console has one role".
 
+**An invoice is the provider's to collect and ours to decide (30
+September 2026).** A closed statement is drafted as a Stripe one-off
+invoice, reviewed, and sent, and Stripe says what became of it. The port
+is `InvoicingConnector` in `@hm/connectors` (`stripe-invoicing.ts`, the
+official SDK with its API version pinned; `fixture-invoicing.ts` for tests,
+which a deployed service refuses to issue through). `services/billing-invoices.ts`
+holds the profile a draft cannot be made without, the acts (draft, send,
+void, paid by hand, sync), the inbox for Stripe's deliveries and the
+reconciliation; `/api/webhooks/invoicing` is the one door above the body
+parser besides the partner key, because the signature is over the raw
+bytes. Every write is idempotent on our invoice id and a draft is found
+before it is made; the hosted link is never stored; an event is acted on
+by re-reading the invoice, never from its copy. `INVOICING_PROVIDER=stripe`
+with `STRIPE_BILLING_KEY_SANDBOX` (a restricted test key) turns it on;
+`STRIPE_BILLING_KEY` needs `STRIPE_ALLOW_LIVE_BILLING=true`. `npm run
+billing:smoke` walks a real sandbox; `npm run billing:reconcile` is the
+hourly job by hand. See `docs/decisions.md`, "An invoice is the provider's
+to collect and ours to decide".
+
 ## Known stubs, for whoever wires the real thing
 
 - **The property card is CoreLogic's when `PROPERTY_RECORDS_PROVIDER=corelogic`,
@@ -637,6 +656,8 @@ npm run build && npm run seed:personas   # the eight sample borrowers
 npm run servicing:db:setup   # create the servicing database and apply the servicing app's migrations
 npm run seed-demo -w @hm/servicing       # his 100-loan batch and 12-loan partner book
 npm run billing:close        # close the billing month that has ended (-- 2026-09 for a named one)
+npm run billing:reconcile    # retry Stripe's deliveries and re-read every invoice that can still move
+npm run billing:smoke        # walk one invoice through a real Stripe SANDBOX (STRIPE_BILLING_KEY_SANDBOX=rk_test_…)
 ```
 
 `seed:personas` refuses to run unless `DEMO_PERSONAS=true` is in its own

@@ -114,6 +114,16 @@ resource "google_secret_manager_secret_iam_member" "api_reads_servicing_api_toke
   member    = "serviceAccount:${var.service_account_email}"
 }
 
+# The Stripe billing key, once invoicing is on for the stack: the API mounts
+# it and the reconciliation job reads it, both as hm-run@. The secret is made
+# by hand first, then invoicing is switched on here.
+resource "google_secret_manager_secret_iam_member" "api_reads_billing_key" {
+  count     = var.invoicing == "off" ? 0 : 1
+  secret_id = var.billing_key_secret
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${var.service_account_email}"
+}
+
 # ── The jobs ─────────────────────────────────────────────────────────────────
 #
 # Each is the service's own image with a different entrypoint. The deploy
@@ -531,6 +541,131 @@ resource "google_cloud_scheduler_job" "billing_close" {
   depends_on = [google_cloud_run_v2_job_iam_member.scheduler_runs_billing_close]
 }
 
+# Invoices reconciled with the payment provider: every delivery that could
+# not be acted on is retried, and every invoice that can still move is read
+# again. The provider retries a delivery for three days; this is what makes
+# the fourth day safe. With invoicing off it reads the fixture and reports
+# nothing to do.
+resource "google_cloud_run_v2_job" "billing_reconcile" {
+  name     = "homestead-mortgages-${var.environment}-billing-reconcile"
+  location = var.region
+
+  template {
+    template {
+      service_account = var.service_account_email
+      max_retries     = 1
+      timeout         = "600s"
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.this.connection_name]
+        }
+      }
+
+      containers {
+        image   = var.image
+        command = ["node"]
+        args    = ["apps/api/dist/scripts/reconcile-billing.js"]
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "512Mi"
+          }
+        }
+
+        env {
+          name  = "NODE_ENV"
+          value = "production"
+        }
+
+        env {
+          name = "DATABASE_URL"
+          value_source {
+            secret_key_ref {
+              secret  = var.database_url_secret
+              version = "latest"
+            }
+          }
+        }
+
+        # Stripe, when invoicing is on: the provider, and a live key only
+        # where the stack says live — the adapter refuses one otherwise.
+        dynamic "env" {
+          for_each = var.invoicing == "off" ? {} : merge(
+            { INVOICING_PROVIDER = "stripe" },
+            var.invoicing == "live" ? { STRIPE_ALLOW_LIVE_BILLING = "true" } : {},
+          )
+          content {
+            name  = env.key
+            value = env.value
+          }
+        }
+
+        dynamic "env" {
+          for_each = var.invoicing == "off" ? {} : {
+            (var.invoicing == "live" ? "STRIPE_BILLING_KEY" : "STRIPE_BILLING_KEY_SANDBOX") = var.billing_key_secret
+          }
+          content {
+            name = env.key
+            value_source {
+              secret_key_ref {
+                secret  = env.value
+                version = "latest"
+              }
+            }
+          }
+        }
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    # The image is the deploy's, and gcloud stamps its client on every
+    # update; neither is ours to put back.
+    ignore_changes = [template[0].template[0].containers[0].image, client, client_version]
+  }
+
+  depends_on = [google_secret_manager_secret_iam_member.api_reads_billing_key]
+}
+
+resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_billing_reconcile" {
+  project  = google_cloud_run_v2_job.billing_reconcile.project
+  location = google_cloud_run_v2_job.billing_reconcile.location
+  name     = google_cloud_run_v2_job.billing_reconcile.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${var.scheduler_service_account_email}"
+}
+
+resource "google_cloud_scheduler_job" "billing_reconcile" {
+  name        = "homestead-mortgages-${var.environment}-billing-reconcile"
+  description = "Reconcile invoices with the payment provider: retry deliveries, re-read what can still move."
+  schedule    = var.billing_reconcile_schedule
+  time_zone   = "America/New_York"
+  region      = var.region
+
+  retry_config {
+    retry_count = 1
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.billing_reconcile.name}:run"
+
+    oauth_token {
+      service_account_email = var.scheduler_service_account_email
+    }
+  }
+
+  depends_on = [google_cloud_run_v2_job_iam_member.scheduler_runs_billing_reconcile]
+}
+
 resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_servicing_sweep" {
   project  = google_cloud_run_v2_job.servicing_sweep.project
   location = google_cloud_run_v2_job.servicing_sweep.location
@@ -643,6 +778,32 @@ resource "google_monitoring_alert_policy" "billing_close_failed" {
 
   documentation {
     content = "The scheduled close of the billing month failed, so no servicer has a statement for the month that just ended. The console's Billing page still shows the month computed live; an admin can close it by hand from there, or run `npm run billing:close` against the environment. Read the job's logs."
+  }
+}
+
+resource "google_monitoring_alert_policy" "billing_reconcile_failed" {
+  count        = var.notification_channel_id == null ? 0 : 1
+  display_name = "Billing reconciliation failed (${var.environment})"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "an hourly reconciliation with the payment provider exited non-zero"
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_job\" AND resource.labels.job_name = \"${google_cloud_run_v2_job.billing_reconcile.name}\" AND metric.type = \"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result = \"failed\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      aggregations {
+        alignment_period   = "3600s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+
+  notification_channels = [var.notification_channel_id]
+
+  documentation {
+    content = "The hourly reconciliation with the payment provider could not read an invoice or act on a delivery it holds. An invoice's status in the console may be behind what Stripe knows. Read the job's logs: it names the delivery or invoice; the console's Read again button on the invoice re-reads it by hand."
   }
 }
 

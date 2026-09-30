@@ -6,16 +6,23 @@
  * Read-only: the pool and the close are Supermortgage's to set.
  */
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../../components/Page.js";
 import { Table, type Column } from "../../components/Table.js";
 import { StatementLines, StatementLoans } from "../../components/StatementTables.js";
-import { Notice, Pill, Rows, Stat, type Tone } from "../../components/ui.js";
+import { Button, Notice, Pill, Rows, Stat, type Tone } from "../../components/ui.js";
 import { Loading } from "../../components/Loading.js";
+import { useToast } from "../../components/Toast.js";
 import { fmtDate, money, plural } from "../../lib/format.js";
-import { monthLabel, tokensWord, type StatementStanding } from "../../lib/billing.js";
+import {
+  monthLabel,
+  openInvoicePage,
+  tokensWord,
+  type InvoiceLink,
+  type StatementStanding,
+} from "../../lib/billing.js";
 import {
   portal,
   PortalError,
@@ -28,6 +35,18 @@ const STANDING_WORDS: Record<StatementStanding, { word: string; tone: Tone }> = 
   closed: { word: "Invoiced", tone: "ok" },
   open: { word: "Being finalized", tone: "warn" },
   running: { word: "Running", tone: "info" },
+};
+
+/** Where an issued invoice stands, in the servicer's words. */
+const ISSUED_WORDS: Record<
+  NonNullable<PortalInvoice["issued"]>["standing"],
+  { word: string; tone: Tone }
+> = {
+  open: { word: "Issued", tone: "info" },
+  sent: { word: "Awaiting payment", tone: "info" },
+  past_due: { word: "Past due", tone: "danger" },
+  paid: { word: "Paid", tone: "ok" },
+  uncollectible: { word: "Overdue", tone: "danger" },
 };
 
 /** How a loan on the book is charged, in the servicer's terms. */
@@ -64,10 +83,20 @@ function StatementStats({ answer }: { answer: PortalStatement }) {
 
 export function PortalBillingPage() {
   const navigate = useNavigate();
+  const toast = useToast();
   const page = useQuery({
     queryKey: ["portal-billing"],
     queryFn: () => portal<PortalBilling>("/billing"),
   });
+  // The page is opened fresh each time: the link expires, so none is kept.
+  const pay = useCallback(
+    (id: string) =>
+      openInvoicePage(() => portal<InvoiceLink>(`/billing/invoices/${id}/link`)).catch(
+        (err: Error) =>
+          toast({ tone: "danger", title: "The invoice could not be opened", body: err.message }),
+      ),
+    [toast],
+  );
 
   const columns = useMemo<Column<PortalInvoice>[]>(
     () => [
@@ -75,7 +104,35 @@ export function PortalBillingPage() {
         key: "month",
         header: "Invoice",
         primary: true,
-        render: (i) => <span className="font-medium text-fg">{monthLabel(i.month)}</span>,
+        render: (i) => (
+          <span className="flex flex-col">
+            <span className="font-medium text-fg">{monthLabel(i.month)}</span>
+            {i.issued?.number ? (
+              <span className="font-mono text-xs text-fg-3">{i.issued.number}</span>
+            ) : null}
+          </span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (i) =>
+          i.issued ? (
+            <span className="flex flex-col gap-0.5">
+              <Pill tone={ISSUED_WORDS[i.issued.standing].tone}>
+                {ISSUED_WORDS[i.issued.standing].word}
+              </Pill>
+              <span className="text-xs text-fg-3">
+                {i.issued.standing === "paid" && i.issued.paidAt
+                  ? `paid ${fmtDate(i.issued.paidAt)}`
+                  : i.issued.dueAt
+                    ? `due ${fmtDate(i.issued.dueAt)}`
+                    : ""}
+              </span>
+            </span>
+          ) : (
+            <span className="text-fg-3">Being prepared</span>
+          ),
       },
       {
         key: "loans",
@@ -111,9 +168,28 @@ export function PortalBillingPage() {
         align: "right",
         render: (i) => <span className="tabular-nums font-medium text-fg">{money(i.cents)}</span>,
       },
-      { key: "closed", header: "Issued", render: (i) => fmtDate(i.closedAt) },
+      { key: "closed", header: "Closed", render: (i) => fmtDate(i.closedAt) },
+      {
+        key: "pay",
+        header: "",
+        align: "right",
+        hideOnCard: false,
+        render: (i) =>
+          i.issued ? (
+            <Button
+              size="sm"
+              variant={i.issued.standing === "paid" ? "secondary" : "primary"}
+              onClick={(e) => {
+                e.stopPropagation();
+                void pay(i.issued!.id);
+              }}
+            >
+              {i.issued.standing === "paid" ? "View invoice" : "Pay"}
+            </Button>
+          ) : null,
+      },
     ],
-    [],
+    [pay],
   );
 
   if (page.isPending) return <Loading what="Opening billing" />;

@@ -26,6 +26,10 @@ output "billing_close_job" {
   value = google_cloud_run_v2_job.billing_close.name
 }
 
+output "billing_reconcile_job" {
+  value = google_cloud_run_v2_job.billing_reconcile.name
+}
+
 output "servicing_sweep_job" {
   value = google_cloud_run_v2_job.servicing_sweep.name
 }

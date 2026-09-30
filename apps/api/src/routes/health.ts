@@ -4,7 +4,7 @@ import { REQUIREMENTS } from "@hm/requirements";
 import { SHADOW_ENGINE_VERSION } from "@hm/underwriting";
 import { config } from "../config.js";
 import { aporStatus } from "../services/apor.js";
-import { providerMix, providerModes } from "../services/connectors.js";
+import { connectors, providerMix, providerModes } from "../services/connectors.js";
 import { originatorPlaceholdersIn } from "@hm/du";
 import { originatorFromConfig } from "../services/originator.js";
 
@@ -65,6 +65,10 @@ healthRouter.get("/", async (_req, res) => {
     // placeholders, reported rather than merely set.
     originator:
       originatorPlaceholdersIn(originatorFromConfig()).length === 0 ? "configured" : "placeholder",
+    // Whether the payment provider's deliveries can be believed: a signing
+    // secret is held. Without one, invoices still move — the reconciliation
+    // reads them — but hours late, and nothing else here would say why.
+    invoicingEvents: connectors().invoicing.verifiesEvents ? "verified" : "no signing secret",
     // Whether the average prime offer rate series reaches the current week.
     // Three legal tests block without it and every decision ends `referred`,
     // and nothing else on this page would say so: the database answers, the

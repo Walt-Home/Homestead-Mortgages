@@ -124,12 +124,122 @@ export interface BillingList {
   readonly servicers: readonly BillingServicerCard[];
 }
 
+export interface BillingProfile {
+  readonly legalName: string | null;
+  readonly billingEmail: string | null;
+  readonly addressLine1: string | null;
+  readonly addressLine2: string | null;
+  readonly city: string | null;
+  readonly state: string | null;
+  readonly postalCode: string | null;
+  readonly country: string;
+  readonly ein: string | null;
+  readonly netDays: number | null;
+  readonly purchaseOrder: string | null;
+  readonly customer: { readonly provider: string; readonly id: string } | null;
+  readonly updatedAt: string | null;
+  readonly updatedBy: string | null;
+}
+
+export type ProfileGap = "legal_name" | "billing_email" | "net_days" | "address";
+
+export const GAP_WORDS: Record<ProfileGap, string> = {
+  legal_name: "the legal name",
+  billing_email: "where the invoice goes",
+  net_days: "the payment terms",
+  address: "the rest of the address",
+};
+
+export type InvoiceStandingWord =
+  "draft" | "open" | "sent" | "past_due" | "paid" | "void" | "uncollectible";
+
+export interface InvoiceView {
+  readonly id: string;
+  readonly statementId: string;
+  readonly month: string;
+  readonly attempt: number;
+  readonly number: string | null;
+  readonly standing: InvoiceStandingWord;
+  readonly provider: string;
+  readonly livemode: boolean;
+  readonly atProvider: boolean;
+  readonly currency: string;
+  readonly amountCents: string;
+  readonly amountDueCents: string;
+  readonly amountPaidCents: string;
+  readonly amountRemainingCents: string;
+  readonly netDays: number;
+  readonly dueAt: string | null;
+  readonly createdAt: string;
+  readonly createdBy: string;
+  readonly finalizedAt: string | null;
+  readonly sentAt: string | null;
+  readonly sentBy: string | null;
+  readonly paidAt: string | null;
+  readonly paidOutOfBand: boolean;
+  readonly voidedAt: string | null;
+  readonly voidedBy: string | null;
+  readonly uncollectibleAt: string | null;
+  readonly lastSyncedAt: string | null;
+}
+
+export interface InvoicingStanding {
+  readonly provider: string;
+  readonly mode: "fixture" | "sandbox" | "production";
+  readonly canIssue: boolean;
+  readonly cannotIssueBecause: string | null;
+  readonly maxInvoiceCents: string;
+  readonly paymentMethods: readonly string[];
+  readonly verifiesEvents: boolean;
+}
+
+export interface InvoiceLink {
+  readonly hostedUrl: string;
+  readonly pdfUrl: string | null;
+}
+
+export interface InvoiceHistoryEntry {
+  readonly from: string | null;
+  readonly to: string;
+  readonly cause: string;
+  readonly note: string | null;
+  readonly at: string;
+}
+
 export interface BillingServicerPage {
   readonly sheet: { readonly version: string; readonly date: string };
   readonly today: string;
   readonly servicer: BillingServicer;
   readonly current: StatementAnswer;
   readonly statements: readonly ClosedStatement[];
+  readonly profile: BillingProfile;
+  readonly profileGaps: readonly ProfileGap[];
+  readonly invoices: readonly InvoiceView[];
+  readonly invoicing: InvoicingStanding;
+}
+
+export const PAYMENT_METHOD_WORDS: Record<string, string> = {
+  customer_balance: "bank transfer",
+  us_bank_account: "ACH debit",
+  card: "card",
+};
+export const paymentMethodWord = (m: string): string => PAYMENT_METHOD_WORDS[m] ?? m;
+
+/**
+ * Open the invoice's hosted page in a new tab. The tab is opened before the
+ * link is fetched, because a browser blocks a window opened after an await;
+ * the link is read fresh each time, since it expires.
+ */
+export async function openInvoicePage(fetchLink: () => Promise<InvoiceLink>): Promise<void> {
+  const tab = window.open("", "_blank", "noopener");
+  try {
+    const { hostedUrl } = await fetchLink();
+    if (tab) tab.location.href = hostedUrl;
+    else window.location.assign(hostedUrl);
+  } catch (err) {
+    tab?.close();
+    throw err;
+  }
 }
 
 export interface CloseReport {

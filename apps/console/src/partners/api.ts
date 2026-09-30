@@ -192,6 +192,18 @@ export interface PortalInvoice {
   tokens: string;
   cents: string;
   closedAt: string;
+  /** The invoice issued for the month and where it stands; null until one has been sent. */
+  issued: {
+    id: string;
+    month: string;
+    number: string | null;
+    standing: "open" | "sent" | "past_due" | "paid" | "uncollectible";
+    amountCents: string;
+    amountRemainingCents: string;
+    dueAt: string | null;
+    sentAt: string | null;
+    paidAt: string | null;
+  } | null;
 }
 
 export interface PortalBilling {

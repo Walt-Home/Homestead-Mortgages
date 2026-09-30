@@ -111,10 +111,13 @@ module "stack" {
   refi_analyst                  = each.value.refi_analyst
   anthropic_api_key_secret      = var.anthropic_api_key_secret
 
-  apor_fetch_schedule      = var.apor_fetch_schedule
-  loan_review_schedule     = var.loan_review_schedule
-  billing_close_schedule   = var.billing_close_schedule
-  servicing_sweep_schedule = var.servicing_sweep_schedule
+  apor_fetch_schedule        = var.apor_fetch_schedule
+  loan_review_schedule       = var.loan_review_schedule
+  billing_close_schedule     = var.billing_close_schedule
+  billing_reconcile_schedule = var.billing_reconcile_schedule
+  invoicing                  = each.value.invoicing
+  billing_key_secret         = each.value.billing_key_secret
+  servicing_sweep_schedule   = var.servicing_sweep_schedule
 
   notification_channel_id   = var.alert_email == "" ? null : google_monitoring_notification_channel.alerts[0].id
   servicing_console_members = var.servicing_console_members

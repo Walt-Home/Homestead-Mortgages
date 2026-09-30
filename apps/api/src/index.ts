@@ -8,6 +8,7 @@ import { personaReadOnly } from "./middleware/persona-read-only.js";
 import { sessionMiddleware } from "./middleware/session.js";
 import { assertAuthConfigured } from "./services/auth.js";
 import { serveSpa } from "./static.js";
+import { billingWebhookRouter } from "./routes/billing-webhook.js";
 import { consoleHost } from "./console-host.js";
 import { providerMix } from "./services/connectors.js";
 import { authRouter } from "./routes/auth.js";
@@ -50,6 +51,13 @@ const consoleMounted = consoleHost(app);
 // body, and a machine's request never mints a cookie.
 // `partner-credential.test.ts` reads this file to hold the order.
 app.use("/api/partner", partnerRouter);
+
+// The payment provider's deliveries. Above the body parser because the
+// signature is over the raw bytes — a parsed and re-serialized body verifies
+// against nothing — and above the session because a provider has none. Its
+// gate is the signature itself, checked with the endpoint's own secret
+// before a byte is believed; `billing-webhook.test.ts` holds that.
+app.use("/api/webhooks", billingWebhookRouter);
 
 app.use(express.json({ limit: "1mb" }));
 app.use(sessionMiddleware());

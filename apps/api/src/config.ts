@@ -104,6 +104,14 @@ export const config = {
      * fixture, which answers what his engine answered for the sample book.
      */
     servicing: process.env.SERVICING_PROVIDER ?? "fixture",
+    /**
+     * "stripe" issues a servicer's closed month as a Stripe invoice;
+     * anything else is the fixture, whose invoices live in memory and which
+     * a deployed service refuses to issue through — an invoice nobody can
+     * pay is worse than none. `connectors()` throws at boot when this is
+     * "stripe" and no billing key is set.
+     */
+    invoicing: process.env.INVOICING_PROVIDER ?? "fixture",
   },
 
   /**
@@ -272,6 +280,39 @@ export const config = {
     publishableKey:
       process.env.STRIPE_PUBLISHABLE_KEY_SANDBOX ?? process.env.STRIPE_PUBLISHABLE_KEY,
     allowLiveIdentity: process.env.STRIPE_ALLOW_LIVE_IDENTITY === "true",
+  },
+
+  /**
+   * Invoicing through Stripe. Only read when INVOICING_PROVIDER=stripe.
+   *
+   * Its own variables, not the identity key above: which legal entity
+   * invoices, and so which Stripe account, is a decision that has not been
+   * made, and the two must be able to differ. The key should be a
+   * RESTRICTED key (`rk_…`) with write on Customers and Invoices and
+   * nothing else. The sandbox key is preferred and a live key is refused
+   * unless STRIPE_ALLOW_LIVE_BILLING=true, the pattern identity keeps: a
+   * live key issues real invoices to real customers.
+   */
+  billing: {
+    stripeKey: process.env.STRIPE_BILLING_KEY_SANDBOX ?? process.env.STRIPE_BILLING_KEY,
+    /** The webhook endpoint's signing secret. Unset, no delivery is believed and the door answers 503. */
+    webhookSecret: process.env.STRIPE_BILLING_WEBHOOK_SECRET,
+    allowLive: process.env.STRIPE_ALLOW_LIVE_BILLING === "true",
+    /**
+     * Let Stripe send reminders and mark invoices uncollectible on its own
+     * schedule. Off until a late policy says otherwise.
+     */
+    autoAdvance: process.env.BILLING_AUTO_ADVANCE === "true",
+    /**
+     * What an invoice may be paid with. Bank transfer and bank debit by
+     * default, cards off: a card's fee on a six-figure invoice is five
+     * figures. A recommendation awaiting confirmation, which is why it is a
+     * variable.
+     */
+    paymentMethods: (process.env.BILLING_PAYMENT_METHODS ?? "customer_balance,us_bank_account")
+      .split(/[\s,;]+/)
+      .map((m) => m.trim())
+      .filter((m) => m !== ""),
   },
 
   /**

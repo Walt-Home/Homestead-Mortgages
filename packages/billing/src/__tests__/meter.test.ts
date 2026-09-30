@@ -7,7 +7,13 @@
 import { describe, expect, it } from "vitest";
 import { sampleBook } from "@hm/partner-book";
 import { plainDate } from "@hm/kernel/calendar";
-import { meterMonth, monthKey, statementWire, tokensForBalance, type MeteredLoan } from "../meter.js";
+import {
+  meterMonth,
+  monthKey,
+  statementWire,
+  tokensForBalance,
+  type MeteredLoan,
+} from "../meter.js";
 
 const day = plainDate;
 
@@ -72,7 +78,18 @@ describe("the month's statement", () => {
     // Per loan, half-up: the twelve round to these, and the total is their sum.
     const perLoan = s.loans.map((c) => c.tokens);
     expect(perLoan).toEqual([
-      7724n, 6480n, 8567n, 5773n, 10393n, 4966n, 6917n, 6214n, 4696n, 5620n, 5839n, 5064n,
+      7724n,
+      6480n,
+      8567n,
+      5773n,
+      10393n,
+      4966n,
+      6917n,
+      6214n,
+      4696n,
+      5620n,
+      5839n,
+      5064n,
     ]);
     expect(s.tokens).toBe(78_253n);
     expect(s.cents).toBe(78_253n);

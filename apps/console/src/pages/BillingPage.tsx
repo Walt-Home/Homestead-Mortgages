@@ -80,7 +80,7 @@ export function BillingPage() {
       },
       {
         key: "balance",
-        header: "Balance on the meter",
+        header: "UPB billed on",
         align: "right",
         render: (s) => (
           <span className="flex flex-col items-end">
@@ -429,7 +429,7 @@ export function BillingServicerPage() {
               hint={`${s.loanDays.toLocaleString()} loan-days of ${s.daysInMonth}`}
             />
             <Stat
-              label="Balance on the meter"
+              label="UPB billed on"
               value={money(s.balanceCents, { compact: true })}
               hint={
                 s.loansBilled > 0

@@ -38,6 +38,7 @@ import {
   monthOf,
   monthsSince,
   paymentMethodWord,
+  stripeDashboardUrl,
   tokensWord,
   type BillingList,
   type BillingServicerCard,
@@ -421,7 +422,26 @@ export function BillingServicerPage() {
                   key: "number",
                   header: "Number",
                   mono: true,
-                  render: (i) => i.number ?? "—",
+                  render: (i) => {
+                    const at = stripeDashboardUrl(
+                      "invoices",
+                      i.providerInvoiceId,
+                      i.provider,
+                      i.livemode,
+                    );
+                    return at ? (
+                      <a
+                        href={at}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-fg hover:underline"
+                      >
+                        {i.number ?? i.providerInvoiceId}
+                      </a>
+                    ) : (
+                      (i.number ?? "—")
+                    );
+                  },
                 },
                 {
                   key: "standing",

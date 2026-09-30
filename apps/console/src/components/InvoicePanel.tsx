@@ -20,6 +20,7 @@ import {
   monthLabel,
   openInvoicePage,
   paymentMethodWord,
+  stripeDashboardUrl,
   tokensWord,
   type BillingProfile,
   type CreditNoteView,
@@ -325,6 +326,22 @@ export function InvoicePanel({
             <Button variant="secondary" onClick={() => setSheet("credit")}>
               Credit…
             </Button>
+          ) : null}
+          {live &&
+          stripeDashboardUrl("invoices", live.providerInvoiceId, live.provider, live.livemode) ? (
+            <a
+              href={stripeDashboardUrl(
+                "invoices",
+                live.providerInvoiceId,
+                live.provider,
+                live.livemode,
+              )!}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center rounded-md px-3 text-sm text-fg-2 hover:bg-surface-2 hover:text-fg"
+            >
+              View in Stripe
+            </a>
           ) : null}
           {live?.atProvider && live.standing !== "draft" ? (
             <Button

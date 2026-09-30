@@ -15,6 +15,7 @@ import {
   billing,
   CREDIT_REASON_WORDS,
   SETTLEMENT_WORDS,
+  stripeDashboardUrl,
   type CreditNoteReason,
   type CreditNoteSettlement,
   type CreditNoteView,
@@ -241,6 +242,26 @@ export function CreditNoteList({
                 <Button size="sm" variant="secondary" onClick={() => void openPdf(n)}>
                   PDF
                 </Button>
+              ) : null}
+              {stripeDashboardUrl(
+                "credit_notes",
+                n.providerCreditNoteId,
+                invoice.provider,
+                invoice.livemode,
+              ) ? (
+                <a
+                  href={stripeDashboardUrl(
+                    "credit_notes",
+                    n.providerCreditNoteId,
+                    invoice.provider,
+                    invoice.livemode,
+                  )!}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-8 items-center rounded-md px-3 text-sm text-fg-2 hover:bg-surface-2 hover:text-fg"
+                >
+                  View in Stripe
+                </a>
               ) : null}
               {n.standing === "issued" && invoice.standing !== "paid" ? (
                 <Button size="sm" variant="ghost" onClick={() => setVoiding(n)}>

@@ -333,6 +333,8 @@ export interface InvoiceView {
   readonly livemode: boolean;
   /** False while our row waits for the provider to answer; Draft again resumes it. */
   readonly atProvider: boolean;
+  /** The provider's own id, for the link into its dashboard. */
+  readonly providerInvoiceId: string | null;
   readonly currency: string;
   readonly amountCents: string;
   readonly amountDueCents: string;
@@ -368,6 +370,7 @@ function viewOf(row: InvoiceWithMonth, now: Date = new Date()): InvoiceView {
     provider: row.provider,
     livemode: row.livemode,
     atProvider: row.providerInvoiceId !== null,
+    providerInvoiceId: row.providerInvoiceId,
     currency: row.currency,
     amountCents: row.amountCents.toString(),
     amountDueCents: row.amountDueCents.toString(),
@@ -926,6 +929,7 @@ export interface CreditNoteView {
   readonly standing: CreditNoteStandingWord;
   /** False while our row waits for the provider to answer. */
   readonly atProvider: boolean;
+  readonly providerCreditNoteId: string | null;
   readonly amountCents: string;
   readonly reason: CreditNoteReason;
   readonly memo: string;
@@ -943,6 +947,7 @@ const noteView = (n: BillingCreditNote): CreditNoteView => ({
   number: n.number,
   standing: n.status.toLowerCase() as CreditNoteStandingWord,
   atProvider: n.providerCreditNoteId !== null,
+  providerCreditNoteId: n.providerCreditNoteId,
   amountCents: n.amountCents.toString(),
   reason: n.reason as CreditNoteReason,
   memo: n.memo,

@@ -163,6 +163,7 @@ export interface InvoiceView {
   readonly provider: string;
   readonly livemode: boolean;
   readonly atProvider: boolean;
+  readonly providerInvoiceId: string | null;
   readonly currency: string;
   readonly amountCents: string;
   readonly amountDueCents: string;
@@ -207,6 +208,7 @@ export interface CreditNoteView {
   readonly number: string | null;
   readonly standing: "pending" | "issued" | "void";
   readonly atProvider: boolean;
+  readonly providerCreditNoteId: string | null;
   readonly amountCents: string;
   readonly reason: CreditNoteReason;
   readonly memo: string;
@@ -342,4 +344,19 @@ export function tokensWord(tokens: string | number): string {
   const n = typeof tokens === "number" ? tokens : Number(tokens);
   if (!Number.isFinite(n)) return `${tokens} tokens`;
   return `${n.toLocaleString("en-US")} ${n === 1 ? "token" : "tokens"}`;
+}
+
+/**
+ * The record in Stripe's own dashboard, for staff. A test-mode object
+ * lives under `/test`; a live one at the root. Null for the fixture, which
+ * has no dashboard.
+ */
+export function stripeDashboardUrl(
+  kind: "invoices" | "credit_notes" | "customers",
+  providerId: string | null,
+  provider: string,
+  livemode: boolean,
+): string | null {
+  if (!providerId || !provider.startsWith("stripe")) return null;
+  return `https://dashboard.stripe.com/${livemode ? "" : "test/"}${kind}/${providerId}`;
 }

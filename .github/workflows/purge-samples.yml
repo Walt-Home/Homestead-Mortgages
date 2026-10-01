@@ -1,0 +1,117 @@
+name: Purge the staging samples
+
+# Staging holds tapes uploaded from real books now. This removes what the old
+# deploy seeded beside them, from both databases, and keeps every upload:
+#
+#   servicing   his demo: the 100-loan transfer batch, the entry demo's FAKE
+#               configuration, the twelve-loan book, and every escalation,
+#               timer, work item, notice and decision the sweep raised over
+#               them (apps/servicing/scripts/purge-synthetic.mjs)
+#   API         the nine persona borrowers and the Northlight sample book
+#               (apps/api/src/scripts/purge-samples.ts)
+#
+# By hand only. Run it first with `apply` off: both scripts plan inside a
+# transaction they roll back, so the log is exactly what an apply would
+# delete — and what each keeps because an upload stands on it — with nothing
+# changed. Read that, then run it again with `apply` on.
+#
+# It runs the images Cloud Run is serving now, so the deploy that carries the
+# scripts has to have gone out first. Staging only: production was never seeded
+# (deploy-production.yml), and both scripts refuse to run there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Delete (off: print the plan and change nothing)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: purge-staging-samples
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT: homestead-mortgages
+  REGION: us-central1
+  SERVICE: homestead-mortgages-staging
+  SERVICING_SERVICE: homestead-mortgages-staging-servicing
+  SQL_INSTANCE: homestead-mortgages-db
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # The images serving now, not a build: the purge is the same code the
+      # services run, and it is only as new as the last deploy.
+      - name: The images Cloud Run is serving
+        run: |
+          for pair in "SERVICING_IMAGE ${{ env.SERVICING_SERVICE }}" "IMAGE ${{ env.SERVICE }}"; do
+            set -- $pair
+            IMG=$(gcloud run services describe "$2" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+              --format='value(spec.template.spec.containers[0].image)')
+            test -n "$IMG" || { echo "::error::no image for $2"; exit 1; }
+            echo "$1: $IMG"
+            echo "$1=$IMG" >> "$GITHUB_ENV"
+          done
+
+      - name: Start Cloud SQL Auth Proxy
+        run: |
+          curl -sSo cloud-sql-proxy \
+            https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy --port 5432 \
+            ${{ env.GCP_PROJECT }}:${{ env.REGION }}:${{ env.SQL_INSTANCE }} &
+          for i in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+      # As the role that owns his tables (it applied his migrations): the
+      # purge switches their append-only triggers off for the length of its
+      # one transaction, which only an owner may do. A sweep that lands a row
+      # on a doomed loan mid-run fails it with nothing deleted; run it again.
+      - name: Servicing — his demo
+        run: |
+          set +e
+          OUT=$(docker run --rm --network host \
+            -e SERVICING_DATABASE_URL="$SERVICING_DATABASE_URL" \
+            -e SERVICING_ENVIRONMENT=nonprod \
+            "$SERVICING_IMAGE" purge-synthetic $APPLY 2>&1)
+          code=$?
+          set -e
+          echo "$OUT"
+          test "$code" -eq 0
+        env:
+          SERVICING_DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_SERVICING_MIGRATION_URL }}
+          APPLY: ${{ inputs.apply && '--apply' || '' }}
+
+      - name: API — the sample borrowers and the sample book
+        run: |
+          set +e
+          OUT=$(docker run --rm --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e DEMO_PERSONAS=true \
+            "$IMAGE" node apps/api/dist/scripts/purge-samples.js $APPLY 2>&1)
+          code=$?
+          set -e
+          echo "$OUT"
+          test "$code" -eq 0
+        env:
+          DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
+          APPLY: ${{ inputs.apply && '--apply' || '' }}

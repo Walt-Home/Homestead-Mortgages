@@ -72,7 +72,10 @@ imports from ours; the seam between the two is HTTP, and the plan for it is
 `docs/decisions.md`, "Doug's servicing runtime is an app in this repo".
 `npm run servicing:db:setup` makes the database and applies its 177
 migrations; `npm run seed-demo -w @hm/servicing` boards a hundred loans and a
-twelve-loan partner book to look at. It deploys beside the API as
+twelve-loan partner book to look at locally. Staging is not seeded: it holds
+tapes uploaded from real books, and what the old deploy seeded there is removed
+by the "Purge the staging samples" workflow (`purge-samples.yml`, plan first,
+then `apply`), which keeps every upload. It deploys beside the API as
 `servicing.supermortgage.com`; the tape desk is its one screen for a book.
 
 ## The borrower flow is FIVE screens; the engine has ten
@@ -668,7 +671,11 @@ make its rows reachable. It is idempotent by `users.persona_key`: a persona
 already standing at its target is reported and left alone, one standing
 anywhere else is reported as a DRIFT and the run exits non-zero. `--reset
 <key>` re-walks exactly one; `--purge-legacy-demo` clears what the old
-`seed-demo.ts` left behind.
+`seed-demo.ts` left behind. The staging deploy no longer runs it, and
+`apps/api/src/scripts/purge-samples.ts` removes what it wrote there (the
+personas and the Northlight sample book) while keeping every uploaded tape.
+`DEMO_PERSONAS` stays on in staging regardless: it is also the mail fence that
+keeps the mailer to our own domains.
 
 The API tests talk to a real Postgres and mock nothing: `docker compose up -d
 postgres`, then `npm run db:test:setup`. Every promise about who may read whose

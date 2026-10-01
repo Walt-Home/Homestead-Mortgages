@@ -889,42 +889,27 @@ describe("a failing run keeps its report", () => {
   });
 });
 
-describe("the deploy step that runs the seed", () => {
+describe("the staging deploy seeds nothing", () => {
   /**
-   * The step is the only place the seed ever runs unattended, and its whole
-   * job on a bad day is to say WHICH persona drifted and where it stood.
-   *
-   * A workflow `run:` block is executed under `bash -e`. Assigning a command
-   * substitution — `OUT=$(docker run …)` — takes the container's exit status,
-   * so the shell aborts at the assignment the moment the seed exits non-zero
-   * and the `echo` below it never runs: the deploy fails with an empty log on
-   * exactly the failure the step exists to catch. Read out of the file,
-   * because nothing else here can run a workflow.
+   * Staging holds tapes uploaded from real books now, and the samples were
+   * removed by the purge workflow (purge-samples.yml). A deploy that seeded
+   * them again would undo that on the next push, unattended. The seed itself
+   * still runs by hand and in the tests above.
    */
-  const step = (): string => {
+  const workflow = (): string => {
     const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
-    const yaml = readFileSync(join(root, ".github", "workflows", "deploy.yml"), "utf8");
-    const start = yaml.indexOf("- name: Seed the sample borrowers");
-    expect(start, "the deploy no longer seeds the sample borrowers").toBeGreaterThan(-1);
-    const end = yaml.indexOf("\n      - name:", start);
-    return yaml.slice(start, end === -1 ? undefined : end);
+    return readFileSync(join(root, ".github", "workflows", "deploy.yml"), "utf8");
   };
 
-  it("prints what the seed said before it decides anything", () => {
-    const body = step();
-    const run = body.indexOf("OUT=$(");
-    expect(body.indexOf("set +e")).toBeGreaterThan(-1);
-    expect(body.indexOf("set +e")).toBeLessThan(run);
-    expect(body.indexOf("code=$?")).toBeGreaterThan(run);
-    expect(body.indexOf('echo "$OUT"')).toBeLessThan(body.indexOf('test "$code" -eq 0'));
+  it("runs neither the persona seed nor his demo seed", () => {
+    const yaml = workflow();
+    expect(yaml).not.toContain("seed-personas.js");
+    expect(yaml).not.toMatch(/"\$SERVICING_IMAGE" seed-demo/);
   });
 
-  it("fails when the seed fails, and counts a row for every story", () => {
-    const body = step();
-    // The script exits non-zero on a drift, so its own status carries that.
-    expect(body).toContain('test "$code" -eq 0');
-    expect(body).toContain(`-eq ${PERSONA_STORIES.length}`);
-    expect(body).toContain("node apps/api/dist/scripts/seed-personas.js");
-    expect(body).toContain("DEMO_PERSONAS=true");
+  it("keeps DEMO_PERSONAS on the service, because it is also staging's mail fence", () => {
+    // services/connectors.ts fences the real mailer to internal domains when the
+    // flag is on, and the uploaded supplements carry homeowners' real addresses.
+    expect(workflow()).toContain('ENV_VARS="$ENV_VARS,DEMO_PERSONAS=true"');
   });
 });

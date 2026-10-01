@@ -1815,7 +1815,9 @@ modes — `serve` as the service, `migrate` run by the deploy before it, `sweep`
 as a Cloud Run job Cloud Scheduler fires every five minutes — on a database
 of its own on the shared instance, under a runtime identity of its own. The
 deploy workflow's `deploy-servicing` job builds the image, applies his
-migrations and seeds his demo from that image through the Auth Proxy, deploys
+migrations from that image through the Auth Proxy (it seeded his demo too,
+until staging began holding real books — see "Staging holds real books, not
+samples"), deploys
 the service, points the sweep job at the image and reads the runtime's two probes back;
 the API's own deploy runs after it and is told where his door is, so
 `/api/health` reports `servicing: supermortgage (https://…)` and the
@@ -3704,6 +3706,37 @@ team unreachable; `console-tape.test.ts` holds the desk's side. The
 two-session rule is the console's and was walked by hand against a local
 servicing app: a staff session, an invitation taken beside it, the portal
 rendered, the staff session gone, every ops call a 401.
+
+## Staging holds real books, not samples
+
+Staging began taking tapes built from real servicers' books, and the samples
+beside them stopped being something to look at and became noise: the ops
+console's queue was 2,441 items deep, every one an escalation or a breached
+clock over a loan the seed made up. So the deploy no longer seeds either
+database, and what it seeded is removed by hand, once, from the "Purge the
+staging samples" workflow — servicing first, then the API.
+
+Removing, not resetting. A fresh database would have taken the uploads with
+it, so both purges work from what marks a row as seeded and keep everything
+else: his `synthetic` flags and `seed-demo` actor on the servicing side
+(`apps/servicing/scripts/purge-synthetic.mjs`), `persona_key` and the
+Northlight sample files on ours (`apps/api/src/scripts/purge-samples.ts`). The
+servicing schema is append-only by trigger, so that purge switches the
+triggers off inside its one transaction, as the owner that applied the
+migrations, and back on before it commits. Its rule, checked before anything is
+deleted: no row whose `loan_id` names a loan an upload made. A seeded party a
+real tape was loaded under is kept and named in the log, as is a persona
+standing on a real loan, or the Northlight servicer if a person loaded a tape
+under it.
+
+`DEMO_PERSONAS` stays on in staging. The persona sign-in it mounts now offers
+nobody, but the same flag fences the real mailer to our own domains, and the
+uploaded supplements carry homeowners' addresses.
+
+What stays in the servicing database after its purge is the platform's own
+history and alarms — sweep runs, daily reports, dead jobs with no runner,
+unstaffed-queue escalations — which are not sample data and which an upload
+would raise too.
 
 ## Still outstanding
 

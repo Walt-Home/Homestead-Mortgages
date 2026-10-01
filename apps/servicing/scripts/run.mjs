@@ -6,6 +6,8 @@
  *   node scripts/run.mjs migrate             apply db/migrations through his migrate.sh
  *   node scripts/run.mjs db-setup            create the servicing database if it is absent, then migrate
  *   node scripts/run.mjs seed-demo           the 100-loan transfer batch, the entry demo and the 12-loan partner book
+ *   node scripts/run.mjs purge-synthetic     what seed-demo wrote and what grew from it, planned; --apply deletes it
+ *                                            (ours, scripts/purge-synthetic.mjs — his runtime removes nothing)
  *
  * His `src/runtime/main.ts` reads DATABASE_URL, PORT and API_TOKEN, which are
  * the names our own API already uses for its own database and port. This
@@ -42,7 +44,15 @@ const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 loadEnv({ path: resolve(app, "../../.env") });
 
 const [mode = "serve", ...rest] = process.argv.slice(2);
-const MODES = ["serve", "sweep", "migrate", "db-setup", "seed-demo", "staff-bootstrap"];
+const MODES = [
+  "serve",
+  "sweep",
+  "migrate",
+  "db-setup",
+  "seed-demo",
+  "staff-bootstrap",
+  "purge-synthetic",
+];
 if (!MODES.includes(mode)) {
   console.error(`usage: run.mjs <${MODES.join(" | ")}> [--watch]`);
   process.exit(2);
@@ -112,7 +122,14 @@ function run(hisMode, extraNodeFlags = []) {
   });
 }
 
-if (mode === "db-setup") {
+if (mode === "purge-synthetic") {
+  Object.assign(process.env, env);
+  const { main } = await import("./purge-synthetic.mjs");
+  await main(rest).catch((e) => {
+    console.error(e instanceof Error ? e.message : e);
+    process.exit(1);
+  });
+} else if (mode === "db-setup") {
   await ensureDatabase(databaseUrl);
   run("migrate");
 } else {

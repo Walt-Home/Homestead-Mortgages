@@ -16,6 +16,7 @@ npm run servicing:db:setup
 
 npm run dev -w @hm/servicing        # the API, the sweep endpoint and the ops console on :8090
 npm run seed-demo -w @hm/servicing  # 100 serviced loans, the entry demo, the 12-loan partner book
+npm run purge-synthetic -w @hm/servicing -- [--apply]  # remove what seed-demo wrote, keep every upload (plan unless --apply)
 npm run sweep -w @hm/servicing      # one pass of every scheduled job
 ```
 
@@ -85,8 +86,7 @@ Next.js apps under Chromium are left out, because those apps are not here.
 It deploys itself, into our GCP project and nowhere else — Doug's own
 deployment and its `infra/` are his prototype and were not copied. Every push
 to `main` runs the workflow's `deploy-servicing` job, which builds `Dockerfile` from the repository root, applies
-`db/migrations` and runs `seed-demo` from that image through the Cloud SQL
-Auth Proxy, deploys `homestead-mortgages-staging-servicing`, points the sweep
+`db/migrations` from that image through the Cloud SQL Auth Proxy, deploys `homestead-mortgages-staging-servicing`, points the sweep
 job at the image and reads `/readyz` back. `/readyz` and not `/healthz`: on a
 `run.app` URL Google's front end answers `/healthz` with its own 404 before
 the request is logged or reaches the container, so his liveness probe is
@@ -102,6 +102,16 @@ docker build -f apps/servicing/Dockerfile -t hm-servicing:local .   # from the r
 docker run --rm -e SERVICING_DATABASE_URL=… hm-servicing:local db-setup
 docker run --rm -p 8090:8080 -e SERVICING_DATABASE_URL=… -e SERVICING_API_TOKEN=dev-token hm-servicing:local
 ```
+
+The deploy does not seed. Staging holds tapes uploaded from real books, and
+`scripts/purge-synthetic.mjs` (ours, beside his tree) removes what `seed-demo`
+once wrote there: the seed's batches, book, FAKE configuration and loans, and
+every escalation, timer, work item, notice and decision the sweep raised over
+them. It plans inside a transaction it rolls back unless `--apply`; it never
+takes a row that belongs to a loan an upload made, and keeps (and names) a
+synthetic party an upload stands on. `scripts/purge-synthetic.test.mjs` proves
+that end to end in CI. It runs on staging from the "Purge the staging samples"
+workflow.
 
 ## What it is for
 

@@ -304,13 +304,26 @@ jobs:
       # own CI uses. scripts/test.mjs is ours and hands the flag to node --test.
       - name: His tests, as his (shard ${{ matrix.shard }} of 4)
         run: node apps/servicing/scripts/test.mjs -- --test-shard=${{ matrix.shard }}/4
+      # Ours, beside his tree: the purge that removes his seed from a database a
+      # person has uploaded tapes into. It deletes from append-only tables, so it
+      # is proved here end to end on every change: seed, sweeps, uploads, purge,
+      # every uploaded loan's rows byte for byte. On the second shard, which has
+      # the least else to do.
+      - name: The seed purge (scripts/purge-synthetic.test.mjs)
+        if: matrix.shard == 2
+        run: node --test apps/servicing/scripts/purge-synthetic.test.mjs
 
   # Doug's servicing runtime, deployed beside the API as a service of its
   # own: his image (apps/servicing/Dockerfile — one image, the modes his
   # entrypoint has), his migrations applied from that image through the Auth
-  # Proxy, his demo seeded the same way, the service deployed, the sweep job
-  # pointed at the new image, and the runtime's two probes read back. Before the API's
-  # own deploy, because the API is told where his door is.
+  # Proxy, the service deployed, the sweep job pointed at the new image, and
+  # the runtime's two probes read back. Before the API's own deploy, because
+  # the API is told where his door is.
+  #
+  # His demo is no longer seeded: staging holds tapes uploaded from real
+  # books, and the seed's hundred-loan batch and twelve-loan book filled the
+  # console's queue with escalations over loans nobody owns. What it left is
+  # removed by the "Purge the staging samples" workflow (purge-samples.yml).
   #
   # Not gated on GOOGLE_CLIENT_ID: nothing in his runtime signs anyone in
   # with Google here, and his door is a bearer.
@@ -387,25 +400,6 @@ jobs:
           echo "$OUT" | grep -v '^skip ' || true
           echo "skipped: $(grep -c '^skip ' <<< "$OUT"), applied: $(grep -c '^apply ' <<< "$OUT")"
           test "$code" -eq 0
-        env:
-          SERVICING_DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_SERVICING_MIGRATION_URL }}
-
-      # His demo: the 100-loan transfer batch, the entry demo and the
-      # twelve-loan Northlight book — the same NL-1000xx numbers our sample
-      # book carries, so the API's live read finds them. Idempotent by his
-      # rule (a second run reports already_loaded and changes nothing), and
-      # marked synthetic on every row it writes.
-      - name: Seed his demo
-        run: |
-          set +e
-          OUT=$(docker run --rm --network host \
-            -e SERVICING_DATABASE_URL="$SERVICING_DATABASE_URL" \
-            "$SERVICING_IMAGE" seed-demo 2>&1)
-          code=$?
-          set -e
-          echo "$OUT" | tail -n 8
-          test "$code" -eq 0
-          grep -q 'seed-demo partner book' <<< "$OUT"
         env:
           SERVICING_DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_SERVICING_MIGRATION_URL }}
 
@@ -606,31 +600,6 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
 
-      # Sample borrowers, seeded through the real services from the image that
-      # was just built — no build on the runner, and the same code the service
-      # runs. Idempotent by users.persona_key: a persona that already stands at
-      # its target is left alone and reported. It refuses to run unless
-      # DEMO_PERSONAS=true, the same flag that mounts the persona sign-in —
-      # never set either on a real production deploy.
-      #
-      # Nine lines: eight walked (or `exists`) plus the Grander row, which is
-      # stood on the sample book's first loan rather than walked — the seed
-      # loads the twelve-loan book under its servicer at integration depth
-      # API, so the servicing port's live read has a loan to find. The script exits non-zero on a drift — a
-      # persona standing somewhere its story does not describe — and the
-      # sign-in page shows the LIVE state beside each name, so that is a wrong
-      # answer on a public page and the deploy stops here rather than ship it.
-      # Recovery is by hand and on purpose, because a drift means somebody or
-      # something moved a persona and the next run should not erase the
-      # evidence: read the DRIFT line for the key, then run this same image
-      # against the same database with `--reset <key>` and deploy again.
-      #
-      # The status is taken by hand because a step runs under `bash -e`: with
-      # `OUT=$(docker run …)` the shell aborts at the assignment the moment the
-      # container exits non-zero, and the `echo` never runs. That threw away
-      # the whole log on the one failure this step exists to catch — the drift
-      # line naming which persona and where it stood, and any stack trace from
-      # a walk that broke mid-way. Print first, then decide.
       # The average prime offer rate, fetched from the CFPB before anything is
       # decided against it. Three legal tests are compared against this series
       # for the week a loan's rate was set, and it is a weekly publication: the
@@ -639,8 +608,7 @@ jobs:
       # unchanged) and exits non-zero if the series it leaves behind does not
       # cover the current week — so a CFPB outage or a reshaped file stops the
       # deploy here, with the reason printed, rather than shipping a service on
-      # which every decision quietly ends "In review". Before the seed, because
-      # the sample borrowers are decided against this table too.
+      # which every decision quietly ends "In review".
       - name: Fetch the average prime offer rates
         run: |
           set +e
@@ -656,27 +624,12 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
 
-      - name: Seed the sample borrowers
-        run: |
-          set +e
-          OUT=$(docker run --rm --network host \
-            -e DATABASE_URL="$DATABASE_URL" \
-            -e DEMO_PERSONAS=true \
-            "$IMAGE" node apps/api/dist/scripts/seed-personas.js --purge-legacy-demo 2>&1)
-          code=$?
-          set -e
-          echo "$OUT"
-          test "$code" -eq 0
-          test "$(grep -c '^persona ' <<< "$OUT")" -eq 9
-        env:
-          DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
-
-      # The daily refinance review, once, after the seed: every monitored loan
+      # The daily refinance review, once, after the migrations: every monitored loan
       # gets a verdict from the ported engine before anyone looks at staging,
       # and a second run today — the scheduled one — writes nothing. A loan
       # the tape cannot describe is reported and skipped, not a failure. A
-      # candidate opens an offer, which is what the sample borrower's loan
-      # page then leads with. The analyst runs when the repository secret
+      # candidate opens an offer, which is what the borrower's loan page then
+      # leads with. The analyst runs when the repository secret
       # holds an Anthropic key and is recorded as off when it is empty.
       - name: Review the monitored loans
         run: |
@@ -743,12 +696,18 @@ jobs:
       - name: Deploy to Cloud Run
         run: |
           ENV_VARS="NODE_ENV=production,TRUST_PROXY=1,CONNECTOR_MODE=fixture,STATE_GALLERY=true"
-          # Sample borrowers on the sign-in page. This mounts a route that
-          # mints a real session with no Google credential, so it MUST NEVER be
-          # set on a real production deploy — staging runs NODE_ENV=production,
-          # which is why nothing in the code can tell the two apart and this
-          # flag is the whole of the decision. /api/health reports it, and the
-          # check below fails the deploy if it is not what was asked for.
+          # The persona sign-in. This mounts a route that mints a real session
+          # with no Google credential, so it MUST NEVER be set on a real
+          # production deploy — staging runs NODE_ENV=production, which is why
+          # nothing in the code can tell the two apart and this flag is the
+          # whole of the decision. /api/health reports it, and the check below
+          # fails the deploy if it is not what was asked for.
+          #
+          # The sample borrowers are no longer seeded (staging holds uploads
+          # from real books now), so the sign-in offers none. The flag stays on
+          # because it is also staging's mail fence: it keeps the mailer to
+          # internal domains (services/connectors.ts), and the uploaded
+          # supplements carry real homeowners' addresses.
           ENV_VARS="$ENV_VARS,DEMO_PERSONAS=true"
           ENV_VARS="$ENV_VARS,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}"
           ENV_VARS="$ENV_VARS,BANK_PROVIDER=plaid,PLAID_ENV=sandbox,PLAID_PRODUCT=assets"
@@ -985,9 +944,9 @@ jobs:
           case "$PROVIDERS" in
             *"stripe-identity (LIVE)"*) echo "::error::LIVE Stripe identity on staging"; exit 1 ;;
           esac
-          # The sample borrowers are what a tester is sent to look at, and a
-          # deploy that silently dropped the flag would leave the sign-in page
-          # offering nothing but Google with no error anywhere.
+          # The flag is staging's mail fence as well as the persona sign-in, and
+          # a deploy that silently dropped it would let the mailer write to the
+          # real addresses in the uploaded supplements with no error anywhere.
           case "$PROVIDERS" in
             *'"personas":"enabled"'*) echo "ok: sample borrowers are mounted" ;;
             *) echo "::error::DEMO_PERSONAS did not reach the service"; exit 1 ;;

@@ -14,6 +14,8 @@
     "migrate": "node scripts/run.mjs migrate",
     "db:setup": "node scripts/run.mjs db-setup",
     "seed-demo": "node scripts/run.mjs seed-demo",
+    "purge-synthetic": "node scripts/run.mjs purge-synthetic",
+    "test:purge": "node --test scripts/purge-synthetic.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "build": "npm run typecheck",
     "lint": "eslint scripts --max-warnings 0 --no-error-on-unmatched-pattern",

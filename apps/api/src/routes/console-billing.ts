@@ -23,6 +23,8 @@ import {
   statementFor,
 } from "../services/billing.js";
 import {
+  bankAccounts,
+  bankSetupLink,
   billingProfile,
   creditNoteLink,
   draftInvoice,
@@ -41,8 +43,20 @@ import {
   voidInvoice,
 } from "../services/billing-invoices.js";
 import { PRICE_SHEET } from "@hm/billing";
+import { config } from "../config.js";
 import { dayEt } from "../services/refi-offers.js";
 import { startOfMonth } from "@hm/kernel/calendar";
+
+/**
+ * Where the servicer's own portal is, for the page the provider sends a
+ * person back to: the servicing host once there is one, the console's dev
+ * server before that.
+ */
+export function portalOrigin(): string {
+  return config.servicing.publicHost
+    ? `https://${config.servicing.publicHost}`
+    : "http://localhost:5174";
+}
 
 const PoolBody = z
   .object({
@@ -230,6 +244,29 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
     "/invoices/:id/link",
     asyncRoute(async (req, res) => {
       res.json(await invoiceLink({ invoiceId: InvoiceId.parse(req.params.id) }));
+    }),
+  );
+
+  /** The bank accounts the servicer has on file for ACH debit. */
+  router.get(
+    "/servicers/:slug/ach",
+    asyncRoute(async (req, res) => {
+      res.json(await bankAccounts(z.string().min(1).parse(req.params.slug)));
+    }),
+  );
+
+  /**
+   * A link, good for a day, where the servicer puts a bank account on file.
+   * Made here to hand over; the portal has its own button for the same page.
+   */
+  router.post(
+    "/servicers/:slug/ach/setup-link",
+    asyncRoute(async (req, res) => {
+      const slug = z.string().min(1).parse(req.params.slug);
+      const back = `${portalOrigin()}/console/portal/billing`;
+      res.status(201).json(
+        await bankSetupLink({ slug, successUrl: `${back}?ach=done`, cancelUrl: `${back}?ach=left` }),
+      );
     }),
   );
 

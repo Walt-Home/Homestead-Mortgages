@@ -220,6 +220,26 @@ export interface CreditNoteView {
   readonly voidedBy: string | null;
 }
 
+export interface BankAccountOnFile {
+  readonly id: string;
+  readonly bankName: string | null;
+  readonly last4: string | null;
+  readonly accountType: string | null;
+  readonly holderType: string | null;
+  readonly isDefault: boolean;
+  readonly addedAt: string;
+}
+
+export interface BankAccountsAnswer {
+  readonly customer: { readonly provider: string; readonly id: string } | null;
+  readonly accounts: readonly BankAccountOnFile[];
+}
+
+export interface BankSetupLink {
+  readonly url: string;
+  readonly expiresAt: string;
+}
+
 export interface InvoicingStanding {
   readonly provider: string;
   readonly mode: "fixture" | "sandbox" | "production";
@@ -359,4 +379,27 @@ export function stripeDashboardUrl(
 ): string | null {
   if (!providerId || !provider.startsWith("stripe")) return null;
   return `https://dashboard.stripe.com/${livemode ? "" : "test/"}${kind}/${providerId}`;
+}
+
+/** The first day of the month after a "YYYY-MM-DD" day, as a day. */
+export function firstOfNextMonth(day: string): string {
+  const [y, m] = day.split("-").map(Number) as [number, number];
+  const ny = m === 12 ? y + 1 : y;
+  const nm = m === 12 ? 1 : m + 1;
+  return `${ny}-${String(nm).padStart(2, "0")}-01`;
+}
+
+/** Calendar days from one "YYYY-MM-DD" through another, inclusive. */
+export function daysThrough(from: string, through: string): number {
+  const a = Date.UTC(
+    Number(from.slice(0, 4)),
+    Number(from.slice(5, 7)) - 1,
+    Number(from.slice(8, 10)),
+  );
+  const b = Date.UTC(
+    Number(through.slice(0, 4)),
+    Number(through.slice(5, 7)) - 1,
+    Number(through.slice(8, 10)),
+  );
+  return Math.max(0, Math.round((b - a) / 86_400_000) + 1);
 }

@@ -179,7 +179,7 @@ describe("the billing profile", () => {
     expect(page.body.invoicing).toMatchObject({
       canIssue: true,
       provider: "fixture-invoicing",
-      paymentMethods: ["customer_balance", "us_bank_account"],
+      paymentMethods: ["us_bank_account"],
     });
 
     const saved = await call<{ profile: Record<string, unknown>; profileGaps: string[] }>(
@@ -799,5 +799,50 @@ describe("a credit note", () => {
     const after = await prisma.billingCreditNote.findUniqueOrThrow({ where: { id: note.id } });
     expect(after.status).toBe("VOID");
     expect(after.voidedAt).not.toBeNull();
+  });
+});
+
+describe("the bank account on file", () => {
+  it("is nothing until the provider knows the customer, which a setup link makes before any invoice", async () => {
+    await closedAugust();
+    const before = await call<{ customer: null; accounts: unknown[] }>("GET", `/servicers/${SLUG}/ach`);
+    expect(before.status).toBe(200);
+    expect(before.body).toEqual({ customer: null, accounts: [] });
+
+    // The provider cannot know a customer with no name and no address to mail.
+    const early = await call<{ error: { code: string } }>("POST", `/servicers/${SLUG}/ach/setup-link`);
+    expect(early.status).toBe(409);
+    expect(early.body.error.code).toBe("PROFILE_INCOMPLETE");
+
+    await call("PUT", `/servicers/${SLUG}/profile`, { ...PROFILE, netDays: null });
+    const link = await call<{ url: string; expiresAt: string }>("POST", `/servicers/${SLUG}/ach/setup-link`);
+    expect(link.status).toBe(201);
+    expect(link.body.url).toMatch(/^https:\/\/setup\.fixture\.test\/cus_fixture_northlight\?success=/);
+    expect(decodeURIComponent(link.body.url)).toContain("/console/portal/billing?ach=done");
+    const profile = await prisma.servicerBillingProfile.findFirstOrThrow();
+    expect(profile.providerCustomerId).toBe(`cus_fixture_${SLUG}`);
+    expect(await prisma.billingInvoice.count()).toBe(0);
+
+    const known = await call<{ customer: { id: string }; accounts: unknown[] }>("GET", `/servicers/${SLUG}/ach`);
+    expect(known.body.customer.id).toBe(`cus_fixture_${SLUG}`);
+    expect(known.body.accounts).toEqual([]);
+  });
+
+  it("lists what the servicer put on file, and makes a lone account the default", async () => {
+    await profiled();
+    await call("POST", `/servicers/${SLUG}/ach/setup-link`);
+    fixture().addBankAccount(`cus_fixture_${SLUG}`, { bankName: "FIRST BANK", last4: "6789" });
+    const listed = await call<{ accounts: { id: string; bankName: string; last4: string; isDefault: boolean }[] }>(
+      "GET",
+      `/servicers/${SLUG}/ach`,
+    );
+    expect(listed.body.accounts).toEqual([
+      expect.objectContaining({ bankName: "FIRST BANK", last4: "6789", isDefault: true }),
+    ]);
+    // The servicer's own team reads the same, and the invoice is paid from it.
+    const servicer = await prisma.servicer.findUniqueOrThrow({ where: { slug: SLUG } });
+    void servicer;
+    const again = await fixture().listBankAccounts(`cus_fixture_${SLUG}`);
+    expect(again[0]!.isDefault).toBe(true);
   });
 });

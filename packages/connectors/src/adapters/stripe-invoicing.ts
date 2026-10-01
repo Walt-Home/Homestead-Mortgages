@@ -35,6 +35,8 @@
 
 import Stripe from "stripe";
 import type {
+  BankAccountOnFile,
+  BankSetupLinkInput,
   ConnectorCapabilities,
   CreditNoteInput,
   InvoiceDraftInput,
@@ -467,6 +469,67 @@ export function stripeInvoicingConnector(options: StripeInvoicingOptions): Invoi
         return mapCreditNote(await stripe.creditNotes.retrieve(providerCreditNoteId));
       } catch (err) {
         if (isMissing(err)) return null;
+        throw refusal(err);
+      }
+    },
+
+    async listBankAccounts(customerId): Promise<BankAccountOnFile[]> {
+      try {
+        const customer = await stripe.customers.retrieve(customerId);
+        const preferred =
+          "deleted" in customer && customer.deleted
+            ? null
+            : typeof customer.invoice_settings?.default_payment_method === "string"
+              ? customer.invoice_settings.default_payment_method
+              : (customer.invoice_settings?.default_payment_method?.id ?? null);
+        const held = await stripe.customers.listPaymentMethods(customerId, {
+          type: "us_bank_account",
+          limit: 100,
+        });
+        return held.data.map((pm) => ({
+          id: pm.id,
+          bankName: pm.us_bank_account?.bank_name ?? null,
+          last4: pm.us_bank_account?.last4 ?? null,
+          accountType: pm.us_bank_account?.account_type ?? null,
+          holderType: pm.us_bank_account?.account_holder_type ?? null,
+          isDefault: pm.id === preferred,
+          addedAt: new Date(pm.created * 1000).toISOString(),
+        }));
+      } catch (err) {
+        throw refusal(err);
+      }
+    },
+
+    async createBankSetupLink(input: BankSetupLinkInput) {
+      try {
+        const session = await stripe.checkout.sessions.create({
+          mode: "setup",
+          customer: input.customerId,
+          payment_method_types: ["us_bank_account"],
+          success_url: input.successUrl,
+          cancel_url: input.cancelUrl,
+          metadata: { hm_servicer_id: input.servicerId, hm_purpose: "ach_setup" },
+          payment_method_options: {
+            // Instant verification through the bank's login where it is
+            // offered, two small deposits where it is not.
+            us_bank_account: { verification_method: "automatic" },
+          },
+        });
+        if (!session.url) {
+          throw new InvoicingProviderError("Stripe made a setup session with no page.", "no_url");
+        }
+        return { url: session.url, expiresAt: new Date(session.expires_at * 1000).toISOString() };
+      } catch (err) {
+        throw refusal(err);
+      }
+    },
+
+    async setDefaultBankAccount(customerId, bankAccountId) {
+      try {
+        await stripe.customers.update(customerId, {
+          invoice_settings: { default_payment_method: bankAccountId },
+        });
+      } catch (err) {
         throw refusal(err);
       }
     },

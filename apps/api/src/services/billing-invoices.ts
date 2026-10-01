@@ -56,6 +56,8 @@ import type {
 } from "@hm/db";
 import {
   InvoicingProviderError,
+  type BankAccountOnFile,
+  type BankSetupLink,
   type CreditNoteReason,
   type CreditNoteSettlement,
   type ProviderCreditNote,
@@ -545,6 +547,111 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 /**
+ * The provider's customer for a servicer, made from the profile or brought
+ * in line with it, and remembered. A customer made in the sandbox is not
+ * one in live, and the reverse, so the remembered id counts only under the
+ * provider this deployment runs.
+ */
+async function ensureCustomer(
+  servicer: { readonly id: string; readonly slug: string },
+  profile: BillingProfile,
+  db: Db,
+): Promise<string> {
+  if (!profile.legalName || !profile.billingEmail) {
+    throw new AppError(
+      409,
+      "The billing profile needs the legal name and where the invoice goes before the provider can know the customer.",
+      "PROFILE_INCOMPLETE",
+      { gaps: profileGaps(profile).filter((g) => g === "legal_name" || g === "billing_email") },
+    );
+  }
+  const invoicing = connectors().invoicing;
+  const provider = providerKey(invoicing);
+  const { customerId } = await atProvider(() =>
+    invoicing.upsertCustomer(
+      {
+        servicerId: servicer.id,
+        servicerSlug: servicer.slug,
+        legalName: profile.legalName!,
+        email: profile.billingEmail!,
+        address:
+          profile.addressLine1 && profile.city && profile.state && profile.postalCode
+            ? {
+                line1: profile.addressLine1,
+                line2: profile.addressLine2,
+                city: profile.city,
+                state: profile.state,
+                postalCode: profile.postalCode,
+                country: profile.country,
+              }
+            : null,
+        ein: profile.ein,
+      },
+      profile.customer?.provider === provider ? profile.customer.id : null,
+    ),
+  );
+  await db.servicerBillingProfile.update({
+    where: { servicerId: servicer.id },
+    data: { provider, providerCustomerId: customerId },
+  });
+  return customerId;
+}
+
+/* ── ACH: the bank account on file ───────────────────────────────────────── */
+
+export interface BankAccountsAnswer {
+  /** Null until the provider knows the servicer as a customer. */
+  readonly customer: { readonly provider: string; readonly id: string } | null;
+  readonly accounts: readonly BankAccountOnFile[];
+}
+
+/**
+ * The bank accounts a servicer has put on file for ACH debit, read from
+ * the provider. One account and no default is made the default here, so
+ * the hosted page pays from it without asking again.
+ */
+export async function bankAccounts(slug: string, db: Db = prisma): Promise<BankAccountsAnswer> {
+  const servicer = await servicerFor(slug, db);
+  const profile = profileOf(servicer.billingProfile);
+  const invoicing = connectors().invoicing;
+  if (!profile.customer || profile.customer.provider !== providerKey(invoicing)) {
+    return { customer: null, accounts: [] };
+  }
+  const customerId = profile.customer.id;
+  let accounts = await atProvider(() => invoicing.listBankAccounts(customerId));
+  if (accounts.length > 0 && !accounts.some((a) => a.isDefault)) {
+    const first = [...accounts].sort((a, b) => a.addedAt.localeCompare(b.addedAt))[0]!;
+    await atProvider(() => invoicing.setDefaultBankAccount(customerId, first.id));
+    accounts = accounts.map((a) => ({ ...a, isDefault: a.id === first.id }));
+  }
+  return { customer: profile.customer, accounts };
+}
+
+/**
+ * A hosted page where the servicer puts a bank account on file, good for a
+ * day. The provider has to know the customer first, so the profile's
+ * legal name and e-mail are needed; an invoice is not.
+ */
+export async function bankSetupLink(
+  args: { readonly slug: string; readonly successUrl: string; readonly cancelUrl: string },
+  db: Db = prisma,
+): Promise<BankSetupLink> {
+  const invoicing = connectors().invoicing;
+  const why = cannotIssue(invoicing);
+  if (why) throw new AppError(409, why, "INVOICING_NOT_CONNECTED");
+  const servicer = await servicerFor(args.slug, db);
+  const customerId = await ensureCustomer(servicer, profileOf(servicer.billingProfile), db);
+  return atProvider(() =>
+    invoicing.createBankSetupLink({
+      customerId,
+      servicerId: servicer.id,
+      successUrl: args.successUrl,
+      cancelUrl: args.cancelUrl,
+    }),
+  );
+}
+
+/**
  * Draft an invoice for a closed month: our row, then the provider's draft
  * with the statement's lines. Nothing is sent. A row an earlier attempt
  * left without a provider id is resumed, not remade.
@@ -605,34 +712,7 @@ export async function draftInvoice(
   }
 
   const provider = providerKey(invoicing);
-  const { customerId } = await atProvider(() =>
-    invoicing.upsertCustomer(
-      {
-        servicerId: servicer.id,
-        servicerSlug: servicer.slug,
-        legalName: profile.legalName!,
-        email: profile.billingEmail!,
-        address:
-          profile.addressLine1 && profile.city && profile.state && profile.postalCode
-            ? {
-                line1: profile.addressLine1,
-                line2: profile.addressLine2,
-                city: profile.city,
-                state: profile.state,
-                postalCode: profile.postalCode,
-                country: profile.country,
-              }
-            : null,
-        ein: profile.ein,
-      },
-      // A customer made in the sandbox is not one in live, and the reverse.
-      profile.customer?.provider === provider ? profile.customer.id : null,
-    ),
-  );
-  await db.servicerBillingProfile.update({
-    where: { servicerId: servicer.id },
-    data: { provider, providerCustomerId: customerId },
-  });
+  const customerId = await ensureCustomer(servicer, profile, db);
 
   let row = live;
   if (!row) {

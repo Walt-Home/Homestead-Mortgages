@@ -28,3 +28,14 @@ describe("billing's words", () => {
     expect(tokensWord("0")).toBe("0 tokens");
   });
 });
+
+describe("the running month's arithmetic", () => {
+  it("counts the days through today, inclusive, and names the first of the next month", async () => {
+    const { daysThrough, firstOfNextMonth } = await import("../billing.js");
+    expect(daysThrough("2026-10-01", "2026-10-01")).toBe(1);
+    expect(daysThrough("2026-09-22", "2026-09-30")).toBe(9);
+    expect(daysThrough("2026-10-05", "2026-10-01")).toBe(0);
+    expect(firstOfNextMonth("2026-10-31")).toBe("2026-11-01");
+    expect(firstOfNextMonth("2026-12-15")).toBe("2027-01-01");
+  });
+});

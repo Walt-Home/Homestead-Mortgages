@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../../components/Page.js";
 import { Table, type Column } from "../../components/Table.js";
@@ -18,15 +18,19 @@ import { Loading } from "../../components/Loading.js";
 import { useToast } from "../../components/Toast.js";
 import { fmtDate, money, plural } from "../../lib/format.js";
 import {
+  daysThrough,
+  firstOfNextMonth,
   monthLabel,
   openInvoicePage,
   tokensWord,
   type InvoiceLink,
+  type Statement,
   type StatementStanding,
 } from "../../lib/billing.js";
 import {
   portal,
   PortalError,
+  type PortalBankAccount,
   type PortalBilling,
   type PortalCreditNote,
   type PortalInvoice,
@@ -50,6 +54,114 @@ const ISSUED_WORDS: Record<
   paid: { word: "Paid", tone: "ok" },
   uncollectible: { word: "Overdue", tone: "danger" },
 };
+
+/** The month still running, in a sentence that is true on its first day too. */
+function runningWords(s: Statement): string {
+  const days = daysThrough(s.from, s.through);
+  const span =
+    s.from === s.through
+      ? `${fmtDate(s.from)} only`
+      : `${fmtDate(s.from)} through ${fmtDate(s.through)}`;
+  return `${span}, ${plural(days, "day")} of ${s.daysInMonth} so far. The month is invoiced after it closes on ${fmtDate(firstOfNextMonth(s.to))}.`;
+}
+
+/**
+ * How the servicer pays: ACH debit from a bank account on file with the
+ * provider, set up on the provider's own page. Cards are not accepted.
+ */
+function PortalAch() {
+  const toast = useToast();
+  const [params, setParams] = useSearchParams();
+  const outcome = params.get("ach");
+  // Coming back with ?ach=done is a new question to the provider, not a cached answer.
+  const accounts = useQuery({
+    queryKey: ["portal-ach", outcome ?? ""],
+    queryFn: () =>
+      portal<{ accounts: PortalBankAccount[] }>("/billing/ach").then((r) => r.accounts),
+  });
+  const [busy, setBusy] = useState(false);
+  const setUp = async () => {
+    setBusy(true);
+    try {
+      const { url } = await portal<{ url: string }>("/billing/ach/setup-link", {
+        method: "POST",
+        body: {},
+      });
+      window.location.assign(url);
+    } catch (err) {
+      setBusy(false);
+      toast({
+        tone: "danger",
+        title: "The setup page could not be opened",
+        body: (err as Error).message,
+      });
+    }
+  };
+  const dismiss = () => {
+    params.delete("ach");
+    setParams(params, { replace: true });
+  };
+  return (
+    <div className="space-y-4 rounded-lg border border-line-2 bg-surface p-4">
+      {outcome === "done" ? (
+        <Notice tone="ok" title="Thank you — the bank account is on file">
+          Invoices are paid from it on the invoice page.{" "}
+          <button type="button" className="underline" onClick={dismiss}>
+            Dismiss
+          </button>
+        </Notice>
+      ) : outcome === "left" ? (
+        <Notice tone="neutral" title="Nothing was added">
+          Come back to it any time.{" "}
+          <button type="button" className="underline" onClick={dismiss}>
+            Dismiss
+          </button>
+        </Notice>
+      ) : null}
+      <p className="text-sm text-fg-2">
+        Invoices are paid by ACH debit from a bank account you put on file. Cards are not accepted.
+        The account is entered and verified on our payment provider's page, by signing in to the
+        bank or confirming two small deposits; the number never reaches us.
+      </p>
+      {accounts.isPending ? (
+        <Loading what="Reading what is on file" />
+      ) : accounts.isError || !accounts.data ? (
+        <Notice tone="danger">What is on file could not be read.</Notice>
+      ) : accounts.data.length === 0 ? (
+        <Notice tone="warn" title="No bank account on file yet">
+          Add one now and the first invoice can be paid in a click.
+        </Notice>
+      ) : (
+        <ul className="divide-y divide-line rounded-lg border border-line-2">
+          {accounts.data.map((a) => (
+            <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+              <span className="flex flex-col">
+                <span className="font-medium text-fg">
+                  {a.bankName ?? "Bank account"}
+                  {a.last4 ? <span className="ml-2 font-mono text-fg-2">····{a.last4}</span> : null}
+                </span>
+                <span className="text-xs text-fg-3">
+                  {a.accountType ?? ""}
+                  {a.addedAt ? ` · added ${fmtDate(a.addedAt)}` : ""}
+                </span>
+              </span>
+              {a.isDefault ? <Pill tone="ok">Invoices are paid from this</Pill> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button
+        variant={accounts.data && accounts.data.length > 0 ? "secondary" : "primary"}
+        loading={busy}
+        onClick={() => void setUp()}
+      >
+        {accounts.data && accounts.data.length > 0
+          ? "Add another bank account"
+          : "Set up ACH payments"}
+      </Button>
+    </div>
+  );
+}
 
 /** How a loan on the book is charged, in the servicer's terms. */
 const BASIS =
@@ -304,10 +416,11 @@ export function PortalBillingPage() {
         }
       >
         <StatementStats answer={current} />
-        <p className="mt-3 text-sm text-fg-3">
-          {fmtDate(s.from)} through {fmtDate(s.through)}. The month is invoiced on the first of the
-          next.
-        </p>
+        <p className="mt-3 text-sm text-fg-3">{runningWords(s)}</p>
+      </Section>
+
+      <Section title="Paying">
+        <PortalAch />
       </Section>
 
       <Section
@@ -405,10 +518,7 @@ export function PortalInvoicePage() {
             {answer.data.closedAt ? `, issued ${fmtDate(answer.data.closedAt)}` : ""}.
           </span>
         ) : answer.data.standing === "running" ? (
-          <span>
-            {fmtDate(s.from)} through {fmtDate(s.through)}; the month is invoiced on the first of
-            the next.
-          </span>
+          <span>{runningWords(s)}</span>
         ) : (
           <span>
             {fmtDate(s.from)} through {fmtDate(s.to)}; the month has ended and its invoice is on its

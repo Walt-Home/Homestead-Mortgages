@@ -3607,12 +3607,23 @@ deferred delivery the reconciliation finishes, the payment taken back.
 the day this landed: customer, draft, an idempotent retry that found the
 same draft, send with a hosted page, read, void.
 
-**Not decided, and where each waits.** Payment methods: bank transfer and
-ACH debit on, cards off, is the recommendation, and `BILLING_PAYMENT_METHODS`
-is where it changes. Reminders and write-off: `BILLING_AUTO_ADVANCE`.
-Tax: nothing is computed; Stripe Tax would need a registration. Credit
-notes, an accounting export and the servicer-side receipt are the next
-pieces once the first invoice has been paid.
+**ACH debit only (Joe, 1 October 2026).** "We won't accept credit card
+for purchases. ACH only." So an invoice offers one payment method,
+`us_bank_account`, and the servicer puts a bank account on file once: the
+console's ACH section and the portal's "Set up ACH payments" both open the
+provider's hosted setup page (a Checkout session in setup mode, instant
+verification through the bank's login where offered, two small deposits
+otherwise), the account number never reaches us, and a lone account on
+file is made the default so the invoice page pays from it without asking
+again. `BILLING_PAYMENT_METHODS` is where this changes; bank transfer to a
+virtual account is a word away. Collecting automatically from the account
+on file, rather than sending the invoice for the servicer to pay, is a
+further decision not taken.
+
+**Not decided, and where each waits.** Reminders and write-off:
+`BILLING_AUTO_ADVANCE`. Tax: nothing is computed; Stripe Tax would need a
+registration. An accounting export is the next piece once the first real
+invoice has been paid.
 
 ## The console has one role
 

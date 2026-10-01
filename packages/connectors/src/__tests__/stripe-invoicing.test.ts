@@ -634,3 +634,81 @@ describe("a credit note", () => {
     expect(await d.retrieveCreditNote("cn_nope")).toBeNull();
   });
 });
+
+describe("the bank account on file", () => {
+  it("lists the customer's US bank accounts, marking the one invoices default to", async () => {
+    const { seen, fetchImpl } = stub((req) =>
+      req.path === "/v1/customers/cus_1"
+        ? { json: { id: "cus_1", object: "customer", invoice_settings: { default_payment_method: "pm_2" } } }
+        : {
+            json: {
+              object: "list",
+              has_more: false,
+              url: "/v1/customers/cus_1/payment_methods",
+              data: [
+                {
+                  id: "pm_1",
+                  object: "payment_method",
+                  type: "us_bank_account",
+                  created: 1_790_000_000,
+                  us_bank_account: { bank_name: "FIRST BANK", last4: "6789", account_type: "checking", account_holder_type: "company" },
+                },
+                {
+                  id: "pm_2",
+                  object: "payment_method",
+                  type: "us_bank_account",
+                  created: 1_790_100_000,
+                  us_bank_account: { bank_name: "SECOND BANK", last4: "4321", account_type: "savings", account_holder_type: "company" },
+                },
+              ],
+            },
+          },
+    );
+    const c = stripeInvoicingConnector({ apiKey: KEY, fetchImpl });
+    const accounts = await c.listBankAccounts("cus_1");
+    expect(seen.map((r) => `${r.method} ${r.path}`)).toEqual([
+      "GET /v1/customers/cus_1",
+      "GET /v1/customers/cus_1/payment_methods",
+    ]);
+    expect(seen[1]!.query.get("type")).toBe("us_bank_account");
+    expect(accounts).toEqual([
+      expect.objectContaining({ id: "pm_1", bankName: "FIRST BANK", last4: "6789", accountType: "checking", holderType: "company", isDefault: false }),
+      expect.objectContaining({ id: "pm_2", bankName: "SECOND BANK", last4: "4321", isDefault: true }),
+    ]);
+  });
+
+  it("asks Stripe for a hosted setup page for a bank account and nothing else", async () => {
+    const { seen, fetchImpl } = stub(() => ({
+      json: { id: "cs_1", object: "checkout.session", url: "https://checkout.stripe.com/c/pay/cs_1", expires_at: 1_790_086_400 },
+    }));
+    const c = stripeInvoicingConnector({ apiKey: KEY, fetchImpl });
+    const link = await c.createBankSetupLink({
+      customerId: "cus_1",
+      servicerId: "svc-1",
+      successUrl: "https://portal.example/billing?ach=done",
+      cancelUrl: "https://portal.example/billing?ach=left",
+    });
+    expect(`${seen[0]!.method} ${seen[0]!.path}`).toBe("POST /v1/checkout/sessions");
+    const b = seen[0]!.body;
+    expect(b.get("mode")).toBe("setup");
+    expect(b.get("customer")).toBe("cus_1");
+    expect(b.get("payment_method_types[0]")).toBe("us_bank_account");
+    expect(b.has("payment_method_types[1]")).toBe(false);
+    expect(b.get("success_url")).toBe("https://portal.example/billing?ach=done");
+    expect(b.get("cancel_url")).toBe("https://portal.example/billing?ach=left");
+    expect(b.get("payment_method_options[us_bank_account][verification_method]")).toBe("automatic");
+    expect(b.get("metadata[hm_servicer_id]")).toBe("svc-1");
+    expect(link).toEqual({
+      url: "https://checkout.stripe.com/c/pay/cs_1",
+      expiresAt: new Date(1_790_086_400 * 1000).toISOString(),
+    });
+  });
+
+  it("makes an account the one invoices default to", async () => {
+    const { seen, fetchImpl } = stub(() => ({ json: { id: "cus_1", object: "customer" } }));
+    const c = stripeInvoicingConnector({ apiKey: KEY, fetchImpl });
+    await c.setDefaultBankAccount("cus_1", "pm_2");
+    expect(`${seen[0]!.method} ${seen[0]!.path}`).toBe("POST /v1/customers/cus_1");
+    expect(seen[0]!.body.get("invoice_settings[default_payment_method]")).toBe("pm_2");
+  });
+});

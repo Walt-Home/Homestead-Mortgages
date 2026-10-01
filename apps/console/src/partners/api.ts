@@ -223,6 +223,15 @@ export interface PortalBilling {
   invoices: PortalInvoice[];
 }
 
+export interface PortalBankAccount {
+  id: string;
+  bankName: string | null;
+  last4: string | null;
+  accountType: string | null;
+  isDefault: boolean;
+  addedAt: string;
+}
+
 export interface PortalTeamMember {
   id: string;
   email: string;

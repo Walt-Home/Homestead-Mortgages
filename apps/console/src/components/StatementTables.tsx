@@ -5,7 +5,8 @@
  * page in the portal — so an invoice reads the same on both sides of it.
  */
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Button } from "./ui.js";
 import { Table, type Column } from "./Table.js";
 import { fmtDate, money, plural } from "../lib/format.js";
 import { tokensWord, type LoanCharge, type Statement, type StatementLine } from "../lib/billing.js";
@@ -72,11 +73,21 @@ export function StatementLines({ statement: s }: { statement: Statement }) {
 export function StatementLoans({
   statement: s,
   loanNumber,
+  pageSize = 10,
 }: {
   statement: Statement;
   /** How a loan's number is drawn: a link to its page, where there is one. */
   loanNumber?: (charge: LoanCharge) => ReactNode;
+  /** A book is thousands of loans; a page is ten of them. */
+  pageSize?: number;
 }) {
+  const [page, setPage] = useState(0);
+  const pages = Math.max(1, Math.ceil(s.loans.length / pageSize));
+  const at = Math.min(page, pages - 1);
+  const rows = useMemo(
+    () => s.loans.slice(at * pageSize, (at + 1) * pageSize),
+    [s.loans, at, pageSize],
+  );
   const columns = useMemo<Column<LoanCharge>[]>(
     () => [
       {
@@ -141,7 +152,7 @@ export function StatementLoans({
     <div className="overflow-hidden rounded-lg border border-line-2 bg-surface">
       <Table
         columns={columns}
-        rows={s.loans}
+        rows={rows}
         rowKey={(c) => c.loanId}
         dense
         empty={{
@@ -150,6 +161,33 @@ export function StatementLoans({
           body: "No loan on the book was watched during it.",
         }}
       />
+      {s.loans.length > pageSize ? (
+        <div className="flex items-center justify-between border-t border-line-2 px-4 py-2 text-sm text-fg-2">
+          <span>
+            Loans {(at * pageSize + 1).toLocaleString()}–
+            {Math.min((at + 1) * pageSize, s.loans.length).toLocaleString()} of{" "}
+            {s.loans.length.toLocaleString()}
+          </span>
+          <span className="flex gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={at === 0}
+              onClick={() => setPage(at - 1)}
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={at >= pages - 1}
+              onClick={() => setPage(at + 1)}
+            >
+              Next
+            </Button>
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

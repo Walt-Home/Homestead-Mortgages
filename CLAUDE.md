@@ -255,7 +255,9 @@ which a deployed service refuses to issue through). `services/billing-invoices.t
 holds the profile a draft cannot be made without, the acts (draft, send,
 void, paid by hand, sync, and a credit note against what was sent or paid,
 settled one way on a paid invoice), the inbox for Stripe's deliveries and
-the reconciliation; `/api/webhooks/invoicing` is the one door above the body
+the reconciliation, and the bank account a servicer puts on file for ACH
+debit — the only payment method, by Joe's rule of 1 October — through the
+provider's hosted setup page; `/api/webhooks/invoicing` is the one door above the body
 parser besides the partner key, because the signature is over the raw
 bytes. Every write is idempotent on our invoice id and a draft is found
 before it is made; the hosted link is never stored; an event is acted on

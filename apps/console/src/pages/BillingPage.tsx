@@ -15,8 +15,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../components/Page.js";
 import { Table, type Column } from "../components/Table.js";
 import { StatementLines, StatementLoans } from "../components/StatementTables.js";
+import { AchPayments } from "../components/AchPayments.js";
 import { BillingProfileForm } from "../components/BillingProfileForm.js";
 import { INVOICE_WORDS, InvoicePanel } from "../components/InvoicePanel.js";
+import { useToast } from "../components/Toast.js";
 import {
   Button,
   EmptyState,
@@ -34,9 +36,12 @@ import { useAct } from "../lib/act.js";
 import { fmtDate, fmtDateTime, money, plural } from "../lib/format.js";
 import {
   billing,
+  daysThrough,
+  firstOfNextMonth,
   monthLabel,
   monthOf,
   monthsSince,
+  openInvoicePage,
   paymentMethodWord,
   stripeDashboardUrl,
   tokensWord,
@@ -44,10 +49,22 @@ import {
   type BillingServicerCard,
   type BillingServicerPage as ServicerBilling,
   type CloseReport,
+  type InvoiceLink,
   type InvoiceView,
+  type Statement,
   type StatementAnswer,
   type StatementStanding,
 } from "../lib/billing.js";
+
+/** The month still running, in a sentence that is true on its first day too. */
+function runningWords(s: Statement): string {
+  const days = daysThrough(s.from, s.through);
+  const span =
+    s.from === s.through
+      ? `${fmtDate(s.from)} only`
+      : `${fmtDate(s.from)} through ${fmtDate(s.through)}`;
+  return `${monthLabel(s.month)} so far: ${span}, ${plural(days, "day")} of ${s.daysInMonth}. It closes on ${fmtDate(firstOfNextMonth(s.to))} and is drafted and sent from here after that.`;
+}
 
 const STANDING_WORDS: Record<StatementStanding, { word: string; tone: Tone }> = {
   closed: { word: "Closed", tone: "ok" },
@@ -234,6 +251,7 @@ export function BillingServicerPage() {
     invalidate: [["billing-servicer", slug], ["billing-statement", slug], ["billing-servicers"]],
     done: "Closed",
   });
+  const toast = useToast();
 
   if (page.isPending) return <Loading what="Reading the servicer" />;
   if (page.isError || !page.data) {
@@ -247,6 +265,7 @@ export function BillingServicerPage() {
   }
   const { servicer, today, sheet, statements, profile, profileGaps, invoices, invoicing } =
     page.data;
+  const running = page.data.current.statement;
   const months = monthsSince(servicer.since, today);
   // The month's invoice: the live one if there is one, else the last voided.
   const invoiceFor = (m: string): InvoiceView | null => {
@@ -320,9 +339,7 @@ export function BillingServicerPage() {
                 {answer.closed.closedBy === "job" ? "the month-close job" : "staff"}
               </span>
             ) : answer.standing === "running" ? (
-              <span>
-                {fmtDate(s.from)} through {fmtDate(s.through)}; the month closes on the first.
-              </span>
+              <span>{runningWords(s)}</span>
             ) : (
               <span>
                 {fmtDate(s.from)} through {fmtDate(s.to)}, computed now; close it to keep it.
@@ -388,6 +405,164 @@ export function BillingServicerPage() {
         </>
       )}
 
+      <Section
+        title="Invoices"
+        className="mt-8"
+        aside={
+          <span className="text-sm text-fg-3">
+            {statements.length ? plural(statements.length, "past invoice") : "none past yet"}
+          </span>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg border border-line-2 bg-surface p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold uppercase tracking-[0.08em] text-fg-3">
+                  Upcoming
+                </div>
+                <div className="mt-1 text-base font-medium text-fg">
+                  {monthLabel(running.month)}
+                </div>
+                <div className="mt-1 max-w-prose text-sm text-fg-2">{runningWords(running)}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xl font-semibold tabular-nums text-fg">
+                  {money(running.cents)}
+                </div>
+                <div className="text-xs text-fg-3">so far · {tokensWord(running.tokens)}</div>
+              </div>
+            </div>
+          </div>
+          {statements.length > 0 ? (
+            <div className="overflow-hidden rounded-lg border border-line-2 bg-surface">
+              <Table
+                dense
+                columns={[
+                  {
+                    key: "month",
+                    header: "Past",
+                    primary: true,
+                    render: (c) => (
+                      <button
+                        type="button"
+                        className="font-medium text-fg hover:underline"
+                        onClick={() => setChosen(c.month)}
+                      >
+                        {monthLabel(c.month)}
+                      </button>
+                    ),
+                  },
+                  {
+                    key: "amount",
+                    header: "Amount",
+                    align: "right",
+                    render: (c) => <span className="font-medium text-fg">{money(c.cents)}</span>,
+                  },
+                  {
+                    key: "invoice",
+                    header: "Invoice",
+                    render: (c) => {
+                      const i = invoiceFor(c.month);
+                      if (!i) return <span className="text-fg-3">Not drafted</span>;
+                      const at = stripeDashboardUrl(
+                        "invoices",
+                        i.providerInvoiceId,
+                        i.provider,
+                        i.livemode,
+                      );
+                      return (
+                        <span className="flex flex-wrap items-center gap-2">
+                          <Pill tone={INVOICE_WORDS[i.standing].tone}>
+                            {INVOICE_WORDS[i.standing].word}
+                          </Pill>
+                          {i.number ? (
+                            at ? (
+                              <a
+                                href={at}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-mono text-xs text-fg-2 hover:underline"
+                              >
+                                {i.number}
+                              </a>
+                            ) : (
+                              <span className="font-mono text-xs text-fg-2">{i.number}</span>
+                            )
+                          ) : null}
+                          {i.attempt > 1 ? (
+                            <span className="text-xs text-fg-3">attempt {i.attempt}</span>
+                          ) : null}
+                        </span>
+                      );
+                    },
+                  },
+                  {
+                    key: "due",
+                    header: "Due",
+                    render: (c) => {
+                      const i = invoiceFor(c.month);
+                      return i?.dueAt ? fmtDate(i.dueAt) : "—";
+                    },
+                  },
+                  {
+                    key: "paid",
+                    header: "Paid",
+                    render: (c) => {
+                      const i = invoiceFor(c.month);
+                      return i?.paidAt
+                        ? `${fmtDate(i.paidAt)}${i.paidOutOfBand ? " · outside" : ""}`
+                        : "—";
+                    },
+                  },
+                  {
+                    key: "open",
+                    header: "",
+                    align: "right",
+                    render: (c) => {
+                      const i = invoiceFor(c.month);
+                      return i &&
+                        ["sent", "open", "past_due", "paid", "uncollectible"].includes(
+                          i.standing,
+                        ) ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() =>
+                            void openInvoicePage(() =>
+                              billing<InvoiceLink>(`/invoices/${i.id}/link`),
+                            ).catch((err: Error) =>
+                              toast({
+                                tone: "danger",
+                                title: "The page could not be opened",
+                                body: err.message,
+                              }),
+                            )
+                          }
+                        >
+                          {i.standing === "paid" ? "Receipt" : "Invoice page"}
+                        </Button>
+                      ) : null;
+                    },
+                  },
+                ]}
+                rows={statements}
+                rowKey={(c) => c.id}
+              />
+            </div>
+          ) : (
+            <Notice tone="neutral">
+              No month has closed yet. The first past invoice appears after{" "}
+              {monthLabel(running.month)} closes on {fmtDate(firstOfNextMonth(running.to))}.
+            </Notice>
+          )}
+        </div>
+      </Section>
+
+      <Section title="ACH payments" className="mt-8">
+        <AchPayments slug={slug} gaps={profileGaps} invoicing={invoicing} />
+      </Section>
+
       <Section title="Billing profile" className="mt-8">
         <BillingProfileForm
           key={profile.updatedAt ?? "new"}
@@ -396,93 +571,6 @@ export function BillingServicerPage() {
           gaps={profileGaps}
         />
       </Section>
-
-      {invoices.length > 0 ? (
-        <Section title="Invoices" className="mt-8">
-          <div className="overflow-hidden rounded-lg border border-line-2 bg-surface">
-            <Table
-              dense
-              columns={[
-                {
-                  key: "month",
-                  header: "Month",
-                  primary: true,
-                  render: (i) => (
-                    <button
-                      type="button"
-                      className="font-medium text-fg hover:underline"
-                      onClick={() => setChosen(i.month)}
-                    >
-                      {monthLabel(i.month)}
-                      {i.attempt > 1 ? ` · attempt ${i.attempt}` : ""}
-                    </button>
-                  ),
-                },
-                {
-                  key: "number",
-                  header: "Number",
-                  mono: true,
-                  render: (i) => {
-                    const at = stripeDashboardUrl(
-                      "invoices",
-                      i.providerInvoiceId,
-                      i.provider,
-                      i.livemode,
-                    );
-                    return at ? (
-                      <a
-                        href={at}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-fg hover:underline"
-                      >
-                        {i.number ?? i.providerInvoiceId}
-                      </a>
-                    ) : (
-                      (i.number ?? "—")
-                    );
-                  },
-                },
-                {
-                  key: "standing",
-                  header: "Standing",
-                  render: (i) => (
-                    <Pill tone={INVOICE_WORDS[i.standing].tone}>
-                      {INVOICE_WORDS[i.standing].word}
-                    </Pill>
-                  ),
-                },
-                {
-                  key: "amount",
-                  header: "Amount",
-                  align: "right",
-                  render: (i) => (
-                    <span className="font-medium text-fg">{money(i.amountCents)}</span>
-                  ),
-                },
-                {
-                  key: "due",
-                  header: "Due",
-                  render: (i) => (i.dueAt ? fmtDate(i.dueAt) : "—"),
-                },
-                {
-                  key: "sent",
-                  header: "Sent",
-                  render: (i) => (i.sentAt ? fmtDate(i.sentAt) : "—"),
-                },
-                {
-                  key: "paid",
-                  header: "Paid",
-                  render: (i) =>
-                    i.paidAt ? `${fmtDate(i.paidAt)}${i.paidOutOfBand ? " · outside" : ""}` : "—",
-                },
-              ]}
-              rows={invoices}
-              rowKey={(i) => i.id}
-            />
-          </div>
-        </Section>
-      ) : null}
 
       <Section title="Annual token pool" className="mt-8">
         <div className="space-y-4 rounded-lg border border-line-2 bg-surface p-4">
@@ -515,59 +603,6 @@ export function BillingServicerPage() {
           />
         </div>
       </Section>
-
-      {statements.length > 0 ? (
-        <Section title="Closed statements" className="mt-8">
-          <div className="overflow-hidden rounded-lg border border-line-2 bg-surface">
-            <Table
-              dense
-              columns={[
-                {
-                  key: "month",
-                  header: "Month",
-                  primary: true,
-                  render: (c) => (
-                    <button
-                      type="button"
-                      className="font-medium text-fg hover:underline"
-                      onClick={() => setChosen(c.month)}
-                    >
-                      {monthLabel(c.month)}
-                    </button>
-                  ),
-                },
-                {
-                  key: "loans",
-                  header: "Loans",
-                  align: "right",
-                  render: (c) => c.loansBilled.toLocaleString(),
-                },
-                { key: "lm", header: "Loan-months", align: "right", render: (c) => c.loanMonths },
-                {
-                  key: "tokens",
-                  header: "Tokens",
-                  align: "right",
-                  render: (c) => Number(c.tokens).toLocaleString("en-US"),
-                },
-                {
-                  key: "cents",
-                  header: "Charge",
-                  align: "right",
-                  render: (c) => <span className="font-medium text-fg">{money(c.cents)}</span>,
-                },
-                {
-                  key: "closed",
-                  header: "Closed",
-                  render: (c) =>
-                    `${fmtDateTime(c.closedAt)} · ${c.closedBy === "job" ? "job" : "by hand"}`,
-                },
-              ]}
-              rows={statements}
-              rowKey={(c) => c.id}
-            />
-          </div>
-        </Section>
-      ) : null}
 
       <Notice tone="neutral" className="mt-8">
         {BASIS}

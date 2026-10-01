@@ -16,6 +16,7 @@
  */
 
 import type {
+  BankAccountOnFile,
   ConnectorCapabilities,
   CreditNoteInput,
   InvoiceDraftInput,
@@ -54,6 +55,11 @@ export interface FixtureInvoicingConnector extends InvoicingConnector {
   reopen(providerInvoiceId: string): void;
   /** The next call of this kind fails as a provider outage would. */
   failNext(act: Act): void;
+  /** The customer put a bank account on file, as the setup page would leave it. */
+  addBankAccount(
+    customerId: string,
+    account: { readonly bankName: string; readonly last4: string },
+  ): BankAccountOnFile;
   /** A signed delivery about an invoice, or a credit note, as a request body and its signature. */
   event(
     type: string,
@@ -84,6 +90,7 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
   const customers = new Map<string, InvoicingCustomerInput>();
   const invoices = new Map<string, Held>();
   const notes = new Map<string, HeldNote>();
+  const banks = new Map<string, BankAccountOnFile[]>();
   const writes: string[] = [];
   const failing = new Set<Act>();
   let sequence = 0;
@@ -339,6 +346,54 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
 
     async retrieveCreditNote(providerCreditNoteId) {
       return notes.get(providerCreditNoteId)?.note ?? null;
+    },
+
+    async listBankAccounts(customerId) {
+      if (!customers.has(customerId)) {
+        throw new InvoicingProviderError(`No such customer: ${customerId}`, "resource_missing", 404);
+      }
+      return banks.get(customerId) ?? [];
+    },
+
+    async createBankSetupLink(input) {
+      if (!customers.has(input.customerId)) {
+        throw new InvoicingProviderError(
+          `No such customer: ${input.customerId}`,
+          "resource_missing",
+          404,
+        );
+      }
+      writes.push(`setup-link:${input.customerId}`);
+      return {
+        url: `https://setup.fixture.test/${input.customerId}?success=${encodeURIComponent(input.successUrl)}`,
+        expiresAt: new Date(Date.now() + 24 * 3_600_000).toISOString(),
+      };
+    },
+
+    async setDefaultBankAccount(customerId, bankAccountId) {
+      const held = banks.get(customerId) ?? [];
+      if (!held.some((b) => b.id === bankAccountId)) {
+        throw new InvoicingProviderError(`No such bank account: ${bankAccountId}`, "resource_missing", 404);
+      }
+      banks.set(
+        customerId,
+        held.map((b) => ({ ...b, isDefault: b.id === bankAccountId })),
+      );
+    },
+
+    addBankAccount(customerId, account) {
+      const held = banks.get(customerId) ?? [];
+      const added: BankAccountOnFile = {
+        id: `pm_fixture_${String(held.length + 1).padStart(3, "0")}`,
+        bankName: account.bankName,
+        last4: account.last4,
+        accountType: "checking",
+        holderType: "company",
+        isDefault: false,
+        addedAt: new Date().toISOString(),
+      };
+      banks.set(customerId, [...held, added]);
+      return added;
     },
 
     readEvent(rawBody, signature) {

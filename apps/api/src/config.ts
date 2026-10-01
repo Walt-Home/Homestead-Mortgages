@@ -304,12 +304,13 @@ export const config = {
      */
     autoAdvance: process.env.BILLING_AUTO_ADVANCE === "true",
     /**
-     * What an invoice may be paid with. Bank transfer and bank debit by
-     * default, cards off: a card's fee on a six-figure invoice is five
-     * figures. A recommendation awaiting confirmation, which is why it is a
-     * variable.
+     * What an invoice may be paid with. ACH debit only — Joe, 1 October
+     * 2026: "we won't accept credit card for purchases. ACH only." A card's
+     * fee on a six-figure invoice is five figures. Bank transfer to a
+     * virtual account (`customer_balance`) is a word away here if it is
+     * ever wanted.
      */
-    paymentMethods: (process.env.BILLING_PAYMENT_METHODS ?? "customer_balance,us_bank_account")
+    paymentMethods: (process.env.BILLING_PAYMENT_METHODS ?? "us_bank_account")
       .split(/[\s,;]+/)
       .map((m) => m.trim())
       .filter((m) => m !== ""),

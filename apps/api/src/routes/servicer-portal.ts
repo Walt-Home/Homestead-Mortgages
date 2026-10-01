@@ -32,11 +32,14 @@ import {
   type StatementAnswer,
 } from "../services/billing.js";
 import {
+  bankAccounts,
+  bankSetupLink,
   creditNoteLink,
   invoiceLink,
   listCreditNotes,
   memberInvoices,
 } from "../services/billing-invoices.js";
+import { portalOrigin } from "./console-billing.js";
 import { dayEt } from "../services/refi-offers.js";
 import {
   acceptServicerInvitation,
@@ -279,6 +282,39 @@ servicerPortalRouter.get(
     const month = monthFromKey(z.string().parse(req.params.month));
     res.json(
       statementForMember(await statementFor({ slug: req.servicerUser!.servicer.slug, month })),
+    );
+  }),
+);
+
+/** The bank accounts their servicer has on file for ACH debit. */
+servicerPortalRouter.get(
+  "/billing/ach",
+  asyncRoute(async (req, res) => {
+    const { accounts } = await bankAccounts(req.servicerUser!.servicer.slug);
+    res.json({
+      accounts: accounts.map((a) => ({
+        id: a.id,
+        bankName: a.bankName,
+        last4: a.last4,
+        accountType: a.accountType,
+        isDefault: a.isDefault,
+        addedAt: a.addedAt,
+      })),
+    });
+  }),
+);
+
+/** The hosted page where a member puts their servicer's bank account on file; they are sent there. */
+servicerPortalRouter.post(
+  "/billing/ach/setup-link",
+  asyncRoute(async (req, res) => {
+    const back = `${portalOrigin()}/console/portal/billing`;
+    res.status(201).json(
+      await bankSetupLink({
+        slug: req.servicerUser!.servicer.slug,
+        successUrl: `${back}?ach=done`,
+        cancelUrl: `${back}?ach=left`,
+      }),
     );
   }),
 );

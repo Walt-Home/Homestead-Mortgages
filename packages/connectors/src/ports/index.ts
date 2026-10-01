@@ -946,6 +946,38 @@ export interface ProviderCreditNote {
   readonly metadata: Readonly<Record<string, string>>;
 }
 
+/**
+ * A US bank account the customer has put on file for ACH debit: what the
+ * provider holds after the customer verified it, and whether it is the
+ * one an invoice is paid from by default. The account number never
+ * reaches us; the provider keeps it.
+ */
+export interface BankAccountOnFile {
+  readonly id: string;
+  readonly bankName: string | null;
+  readonly last4: string | null;
+  /** "checking", "savings"… as the provider reports it. */
+  readonly accountType: string | null;
+  /** "company" or "individual". */
+  readonly holderType: string | null;
+  readonly isDefault: boolean;
+  readonly addedAt: string;
+}
+
+export interface BankSetupLinkInput {
+  readonly customerId: string;
+  readonly servicerId: string;
+  /** Where the provider sends the person once the account is on file, and if they give up. */
+  readonly successUrl: string;
+  readonly cancelUrl: string;
+}
+
+export interface BankSetupLink {
+  /** The provider's hosted page where the bank account is entered and verified. Expires. */
+  readonly url: string;
+  readonly expiresAt: string;
+}
+
 export interface InvoicingEvent {
   readonly id: string;
   readonly type: string;
@@ -991,6 +1023,12 @@ export interface InvoicingConnector {
   voidCreditNote(providerCreditNoteId: string, creditNoteId: string): Promise<ProviderCreditNote>;
   /** The credit note as it stands now; null when the provider holds no such note. */
   retrieveCreditNote(providerCreditNoteId: string): Promise<ProviderCreditNote | null>;
+  /** The US bank accounts the customer has on file for ACH debit. */
+  listBankAccounts(customerId: string): Promise<BankAccountOnFile[]>;
+  /** A hosted page, good for a day, where the customer puts a bank account on file. */
+  createBankSetupLink(input: BankSetupLinkInput): Promise<BankSetupLink>;
+  /** Make one account the one invoices are paid from by default. */
+  setDefaultBankAccount(customerId: string, bankAccountId: string): Promise<void>;
   /**
    * Verify a delivery against the raw request body and say what it is
    * about. Throws `InvoicingSignatureError` when the signature does not

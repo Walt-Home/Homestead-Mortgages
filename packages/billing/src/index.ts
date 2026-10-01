@@ -39,3 +39,4 @@ export {
   type StatementLineWire,
   type StatementWire,
 } from "./meter.js";
+export { ISSUER, invoiceFooter, issuerAddressLine, issuerAgrees, type Issuer } from "./issuer.js";

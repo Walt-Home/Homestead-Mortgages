@@ -1,9 +1,14 @@
 /**
  * The invoice for a closed month: where it stands and what a person may
  * do next. Each act is its own press with its own word — draft, review and
- * send, void with a reason, mark paid with a note — because sending money's
- * worth of invoice is never a side effect of something else, and who
- * pressed is recorded.
+ * approve, review and send, void with a reason, mark paid with a note —
+ * because sending money's worth of invoice is never a side effect of
+ * something else, and who pressed is recorded by name.
+ *
+ * Two people stand between a draft and a sent invoice: one admin approves
+ * it after reading it as the servicer will, and a different admin sends
+ * it. The panel knows who is looking and says so when the person who
+ * approved is the one about to press Send.
  */
 
 import { useState } from "react";
@@ -12,6 +17,7 @@ import { Sheet } from "./Sheet.js";
 import { CreditNoteList, CreditNoteSheet } from "./CreditNotes.js";
 import { Button, Notice, Pill, Rows, Textarea, type Tone } from "./ui.js";
 import { useAct } from "../lib/act.js";
+import { useAuth } from "../lib/auth.js";
 import { useToast } from "./Toast.js";
 import { fmtDate, fmtDateTime, money, plural } from "../lib/format.js";
 import {
@@ -34,6 +40,7 @@ import {
 
 export const INVOICE_WORDS: Record<InvoiceStandingWord, { word: string; tone: Tone }> = {
   draft: { word: "Draft", tone: "neutral" },
+  approved: { word: "Approved, not sent", tone: "info" },
   open: { word: "Finalized, not sent", tone: "warn" },
   sent: { word: "Sent", tone: "info" },
   past_due: { word: "Past due", tone: "danger" },
@@ -41,6 +48,9 @@ export const INVOICE_WORDS: Record<InvoiceStandingWord, { word: string; tone: To
   void: { word: "Voided", tone: "neutral" },
   uncollectible: { word: "Written off", tone: "danger" },
 };
+
+/** A person's name as the record has it, or the word for a staff act whose name was not kept. */
+const by = (name: string | null | undefined): string => (name ? `by ${name}` : "by staff");
 
 function ReasonSheet({
   title,
@@ -98,37 +108,94 @@ function ReasonSheet({
   );
 }
 
+/**
+ * What the provider prints at the head of the invoice beside what our
+ * footer says, and whether the two agree. A sandbox that disagrees is only
+ * confusing; a live account that disagrees refuses the send.
+ */
+function IssuerNotice({
+  invoicing,
+  livemode,
+}: {
+  invoicing: InvoicingStanding;
+  livemode: boolean;
+}) {
+  if (invoicing.printed === null) {
+    return (
+      <Notice tone={livemode ? "danger" : "neutral"} className="mt-4" title="Who Stripe prints">
+        {invoicing.printedError ?? "The account behind the billing key could not be read."}
+        {livemode ? " A real invoice is not sent until it can be." : ""}
+      </Notice>
+    );
+  }
+  if (invoicing.issuerAgrees) return null;
+  return (
+    <Notice
+      tone={livemode ? "danger" : "warn"}
+      className="mt-4"
+      title={`Stripe prints "${invoicing.printed.name ?? ""}" at the head of this invoice`}
+    >
+      The footer names {invoicing.issuer.name}.{" "}
+      {livemode
+        ? "A real invoice is refused until the Stripe account's public business name is ours."
+        : "On the sandbox that is only confusing; on the live account the send would be refused."}
+    </Notice>
+  );
+}
+
 function ReviewSheet({
+  mode,
   invoice,
   statement,
   profile,
   invoicing,
   busy,
   onClose,
-  onSend,
+  onConfirm,
 }: {
+  /** Approve: the first reading. Send: the second person's. */
+  mode: "approve" | "send";
   invoice: InvoiceView;
   statement: Statement;
   profile: BillingProfile;
   invoicing: InvoicingStanding;
   busy: boolean;
   onClose: () => void;
-  onSend: () => void;
+  onConfirm: () => void;
 }) {
   const lines = statement.lines.filter((l) => BigInt(l.cents) > 0n);
+  const terms = invoice.termsUrl ?? invoicing.issuer.termsUrl;
+  const cannotSend =
+    mode === "send" && invoice.livemode && invoicing.issuerAgrees !== true
+      ? "Stripe's account must print our name first."
+      : null;
   return (
     <Sheet
       open
       onClose={onClose}
-      title={`Send the invoice for ${monthLabel(invoice.month)}`}
-      subtitle="Read it as they will. Once sent, the amount cannot change."
+      title={
+        mode === "approve"
+          ? `Approve the invoice for ${monthLabel(invoice.month)}`
+          : `Send the invoice for ${monthLabel(invoice.month)}`
+      }
+      subtitle={
+        mode === "approve"
+          ? "Read it as they will. Approving says it may go; a different admin sends it."
+          : `Approved ${by(invoice.approvedByName)} ${fmtDate(invoice.approvedAt)}. Once sent, the amount cannot change.`
+      }
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
             Not yet
           </Button>
-          <Button variant="primary" loading={busy} onClick={onSend}>
-            Send {money(invoice.amountCents)}
+          <Button
+            variant="primary"
+            loading={busy}
+            disabled={cannotSend !== null}
+            title={cannotSend ?? undefined}
+            onClick={onConfirm}
+          >
+            {mode === "approve" ? "Approve" : "Send"} {money(invoice.amountCents)}
           </Button>
         </>
       }
@@ -149,9 +216,20 @@ function ReviewSheet({
             value: invoicing.paymentMethods.map(paymentMethodWord).join(", "),
           },
           ...(profile.purchaseOrder ? [{ label: "PO number", value: profile.purchaseOrder }] : []),
+          { label: "Issued by", value: invoice.issuerName ?? invoicing.issuer.name },
           {
-            label: "Issued by",
-            value: `${invoicing.provider}${invoice.livemode ? "" : " · no real money moves"}`,
+            label: "Governed by",
+            value: (
+              <a href={terms} target="_blank" rel="noreferrer" className="underline">
+                {terms.replace(/^https?:\/\//, "")}
+              </a>
+            ),
+          },
+          {
+            label: "Through",
+            value: `${invoicing.provider}${invoice.livemode ? "" : " · no real money moves"}${
+              invoicing.printed?.name ? `, which prints "${invoicing.printed.name}"` : ""
+            }`,
           },
         ]}
       />
@@ -171,6 +249,7 @@ function ReviewSheet({
           </li>
         ))}
       </ul>
+      <IssuerNotice invoicing={invoicing} livemode={invoice.livemode} />
       {!invoice.livemode ? (
         <Notice tone="info" className="mt-4">
           This is a sandbox invoice: it is issued, it has a page, and it moves no money.
@@ -198,16 +277,31 @@ export function InvoicePanel({
   gaps: readonly ProfileGap[];
   invoicing: InvoicingStanding;
 }) {
+  const { me } = useAuth();
   const invalidate = [["billing-servicer", slug]] as const;
   const draft = useAct({ invalidate, done: "Drafted" });
+  const approve = useAct({ invalidate, done: "Approved" });
+  const withdraw = useAct({ invalidate, done: "Approval withdrawn" });
   const send = useAct({ invalidate, done: "Sent" });
   const cancel = useAct({ invalidate, done: "Done" });
   const paid = useAct({ invalidate, done: "Recorded" });
   const sync = useAct({ invalidate, done: "Read again" });
   const toast = useToast();
-  const [sheet, setSheet] = useState<"review" | "void" | "paid" | "credit" | null>(null);
+  const [sheet, setSheet] = useState<
+    "approve" | "send" | "withdraw" | "void" | "paid" | "credit" | null
+  >(null);
 
   const live = invoice && invoice.standing !== "void" ? invoice : null;
+  const isDraft = live?.atProvider === true && live.standing === "draft";
+  const isApproved = live?.atProvider === true && live.standing === "approved";
+  const iApproved = isApproved && live.approvedBy !== null && live.approvedBy === me?.staff_user_id;
+  const cannotSend = !isApproved
+    ? null
+    : iApproved
+      ? "You approved this invoice; a different admin sends it."
+      : live.livemode && invoicing.issuerAgrees !== true
+        ? "Stripe's account must print our name before a real invoice is sent."
+        : null;
   const creditable =
     live?.atProvider === true &&
     ["open", "sent", "past_due", "paid", "uncollectible"].includes(live.standing);
@@ -251,6 +345,14 @@ export function InvoicePanel({
     );
 
   const standing = live ? INVOICE_WORDS[live.standing] : null;
+  const firstError =
+    draft.error ??
+    approve.error ??
+    withdraw.error ??
+    send.error ??
+    cancel.error ??
+    paid.error ??
+    sync.error;
 
   return (
     <div className="rounded-lg border border-line-2 bg-surface p-4">
@@ -297,12 +399,30 @@ export function InvoicePanel({
               {live ? "Draft again" : "Draft invoice"}
             </Button>
           ) : null}
-          {live?.atProvider && live.standing === "draft" ? (
+          {isDraft ? (
             <>
-              <Button variant="primary" onClick={() => setSheet("review")}>
-                Review and send…
+              <Button variant="primary" onClick={() => setSheet("approve")}>
+                Review and approve…
               </Button>
               <Button variant="secondary" onClick={() => setSheet("void")}>
+                Discard…
+              </Button>
+            </>
+          ) : null}
+          {isApproved ? (
+            <>
+              <Button
+                variant="primary"
+                disabled={cannotSend !== null}
+                title={cannotSend ?? undefined}
+                onClick={() => setSheet("send")}
+              >
+                Review and send…
+              </Button>
+              <Button variant="secondary" onClick={() => setSheet("withdraw")}>
+                Withdraw approval…
+              </Button>
+              <Button variant="ghost" onClick={() => setSheet("void")}>
                 Discard…
               </Button>
             </>
@@ -343,7 +463,7 @@ export function InvoicePanel({
               View in Stripe
             </a>
           ) : null}
-          {live?.atProvider && live.standing !== "draft" ? (
+          {live?.atProvider && !isDraft && !isApproved ? (
             <Button
               variant="ghost"
               loading={sync.busy}
@@ -369,23 +489,37 @@ export function InvoicePanel({
               ...(creditedCents > 0n
                 ? [{ label: "Credited", value: money(creditedCents.toString()) }]
                 : []),
-              ...(live.standing !== "draft"
+              ...(isDraft || isApproved
                 ? [
+                    {
+                      label: "Terms",
+                      value: live.netDays === 0 ? "Due on receipt" : `Net ${live.netDays}`,
+                    },
+                  ]
+                : [
                     {
                       label: "Remaining",
                       value: money(live.amountRemainingCents),
                     },
                     { label: "Due", value: live.dueAt ? fmtDate(live.dueAt) : "—" },
-                  ]
-                : [
-                    {
-                      label: "Terms",
-                      value: live.netDays === 0 ? "Due on receipt" : `Net ${live.netDays}`,
-                    },
                   ]),
-              { label: "Drafted", value: `${fmtDateTime(live.createdAt)} by staff` },
+              ...(live.issuerName ? [{ label: "Issued by", value: live.issuerName }] : []),
+              {
+                label: "Drafted",
+                value: `${fmtDateTime(live.createdAt)} ${by(live.createdByName)}`,
+              },
+              ...(live.approvedAt
+                ? [
+                    {
+                      label: "Approved",
+                      value: `${fmtDateTime(live.approvedAt)} ${by(live.approvedByName)}${
+                        iApproved ? " (you)" : ""
+                      }`,
+                    },
+                  ]
+                : []),
               ...(live.sentAt
-                ? [{ label: "Sent", value: `${fmtDateTime(live.sentAt)} by staff` }]
+                ? [{ label: "Sent", value: `${fmtDateTime(live.sentAt)} ${by(live.sentByName)}` }]
                 : []),
               ...(live.paidAt
                 ? [
@@ -403,6 +537,14 @@ export function InvoicePanel({
                 : []),
             ]}
           />
+          {isApproved && cannotSend ? (
+            <Notice tone="neutral" className="mt-4">
+              {cannotSend}
+            </Notice>
+          ) : null}
+          {isDraft || isApproved ? (
+            <IssuerNotice invoicing={invoicing} livemode={live.livemode} />
+          ) : null}
           {live.atProvider ? <CreditNoteList slug={slug} invoice={live} notes={noteList} /> : null}
         </div>
       ) : cannotDraft && !nothing ? (
@@ -410,38 +552,58 @@ export function InvoicePanel({
           {cannotDraft}
         </Notice>
       ) : null}
-      {(draft.error ?? send.error ?? cancel.error ?? paid.error ?? sync.error) ? (
+      {firstError ? (
         <Notice tone="danger" className="mt-4">
-          {(draft.error ?? send.error ?? cancel.error ?? paid.error ?? sync.error)!.message}
+          {firstError.message}
         </Notice>
       ) : null}
 
-      {sheet === "review" && live ? (
+      {(sheet === "approve" || sheet === "send") && live ? (
         <ReviewSheet
+          mode={sheet}
           invoice={live}
           statement={statement}
           profile={profile}
           invoicing={invoicing}
-          busy={send.busy}
+          busy={sheet === "approve" ? approve.busy : send.busy}
           onClose={() => setSheet(null)}
-          onSend={() =>
-            void send
-              .run(`/invoices/${live.id}/send`, { method: "POST", body: {}, door: "billing" })
+          onConfirm={() =>
+            void (sheet === "approve" ? approve : send)
+              .run(`/invoices/${live.id}/${sheet}`, { method: "POST", body: {}, door: "billing" })
+              .then((ok) => ok && setSheet(null))
+          }
+        />
+      ) : null}
+      {sheet === "withdraw" && live ? (
+        <ReasonSheet
+          title="Withdraw the approval"
+          subtitle={`Approved ${by(live.approvedByName)}. The draft stays; it has to be approved again before it is sent.`}
+          label="Why"
+          button="Withdraw"
+          busy={withdraw.busy}
+          onClose={() => setSheet(null)}
+          onConfirm={(reason) =>
+            void withdraw
+              .run(`/invoices/${live.id}/approval/withdraw`, {
+                method: "POST",
+                body: { reason },
+                door: "billing",
+              })
               .then((ok) => ok && setSheet(null))
           }
         />
       ) : null}
       {sheet === "void" && live ? (
         <ReasonSheet
-          title={live.standing === "draft" ? "Discard this draft" : "Void this invoice"}
+          title={isDraft || isApproved ? "Discard this draft" : "Void this invoice"}
           subtitle={
-            live.standing === "draft"
+            isDraft || isApproved
               ? "Nothing was sent. The month can be drafted again."
               : "It stays on record as voided, and the month can be issued again."
           }
           label="Why"
-          button={live.standing === "draft" ? "Discard" : "Void"}
-          danger={live.standing !== "draft"}
+          button={isDraft || isApproved ? "Discard" : "Void"}
+          danger={!(isDraft || isApproved)}
           busy={cancel.busy}
           onClose={() => setSheet(null)}
           onConfirm={(reason) =>

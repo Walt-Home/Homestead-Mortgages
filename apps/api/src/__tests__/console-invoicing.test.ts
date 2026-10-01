@@ -34,7 +34,15 @@ import { connectors } from "../services/connectors.js";
 import { importPartnerBook } from "../services/partner-book.js";
 import { partnerPrincipal } from "../services/party.js";
 
-const ADMIN_COOKIE = "sm_staff=admin";
+/**
+ * Two admins at the console, told apart by cookie: an invoice is approved
+ * by one and sent by the other, and the same person may not do both.
+ */
+const STAFF = {
+  admin: { cookie: "sm_staff=admin", id: "staff-admin", name: "The Admin" },
+  second: { cookie: "sm_staff=second", id: "staff-second", name: "A Second Admin" },
+} as const;
+type Who = keyof typeof STAFF;
 
 let upstream: Server;
 let app: Server;
@@ -43,15 +51,17 @@ let port: number;
 beforeAll(async () => {
   upstream = createServer((req, res) => {
     res.setHeader("Content-Type", "application/json");
-    if (req.url !== "/ops/api/me" || !String(req.headers.cookie ?? "").includes(ADMIN_COOKIE)) {
+    const cookie = String(req.headers.cookie ?? "");
+    const who = Object.values(STAFF).find((w) => cookie.includes(w.cookie));
+    if (req.url !== "/ops/api/me" || !who) {
       res.statusCode = 401;
       res.end(JSON.stringify({ code: "AUTH_REQUIRED" }));
       return;
     }
     res.end(
       JSON.stringify({
-        staff_user_id: "staff-admin",
-        legal_name: "The Admin",
+        staff_user_id: who.id,
+        legal_name: who.name,
         roles: ["ops_analyst", "officer", "compliance", "admin"],
         role: "ops_analyst",
         source: "session",
@@ -82,13 +92,26 @@ async function call<T = Record<string, unknown>>(
   method: "GET" | "POST" | "PUT",
   path: string,
   body?: unknown,
+  as: Who = "admin",
 ): Promise<{ status: number; body: T }> {
   const r = await fetch(`http://127.0.0.1:${port}/console/hm/billing${path}`, {
     method,
-    headers: { "content-type": "application/json", cookie: ADMIN_COOKIE },
+    headers: { "content-type": "application/json", cookie: STAFF[as].cookie },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return { status: r.status, body: (await r.json()) as T };
+}
+
+/** The way out the door: the first admin approves, the second sends. */
+async function approveAndSend(invoiceId: string) {
+  const approved = await call("POST", `/invoices/${invoiceId}/approve`);
+  if (approved.status !== 200) throw new Error(`approve: ${JSON.stringify(approved.body)}`);
+  return call<{ invoice: InvoiceView; error?: { code: string; message: string } }>(
+    "POST",
+    `/invoices/${invoiceId}/send`,
+    undefined,
+    "second",
+  );
 }
 
 async function deliver(
@@ -322,7 +345,22 @@ describe("drafting an invoice", () => {
       hm_statement_id: statement.id,
       hm_month: "2026-08",
       hm_sheet_version: "1.0",
+      hm_issuer: "Tomorrow OS Inc. dba Supermortgage",
+      hm_terms_url: "https://supermortgage.com/terms.html",
     });
+    // Who issues it and under which terms is printed in the footer and kept on the row.
+    expect(invoice).toMatchObject({
+      issuerName: "Tomorrow OS Inc. dba Supermortgage",
+      termsUrl: "https://supermortgage.com/terms.html",
+      createdByName: "The Admin",
+    });
+    const asked = fixture().drafts.get(invoice.id)!;
+    expect(asked.footer).toBe(
+      "Issued by Tomorrow OS Inc. dba Supermortgage, 2261 Market Street, Suite 86665, " +
+        "San Francisco, CA 94114. Payable by ACH debit. " +
+        "Governed by the terms at https://supermortgage.com/terms.html. " +
+        "Questions: support@supermortgage.com.",
+    );
 
     const again = await draftAugust();
     expect(again.status).toBe(409);
@@ -333,8 +371,43 @@ describe("drafting an invoice", () => {
       `/invoices/${invoice.id}/history`,
     );
     expect(history.body.history).toEqual([
-      expect.objectContaining({ from: null, to: "draft", cause: "staff:staff-admin" }),
+      expect.objectContaining({
+        from: null,
+        to: "draft",
+        cause: "staff:staff-admin",
+        actorName: "The Admin",
+      }),
     ]);
+  });
+
+  it("says who the provider prints as the issuer, and whether that names us", async () => {
+    await closedAugust();
+    const page = await call<{
+      invoicing: {
+        issuer: { name: string; termsUrl: string };
+        printed: { name: string | null } | null;
+        issuerAgrees: boolean | null;
+        twoPerson: true;
+      };
+    }>("GET", `/servicers/${SLUG}`);
+    expect(page.body.invoicing.issuer).toMatchObject({
+      name: "Tomorrow OS Inc. dba Supermortgage",
+      termsUrl: "https://supermortgage.com/terms.html",
+    });
+    expect(page.body.invoicing.printed?.name).toBe("Supermortgage");
+    expect(page.body.invoicing.issuerAgrees).toBe(true);
+    expect(page.body.invoicing.twoPerson).toBe(true);
+
+    fixture().setIssuerName("HMX sandbox");
+    try {
+      const other = await call<{ invoicing: { issuerAgrees: boolean | null } }>(
+        "GET",
+        `/servicers/${SLUG}`,
+      );
+      expect(other.body.invoicing.issuerAgrees).toBe(false);
+    } finally {
+      fixture().setIssuerName("Supermortgage");
+    }
   });
 
   it("resumes a draft the provider never answered for, under the same id, and never makes two", async () => {
@@ -364,6 +437,118 @@ describe("drafting an invoice", () => {
 });
 
 describe("sending, voiding, paying", () => {
+  it("is approved by one admin and sent by another, never by the same person, and never unapproved", async () => {
+    await profiled();
+    const invoice = (await draftAugust()).body.invoice;
+    type Answer = { invoice: InvoiceView; error?: { code: string; message: string } };
+
+    // Nobody has approved it.
+    const early = await call<Answer>("POST", `/invoices/${invoice.id}/send`);
+    expect(early.status).toBe(409);
+    expect(early.body.error?.code).toBe("NOT_APPROVED");
+
+    const approved = await call<Answer>("POST", `/invoices/${invoice.id}/approve`);
+    expect(approved.status).toBe(200);
+    expect(approved.body.invoice).toMatchObject({
+      standing: "approved",
+      approvedBy: "staff-admin",
+      approvedByName: "The Admin",
+      sentAt: null,
+    });
+    expect(approved.body.invoice.approvedAt).not.toBeNull();
+    const twice = await call<Answer>(
+      "POST",
+      `/invoices/${invoice.id}/approve`,
+      undefined,
+      "second",
+    );
+    expect(twice.status).toBe(409);
+    expect(twice.body.error?.code).toBe("ALREADY_APPROVED");
+
+    // The approver may not send it.
+    const same = await call<Answer>("POST", `/invoices/${invoice.id}/send`);
+    expect(same.status).toBe(409);
+    expect(same.body.error?.code).toBe("APPROVER_CANNOT_SEND");
+    // Nor may the database be talked into it.
+    await expect(
+      prisma.billingInvoice.update({
+        where: { id: invoice.id },
+        data: { sentAt: new Date(), sentBy: "staff-admin" },
+      }),
+    ).rejects.toThrow(/billing_invoices_two_people/);
+
+    const sent = await call<Answer>("POST", `/invoices/${invoice.id}/send`, undefined, "second");
+    expect(sent.status).toBe(200);
+    expect(sent.body.invoice).toMatchObject({
+      standing: "sent",
+      approvedBy: "staff-admin",
+      sentBy: "staff-second",
+      sentByName: "A Second Admin",
+    });
+    // Sent, the approval is past withdrawing.
+    const late = await call<Answer>("POST", `/invoices/${invoice.id}/approval/withdraw`, {
+      reason: "Too late.",
+    });
+    expect(late.status).toBe(409);
+
+    const history = await call<{
+      history: { to: string; actorName: string | null; note: string | null }[];
+    }>("GET", `/invoices/${invoice.id}/history`);
+    expect(history.body.history.map((h) => [h.to, h.actorName, h.note])).toEqual([
+      ["draft", "The Admin", null],
+      ["draft", "The Admin", "approved"],
+      ["open", "A Second Admin", null],
+    ]);
+  });
+
+  it("withdraws an approval with a reason, and the draft is a draft again", async () => {
+    await profiled();
+    const invoice = (await draftAugust()).body.invoice;
+    await call("POST", `/invoices/${invoice.id}/approve`);
+    const nothing = await call<{ error: { code: string } }>(
+      "POST",
+      `/invoices/${invoice.id}/approval/withdraw`,
+      { reason: "" },
+    );
+    expect(nothing.status).toBe(400);
+    const back = await call<{ invoice: InvoiceView }>(
+      "POST",
+      `/invoices/${invoice.id}/approval/withdraw`,
+      { reason: "The PO number is last year's." },
+      "second",
+    );
+    expect(back.status).toBe(200);
+    expect(back.body.invoice).toMatchObject({
+      standing: "draft",
+      approvedAt: null,
+      approvedBy: null,
+    });
+    const again = await call<{ error: { code: string } }>(
+      "POST",
+      `/invoices/${invoice.id}/approval/withdraw`,
+      { reason: "Nothing to withdraw." },
+    );
+    expect(again.status).toBe(409);
+    expect(
+      (
+        await call<{ error: { code: string } }>(
+          "POST",
+          `/invoices/${invoice.id}/send`,
+          undefined,
+          "second",
+        )
+      ).body.error.code,
+    ).toBe("NOT_APPROVED");
+    const history = await call<{ history: { actorName: string | null; note: string | null }[] }>(
+      "GET",
+      `/invoices/${invoice.id}/history`,
+    );
+    expect(history.body.history.at(-1)).toMatchObject({
+      actorName: "A Second Admin",
+      note: "approval withdrawn: The PO number is last year's.",
+    });
+  });
+
   it("sends once, under the staff id, and the servicer's team sees it and its fresh link from then on", async () => {
     const { servicer } = await profiled();
     const invoice = (await draftAugust()).body.invoice;
@@ -376,16 +561,18 @@ describe("sending, voiding, paying", () => {
       statusCode: 404,
     });
 
-    const sent = await call<{ invoice: InvoiceView }>("POST", `/invoices/${invoice.id}/send`);
+    const sent = await approveAndSend(invoice.id);
     expect(sent.status).toBe(200);
     expect(sent.body.invoice).toMatchObject({
       standing: "sent",
-      sentBy: "staff-admin",
+      sentBy: "staff-second",
       number: expect.stringMatching(/^FIX-/),
     });
     expect(sent.body.invoice.sentAt).not.toBeNull();
     expect(sent.body.invoice.dueAt).not.toBeNull();
-    expect((await call("POST", `/invoices/${invoice.id}/send`)).status).toBe(409);
+    expect((await call("POST", `/invoices/${invoice.id}/send`, undefined, "second")).status).toBe(
+      409,
+    );
 
     const link = await call<{ hostedUrl: string; pdfUrl: string }>(
       "GET",
@@ -415,7 +602,7 @@ describe("sending, voiding, paying", () => {
   it("voids a sent invoice with a reason and frees the month to be issued again as the next attempt", async () => {
     await profiled();
     const first = (await draftAugust()).body.invoice;
-    await call("POST", `/invoices/${first.id}/send`);
+    await approveAndSend(first.id);
     expect((await call("POST", `/invoices/${first.id}/void`, { reason: "" })).status).toBe(400);
     const voided = await call<{ invoice: InvoiceView }>("POST", `/invoices/${first.id}/void`, {
       reason: "Wrong PO number on it.",
@@ -436,8 +623,8 @@ describe("sending, voiding, paying", () => {
       "GET",
       `/invoices/${first.id}/history`,
     );
-    expect(history.body.history.map((h) => h.to)).toEqual(["draft", "open", "void"]);
-    expect(history.body.history[2]!.note).toBe("Wrong PO number on it.");
+    expect(history.body.history.map((h) => h.to)).toEqual(["draft", "draft", "open", "void"]);
+    expect(history.body.history[3]!.note).toBe("Wrong PO number on it.");
   });
 
   it("discards a draft outright, and refuses to void what has been paid", async () => {
@@ -451,7 +638,7 @@ describe("sending, voiding, paying", () => {
     expect(await fixture().retrieveInvoice(row.providerInvoiceId!)).toBeNull();
 
     const next = (await draftAugust()).body.invoice;
-    await call("POST", `/invoices/${next.id}/send`);
+    await approveAndSend(next.id);
     const paid = await call<{ invoice: InvoiceView }>("POST", `/invoices/${next.id}/paid`, {
       note: "Wire received 3 September, ref 4471.",
     });
@@ -485,7 +672,7 @@ describe("the provider's deliveries", () => {
   async function sentInvoice() {
     const made = await profiled();
     const invoice = (await draftAugust()).body.invoice;
-    await call("POST", `/invoices/${invoice.id}/send`);
+    await approveAndSend(invoice.id);
     const row = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
     return { ...made, invoice, providerId: row.providerInvoiceId! };
   }
@@ -524,6 +711,7 @@ describe("the provider's deliveries", () => {
       orderBy: { at: "asc" },
     });
     expect(history.map((h) => [h.toStatus, h.cause.split(":")[0]])).toEqual([
+      ["DRAFT", "staff"],
       ["DRAFT", "staff"],
       ["OPEN", "staff"],
       ["PAID", "event"],
@@ -583,7 +771,7 @@ describe("a credit note", () => {
   async function sentInvoice() {
     const made = await profiled();
     const invoice = (await draftAugust()).body.invoice;
-    await call("POST", `/invoices/${invoice.id}/send`);
+    await approveAndSend(invoice.id);
     const row = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
     return { ...made, invoice, providerId: row.providerInvoiceId!, cents: BigInt(made.cents) };
   }
@@ -805,25 +993,39 @@ describe("a credit note", () => {
 describe("the bank account on file", () => {
   it("is nothing until the provider knows the customer, which a setup link makes before any invoice", async () => {
     await closedAugust();
-    const before = await call<{ customer: null; accounts: unknown[] }>("GET", `/servicers/${SLUG}/ach`);
+    const before = await call<{ customer: null; accounts: unknown[] }>(
+      "GET",
+      `/servicers/${SLUG}/ach`,
+    );
     expect(before.status).toBe(200);
     expect(before.body).toEqual({ customer: null, accounts: [] });
 
     // The provider cannot know a customer with no name and no address to mail.
-    const early = await call<{ error: { code: string } }>("POST", `/servicers/${SLUG}/ach/setup-link`);
+    const early = await call<{ error: { code: string } }>(
+      "POST",
+      `/servicers/${SLUG}/ach/setup-link`,
+    );
     expect(early.status).toBe(409);
     expect(early.body.error.code).toBe("PROFILE_INCOMPLETE");
 
     await call("PUT", `/servicers/${SLUG}/profile`, { ...PROFILE, netDays: null });
-    const link = await call<{ url: string; expiresAt: string }>("POST", `/servicers/${SLUG}/ach/setup-link`);
+    const link = await call<{ url: string; expiresAt: string }>(
+      "POST",
+      `/servicers/${SLUG}/ach/setup-link`,
+    );
     expect(link.status).toBe(201);
-    expect(link.body.url).toMatch(/^https:\/\/setup\.fixture\.test\/cus_fixture_northlight\?success=/);
+    expect(link.body.url).toMatch(
+      /^https:\/\/setup\.fixture\.test\/cus_fixture_northlight\?success=/,
+    );
     expect(decodeURIComponent(link.body.url)).toContain("/console/portal/billing?ach=done");
     const profile = await prisma.servicerBillingProfile.findFirstOrThrow();
     expect(profile.providerCustomerId).toBe(`cus_fixture_${SLUG}`);
     expect(await prisma.billingInvoice.count()).toBe(0);
 
-    const known = await call<{ customer: { id: string }; accounts: unknown[] }>("GET", `/servicers/${SLUG}/ach`);
+    const known = await call<{ customer: { id: string }; accounts: unknown[] }>(
+      "GET",
+      `/servicers/${SLUG}/ach`,
+    );
     expect(known.body.customer.id).toBe(`cus_fixture_${SLUG}`);
     expect(known.body.accounts).toEqual([]);
   });
@@ -832,10 +1034,9 @@ describe("the bank account on file", () => {
     await profiled();
     await call("POST", `/servicers/${SLUG}/ach/setup-link`);
     fixture().addBankAccount(`cus_fixture_${SLUG}`, { bankName: "FIRST BANK", last4: "6789" });
-    const listed = await call<{ accounts: { id: string; bankName: string; last4: string; isDefault: boolean }[] }>(
-      "GET",
-      `/servicers/${SLUG}/ach`,
-    );
+    const listed = await call<{
+      accounts: { id: string; bankName: string; last4: string; isDefault: boolean }[];
+    }>("GET", `/servicers/${SLUG}/ach`);
     expect(listed.body.accounts).toEqual([
       expect.objectContaining({ bankName: "FIRST BANK", last4: "6789", isDefault: true }),
     ]);

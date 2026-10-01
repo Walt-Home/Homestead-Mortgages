@@ -314,6 +314,13 @@ export const config = {
       .split(/[\s,;]+/)
       .map((m) => m.trim())
       .filter((m) => m !== ""),
+    /**
+     * The terms an invoice names in its footer. Joe, 1 October 2026: the
+     * ones at supermortgage.com. Unset, the issuer's own in `@hm/billing`;
+     * set, a page that replaces them — the one there today is the
+     * borrower terms, and a partner terms page should not need a release.
+     */
+    termsUrl: process.env.BILLING_TERMS_URL || null,
   },
 
   /**

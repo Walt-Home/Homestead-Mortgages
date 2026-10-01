@@ -87,6 +87,7 @@ const draft = {
   customerId: "cus_1",
   netDays: 30,
   memo: "September 2026",
+  footer: "Issued by Tomorrow OS Inc. dba Supermortgage. Payable by ACH debit.",
   purchaseOrder: "PO-77",
   paymentMethods: ["customer_balance", "us_bank_account"] as const,
   lines: [
@@ -163,6 +164,9 @@ describe("drafting an invoice", () => {
     expect(create.body.get("pending_invoice_items_behavior")).toBe("exclude");
     expect(create.body.get("currency")).toBe("usd");
     expect(create.body.get("description")).toBe("September 2026");
+    expect(create.body.get("footer")).toBe(
+      "Issued by Tomorrow OS Inc. dba Supermortgage. Payable by ACH debit.",
+    );
     expect(create.body.get("custom_fields[0][name]")).toBe("PO number");
     expect(create.body.get("custom_fields[0][value]")).toBe("PO-77");
     expect(create.body.get("metadata[hm_invoice_id]")).toBe(OUR_INVOICE);
@@ -639,7 +643,13 @@ describe("the bank account on file", () => {
   it("lists the customer's US bank accounts, marking the one invoices default to", async () => {
     const { seen, fetchImpl } = stub((req) =>
       req.path === "/v1/customers/cus_1"
-        ? { json: { id: "cus_1", object: "customer", invoice_settings: { default_payment_method: "pm_2" } } }
+        ? {
+            json: {
+              id: "cus_1",
+              object: "customer",
+              invoice_settings: { default_payment_method: "pm_2" },
+            },
+          }
         : {
             json: {
               object: "list",
@@ -651,14 +661,24 @@ describe("the bank account on file", () => {
                   object: "payment_method",
                   type: "us_bank_account",
                   created: 1_790_000_000,
-                  us_bank_account: { bank_name: "FIRST BANK", last4: "6789", account_type: "checking", account_holder_type: "company" },
+                  us_bank_account: {
+                    bank_name: "FIRST BANK",
+                    last4: "6789",
+                    account_type: "checking",
+                    account_holder_type: "company",
+                  },
                 },
                 {
                   id: "pm_2",
                   object: "payment_method",
                   type: "us_bank_account",
                   created: 1_790_100_000,
-                  us_bank_account: { bank_name: "SECOND BANK", last4: "4321", account_type: "savings", account_holder_type: "company" },
+                  us_bank_account: {
+                    bank_name: "SECOND BANK",
+                    last4: "4321",
+                    account_type: "savings",
+                    account_holder_type: "company",
+                  },
                 },
               ],
             },
@@ -672,14 +692,31 @@ describe("the bank account on file", () => {
     ]);
     expect(seen[1]!.query.get("type")).toBe("us_bank_account");
     expect(accounts).toEqual([
-      expect.objectContaining({ id: "pm_1", bankName: "FIRST BANK", last4: "6789", accountType: "checking", holderType: "company", isDefault: false }),
-      expect.objectContaining({ id: "pm_2", bankName: "SECOND BANK", last4: "4321", isDefault: true }),
+      expect.objectContaining({
+        id: "pm_1",
+        bankName: "FIRST BANK",
+        last4: "6789",
+        accountType: "checking",
+        holderType: "company",
+        isDefault: false,
+      }),
+      expect.objectContaining({
+        id: "pm_2",
+        bankName: "SECOND BANK",
+        last4: "4321",
+        isDefault: true,
+      }),
     ]);
   });
 
   it("asks Stripe for a hosted setup page for a bank account and nothing else", async () => {
     const { seen, fetchImpl } = stub(() => ({
-      json: { id: "cs_1", object: "checkout.session", url: "https://checkout.stripe.com/c/pay/cs_1", expires_at: 1_790_086_400 },
+      json: {
+        id: "cs_1",
+        object: "checkout.session",
+        url: "https://checkout.stripe.com/c/pay/cs_1",
+        expires_at: 1_790_086_400,
+      },
     }));
     const c = stripeInvoicingConnector({ apiKey: KEY, fetchImpl });
     const link = await c.createBankSetupLink({
@@ -710,5 +747,58 @@ describe("the bank account on file", () => {
     await c.setDefaultBankAccount("cus_1", "pm_2");
     expect(`${seen[0]!.method} ${seen[0]!.path}`).toBe("POST /v1/customers/cus_1");
     expect(seen[0]!.body.get("invoice_settings[default_payment_method]")).toBe("pm_2");
+  });
+});
+
+describe("who the provider prints as the issuer", () => {
+  it("reads the account behind the key: its public business name, descriptor and support address", async () => {
+    const { seen, fetchImpl } = stub(() => ({
+      json: {
+        id: "acct_1",
+        object: "account",
+        business_profile: { name: "HMX sandbox", support_email: null },
+        settings: {
+          dashboard: { display_name: "HMX sandbox" },
+          payments: { statement_descriptor: "HMX SANDBOX" },
+        },
+      },
+    }));
+    const c = stripeInvoicingConnector({ apiKey: KEY, fetchImpl });
+    const issuer = await c.describeIssuer();
+    expect(seen.map((r) => `${r.method} ${r.path}`)).toEqual(["GET /v1/account"]);
+    expect(issuer).toEqual({
+      accountId: "acct_1",
+      name: "HMX sandbox",
+      statementDescriptor: "HMX SANDBOX",
+      supportEmail: null,
+      livemode: false,
+    });
+  });
+
+  it("falls back to the dashboard's display name, and refuses in the provider's words when the key may not read the account", async () => {
+    const named = stub(() => ({
+      json: {
+        id: "acct_1",
+        object: "account",
+        settings: { dashboard: { display_name: "Supermortgage" } },
+      },
+    }));
+    expect(
+      (await stripeInvoicingConnector({ apiKey: KEY, fetchImpl: named.fetchImpl }).describeIssuer())
+        .name,
+    ).toBe("Supermortgage");
+    const refused = stub(() => ({
+      status: 403,
+      json: {
+        error: {
+          type: "invalid_request_error",
+          code: "permission_denied",
+          message: "This API key does not have access to the account resource.",
+        },
+      },
+    }));
+    await expect(
+      stripeInvoicingConnector({ apiKey: KEY, fetchImpl: refused.fetchImpl }).describeIssuer(),
+    ).rejects.toBeInstanceOf(InvoicingProviderError);
   });
 });

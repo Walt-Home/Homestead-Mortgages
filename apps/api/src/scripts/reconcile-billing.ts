@@ -18,7 +18,7 @@ import { prisma } from "@hm/db";
 import { invoicingStanding, reconcileInvoices } from "../services/billing-invoices.js";
 
 async function main(): Promise<void> {
-  const standing = invoicingStanding();
+  const standing = await invoicingStanding();
   const report = await reconcileInvoices();
   console.log(
     `reconciled with ${standing.provider}: ` +

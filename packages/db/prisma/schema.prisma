@@ -1889,12 +1889,25 @@ model BillingInvoice {
   netDays Int       @map("net_days")
   dueAt   DateTime? @map("due_at")
 
-  createdBy String   @map("created_by")
-  createdAt DateTime @default(now()) @map("created_at")
+  /// Who issues it and under which terms, as printed in its footer; copied
+  /// here at draft time so what was sent is kept.
+  issuerName String? @map("issuer_name")
+  termsUrl   String? @map("terms_url")
+
+  createdBy     String   @map("created_by")
+  createdByName String?  @map("created_by_name")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  /// One admin approves and a different one sends: a CHECK keeps the
+  /// approver from being the sender, the service keeps approval before send.
+  approvedAt     DateTime? @map("approved_at")
+  approvedBy     String?   @map("approved_by")
+  approvedByName String?   @map("approved_by_name")
 
   finalizedAt     DateTime? @map("finalized_at")
   sentAt          DateTime? @map("sent_at")
   sentBy          String?   @map("sent_by")
+  sentByName      String?   @map("sent_by_name")
   paidAt          DateTime? @map("paid_at")
   /// Paid by a wire that reached us outside the provider, and marked so by hand.
   paidOutOfBand   Boolean   @default(false) @map("paid_out_of_band")
@@ -1983,6 +1996,8 @@ model BillingInvoiceTransition {
   toStatus   BillingInvoiceStatus  @map("to_status")
   /// "staff:<id>", "event:<provider event id>", or "reconcile".
   cause      String
+  /// The staff member's legal name when the cause is a person.
+  actorName  String?               @map("actor_name")
   note       String?
   at         DateTime              @default(now())
 

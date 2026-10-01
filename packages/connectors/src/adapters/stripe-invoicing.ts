@@ -47,6 +47,7 @@ import type {
   ProviderCreditNote,
   ProviderCreditNoteStatus,
   ProviderInvoice,
+  ProviderIssuer,
   ProviderInvoiceStatus,
 } from "../ports/index.js";
 import {
@@ -307,6 +308,7 @@ export function stripeInvoicingConnector(options: StripeInvoicingOptions): Invoi
               pending_invoice_items_behavior: "exclude",
               currency: "usd",
               description: input.memo,
+              footer: input.footer,
               ...(input.purchaseOrder
                 ? { custom_fields: [{ name: "PO number", value: input.purchaseOrder }] }
                 : {}),
@@ -529,6 +531,22 @@ export function stripeInvoicingConnector(options: StripeInvoicingOptions): Invoi
         await stripe.customers.update(customerId, {
           invoice_settings: { default_payment_method: bankAccountId },
         });
+      } catch (err) {
+        throw refusal(err);
+      }
+    },
+
+    async describeIssuer(): Promise<ProviderIssuer> {
+      try {
+        // The account behind the key: GET /v1/account, no id.
+        const account = await stripe.accounts.retrieveCurrent();
+        return {
+          accountId: account.id,
+          name: account.business_profile?.name ?? account.settings?.dashboard?.display_name ?? null,
+          statementDescriptor: account.settings?.payments?.statement_descriptor ?? null,
+          supportEmail: account.business_profile?.support_email ?? null,
+          livemode: live,
+        };
       } catch (err) {
         throw refusal(err);
       }

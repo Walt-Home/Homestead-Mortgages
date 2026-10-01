@@ -265,8 +265,14 @@ by re-reading the invoice, never from its copy. `INVOICING_PROVIDER=stripe`
 with `STRIPE_BILLING_KEY_SANDBOX` (a restricted test key) turns it on;
 `STRIPE_BILLING_KEY` needs `STRIPE_ALLOW_LIVE_BILLING=true`. `npm run
 billing:smoke` walks a real sandbox; `npm run billing:reconcile` is the
-hourly job by hand. See `docs/decisions.md`, "An invoice is the provider's
-to collect and ours to decide".
+hourly job by hand. Since 1 October the issuer is data (`ISSUER` in
+`@hm/billing`: Tomorrow OS Inc. dba Supermortgage, the terms at
+supermortgage.com, printed in every footer and copied onto the row), a
+live invoice is refused when the name Stripe prints at its head does not
+name us, and a send takes two admins — one approves, a different one
+sends, both by name, a CHECK keeping the approver from being the sender.
+See `docs/decisions.md`, "An invoice is the provider's to collect and
+ours to decide".
 
 ## Known stubs, for whoever wires the real thing
 

@@ -23,6 +23,7 @@ import {
   statementFor,
 } from "../services/billing.js";
 import {
+  approveInvoice,
   bankAccounts,
   bankSetupLink,
   billingProfile,
@@ -41,6 +42,8 @@ import {
   sendInvoice,
   syncInvoice,
   voidInvoice,
+  withdrawApproval,
+  type StaffActor,
 } from "../services/billing-invoices.js";
 import { PRICE_SHEET } from "@hm/billing";
 import { config } from "../config.js";
@@ -112,11 +115,11 @@ const CreditNoteBody = z
 const NoteBody = z.object({ note: z.string().trim().min(3).max(500) }).strict();
 const InvoiceId = z.string().uuid();
 
-function staffOf(req: express.Request): { id: string } {
+function staffOf(req: express.Request): StaffActor {
   if (!req.staff) {
     throw new AppError(401, "Sign in to the console to continue.", "STAFF_SIGN_IN_REQUIRED");
   }
-  return req.staff;
+  return { id: req.staff.id, legalName: req.staff.legalName };
 }
 
 export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
@@ -156,7 +159,7 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
         profile: profile.profile,
         profileGaps: profile.gaps,
         invoices,
-        invoicing: invoicingStanding(),
+        invoicing: await invoicingStanding(),
       });
     }),
   );
@@ -181,18 +184,37 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
       const invoice = await draftInvoice({
         slug,
         month: new Date(`${month}T00:00:00.000Z`),
-        staffId: staffOf(req).id,
+        staff: staffOf(req),
       });
       res.status(201).json({ invoice });
     }),
   );
 
-  /** Finalize and send a draft somebody has looked at. */
+  /** One admin has read the draft as the servicer will and says it may go. */
+  router.post(
+    "/invoices/:id/approve",
+    asyncRoute(async (req, res) => {
+      const invoiceId = InvoiceId.parse(req.params.id);
+      res.json({ invoice: await approveInvoice({ invoiceId, staff: staffOf(req) }) });
+    }),
+  );
+
+  /** The approval is taken back, with the reason. */
+  router.post(
+    "/invoices/:id/approval/withdraw",
+    asyncRoute(async (req, res) => {
+      const invoiceId = InvoiceId.parse(req.params.id);
+      const { reason } = ReasonBody.parse(req.body);
+      res.json({ invoice: await withdrawApproval({ invoiceId, staff: staffOf(req), reason }) });
+    }),
+  );
+
+  /** Finalize and send an approved draft — by a different admin than the one who approved it. */
   router.post(
     "/invoices/:id/send",
     asyncRoute(async (req, res) => {
       const invoiceId = InvoiceId.parse(req.params.id);
-      res.json({ invoice: await sendInvoice({ invoiceId, staffId: staffOf(req).id }) });
+      res.json({ invoice: await sendInvoice({ invoiceId, staff: staffOf(req) }) });
     }),
   );
 
@@ -202,7 +224,7 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
     asyncRoute(async (req, res) => {
       const invoiceId = InvoiceId.parse(req.params.id);
       const { reason } = ReasonBody.parse(req.body);
-      res.json({ invoice: await voidInvoice({ invoiceId, staffId: staffOf(req).id, reason }) });
+      res.json({ invoice: await voidInvoice({ invoiceId, staff: staffOf(req), reason }) });
     }),
   );
 
@@ -212,7 +234,7 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
     asyncRoute(async (req, res) => {
       const invoiceId = InvoiceId.parse(req.params.id);
       const { note } = NoteBody.parse(req.body);
-      res.json({ invoice: await markInvoicePaid({ invoiceId, staffId: staffOf(req).id, note }) });
+      res.json({ invoice: await markInvoicePaid({ invoiceId, staff: staffOf(req), note }) });
     }),
   );
 
@@ -223,7 +245,7 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
       const invoiceId = InvoiceId.parse(req.params.id);
       const { note } = NoteBody.parse(req.body);
       res.json({
-        invoice: await markInvoiceUncollectible({ invoiceId, staffId: staffOf(req).id, note }),
+        invoice: await markInvoiceUncollectible({ invoiceId, staff: staffOf(req), note }),
       });
     }),
   );
@@ -234,7 +256,10 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
     asyncRoute(async (req, res) => {
       const invoiceId = InvoiceId.parse(req.params.id);
       res.json({
-        invoice: await syncInvoice({ invoiceId, cause: `staff:${staffOf(req).id}` }),
+        invoice: await syncInvoice({
+          invoiceId,
+          cause: { cause: `staff:${staffOf(req).id}`, actorName: staffOf(req).legalName },
+        }),
       });
     }),
   );
@@ -264,9 +289,15 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
     asyncRoute(async (req, res) => {
       const slug = z.string().min(1).parse(req.params.slug);
       const back = `${portalOrigin()}/console/portal/billing`;
-      res.status(201).json(
-        await bankSetupLink({ slug, successUrl: `${back}?ach=done`, cancelUrl: `${back}?ach=left` }),
-      );
+      res
+        .status(201)
+        .json(
+          await bankSetupLink({
+            slug,
+            successUrl: `${back}?ach=done`,
+            cancelUrl: `${back}?ach=left`,
+          }),
+        );
     }),
   );
 
@@ -290,7 +321,7 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
         reason: body.reason,
         memo: body.memo,
         settlement: body.settlement,
-        staffId: staffOf(req).id,
+        staff: staffOf(req),
       });
       res.status(201).json({ creditNote });
     }),
@@ -303,7 +334,7 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
       const creditNoteId = InvoiceId.parse(req.params.id);
       const { reason } = ReasonBody.parse(req.body);
       res.json({
-        creditNote: await voidCreditNote({ creditNoteId, staffId: staffOf(req).id, reason }),
+        creditNote: await voidCreditNote({ creditNoteId, staff: staffOf(req), reason }),
       });
     }),
   );

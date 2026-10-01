@@ -863,6 +863,8 @@ export interface InvoiceDraftInput {
   /** Days from issue until due. */
   readonly netDays: number;
   readonly memo: string;
+  /** Printed at the foot of the invoice and its PDF: who issues it, how it is paid, which terms govern it. */
+  readonly footer: string;
   readonly purchaseOrder: string | null;
   readonly paymentMethods: readonly InvoicePaymentMethod[];
   readonly lines: readonly InvoiceLineInput[];
@@ -993,6 +995,19 @@ export interface InvoicingEvent {
   readonly creditNoteId: string | null;
 }
 
+/**
+ * Who the provider prints as the issuer at the head of every invoice: its
+ * account's public business name. Ours is the footer, so the two are
+ * compared before a real invoice is sent.
+ */
+export interface ProviderIssuer {
+  readonly accountId: string;
+  readonly name: string | null;
+  readonly statementDescriptor: string | null;
+  readonly supportEmail: string | null;
+  readonly livemode: boolean;
+}
+
 export interface InvoicingConnector {
   readonly capabilities: ConnectorCapabilities;
   /** The most one invoice may carry: the provider's ceiling on a single payment. */
@@ -1029,6 +1044,8 @@ export interface InvoicingConnector {
   createBankSetupLink(input: BankSetupLinkInput): Promise<BankSetupLink>;
   /** Make one account the one invoices are paid from by default. */
   setDefaultBankAccount(customerId: string, bankAccountId: string): Promise<void>;
+  /** The account behind the key, as it is printed on an invoice. */
+  describeIssuer(): Promise<ProviderIssuer>;
   /**
    * Verify a delivery against the raw request body and say what it is
    * about. Throws `InvoicingSignatureError` when the signature does not

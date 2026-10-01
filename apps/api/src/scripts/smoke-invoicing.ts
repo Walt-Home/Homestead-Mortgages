@@ -52,6 +52,7 @@ async function main(): Promise<void> {
     customerId,
     netDays: 30,
     memo: "Smoke test: not a real invoice.",
+    footer: "Smoke test: issued by nobody, under no terms, and never sent to a customer.",
     purchaseOrder: "SMOKE-TEST",
     paymentMethods: methods,
     lines: [

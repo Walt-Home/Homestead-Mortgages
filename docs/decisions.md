@@ -3507,12 +3507,12 @@ idempotence, and the trigger.
 somebody can pay through Stripe, and Stripe tells us what became of it.
 Joe's brief: hook billing up to Stripe to generate a payment link, accept a
 payment, and track the invoice's status, best in class, with no
-assumptions. Three of his answers are still open — which legal entity
-invoices and owns the Stripe account, the contract terms per servicer, and
-who approves an invoice before it goes out — so the build is shaped so
-none is baked in: the profile that holds the entity and the terms is empty
-until somebody fills it, the review before a send is a separate press by
-a named admin, and every knob a decision would turn is a variable.
+assumptions. Three of his answers were open when this was built — which
+legal entity invoices and owns the Stripe account, the contract terms per
+servicer, and who approves an invoice before it goes out — so the build
+was shaped so none was baked in; he answered all three on 1 October, and
+"Who issues it, under which terms, and who may send it" below is what
+each answer became.
 
 **One-off invoices, not Stripe Billing.** Our meter is the source of truth
 for what a month cost. Stripe's own documentation, read 30 September,
@@ -3620,10 +3620,50 @@ virtual account is a word away. Collecting automatically from the account
 on file, rather than sending the invoice for the servicer to pay, is a
 further decision not taken.
 
+**Who issues it, under which terms, and who may send it (Joe, 1 October
+2026).** The legal entity is the one the Stripe account was opened under,
+Tomorrow OS Inc. doing business as Supermortgage; the terms are the ones
+at supermortgage.com/terms.html; Drew approves and Doug sends.
+
+- _The issuer is data, printed and kept._ `ISSUER` in `@hm/billing` is the
+  entity, its address and support address as section 23 of those terms
+  gives them, and the terms URL. Every draft carries a footer naming all
+  of it and how the invoice is paid, and the row copies `issuer_name` and
+  `terms_url` at draft time, so what a servicer was sent is kept if the
+  data changes. `BILLING_TERMS_URL` overrides the URL alone, because the
+  page there today is the _borrower_ terms — it says the service is free
+  to the borrower and names no payment terms — and a partner terms page
+  replacing it should not need a release. Until one exists the due date
+  on the invoice is the only payment term the servicer has in writing.
+- _What Stripe prints at the head must name us._ Stripe puts its
+  account's public business name above every invoice and our footer
+  below it. The port reads the account behind the key
+  (`describeIssuer`, `GET /v1/account`), the console shows what it prints
+  beside what the footer says, and a live invoice is refused
+  (`ISSUER_MISMATCH`) when the printed name is neither "Supermortgage"
+  nor "Tomorrow OS"; a key that may not read the account refuses too
+  (`ISSUER_UNREAD`), because an unverified head is not a verified one.
+  The sandbox staging invoices through prints "HMX sandbox", which is
+  why it warns and the live path refuses.
+- _Two people stand between a draft and a sent invoice._ One admin reads
+  the draft as the servicer will and approves it; a different admin
+  sends it. The approver, the sender and the person who drafted are
+  recorded by id and by legal name, on the row and in the history
+  (`actor_name` on every staff transition), and an approval can be
+  withdrawn with a reason by whoever finds something wrong. The database
+  keeps the half it can — `billing_invoices_two_people`, a CHECK that the
+  sender is not the approver — and the service keeps approval before
+  send. The rule is structural rather than two named accounts because
+  the console has one role by the decision of 29 September and the
+  servicing app never names a staff member's e-mail, only a hash; Drew
+  approving and Doug sending is the practice the rule allows and the
+  history shows.
+
 **Not decided, and where each waits.** Reminders and write-off:
 `BILLING_AUTO_ADVANCE`. Tax: nothing is computed; Stripe Tax would need a
-registration. An accounting export is the next piece once the first real
-invoice has been paid.
+registration. Partner terms with payment terms in them: `BILLING_TERMS_URL`
+once Doug publishes the page. An accounting export is the next piece once
+the first real invoice has been paid.
 
 ## The console has one role
 

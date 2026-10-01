@@ -12,17 +12,24 @@
  * What a person does, in order, each its own act:
  *
  *   draft    a closed statement becomes a draft at the provider, with the
- *            statement's lines; nothing has been sent and it can be
- *            discarded
- *   send     somebody has looked at it; the provider finalizes and sends
- *            it, and from here the amount cannot change
+ *            statement's lines and our footer — who issues it, under which
+ *            terms; nothing has been sent and it can be discarded
+ *   approve  one admin has read it as the servicer will and says it may go
+ *   send     a different admin sends it; the provider finalizes it, and
+ *            from here the amount cannot change
  *   void     a sent invoice is cancelled, keeping the paper trail, and the
  *            statement is free to be issued again
  *   paid     a wire that reached us outside the provider is recorded
  *
- * Sending is never automatic. Who approves an invoice before it goes out
- * is a decision still open, so the code keeps the review a separate press
- * by a named admin and records who pressed.
+ * Sending is never automatic, and it is never one person. Joe, 1 October
+ * 2026: Drew approves and Doug sends. The console has one role and the
+ * servicing app never names a staff member's e-mail, so the rule kept
+ * here is the structural one — the approver and the sender are two
+ * different admins, each named on the row and in the history — rather
+ * than two named accounts. A live invoice is also refused when the name
+ * the provider prints at its head does not name us: the footer is ours,
+ * and an invoice headed by one company and signed by another reads as a
+ * mistake or a fraud.
  *
  * Three things that are easy to get wrong, and what is done about each:
  *
@@ -61,12 +68,19 @@ import {
   type CreditNoteReason,
   type CreditNoteSettlement,
   type ProviderCreditNote,
+  type ProviderIssuer,
   type InvoiceLineInput,
   type InvoicingConnector,
   type InvoicingEvent,
   type ProviderInvoice,
 } from "@hm/connectors";
-import type { StatementWire } from "@hm/billing";
+import {
+  ISSUER,
+  invoiceFooter,
+  issuerAddressLine,
+  issuerAgrees,
+  type StatementWire,
+} from "@hm/billing";
 import { config } from "../config.js";
 import { AppError } from "../middleware/error-handler.js";
 import { connectors, invoicePaymentMethods } from "./connectors.js";
@@ -90,6 +104,21 @@ export function providerKey(invoicing: InvoicingConnector): string {
   }
 }
 
+/** Who is at the console when an act is taken: the id the servicing app knows, and the name. */
+export interface StaffActor {
+  readonly id: string;
+  readonly legalName: string | null;
+}
+
+/** A cause for the history: a staff act carries the person's name beside the id. */
+type Cause = string | { readonly cause: string; readonly actorName: string | null };
+const staffCause = (staff: StaffActor): Cause => ({
+  cause: `staff:${staff.id}`,
+  actorName: staff.legalName,
+});
+const causeOf = (c: Cause): { cause: string; actorName: string | null } =>
+  typeof c === "string" ? { cause: c, actorName: null } : c;
+
 export interface InvoicingStanding {
   readonly provider: string;
   readonly mode: "fixture" | "sandbox" | "production";
@@ -100,6 +129,68 @@ export interface InvoicingStanding {
   readonly paymentMethods: readonly string[];
   /** Whether the provider's deliveries can be verified: a signing secret is held. */
   readonly verifiesEvents: boolean;
+  /** Who issues an invoice, as its footer prints it. */
+  readonly issuer: {
+    readonly name: string;
+    readonly address: string;
+    readonly supportEmail: string;
+    readonly termsUrl: string;
+  };
+  /** Who the provider prints at the head of an invoice; null when it could not be read. */
+  readonly printed: ProviderIssuer | null;
+  readonly printedError: string | null;
+  /** Whether what the provider prints names us; null when it could not be read. */
+  readonly issuerAgrees: boolean | null;
+  /** The rule on a send: approved by one admin, sent by another. */
+  readonly twoPerson: true;
+}
+
+/** The terms an invoice names: the deployment's, or the issuer's own. */
+export function termsUrl(): string {
+  return config.billing.termsUrl ?? ISSUER.termsUrl;
+}
+
+const PRINTED_FOR_MS = 10 * 60 * 1000;
+let printedCache: {
+  key: string;
+  at: number;
+  issuer: ProviderIssuer | null;
+  error: string | null;
+} | null = null;
+
+/**
+ * What the provider prints as the issuer, read from the account behind
+ * the key and kept for ten minutes, because it is asked on every page and
+ * changes when somebody edits the account. The fixture is never kept: a
+ * test renames it between reads.
+ */
+export async function printedIssuer(): Promise<{
+  readonly issuer: ProviderIssuer | null;
+  readonly error: string | null;
+}> {
+  const invoicing = connectors().invoicing;
+  const key = providerKey(invoicing);
+  const now = Date.now();
+  if (key !== "fixture" && printedCache?.key === key && now - printedCache.at < PRINTED_FOR_MS) {
+    return { issuer: printedCache.issuer, error: printedCache.error };
+  }
+  let issuer: ProviderIssuer | null = null;
+  let error: string | null = null;
+  try {
+    issuer = await invoicing.describeIssuer();
+  } catch (err) {
+    error =
+      err instanceof InvoicingProviderError
+        ? `The account behind the billing key could not be read: ${err.message}`
+        : "The account behind the billing key could not be read.";
+  }
+  printedCache = { key, at: now, issuer, error };
+  return { issuer, error };
+}
+
+/** For tests: forget what the provider was last read to print. */
+export function forgetPrintedIssuer(): void {
+  printedCache = null;
 }
 
 /**
@@ -114,9 +205,10 @@ function cannotIssue(invoicing: InvoicingConnector): string | null {
   return null;
 }
 
-export function invoicingStanding(): InvoicingStanding {
+export async function invoicingStanding(): Promise<InvoicingStanding> {
   const invoicing = connectors().invoicing;
   const why = cannotIssue(invoicing);
+  const printed = await printedIssuer();
   return {
     provider: invoicing.capabilities.provider,
     mode: invoicing.capabilities.mode,
@@ -125,6 +217,16 @@ export function invoicingStanding(): InvoicingStanding {
     maxInvoiceCents: invoicing.maxInvoiceCents.toString(),
     paymentMethods: invoicePaymentMethods(),
     verifiesEvents: invoicing.verifiesEvents,
+    issuer: {
+      name: ISSUER.name,
+      address: issuerAddressLine(),
+      supportEmail: ISSUER.supportEmail,
+      termsUrl: termsUrl(),
+    },
+    printed: printed.issuer,
+    printedError: printed.error,
+    issuerAgrees: printed.issuer ? issuerAgrees(printed.issuer.name) : null,
+    twoPerson: true,
   };
 }
 
@@ -302,15 +404,15 @@ export async function saveBillingProfile(
  * has been sent and one whose due date is behind us.
  */
 export type InvoiceStandingWord =
-  "draft" | "open" | "sent" | "past_due" | "paid" | "void" | "uncollectible";
+  "draft" | "approved" | "open" | "sent" | "past_due" | "paid" | "void" | "uncollectible";
 
 export function invoiceStanding(
-  row: Pick<BillingInvoice, "status" | "sentAt" | "dueAt">,
+  row: Pick<BillingInvoice, "status" | "sentAt" | "dueAt" | "approvedAt">,
   now: Date = new Date(),
 ): InvoiceStandingWord {
   switch (row.status) {
     case "DRAFT":
-      return "draft";
+      return row.approvedAt !== null ? "approved" : "draft";
     case "OPEN":
       if (row.dueAt !== null && row.dueAt < now) return "past_due";
       return row.sentAt !== null ? "sent" : "open";
@@ -344,11 +446,19 @@ export interface InvoiceView {
   readonly amountRemainingCents: string;
   readonly netDays: number;
   readonly dueAt: string | null;
+  /** As its footer prints them; null on a row from before the issuer was decided. */
+  readonly issuerName: string | null;
+  readonly termsUrl: string | null;
   readonly createdAt: string;
   readonly createdBy: string;
+  readonly createdByName: string | null;
+  readonly approvedAt: string | null;
+  readonly approvedBy: string | null;
+  readonly approvedByName: string | null;
   readonly finalizedAt: string | null;
   readonly sentAt: string | null;
   readonly sentBy: string | null;
+  readonly sentByName: string | null;
   readonly paidAt: string | null;
   readonly paidOutOfBand: boolean;
   readonly voidedAt: string | null;
@@ -380,11 +490,18 @@ function viewOf(row: InvoiceWithMonth, now: Date = new Date()): InvoiceView {
     amountRemainingCents: row.amountRemainingCents.toString(),
     netDays: row.netDays,
     dueAt: day(row.dueAt),
+    issuerName: row.issuerName,
+    termsUrl: row.termsUrl,
     createdAt: row.createdAt.toISOString(),
     createdBy: row.createdBy,
+    createdByName: row.createdByName,
+    approvedAt: day(row.approvedAt),
+    approvedBy: row.approvedBy,
+    approvedByName: row.approvedByName,
     finalizedAt: day(row.finalizedAt),
     sentAt: day(row.sentAt),
     sentBy: row.sentBy,
+    sentByName: row.sentByName,
     paidAt: day(row.paidAt),
     paidOutOfBand: row.paidOutOfBand,
     voidedAt: day(row.voidedAt),
@@ -411,6 +528,8 @@ export interface InvoiceHistoryEntry {
   readonly from: string | null;
   readonly to: string;
   readonly cause: string;
+  /** The person, when the cause is one. */
+  readonly actorName: string | null;
   readonly note: string | null;
   readonly at: string;
 }
@@ -428,6 +547,7 @@ export async function invoiceHistory(
     from: t.fromStatus?.toLowerCase() ?? null,
     to: t.toStatus.toLowerCase(),
     cause: t.cause,
+    actorName: t.actorName,
     note: t.note,
     at: t.at.toISOString(),
   }));
@@ -452,12 +572,13 @@ const instant = (s: string | null): Date | null => (s === null ? null : new Date
 async function apply(
   row: BillingInvoice,
   p: ProviderInvoice,
-  cause: string,
+  by: Cause,
   extra: Prisma.BillingInvoiceUpdateInput = {},
   note: string | null = null,
   db: Db = prisma,
 ): Promise<InvoiceWithMonth> {
   const next = p.status.toUpperCase() as BillingInvoiceStatus;
+  const { cause, actorName } = causeOf(by);
   const data: Prisma.BillingInvoiceUpdateInput = {
     providerInvoiceId: p.id,
     number: p.number,
@@ -484,7 +605,7 @@ async function apply(
     });
     if (row.status !== next) {
       await tx.billingInvoiceTransition.create({
-        data: { invoiceId: row.id, fromStatus: row.status, toStatus: next, cause, note },
+        data: { invoiceId: row.id, fromStatus: row.status, toStatus: next, cause, actorName, note },
       });
     }
     return updated;
@@ -657,7 +778,7 @@ export async function bankSetupLink(
  * left without a provider id is resumed, not remade.
  */
 export async function draftInvoice(
-  args: { readonly slug: string; readonly month: Date; readonly staffId: string },
+  args: { readonly slug: string; readonly month: Date; readonly staff: StaffActor },
   db: Db = prisma,
 ): Promise<InvoiceView> {
   const invoicing = connectors().invoicing;
@@ -733,9 +854,17 @@ export async function draftInvoice(
           amountDueCents: statement.cents,
           amountRemainingCents: statement.cents,
           netDays: profile.netDays,
-          createdBy: args.staffId,
+          issuerName: ISSUER.name,
+          termsUrl: termsUrl(),
+          createdBy: args.staff.id,
+          createdByName: args.staff.legalName,
           transitions: {
-            create: { fromStatus: null, toStatus: "DRAFT", cause: `staff:${args.staffId}` },
+            create: {
+              fromStatus: null,
+              toStatus: "DRAFT",
+              cause: `staff:${args.staff.id}`,
+              actorName: args.staff.legalName,
+            },
           },
         },
       });
@@ -757,6 +886,10 @@ export async function draftInvoice(
       customerId,
       netDays: resumed.netDays,
       memo: `Supermortgage usage for ${monthWords(month)}, ${wire.from} through ${wire.to}. Price sheet ${statement.sheetVersion}; one token is one cent.`,
+      footer: invoiceFooter({
+        payable: methods.map(paymentMethodWords).join(" or "),
+        termsUrl: resumed.termsUrl ?? termsUrl(),
+      }),
       purchaseOrder: profile.purchaseOrder,
       paymentMethods: methods,
       lines: invoiceLines(wire),
@@ -766,15 +899,162 @@ export async function draftInvoice(
         hm_month: month,
         hm_sheet_version: statement.sheetVersion,
         hm_tokens: statement.tokens.toString(),
+        hm_issuer: resumed.issuerName ?? ISSUER.name,
+        hm_terms_url: resumed.termsUrl ?? termsUrl(),
       },
     }),
   );
-  return viewOf(await apply(resumed, drafted, `staff:${args.staffId}`, {}, null, db));
+  return viewOf(await apply(resumed, drafted, staffCause(args.staff), {}, null, db));
+}
+
+/** A payment method in the words a footer prints. */
+function paymentMethodWords(method: string): string {
+  switch (method) {
+    case "us_bank_account":
+      return "ACH debit";
+    case "customer_balance":
+      return "bank transfer";
+    case "card":
+      return "card";
+    default:
+      return method;
+  }
+}
+
+/* ── approval: one admin says it may go, another sends it ───────────────── */
+
+/**
+ * One admin has read the draft as the servicer will and says it may go.
+ * Recorded on the row and in the history under the person's name; the
+ * status stays the provider's (draft), because nothing at the provider
+ * changed. The same person cannot then send it.
+ */
+export async function approveInvoice(
+  args: { readonly invoiceId: string; readonly staff: StaffActor },
+  db: Db = prisma,
+): Promise<InvoiceView> {
+  const row = await invoiceRow(args.invoiceId, db);
+  if (row.status !== "DRAFT" || !row.providerInvoiceId) {
+    throw new AppError(
+      409,
+      row.status !== "DRAFT"
+        ? `An invoice that is ${invoiceStanding(row)} is past approval.`
+        : "The provider never answered for this draft. Draft it again first.",
+      row.status !== "DRAFT" ? "NOT_A_DRAFT" : "NOT_AT_PROVIDER",
+    );
+  }
+  if (row.approvedAt !== null) {
+    throw new AppError(
+      409,
+      `Already approved by ${row.approvedByName ?? "another admin"}.`,
+      "ALREADY_APPROVED",
+    );
+  }
+  const now = new Date();
+  const [updated] = await db.$transaction([
+    db.billingInvoice.update({
+      where: { id: row.id },
+      data: { approvedAt: now, approvedBy: args.staff.id, approvedByName: args.staff.legalName },
+      include: WITH_MONTH,
+    }),
+    db.billingInvoiceTransition.create({
+      data: {
+        invoiceId: row.id,
+        fromStatus: "DRAFT",
+        toStatus: "DRAFT",
+        cause: `staff:${args.staff.id}`,
+        actorName: args.staff.legalName,
+        note: "approved",
+        at: now,
+      },
+    }),
+  ]);
+  return viewOf(updated);
+}
+
+/** The approval is taken back, with the reason, by whoever found something wrong. */
+export async function withdrawApproval(
+  args: { readonly invoiceId: string; readonly staff: StaffActor; readonly reason: string },
+  db: Db = prisma,
+): Promise<InvoiceView> {
+  const row = await invoiceRow(args.invoiceId, db);
+  if (row.status !== "DRAFT" || row.approvedAt === null) {
+    throw new AppError(
+      409,
+      row.status !== "DRAFT"
+        ? `An invoice that is ${invoiceStanding(row)} has been sent; void it instead.`
+        : "This draft is not approved.",
+      "NOT_APPROVED",
+    );
+  }
+  const [updated] = await db.$transaction([
+    db.billingInvoice.update({
+      where: { id: row.id },
+      data: { approvedAt: null, approvedBy: null, approvedByName: null },
+      include: WITH_MONTH,
+    }),
+    db.billingInvoiceTransition.create({
+      data: {
+        invoiceId: row.id,
+        fromStatus: "DRAFT",
+        toStatus: "DRAFT",
+        cause: `staff:${args.staff.id}`,
+        actorName: args.staff.legalName,
+        note: `approval withdrawn: ${args.reason}`,
+      },
+    }),
+  ]);
+  return viewOf(updated);
+}
+
+/**
+ * Why this person may not send this invoice now, or null when they may:
+ * it has to be approved, by somebody else, and a live invoice has to be
+ * headed by a name that is ours.
+ */
+export async function cannotSendBecause(
+  row: Pick<BillingInvoice, "approvedAt" | "approvedBy" | "approvedByName" | "livemode">,
+  staff: Pick<StaffActor, "id">,
+): Promise<{ readonly code: string; readonly message: string } | null> {
+  if (row.approvedAt === null || row.approvedBy === null) {
+    return {
+      code: "NOT_APPROVED",
+      message: "Nobody has approved this invoice. One admin approves it and another sends it.",
+    };
+  }
+  if (row.approvedBy === staff.id) {
+    return {
+      code: "APPROVER_CANNOT_SEND",
+      message: "You approved this invoice; a different admin sends it.",
+    };
+  }
+  if (row.livemode) {
+    const printed = await printedIssuer();
+    if (!printed.issuer) {
+      return {
+        code: "ISSUER_UNREAD",
+        message:
+          `${printed.error ?? "The account behind the billing key could not be read."} ` +
+          "A real invoice is not sent until what Stripe prints at its head is known to name us; " +
+          "give the key read access to the account.",
+      };
+    }
+    if (!issuerAgrees(printed.issuer.name)) {
+      return {
+        code: "ISSUER_MISMATCH",
+        message:
+          `Stripe prints "${printed.issuer.name ?? ""}" at the head of this invoice and the footer ` +
+          `names ${ISSUER.name}. Set the Stripe account's public business name to ours before a ` +
+          "real invoice is sent.",
+      };
+    }
+  }
+  return null;
 }
 
 /** Finalize and send a draft somebody has looked at. From here the amount cannot change. */
 export async function sendInvoice(
-  args: { readonly invoiceId: string; readonly staffId: string },
+  args: { readonly invoiceId: string; readonly staff: StaffActor },
   db: Db = prisma,
 ): Promise<InvoiceView> {
   const row = await invoiceRow(args.invoiceId, db);
@@ -792,14 +1072,16 @@ export async function sendInvoice(
       "NOT_SENDABLE",
     );
   }
+  const refused = await cannotSendBecause(row, args.staff);
+  if (refused) throw new AppError(409, refused.message, refused.code);
   const invoicing = connectors().invoicing;
   const sent = await atProvider(() => invoicing.sendInvoice(row.providerInvoiceId!, row.id));
   return viewOf(
     await apply(
       row,
       sent,
-      `staff:${args.staffId}`,
-      { sentAt: new Date(), sentBy: args.staffId },
+      staffCause(args.staff),
+      { sentAt: new Date(), sentBy: args.staff.id, sentByName: args.staff.legalName },
       null,
       db,
     ),
@@ -813,12 +1095,12 @@ export async function sendInvoice(
  * credit note, which are not built.
  */
 export async function voidInvoice(
-  args: { readonly invoiceId: string; readonly staffId: string; readonly reason: string },
+  args: { readonly invoiceId: string; readonly staff: StaffActor; readonly reason: string },
   db: Db = prisma,
 ): Promise<InvoiceView> {
   const row = await invoiceRow(args.invoiceId, db);
   const invoicing = connectors().invoicing;
-  const cause = `staff:${args.staffId}`;
+  const cause = staffCause(args.staff);
   if (row.status === "DRAFT") {
     if (row.providerInvoiceId) {
       await atProvider(() => invoicing.deleteDraft(row.providerInvoiceId!));
@@ -826,7 +1108,7 @@ export async function voidInvoice(
     const [updated] = await prisma.$transaction([
       prisma.billingInvoice.update({
         where: { id: row.id },
-        data: { status: "VOID", voidedAt: new Date(), voidedBy: args.staffId },
+        data: { status: "VOID", voidedAt: new Date(), voidedBy: args.staff.id },
         include: WITH_MONTH,
       }),
       prisma.billingInvoiceTransition.create({
@@ -834,7 +1116,7 @@ export async function voidInvoice(
           invoiceId: row.id,
           fromStatus: "DRAFT",
           toStatus: "VOID",
-          cause,
+          ...causeOf(cause),
           note: `draft discarded: ${args.reason}`,
         },
       }),
@@ -851,12 +1133,12 @@ export async function voidInvoice(
     );
   }
   const voided = await atProvider(() => invoicing.voidInvoice(row.providerInvoiceId!, row.id));
-  return viewOf(await apply(row, voided, cause, { voidedBy: args.staffId }, args.reason, db));
+  return viewOf(await apply(row, voided, cause, { voidedBy: args.staff.id }, args.reason, db));
 }
 
 /** Record a payment that reached us outside the provider. No charge is made. */
 export async function markInvoicePaid(
-  args: { readonly invoiceId: string; readonly staffId: string; readonly note: string },
+  args: { readonly invoiceId: string; readonly staff: StaffActor; readonly note: string },
   db: Db = prisma,
 ): Promise<InvoiceView> {
   const row = await invoiceRow(args.invoiceId, db);
@@ -870,13 +1152,13 @@ export async function markInvoicePaid(
   const invoicing = connectors().invoicing;
   const paid = await atProvider(() => invoicing.markPaidOutOfBand(row.providerInvoiceId!, row.id));
   return viewOf(
-    await apply(row, paid, `staff:${args.staffId}`, { paidOutOfBand: true }, args.note, db),
+    await apply(row, paid, staffCause(args.staff), { paidOutOfBand: true }, args.note, db),
   );
 }
 
 /** Write an open invoice off as bad debt. It can still be paid afterwards. */
 export async function markInvoiceUncollectible(
-  args: { readonly invoiceId: string; readonly staffId: string; readonly note: string },
+  args: { readonly invoiceId: string; readonly staff: StaffActor; readonly note: string },
   db: Db = prisma,
 ): Promise<InvoiceView> {
   const row = await invoiceRow(args.invoiceId, db);
@@ -891,12 +1173,12 @@ export async function markInvoiceUncollectible(
   const marked = await atProvider(() =>
     invoicing.markUncollectible(row.providerInvoiceId!, row.id),
   );
-  return viewOf(await apply(row, marked, `staff:${args.staffId}`, {}, args.note, db));
+  return viewOf(await apply(row, marked, staffCause(args.staff), {}, args.note, db));
 }
 
 /** Read the invoice again from the provider and bring our row in line. */
 export async function syncInvoice(
-  args: { readonly invoiceId: string; readonly cause: string },
+  args: { readonly invoiceId: string; readonly cause: Cause },
   db: Db = prisma,
 ): Promise<InvoiceView> {
   const row = await invoiceRow(args.invoiceId, db);
@@ -954,7 +1236,7 @@ export interface MemberInvoice {
   readonly id: string;
   readonly month: string;
   readonly number: string | null;
-  readonly standing: Exclude<InvoiceStandingWord, "draft" | "void">;
+  readonly standing: Exclude<InvoiceStandingWord, "draft" | "approved" | "void">;
   readonly amountCents: string;
   readonly amountRemainingCents: string;
   /** What has been credited back against it, summed over the notes issued. */
@@ -1125,7 +1407,7 @@ async function syncCreditNotesOf(invoiceId: string, cause: string, db: Db): Prom
 /** A line in the invoice's history that is not a change of status: a credit issued or voided. */
 async function noteInHistory(
   invoice: BillingInvoice,
-  cause: string,
+  by: Cause,
   note: string,
   db: Db,
 ): Promise<void> {
@@ -1134,7 +1416,7 @@ async function noteInHistory(
       invoiceId: invoice.id,
       fromStatus: invoice.status,
       toStatus: invoice.status,
-      cause,
+      ...causeOf(by),
       note,
     },
   });
@@ -1147,7 +1429,7 @@ export interface IssueCreditNoteArgs {
   readonly memo: string;
   /** Required on a paid invoice; must be absent on an open one. */
   readonly settlement: CreditNoteSettlement | null;
-  readonly staffId: string;
+  readonly staff: StaffActor;
 }
 
 /**
@@ -1223,10 +1505,10 @@ export async function issueCreditNote(
       reason: args.reason,
       memo: args.memo,
       settlement: args.settlement === null ? "REDUCES_AMOUNT_DUE" : SETTLEMENT_OF[args.settlement],
-      createdBy: args.staffId,
+      createdBy: args.staff.id,
     },
   });
-  const cause = `staff:${args.staffId}`;
+  const cause = staffCause(args.staff);
   const issuedNote = await atProvider(() => issueAtProvider(row, invoice, db));
   await noteInHistory(
     invoice,
@@ -1241,7 +1523,7 @@ export async function issueCreditNote(
 
 /** Void a credit note. The provider allows it only while the invoice is still open. */
 export async function voidCreditNote(
-  args: { readonly creditNoteId: string; readonly staffId: string; readonly reason: string },
+  args: { readonly creditNoteId: string; readonly staff: StaffActor; readonly reason: string },
   db: Db = prisma,
 ): Promise<CreditNoteView> {
   const note = await db.billingCreditNote.findUnique({
@@ -1270,11 +1552,11 @@ export async function voidCreditNote(
     data: {
       status: p.status === "void" ? "VOID" : "ISSUED",
       voidedAt: instant(p.voidedAt) ?? new Date(),
-      voidedBy: args.staffId,
+      voidedBy: args.staff.id,
       lastSyncedAt: new Date(),
     },
   });
-  const cause = `staff:${args.staffId}`;
+  const cause = staffCause(args.staff);
   await noteInHistory(
     note.invoice,
     cause,

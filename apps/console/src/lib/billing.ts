@@ -151,7 +151,7 @@ export const GAP_WORDS: Record<ProfileGap, string> = {
 };
 
 export type InvoiceStandingWord =
-  "draft" | "open" | "sent" | "past_due" | "paid" | "void" | "uncollectible";
+  "draft" | "approved" | "open" | "sent" | "past_due" | "paid" | "void" | "uncollectible";
 
 export interface InvoiceView {
   readonly id: string;
@@ -171,11 +171,20 @@ export interface InvoiceView {
   readonly amountRemainingCents: string;
   readonly netDays: number;
   readonly dueAt: string | null;
+  /** As its footer prints them; null on a row from before the issuer was decided. */
+  readonly issuerName: string | null;
+  readonly termsUrl: string | null;
   readonly createdAt: string;
   readonly createdBy: string;
+  readonly createdByName: string | null;
+  /** One admin approves; a different one sends. */
+  readonly approvedAt: string | null;
+  readonly approvedBy: string | null;
+  readonly approvedByName: string | null;
   readonly finalizedAt: string | null;
   readonly sentAt: string | null;
   readonly sentBy: string | null;
+  readonly sentByName: string | null;
   readonly paidAt: string | null;
   readonly paidOutOfBand: boolean;
   readonly voidedAt: string | null;
@@ -240,6 +249,15 @@ export interface BankSetupLink {
   readonly expiresAt: string;
 }
 
+/** Who the provider prints at the head of an invoice: its account's public business name. */
+export interface ProviderIssuer {
+  readonly accountId: string;
+  readonly name: string | null;
+  readonly statementDescriptor: string | null;
+  readonly supportEmail: string | null;
+  readonly livemode: boolean;
+}
+
 export interface InvoicingStanding {
   readonly provider: string;
   readonly mode: "fixture" | "sandbox" | "production";
@@ -248,6 +266,20 @@ export interface InvoicingStanding {
   readonly maxInvoiceCents: string;
   readonly paymentMethods: readonly string[];
   readonly verifiesEvents: boolean;
+  /** Who issues an invoice, as its footer prints it. */
+  readonly issuer: {
+    readonly name: string;
+    readonly address: string;
+    readonly supportEmail: string;
+    readonly termsUrl: string;
+  };
+  /** Who the provider prints at the head; null when it could not be read. */
+  readonly printed: ProviderIssuer | null;
+  readonly printedError: string | null;
+  /** Whether what the provider prints names us; null when it could not be read. */
+  readonly issuerAgrees: boolean | null;
+  /** Approved by one admin, sent by another. */
+  readonly twoPerson: true;
 }
 
 export interface InvoiceLink {
@@ -259,6 +291,8 @@ export interface InvoiceHistoryEntry {
   readonly from: string | null;
   readonly to: string;
   readonly cause: string;
+  /** The person, when the cause is one. */
+  readonly actorName: string | null;
   readonly note: string | null;
   readonly at: string;
 }

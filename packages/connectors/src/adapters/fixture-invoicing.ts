@@ -25,6 +25,7 @@ import type {
   InvoicingEvent,
   ProviderCreditNote,
   ProviderInvoice,
+  ProviderIssuer,
   ProviderInvoiceStatus,
 } from "../ports/index.js";
 import {
@@ -49,6 +50,10 @@ export interface FixtureInvoicingConnector extends InvoicingConnector {
   readonly customers: Map<string, InvoicingCustomerInput>;
   /** Every write, by its idempotency key, in order: what a retry must not repeat. */
   readonly writes: string[];
+  /** Every draft as it was asked for, by our invoice id: the footer and the memo a test reads back. */
+  readonly drafts: Map<string, InvoiceDraftInput>;
+  /** What the fixture prints as the issuer; "Supermortgage" unless a test says otherwise. */
+  setIssuerName(name: string | null): void;
   /** A payment arrives, in full. */
   settle(providerInvoiceId: string, at?: Date): void;
   /** A payment is taken back: a paid invoice is open again. */
@@ -92,6 +97,8 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
   const notes = new Map<string, HeldNote>();
   const banks = new Map<string, BankAccountOnFile[]>();
   const writes: string[] = [];
+  const drafts = new Map<string, InvoiceDraftInput>();
+  let issuerName: string | null = "Supermortgage";
   const failing = new Set<Act>();
   let sequence = 0;
   let events = 0;
@@ -138,6 +145,10 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
     verifiesEvents: true,
     customers,
     writes,
+    drafts,
+    setIssuerName(name) {
+      issuerName = name;
+    },
 
     async upsertCustomer(input, existingCustomerId) {
       maybeFail("upsertCustomer");
@@ -155,6 +166,7 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
           404,
         );
       }
+      drafts.set(input.invoiceId, input);
       // Found, not made again: the rule a retry depends on.
       for (const h of invoices.values()) if (h.ourId === input.invoiceId) return fresh(h.invoice);
       writes.push(invoicingKey(input.invoiceId, "create"));
@@ -350,7 +362,11 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
 
     async listBankAccounts(customerId) {
       if (!customers.has(customerId)) {
-        throw new InvoicingProviderError(`No such customer: ${customerId}`, "resource_missing", 404);
+        throw new InvoicingProviderError(
+          `No such customer: ${customerId}`,
+          "resource_missing",
+          404,
+        );
       }
       return banks.get(customerId) ?? [];
     },
@@ -373,7 +389,11 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
     async setDefaultBankAccount(customerId, bankAccountId) {
       const held = banks.get(customerId) ?? [];
       if (!held.some((b) => b.id === bankAccountId)) {
-        throw new InvoicingProviderError(`No such bank account: ${bankAccountId}`, "resource_missing", 404);
+        throw new InvoicingProviderError(
+          `No such bank account: ${bankAccountId}`,
+          "resource_missing",
+          404,
+        );
       }
       banks.set(
         customerId,
@@ -394,6 +414,16 @@ export function fixtureInvoicingConnector(): FixtureInvoicingConnector {
       };
       banks.set(customerId, [...held, added]);
       return added;
+    },
+
+    async describeIssuer(): Promise<ProviderIssuer> {
+      return {
+        accountId: "acct_fixture",
+        name: issuerName,
+        statementDescriptor: issuerName === null ? null : issuerName.toUpperCase().slice(0, 22),
+        supportEmail: null,
+        livemode: false,
+      };
     },
 
     readEvent(rawBody, signature) {

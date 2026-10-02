@@ -365,11 +365,23 @@ jobs:
           MAIL_FROM: ${{ vars.MAIL_FROM }}
           MAIL_ALLOWED_ADDRESSES: ${{ vars.MAIL_ALLOWED_ADDRESSES }}
           MAIL_ALLOWED_DOMAINS: ${{ vars.MAIL_ALLOWED_DOMAINS }}
+      # The three jobs every stack has are required: a missing one is a
+      # stack that never closes a month, and the deploy should say so. The
+      # reconcile job exists only where invoicing is on — Terraform makes it
+      # with the stack's `invoicing` switch — so it is repointed only when
+      # this environment invoices through Stripe, and named as skipped
+      # otherwise. (2 October 2026: production's first promotion with the
+      # invoicing code failed here, on a job it had no reason to have.)
       - name: Point the scheduled jobs at this image
         run: |
-          for JOB in ${{ env.SERVICE }}-apor-fetch ${{ env.SERVICE }}-loan-review ${{ env.SERVICE }}-billing-close ${{ env.SERVICE }}-billing-reconcile; do
+          for JOB in ${{ env.SERVICE }}-apor-fetch ${{ env.SERVICE }}-loan-review ${{ env.SERVICE }}-billing-close; do
             gcloud run jobs update "$JOB" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$IMAGE" --quiet
           done
+          if [ "${{ vars.INVOICING_PROVIDER }}" = "stripe" ]; then
+            gcloud run jobs update "${{ env.SERVICE }}-billing-reconcile" --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} --image "$IMAGE" --quiet
+          else
+            echo "invoicing is not on for this environment; there is no ${{ env.SERVICE }}-billing-reconcile job to repoint (Terraform makes it when the stack's invoicing switch is on)."
+          fi
       - name: Confirm the service is reachable and is production
         run: |
           gcloud run services add-iam-policy-binding ${{ env.SERVICE }} \

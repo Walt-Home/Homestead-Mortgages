@@ -19,7 +19,7 @@ import session from "express-session";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import type { FixtureMailConnector } from "@hm/connectors";
-import { NORTHLIGHT, sampleBook } from "@hm/partner-book";
+import { NORTHLIGHT, sampleAsOfFor, sampleBook } from "@hm/partner-book";
 import { errorHandler } from "../middleware/error-handler.js";
 import { requireAuth } from "../middleware/require-auth.js";
 import { servicerPortalRouter } from "../routes/servicer-portal.js";
@@ -32,6 +32,7 @@ import {
   hashPassword,
 } from "../services/servicer-team.js";
 import { loadTape, reviewBook } from "../services/tape-desk.js";
+import { dayEt } from "../services/refi-offers.js";
 import { createUser } from "./support/factories.js";
 
 let server: Server;
@@ -96,7 +97,9 @@ const utf8 = (s: string) => new TextEncoder().encode(s);
 const PASSWORD = "correct horse battery staple 22";
 
 async function loadNorthlight() {
-  const book = sampleBook();
+  // Reviewed as of today, so as of this month; pinned to September the
+  // book reads as a day past due from the second of October.
+  const book = sampleBook(() => ({}), { asOf: sampleAsOfFor(dayEt(new Date())) });
   const loaded = await loadTape({
     servicer: { slug: NORTHLIGHT.slug, displayName: NORTHLIGHT.legal_name },
     profile: "m3-v1",

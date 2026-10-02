@@ -16,12 +16,13 @@ import express from "express";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import type { FixtureMailConnector } from "@hm/connectors";
-import { NORTHLIGHT, sampleBook, toCsv } from "@hm/partner-book";
+import { NORTHLIGHT, sampleAsOfFor, sampleBook, toCsv } from "@hm/partner-book";
 import { errorHandler } from "../middleware/error-handler.js";
 import { consoleTapeRouter } from "../routes/console-tape.js";
 import { connectors } from "../services/connectors.js";
 import { acceptLoanClaim, mintLoanClaim } from "../services/loan-claims.js";
 import { partnerPrincipal } from "../services/party.js";
+import { dayEt } from "../services/refi-offers.js";
 import { createUser } from "./support/factories.js";
 
 const STAFF_COOKIE = "sm_staff=desk";
@@ -415,7 +416,10 @@ describe("inviting the people on a tape to claim", () => {
 
 describe("the book's first review", () => {
   it("reviews every loan after a load, once a day, holds the offers for the claim, and the next preview carries the verdicts", async () => {
-    const load = await call<{ result: { status: string } }>("POST", "/imports", tapeBody());
+    // The review runs as of today, so the book is as of this month: pinned
+    // to September it reads as a day past due from the second of October.
+    const current = sampleBook(() => ({}), { asOf: sampleAsOfFor(dayEt(new Date())) });
+    const load = await call<{ result: { status: string } }>("POST", "/imports", tapeBody(current));
     expect(load.status).toBe(201);
 
     const first = await call<{

@@ -17,7 +17,7 @@
  */
 
 import { Decimal, levelPayment, monthlyInterest, ratePercent, type Cents } from "@hm/kernel/money";
-import { addMonths, parts, plainDate, type PlainDate } from "@hm/kernel/calendar";
+import { addMonths, parts, plainDate, startOfMonth, type PlainDate } from "@hm/kernel/calendar";
 import { luhnCheckDigit, M3_V1 } from "../m3-v1.js";
 import { toCsv } from "../tabular.js";
 import { writeXlsx } from "../vendored/xlsx.js";
@@ -155,7 +155,17 @@ const SEEDS: readonly Seed[] = [
     monthsBehind: 0, remittance: "FNMA A/A", bedrooms: 3, baths: "2", sqft: 1690, garage: "2 car attached", lot: "0.23 ac", zipRank: 2, docType: "Full" },
 ];
 
-const AS_OF = plainDate(NORTHLIGHT_AS_OF);
+/**
+ * The as-of that keeps the sample current when it is loaded on `today`: the
+ * first of that month, so a current loan's next due date is the first of
+ * the next. The book is pinned to NORTHLIGHT_AS_OF by default because a
+ * dozen tests hold its figures; a loader that reviews the book as of today
+ * passes this instead, or the review reads every current loan as a day past
+ * due from the second of the month after the pin.
+ */
+export function sampleAsOfFor(today: string): PlainDate {
+  return startOfMonth(plainDate(today));
+}
 const cents = (dollars: string): Cents => Decimal.parse(dollars).toCents("HALF_UP");
 /** The tape carries dollars as numeric cells. */
 const dollars = (c: Cents): number => Number(c) / 100;
@@ -214,7 +224,7 @@ export function sampleMin(n: number): string {
   return body + String(luhnCheckDigit(body));
 }
 
-function buildLoan(sd: Seed): SampleLoan {
+function buildLoan(sd: Seed, asOf: PlainDate): SampleLoan {
   const original = cents(sd.original);
   const first = plainDate(sd.firstPayment);
   const term = 360;
@@ -223,7 +233,7 @@ function buildLoan(sd: Seed): SampleLoan {
   // Payments made through the as-of date: a current loan paid the as-of
   // month's installment; a delinquent loan stopped `monthsBehind` months
   // earlier.
-  const lastPaidDue = addMonths(AS_OF, -sd.monthsBehind);
+  const lastPaidDue = addMonths(asOf, -sd.monthsBehind);
   const paymentsMade = monthsInclusive(first, lastPaidDue);
   const upb = scheduledUpb(original, sd.rate, term, paymentsMade);
   const nextDue = addMonths(lastPaidDue, 1);
@@ -261,12 +271,12 @@ function buildLoan(sd: Seed): SampleLoan {
   }
   const advances = sd.fcReferral ? cents("1850.00") : sd.monthsBehind > 0 ? cents("125.00") : 0n;
   // A plausible cushion: a few months of T&I.
-  const escrowBalance = ti * BigInt(((parts(AS_OF).m + 3) % 12) + 1);
+  const escrowBalance = ti * BigInt(((parts(asOf).m + 3) % 12) + 1);
   const min = sampleMin(sd.n);
   const loanNo = `NL-${100000 + sd.n}`;
   /* prettier-ignore */
   const tape: Record<string, string | number | null> = {
-    m3: "M3", as_of_date: NORTHLIGHT_AS_OF, servicer_loan_number: loanNo, lien_position: "1", borrower_name: `${sd.first} ${sd.last}`,
+    m3: "M3", as_of_date: asOf, servicer_loan_number: loanNo, lien_position: "1", borrower_name: `${sd.first} ${sd.last}`,
     property_address: sd.address, property_city: sd.city, property_state: sd.state, property_zip: sd.zip, property_county: sd.county, zip_toxic_ranking: sd.zipRank,
     original_upb_cents: dollars(original), upb_cents: dollars(upb), deferred_upb_cents: 0, total_upb_cents: dollars(upb),
     original_note_rate_pct: Number(sd.rate), note_rate_pct: Number(sd.rate), servicer_retained_rate_pct: 0.25, investor_net_rate_pct: Number(Decimal.parse(sd.rate).sub(Decimal.parse("0.25")).toFixed(3)),
@@ -345,12 +355,16 @@ export type SampleBook = {
 
 /**
  * The book, with an optional override per loan for a test that wants a later
- * tape: a different as-of, a paid-off status, a changed balance.
+ * tape: a different as-of, a paid-off status, a changed balance. `asOf`
+ * moves the whole book — the as-of, what has been paid through, the next
+ * due dates — and defaults to NORTHLIGHT_AS_OF; see `sampleAsOfFor`.
  */
 export function sampleBook(
   override: (loan: SampleLoan) => Partial<Record<string, string | number | null>> = () => ({}),
+  opts: { readonly asOf?: string } = {},
 ): SampleBook {
-  const loans = SEEDS.map(buildLoan).map((l) => ({
+  const asOf = plainDate(opts.asOf ?? NORTHLIGHT_AS_OF);
+  const loans = SEEDS.map((sd) => buildLoan(sd, asOf)).map((l) => ({
     ...l,
     tape: withOverrides(l.tape, override(l)),
   }));

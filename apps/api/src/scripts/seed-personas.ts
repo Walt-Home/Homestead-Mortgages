@@ -62,7 +62,8 @@ import {
   type PricingConnector,
 } from "@hm/connectors";
 import type { Address, ApplicationState, LoanFile, LoanState } from "@hm/shared";
-import { NORTHLIGHT, sampleBook } from "@hm/partner-book";
+import { NORTHLIGHT, sampleAsOfFor, sampleBook } from "@hm/partner-book";
+import { dayEt } from "../services/refi-offers.js";
 import { quoteSubjectProduct } from "../services/pricing.js";
 import { underwrite } from "@hm/underwriting";
 import {
@@ -1642,7 +1643,9 @@ async function seedImportedPersona(story: ImportedPersona): Promise<SeedReport> 
     update: { integrationDepth: "API" },
     select: { id: true },
   });
-  const book = sampleBook();
+  // As of this month, so the daily review reads the sample as current: a
+  // book pinned to September reads as a day past due from 2 October.
+  const book = sampleBook(() => ({}), { asOf: sampleAsOfFor(dayEt(new Date())) });
   const imported = await importPartnerBook({
     servicerId: servicer.id,
     principalId: await partnerPrincipal(prisma, story.loan.servicerSlug),

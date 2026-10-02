@@ -16,7 +16,8 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { prisma } from "@hm/db";
-import { NORTHLIGHT, sampleBook } from "@hm/partner-book";
+import { NORTHLIGHT, sampleAsOfFor, sampleBook } from "@hm/partner-book";
+import { dayEt } from "../services/refi-offers.js";
 import { importPartnerBook, type ImportBookResult } from "../services/partner-book.js";
 import { partnerPrincipal } from "../services/party.js";
 
@@ -95,7 +96,8 @@ async function sample(slug: string, rest: readonly string[]): Promise<void> {
   );
   if (!servicer) return;
   const principalId = await partnerPrincipal(prisma, slug);
-  const book = sampleBook();
+  // As of this month, so the daily review reads the sample as current.
+  const book = sampleBook(() => ({}), { asOf: sampleAsOfFor(dayEt(new Date())) });
   print(
     await importPartnerBook({
       servicerId: servicer.id,

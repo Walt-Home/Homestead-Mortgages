@@ -156,12 +156,13 @@ const SEEDS: readonly Seed[] = [
 ];
 
 /**
- * The as-of that keeps the sample current when it is loaded on `today`: the
- * first of that month, so a current loan's next due date is the first of
- * the next. The book is pinned to NORTHLIGHT_AS_OF by default because a
- * dozen tests hold its figures; a loader that reviews the book as of today
- * passes this instead, or the review reads every current loan as a day past
- * due from the second of the month after the pin.
+ * The as-of that makes the sample this month's book when it is loaded on
+ * `today`: the first of that month, with a current loan next due the first
+ * of the next. The book is pinned to NORTHLIGHT_AS_OF by default because a
+ * dozen tests hold its figures; a loader showing somebody a book passes
+ * this instead, so what they look at is dated now. (It was first needed for
+ * a worse reason: until 5 October 2026 the review counted delinquency to
+ * the review day, and a pinned book read as past due a month on.)
  */
 export function sampleAsOfFor(today: string): PlainDate {
   return startOfMonth(plainDate(today));

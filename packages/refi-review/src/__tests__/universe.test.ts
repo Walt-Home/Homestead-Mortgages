@@ -63,7 +63,8 @@ const HIS: Record<string, { verdict: Review["verdict"]; reasons: string[] }> = {
 /** The five his pricing refused; ours prices them. */
 const HIS_UNPRICED = ["NL-100004", "NL-100005", "NL-100006", "NL-100007", "NL-100012"];
 
-function reviews(): Map<string, Review> {
+/** The sample book as the review is handed it: each loan, and the tape's word on it. */
+function sample(): Map<string, { loan: ObservedLoan; obs: Observation }> {
   const b = sampleBook();
   const book = readBook(
     profileById("m3-v1"),
@@ -72,7 +73,7 @@ function reviews(): Map<string, Review> {
     { filename: "northlight.xlsx", bytes: b.tape },
     { filename: "supplement.csv", bytes: new TextEncoder().encode(b.supplement) },
   );
-  const out = new Map<string, Review>();
+  const out = new Map<string, { loan: ObservedLoan; obs: Observation }>();
   for (const { record, facts } of book.records) {
     const loan: ObservedLoan = {
       loan_id: record.sourceLoanKey,
@@ -98,14 +99,36 @@ function reviews(): Map<string, Review> {
       delinquency_days: record.servicing.delinquencyDays,
       facts,
     };
-    const u = universeLoanOf(loan, obs, AS_OF);
-    if ("skipped" in u) throw new Error(`${record.sourceLoanKey}: ${u.skipped}`);
-    out.set(
-      record.sourceLoanKey,
-      reviewLoan(u.row, { as_of: AS_OF, rate: rateFor(record.sourceLoanKey) }),
-    );
+    out.set(record.sourceLoanKey, { loan, obs });
   }
   return out;
+}
+
+function reviews(): Map<string, Review> {
+  const out = new Map<string, Review>();
+  for (const [key, { loan, obs }] of sample()) {
+    const u = universeLoanOf(loan, obs, AS_OF);
+    if ("skipped" in u) throw new Error(`${key}: ${u.skipped}`);
+    out.set(key, reviewLoan(u.row, { as_of: AS_OF, rate: rateFor(key) }));
+  }
+  return out;
+}
+
+/** Days delinquent as the universe row carries them, for one loan read on a given review day. */
+function daysDelinquent(
+  key: string,
+  reviewDay: string,
+  over: Partial<Observation> = {},
+  facts: Record<string, string | number | boolean | null> = {},
+): number {
+  const { loan, obs } = sample().get(key)!;
+  const u = universeLoanOf(
+    loan,
+    { ...obs, ...over, facts: { ...obs.facts, ...facts } },
+    plainDate(reviewDay),
+  );
+  if ("skipped" in u) throw new Error(u.skipped);
+  return u.row.regx_days_delinquent;
 }
 
 describe("the sample book, reviewed here", () => {
@@ -158,6 +181,39 @@ describe("the sample book, reviewed here", () => {
       expect(["candidate", "watching"], n).toContain(r.verdict);
       expect(r.reasons, n).not.toContain("not_priceable");
     }
+  });
+
+  it("counts delinquency to the tape's own date, however long after the review runs", () => {
+    // The sample is as of 1 September with loan 1 next due 1 October and reported
+    // current. Reviewed that month, the month after, or five months on — the
+    // shape of the first real book, a tape of 30 April reviewed on 5 October —
+    // the tape still says current, and so does the row.
+    for (const day of ["2026-09-21", "2026-10-02", "2027-02-05"]) {
+      expect([day, daysDelinquent("NL-100001", day)]).toEqual([day, 0]);
+    }
+    const { loan, obs } = sample().get("NL-100001")!;
+    const late = universeLoanOf(loan, obs, plainDate("2027-02-05"));
+    if ("skipped" in late) throw new Error(late.skipped);
+    const review = reviewLoan(late.row, {
+      as_of: plainDate("2027-02-05"),
+      rate: rateFor("NL-100001"),
+    });
+    expect(review.reasons).not.toContain("delinquent");
+    expect(review.facts.days_delinquent).toBe(0);
+  });
+
+  it("still calls late what the tape itself says is late, counted to the tape's date", () => {
+    // Next due a month before the tape's date, and nothing else said: thirty-one
+    // days at the tape, whichever day the review happens to run.
+    const behind = { next_payment_due_on: "2026-08-01", delinquency_days: null };
+    const quiet = { mba_delinquency_status: "C", pay_string: null };
+    for (const day of ["2026-09-21", "2027-02-05"]) {
+      expect([day, daysDelinquent("NL-100001", day, behind, quiet)]).toEqual([day, 31]);
+    }
+    // The servicer's own count stands when it is the larger.
+    expect(daysDelinquent("NL-100001", "2027-02-05", { delinquency_days: 45 })).toBe(45);
+    // And the sample's one late loan is late on any day it is read.
+    expect(daysDelinquent("NL-100008", "2027-02-05")).toBeGreaterThan(0);
   });
 
   it("skips a row the tape cannot describe, with the reason", () => {

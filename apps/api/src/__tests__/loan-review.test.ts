@@ -54,6 +54,30 @@ async function claimedBook(numbers: readonly string[]) {
   return { servicer, owners };
 }
 
+describe("a tape read months after its date", () => {
+  it("does not call delinquent what the servicer reported current", async () => {
+    // The first real book on production: a tape as of 30 April reviewed on
+    // 5 October, 243 loans reported current and every one excluded as
+    // delinquent for the tape's age. Here the sample, as of 1 September,
+    // reviewed five months on.
+    await claimedBook(["NL-100001", "NL-100008"]);
+    const run = await reviewLoans({ asOf: plainDate("2027-02-05") });
+    expect(run.skipped).toEqual([]);
+    const calledDelinquent = run.reviewed
+      .filter((r) => r.reasons.includes("delinquent"))
+      .map((r) => r.servicerLoanNumber);
+    // The one loan the tape itself shows behind, and no other.
+    expect(calledDelinquent).toEqual(["NL-100008"]);
+    const one = run.reviewed.find((r) => r.servicerLoanNumber === "NL-100001")!;
+    expect(one.verdict).not.toBe("excluded");
+    const row = await prisma.loanReview.findFirstOrThrow({
+      where: { loan: { servicerLoanNumber: "NL-100001" } },
+    });
+    expect(row.ruleSetVersion).toContain("hm.refi-review.v2");
+    expect((row.facts as { days_delinquent: number }).days_delinquent).toBe(0);
+  });
+});
+
 describe("the daily review", () => {
   it("reviews the monitored loans once for the day, off the fixture's sheet, and keeps the verdicts", async () => {
     const { owners } = await claimedBook(["NL-100001", "NL-100008", "NL-100009", "NL-100011"]);

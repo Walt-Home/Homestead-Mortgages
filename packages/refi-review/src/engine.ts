@@ -40,7 +40,8 @@ import {
 
 /** His rule set's name, and this port's. The row carries both. */
 export const RULE_SET_VERSION = "sm.refi_trigger.v1+partner_book.review.v1";
-export const PORT_VERSION = "hm.refi-review.v1";
+/** v2 (5 October 2026): delinquency is counted to the tape's own date, not the review day. */
+export const PORT_VERSION = "hm.refi-review.v2";
 
 export const REFI_PRODUCT_CODE = "FRM30";
 export const LCOR_CASH_BACK_FLOOR_CENTS: Cents = 200_000n;

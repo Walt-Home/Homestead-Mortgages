@@ -149,9 +149,18 @@ export function universeLoanOf(loan: ObservedLoan, obs: Observation, asOf: Plain
       fMoney(F["pi_cents"]) ??
       levelPayment(original_upb_cents, ratePercent(note_rate_pct), originalTerm);
 
-    // Delinquency: days past the tape's next due date at as-of; the pay string,
-    // the MBA status and the observation's own count corroborate.
-    let regx_days_delinquent = next_due_date < asOf ? daysBetween(next_due_date, asOf) : 0;
+    // Delinquency: days past the tape's next due date AT THE TAPE'S OWN DATE;
+    // the pay string, the MBA status and the observation's own count
+    // corroborate. A tape speaks for the day it is as of and no later. It was
+    // measured against the review day until 5 October 2026, which made a
+    // statement the data never made: the first real book on production was a
+    // tape as of 30 April reviewed on 5 October, and all 243 loans its
+    // servicer reported current, at zero days, were excluded as delinquent
+    // because their May-to-August due dates were behind October. Any tape
+    // older than its own next due date did the same from the second of the
+    // month. What the tape says is late is still late, counted to its date.
+    const obsDay = plainDate(obs.as_of.slice(0, 10));
+    let regx_days_delinquent = next_due_date < obsDay ? daysBetween(next_due_date, obsDay) : 0;
     if (
       regx_days_delinquent === 0 &&
       (payStringLate(F["pay_string"]) || mbaStatusLate(F["mba_delinquency_status"]))
@@ -165,7 +174,6 @@ export function universeLoanOf(loan: ObservedLoan, obs: Observation, asOf: Plain
     const fmv = fMoney(F["fmv_cents"]);
     const bpo = fMoney(F["bpo_value_cents"]);
     const appraised = fMoney(F["appraised_value_cents"]);
-    const obsDay = plainDate(obs.as_of.slice(0, 10));
     const candidates: { source: ValueEstimate["source"]; value_cents: Cents; as_of: PlainDate }[] =
       [];
     if (fmv !== null && fmv > 0n)

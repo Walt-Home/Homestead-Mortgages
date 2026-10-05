@@ -1953,6 +1953,28 @@ servicer; an alert when the morning run fails. A monitored loan whose
 servicer's platform is also reviewing it gets two verdicts a day, and that
 stays true until one of them is turned off on purpose.
 
+**Delinquency is counted to the tape's own date (Joe, 5 October 2026).**
+The universe row's days delinquent were the days from the tape's next due
+date to the _review_ day. That made a statement the data never made. The
+first real book on production was a tape as of 30 April, loaded and
+reviewed on 5 October: 245 loans, of which the servicer reported 243
+current at zero days, and the review excluded all 243 as `delinquent`
+because their May-to-August due dates were behind October. Read on
+production before anything was changed: 243 `["delinquent"]`, 2
+`["lossmit_plan_active"]`; the tape, `CUR` on 243 and `DQ30-59` on 2. The
+same thing happened to any tape older than its own next due date from the
+second of the following month, and is what broke two suites on 2 October
+over a sample book pinned to September. A tape speaks for the day it is as
+of and no later, so the days are now counted to that day
+(`universeLoanOf`, `PORT_VERSION` `hm.refi-review.v2`); what the tape says
+is late is still late, and the pay string, the MBA status and the
+servicer's own count corroborate as before. The rows written on 5 October
+stand as that day's record under the rule then in force — a review is one
+row per loan per day and never rewritten — and the next morning's run
+judges the 243 on their merits. What this does not settle: a five-month-old
+tape is still five months old, and an offer made off it is made off April's
+balance.
+
 ## An offer is a row and a card
 
 **Decision (23 September 2026).** A candidate the daily review finds

@@ -82,9 +82,9 @@ function firstOfNextMonth(day: string): string {
 
 /**
  * A later tape for the same book: the same loans, current as of `day`. A
- * review months on reads the newest observation, and one whose next due
- * date is behind the review day is a delinquent loan, not a candidate —
- * which is right, and not what these tests are about.
+ * review months on reads the newest observation, so a test about what a
+ * later month's review does gives it that month's tape, as a servicer
+ * would.
  */
 async function laterTape(servicer: { id: string; slug: string }, day: string): Promise<void> {
   const principalId = await partnerPrincipal(prisma, servicer.slug);

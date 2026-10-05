@@ -256,8 +256,11 @@ async function newestVerdicts(
   });
   const day = latest._max.asOf;
   if (!day) return out;
+  // Oldest first, so a loan reviewed again that day under a changed rule
+  // ends on its newest verdict.
   const rows = await db.loanReview.findMany({
     where: { asOf: day, loan: { servicerId } },
+    orderBy: { recordedAt: "asc" },
     select: { loanId: true, verdict: true },
   });
   for (const r of rows) out.set(r.loanId, { verdict: verdictOf(r.verdict), asOf: isoDay(day) });
@@ -475,14 +478,20 @@ export async function reviewBook(
   const run = await reviewLoans({ servicerId: servicer.id, onProgress }, db);
   const counts = emptyCounts();
   const verdicts: Record<string, ReviewVerdict> = {};
+  // The day's verdict on each loan is its newest row: read oldest first and
+  // let a later one replace an earlier, then count loans, not rows.
   const today = await db.loanReview.findMany({
     where: { asOf: new Date(`${run.asOf}T00:00:00.000Z`), loan: { servicerId: servicer.id } },
-    select: { verdict: true, loan: { select: { servicerLoanNumber: true } } },
+    orderBy: { recordedAt: "asc" },
+    select: { loanId: true, verdict: true, loan: { select: { servicerLoanNumber: true } } },
   });
+  const newest = new Map<string, { verdict: ReviewVerdict; number: string | null }>();
   for (const t of today) {
-    const v = verdictOf(t.verdict);
-    counts[v] += 1;
-    if (t.loan.servicerLoanNumber) verdicts[t.loan.servicerLoanNumber] = v;
+    newest.set(t.loanId, { verdict: verdictOf(t.verdict), number: t.loan.servicerLoanNumber });
+  }
+  for (const { verdict, number } of newest.values()) {
+    counts[verdict] += 1;
+    if (number) verdicts[number] = verdict;
   }
   return {
     asOf: run.asOf,

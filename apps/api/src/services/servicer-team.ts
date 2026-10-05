@@ -656,7 +656,11 @@ export async function servicerBookLoans(
           take: 1,
           select: { principalBalanceCents: true },
         },
-        reviews: { orderBy: { asOf: "desc" }, take: 1, select: { verdict: true, asOf: true } },
+        reviews: {
+          orderBy: [{ asOf: "desc" }, { recordedAt: "desc" }],
+          take: 1,
+          select: { verdict: true, asOf: true },
+        },
         offers: {
           orderBy: { offeredAt: "desc" },
           take: 1,
@@ -879,12 +883,16 @@ export async function servicerBookLoan(
       nextPaymentDueOn: o.nextPaymentDueOn ? day(o.nextPaymentDueOn) : null,
       delinquencyDays: o.delinquencyDays,
     })),
-    reviews: l.reviews.map((r) => ({
-      asOf: day(r.asOf),
-      verdict: r.verdict.toLowerCase(),
-      reasons: reasonsInWords(Array.isArray(r.reasons) ? (r.reasons as string[]) : []),
-      candidateRatePct: r.candidateRatePct?.toFixed(3) ?? null,
-    })),
+    // One verdict a day, the newest: a day reviewed again under a changed
+    // rule holds the earlier row too, and that one is the record, not the news.
+    reviews: l.reviews
+      .filter((r, i, all) => all.findIndex((x) => x.asOf.getTime() === r.asOf.getTime()) === i)
+      .map((r) => ({
+        asOf: day(r.asOf),
+        verdict: r.verdict.toLowerCase(),
+        reasons: reasonsInWords(Array.isArray(r.reasons) ? (r.reasons as string[]) : []),
+        candidateRatePct: r.candidateRatePct?.toFixed(3) ?? null,
+      })),
     offers: l.offers.map((o) => {
       const d = (o.disclosure ?? {}) as Record<string, unknown>;
       return {

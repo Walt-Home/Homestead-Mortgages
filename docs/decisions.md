@@ -1975,6 +1975,23 @@ judges the 243 on their merits. What this does not settle: a five-month-old
 tape is still five months old, and an offer made off it is made off April's
 balance.
 
+**A review is one per loan, per day, per rule (the same evening).** It was
+one per loan per day, which is right while the rule stands still and meant
+the correction above could not be seen until the next morning: the day had
+its row, the table is append-only, and Joe — looking at 245 "Excluded" an
+hour after the rule was fixed — said to do it that night. Nothing is
+rewritten, as before. The unique key now includes `rule_set_version`
+(`loan_reviews_one_per_loan_day_and_rule`), a run skips a loan only when
+today's row was made under the rule in force (`CURRENT_RULE_SET`), and a
+review under a changed rule is a new row beside the earlier one, each
+carrying the rule it was made under. "The day's verdict" is the newest of
+them, and every reader takes it that way: the loan's own newest review,
+the book's count of verdicts (loans, not rows), the desk's preview and its
+count after a review, the portal's list and the one verdict a day on a
+loan's page. The same rule on the same day is still one row, and the
+database still says so. What it does not cover yet is a second tape on
+the same day under the same rule: that is still tomorrow's review.
+
 ## An offer is a row and a card
 
 **Decision (23 September 2026).** A candidate the daily review finds

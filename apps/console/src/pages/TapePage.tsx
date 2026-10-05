@@ -794,7 +794,7 @@ function ReviewStep({
         <Notice tone="warn" title="These exact files were loaded before">
           On {fmtDateTime(preview.alreadyLoaded.loadedAt)}. Loading again writes nothing new.
           {reviewedOn
-            ? ` The Refi column is the review recorded on ${fmtDate(reviewedOn)}. A loan is reviewed once a day and a day's review is never rewritten, so loading again does not change it; the next review runs tomorrow morning.`
+            ? ` The Refi column is the newest review on record, from ${fmtDate(reviewedOn)}. A loan is reviewed once a day under a rule: loading again reviews it again only if the rule has changed since, and otherwise the next review is tomorrow morning.`
             : ""}
         </Notice>
       ) : (

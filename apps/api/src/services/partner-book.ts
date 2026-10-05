@@ -526,13 +526,16 @@ export async function partnerBookStatus(servicerId: string, db: Db = prisma) {
   });
   const verdicts = { candidate: 0, watching: 0, not_now: 0, excluded: 0 };
   if (newest._max.asOf) {
-    const groups = await db.loanReview.groupBy({
-      by: ["verdict"],
+    // Loans, not rows: a loan reviewed again that day under a changed rule
+    // holds two rows, and its verdict is the newer.
+    const rows = await db.loanReview.findMany({
       where: { asOf: newest._max.asOf, loan: { servicerId } },
-      _count: { _all: true },
+      orderBy: { recordedAt: "asc" },
+      select: { loanId: true, verdict: true },
     });
-    for (const g of groups)
-      verdicts[g.verdict.toLowerCase() as keyof typeof verdicts] = g._count._all;
+    const byLoan = new Map<string, string>();
+    for (const r of rows) byLoan.set(r.loanId, r.verdict);
+    for (const v of byLoan.values()) verdicts[v.toLowerCase() as keyof typeof verdicts] += 1;
   }
   return {
     imports,

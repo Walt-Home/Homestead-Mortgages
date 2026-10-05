@@ -3,7 +3,7 @@
  * unclaimed loan on a servicer's book beside it.
  *
  *   npm run review:run                 today, in the creditor's zone
- *   npm run review:run -- 2026-09-22   a named day (a re-run writes nothing)
+ *   npm run review:run -- 2026-09-22   a named day (a re-run under the same rule writes nothing)
  *
  * What the scheduled Cloud Run job runs each morning, and what the deploy
  * runs once after the seed so a fresh deployment has a verdict on every
@@ -36,7 +36,9 @@ async function main(): Promise<void> {
   console.log(
     `reviewed ${report.reviewed.filter((r) => r.claimed).length} of ${report.monitored} monitored loans ` +
       `and analyzed ${report.reviewed.filter((r) => !r.claimed).length} of ${report.unclaimed} unclaimed as of ${report.asOf}; ` +
-      `${report.alreadyReviewed} already reviewed today; ${report.skipped.length} skipped; ` +
+      `${report.alreadyReviewed} already reviewed today` +
+      `${report.reviewedAgain ? `, ${report.reviewedAgain} reviewed again under a changed rule` : ""}; ` +
+      `${report.skipped.length} skipped; ` +
       `${report.offersOpened} offers opened, ${report.offersExpired} lapsed; ` +
       `analyst wrote ${report.analyst.written}${analystSkips ? ` (skipped: ${analystSkips})` : ""}`,
   );

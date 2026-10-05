@@ -4,7 +4,8 @@
  *
  * The engine's arithmetic is held to his numbers in its own package; what
  * is held here is everything around it — that only monitored loans are
- * reviewed, that a day is reviewed once, that the row is append-only, that
+ * reviewed, that a day is reviewed once under a rule and again when the
+ * rule changes, that the row is append-only, that
  * the rate came off the pricing port, and that the route hands the newest
  * review out beside the platform's live read rather than inside it.
  */
@@ -15,9 +16,11 @@ import { NORTHLIGHT, sampleBook } from "@hm/partner-book";
 import { plainDate } from "@hm/kernel/calendar";
 import { loanRouter } from "../routes/loans.js";
 import { acceptLoanClaim, mintLoanClaim } from "../services/loan-claims.js";
-import { latestLoanReview, reviewLoans } from "../services/loan-review.js";
-import { importPartnerBook } from "../services/partner-book.js";
+import { CURRENT_RULE_SET, latestLoanReview, reviewLoans } from "../services/loan-review.js";
+import { importPartnerBook, partnerBookStatus } from "../services/partner-book.js";
 import { partnerPrincipal } from "../services/party.js";
+import { servicerBookLoan, servicerBookLoans } from "../services/servicer-team.js";
+import { reviewBook } from "../services/tape-desk.js";
 import { createUser } from "./support/factories.js";
 import { callAs } from "./support/http.js";
 
@@ -75,6 +78,121 @@ describe("a tape read months after its date", () => {
     });
     expect(row.ruleSetVersion).toContain("hm.refi-review.v2");
     expect((row.facts as { days_delinquent: number }).days_delinquent).toBe(0);
+  });
+});
+
+describe("a day reviewed again under a changed rule", () => {
+  const EARLIER_RULE = "sm.refi_trigger.v1+partner_book.review.v1 (hm.refi-review.v1)";
+
+  it("writes a new row beside the earlier one, once, and every reader takes the newest", async () => {
+    // The first real book: reviewed on the day it was loaded under a rule
+    // that excluded every loan as delinquent, the rule fixed that afternoon.
+    const { servicer, owners } = await claimedBook(["NL-100001"]);
+    const day = new Date(`${AS_OF}T00:00:00.000Z`);
+    const loans = await prisma.loan.findMany({
+      where: { servicerId: servicer.id },
+      select: { id: true },
+    });
+    expect(loans).toHaveLength(12);
+    await prisma.loanReview.createMany({
+      data: loans.map((l) => ({
+        loanId: l.id,
+        asOf: day,
+        verdict: "EXCLUDED" as const,
+        reasons: ["delinquent"],
+        facts: {},
+        ruleSetVersion: EARLIER_RULE,
+        explanation: "excluded: delinquent",
+        // Earlier in the day, so the order of the two is not left to the clock's grain.
+        recordedAt: new Date(Date.now() - 60_000),
+      })),
+    });
+    expect(CURRENT_RULE_SET).not.toBe(EARLIER_RULE);
+    expect((await partnerBookStatus(servicer.id)).analysis?.verdicts).toEqual({
+      candidate: 0,
+      watching: 0,
+      not_now: 0,
+      excluded: 12,
+    });
+
+    // The rule in force has not reviewed the day: every loan is reviewed again.
+    const run = await reviewLoans({ asOf: AS_OF });
+    expect(run.alreadyReviewed).toBe(0);
+    expect(run.reviewed).toHaveLength(12);
+    expect(run.reviewedAgain).toBe(12);
+    // Beside the earlier rows, which stand as what was said under the earlier rule.
+    expect(await prisma.loanReview.count({ where: { asOf: day } })).toBe(24);
+    expect(
+      await prisma.loanReview.count({
+        where: { asOf: day, ruleSetVersion: EARLIER_RULE, verdict: "EXCLUDED" },
+      }),
+    ).toBe(12);
+
+    // And once: the same rule on the same day writes nothing more.
+    const again = await reviewLoans({ asOf: AS_OF });
+    expect(again.alreadyReviewed).toBe(12);
+    expect(again.reviewed).toEqual([]);
+    expect(again.reviewedAgain).toBe(0);
+    expect(await prisma.loanReview.count({ where: { asOf: day } })).toBe(24);
+    const one = owners.get("NL-100001")!;
+    await expect(
+      prisma.loanReview.create({
+        data: {
+          loanId: one.loanId,
+          asOf: day,
+          verdict: "WATCHING",
+          reasons: [],
+          facts: {},
+          ruleSetVersion: CURRENT_RULE_SET,
+          explanation: "a second row under the same rule",
+        },
+      }),
+    ).rejects.toThrow(/loan_reviews_one_per_loan_day_and_rule|Unique constraint/);
+
+    // Every reader takes the newest: the loan, the book's count, the desk, the portal.
+    expect((await latestLoanReview(one.loanId))?.verdict).toBe("candidate");
+    const status = (await partnerBookStatus(servicer.id)).analysis!;
+    const counted = Object.values(status.verdicts).reduce((n, v) => n + v, 0);
+    // Loans, not rows.
+    expect(counted).toBe(12);
+    expect(status.verdicts.candidate).toBeGreaterThanOrEqual(1);
+    expect(status.verdicts.excluded).toBeLessThan(12);
+    const book = await servicerBookLoans(servicer.id, { limit: 50 });
+    expect(book.rows.find((r) => r.number === "NL-100001")?.review?.verdict).toBe("candidate");
+    const page = await servicerBookLoan(servicer.id, one.loanId);
+    // One verdict for the day on the loan's page, and it is the newer.
+    expect(page?.reviews.map((r) => [r.asOf, r.verdict])).toEqual([[AS_OF, "candidate"]]);
+  });
+
+  it("counts loans, not rows, on the desk after a book is reviewed again", async () => {
+    const { servicer } = await claimedBook([]);
+    // The desk's own review, today; then an earlier rule's rows for the same day beside it.
+    const first = await reviewBook({ servicerSlug: servicer.slug });
+    const sum = (c: Record<string, number>) => Object.values(c).reduce((n, v) => n + v, 0);
+    expect(sum(first.counts)).toBe(12);
+    const day = new Date(`${first.asOf}T00:00:00.000Z`);
+    const loans = await prisma.loan.findMany({
+      where: { servicerId: servicer.id },
+      select: { id: true },
+    });
+    await prisma.loanReview.createMany({
+      data: loans.map((l) => ({
+        loanId: l.id,
+        asOf: day,
+        verdict: "EXCLUDED" as const,
+        reasons: ["delinquent"],
+        facts: {},
+        ruleSetVersion: EARLIER_RULE,
+        explanation: "excluded: delinquent",
+        recordedAt: new Date(Date.now() - 3_600_000),
+      })),
+    });
+    const second = await reviewBook({ servicerSlug: servicer.slug });
+    // Twenty-four rows for the day, twelve loans, and the verdicts are the newer ones.
+    expect(await prisma.loanReview.count({ where: { asOf: day } })).toBe(24);
+    expect(sum(second.counts)).toBe(12);
+    expect(second.counts).toEqual(first.counts);
+    expect(second.alreadyReviewed).toBe(12);
   });
 });
 

@@ -203,7 +203,10 @@ is the servicing app's spec §33.2 over its §20.1, ported pure over the kernel
 and held to its figures by its tests; `services/loan-review.ts` runs it each morning over
 every monitored loan's newest observation with one 30-year fixed quoted off
 the pricing port, and keeps one append-only `loan_reviews` row per loan per
-day. Since 24 September every loan on a servicer's book is watched from
+day per rule: the same rule on the same day writes nothing twice, a changed
+rule reviews the day again beside the earlier row, and every reader takes
+the newest (5 October; the days delinquent are counted to the tape's own
+date since the same day). Since 24 September every loan on a servicer's book is watched from
 the day the book is loaded, claimed or not: the review runs over all of
 them, one batched pass, claimed loans first. The one thing the claim
 changes is delivery — an offer on a claimed loan is delivered as it is

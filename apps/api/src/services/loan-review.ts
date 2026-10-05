@@ -6,8 +6,10 @@
  * says: every loan whose review is on, its newest observation and the
  * tape's facts beside it, and the rate the pricing port quotes for a
  * 30-year fixed on that loan today. One `loan_reviews` row per loan per
- * day, append-only, with the engine's facts and, for a candidate, the
- * benefit disclosure.
+ * day per rule, append-only, with the engine's facts and, for a candidate,
+ * the benefit disclosure. The same rule on the same day writes nothing
+ * twice; a changed rule reviews the day again and writes a row beside the
+ * earlier one, and the day's verdict is the newest (`CURRENT_RULE_SET`).
  *
  * Every loan on a servicer's book is watched from the day the book is
  * loaded, claimed or not: the row, an offer when it is a candidate, the
@@ -46,6 +48,8 @@ import type { Prisma } from "@hm/db";
 import { UnquotableScenarioError, type PricingConnector } from "@hm/connectors";
 import type { PlainDate } from "@hm/kernel/calendar";
 import {
+  PORT_VERSION,
+  RULE_SET_VERSION,
   buildCandidate,
   fillReviewTokens,
   reasonsInWords,
@@ -180,7 +184,10 @@ export interface ReviewRunReport {
   /** Of those, the loans on a book nobody has claimed yet. */
   readonly unclaimed: number;
   readonly reviewed: readonly ReviewedLoan[];
+  /** Loans that already hold today's review under the rule in force. */
   readonly alreadyReviewed: number;
+  /** Of the loans reviewed, those that had a review today under an earlier rule. */
+  readonly reviewedAgain: number;
   readonly skipped: readonly {
     loanId: string;
     servicerLoanNumber: string | null;
@@ -288,7 +295,9 @@ export async function reviewLoans(
         facts: true,
       },
     },
-    reviews: { where: { asOf: day }, select: { id: true }, take: 1 },
+    // Every review of the day, with the rule it was made under: the same
+    // rule is not run twice, and an earlier rule's row does not stop this one.
+    reviews: { where: { asOf: day }, select: { ruleSetVersion: true } },
   } satisfies Prisma.LoanSelect;
   type LoanRow = Prisma.LoanGetPayload<{ select: typeof select }>;
   const ids = (
@@ -312,9 +321,10 @@ export async function reviewLoans(
   // The people who can read a card today come first, so the analyst's daily
   // cap serves them before the book that is still waiting to be claimed.
   const due = loans
-    .filter((l) => l.reviews.length === 0)
+    .filter((l) => !l.reviews.some((r) => r.ruleSetVersion === CURRENT_RULE_SET))
     .sort((a, b) => Number(unclaimed(a)) - Number(unclaimed(b)));
   const alreadyReviewed = loans.length - due.length;
+  const hadEarlierRule = new Set(due.filter((l) => l.reviews.length > 0).map((l) => l.id));
   const offerStates = await offerStateFor(
     db,
     due.map((l) => l.id),
@@ -473,6 +483,7 @@ export async function reviewLoans(
     unclaimed: loans.filter(unclaimed).length,
     reviewed,
     alreadyReviewed,
+    reviewedAgain: reviewed.filter((r) => hadEarlierRule.has(r.loanId)).length,
     skipped,
     offersOpened: offers.length,
     offersAwaitingClaim: offers.filter((o) => !o.deliver).length,
@@ -480,6 +491,14 @@ export async function reviewLoans(
     analyst: analystReport,
   };
 }
+
+/**
+ * The rule a review is made under today, as the row carries it: the
+ * servicing app's rule set and our port of it. A review is one per loan,
+ * per day, per THIS — so when either changes, the day is reviewed again
+ * and the earlier row stays as what was said under the earlier rule.
+ */
+export const CURRENT_RULE_SET = `${RULE_SET_VERSION} (${PORT_VERSION})`;
 
 /** The newest review of one loan, as the route hands it out; null before the first. */
 export async function latestLoanReview(loanId: string, db: Db = prisma) {

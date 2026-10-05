@@ -3723,7 +3723,9 @@ model LoanReview {
 
   offers RefiOffer[]
 
-  @@unique([loanId, asOf], map: "loan_reviews_one_per_loan_day")
+  /// One per loan, per day, per rule: a review under a changed rule is a new
+  /// row beside the earlier one, and the day's verdict is the newest.
+  @@unique([loanId, asOf, ruleSetVersion], map: "loan_reviews_one_per_loan_day_and_rule")
   @@index([asOf], map: "loan_reviews_as_of")
   /// The observation's foreign key: without this, removing an observation
   /// scans every review for the one that read it, thirty milliseconds a row.

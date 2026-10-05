@@ -762,6 +762,9 @@ function ReviewStep({
   }));
   const gaps = Object.entries(preview.gaps).filter(([, n]) => n > 0);
 
+  // The day the verdicts in the Refi column were recorded: they are stored, not computed here.
+  const reviewedOn = preview.rows.find((r) => r.review)?.review?.asOf ?? null;
+
   return (
     <div className="mt-8 space-y-6">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -789,8 +792,10 @@ function ReviewStep({
         </Notice>
       ) : preview.alreadyLoaded ? (
         <Notice tone="warn" title="These exact files were loaded before">
-          On {fmtDateTime(preview.alreadyLoaded.loadedAt)}. Loading again writes nothing new to the
-          loans database; the servicing app's copy answers for itself.
+          On {fmtDateTime(preview.alreadyLoaded.loadedAt)}. Loading again writes nothing new.
+          {reviewedOn
+            ? ` The Refi column is the review recorded on ${fmtDate(reviewedOn)}. A loan is reviewed once a day and a day's review is never rewritten, so loading again does not change it; the next review runs tomorrow morning.`
+            : ""}
         </Notice>
       ) : (
         <Notice tone="ok" title={`The tape matches the ${preview.profile} profile`}>

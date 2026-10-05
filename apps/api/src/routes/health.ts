@@ -7,6 +7,7 @@ import { aporStatus } from "../services/apor.js";
 import { connectors, providerMix, providerModes } from "../services/connectors.js";
 import { originatorPlaceholdersIn } from "@hm/du";
 import { originatorFromConfig } from "../services/originator.js";
+import { staffSignInCodes } from "../console-host.js";
 
 export const healthRouter = Router();
 
@@ -69,6 +70,11 @@ healthRouter.get("/", async (_req, res) => {
     // secret is held. Without one, invoices still move — the reconciliation
     // reads them — but hours late, and nothing else here would say why.
     invoicingEvents: connectors().invoicing.verifiesEvents ? "verified" : "no signing secret",
+    // How a staff sign-in code reaches a person: mailed by us, or shown on
+    // the sign-in page because the mailer is a stand-in. The second is a
+    // development convenience and one factor short on a public host; the
+    // production deploy fails on it.
+    staffSignInCodes: staffSignInCodes(),
     // Whether the average prime offer rate series reaches the current week.
     // Three legal tests block without it and every decision ends `referred`,
     // and nothing else on this page would say so: the database answers, the

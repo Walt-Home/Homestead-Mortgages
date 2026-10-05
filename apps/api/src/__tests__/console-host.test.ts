@@ -14,7 +14,7 @@ import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { consoleHostRouter } from "../console-host.js";
+import { consoleHostRouter, withoutEchoedCodes } from "../console-host.js";
 
 interface Seen {
   method: string;
@@ -52,6 +52,33 @@ beforeAll(async () => {
         res.setHeader("Set-Cookie", "sm_staff=abc; Path=/; Secure; HttpOnly; SameSite=Strict");
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+      // His staff door on a stand-in mailer: the code comes back in the answer.
+      if (req.url === "/ops/api/auth/code") {
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("ETag", '"his-validator"');
+        res.end(
+          JSON.stringify({
+            challenge_id: "ch_1",
+            delivery: "FAKE",
+            expires_at: "2026-10-05T16:10:00.000Z",
+            fake_code: "246810",
+          }),
+        );
+        return;
+      }
+      // Any other door of his that echoes one, however deep in the answer.
+      if (req.url === "/ops/api/somewhere/else" || req.url === "/api/borrower/door") {
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            ok: true,
+            fake_code: "111111",
+            challenge: { id: "ch_2", fake_code: "222222" },
+            many: [{ fake_code: "333333", keep: 1 }],
+          }),
+        );
         return;
       }
       if (req.url === "/login?token=t") {
@@ -285,5 +312,152 @@ describe("the servicing hostname", () => {
     expect(res.status).toBe(502);
     expect(JSON.parse(res.body).error.code).toBe("UPSTREAM");
     await new Promise<void>((r) => s.close(() => r()));
+  });
+});
+
+describe("a sign-in code and the proxy", () => {
+  const mails: { to: string; code: string }[] = [];
+  let refuse = false;
+  let guarded: Server;
+  let guardedPort: number;
+
+  beforeAll(async () => {
+    const server = express();
+    server.set("trust proxy", 1);
+    const router = consoleHostRouter({
+      host: HOST,
+      upstream: upstreamUrl,
+      codes: {
+        internal: (email) => email.endsWith("@ours.test"),
+        send: async (to, code) => {
+          if (refuse) return false;
+          mails.push({ to, code });
+          return true;
+        },
+      },
+    });
+    server.use((req, res, next) => (req.hostname === HOST ? router(req, res, next) : next()));
+    guarded = server.listen(0, "127.0.0.1");
+    await new Promise<void>((r) => guarded.once("listening", r));
+    guardedPort = (guarded.address() as AddressInfo).port;
+  });
+  afterAll(async () => {
+    await new Promise<void>((r) => guarded.close(() => r()));
+  });
+
+  const post = (path: string, body: unknown, port = guardedPort) =>
+    new Promise<{ status: number; headers: Record<string, unknown>; body: string }>(
+      (resolve, reject) => {
+        const req = httpRequest(
+          {
+            host: "127.0.0.1",
+            port,
+            path,
+            method: "POST",
+            agent: false,
+            headers: { host: HOST, "content-type": "application/json" },
+          },
+          (res) => {
+            let text = "";
+            res.on("data", (c) => (text += c));
+            res.on("end", () =>
+              resolve({ status: res.statusCode ?? 0, headers: res.headers, body: text }),
+            );
+          },
+        );
+        req.on("error", reject);
+        req.write(typeof body === "string" ? body : JSON.stringify(body));
+        req.end();
+      },
+    );
+
+  it("crosses as it is where the mailer is a stand-in, so a developer can sign in", async () => {
+    const r = await post("/console/api/auth/code", { email: "ada@ours.test" }, appPort);
+    expect(JSON.parse(r.body)).toMatchObject({ delivery: "FAKE", fake_code: "246810" });
+  });
+
+  it("is mailed to one of ours and never shown, on the console's path and on his own", async () => {
+    for (const path of ["/console/api/auth/code", "/ops/api/auth/code"]) {
+      mails.length = 0;
+      seen.length = 0;
+      const r = await post(path, { email: " Ada@Ours.test " });
+      expect(r.status).toBe(200);
+      expect(JSON.parse(r.body)).toEqual({
+        challenge_id: "ch_1",
+        delivery: "email",
+        expires_at: "2026-10-05T16:10:00.000Z",
+      });
+      expect(r.body).not.toContain("246810");
+      // The body changed, so his validator for it is not passed on.
+      expect(r.headers.etag).not.toBe('"his-validator"');
+      expect(mails).toEqual([{ to: "ada@ours.test", code: "246810" }]);
+      // His server got the request whole, as the person sent it.
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.url).toBe("/ops/api/auth/code");
+      expect(JSON.parse(seen[0]!.body)).toEqual({ email: " Ada@Ours.test " });
+    }
+  });
+
+  it("answers a stranger's address the same and mails it nothing", async () => {
+    mails.length = 0;
+    const r = await post("/console/api/auth/code", { email: "eve@elsewhere.test" });
+    expect(r.status).toBe(200);
+    expect(JSON.parse(r.body)).toEqual({
+      challenge_id: "ch_1",
+      delivery: "email",
+      expires_at: "2026-10-05T16:10:00.000Z",
+    });
+    expect(mails).toEqual([]);
+    // No address at all is still no code.
+    const none = await post("/console/api/auth/code", "not json");
+    expect(none.body).not.toContain("246810");
+    expect(mails).toEqual([]);
+  });
+
+  it("tells nobody the code when it could not be mailed", async () => {
+    refuse = true;
+    try {
+      const r = await post("/console/api/auth/code", { email: "ada@ours.test" });
+      expect(r.status).toBe(502);
+      expect(JSON.parse(r.body).error.code).toBe("CODE_NOT_MAILED");
+      expect(r.body).not.toContain("246810");
+    } finally {
+      refuse = false;
+    }
+  });
+
+  it("takes an echoed code out of any forwarded write's answer, at any depth, and leaves the rest", async () => {
+    for (const path of ["/console/api/somewhere/else", "/api/borrower/door"]) {
+      const r = await post(path, { anything: true });
+      expect(r.status).toBe(200);
+      expect(JSON.parse(r.body)).toEqual({
+        ok: true,
+        challenge: { id: "ch_2" },
+        many: [{ keep: 1 }],
+      });
+      expect(r.body).not.toMatch(/fake_code|111111|222222|333333/);
+    }
+    // An answer with no code in it crosses byte for byte.
+    const plain = await post("/console/api/staff/invite", { email: "x@ours.test" });
+    expect(JSON.parse(plain.body)).toEqual({ role_seen: null, gate_seen: null });
+  });
+
+  it("refuses a code request too large to be an address", async () => {
+    const r = await post("/console/api/auth/code", {
+      email: "a@ours.test",
+      pad: "x".repeat(20_000),
+    });
+    expect(r.status).toBe(413);
+  });
+
+  it("removes the echo wherever it sits, and says whether it found one", () => {
+    expect(withoutEchoedCodes({ a: 1, fake_code: "1", b: [{ fake_code: "2", c: null }] })).toEqual({
+      value: { a: 1, b: [{ c: null }] },
+      found: true,
+    });
+    expect(withoutEchoedCodes({ a: [1, "two", null] })).toEqual({
+      value: { a: [1, "two", null] },
+      found: false,
+    });
   });
 });

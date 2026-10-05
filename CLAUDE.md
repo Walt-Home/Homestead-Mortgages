@@ -625,8 +625,14 @@ that Host serves OUR ops console (`apps/console`, at `/console`) and forwards
 the console's calls to the servicing app as `/console/api/*` → its `/ops/api/*`
 (`apps/api/src/console-host.ts`), and answers the tape desk's own calls at
 `/console/hm/tape/*` itself; the servicing app's own page is forwarded at `/ops` for
-comparison. Behind IAP is the servicing app's own sign-in (e-mailed code, printed
-on the page because the mail vendor is a FAKE, then a password). The deploy
+comparison. The console's sign-in is the servicing app's own: a code to the
+person's e-mail, then a password. The servicing app's mailer is a FAKE and it
+runs as non-production even in production, so it hands the code back in its
+answer; **since 5 October that code never crosses our proxy where our mailer
+is real** — `console-host.ts` takes it out of every forwarded write's answer
+and mails the staff door's code itself, to our own domains only. Health
+reports `staffSignInCodes`, and the production deploy fails unless it reads
+`mailed`. The deploy
 stands the first console admin with its `staff-bootstrap`; that admin
 invites the rest from the console. The servicing app's run.app has no public
 invoker: the API's identity is the one invoker, and the adapter and the

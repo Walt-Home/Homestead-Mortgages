@@ -23,6 +23,21 @@
  * Mounted first, above the body parser and the session, so a request on the
  * servicing Host is forwarded whole — his server parses its own bodies — and
  * never mints a cookie of ours. On any other Host this is a no-op.
+ *
+ * **A sign-in code never crosses this proxy on a real deployment.** The
+ * servicing app's vendors are stand-ins, so it runs as non-production even
+ * in production, and a non-production servicing app with a stand-in mailer
+ * hands the six-digit code back in the answer for the page to show. That
+ * was harmless behind Identity-Aware Proxy and is not since the host went
+ * public for the servicers' portal: anybody who knew a staff address was
+ * shown that person's code, and the console's two factors were one. So
+ * where OUR mailer is real (`codes` below), every answer to a forwarded
+ * write is read before it is passed on and any echoed code is taken out of
+ * it, at any depth, on every forwarded path; and the staff door's code is
+ * mailed by us instead — to the address that asked, and only when that
+ * address is on one of our own domains, so the door cannot be made to mail
+ * a stranger. The vendored tree is not touched: the servicing app has no
+ * public invoker, this proxy is the only way to it, and the seam is ours.
  */
 
 import { existsSync } from "node:fs";
@@ -34,11 +49,21 @@ import express, { type Express, type Request, type Response, type Router } from 
 import { config } from "./config.js";
 import { consoleBillingRouter } from "./routes/console-billing.js";
 import { consoleTapeRouter } from "./routes/console-tape.js";
+import { connectors } from "./services/connectors.js";
+import { signInCodeMessage } from "./services/servicer-team.js";
 import {
   IDENTITY_HEADER,
   identityTokenFor,
   type IdentityTokenProvider,
 } from "./services/google-identity.js";
+
+/** How a sign-in code reaches a person where our mailer is real: by mail, to our own domains only. */
+export interface SignInCodeMail {
+  /** Whether an address is on one of our own domains: the only ones a staff code is mailed to. */
+  internal(email: string): boolean;
+  /** Mail the code. False when the mailer would not, and then nobody is told the code. */
+  send(to: string, code: string): Promise<boolean>;
+}
 
 export interface ConsoleHostOptions {
   /** The Host this router answers. */
@@ -63,6 +88,73 @@ export interface ConsoleHostOptions {
    */
   readonly tape?: Router;
   readonly billing?: Router;
+  /**
+   * Set where our mailer is real. Then no answer carries an echoed code
+   * across, and the staff door's code is mailed through this. Unset — in
+   * development and in a test of the forwarding — answers cross as they
+   * are, which is what lets a developer sign in with no mailbox.
+   */
+  readonly codes?: SignInCodeMail;
+}
+
+/** The field the servicing app echoes a code in, on every door that mints one. */
+const ECHOED_CODE = "fake_code";
+/** The staff door's code request, as his server names it, however it was reached. */
+const STAFF_CODE_PATH = "/ops/api/auth/code";
+/** A code request is an address and nothing else. */
+const MAX_CODE_REQUEST_BYTES = 16 * 1024;
+
+/** The same value with every echoed code removed, at any depth, and whether one was there. */
+export function withoutEchoedCodes(value: unknown): { value: unknown; found: boolean } {
+  if (Array.isArray(value)) {
+    let found = false;
+    const out = value.map((v) => {
+      const inner = withoutEchoedCodes(v);
+      found ||= inner.found;
+      return inner.value;
+    });
+    return { value: out, found };
+  }
+  if (value !== null && typeof value === "object") {
+    let found = false;
+    const out: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(value)) {
+      if (key === ECHOED_CODE) {
+        found = true;
+        continue;
+      }
+      const inner = withoutEchoedCodes(v);
+      found ||= inner.found;
+      out[key] = inner.value;
+    }
+    return { value: out, found };
+  }
+  return { value, found: false };
+}
+
+/** A small request body, whole; null when it is larger than a code request could be. */
+async function readSmall(req: Request, limit: number): Promise<Buffer | null> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const piece = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
+    size += piece.length;
+    if (size > limit) return null;
+    chunks.push(piece);
+  }
+  return Buffer.concat(chunks);
+}
+
+/** The address a code request names, lowercased; null when it names none. */
+function addressIn(body: Buffer): string | null {
+  try {
+    const parsed = JSON.parse(body.toString("utf8")) as { email?: unknown };
+    return typeof parsed.email === "string" && parsed.email.includes("@")
+      ? parsed.email.trim().toLowerCase()
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The request headers that cross to his server. Nothing else does. */
@@ -118,12 +210,33 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
       // builds from it comes back to the same door.
       headers.set("x-forwarded-host", req.hostname || opts.host);
       const hasBody = req.method !== "GET" && req.method !== "HEAD";
+      const target = rewrite(req.url);
+      // Only a write can mint a code, so only a write's answer is read first.
+      const guarded = opts.codes !== undefined && hasBody;
+      const staffCode =
+        guarded && req.method === "POST" && target.split("?")[0] === STAFF_CODE_PATH;
+      // The staff door's request is read whole, for the address the code goes to.
+      let asked: string | null = null;
+      let body: ReadableStream | Buffer | undefined;
+      if (staffCode) {
+        const whole = await readSmall(req, MAX_CODE_REQUEST_BYTES);
+        if (whole === null) {
+          res.status(413).json({
+            error: { message: "That is too much to be an e-mail address.", code: "TOO_LARGE" },
+          });
+          return;
+        }
+        asked = addressIn(whole);
+        body = whole;
+      } else if (hasBody) {
+        body = Readable.toWeb(req) as ReadableStream;
+      }
       let answer: globalThis.Response;
       try {
-        answer = await doFetch(upstream + rewrite(req.url), {
+        answer = await doFetch(upstream + target, {
           method: req.method,
           headers,
-          body: hasBody ? (Readable.toWeb(req) as ReadableStream) : undefined,
+          body,
           redirect: "manual",
           // A streamed request body needs this; the DOM lib does not know it.
           ...({ duplex: "half" } as object),
@@ -143,6 +256,45 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
       for (const cookie of answer.headers.getSetCookie()) res.append("Set-Cookie", cookie);
       if (!answer.body || req.method === "HEAD" || answer.status === 204 || answer.status === 304) {
         res.end();
+        return;
+      }
+      if (guarded && (answer.headers.get("content-type") ?? "").includes("json")) {
+        const text = await answer.text();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          res.end(text);
+          return;
+        }
+        const cleaned = withoutEchoedCodes(parsed);
+        if (!cleaned.found) {
+          res.end(text);
+          return;
+        }
+        // The body is no longer his, so neither is its validator.
+        res.removeHeader("etag");
+        const top = parsed as Record<string, unknown>;
+        const code = !Array.isArray(parsed) ? top[ECHOED_CODE] : undefined;
+        if (staffCode && typeof code === "string") {
+          // Mailed to the address that asked, when it is one of ours; a
+          // stranger's address is answered the same and mailed nothing.
+          if (asked !== null && opts.codes!.internal(asked)) {
+            const sent = await opts.codes!.send(asked, code);
+            if (!sent) {
+              res.status(502).json({
+                error: {
+                  message:
+                    "The sign-in code could not be mailed. Try again in ten minutes, or ask an admin.",
+                  code: "CODE_NOT_MAILED",
+                },
+              });
+              return;
+            }
+          }
+          (cleaned.value as Record<string, unknown>).delivery = "email";
+        }
+        res.json(cleaned.value);
         return;
       }
       await pipeline(Readable.fromWeb(answer.body as never), res);
@@ -224,6 +376,32 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
 }
 
 /**
+ * How a staff sign-in code reaches a person on this deployment: mailed by
+ * us where our mailer is real, shown on the page where it is a stand-in.
+ * Health reports it, and the production deploy fails on the second.
+ */
+export function staffSignInCodes(): "mailed" | "shown on the page" {
+  return connectors().mail.capabilities.mode === "fixture" ? "shown on the page" : "mailed";
+}
+
+/** The mailing of codes where our mailer is real; undefined where it is a stand-in. */
+export function signInCodeMail(): SignInCodeMail | undefined {
+  if (staffSignInCodes() !== "mailed") return undefined;
+  return {
+    internal: (email) =>
+      config.internalEmailDomains.includes(email.slice(email.lastIndexOf("@") + 1).toLowerCase()),
+    send: async (to, code) => {
+      try {
+        const outcome = await connectors().mail.send(signInCodeMessage({ to, code }));
+        return outcome.status === "sent";
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
+/**
  * Mount the servicing-host router when there is a servicing hostname to
  * answer. Returns what was mounted, for the start-up log.
  */
@@ -235,6 +413,7 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
   const identityToken = identityTokenFor(upstream);
   const tape = consoleTapeRouter({ upstream, identityToken });
   const billing = consoleBillingRouter({ upstream, identityToken });
+  const codes = signInCodeMail();
   if (!host) {
     // No servicing hostname: development, where the console's dev server
     // proxies `/console/hm` here. Each door carries its own gate, so it is
@@ -254,6 +433,7 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
     identityToken,
     tape,
     billing,
+    ...(codes ? { codes } : {}),
   });
   app.use((req, res, next) => {
     if (hosts.has(req.hostname)) router(req, res, next);

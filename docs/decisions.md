@@ -3804,6 +3804,73 @@ Held by `console-tape.test.ts`, "a servicer stood up before its tape": made
 once, a second of the same slug refused, listed with no book, its team
 invited, and the first tape loading onto the same row with the team kept.
 
+## A sign-in code never crosses the proxy, and the staff's is mailed by us
+
+**Decision (5 October 2026).** Found the day production invoicing went
+live and Joe asked for production to be ready for Grander's first tape:
+the console's sign-in was one factor, on both deployed environments.
+
+The servicing app's vendors are stand-ins, so it runs as non-production
+even in production (its config refuses to start a production process on
+fakes), and a non-production servicing app with a stand-in mailer returns
+the six-digit sign-in code in its answer — `fake_code` — for the page to
+show. That was a convenience behind Identity-Aware Proxy. IAP came off the
+servicing host on 28 September so that a servicer's team could sign in
+there, and from that day anybody who knew a staff address could ask for
+that person's code and be shown it: the password was the whole of the
+door. Asked from outside with an address that belongs to nobody, both
+`servicing.supermortgage.com` and the staging host answered with a code in
+the body. Staging has held a servicer's real book the whole time;
+production was about to.
+
+The fix is in the seam that is ours, `console-host.ts`, and the vendored
+tree is untouched. Where our mailer is real:
+
+- _Every answer to a forwarded write is read before it is passed on_, and
+  an echoed code is taken out of it at any depth, on every forwarded path
+  — the console's `/console/api`, and the servicing app's own `/ops`,
+  `/api`, `/login` and `/verify`, which reach the same doors. Only a write
+  can mint a code, so reads still stream. The servicing app has no public
+  invoker; this proxy is the only way to it.
+- _The staff door's code is mailed by us_, through the mail port, to the
+  address that asked — and only when that address is on one of
+  `INTERNAL_EMAIL_DOMAINS`, so the door cannot be made to mail a stranger.
+  A stranger's address gets the same answer and no mail, as before. When
+  the mail cannot be sent the answer is a refusal and nobody is told the
+  code.
+- _Where the mailer is a stand-in_ — development, tests — answers cross
+  as they are, which is what lets a developer sign in with no mailbox.
+
+`/api/health` reports `staffSignInCodes` as `mailed` or `shown on the
+page`, and the production deploy fails on the second. One consequence to
+know: the servicing app mints one code per address per ten minutes and
+does not repeat it, so "Send a new code" inside that window mails nothing
+new; the first mail is the code.
+
+Not done, and worth a decision: the servicing app's own console and its
+other raw paths are still forwarded on the public host "for comparison".
+Our console uses none of them. Closing them would shrink what is exposed
+to what we use.
+
+Held by `console-host.test.ts`, "a sign-in code and the proxy".
+
+## Production's bank connections are Plaid's production
+
+**Decision (Joe, 5 October 2026).** "Production should be using production
+Plaid." The production deploy reads the `production` environment's
+`PLAID_ENV` — `production` now — and mounts
+`HOMESTEAD_MORTGAGES_PLAID_SECRET_PROD` with it; unset it is the sandbox
+and the sandbox's secret, and staging stays on the sandbox. The
+credentials were tested first, by asking Plaid's production for a link
+token: they authenticate, and Plaid refuses the token until a Data
+Transparency Messaging use case is chosen in its Dashboard (Link →
+Data Transparency), which nobody but the account's owner can do. Until
+then the bank screen on production cannot open Link; after it, the
+redirect address `https://app.supermortgage.com/plaid/return` has to be on
+the allowed list too, or Plaid refuses every token for that reason
+instead. The product is still `assets`, the stand-in for the consumer
+report, so CRD-017 stays unsatisfied exactly as before.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

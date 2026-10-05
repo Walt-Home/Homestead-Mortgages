@@ -2,12 +2,17 @@
  * The tape desk: one job, on its own, without the console around it.
  *
  * A servicer's monthly book arrives as a tape and a supplement. The desk
- * walks it through four steps and shows a receipt at each: the files, a
+ * walks it through its steps and shows a receipt at each: the files, a
  * review of what loading them would do — read by our own reader, nothing
- * written — the load itself into the servicing app's book and then into the
- * loans database, and the invitations that turn the people on the tape into
- * borrowers who can claim their mortgage. Recapture starts with the claim,
- * and the claim starts here.
+ * written — the load itself into the loans database, and the servicer's
+ * own team. Loading ends there: "Done" is the way out of the load, and
+ * nothing about finishing a load says or implies writing to a borrower.
+ *
+ * E-mailing the homeowners their claim links is a fifth step that exists
+ * only where the deployment's switch is on, is never the default way
+ * forward, and is reached by a button that says what it is. The first
+ * person to load a real book on production met a load whose only way on
+ * read "Invite the borrowers to claim" (5 October 2026).
  *
  * Nothing on this page is the servicing app's word alone: the review and
  * the loans-database receipt come from our API, gated by the same console
@@ -44,7 +49,7 @@ import {
   type Tone,
 } from "../components/ui.js";
 import { ApiError, api } from "../lib/api.js";
-import { roleWord, useAuth } from "../lib/auth.js";
+import { useAuth } from "../lib/auth.js";
 import { fmtDate, fmtDateTime, money, pct, plural, words } from "../lib/format.js";
 import {
   changeTone,
@@ -56,7 +61,6 @@ import {
   fileToWire,
   INVITE_BATCH,
   inviteToClaim,
-  loadIntoServicingBook,
   loadTapeWithProgress,
   previewTape,
   progressPercent,
@@ -67,7 +71,6 @@ import {
   todayEt,
   type InvitationOutcome,
   type PreviewRow,
-  type ServicingBookReceipt,
   type TapeFiles,
   type TapeLoad,
   type TapePreview,
@@ -86,7 +89,7 @@ const STEPS: readonly { key: Step; label: string }[] = [
   { key: "review", label: "Review" },
   { key: "load", label: "Load" },
   { key: "team", label: "Team" },
-  { key: "invite", label: "Invite" },
+  { key: "invite", label: "Homeowners" },
 ];
 
 const NEW = "__new__";
@@ -190,7 +193,6 @@ export function TapePage() {
   const [displayName, setDisplayName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
-  const [nmlsr, setNmlsr] = useState("");
   const [asOf, setAsOf] = useState(todayEt());
   const [tape, setTape] = useState<File | null>(null);
   const [supplement, setSupplement] = useState<File | null>(null);
@@ -199,6 +201,11 @@ export function TapePage() {
   const [preview, setPreview] = useState<TapePreview | null>(null);
   /** Today's verdicts by loan number, from the load step's first look. */
   const [verdicts, setVerdicts] = useState<Record<string, Verdict> | null>(null);
+  // Whether this deployment lets a homeowner be e-mailed at all. Off, or
+  // not yet known, the desk has no homeowner step and no way to one.
+  const settings = useQuery({ queryKey: ["desk-settings"], queryFn: () => deskSettings() });
+  const homeownerMailOn = settings.data?.homeownerMail === "on";
+  const steps = homeownerMailOn ? STEPS : STEPS.filter((s) => s.key !== "invite");
   const [wire, setWire] = useState<TapeFiles | null>(null);
 
   // One servicer to begin with picks itself; a new one is typed.
@@ -263,6 +270,21 @@ export function TapePage() {
     setError(null);
   }
 
+  /** The load is done: keep today's verdicts, and let every list that shows the book read again. */
+  const afterLoad = (v: Record<string, Verdict> | null) => {
+    setVerdicts(v);
+    for (const key of [
+      ["desk-servicers"],
+      ["desk-imports"],
+      ["partners"],
+      ["book-imports"],
+      ["book-loans"],
+      ["loans"],
+      ["home"],
+    ])
+      void queries.invalidateQueries({ queryKey: key });
+  };
+
   return (
     <div className="min-h-screen bg-canvas text-fg">
       <header className="sticky top-0 z-10 border-b border-line bg-canvas/90 backdrop-blur">
@@ -287,7 +309,7 @@ export function TapePage() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        <Steps current={step} />
+        <Steps current={step} steps={steps} />
 
         {step === "files" && (
           <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -353,19 +375,6 @@ export function TapePage() {
               )}
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="NMLSR id"
-                  htmlFor="desk-nmlsr"
-                  hint="For the servicing app's copy of the book. Leave blank to skip that copy."
-                >
-                  <Input
-                    id="desk-nmlsr"
-                    inputMode="numeric"
-                    value={nmlsr}
-                    onChange={(e) => setNmlsr(e.target.value)}
-                    className="font-mono"
-                  />
-                </Field>
                 <Field
                   label="As of"
                   htmlFor="desk-asof"
@@ -482,25 +491,12 @@ export function TapePage() {
           <LoadStep
             wire={wire}
             preview={preview}
-            book={{
-              legalName: preview.servicer.displayName,
-              nmlsrId: nmlsr.trim(),
-              asOf,
-              tape,
-              supplement,
+            onFinish={(v) => {
+              afterLoad(v);
+              navigate(`/servicers/${preview.servicer.slug}`);
             }}
-            onDone={(v) => {
-              setVerdicts(v);
-              for (const key of [
-                ["desk-servicers"],
-                ["desk-imports"],
-                ["partners"],
-                ["book-imports"],
-                ["book-loans"],
-                ["loans"],
-                ["home"],
-              ])
-                void queries.invalidateQueries({ queryKey: key });
+            onTeam={(v) => {
+              afterLoad(v);
               setStep("team");
             }}
             onBack={() => setStep("review")}
@@ -510,7 +506,8 @@ export function TapePage() {
         {step === "team" && preview && (
           <TeamStep
             servicer={{ slug: preview.servicer.slug, displayName: preview.servicer.displayName }}
-            onDone={() => setStep("invite")}
+            onFinish={() => navigate(`/servicers/${preview.servicer.slug}`)}
+            onHomeowners={homeownerMailOn ? () => setStep("invite") : undefined}
           />
         )}
 
@@ -533,11 +530,17 @@ export function TapePage() {
 
 /* ── the stepper ──────────────────────────────────────────────────────────── */
 
-function Steps({ current }: { current: Step }) {
-  const at = STEPS.findIndex((s) => s.key === current);
+function Steps({
+  current,
+  steps,
+}: {
+  current: Step;
+  steps: readonly { key: Step; label: string }[];
+}) {
+  const at = steps.findIndex((s) => s.key === current);
   return (
     <ol className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm">
-      {STEPS.map((s, i) => {
+      {steps.map((s, i) => {
         const done = i < at;
         const here = i === at;
         return (
@@ -555,7 +558,7 @@ function Steps({ current }: { current: Step }) {
               {done ? <Icon name="check" size={12} /> : i + 1}
             </span>
             <span className={here ? "font-medium text-fg" : "text-fg-3"}>{s.label}</span>
-            {i < STEPS.length - 1 ? <span className="mx-1 text-fg-3">›</span> : null}
+            {i < steps.length - 1 ? <span className="mx-1 text-fg-3">›</span> : null}
           </li>
         );
       })}
@@ -961,17 +964,18 @@ function Meter({ progress }: { progress: Progress }) {
 function LoadStep({
   wire,
   preview,
-  book,
-  onDone,
+  onFinish,
+  onTeam,
   onBack,
 }: {
   wire: TapeFiles;
   preview: TapePreview;
-  book: { legalName: string; nmlsrId: string; asOf: string; tape: File; supplement: File | null };
-  onDone: (verdicts: Record<string, Verdict> | null) => void;
+  /** The load is the whole job: out to the servicer's page. */
+  onFinish: (verdicts: Record<string, Verdict> | null) => void;
+  /** On to the servicer's own people, who are not borrowers. */
+  onTeam: (verdicts: Record<string, Verdict> | null) => void;
   onBack: () => void;
 }) {
-  const [servicing, setServicing] = useState<Phase<ServicingBookReceipt>>({ state: "idle" });
   const [db, setDb] = useState<Phase<TapeLoad>>({ state: "idle" });
   const [review, setReview] = useState<Phase<BookReview>>({ state: "idle" });
   const started = useRef(false);
@@ -993,22 +997,6 @@ function LoadStep({
     }
   }
 
-  async function loadServicing(role?: string) {
-    setServicing({ state: "running" });
-    try {
-      setServicing({
-        state: "done",
-        value: await loadIntoServicingBook({ ...book, profile: wire.profile }, role),
-      });
-      return true;
-    } catch (err) {
-      setServicing({
-        state: "failed",
-        error: err instanceof ApiError ? err : new ApiError(0, String(err), null),
-      });
-      return false;
-    }
-  }
   async function loadDb() {
     setDb({ state: "running" });
     try {
@@ -1031,28 +1019,9 @@ function LoadStep({
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    void (async () => {
-      if (book.nmlsrId) {
-        const ok = await loadServicing();
-        if (!ok) return;
-      } else {
-        setServicing({
-          state: "skipped",
-          why: "No NMLSR id was given, so the servicing app's copy was skipped.",
-        });
-      }
-      await loadDb();
-    })();
+    void loadDb();
   }, []);
 
-  const receipt = (r: ServicingBookReceipt) => [
-    { label: "Rows loaded", value: `${r.rows_loaded ?? "—"} of ${r.rows_total ?? "—"}` },
-    {
-      label: "Loans created · updated · unchanged",
-      value: `${r.loans_created ?? "—"} · ${r.loans_updated ?? "—"} · ${r.loans_unchanged ?? "—"}`,
-    },
-    { label: "Import id", value: r.import_id, mono: true },
-  ];
   const dbDone = db.state === "done";
   const dbResult = dbDone ? db.value.result : null;
 
@@ -1064,92 +1033,6 @@ function LoadStep({
           {preview.servicer.displayName} · as of {fmtDate(preview.asOf)}
         </p>
       </div>
-
-      <PhaseCard
-        title="The servicing app's book"
-        phase={servicing}
-        renderDone={(r) => (
-          <>
-            <div className="mb-2 flex items-center gap-2">
-              <Pill
-                tone={
-                  r.status === "loaded" ? "ok" : r.status === "already_loaded" ? "warn" : "danger"
-                }
-              >
-                {words(r.status)}
-              </Pill>
-              <span className="text-sm text-fg-2">
-                {r.status === "already_loaded"
-                  ? "This exact tape was loaded there before."
-                  : r.status === "loaded"
-                    ? "The book is on the servicing app."
-                    : "Nothing was written there."}
-              </span>
-            </div>
-            <Rows rows={receipt(r)} />
-          </>
-        )}
-        renderFailed={(e) =>
-          e.actAs.length ? (
-            <div className="space-y-3">
-              <Notice tone="warn" title={`Loading needs ${e.actAs.map(roleWord).join(" or ")}`}>
-                You hold that role. Load it under it.
-              </Notice>
-              <div className="flex flex-wrap gap-2">
-                {e.actAs.map((r) => (
-                  <Button
-                    key={r}
-                    onClick={() =>
-                      void loadServicing(r).then((ok) => {
-                        if (ok) void loadDb();
-                      })
-                    }
-                  >
-                    Load it as {roleWord(r)}
-                  </Button>
-                ))}
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setServicing({ state: "skipped", why: "Skipped by hand." });
-                    void loadDb();
-                  }}
-                >
-                  Skip this copy
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <Notice tone="danger">
-                {/loans_servicer_loan_number_key/.test(e.message)
-                  ? "A loan number on this tape already belongs to another servicer's book in the servicing app, which holds loan numbers unique across servicers."
-                  : e.message}
-              </Notice>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  onClick={() =>
-                    void loadServicing().then((ok) => {
-                      if (ok) void loadDb();
-                    })
-                  }
-                >
-                  Try again
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setServicing({ state: "skipped", why: "Skipped after it failed." });
-                    void loadDb();
-                  }}
-                >
-                  Skip this copy and load the loans database
-                </Button>
-              </div>
-            </div>
-          )
-        }
-      />
 
       <PhaseCard
         title="The loans database"
@@ -1251,19 +1134,28 @@ function LoadStep({
         )}
       />
 
+      {dbDone && dbResult?.status !== "rejected" && review.state !== "running" ? (
+        <p className="max-w-prose text-sm text-fg-2">
+          That is the load. The book is watched from today and billed from today, and nobody on it
+          has been written to.
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-3">
         <Button
           variant="primary"
           disabled={!dbDone || dbResult?.status === "rejected" || review.state === "running"}
-          onClick={() => onDone(review.state === "done" ? review.value.verdicts : null)}
+          onClick={() => onFinish(review.state === "done" ? review.value.verdicts : null)}
         >
-          Invite the borrowers to claim
+          Done
         </Button>
         <Button
-          variant="ghost"
-          onClick={onBack}
-          disabled={db.state === "running" || servicing.state === "running"}
+          variant="secondary"
+          disabled={!dbDone || dbResult?.status === "rejected" || review.state === "running"}
+          onClick={() => onTeam(review.state === "done" ? review.value.verdicts : null)}
         >
+          Invite the servicer&rsquo;s team
+        </Button>
+        <Button variant="ghost" onClick={onBack} disabled={db.state === "running"}>
           Back
         </Button>
       </div>
@@ -1338,12 +1230,14 @@ function PhaseCard<T>({
  */
 function TeamStep({
   servicer,
-  onDone,
+  onFinish,
+  onHomeowners,
 }: {
   servicer: { slug: string; displayName: string };
-  onDone: () => void;
+  onFinish: () => void;
+  /** Present only where this deployment may e-mail homeowners at all. */
+  onHomeowners?: () => void;
 }) {
-  const [sent, setSent] = useState(0);
   return (
     <div className="mt-8 space-y-6">
       <div>
@@ -1362,11 +1256,16 @@ function TeamStep({
           .
         </p>
       </div>
-      <ServicerTeam servicer={servicer} onSent={(n) => setSent((k) => k + n)} />
+      <ServicerTeam servicer={servicer} />
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="primary" onClick={onDone}>
-          {sent ? "Continue to the borrowers" : "Skip for now"}
+        <Button variant="primary" onClick={onFinish}>
+          Done
         </Button>
+        {onHomeowners ? (
+          <Button variant="ghost" onClick={onHomeowners}>
+            E-mail homeowners their claim links…
+          </Button>
+        ) : null}
       </div>
     </div>
   );
@@ -1743,7 +1642,7 @@ function InviteStep({
       {confirmation}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-fg">
-          Invite the borrowers to claim
+          E-mail homeowners their claim links
         </h1>
         <p className="mt-1 max-w-prose text-sm text-fg-2">
           Each loan gets one link, good for thirty days, mailed to the address the supplement

@@ -3068,11 +3068,18 @@ because that is the step that turns a row on a tape into a person on a loan.
   pretending. The match at sign-in is still never made: whoever holds the
   link is whoever the delivery reached, exactly as when the partner delivers
   it.
-- **The servicing app's own copy of the book is optional and separate.** With
-  an NMLSR id the desk also posts the same files to the servicing app's
-  `/partner-book/imports` through the console proxy, so its reviewer runs
-  over the same book; its receipt is shown beside ours and its refusal fails
-  nothing of ours. Blank, that copy is skipped and said so.
+- **The servicing app's own copy of the book is no longer made from the
+  desk (5 October 2026, Joe).** The desk used to ask for the servicer's
+  NMLSR id and, given one, post the same files to the servicing app's
+  `/partner-book/imports` so its reviewer ran over the same book. Nothing
+  we load, review, bill or show a servicer reads that copy — only a
+  homeowner's loan page shows the servicing app's verdict after ours — and
+  on production it was a second full copy of a real book's borrowers for no
+  present use, behind a field nobody could say the reason for. The field
+  and the copy are gone from the desk. The servicing app's import still
+  exists behind the console's API if that copy is ever wanted again; for
+  Grander the id it would take is the company's NMLS number, 1065200, not
+  any of its state license numbers.
 - **Files cross as base64 in JSON, at 40 MB, gzipped when the browser
   can.** The same contract the partner door carries, so one shape describes
   a tape whoever carries it; the router parses its own body at that size and
@@ -3333,8 +3340,8 @@ kinds of account, with members inviting members.
 **Why our side, not the servicing app's partner portal.** The vendored
 runtime carries a partner portal (its §36: partner users, three roles, a
 two-factor door), and it was the pattern, not the place. Its tenant is the
-servicing app's copy of the book, which the desk makes only when an NMLSR
-id is typed, and its analysis is the servicing app's own — not the daily
+servicing app's copy of the book, which the desk made only when an NMLSR
+id was typed and no longer makes, and its analysis is the servicing app's own — not the daily
 review that makes our offers and fills the borrower's page. What Joe wants
 a servicer's team to see is "the analysis we ran", and that lives in our
 database. So the pattern is borrowed — a code and a password, never one
@@ -3909,6 +3916,15 @@ way it could go out by mistake.
   (`CONFIRMATION_MISMATCH`), before anything is minted. In the console
   that number is typed into a sheet that says what is about to happen.
   Who asked is kept on each claim beside what the mailer said.
+
+- _A load does not lead to it._ The first real book loaded on production
+  (245 loans, 5 October) ended on a screen whose only way forward was a
+  red button reading "Invite the borrowers to claim" — a "next" worded as
+  the one act that must not happen, shown to the person who had just said
+  so. The load now ends with "Done", which leaves the desk for the
+  servicer's page; the servicer's own team is the other way on, named as
+  theirs; and the homeowner step is in the desk's steps only where the
+  switch is on, reached by a button that says what it does.
 
 What this does not cover, and should be decided: an applicant in the
 borrower app can still send their own co-borrower an invitation

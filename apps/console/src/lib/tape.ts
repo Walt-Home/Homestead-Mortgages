@@ -4,7 +4,7 @@
  * spelled here once for the screen.
  */
 
-import { hm, upload, type Call, stream } from "./api.js";
+import { hm, type Call, stream } from "./api.js";
 
 export type PreviewChange = "created" | "updated" | "unchanged";
 
@@ -179,21 +179,6 @@ export type InvitationOutcome =
       readonly expiresAt: string;
     }
   | { readonly number: string; readonly status: "not_claimable"; readonly reason: string };
-
-/** The servicing app's own receipt for its copy of the book, as its console API answers it. */
-export interface ServicingBookReceipt {
-  readonly import_id: string;
-  readonly status: "loaded" | "rejected" | "already_loaded" | string;
-  readonly rows_total?: number;
-  readonly rows_loaded?: number;
-  readonly rows_exception?: number;
-  readonly loans_created?: number;
-  readonly loans_updated?: number;
-  readonly loans_unchanged?: number;
-  readonly parties_created?: number;
-  readonly missing_headers?: string[];
-  readonly [k: string]: unknown;
-}
 
 /** A file on the wire: its name and its bytes, base64, gzipped first when the browser could. */
 export interface WireFile {
@@ -421,28 +406,6 @@ export interface DeskSettings {
   readonly homeownerMail: "on" | "off";
 }
 export const deskSettings = (init: Call = {}) => hm<DeskSettings>("/settings", init);
-
-/** The servicing app's own import of the same files, through its console API. */
-export function loadIntoServicingBook(
-  input: {
-    readonly legalName: string;
-    readonly nmlsrId: string;
-    readonly asOf: string;
-    readonly profile: string;
-    readonly tape: File;
-    readonly supplement: File | null;
-  },
-  role?: string,
-): Promise<ServicingBookReceipt> {
-  const form = new FormData();
-  form.set("partner_legal_name", input.legalName);
-  form.set("partner_nmlsr_id", input.nmlsrId);
-  form.set("as_of_date", input.asOf);
-  form.set("profile", input.profile);
-  form.set("tape", input.tape, input.tape.name);
-  if (input.supplement) form.set("supplement", input.supplement, input.supplement.name);
-  return upload<ServicingBookReceipt>("/partner-book/imports", form, { role });
-}
 
 export const changeTone = (c: PreviewChange): "ok" | "info" | "neutral" =>
   c === "created" ? "ok" : c === "updated" ? "info" : "neutral";

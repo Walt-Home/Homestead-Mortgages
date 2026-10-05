@@ -3777,6 +3777,33 @@ two-session rule is the console's and was walked by hand against a local
 servicing app: a staff session, an invitation taken beside it, the portal
 rendered, the staff session gone, every ops call a 401.
 
+## A servicer can be stood up before its first tape
+
+**Decision (5 October 2026).** A servicer's row used to be born with its
+first load at the tape desk, and everything that hangs from the row waited
+for that day: its team's invitations, the billing profile an invoice
+cannot be drafted without, and the bank account it pays from. Joe's brief,
+the day production invoicing went live and before Grander had sent a tape:
+have everything ready for when it arrives. The slow piece is the bank
+account — one verified by two small deposits takes days, and the servicer
+has ten to confirm them — so tape day was the wrong day to start it.
+
+`POST /console/hm/tape/servicers` (`createServicer` in `tape-desk.ts`)
+makes the row from a name and a slug, once; the Servicers page has "Add a
+servicer" for it, and a servicer with no tape says what can be done
+meanwhile and links to its billing page. Nothing else had to change,
+which is why it is small: the desk's load already finds a servicer by its
+slug before it makes one, so the first tape lands on the row made ahead;
+the team routes, the billing profile and the ACH setup link key on the
+servicer and never needed a loan; the portal already answers a member of a
+bookless servicer with no loans and a month so far at nothing; and the
+meter bills nothing until a tape is loaded. The slug cannot be changed
+afterward, so the sheet says so.
+
+Held by `console-tape.test.ts`, "a servicer stood up before its tape": made
+once, a second of the same slug refused, listed with no book, its team
+invited, and the first tape loading onto the same row with the team kept.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

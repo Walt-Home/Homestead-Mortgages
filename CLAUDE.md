@@ -183,7 +183,10 @@ The desk's Team step mails the first invitations, and the Servicers page
 (`/console/servicers`, ours: `pages/ServicersPage.tsx` over the desk's
 `/servicers` and `/team` routes) is where a servicer's team is managed any
 day after, without walking a load — invited and removed; the link
-(`/console/accept#token`) sets the password. No roles, one address per
+(`/console/accept#token`) sets the password. Since 5 October a servicer
+can be added there before its first tape (`POST …/tape/servicers`), so its
+team, billing profile and bank account are done by tape day; the desk's
+load finds the row by its slug. No roles, one address per
 servicer. IAP is off the servicing host for this: a servicer's staff are
 not our Google accounts, and both doors are two factors. The two sessions
 never cross: `requireServicerUser` reads `servicerUserId`, `requireAuth`

@@ -273,6 +273,13 @@ export const todayEt = (): string =>
 export const deskServicers = (init: Call = {}) =>
   hm<{ servicers: DeskServicer[] }>("/servicers", init).then((r) => r.servicers);
 
+/** Stand a servicer up before its first tape; the desk's load then finds it by its slug. */
+export const createServicer = (servicer: { slug: string; displayName: string }, init: Call = {}) =>
+  hm<{ servicer: { slug: string; displayName: string } }>("/servicers", {
+    ...init,
+    body: servicer,
+  }).then((r) => r.servicer);
+
 export const deskImports = (slug: string, init: Call = {}) =>
   hm<{ imports: DeskImport[] }>("/imports", { ...init, query: { servicer: slug } }).then(
     (r) => r.imports,

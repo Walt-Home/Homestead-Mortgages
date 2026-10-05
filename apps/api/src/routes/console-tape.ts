@@ -25,6 +25,7 @@ import {
   removeServicerMember,
 } from "../services/servicer-team.js";
 import {
+  createServicer,
   deskImports,
   deskServicers,
   inviteToClaim,
@@ -68,6 +69,14 @@ const InviteBody = z
       .array(z.object({ number: z.string().min(1), email: z.string().email().nullable() }))
       .min(1)
       .max(5000),
+  })
+  .strict();
+
+/** A servicer named ahead of its first tape: the slug our rows key on, and the name people read. */
+const ServicerBody = z
+  .object({
+    slug: z.string().min(1).max(60),
+    displayName: z.string().trim().min(1).max(200),
   })
   .strict();
 
@@ -139,6 +148,17 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
     "/servicers",
     asyncRoute(async (_req, res) => {
       res.json({ servicers: await deskServicers() });
+    }),
+  );
+
+  /**
+   * Stand a servicer up before its first tape, so its team, its billing
+   * profile and its bank account are done by the day the tape arrives.
+   */
+  router.post(
+    "/servicers",
+    asyncRoute(async (req, res) => {
+      res.status(201).json({ servicer: await createServicer(ServicerBody.parse(req.body)) });
     }),
   );
 

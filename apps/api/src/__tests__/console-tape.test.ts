@@ -469,6 +469,68 @@ describe("the book's first review", () => {
   });
 });
 
+describe("a servicer stood up before its tape", () => {
+  it("is made once, holds no book, takes a team, and the first tape lands on it", async () => {
+    const made = await call<{ servicer: { slug: string; displayName: string } }>(
+      "POST",
+      "/servicers",
+      { slug: NORTHLIGHT.slug, displayName: `  ${NORTHLIGHT.legal_name}  ` },
+    );
+    expect(made.status).toBe(201);
+    expect(made.body.servicer).toEqual({
+      slug: NORTHLIGHT.slug,
+      displayName: NORTHLIGHT.legal_name,
+    });
+    // Once: the slug is the key, and a second servicer cannot take it.
+    const twice = await call<{ error: { code: string } }>("POST", "/servicers", {
+      slug: NORTHLIGHT.slug,
+      displayName: "Somebody Else",
+    });
+    expect(twice.status).toBe(409);
+    expect(twice.body.error.code).toBe("SERVICER_EXISTS");
+    const bad = await call<{ error: { code: string } }>("POST", "/servicers", {
+      slug: "Not A Slug",
+      displayName: "Somebody",
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error.code).toBe("BAD_SLUG");
+    expect((await call("POST", "/servicers", { slug: "x", displayName: "  " })).status).toBe(400);
+
+    // Listed with no book, and its team can be invited before any tape.
+    const listed = await call<{
+      servicers: {
+        slug: string;
+        team: { invited: number };
+        book: { imports: number; lastAsOf: string | null; loans: { total: number } };
+      }[];
+    }>("GET", "/servicers");
+    expect(listed.body.servicers).toHaveLength(1);
+    expect(listed.body.servicers[0]).toMatchObject({
+      slug: NORTHLIGHT.slug,
+      book: { imports: 0, lastAsOf: null, loans: { total: 0 } },
+    });
+    const invited = await call<{ outcomes: { status: string }[] }>("POST", "/team", {
+      servicerSlug: NORTHLIGHT.slug,
+      invitations: [{ email: "ada@northlight.example", name: "Ada" }],
+    });
+    expect(invited.status).toBe(201);
+    expect(invited.body.outcomes[0]!.status).toBe("sent");
+
+    // The first tape lands on the same row: one servicer, its team kept, twelve loans.
+    const before = await prisma.servicer.findUniqueOrThrow({ where: { slug: NORTHLIGHT.slug } });
+    expect((await call("POST", "/imports", tapeBody())).status).toBe(201);
+    expect(await prisma.servicer.count()).toBe(1);
+    const after = await call<{
+      servicers: { team: { invited: number }; book: { loans: { total: number } } }[];
+    }>("GET", "/servicers");
+    expect(after.body.servicers[0]).toMatchObject({
+      team: { invited: 1 },
+      book: { loans: { total: 12 } },
+    });
+    expect(await prisma.loan.count({ where: { servicerId: before.id } })).toBe(12);
+  });
+});
+
 describe("the servicer's team, from the desk", () => {
   it("is invited, listed, and pruned under the staff id that asked", async () => {
     expect((await call("POST", "/imports", tapeBody())).status).toBe(201);

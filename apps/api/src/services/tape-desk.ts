@@ -83,6 +83,33 @@ export function assertSlug(slug: string): string {
   return slug;
 }
 
+/**
+ * Stand a servicer up before its first tape.
+ *
+ * A servicer's row used to be born with its first load, which put
+ * everything that hangs from the row on tape day: its team's invitations,
+ * the billing profile an invoice cannot be drafted without, and the bank
+ * account it pays from — the slow one, since an account verified by two
+ * small deposits takes days. Made here ahead of time, all three are done
+ * before a tape exists, and the first load lands on this row because the
+ * desk finds a servicer by its slug before it makes one. The row carries
+ * no book and is billed nothing until it has one.
+ */
+export async function createServicer(input: DeskServicer, db: Db = prisma): Promise<DeskServicer> {
+  const slug = assertSlug(input.slug);
+  const displayName = input.displayName.trim();
+  if (!displayName) throw new AppError(400, "The servicer needs a name.", "BAD_REQUEST");
+  try {
+    await db.servicer.create({ data: { slug, displayName, integrationDepth: "API" } });
+  } catch (err) {
+    if ((err as { code?: string }).code === "P2002") {
+      throw new AppError(409, `A servicer already goes by ${slug}.`, "SERVICER_EXISTS");
+    }
+    throw err;
+  }
+  return { slug, displayName };
+}
+
 /* ── the supplement's addresses, read once and kept nowhere ─────────────── */
 
 const norm = (h: string) =>

@@ -3860,6 +3860,18 @@ an address an admin has invited, and what to do otherwise, and the page's
 refusal says the same. The proxy cannot do better than say so: whether an
 address is staff is exactly what the servicing app will not tell a caller.
 
+**An invitation is mailed by us too (later the same evening).** Signed in
+as the admin, Joe invited his second address and no e-mail came: the
+servicing app's `staff.invite` makes the account and tells nobody, its
+mailer being a stand-in, and our console's sheet still said that "no mail
+leaves" and the code is read off the page — true until that morning.
+Where our mailer is real the proxy now mails the invited address what
+happened and where to sign in, on a successful invitation only and to our
+own domains only, and adds `invitation_mail` to the answer — `sent`,
+`not_sent` or `not_ours` — so the admin is told when the person was not.
+The account exists either way; an invitation that could not be mailed is
+said, never hidden.
+
 **The raw paths are closed (Joe, the same day).** The servicing app's own
 console at `/ops`, its API at `/api` and its sign-in links at `/login` and
 `/verify` were forwarded on the public host "for comparison" while it sat

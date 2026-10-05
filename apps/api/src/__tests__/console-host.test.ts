@@ -14,7 +14,12 @@ import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { consoleHostRouter, staffSignInCodeMessage, withoutEchoedCodes } from "../console-host.js";
+import {
+  consoleHostRouter,
+  staffInvitationMessage,
+  staffSignInCodeMessage,
+  withoutEchoedCodes,
+} from "../console-host.js";
 
 interface Seen {
   method: string;
@@ -337,6 +342,7 @@ describe("the servicing hostname", () => {
 
 describe("a sign-in code and the proxy", () => {
   const mails: { to: string; code: string }[] = [];
+  const invitations: { to: string; name: string | null; signInUrl: string }[] = [];
   let refuse = false;
   let guarded: Server;
   let guardedPort: number;
@@ -352,6 +358,11 @@ describe("a sign-in code and the proxy", () => {
         send: async (to, code) => {
           if (refuse) return false;
           mails.push({ to, code });
+          return true;
+        },
+        invite: async (to, input) => {
+          if (refuse) return false;
+          invitations.push({ to, ...input });
           return true;
         },
       },
@@ -458,8 +469,62 @@ describe("a sign-in code and the proxy", () => {
       expect(r.body).not.toMatch(/fake_code|111111|222222|333333/);
     }
     // An answer with no code in it crosses byte for byte.
-    const plain = await post("/console/api/staff/invite", { email: "x@ours.test" });
-    expect(JSON.parse(plain.body)).toEqual({ role_seen: null, gate_seen: null });
+    const plain = await post("/console/api/staff?x=1", { anything: true });
+    expect(JSON.parse(plain.body)).toEqual({ echo: "/ops/api/staff?x=1", cookie: null });
+  });
+
+  it("tells an invited colleague by mail, since the servicing app tells nobody, and tells the admin whether it went", async () => {
+    invitations.length = 0;
+    seen.length = 0;
+    const r = await post("/console/api/staff/invite", {
+      email: " Drew@Ours.test ",
+      legal_name: "Drew Example",
+      roles: ["admin"],
+    });
+    expect(r.status).toBe(200);
+    expect(JSON.parse(r.body)).toEqual({
+      role_seen: null,
+      gate_seen: null,
+      invitation_mail: "sent",
+    });
+    expect(invitations).toEqual([
+      { to: "drew@ours.test", name: "Drew Example", signInUrl: `https://${HOST}/console/` },
+    ]);
+    // His server made the account from the request as the admin sent it.
+    expect(JSON.parse(seen[0]!.body)).toMatchObject({ email: " Drew@Ours.test " });
+
+    // An address that is not on our domains is never written to from here, and the admin is told.
+    invitations.length = 0;
+    const stranger = await post("/console/api/staff/invite", { email: "eve@elsewhere.test" });
+    expect(JSON.parse(stranger.body).invitation_mail).toBe("not_ours");
+    expect(invitations).toEqual([]);
+
+    // The account exists either way; a mail that would not go is said, not hidden.
+    refuse = true;
+    try {
+      const unsent = await post("/console/api/staff/invite", { email: "doug@ours.test" });
+      expect(unsent.status).toBe(200);
+      expect(JSON.parse(unsent.body).invitation_mail).toBe("not_sent");
+    } finally {
+      refuse = false;
+    }
+  });
+
+  it("writes an invitation that says who, where to sign in, and what signing in takes", () => {
+    const mail = staffInvitationMessage({
+      to: "drew@ours.test",
+      name: "Drew Example",
+      signInUrl: "https://servicing.example.test/console/",
+    });
+    expect(mail.to).toBe("drew@ours.test");
+    expect(mail.subject).toBe("You have been invited to the Supermortgage console");
+    expect(mail.text).toContain("Drew Example, you have been invited");
+    expect(mail.text).toContain("as drew@ours.test");
+    expect(mail.text).toContain("https://servicing.example.test/console/");
+    expect(mail.text).toContain("six-digit code");
+    expect(staffInvitationMessage({ to: "a@ours.test", name: null, signInUrl: "u" }).text).toMatch(
+      /^You have been invited/,
+    );
   });
 
   it("refuses a code request too large to be an address", async () => {

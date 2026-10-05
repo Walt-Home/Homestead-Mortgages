@@ -129,24 +129,41 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [rationale, setRationale] = useState("");
+  // What became of the invitation's e-mail, when it did not simply go.
+  const [unsent, setUnsent] = useState<string | null>(null);
   const invite = async () => {
-    const ok = await act.run("/staff/invite", {
-      body: {
-        email: email.trim(),
-        legal_name: name.trim() || undefined,
-        roles: [...ADMIN_GRANT],
-        rationale: rationale || undefined,
+    setUnsent(null);
+    const made = await act.run<{ invitation_mail?: "sent" | "not_sent" | "not_ours" }>(
+      "/staff/invite",
+      {
+        body: {
+          email: email.trim(),
+          legal_name: name.trim() || undefined,
+          roles: [...ADMIN_GRANT],
+          rationale: rationale || undefined,
+        },
+        role: "admin",
       },
-      role: "admin",
-    });
-    if (ok) onClose();
+    );
+    if (!made) return;
+    if (made.invitation_mail === "not_sent") {
+      setUnsent(
+        `${email.trim()} is invited, but the e-mail could not be sent. Tell them to sign in here with that address; the sign-in code is mailed separately.`,
+      );
+    } else if (made.invitation_mail === "not_ours") {
+      setUnsent(
+        `${email.trim()} is invited, but it is not on one of our domains, so no e-mail was sent and the sign-in page will send that address to the servicer door.`,
+      );
+    } else {
+      onClose();
+    }
   };
   return (
     <Sheet
       open
       onClose={onClose}
       title="Invite someone"
-      subtitle="They get a code by e-mail, set a password, and are in."
+      subtitle="They get an invitation by e-mail. Signing in is a code to that address, and the first time they choose a password."
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -184,9 +201,14 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
           <Textarea id="inv-why" value={rationale} onChange={(e) => setRationale(e.target.value)} />
         </Field>
         <Notice tone="neutral">
-          On this deployment no mail leaves: the invitee reads the code off the sign-in page
-          instead.
+          The invitation and every sign-in code go to this address, so it has to be one of ours and
+          one they can read.
         </Notice>
+        {unsent ? (
+          <Notice tone="warn" title="Invited, and not told">
+            {unsent}
+          </Notice>
+        ) : null}
       </div>
     </Sheet>
   );

@@ -63,6 +63,11 @@ export interface SignInCodeMail {
   internal(email: string): boolean;
   /** Mail the code. False when the mailer would not, and then nobody is told the code. */
   send(to: string, code: string): Promise<boolean>;
+  /** Mail somebody the news that an admin invited them, and where to sign in. */
+  invite(
+    to: string,
+    input: { readonly name: string | null; readonly signInUrl: string },
+  ): Promise<boolean>;
 }
 
 export interface ConsoleHostOptions {
@@ -101,8 +106,11 @@ export interface ConsoleHostOptions {
 const ECHOED_CODE = "fake_code";
 /** The staff door's code request, as his server names it, however it was reached. */
 const STAFF_CODE_PATH = "/ops/api/auth/code";
-/** A code request is an address and nothing else. */
+/** An admin inviting somebody onto the staff, as his server names it. */
+const STAFF_INVITE_PATH = "/ops/api/staff/invite";
+/** A code request is an address and nothing else; an invitation is a few fields more. */
 const MAX_CODE_REQUEST_BYTES = 16 * 1024;
+const MAX_INVITE_REQUEST_BYTES = 64 * 1024;
 
 /** The same value with every echoed code removed, at any depth, and whether one was there. */
 export function withoutEchoedCodes(value: unknown): { value: unknown; found: boolean } {
@@ -145,15 +153,22 @@ async function readSmall(req: Request, limit: number): Promise<Buffer | null> {
   return Buffer.concat(chunks);
 }
 
-/** The address a code request names, lowercased; null when it names none. */
-function addressIn(body: Buffer): string | null {
+/** The address a request names, lowercased, and the person's name when it gives one. */
+function addressIn(body: Buffer): { email: string | null; name: string | null } {
   try {
-    const parsed = JSON.parse(body.toString("utf8")) as { email?: unknown };
-    return typeof parsed.email === "string" && parsed.email.includes("@")
-      ? parsed.email.trim().toLowerCase()
-      : null;
+    const parsed = JSON.parse(body.toString("utf8")) as { email?: unknown; legal_name?: unknown };
+    return {
+      email:
+        typeof parsed.email === "string" && parsed.email.includes("@")
+          ? parsed.email.trim().toLowerCase()
+          : null,
+      name:
+        typeof parsed.legal_name === "string" && parsed.legal_name.trim() !== ""
+          ? parsed.legal_name.trim()
+          : null,
+    };
   } catch {
-    return null;
+    return { email: null, name: null };
   }
 }
 
@@ -210,20 +225,28 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
       const target = rewrite(req.url);
       // Only a write can mint a code, so only a write's answer is read first.
       const guarded = opts.codes !== undefined && hasBody;
-      const staffCode =
-        guarded && req.method === "POST" && target.split("?")[0] === STAFF_CODE_PATH;
-      // The staff door's request is read whole, for the address the code goes to.
+      const upstreamPath = target.split("?")[0];
+      const staffCode = guarded && req.method === "POST" && upstreamPath === STAFF_CODE_PATH;
+      // An invitation is the servicing app's to make and ours to tell the
+      // person about: its mailer is a stand-in, so without this the invitee
+      // hears nothing and has to be told by hand to go and sign in.
+      const staffInvite = guarded && req.method === "POST" && upstreamPath === STAFF_INVITE_PATH;
+      // Both requests are read whole, for the address the mail goes to.
       let asked: string | null = null;
+      let askedName: string | null = null;
       let body: ReadableStream | Buffer | undefined;
-      if (staffCode) {
-        const whole = await readSmall(req, MAX_CODE_REQUEST_BYTES);
+      if (staffCode || staffInvite) {
+        const whole = await readSmall(
+          req,
+          staffCode ? MAX_CODE_REQUEST_BYTES : MAX_INVITE_REQUEST_BYTES,
+        );
         if (whole === null) {
           res.status(413).json({
             error: { message: "That is too much to be an e-mail address.", code: "TOO_LARGE" },
           });
           return;
         }
-        asked = addressIn(whole);
+        ({ email: asked, name: askedName } = addressIn(whole));
         body = whole;
       } else if (hasBody) {
         body = Readable.toWeb(req) as ReadableStream;
@@ -265,14 +288,29 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
           return;
         }
         const cleaned = withoutEchoedCodes(parsed);
-        if (!cleaned.found) {
+        const isObject = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed);
+        const invited = staffInvite && answer.ok && isObject;
+        if (!cleaned.found && !invited) {
           res.end(text);
           return;
         }
         // The body is no longer his, so neither is its validator.
         res.removeHeader("etag");
+        if (invited) {
+          // Told to the person by us, and the admin is told whether it went:
+          // mailed, not mailed, or an address that is not on our domains and
+          // so is never written to from here.
+          let mailed: "sent" | "not_sent" | "not_ours" = "not_ours";
+          if (asked !== null && opts.codes!.internal(asked)) {
+            const signInUrl = `https://${req.hostname || opts.host}/console/`;
+            mailed = (await opts.codes!.invite(asked, { name: askedName, signInUrl }))
+              ? "sent"
+              : "not_sent";
+          }
+          (cleaned.value as Record<string, unknown>).invitation_mail = mailed;
+        }
         const top = parsed as Record<string, unknown>;
-        const code = !Array.isArray(parsed) ? top[ECHOED_CODE] : undefined;
+        const code = isObject ? top[ECHOED_CODE] : undefined;
         if (staffCode && typeof code === "string") {
           // Mailed to the address that asked, when it is one of ours; a
           // stranger's address is answered the same and mailed nothing.
@@ -398,6 +436,32 @@ export function staffSignInCodeMessage(input: { readonly to: string; readonly co
 }
 
 /**
+ * The news that an admin invited somebody to the console, as we mail it.
+ * The servicing app makes the account and tells nobody — its mailer is a
+ * stand-in — so the first invitation made on production reached no inbox
+ * (5 October 2026, Joe inviting his own second address).
+ */
+export function staffInvitationMessage(input: {
+  readonly to: string;
+  readonly name: string | null;
+  readonly signInUrl: string;
+}) {
+  return {
+    to: input.to,
+    subject: "You have been invited to the Supermortgage console",
+    text: [
+      `${input.name ? `${input.name}, you` : "You"} have been invited to the Supermortgage console as ${input.to}.`,
+      "",
+      `To sign in, go to ${input.signInUrl} and enter this address. A six-digit code is mailed to you each time you sign in, and the first time you choose a password.`,
+      "",
+      "If you were not expecting this, ignore it; nothing happens until you sign in.",
+      "",
+      "Supermortgage",
+    ].join("\n"),
+  };
+}
+
+/**
  * How a staff sign-in code reaches a person on this deployment: mailed by
  * us where our mailer is real, shown on the page where it is a stand-in.
  * Health reports it, and the production deploy fails on the second.
@@ -415,6 +479,16 @@ export function signInCodeMail(): SignInCodeMail | undefined {
     send: async (to, code) => {
       try {
         const outcome = await connectors().mail.send(staffSignInCodeMessage({ to, code }));
+        return outcome.status === "sent";
+      } catch {
+        return false;
+      }
+    },
+    invite: async (to, { name, signInUrl }) => {
+      try {
+        const outcome = await connectors().mail.send(
+          staffInvitationMessage({ to, name, signInUrl }),
+        );
         return outcome.status === "sent";
       } catch {
         return false;

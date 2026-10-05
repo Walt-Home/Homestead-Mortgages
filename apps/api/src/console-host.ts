@@ -51,7 +51,6 @@ import { config } from "./config.js";
 import { consoleBillingRouter } from "./routes/console-billing.js";
 import { consoleTapeRouter } from "./routes/console-tape.js";
 import { connectors } from "./services/connectors.js";
-import { signInCodeMessage } from "./services/servicer-team.js";
 import {
   IDENTITY_HEADER,
   identityTokenFor,
@@ -371,6 +370,34 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
 }
 
 /**
+ * The staff door's code, as we mail it.
+ *
+ * The servicing app answers a code request the same whether or not the
+ * address is a staff member's, and mints a code either way, so this is
+ * mailed to any address of ours that asks — including one nobody has
+ * invited, whose code can never be accepted. The message has to say so,
+ * because the page cannot: the first person to hit it was the owner,
+ * signing in with the address he works under rather than the one the
+ * deploy had made admin, holding a code that "didn't match" (5 October
+ * 2026).
+ */
+export function staffSignInCodeMessage(input: { readonly to: string; readonly code: string }) {
+  return {
+    to: input.to,
+    subject: `Your Supermortgage console sign-in code: ${input.code}`,
+    text: [
+      `Your sign-in code for the Supermortgage console is ${input.code}.`,
+      "",
+      "It is good for ten minutes and one sign-in, and only for an address an admin has invited to the console. If this address has not been invited, the code will not be accepted: sign in with the address that was invited, or ask an admin to invite this one from Staff & roles.",
+      "",
+      "If you did not ask for it, ignore this message; nobody can sign in with the code alone.",
+      "",
+      "Supermortgage",
+    ].join("\n"),
+  };
+}
+
+/**
  * How a staff sign-in code reaches a person on this deployment: mailed by
  * us where our mailer is real, shown on the page where it is a stand-in.
  * Health reports it, and the production deploy fails on the second.
@@ -387,7 +414,7 @@ export function signInCodeMail(): SignInCodeMail | undefined {
       config.internalEmailDomains.includes(email.slice(email.lastIndexOf("@") + 1).toLowerCase()),
     send: async (to, code) => {
       try {
-        const outcome = await connectors().mail.send(signInCodeMessage({ to, code }));
+        const outcome = await connectors().mail.send(staffSignInCodeMessage({ to, code }));
         return outcome.status === "sent";
       } catch {
         return false;

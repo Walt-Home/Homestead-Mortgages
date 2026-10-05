@@ -83,7 +83,7 @@ export function SignInPage({
         return setError("That doesn't look like an e-mail address.");
       case "OTP_INVALID":
         return setError(
-          "That code didn't match. If this address hasn't been invited yet, no code will: an admin invites you from Staff & roles first. Otherwise check it and try again, or send a new one.",
+          "That code didn't match. If this address hasn't been invited to the console, no code will: sign in with the address that was invited, or have an admin invite this one from Staff & roles. Otherwise check it and try again, or send a new one.",
         );
       case "OTP_TOO_MANY_ATTEMPTS":
         return setError("Too many tries against that code. Send a new one.");

@@ -3847,6 +3847,19 @@ know: the servicing app mints one code per address per ten minutes and
 does not repeat it, so "Send a new code" inside that window mails nothing
 new; the first mail is the code.
 
+**The mailed code says what it is good for (the same evening).** The
+servicing app answers a code request the same whether or not the address
+is a staff member's and mints a code either way, so the proxy mails any
+address of ours that asks — including one nobody has invited, whose code
+can never be accepted. The first person to meet that was Joe, signing in
+on production as `joe@supermortgage.com` when the admin the deploy had
+stood was `joe@trywalt.ai`: a code arrived, and it "didn't match". The
+servicing app's log said why (`staff.code.requested`, `known: false`), and
+nothing a person could see did. The mail now says the code works only for
+an address an admin has invited, and what to do otherwise, and the page's
+refusal says the same. The proxy cannot do better than say so: whether an
+address is staff is exactly what the servicing app will not tell a caller.
+
 **The raw paths are closed (Joe, the same day).** The servicing app's own
 console at `/ops`, its API at `/api` and its sign-in links at `/login` and
 `/verify` were forwarded on the public host "for comparison" while it sat

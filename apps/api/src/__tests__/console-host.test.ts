@@ -14,7 +14,7 @@ import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { consoleHostRouter, withoutEchoedCodes } from "../console-host.js";
+import { consoleHostRouter, staffSignInCodeMessage, withoutEchoedCodes } from "../console-host.js";
 
 interface Seen {
   method: string;
@@ -468,6 +468,16 @@ describe("a sign-in code and the proxy", () => {
       pad: "x".repeat(20_000),
     });
     expect(r.status).toBe(413);
+  });
+
+  it("says in the mail that the code works only for an invited address, since the page cannot", () => {
+    const mail = staffSignInCodeMessage({ to: "ada@ours.test", code: "246810" });
+    expect(mail.to).toBe("ada@ours.test");
+    expect(mail.subject).toContain("246810");
+    expect(mail.text).toContain("246810");
+    expect(mail.text).toContain("only for an address an admin has invited");
+    expect(mail.text).toContain("sign in with the address that was invited");
+    expect(mail.text).toContain("Staff & roles");
   });
 
   it("removes the echo wherever it sits, and says whether it found one", () => {

@@ -3659,6 +3659,27 @@ at supermortgage.com/terms.html; Drew approves and Doug sends.
   approving and Doug sending is the practice the rule allows and the
   history shows.
 
+**Production invoices for real (5 October 2026).** Joe put the live key
+in hand, enabled ACH debit on the account and said to finish it. The
+account behind the key was read before anything was made: Stripe account
+`acct_1TbMaoGU…`, public business name "Supermortgage", legal name
+Tomorrow OS Inc, charges and payouts enabled, `us_bank_account_ach_payments`
+active, no webhook endpoints — so the head Stripe prints agrees with the
+footer and the live send is not refused. Then, in this order because each
+needs the one before: the key into Secret Manager as
+`HOMESTEAD_MORTGAGES_STRIPE_BILLING_KEY_PROD`; a live webhook endpoint at
+`https://app.supermortgage.com/api/webhooks/invoicing`, pinned to the
+adapter's API version with staging's twelve events, its signing secret
+stored as `…_STRIPE_BILLING_WEBHOOK_SECRET_PROD` in the same breath (it is
+shown once) and readable by `hm-run@`; the production stack's `invoicing`
+switched to `live` and its reconcile job, schedule, alert and key grant
+applied; the `production` environment's `INVOICING_PROVIDER=stripe` and
+`STRIPE_ALLOW_LIVE_BILLING=true`; and a promotion. What is stored is a
+full secret key, as on staging; a restricted key scoped to customers,
+invoices, credit notes, Checkout sessions and a read of the account should
+replace it, and that is one new secret version. No invoice was drafted or
+sent by this work: a real one is Drew's approval and Doug's send.
+
 **Not decided, and where each waits.** Reminders and write-off:
 `BILLING_AUTO_ADVANCE`. Tax: nothing is computed; Stripe Tax would need a
 registration. Partner terms with payment terms in them: `BILLING_TERMS_URL`

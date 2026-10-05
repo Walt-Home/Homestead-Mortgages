@@ -271,6 +271,9 @@ supermortgage.com, printed in every footer and copied onto the row), a
 live invoice is refused when the name Stripe prints at its head does not
 name us, and a send takes two admins — one approves, a different one
 sends, both by name, a CHECK keeping the approver from being the sender.
+Production has invoiced live since 5 October 2026, through the Stripe
+account of Tomorrow OS Inc. (`_PROD` key and webhook secret, the stack's
+`invoicing = "live"`); staging stays on the sandbox.
 See `docs/decisions.md`, "An invoice is the provider's to collect and
 ours to decide".
 

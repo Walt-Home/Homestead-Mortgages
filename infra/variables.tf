@@ -113,7 +113,13 @@ variable "stacks" {
       database_url_secret           = "HOMESTEAD_MORTGAGES_DATABASE_URL_PROD"
       servicing_database_url_secret = "HOMESTEAD_MORTGAGES_SERVICING_DATABASE_URL_PROD"
       servicing_api_token_secret    = "HOMESTEAD_MORTGAGES_SERVICING_API_TOKEN_PROD"
-      billing_key_secret            = "HOMESTEAD_MORTGAGES_STRIPE_BILLING_KEY_PROD"
+      # 5 October 2026: production invoices for real, through the Stripe
+      # account of Tomorrow OS Inc. dba Supermortgage (acct_1TbMaoGU…), whose
+      # public business name is the one our footer signs and whose ACH debit
+      # capability is active. The key and the webhook's signing secret were
+      # made by hand first, as the module asks.
+      invoicing          = "live"
+      billing_key_secret = "HOMESTEAD_MORTGAGES_STRIPE_BILLING_KEY_PROD"
     }
   }
 }

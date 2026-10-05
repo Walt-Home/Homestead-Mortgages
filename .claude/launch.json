@@ -29,6 +29,22 @@
       "port": 8080
     },
     {
+      "name": "api-deployed-defaults",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "HOMEOWNER_MAIL=off",
+        "DEMO_PERSONAS=true",
+        "GOOGLE_CLIENT_ID=",
+        "SERVICING_API_URL=http://localhost:8090",
+        "INTERNAL_EMAIL_DOMAINS=supermortgage.com,trywalt.ai,example.test",
+        "npm",
+        "run",
+        "dev",
+        "--workspace=@hm/api"
+      ],
+      "port": 8080
+    },
+    {
       "name": "servicing",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--workspace=@hm/servicing"],

@@ -75,6 +75,10 @@ healthRouter.get("/", async (_req, res) => {
     // development convenience and one factor short on a public host; the
     // production deploy fails on it.
     staffSignInCodes: staffSignInCodes(),
+    // Whether the tape desk may e-mail the homeowners on a servicer's book.
+    // Off on a deployment until its environment says otherwise; reported,
+    // because it is the one switch that writes to people who never asked.
+    homeownerMail: config.homeownerMail ? "on" : "off",
     // Whether the average prime offer rate series reaches the current week.
     // Three legal tests block without it and every decision ends `referred`,
     // and nothing else on this page would say so: the database answers, the

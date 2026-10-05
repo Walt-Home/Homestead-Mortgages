@@ -826,6 +826,12 @@ jobs:
           if [ -n "$MAIL_ALLOWED_ADDRESSES" ]; then
             ENV_VARS="$ENV_VARS,MAIL_ALLOWED_ADDRESSES=$MAIL_ALLOWED_ADDRESSES"
           fi
+          # E-mailing the homeowners on a servicer's book: off unless the
+          # repository's HOMEOWNER_MAIL says `on`. Staging holds a real book,
+          # and its mailer is fenced to our own domains besides.
+          if [ "${{ vars.HOMEOWNER_MAIL }}" = "on" ]; then
+            ENV_VARS="$ENV_VARS,HOMEOWNER_MAIL=on"
+          fi
           if [ -n "$MAIL_ALLOWED_DOMAINS" ]; then
             ENV_VARS="$ENV_VARS,MAIL_ALLOWED_DOMAINS=$MAIL_ALLOWED_DOMAINS"
           fi

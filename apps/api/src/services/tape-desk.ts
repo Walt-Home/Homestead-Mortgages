@@ -556,13 +556,47 @@ export function claimMessage(input: {
  * the desk shows a table, not an exception — and a mailer that is not on
  * says so per loan rather than pretending, with the link beside it.
  */
+/** Whether this deployment lets the desk e-mail the homeowners on a book at all. */
+export function homeownerMail(): "on" | "off" {
+  return config.homeownerMail ? "on" : "off";
+}
+
+/**
+ * E-mail the homeowners on a book their claim links. The only place a
+ * homeowner is ever written to, and never a side effect: no load, review,
+ * schedule or job calls this. It runs when one named person asks for it,
+ * on a deployment whose switch is on, having confirmed how many homeowners
+ * the request e-mails — a count that has to match what the request holds,
+ * so a script or a slip that asks without one, or with the wrong one, is
+ * refused before anything is minted or mailed. Who asked is kept on each
+ * claim beside what the mailer said.
+ */
 export async function inviteToClaim(
   input: {
     readonly servicerSlug: string;
     readonly invitations: readonly { readonly number: string; readonly email: string | null }[];
+    /** How many homeowners the person confirmed this request e-mails. */
+    readonly confirmedHomeowners: number;
+    readonly sentBy: { readonly id: string; readonly name: string | null };
   },
   db: Db = prisma,
 ): Promise<readonly InvitationOutcome[]> {
+  if (!config.homeownerMail) {
+    throw new AppError(
+      409,
+      "E-mailing homeowners is switched off on this deployment. Nothing was minted and nothing was mailed.",
+      "HOMEOWNER_MAIL_OFF",
+    );
+  }
+  const toEmail = input.invitations.filter((i) => i.email !== null).length;
+  if (input.confirmedHomeowners !== toEmail) {
+    throw new AppError(
+      409,
+      `This request would e-mail ${toEmail} homeowner${toEmail === 1 ? "" : "s"} and ${input.confirmedHomeowners} ${input.confirmedHomeowners === 1 ? "was" : "were"} confirmed. Nothing was minted and nothing was mailed.`,
+      "CONFIRMATION_MISMATCH",
+      { toEmail, confirmed: input.confirmedHomeowners },
+    );
+  }
   const slug = assertSlug(input.servicerSlug);
   const servicer = await db.servicer.findUnique({
     where: { slug },
@@ -617,7 +651,11 @@ export async function inviteToClaim(
       data: {
         deliveredTo: inv.email,
         deliveredAt: outcome.status === "sent" ? new Date() : null,
-        delivery: outcome as unknown as Prisma.InputJsonValue,
+        delivery: {
+          ...outcome,
+          sentBy: input.sentBy.id,
+          sentByName: input.sentBy.name,
+        } as unknown as Prisma.InputJsonValue,
       },
     });
     if (outcome.status === "sent") {

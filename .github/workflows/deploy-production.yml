@@ -350,6 +350,13 @@ jobs:
           if [ -n "$MAIL_ALLOWED_DOMAINS" ]; then
             ENV_VARS="$ENV_VARS,MAIL_ALLOWED_DOMAINS=$MAIL_ALLOWED_DOMAINS"
           fi
+          # E-mailing the homeowners on a servicer's book is off unless this
+          # environment's HOMEOWNER_MAIL says `on`. Unset is off, and off is
+          # the API's own default on a deployment, so forgetting this line
+          # could not turn it on.
+          if [ "${{ vars.HOMEOWNER_MAIL }}" = "on" ]; then
+            ENV_VARS="$ENV_VARS,HOMEOWNER_MAIL=on"
+          fi
           ORIGIN="${PUBLIC_ORIGIN:-$SERVICE_URL}"
           if [ -n "$ORIGIN" ]; then
             ENV_VARS="$ENV_VARS,PUBLIC_ORIGIN=$ORIGIN"
@@ -423,6 +430,12 @@ jobs:
           case "$BODY" in
             *'"staffSignInCodes":"mailed"'*) echo "ok: a staff sign-in code is mailed, never shown" ;;
             *) echo "::error::the console would show a staff sign-in code on the page; MAIL_PROVIDER must be a real mailer here"; exit 1 ;;
+          esac
+          # Said out loud on every promotion, whichever way it is set.
+          case "$BODY" in
+            *'"homeownerMail":"on"'*) echo "::warning::the tape desk CAN e-mail the homeowners on a servicer's book (HOMEOWNER_MAIL=on); each send is still one person's confirmed act" ;;
+            *'"homeownerMail":"off"'*) echo "ok: no homeowner can be e-mailed from this deployment" ;;
+            *) echo "::error::the deployed service does not say whether homeowners can be e-mailed"; exit 1 ;;
           esac
           case "$BODY" in
             *"plaid-assets (production)"*) echo "ok: bank connections are Plaid's production" ;;

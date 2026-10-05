@@ -398,10 +398,29 @@ export const verdictTone = (v: Verdict): "ok" | "info" | "neutral" | "warn" =>
 /** Invitations go in batches: the door takes 5,000 and a mailer is slow. */
 export const INVITE_BATCH = 500;
 
+/**
+ * E-mail the homeowners in a batch their claim links. The server takes the
+ * number of them the person confirmed and refuses a request whose count is
+ * not the count of addresses it holds, so this states it, batch by batch.
+ */
 export const inviteToClaim = (
   body: { servicerSlug: string; invitations: { number: string; email: string | null }[] },
   init: Call = {},
-) => hm<{ outcomes: InvitationOutcome[] }>("/claims", { ...init, body }).then((r) => r.outcomes);
+) =>
+  hm<{ outcomes: InvitationOutcome[] }>("/claims", {
+    ...init,
+    body: {
+      ...body,
+      confirm: { homeownersToEmail: body.invitations.filter((i) => i.email !== null).length },
+    },
+  }).then((r) => r.outcomes);
+
+/** What this deployment lets the desk do. */
+export interface DeskSettings {
+  /** Whether homeowners may be e-mailed from the desk at all. */
+  readonly homeownerMail: "on" | "off";
+}
+export const deskSettings = (init: Call = {}) => hm<DeskSettings>("/settings", init);
 
 /** The servicing app's own import of the same files, through its console API. */
 export function loadIntoServicingBook(

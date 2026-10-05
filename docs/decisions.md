@@ -3847,12 +3847,50 @@ know: the servicing app mints one code per address per ten minutes and
 does not repeat it, so "Send a new code" inside that window mails nothing
 new; the first mail is the code.
 
-Not done, and worth a decision: the servicing app's own console and its
-other raw paths are still forwarded on the public host "for comparison".
-Our console uses none of them. Closing them would shrink what is exposed
-to what we use.
+**The raw paths are closed (Joe, the same day).** The servicing app's own
+console at `/ops`, its API at `/api` and its sign-in links at `/login` and
+`/verify` were forwarded on the public host "for comparison" while it sat
+behind Identity-Aware Proxy. Our console uses none of them, so they are
+not served: `/console/api` and `/console/documents` are all of the
+servicing app that crosses, a bookmark to `/ops` lands on our console,
+and everything else of his is a 404 that never reaches his server.
 
-Held by `console-host.test.ts`, "a sign-in code and the proxy".
+Held by `console-host.test.ts`, "a sign-in code and the proxy" and "serves
+nothing of his raw surface".
+
+## A homeowner is e-mailed by a person, on purpose, or not at all
+
+**Decision (Joe, 5 October 2026).** "We are NOT sending emails to
+borrowers yet. Ensure this is always a clear and manual step." The one
+place a homeowner on a servicer's book is ever written to is the tape
+desk's invite step, which mails each loan's claim link to the address the
+supplement carried. Three things now hold it, each against a different
+way it could go out by mistake.
+
+- _It is switched off on a deployment until its environment says
+  otherwise._ `HOMEOWNER_MAIL=on` is what lets the desk mail a homeowner;
+  unset is off, and off is the API's own default wherever
+  `NODE_ENV=production`, so a forgotten line in a deploy cannot turn it
+  on. Off, the invite step mints nothing and mails nothing
+  (`HOMEOWNER_MAIL_OFF`), and the desk says so in place of the button.
+  Neither environment sets it today. `/api/health` reports
+  `homeownerMail`, and every production promotion says which way it is.
+- _It is never a side effect._ No load, review, schedule or job calls the
+  invitation; a test holds that a load and a first review write to
+  nobody and mint no claim.
+- _It is one person's confirmed act._ The request has to carry the number
+  of homeowners it e-mails, and the server refuses one without it or with
+  a number that is not the count of addresses it holds
+  (`CONFIRMATION_MISMATCH`), before anything is minted. In the console
+  that number is typed into a sheet that says what is about to happen.
+  Who asked is kept on each claim beside what the mailer said.
+
+What this does not cover, and should be decided: an applicant in the
+borrower app can still send their own co-borrower an invitation
+(`services/invitations.ts`). That is one person writing to somebody they
+named, not us writing to a servicer's book, so it is left as it was.
+
+Held by `console-tape.test.ts`, "e-mailing homeowners is a deliberate act".
 
 ## Production's bank connections are Plaid's production
 
@@ -3870,6 +3908,14 @@ redirect address `https://app.supermortgage.com/plaid/return` has to be on
 the allowed list too, or Plaid refuses every token for that reason
 instead. The product is still `assets`, the stand-in for the consumer
 report, so CRD-017 stays unsatisfied exactly as before.
+
+Joe configured both the same day, and the next refusal is the product
+itself: Plaid's production answers `INVALID_PRODUCT`, "your account is not
+enabled for assets" — nor for auth, transactions or identity. The
+consumer-report product answered differently (it wants a user token before
+it will say), so it may be what the account holds. Until a product the
+bank screen asks for is enabled on the production account, that screen on
+production cannot connect a bank.
 
 ## Still outstanding
 

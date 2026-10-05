@@ -28,6 +28,7 @@ import {
   createServicer,
   deskImports,
   deskServicers,
+  homeownerMail,
   inviteToClaim,
   loadTape,
   previewTape,
@@ -62,6 +63,11 @@ const TapeBody = z
   })
   .strict();
 
+/**
+ * The invitation of homeowners, with the number of them this request
+ * e-mails confirmed by the person asking. Without the confirmation the
+ * request is not an invitation; with the wrong number it is refused.
+ */
 const InviteBody = z
   .object({
     servicerSlug: z.string().min(1),
@@ -69,6 +75,7 @@ const InviteBody = z
       .array(z.object({ number: z.string().min(1), email: z.string().email().nullable() }))
       .min(1)
       .max(5000),
+    confirm: z.object({ homeownersToEmail: z.number().int().min(0) }).strict(),
   })
   .strict();
 
@@ -142,6 +149,11 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
   const router = Router();
   router.use(express.json({ limit: "40mb" }));
   router.use(consoleStaffGate(gate));
+
+  /** What this deployment lets the desk do: whether homeowners may be e-mailed at all. */
+  router.get("/settings", (_req, res) => {
+    res.json({ homeownerMail: homeownerMail() });
+  });
 
   /** The servicers we hold books for, each with where its book stands. */
   router.get(
@@ -302,7 +314,14 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
     "/claims",
     asyncRoute(async (req, res) => {
       const body = InviteBody.parse(req.body);
-      res.status(201).json({ outcomes: await inviteToClaim(body) });
+      res.status(201).json({
+        outcomes: await inviteToClaim({
+          servicerSlug: body.servicerSlug,
+          invitations: body.invitations,
+          confirmedHomeowners: body.confirm.homeownersToEmail,
+          sentBy: { id: req.staff!.id, name: req.staff!.legalName },
+        }),
+      });
     }),
   );
 

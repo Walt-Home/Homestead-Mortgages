@@ -163,6 +163,17 @@ export const config = {
    * to the servicer door — a rule, not a lookup, so asking tells nobody
    * whether an address is on a team.
    */
+  /**
+   * Whether the tape desk may e-mail the homeowners on a servicer's book
+   * their claim links. Off on every deployment until its environment says
+   * `HOMEOWNER_MAIL=on` (Joe, 5 October 2026: "We are NOT sending emails
+   * to borrowers yet. Ensure this is always a clear and manual step."); on
+   * in development and tests, where the mailer keeps messages in memory.
+   * Off, the desk's invite step mints nothing and mails nothing. On, it is
+   * still one person's act with the number of homeowners confirmed.
+   */
+  homeownerMail:
+    (process.env.HOMEOWNER_MAIL ?? (process.env.NODE_ENV === "production" ? "off" : "on")) === "on",
   internalEmailDomains: (process.env.INTERNAL_EMAIL_DOMAINS ?? "supermortgage.com,trywalt.ai")
     .split(/[\s,;]+/)
     .map((d) => d.trim().toLowerCase())

@@ -141,7 +141,11 @@ writes nothing until the review has been seen; the load is
 call the partner key reaches; a Team step invites the servicer's own people
 (below); the invite mints one claim per unclaimed loan
 and mails the link to the supplement's address through the mail port, and
-that address lands nowhere but `loan_claims.delivered_to`. The as-of is the
+that address lands nowhere but `loan_claims.delivered_to`. **That invitation
+is the only place a homeowner is ever written to, and it is never automatic**
+(5 October): it is off on a deployment until its environment says
+`HOMEOWNER_MAIL=on`, no load or review calls it, and the request must carry
+the number of homeowners it e-mails, typed by the person sending. The as-of is the
 tape's own when it carries one. After the load the desk runs the book's
 first review — the daily review over the servicer's book, today rather than
 tomorrow morning, its offers made and waiting for the claim — and the
@@ -624,8 +628,9 @@ staging's. Its one backend is the API container, which on
 that Host serves OUR ops console (`apps/console`, at `/console`) and forwards
 the console's calls to the servicing app as `/console/api/*` → its `/ops/api/*`
 (`apps/api/src/console-host.ts`), and answers the tape desk's own calls at
-`/console/hm/tape/*` itself; the servicing app's own page is forwarded at `/ops` for
-comparison. The console's sign-in is the servicing app's own: a code to the
+`/console/hm/tape/*` itself. Those are all of the servicing app this host serves:
+its own console at `/ops`, its `/api` and its sign-in links were forwarded "for
+comparison" until 5 October and are closed. The console's sign-in is the servicing app's own: a code to the
 person's e-mail, then a password. The servicing app's mailer is a FAKE and it
 runs as non-production even in production, so it hands the code back in its
 answer; **since 5 October that code never crosses our proxy where our mailer

@@ -7,10 +7,11 @@
  * apps/console under `/console`, and it forwards the console's calls to
  * Doug's runtime, whose door is `SERVICING_API_URL`, the same URL the
  * `servicing` connector reads. `/console/api/*` is his `/ops/api/*` and
- * `/console/documents/*` is his `/api/documents/*`; his own console at
- * `/ops` is forwarded too, so the original stays reachable on the branded
- * name for comparison. Everything else on that Host is a 404, so nothing of
- * the borrower app is reachable through the servicing name.
+ * `/console/documents/*` is his `/api/documents/*`, and those two are all
+ * of his that this host serves: his own console at `/ops`, his API at
+ * `/api` and his sign-in links were forwarded "for comparison" until 5
+ * October 2026 and are closed. Everything else on that Host is a 404, so
+ * nothing of the borrower app is reachable through the servicing name.
  *
  * Why a proxy rather than a second backend on the load balancer: IAP keys
  * its session cookie per backend, and a console served by one backend
@@ -33,7 +34,7 @@
  * shown that person's code, and the console's two factors were one. So
  * where OUR mailer is real (`codes` below), every answer to a forwarded
  * write is read before it is passed on and any echoed code is taken out of
- * it, at any depth, on every forwarded path; and the staff door's code is
+ * it, at any depth, on both forwarded paths; and the staff door's code is
  * mailed by us instead — to the address that asked, and only when that
  * address is on one of our own domains, so the door cannot be made to mail
  * a stranger. The vendored tree is not touched: the servicing app has no
@@ -186,9 +187,6 @@ const FORWARDED_RESPONSE_HEADERS = [
   "x-acted-as",
 ] as const;
 
-/** The paths of his that a browser on the branded host may reach. */
-const HIS_BROWSER_PATHS = ["/ops", "/api", "/login", "/verify"] as const;
-
 export function consoleHostRouter(opts: ConsoleHostOptions): Router {
   const router = express.Router();
   const upstream = opts.upstream.replace(/\/$/, "");
@@ -327,17 +325,14 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
   // under `/api` on this host is the servicing app's, as before.
   router.use("/api/servicer", (_req, _res, next) => next("router"));
 
-  // His own console and what it calls, forwarded as they are. Express hands
-  // the remainder as "/" or "/?query" for the bare prefix; his server wants
-  // the prefix itself.
-  for (const prefix of HIS_BROWSER_PATHS) {
-    router.use(
-      prefix,
-      forward(
-        (path) => `${prefix}${path === "/" ? "" : path.startsWith("/?") ? path.slice(1) : path}`,
-      ),
-    );
-  }
+  // The servicing app's own console, its API and its sign-in links are not
+  // served on this host. They were forwarded as they are "for comparison"
+  // while the host was behind Identity-Aware Proxy; on a public host that
+  // was the whole of his surface offered to anybody, and our console uses
+  // none of it (closed 5 October 2026, Joe). What crosses is what is named
+  // above: `/console/api` and `/console/documents`. A bookmark to his
+  // console lands on ours; everything else of his is the 404 below.
+  router.get(/^\/ops\/?$/, (_req, res) => res.redirect(302, "/console/"));
 
   // The bundle: immutable hashed assets, an entrypoint that is never cached,
   // and a history fallback for the console's own routes.

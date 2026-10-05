@@ -219,21 +219,41 @@ describe("the servicing hostname", () => {
     expect(JSON.parse(doc.body).echo).toBe("/api/documents/d1/content");
   });
 
-  it("forwards his own console and its redirects as they are", async () => {
-    const ops = await call("/ops");
-    expect(JSON.parse(ops.body).echo).toBe("/ops");
-    const api = await call("/ops/api/roles");
-    expect(JSON.parse(api.body).echo).toBe("/ops/api/roles");
-    const login = await call("/login?token=t");
-    expect(login.status).toBe(302);
-    expect(login.headers.location).toBe("/ops");
+  it("serves nothing of his raw surface: not his console, his API or his sign-in links", async () => {
+    // A bookmark to his console lands on ours.
+    for (const path of ["/ops", "/ops/"]) {
+      const ops = await call(path);
+      expect(ops.status).toBe(302);
+      expect(ops.headers.location).toBe("/console/");
+    }
+    seen.length = 0;
+    for (const [path, method] of [
+      ["/ops/api/roles", "GET"],
+      ["/ops/api/auth/code", "POST"],
+      ["/api/health", "GET"],
+      ["/api/borrower/door", "POST"],
+      ["/login?token=t", "GET"],
+      ["/verify", "GET"],
+      ["/v1/borrower/auth/account", "POST"],
+    ] as const) {
+      const r = await call(path, {
+        method,
+        ...(method === "POST"
+          ? { headers: { "content-type": "application/json" }, body: "{}" }
+          : {}),
+      });
+      expect([path, r.status]).toEqual([path, 404]);
+      expect(JSON.parse(r.body).error.code).toBe("NOT_FOUND");
+    }
+    // None of it reached his server.
+    expect(seen).toEqual([]);
   });
 
   it("answers nothing of the borrower app on the servicing name, and everything on any other", async () => {
-    // /api on the servicing name is HIS api (document reads), never ours.
+    // /api on the servicing name is nobody's: his is closed, and ours is
+    // answered on the other name.
     const his = await call("/api/health");
-    expect(his.status).toBe(200);
-    expect(JSON.parse(his.body).echo).toBe("/api/health");
+    expect(his.status).toBe(404);
     // A borrower route is nobody's there.
     const nobody = await call("/f/123/bank");
     expect(nobody.status).toBe(404);
@@ -376,8 +396,8 @@ describe("a sign-in code and the proxy", () => {
     expect(JSON.parse(r.body)).toMatchObject({ delivery: "FAKE", fake_code: "246810" });
   });
 
-  it("is mailed to one of ours and never shown, on the console's path and on his own", async () => {
-    for (const path of ["/console/api/auth/code", "/ops/api/auth/code"]) {
+  it("is mailed to one of ours and never shown", async () => {
+    for (const path of ["/console/api/auth/code"]) {
       mails.length = 0;
       seen.length = 0;
       const r = await post(path, { email: " Ada@Ours.test " });
@@ -427,7 +447,7 @@ describe("a sign-in code and the proxy", () => {
   });
 
   it("takes an echoed code out of any forwarded write's answer, at any depth, and leaves the rest", async () => {
-    for (const path of ["/console/api/somewhere/else", "/api/borrower/door"]) {
+    for (const path of ["/console/api/somewhere/else"]) {
       const r = await post(path, { anything: true });
       expect(r.status).toBe(200);
       expect(JSON.parse(r.body)).toEqual({

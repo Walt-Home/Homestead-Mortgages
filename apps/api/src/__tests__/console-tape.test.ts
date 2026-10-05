@@ -17,6 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import type { FixtureMailConnector } from "@hm/connectors";
 import { NORTHLIGHT, sampleAsOfFor, sampleBook, toCsv } from "@hm/partner-book";
+import { config } from "../config.js";
 import { errorHandler } from "../middleware/error-handler.js";
 import { consoleTapeRouter } from "../routes/console-tape.js";
 import { connectors } from "../services/connectors.js";
@@ -383,6 +384,8 @@ describe("inviting the people on a tape to claim", () => {
         { number: "NL-100003", email: "three@example.test" },
         { number: "NL-999999", email: "nobody@example.test" },
       ],
+      // Three of the four carry an address; the person confirmed three.
+      confirm: { homeownersToEmail: 3 },
     });
     expect(r.status).toBe(201);
     const by = new Map(r.body.outcomes.map((o) => [o.number, o]));
@@ -406,7 +409,12 @@ describe("inviting the people on a tape to claim", () => {
     });
     expect(claim.deliveredTo).toBe("one@example.test");
     expect(claim.deliveredAt).not.toBeNull();
-    expect(claim.delivery).toMatchObject({ status: "sent" });
+    // What the mailer said, and who asked for it to be sent.
+    expect(claim.delivery).toMatchObject({
+      status: "sent",
+      sentBy: "staff-1",
+      sentByName: expect.any(String),
+    });
     // The link in the mail is the one the row hashes, and it opens the claim door.
     const token = /\/claim#([A-Za-z0-9_-]+)/.exec(mail.text)![1]!;
     const taken = await acceptLoanClaim(token, (await createUser()).id);
@@ -466,6 +474,73 @@ describe("the book's first review", () => {
     );
     expect(p.body.rows.find((r) => r.number === "NL-100001")?.review?.verdict).toBe("candidate");
     expect(p.body.rows.every((r) => r.review !== null)).toBe(true);
+  });
+});
+
+describe("e-mailing homeowners is a deliberate act", () => {
+  const invite = (body: Record<string, unknown>) =>
+    call<{ outcomes?: { status: string }[]; error?: { code: string; message: string } }>(
+      "POST",
+      "/claims",
+      { servicerSlug: NORTHLIGHT.slug, ...body },
+    );
+  const one = [{ number: "NL-100001", email: "one@example.test" }];
+
+  it("never happens on its own: a load and a review write to nobody", async () => {
+    const before = outbox().length;
+    expect((await call("POST", "/imports", tapeBody())).status).toBe(201);
+    expect((await call("POST", "/review", { servicerSlug: NORTHLIGHT.slug })).status).toBe(200);
+    // Twelve loans loaded, reviewed, offers made — and not one message, not one claim.
+    expect(outbox().length).toBe(before);
+    expect(await prisma.loanClaim.count()).toBe(0);
+  });
+
+  it("needs the number of homeowners confirmed, and the right number", async () => {
+    await call("POST", "/imports", tapeBody());
+    const before = outbox().length;
+    // No confirmation is not an invitation.
+    expect((await invite({ invitations: one })).status).toBe(400);
+    // The wrong number is refused before anything is minted or mailed.
+    const wrong = await invite({ invitations: one, confirm: { homeownersToEmail: 12 } });
+    expect(wrong.status).toBe(409);
+    expect(wrong.body.error?.code).toBe("CONFIRMATION_MISMATCH");
+    expect(wrong.body.error?.message).toContain("would e-mail 1 homeowner");
+    // A loan with no address is not an e-mail, and is not counted as one.
+    const none = await invite({
+      invitations: [{ number: "NL-100012", email: null }],
+      confirm: { homeownersToEmail: 1 },
+    });
+    expect(none.status).toBe(409);
+    expect(outbox().length).toBe(before);
+    expect(await prisma.loanClaim.count()).toBe(0);
+
+    const right = await invite({ invitations: one, confirm: { homeownersToEmail: 1 } });
+    expect(right.status).toBe(201);
+    expect(right.body.outcomes?.[0]?.status).toBe("sent");
+    expect(outbox().length).toBe(before + 1);
+  });
+
+  it("is switched off on a deployment until its environment says otherwise, and off mints nothing", async () => {
+    await call("POST", "/imports", tapeBody());
+    const mutable = config as { homeownerMail: boolean };
+    const was = mutable.homeownerMail;
+    const before = outbox().length;
+    mutable.homeownerMail = false;
+    try {
+      expect((await call<{ homeownerMail: string }>("GET", "/settings")).body.homeownerMail).toBe(
+        "off",
+      );
+      const off = await invite({ invitations: one, confirm: { homeownersToEmail: 1 } });
+      expect(off.status).toBe(409);
+      expect(off.body.error?.code).toBe("HOMEOWNER_MAIL_OFF");
+      expect(outbox().length).toBe(before);
+      expect(await prisma.loanClaim.count()).toBe(0);
+    } finally {
+      mutable.homeownerMail = was;
+    }
+    expect((await call<{ homeownerMail: string }>("GET", "/settings")).body.homeownerMail).toBe(
+      "on",
+    );
   });
 });
 

@@ -29,6 +29,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "../components/Icon.js";
 import { Wordmark } from "../components/Shell.js";
 import { ServicerTeam } from "../components/ServicerTeam.js";
+import { Sheet } from "../components/Sheet.js";
 import { Table, type Column } from "../components/Table.js";
 import {
   Button,
@@ -51,6 +52,7 @@ import {
   countVerdicts,
   deskImports,
   deskServicers,
+  deskSettings,
   fileToWire,
   INVITE_BATCH,
   inviteToClaim,
@@ -1418,12 +1420,27 @@ function InviteStep({
       filter === null ? candidates : candidates.filter((r) => (verdictOf(r) ?? "none") === filter),
     [candidates, filter, verdictOf],
   );
-  const [picked, setPicked] = useState<Set<string>>(
-    () => new Set(candidates.filter((r) => r.email).map((r) => r.number)),
-  );
+  // Nobody is picked to begin with. Writing to a homeowner starts with
+  // choosing whom, not with un-choosing a book that arrived ticked.
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outcomes, setOutcomes] = useState<InvitationOutcome[] | null>(null);
+
+  // Whether this deployment lets the desk e-mail a homeowner at all. Read
+  // from the server and taken as off until it says on: a setting that
+  // could not be read is not a permission.
+  const settings = useQuery({ queryKey: ["desk-settings"], queryFn: () => deskSettings() });
+  const mailOn = settings.data?.homeownerMail === "on";
+  // Sending is confirmed by typing how many homeowners it e-mails.
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState("");
+  const pickedRows = useMemo(
+    () => candidates.filter((r) => picked.has(r.number)),
+    [candidates, picked],
+  );
+  const toEmail = pickedRows.filter((r) => r.email).length;
+  const linkOnly = pickedRows.length - toEmail;
 
   const toggle = (n: string) =>
     setPicked((s) => {
@@ -1588,10 +1605,14 @@ function InviteStep({
       <Button
         variant="primary"
         loading={busy}
-        disabled={picked.size === 0}
-        onClick={() => void send()}
+        disabled={picked.size === 0 || !mailOn}
+        title={mailOn ? undefined : "E-mailing homeowners is switched off on this deployment."}
+        onClick={() => {
+          setTyped("");
+          setConfirming(true);
+        }}
       >
-        Send {plural(picked.size, "invitation")}
+        Send {plural(picked.size, "invitation")}…
       </Button>
       <Button
         variant="ghost"
@@ -1645,8 +1666,81 @@ function InviteStep({
     </div>
   );
 
+  const confirmed = toEmail === 0 || typed.trim().replace(/,/g, "") === String(toEmail);
+  const confirmation = confirming ? (
+    <Sheet
+      open
+      onClose={() => setConfirming(false)}
+      title={
+        toEmail === 0
+          ? `Make ${plural(linkOnly, "link")}, e-mail nobody`
+          : `E-mail ${plural(toEmail, "homeowner")}?`
+      }
+      subtitle="Once sent it cannot be unsent. Your name is kept on every invitation."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => setConfirming(false)}>
+            Not yet
+          </Button>
+          <Button
+            variant="primary"
+            disabled={!confirmed}
+            onClick={() => {
+              setConfirming(false);
+              void send();
+            }}
+          >
+            {toEmail === 0
+              ? `Make ${plural(linkOnly, "link")}`
+              : `E-mail ${plural(toEmail, "homeowner")}`}
+          </Button>
+        </>
+      }
+    >
+      <Rows
+        rows={[
+          { label: "Servicer", value: preview.servicer.displayName },
+          {
+            label: "E-mailed",
+            value: `${plural(toEmail, "homeowner")}, at the address the supplement carried`,
+          },
+          ...(linkOnly
+            ? [
+                {
+                  label: "No address",
+                  value: `${plural(linkOnly, "loan")} get a link for you to deliver; nobody is e-mailed`,
+                },
+              ]
+            : []),
+          {
+            label: "What they get",
+            value: "One link each, good for thirty days, to claim their loan",
+          },
+        ]}
+      />
+      {toEmail > 0 ? (
+        <div className="mt-5">
+          <Field
+            label={`Type ${toEmail.toLocaleString()} to confirm`}
+            htmlFor="confirm-homeowners"
+            hint="The number of homeowners this e-mails."
+          >
+            <Input
+              id="confirm-homeowners"
+              inputMode="numeric"
+              autoComplete="off"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+            />
+          </Field>
+        </div>
+      ) : null}
+    </Sheet>
+  ) : null;
+
   return (
     <div className="mt-8 space-y-6">
+      {confirmation}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-fg">
           Invite the borrowers to claim
@@ -1657,7 +1751,25 @@ function InviteStep({
           the daily review has found, the offer included. A loan with no address gets a link you can
           deliver another way.
         </p>
+        <p className="mt-2 max-w-prose text-sm text-fg-2">
+          This is the only place a homeowner is ever written to, and it never happens on its own: no
+          load, review or schedule sends anything. It goes out when you pick the loans here and
+          confirm the number.
+        </p>
       </div>
+
+      {!outcomes && settings.isSuccess && !mailOn ? (
+        <Notice tone="warn" title="E-mailing homeowners is switched off on this deployment">
+          Nothing can be sent to a homeowner from here, and nothing is minted. It stays off until
+          this environment is deliberately set to HOMEOWNER_MAIL=on and deployed again. The list
+          below is for looking.
+        </Notice>
+      ) : null}
+      {!outcomes && settings.isError ? (
+        <Notice tone="warn" title="Whether homeowners may be e-mailed could not be read">
+          Until it can be, nothing is sent from here.
+        </Notice>
+      ) : null}
 
       {!outcomes && refiCandidates.length ? (
         <Notice

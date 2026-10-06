@@ -30,6 +30,7 @@
     "apor:fetch": "tsx apps/api/src/scripts/fetch-apor.ts",
     "review:run": "tsx apps/api/src/scripts/review-loans.ts",
     "billing:close": "tsx apps/api/src/scripts/close-billing.ts",
+    "book:billed-from": "tsx apps/api/src/scripts/book-billed-from.ts",
     "billing:reconcile": "tsx apps/api/src/scripts/reconcile-billing.ts",
     "billing:smoke": "tsx apps/api/src/scripts/smoke-invoicing.ts",
     "apor:vendor": "tsx apps/api/src/scripts/fetch-apor.ts --vendor && node scripts/build-apor.mjs",

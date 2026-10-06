@@ -269,6 +269,49 @@ describe("a load told as it goes", () => {
 });
 
 describe("loading a tape", () => {
+  it("bills the book from the first of the month the tape is for, and refuses a month to come", async () => {
+    // The preview says the day before anything is written.
+    const p = await call<{ billedFrom: string }>("POST", "/preview", {
+      ...tapeBody(),
+      billingMonth: "2026-09",
+    });
+    expect(p.status).toBe(200);
+    expect(p.body.billedFrom).toBe("2026-09-01");
+
+    const ahead = await call<{ error: { code: string } }>("POST", "/imports", {
+      ...tapeBody(),
+      billingMonth: "2999-01",
+    });
+    expect(ahead.status).toBe(400);
+    expect(ahead.body.error.code).toBe("BILLING_MONTH_AHEAD");
+    expect(await prisma.loan.count()).toBe(0);
+
+    const loaded = await call<{ billedFrom: string; result: { status: string } }>(
+      "POST",
+      "/imports",
+      { ...tapeBody(), billingMonth: "2026-09" },
+    );
+    expect(loaded.status).toBe(201);
+    expect(loaded.body.billedFrom).toBe("2026-09-01");
+    const starts = await prisma.loan.groupBy({ by: ["watchedFrom"], _count: { _all: true } });
+    expect(starts).toEqual([
+      { watchedFrom: new Date("2026-09-01T00:00:00.000Z"), _count: { _all: 12 } },
+    ]);
+
+    // A later tape for a later month leaves the start it found: the book was billed from it.
+    const later = sampleBook(() => ({ as_of_date: "2026-10-31" }));
+    const again = await call<{ billedFrom: string; result: { status: string } }>(
+      "POST",
+      "/imports",
+      { ...tapeBody(later, { asOf: "2026-10-31" }), billingMonth: "2026-10" },
+    );
+    expect(again.status).toBe(201);
+    expect(again.body.billedFrom).toBe("2026-10-01");
+    expect(
+      await prisma.loan.count({ where: { watchedFrom: new Date("2026-09-01T00:00:00.000Z") } }),
+    ).toBe(12);
+  });
+
   it("makes the servicer on first sight, loads once, and the preview then reads what is held", async () => {
     const first = await call<{
       servicer: { created: boolean; slug: string };

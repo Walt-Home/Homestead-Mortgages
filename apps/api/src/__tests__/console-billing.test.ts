@@ -114,6 +114,8 @@ async function loadedBook() {
     servicerId: servicer.id,
     principalId,
     profile: "m3-v1",
+    // The day the book is billed from: what the tape named, which the meter reads.
+    billedFrom: LOADED_ON.toISOString().slice(0, 10),
     tape: { filename: "northlight.xlsx", bytes: book.tape },
     supplement: { filename: "supplement.csv", bytes: utf8(book.supplement) },
   });

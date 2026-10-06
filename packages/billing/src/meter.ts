@@ -2,8 +2,10 @@
  * The tape meter: what a servicer's book consumed in a month.
  *
  * A servicer's loans reach us on a tape and are watched from the day the
- * tape is loaded (`docs/decisions.md`, "The book is tracked from the day it
- * is loaded"). The price sheet says what a watched loan on a partner's book
+ * tape names — the first of the month it is for, or the day it is loaded
+ * (`docs/decisions.md`, "The book is tracked from the day it is loaded" and
+ * "A tape is for a month, and the book is billed from it"); the caller
+ * passes that day as `watchedFrom`. The price sheet says what a watched loan on a partner's book
  * consumes — the self-improving mortgage row, per $100,000 of unpaid
  * principal balance per loan-month, and offer touches, flat — and nothing
  * else until the loan boards, which a servicer's own book never does here.

@@ -54,6 +54,15 @@ import { assertSlug } from "./tape-desk.js";
 export const BILLING_ROLES = ["admin"] as const;
 
 const isoDay = (d: Date): PlainDate => plainDate(d.toISOString().slice(0, 10));
+
+/**
+ * The day a servicer's loan is watched and billed from: the day the tape
+ * named (`loans.watched_from`, the first of the month it was for, or the
+ * load day), and the load day in the creditor's zone for a row from before
+ * the column existed — which is what it was billed from then.
+ */
+const watchedFromOf = (l: { watchedFrom: Date | null; createdAt: Date }): PlainDate =>
+  l.watchedFrom ? isoDay(l.watchedFrom) : dayEt(l.createdAt);
 const dateOf = (day: PlainDate): Date => new Date(`${day}T00:00:00.000Z`);
 
 /** "YYYY-MM" to the first day of that month; anything else is refused. */
@@ -85,9 +94,9 @@ async function servicerBySlug(slug: string, db: Db): Promise<BillingServicer & {
       annualTokenPool: true,
       loans: {
         where: { servicerLoanNumber: { not: null } },
-        orderBy: { createdAt: "asc" },
+        orderBy: { watchedFrom: { sort: "asc", nulls: "last" } },
         take: 1,
-        select: { createdAt: true },
+        select: { watchedFrom: true, createdAt: true },
       },
     },
   });
@@ -98,7 +107,7 @@ async function servicerBySlug(slug: string, db: Db): Promise<BillingServicer & {
     displayName: s.displayName,
     integrationDepth: s.integrationDepth,
     annualTokenPool: s.annualTokenPool?.toString() ?? null,
-    since: s.loans[0] ? dayEt(s.loans[0].createdAt) : null,
+    since: s.loans[0] ? watchedFromOf(s.loans[0]) : null,
   };
 }
 
@@ -116,7 +125,7 @@ async function meteredBook(
   const [loans, observations] = await Promise.all([
     db.loan.findMany({
       where: { servicerId, servicerLoanNumber: { not: null } },
-      select: { id: true, servicerLoanNumber: true, createdAt: true },
+      select: { id: true, servicerLoanNumber: true, watchedFrom: true, createdAt: true },
       orderBy: { servicerLoanNumber: "asc" },
     }),
     db.servicingObservation.findMany({
@@ -138,7 +147,7 @@ async function meteredBook(
   return loans.map((l) => ({
     loanId: l.id,
     number: l.servicerLoanNumber!,
-    watchedFrom: dayEt(l.createdAt),
+    watchedFrom: watchedFromOf(l),
     observations: byLoan.get(l.id) ?? [],
     // No offer has been sent to a homeowner yet; see the header.
     touches: 0,

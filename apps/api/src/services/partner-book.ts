@@ -68,6 +68,12 @@ export interface ImportBookInput {
   readonly profile: string;
   /** YYYY-MM-DD. Defaults to the tape's own as-of cell, then to today. */
   readonly asOf?: string | null;
+  /**
+   * YYYY-MM-DD: the day every loan this tape puts on the book is watched
+   * and billed from — the first of the month the tape is for. The load day
+   * when absent. A loan already on the book keeps the day it has.
+   */
+  readonly billedFrom?: string | null;
   readonly tape: BookFile;
   readonly supplement?: BookFile | null;
 }
@@ -133,6 +139,14 @@ const TERMINAL_EVENT: Partial<
 };
 
 const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
+/** Today in the creditor's zone, YYYY-MM-DD: the day a tape is loaded. */
+const todayEt = (): string =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 const dateOf = (day: string): Date => new Date(`${day}T00:00:00.000Z`);
 const dateOrNull = (day: string | null): Date | null => (day === null ? null : dateOf(day));
 /** The contract's lower-case words are the schema's enum names, lowered. */
@@ -158,6 +172,8 @@ export async function importPartnerBook(
     select: { id: true, slug: true },
   });
   const asOfDefault = input.asOf ?? isoDay(new Date());
+  const watchedFrom = new Date(`${input.billedFrom ?? todayEt()}T00:00:00.000Z`);
+  if (Number.isNaN(watchedFrom.getTime())) throw new RangeError("billedFrom is a YYYY-MM-DD day");
   onProgress?.({ stage: "reading", done: 0, total: 0 });
   const book = readBook(profile, servicer.slug, asOfDefault, input.tape, input.supplement ?? null);
   if (book.rejected) return { status: "rejected", missing_headers: book.rejected.missing_headers };
@@ -186,7 +202,7 @@ export async function importPartnerBook(
     asOfDefault;
 
   const run = (tx: Db) =>
-    load(tx, { servicer, principalId: input.principalId, asOf, book }, onProgress);
+    load(tx, { servicer, principalId: input.principalId, asOf, book, watchedFrom }, onProgress);
   return ownsTransaction(db)
     ? prisma.$transaction(run, { maxWait: 10_000, timeout: 120_000 })
     : run(db);
@@ -197,12 +213,14 @@ async function load(
   args: {
     servicer: { id: string; slug: string };
     principalId: string;
+    /** The day every loan this tape creates is watched and billed from. */
+    watchedFrom: Date;
     asOf: string;
     book: ReturnType<typeof readBook>;
   },
   onProgress?: OnProgress,
 ): Promise<ImportBookResult> {
-  const { servicer, principalId, asOf, book } = args;
+  const { servicer, principalId, asOf, book, watchedFrom } = args;
   const asOfDate = dateOf(asOf);
 
   // Pass 1: what the servicer has sent before, by its own number.
@@ -280,6 +298,7 @@ async function load(
         parties: [{ partyId: partyIds[i]!, role: "PRIMARY_BORROWER" as const }],
         servicerId: servicer.id,
         servicerLoanNumber: record.sourceLoanKey,
+        watchedFrom,
       };
     }),
     { onProgress: stageProgress(onProgress, "loans") },

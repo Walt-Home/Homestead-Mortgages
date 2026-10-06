@@ -167,6 +167,8 @@ export interface PreviewRow {
 export interface TapePreview {
   readonly profile: string;
   readonly asOf: string;
+  /** The day the loans this tape creates are billed from: the first of the month named, or today. */
+  readonly billedFrom: string;
   readonly servicer: DeskServicer & { readonly exists: boolean };
   readonly headers: {
     readonly matched: boolean;
@@ -219,11 +221,24 @@ export interface TapeInput {
   readonly servicer: DeskServicer;
   readonly profile: string;
   readonly asOf?: string | null;
+  /**
+   * "YYYY-MM": the month the tape is for. Every loan it puts on the book is
+   * watched and billed from the first of it; absent, from the load day. A
+   * tape loaded late is for the month it was for, not the month it arrived
+   * (Joe, 6 October 2026, after September's book reached the desk in October).
+   */
+  readonly billingMonth?: string | null;
   readonly tape: BookFile;
   readonly supplement?: BookFile | null;
 }
 
-const todayEt = () =>
+/** The first day of the month a tape is for, or today when no month was named. */
+export function billedFromOf(billingMonth: string | null | undefined): string {
+  return billingMonth ? `${billingMonth}-01` : todayEt();
+}
+
+/** Today in the creditor's zone, YYYY-MM-DD. */
+export const todayEt = () =>
   new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/New_York",
     year: "numeric",
@@ -346,6 +361,7 @@ export async function previewTape(input: TapeInput, db: Db = prisma): Promise<Ta
   return {
     profile: book.profile,
     asOf,
+    billedFrom: billedFromOf(input.billingMonth),
     servicer: { ...input.servicer, slug, exists: servicer !== null },
     headers: {
       matched: book.rejected === null,
@@ -387,6 +403,8 @@ export async function previewTape(input: TapeInput, db: Db = prisma): Promise<Ta
 
 export interface TapeLoad {
   readonly servicer: DeskServicer & { readonly id: string; readonly created: boolean };
+  /** The day the loans this load created are billed from. */
+  readonly billedFrom: string;
   readonly result: ImportBookResult;
 }
 
@@ -412,6 +430,7 @@ export async function loadTape(
       select: { id: true },
     }));
   const principalId = await partnerPrincipal(db, slug);
+  const billedFrom = billedFromOf(input.billingMonth);
   let result: ImportBookResult;
   try {
     result = await importPartnerBook(
@@ -420,6 +439,7 @@ export async function loadTape(
         principalId,
         profile: input.profile,
         asOf: input.asOf ?? null,
+        billedFrom,
         tape: input.tape,
         supplement: input.supplement ?? null,
       },
@@ -432,6 +452,7 @@ export async function loadTape(
   }
   return {
     servicer: { slug, displayName, id: servicer.id, created: existing === null },
+    billedFrom,
     result,
   };
 }

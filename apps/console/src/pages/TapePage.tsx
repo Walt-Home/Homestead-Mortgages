@@ -194,6 +194,9 @@ export function TapePage() {
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
   const [asOf, setAsOf] = useState(todayEt());
+  // The month the tape is for. A tape loaded late is for the month it was
+  // for, and the book is billed from the first of it, not from the load day.
+  const [billingMonth, setBillingMonth] = useState(todayEt().slice(0, 7));
   const [tape, setTape] = useState<File | null>(null);
   const [supplement, setSupplement] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -235,7 +238,9 @@ export function TapePage() {
     !!servicer &&
     servicer.displayName !== "" &&
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(servicer.slug) &&
-    /^\d{4}-\d{2}-\d{2}$/.test(asOf);
+    /^\d{4}-\d{2}-\d{2}$/.test(asOf) &&
+    /^\d{4}-\d{2}$/.test(billingMonth) &&
+    billingMonth <= todayEt().slice(0, 7);
 
   async function review() {
     if (!tape || !servicer) return;
@@ -246,6 +251,7 @@ export function TapePage() {
         servicer,
         profile: "m3-v1",
         asOf,
+        billingMonth,
         tape: await fileToWire(tape),
         ...(supplement ? { supplement: await fileToWire(supplement) } : {}),
       };
@@ -385,6 +391,19 @@ export function TapePage() {
                     type="date"
                     value={asOf}
                     onChange={(e) => setAsOf(e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label="Billed from"
+                  htmlFor="desk-billing-month"
+                  hint="The month this tape is for. Loans new to the book are billed from the first of it; loans already on the book keep their start."
+                >
+                  <Input
+                    id="desk-billing-month"
+                    type="month"
+                    value={billingMonth}
+                    max={todayEt().slice(0, 7)}
+                    onChange={(e) => setBillingMonth(e.target.value)}
                   />
                 </Field>
               </div>
@@ -771,7 +790,8 @@ function ReviewStep({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-fg">What this tape would do</h1>
           <p className="mt-1 text-sm text-fg-2">
-            {preview.servicer.displayName} · as of {fmtDate(preview.asOf)} · {preview.profile}
+            {preview.servicer.displayName} · as of {fmtDate(preview.asOf)} · billed from{" "}
+            {fmtDate(preview.billedFrom)} · {preview.profile}
             {preview.servicer.exists ? "" : " · a servicer we have not held a book for yet"}
           </p>
         </div>
@@ -1035,7 +1055,8 @@ function LoadStep({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-fg">Loading the tape</h1>
         <p className="mt-1 text-sm text-fg-2">
-          {preview.servicer.displayName} · as of {fmtDate(preview.asOf)}
+          {preview.servicer.displayName} · as of {fmtDate(preview.asOf)} · billed from{" "}
+          {fmtDate(preview.billedFrom)}
         </p>
       </div>
 

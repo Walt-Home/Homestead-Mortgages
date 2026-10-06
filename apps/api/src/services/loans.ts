@@ -86,6 +86,8 @@ export interface ImportedLoanInput {
   readonly servicerId: string | null;
   /** The servicer's own number for it, which is how the next tape finds it. */
   readonly servicerLoanNumber?: string | null;
+  /** The day it is watched and billed from; the tape names it. Null for a loan nobody bills off a tape. */
+  readonly watchedFrom?: Date | null;
 }
 
 export async function createImportedLoan(
@@ -97,6 +99,7 @@ export async function createImportedLoan(
     source: "PARTNER_IMPORT",
     servicerId: args.servicerId,
     servicerLoanNumber: args.servicerLoanNumber ?? null,
+    watchedFrom: args.watchedFrom ?? null,
     axes: args.axes,
     terms: args.terms,
     property: args.property,
@@ -137,6 +140,7 @@ export async function createImportedLoans(
             source: "PARTNER_IMPORT",
             servicerId: r.servicerId,
             servicerLoanNumber: r.servicerLoanNumber ?? null,
+            watchedFrom: r.watchedFrom ?? null,
             axes: r.axes,
             terms: r.terms,
             property: r.property,
@@ -206,6 +210,8 @@ async function create(
     source: "PARTNER_IMPORT" | "ORIGINATION";
     servicerId: string | null;
     servicerLoanNumber: string | null;
+    /** The day a servicer's loan is watched and billed from; null for one nobody bills off a tape. */
+    watchedFrom?: Date | null;
     axes: LoanAxes;
     terms: LoanTerms;
     property: LoanProperty;
@@ -236,6 +242,8 @@ function loanColumns(args: {
   source: "PARTNER_IMPORT" | "ORIGINATION";
   servicerId: string | null;
   servicerLoanNumber: string | null;
+  /** The day a servicer's loan is watched and billed from; null for one nobody bills off a tape. */
+  watchedFrom?: Date | null;
   axes: LoanAxes;
   terms: LoanTerms;
   property: LoanProperty;
@@ -253,6 +261,7 @@ function loanColumns(args: {
     originatingApplicationId: args.originatingApplicationId,
     servicerId: args.servicerId,
     servicerLoanNumber: args.servicerLoanNumber,
+    watchedFrom: args.watchedFrom ?? null,
     objective: args.axes.objective ?? null,
     program: args.axes.program ?? null,
     lienPosition: args.axes.lienPosition ?? null,

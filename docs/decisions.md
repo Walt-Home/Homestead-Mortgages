@@ -4135,3 +4135,38 @@ job moved to eight would be believed. The sentence is careful about what
 a run does: the analysis runs every morning; the charge accrues by
 calendar day whether or not a morning's review changes a verdict, since
 the sheet prices a loan-month and not a run.
+
+## A tape is for a month, and the book is billed from it
+
+**Decision (6 October 2026, Joe).** "Those were supposed to be for
+September, not October. I just uploaded them late. So as part of the
+upload flow, we should choose the month the upload starts for." The
+meter billed a servicer's loan from the day it was loaded, read off the
+row's `created_at`, because the sheet says "from the day it is loaded",
+and the first real book proved the day it is loaded is not the day it is
+for: Grander's September tape reached the desk on 5 October and the
+September statement had nothing on it.
+
+- **The start is a column, named by the tape.** `loans.watched_from` is
+  the day a servicer's loan is watched and billed from, set once by the
+  tape that creates the row — the first of the month the uploader says the
+  tape is for, or the load day when nobody says — and left alone by every
+  later tape, so a re-upload cannot move a start that was already billed.
+  A CHECK requires it on every servicer's loan; the rows from before the
+  column keep the day they were loaded in the creditor's zone, which is
+  what they were billed from. The meter (`meteredBook`) and the
+  servicer's "watched since" read it; `created_at` is once more only when
+  the row was made.
+- **The desk asks for the month.** The Files step has a "Billed from"
+  month beside "As of", this month by default, never a month to come
+  (`BILLING_MONTH_AHEAD`); the review and the load say "billed from
+  September 1, 2026" in their headers so the choice is seen before
+  anything is written. The partner door takes the same `billingMonth`.
+  The month is a start, not an as-of: the tape's figures are as of its
+  own day, and a loan's balance basis is still the newest observation on
+  or before the month's end.
+- **A book already loaded is moved by hand.** `npm run book:billed-from --
+<slug> <YYYY-MM-DD>` sets the start on every loan billed from a later
+  day (`--all` for every loan), prints what it changed, and touches no
+  closed statement, because a closed statement is what was invoiced. The
+  month it opens is closed from the console as any open month is.

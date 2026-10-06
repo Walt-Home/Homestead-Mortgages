@@ -40,6 +40,8 @@ export interface PreviewRow {
 export interface TapePreview {
   readonly profile: string;
   readonly asOf: string;
+  /** The day the loans this tape creates are billed from: the first of the month named, or today. */
+  readonly billedFrom: string;
   readonly servicer: {
     readonly slug: string;
     readonly displayName: string;
@@ -131,6 +133,7 @@ export interface TapeLoad {
     readonly id: string;
     readonly created: boolean;
   };
+  readonly billedFrom: string;
   readonly result:
     | { readonly status: "rejected"; readonly missing_headers: string[] }
     | { readonly status: "already_loaded"; readonly importId: string }
@@ -191,6 +194,8 @@ export interface TapeFiles {
   readonly servicer: { readonly slug: string; readonly displayName: string };
   readonly profile: string;
   readonly asOf?: string;
+  /** "YYYY-MM": the month the tape is for; its new loans are billed from the first of it. */
+  readonly billingMonth?: string;
   readonly tape: WireFile;
   readonly supplement?: WireFile;
 }

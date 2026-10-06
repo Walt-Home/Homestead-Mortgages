@@ -33,6 +33,7 @@ import {
   loadTape,
   previewTape,
   reviewBook,
+  todayEt,
 } from "../services/tape-desk.js";
 
 /**
@@ -58,10 +59,28 @@ const TapeBody = z
     servicer: z.object({ slug: z.string().min(1), displayName: z.string().min(1) }),
     profile: z.string().min(1).default("m3-v1"),
     asOf: z.string().date().optional(),
+    /** The month the tape is for; its loans are billed from the first of it. Never a month to come. */
+    billingMonth: z
+      .string()
+      .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "A billing month is YYYY-MM.")
+      .optional(),
     tape: FileSchema,
     supplement: FileSchema.optional(),
   })
   .strict();
+
+/** The month named is this one or an earlier one: a book is not billed for a month that has not begun. */
+function billingMonthOf(body: { billingMonth?: string }): string | null {
+  if (!body.billingMonth) return null;
+  if (body.billingMonth > todayEt().slice(0, 7)) {
+    throw new AppError(
+      400,
+      `${body.billingMonth} has not begun; a tape is for this month or an earlier one.`,
+      "BILLING_MONTH_AHEAD",
+    );
+  }
+  return body.billingMonth;
+}
 
 /**
  * The invitation of homeowners, with the number of them this request
@@ -192,6 +211,7 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
           servicer: body.servicer,
           profile: body.profile,
           asOf: body.asOf ?? null,
+          billingMonth: billingMonthOf(body),
           tape: bytesOf(body.tape),
           supplement: body.supplement ? bytesOf(body.supplement) : null,
         }),
@@ -208,6 +228,7 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
         servicer: body.servicer,
         profile: body.profile,
         asOf: body.asOf ?? null,
+        billingMonth: billingMonthOf(body),
         tape: bytesOf(body.tape),
         supplement: body.supplement ? bytesOf(body.supplement) : null,
       });
@@ -229,6 +250,7 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
             servicer: body.servicer,
             profile: body.profile,
             asOf: body.asOf ?? null,
+            billingMonth: billingMonthOf(body),
             tape: bytesOf(body.tape),
             supplement: body.supplement ? bytesOf(body.supplement) : null,
           },

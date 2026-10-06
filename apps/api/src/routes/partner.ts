@@ -52,6 +52,11 @@ const ImportBody = z
   .object({
     profile: z.string().min(1).default("m3-v1"),
     asOf: z.string().date().optional(),
+    /** The month the tape is for; the loans it adds are billed from the first of it. Absent, the load day. */
+    billingMonth: z
+      .string()
+      .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "billingMonth is YYYY-MM")
+      .optional(),
     tape: FileSchema,
     supplement: FileSchema.optional(),
   })
@@ -76,6 +81,7 @@ partnerRouter.post("/book/imports", async (req, res) => {
       principalId: partner.principalId,
       profile: body.profile,
       asOf: body.asOf ?? null,
+      billedFrom: body.billingMonth ? `${body.billingMonth}-01` : null,
       tape: bytesOf(body.tape),
       supplement: body.supplement ? bytesOf(body.supplement) : null,
     });

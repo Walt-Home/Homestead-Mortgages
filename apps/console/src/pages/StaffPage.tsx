@@ -12,7 +12,7 @@
  * record of what they did, and a removed address cannot be invited again.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../components/Page.js";
 import { Table } from "../components/Table.js";
@@ -252,6 +252,12 @@ function PersonSheet({
   const maskedPrefix = user.email_masked.replace(/\*+$/, "").toLowerCase();
   const addressFits =
     address.includes("@") && address.trim().toLowerCase().startsWith(maskedPrefix);
+  // The act's error lands in the hook's state after the call returns, so it
+  // is read here and not in the closure that made the call (which saw the
+  // state before it: on production the field never opened, 6 October).
+  useEffect(() => {
+    if (resend.error?.code === "INVITATION_NOT_HELD") setNeedAddress(true);
+  }, [resend.error]);
   const admin = isAdmin(user.roles);
   const save = async () => {
     const ok = await act.run(`/staff/${user.staff_user_id}/roles`, {
@@ -282,10 +288,7 @@ function PersonSheet({
       },
       role: "admin",
     });
-    if (!r) {
-      if (resend.error?.code === "INVITATION_NOT_HELD") setNeedAddress(true);
-      return;
-    }
+    if (!r) return;
     setNeedAddress(false);
     if (r.staff_user_id !== user.staff_user_id || !r.reinvited) {
       setResendNote(

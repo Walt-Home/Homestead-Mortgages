@@ -20,7 +20,18 @@ export interface ActState {
   actAs: readonly string[];
 }
 
-export function useAct(opts: { invalidate?: readonly (readonly unknown[])[]; done?: string } = {}) {
+export function useAct(
+  opts: {
+    invalidate?: readonly (readonly unknown[])[];
+    done?: string;
+    /**
+     * Refusal codes the caller answers on its own surface — a sheet that
+     * opens a field, say — so no toast calls them a failure. The error still
+     * lands in the state.
+     */
+    quiet?: readonly string[];
+  } = {},
+) {
   const queries = useQueryClient();
   const toast = useToast();
   const [state, setState] = useState<ActState>({ busy: false, error: null, actAs: [] });
@@ -49,14 +60,14 @@ export function useAct(opts: { invalidate?: readonly (readonly unknown[])[]; don
             continue;
           }
           setState({ busy: false, error: e, actAs: e.actAs });
-          if (e.actAs.length === 0) {
+          if (e.actAs.length === 0 && !(e.code && opts.quiet?.includes(e.code))) {
             toast({ tone: "danger", title: "That didn't go through", body: e.message });
           }
           return null;
         }
       }
     },
-    [opts.invalidate, opts.done, queries, toast],
+    [opts.invalidate, opts.done, opts.quiet, queries, toast],
   );
 
   /** Send the last act again as another role. */

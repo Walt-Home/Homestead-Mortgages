@@ -240,7 +240,8 @@ function PersonSheet({
   self: boolean;
 }) {
   const act = useAct({ invalidate: [["staff"]], done: "Saved" });
-  const resend = useAct({ done: "Invitation sent again" });
+  // The not-held refusal is answered by the address field below, not a toast.
+  const resend = useAct({ done: "Invitation sent again", quiet: ["INVITATION_NOT_HELD"] });
   const [rationale, setRationale] = useState("");
   const [disabling, setDisabling] = useState(false);
   // What became of the invitation sent again, when it did not simply go.

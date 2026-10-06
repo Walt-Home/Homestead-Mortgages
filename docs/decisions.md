@@ -4152,11 +4152,13 @@ September statement had nothing on it.
   tape that creates the row — the first of the month the uploader says the
   tape is for, or the load day when nobody says — and left alone by every
   later tape, so a re-upload cannot move a start that was already billed.
-  A CHECK requires it on every servicer's loan; the rows from before the
-  column keep the day they were loaded in the creditor's zone, which is
-  what they were billed from. The meter (`meteredBook`) and the
-  servicer's "watched since" read it; `created_at` is once more only when
-  the row was made.
+  The column is nullable: a row with a number and no day — one from before
+  the column, or one the persona seed or a test made — is read as watched
+  from the day it was made in the creditor's zone, which is what every
+  earlier row was billed from (a CHECK requiring the day lasted one
+  migration; it refused the seed and six suites). The meter
+  (`meteredBook`) and the servicer's "watched since" read it through
+  `watchedFromOf`; `created_at` is once more only when the row was made.
 - **The desk asks for the month.** The Files step has a "Billed from"
   month beside "As of", this month by default, never a month to come
   (`BILLING_MONTH_AHEAD`); the review and the load say "billed from

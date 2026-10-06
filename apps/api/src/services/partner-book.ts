@@ -139,14 +139,6 @@ const TERMINAL_EVENT: Partial<
 };
 
 const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
-/** Today in the creditor's zone, YYYY-MM-DD: the day a tape is loaded. */
-const todayEt = (): string =>
-  new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
 const dateOf = (day: string): Date => new Date(`${day}T00:00:00.000Z`);
 const dateOrNull = (day: string | null): Date | null => (day === null ? null : dateOf(day));
 /** The contract's lower-case words are the schema's enum names, lowered. */
@@ -172,8 +164,13 @@ export async function importPartnerBook(
     select: { id: true, slug: true },
   });
   const asOfDefault = input.asOf ?? isoDay(new Date());
-  const watchedFrom = new Date(`${input.billedFrom ?? todayEt()}T00:00:00.000Z`);
-  if (Number.isNaN(watchedFrom.getTime())) throw new RangeError("billedFrom is a YYYY-MM-DD day");
+  // The day the loans this tape creates are billed from, when the tape
+  // names one. Unnamed, the row carries no day and is read as watched from
+  // the day it was made — the load day, as it always was.
+  const watchedFrom = input.billedFrom ? new Date(`${input.billedFrom}T00:00:00.000Z`) : null;
+  if (watchedFrom && Number.isNaN(watchedFrom.getTime())) {
+    throw new RangeError("billedFrom is a YYYY-MM-DD day");
+  }
   onProgress?.({ stage: "reading", done: 0, total: 0 });
   const book = readBook(profile, servicer.slug, asOfDefault, input.tape, input.supplement ?? null);
   if (book.rejected) return { status: "rejected", missing_headers: book.rejected.missing_headers };
@@ -213,8 +210,8 @@ async function load(
   args: {
     servicer: { id: string; slug: string };
     principalId: string;
-    /** The day every loan this tape creates is watched and billed from. */
-    watchedFrom: Date;
+    /** The day every loan this tape creates is watched and billed from; null for the day it is made. */
+    watchedFrom: Date | null;
     asOf: string;
     book: ReturnType<typeof readBook>;
   },

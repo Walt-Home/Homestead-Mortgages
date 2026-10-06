@@ -2347,7 +2347,9 @@ model Loan {
   /// month the tape that brought it was said to be for, or the day it was
   /// loaded when nobody said. A tape loaded late is for the month it was
   /// for (Joe, 6 October 2026). Set once, on the tape that creates the row;
-  /// a later tape leaves it. A CHECK requires it on every servicer's loan.
+  /// a later tape leaves it. Null — a row the seed or a test made with a
+  /// number and no day, or one from before the column — is read as the day
+  /// the row was made, in the creditor's zone (`watchedFromOf` in billing.ts).
   watchedFrom         DateTime? @map("watched_from") @db.Date
   /// The servicing platform's own id for this loan, and which platform said
   /// so, remembered from the first live read so the next one — and a batch —

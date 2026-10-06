@@ -1,0 +1,11 @@
+-- A servicer's loan nobody named a day for is watched from the day it was made.
+--
+-- The migration before this one required `watched_from` on every servicer's
+-- loan by CHECK. The tape names the day on every row it creates, but a
+-- servicer's loan is also made by the persona seed and by tests, which say
+-- a number and no day, and the CHECK refused all of them (the staging run of
+-- 91eeb1e: 29 failures across six suites). The meter already reads a row
+-- without a named day as watched from the day it was made, in the
+-- creditor's zone — exactly what every row from before the column was
+-- billed from — so the column stays nullable and the fallback is the rule.
+ALTER TABLE "loans" DROP CONSTRAINT "loans_servicer_loan_is_watched_from_a_day";

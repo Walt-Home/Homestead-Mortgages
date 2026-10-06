@@ -4170,7 +4170,10 @@ September statement had nothing on it.
   anything is written. The partner door takes the same `billingMonth`.
   The month is a start, not an as-of: the tape's figures are as of its
   own day, and a loan's balance basis is still the newest observation on
-  or before the month's end.
+  or before the month's end. A loan that first appears on a later tape in
+  the same month is billed for the whole month, not from the tape's day —
+  confirmed by Joe on 6 October when asked ("bill for a full month for
+  the loans that get added mid-month").
 - **A book already loaded is moved by hand.** `npm run book:billed-from --
 <slug> <YYYY-MM-DD>` sets the start on every loan billed from a later
   day (`--all` for every loan), prints what it changed, and touches no

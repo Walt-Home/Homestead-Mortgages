@@ -2446,6 +2446,9 @@ export const TABLES_OFF_THE_WIRE = {
   servicer_signin_codes: {
     why: "The hash of a six-digit code mailed to a servicer's team member for one sign-in, and how many times it was tried; the same kind of row as user_authenticators, and nothing about any loan.",
   },
+  console_staff_invitations: {
+    why: "The address an admin invited to the ops console and the servicing app's staff id it answered, so the staff door mails sign-in codes only to invited addresses and an invitation can be sent again; who may work the console, never anything about a borrower or a loan.",
+  },
   partner_credentials: {
     why: "The hash of a servicer's bearer key and when it was revoked; how a partner's machine reaches the API at all, and never a fact about a borrower or a loan.",
   },

@@ -142,13 +142,16 @@ function wrongCode(secret: string): string {
 async function enrolled(b: Browser, userId: string) {
   await b.signIn(userId);
   const start = await b.call<{ secret: string }>("POST", "/api/auth/second-factor/enroll");
+  // The code actually spent, returned so a replay replays it rather than
+  // recomputing one from a clock that may have crossed a 30-second step.
+  const used = freshCode(start.body.secret, 0);
   const done = await b.call<{ recoveryCodes: string[] }>(
     "POST",
     "/api/auth/second-factor/enroll/confirm",
-    { code: freshCode(start.body.secret, 0) },
+    { code: used },
   );
   expect(done.status).toBe(201);
-  return { secret: start.body.secret, recoveryCodes: done.body.recoveryCodes };
+  return { secret: start.body.secret, recoveryCodes: done.body.recoveryCodes, used };
 }
 
 const code = (r: Reply) => (r.body as { error?: { code?: string } }).error?.code;
@@ -306,7 +309,7 @@ describe("a later sign-in", () => {
     const second = await browser();
     const third = await browser();
     try {
-      const { secret } = await enrolled(first, me.id);
+      const { secret, used } = await enrolled(first, me.id);
 
       const signedIn = await second.signIn(me.id);
       expect(signedIn.body.secondFactor).toBe("verify");
@@ -314,9 +317,11 @@ describe("a later sign-in", () => {
       expect(closed.status).toBe(401);
       expect(code(closed)).toBe("SECOND_FACTOR_REQUIRED");
 
-      // The enrollment code was spent by the enrollment.
+      // The enrollment code was spent by the enrollment. (The code itself,
+      // not one recomputed now: on a loaded CI runner the clock crossed a
+      // step between the two and the recomputed code was fresh, 6 October.)
       const replayedEnrollment = await second.call("POST", "/api/auth/second-factor/verify", {
-        code: freshCode(secret, 0),
+        code: used,
       });
       expect(replayedEnrollment.status).toBe(401);
       expect(code(replayedEnrollment)).toBe("WRONG_CODE");

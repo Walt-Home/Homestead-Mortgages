@@ -36,9 +36,14 @@
  * write is read before it is passed on and any echoed code is taken out of
  * it, at any depth, on both forwarded paths; and the staff door's code is
  * mailed by us instead — to the address that asked, and only when that
- * address is on one of our own domains, so the door cannot be made to mail
- * a stranger. The vendored tree is not touched: the servicing app has no
- * public invoker, this proxy is the only way to it, and the seam is ours.
+ * address is one an admin invited through this console or one on our own
+ * domains, so the door cannot be made to mail a stranger. (It was "our own
+ * domains" alone until 6 October 2026, when Joe asked for staff on any
+ * address; the invited addresses are remembered in
+ * `console_staff_invitations` as they cross, which is also what lets an
+ * invitation be sent again with one click.) The vendored tree is not
+ * touched: the servicing app has no public invoker, this proxy is the only
+ * way to it, and the seam is ours.
  */
 
 import { existsSync } from "node:fs";
@@ -49,25 +54,51 @@ import { fileURLToPath } from "node:url";
 import express, { type Express, type Request, type Response, type Router } from "express";
 import { config } from "./config.js";
 import { consoleBillingRouter } from "./routes/console-billing.js";
+import { consoleStaffRouter } from "./routes/console-staff.js";
 import { consoleTapeRouter } from "./routes/console-tape.js";
 import { connectors } from "./services/connectors.js";
+import {
+  markInvitationRemoved,
+  mayMailStaffCode,
+  rememberInvitation,
+  staffInvitationMessage,
+  staffSignInCodeMessage,
+  staffSignInUrl,
+  type InvitationMail,
+} from "./services/console-staff-invitations.js";
 import {
   IDENTITY_HEADER,
   identityTokenFor,
   type IdentityTokenProvider,
 } from "./services/google-identity.js";
 
-/** How a sign-in code reaches a person where our mailer is real: by mail, to our own domains only. */
+/**
+ * How a sign-in code reaches a person where our mailer is real: by mail, to
+ * an address an admin invited through this console or one of our own.
+ */
 export interface SignInCodeMail {
-  /** Whether an address is on one of our own domains: the only ones a staff code is mailed to. */
-  internal(email: string): boolean;
+  /**
+   * Whether the staff door mails this address a code: one an admin invited
+   * here and has not removed, or one on our own domains. Anything else is
+   * answered as the servicing app answers it and mailed nothing.
+   */
+  invited(email: string): Promise<boolean>;
   /** Mail the code. False when the mailer would not, and then nobody is told the code. */
   send(to: string, code: string): Promise<boolean>;
   /** Mail somebody the news that an admin invited them, and where to sign in. */
   invite(
     to: string,
-    input: { readonly name: string | null; readonly signInUrl: string },
+    input: { readonly name: string | null; readonly signInUrl: string; readonly again: boolean },
   ): Promise<boolean>;
+  /** A successful invitation, remembered: the address the code gate and a resend both need. */
+  remember(input: {
+    readonly email: string;
+    readonly name: string | null;
+    readonly staffUserId: string;
+    readonly mailed: InvitationMail;
+  }): Promise<void>;
+  /** The member was removed through the console; the door stops mailing the address. */
+  removed(staffUserId: string): Promise<void>;
 }
 
 export interface ConsoleHostOptions {
@@ -87,12 +118,14 @@ export interface ConsoleHostOptions {
   readonly identityToken?: IdentityTokenProvider;
   /**
    * The prefixes on this host our API answers itself: the tape desk, at
-   * `/console/hm/tape`, and billing, at `/console/hm/billing`, each gated
-   * by the servicing app's own session. Unset in a test that is only about
+   * `/console/hm/tape`, billing, at `/console/hm/billing`, and staff, at
+   * `/console/hm/staff`, each gated by the servicing app's own session. Unset in a test that is only about
    * the forwarding.
    */
   readonly tape?: Router;
   readonly billing?: Router;
+  /** Our own staff door, at `/console/hm/staff`: the invitation sent again. */
+  readonly staff?: Router;
   /**
    * Set where our mailer is real. Then no answer carries an echoed code
    * across, and the staff door's code is mailed through this. Unset — in
@@ -108,6 +141,8 @@ const ECHOED_CODE = "fake_code";
 const STAFF_CODE_PATH = "/ops/api/auth/code";
 /** An admin inviting somebody onto the staff, as his server names it. */
 const STAFF_INVITE_PATH = "/ops/api/staff/invite";
+/** An admin removing somebody from the staff — his disable, the only ending his API has. */
+const STAFF_DISABLE_PATH = /^\/ops\/api\/staff\/([^/]+)\/disable$/;
 /** A code request is an address and nothing else; an invitation is a few fields more. */
 const MAX_CODE_REQUEST_BYTES = 16 * 1024;
 const MAX_INVITE_REQUEST_BYTES = 64 * 1024;
@@ -225,12 +260,16 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
       const target = rewrite(req.url);
       // Only a write can mint a code, so only a write's answer is read first.
       const guarded = opts.codes !== undefined && hasBody;
-      const upstreamPath = target.split("?")[0];
+      const upstreamPath = target.split("?")[0] ?? target;
       const staffCode = guarded && req.method === "POST" && upstreamPath === STAFF_CODE_PATH;
       // An invitation is the servicing app's to make and ours to tell the
       // person about: its mailer is a stand-in, so without this the invitee
       // hears nothing and has to be told by hand to go and sign in.
       const staffInvite = guarded && req.method === "POST" && upstreamPath === STAFF_INVITE_PATH;
+      // A removal is the servicing app's to make and ours to remember, so
+      // the staff door stops mailing that address a code.
+      const removedStaffId =
+        guarded && req.method === "POST" ? STAFF_DISABLE_PATH.exec(upstreamPath)?.[1] : undefined;
       // Both requests are read whole, for the address the mail goes to.
       let asked: string | null = null;
       let askedName: string | null = null;
@@ -290,31 +329,44 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
         const cleaned = withoutEchoedCodes(parsed);
         const isObject = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed);
         const invited = staffInvite && answer.ok && isObject;
+        if (removedStaffId !== undefined && answer.ok) {
+          await opts.codes!.removed(decodeURIComponent(removedStaffId));
+        }
         if (!cleaned.found && !invited) {
           res.end(text);
           return;
         }
         // The body is no longer his, so neither is its validator.
         res.removeHeader("etag");
+        const top = parsed as Record<string, unknown>;
         if (invited) {
-          // Told to the person by us, and the admin is told whether it went:
-          // mailed, not mailed, or an address that is not on our domains and
-          // so is never written to from here.
-          let mailed: "sent" | "not_sent" | "not_ours" = "not_ours";
-          if (asked !== null && opts.codes!.internal(asked)) {
-            const signInUrl = `https://${req.hostname || opts.host}/console/`;
-            mailed = (await opts.codes!.invite(asked, { name: askedName, signInUrl }))
+          // Told to the person by us, whatever company the address is from,
+          // and remembered so the door mails that address its codes; the
+          // admin is told whether the mail went.
+          let mailed: InvitationMail = "not_sent";
+          if (asked !== null) {
+            const signInUrl = staffSignInUrl(req.hostname || opts.host);
+            const again = top.reinvited === true;
+            mailed = (await opts.codes!.invite(asked, { name: askedName, signInUrl, again }))
               ? "sent"
               : "not_sent";
+            if (typeof top.staff_user_id === "string") {
+              await opts.codes!.remember({
+                email: asked,
+                name: askedName,
+                staffUserId: top.staff_user_id,
+                mailed,
+              });
+            }
           }
           (cleaned.value as Record<string, unknown>).invitation_mail = mailed;
         }
-        const top = parsed as Record<string, unknown>;
         const code = isObject ? top[ECHOED_CODE] : undefined;
         if (staffCode && typeof code === "string") {
-          // Mailed to the address that asked, when it is one of ours; a
-          // stranger's address is answered the same and mailed nothing.
-          if (asked !== null && opts.codes!.internal(asked)) {
+          // Mailed to the address that asked, when an admin invited it here
+          // or it is one of ours; any other address is answered the same
+          // and mailed nothing.
+          if (asked !== null && (await opts.codes!.invited(asked))) {
             const sent = await opts.codes!.send(asked, code);
             if (!sent) {
               res.status(502).json({
@@ -344,6 +396,7 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
   // Ours, before anything forwarded: the tape desk and billing answer here.
   if (opts.tape) router.use("/console/hm/tape", opts.tape);
   if (opts.billing) router.use("/console/hm/billing", opts.billing);
+  if (opts.staff) router.use("/console/hm/staff", opts.staff);
 
   // The console's calls, to the servicing app's console API and its document reads.
   router.use(
@@ -407,59 +460,10 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
   return router;
 }
 
-/**
- * The staff door's code, as we mail it.
- *
- * The servicing app answers a code request the same whether or not the
- * address is a staff member's, and mints a code either way, so this is
- * mailed to any address of ours that asks — including one nobody has
- * invited, whose code can never be accepted. The message has to say so,
- * because the page cannot: the first person to hit it was the owner,
- * signing in with the address he works under rather than the one the
- * deploy had made admin, holding a code that "didn't match" (5 October
- * 2026).
- */
-export function staffSignInCodeMessage(input: { readonly to: string; readonly code: string }) {
-  return {
-    to: input.to,
-    subject: `Your Supermortgage console sign-in code: ${input.code}`,
-    text: [
-      `Your sign-in code for the Supermortgage console is ${input.code}.`,
-      "",
-      "It is good for ten minutes and one sign-in, and only for an address an admin has invited to the console. If this address has not been invited, the code will not be accepted: sign in with the address that was invited, or ask an admin to invite this one from Staff & roles.",
-      "",
-      "If you did not ask for it, ignore this message; nobody can sign in with the code alone.",
-      "",
-      "Supermortgage",
-    ].join("\n"),
-  };
-}
-
-/**
- * The news that an admin invited somebody to the console, as we mail it.
- * The servicing app makes the account and tells nobody — its mailer is a
- * stand-in — so the first invitation made on production reached no inbox
- * (5 October 2026, Joe inviting his own second address).
- */
-export function staffInvitationMessage(input: {
-  readonly to: string;
-  readonly name: string | null;
-  readonly signInUrl: string;
-}) {
-  return {
-    to: input.to,
-    subject: "You have been invited to the Supermortgage console",
-    text: [
-      `${input.name ? `${input.name}, you` : "You"} have been invited to the Supermortgage console as ${input.to}.`,
-      "",
-      `To sign in, go to ${input.signInUrl} and enter this address. A six-digit code is mailed to you each time you sign in, and the first time you choose a password.`,
-      "",
-      "If you were not expecting this, ignore it; nothing happens until you sign in.",
-      "",
-      "Supermortgage",
-    ].join("\n"),
-  };
-}
+// The messages live beside the table that remembers who was invited, so
+// the proxy and the resend route mail the same words; re-exported for the
+// callers and tests that learned them here.
+export { staffInvitationMessage, staffSignInCodeMessage };
 
 /**
  * How a staff sign-in code reaches a person on this deployment: mailed by
@@ -474,8 +478,11 @@ export function staffSignInCodes(): "mailed" | "shown on the page" {
 export function signInCodeMail(): SignInCodeMail | undefined {
   if (staffSignInCodes() !== "mailed") return undefined;
   return {
-    internal: (email) =>
-      config.internalEmailDomains.includes(email.slice(email.lastIndexOf("@") + 1).toLowerCase()),
+    invited: (email) => mayMailStaffCode(email),
+    remember: (input) => rememberInvitation(input),
+    removed: async (staffUserId) => {
+      await markInvitationRemoved(staffUserId);
+    },
     send: async (to, code) => {
       try {
         const outcome = await connectors().mail.send(staffSignInCodeMessage({ to, code }));
@@ -484,10 +491,10 @@ export function signInCodeMail(): SignInCodeMail | undefined {
         return false;
       }
     },
-    invite: async (to, { name, signInUrl }) => {
+    invite: async (to, { name, signInUrl, again }) => {
       try {
         const outcome = await connectors().mail.send(
-          staffInvitationMessage({ to, name, signInUrl }),
+          staffInvitationMessage({ to, name, signInUrl, again }),
         );
         return outcome.status === "sent";
       } catch {
@@ -509,6 +516,7 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
   const identityToken = identityTokenFor(upstream);
   const tape = consoleTapeRouter({ upstream, identityToken });
   const billing = consoleBillingRouter({ upstream, identityToken });
+  const staff = consoleStaffRouter({ upstream, identityToken });
   const codes = signInCodeMail();
   if (!host) {
     // No servicing hostname: development, where the console's dev server
@@ -516,6 +524,7 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
     // safe on any Host; it is mounted on one only when there is one.
     app.use("/console/hm/tape", tape);
     app.use("/console/hm/billing", billing);
+    app.use("/console/hm/staff", staff);
     return "not-configured";
   }
   const here = dirname(fileURLToPath(import.meta.url));
@@ -529,6 +538,7 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
     identityToken,
     tape,
     billing,
+    staff,
     ...(codes ? { codes } : {}),
   });
   app.use((req, res, next) => {

@@ -45,12 +45,28 @@ beforeAll(async () => {
       if (req.url === "/ops/api/staff/invite") {
         res.setHeader("Content-Type", "application/json");
         res.setHeader("x-acted-as", String(req.headers["x-staff-role"] ?? "none"));
+        // His answer names the account, new or re-invited, as his does.
+        let reinvited = false;
+        try {
+          reinvited = (JSON.parse(body) as { email?: string }).email?.includes("again") ?? false;
+        } catch {
+          reinvited = false;
+        }
         res.end(
           JSON.stringify({
+            staff_user_id: "staff-9",
+            status: "invited",
+            reinvited,
             role_seen: req.headers["x-staff-role"] ?? null,
             gate_seen: req.headers["x-serverless-authorization"] ?? null,
           }),
         );
+        return;
+      }
+      // His disable: the only ending his staff API has.
+      if (/^\/ops\/api\/staff\/[^/]+\/disable$/.test(req.url ?? "")) {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ staff_user_id: "staff-9", changed: true, sessions_revoked: [] }));
         return;
       }
       if (req.url?.startsWith("/ops/api/auth/signin")) {
@@ -198,7 +214,8 @@ describe("the servicing hostname", () => {
       },
       body: "{}",
     });
-    expect(JSON.parse(acted.body)).toEqual({ role_seen: "admin", gate_seen: null });
+    // His answer names the account too; this test is about the two headers that crossed.
+    expect(JSON.parse(acted.body)).toMatchObject({ role_seen: "admin", gate_seen: null });
     expect(acted.headers["x-acted-as"]).toBe("admin");
 
     // A tape is a multipart body; it crosses whole, with its boundary.
@@ -342,7 +359,10 @@ describe("the servicing hostname", () => {
 
 describe("a sign-in code and the proxy", () => {
   const mails: { to: string; code: string }[] = [];
-  const invitations: { to: string; name: string | null; signInUrl: string }[] = [];
+  const invitations: { to: string; name: string | null; signInUrl: string; again: boolean }[] = [];
+  /** What the proxy asked us to remember: address → the servicing app's id and the mail's fate. */
+  const remembered = new Map<string, { staffUserId: string; mailed: string }>();
+  const removals: string[] = [];
   let refuse = false;
   let guarded: Server;
   let guardedPort: number;
@@ -354,7 +374,16 @@ describe("a sign-in code and the proxy", () => {
       host: HOST,
       upstream: upstreamUrl,
       codes: {
-        internal: (email) => email.endsWith("@ours.test"),
+        // The rule as the real seam applies it: ours, or invited here and not removed.
+        invited: async (email) => email.endsWith("@ours.test") || remembered.has(email),
+        remember: async (input) => {
+          remembered.set(input.email, { staffUserId: input.staffUserId, mailed: input.mailed });
+        },
+        removed: async (staffUserId) => {
+          removals.push(staffUserId);
+          for (const [email, r] of remembered)
+            if (r.staffUserId === staffUserId) remembered.delete(email);
+        },
         send: async (to, code) => {
           if (refuse) return false;
           mails.push({ to, code });
@@ -483,21 +512,31 @@ describe("a sign-in code and the proxy", () => {
     });
     expect(r.status).toBe(200);
     expect(JSON.parse(r.body)).toEqual({
+      staff_user_id: "staff-9",
+      status: "invited",
+      reinvited: false,
       role_seen: null,
       gate_seen: null,
       invitation_mail: "sent",
     });
+    // The link opens the staff door itself, whatever the address's domain.
     expect(invitations).toEqual([
-      { to: "drew@ours.test", name: "Drew Example", signInUrl: `https://${HOST}/console/` },
+      {
+        to: "drew@ours.test",
+        name: "Drew Example",
+        signInUrl: `https://${HOST}/console/?door=staff`,
+        again: false,
+      },
     ]);
+    expect(remembered.get("drew@ours.test")).toEqual({ staffUserId: "staff-9", mailed: "sent" });
     // His server made the account from the request as the admin sent it.
     expect(JSON.parse(seen[0]!.body)).toMatchObject({ email: " Drew@Ours.test " });
 
-    // An address that is not on our domains is never written to from here, and the admin is told.
+    // Sent again to somebody who has not signed in: his re-invite, our mail saying so.
     invitations.length = 0;
-    const stranger = await post("/console/api/staff/invite", { email: "eve@elsewhere.test" });
-    expect(JSON.parse(stranger.body).invitation_mail).toBe("not_ours");
-    expect(invitations).toEqual([]);
+    const again = await post("/console/api/staff/invite", { email: "drew.again@ours.test" });
+    expect(JSON.parse(again.body)).toMatchObject({ reinvited: true, invitation_mail: "sent" });
+    expect(invitations[0]).toMatchObject({ to: "drew.again@ours.test", again: true });
 
     // The account exists either way; a mail that would not go is said, not hidden.
     refuse = true;
@@ -510,21 +549,75 @@ describe("a sign-in code and the proxy", () => {
     }
   });
 
+  it("invites an address on any domain, and the door mails that address its codes until the person is removed", async () => {
+    invitations.length = 0;
+    mails.length = 0;
+    removals.length = 0;
+    // Before the invitation, a stranger: answered the same, mailed nothing.
+    await post("/console/api/auth/code", { email: "eve@elsewhere.test" });
+    expect(mails).toEqual([]);
+
+    // Invited from the console (6 October 2026: no longer only our own domains).
+    const invited = await post("/console/api/staff/invite", {
+      email: "Eve@Elsewhere.test",
+      legal_name: "Eve Elsewhere",
+      roles: ["admin"],
+    });
+    expect(JSON.parse(invited.body).invitation_mail).toBe("sent");
+    expect(invitations).toEqual([
+      {
+        to: "eve@elsewhere.test",
+        name: "Eve Elsewhere",
+        signInUrl: `https://${HOST}/console/?door=staff`,
+        again: false,
+      },
+    ]);
+    expect(remembered.get("eve@elsewhere.test")).toEqual({
+      staffUserId: "staff-9",
+      mailed: "sent",
+    });
+
+    // Now the door mails her the code, and never shows it.
+    const code = await post("/console/api/auth/code", { email: "eve@elsewhere.test" });
+    expect(code.status).toBe(200);
+    expect(code.body).not.toContain("246810");
+    expect(mails).toEqual([{ to: "eve@elsewhere.test", code: "246810" }]);
+
+    // Removed by an admin: his disable crosses as it is, and we are told to forget the address.
+    const removed = await post("/console/api/staff/staff-9/disable", { rationale: "left" });
+    expect(removed.status).toBe(200);
+    expect(JSON.parse(removed.body)).toEqual({
+      staff_user_id: "staff-9",
+      changed: true,
+      sessions_revoked: [],
+    });
+    expect(removals).toEqual(["staff-9"]);
+    mails.length = 0;
+    await post("/console/api/auth/code", { email: "eve@elsewhere.test" });
+    expect(mails).toEqual([]);
+  });
+
   it("writes an invitation that says who, where to sign in, and what signing in takes", () => {
     const mail = staffInvitationMessage({
       to: "drew@ours.test",
       name: "Drew Example",
-      signInUrl: "https://servicing.example.test/console/",
+      signInUrl: "https://servicing.example.test/console/?door=staff",
     });
     expect(mail.to).toBe("drew@ours.test");
     expect(mail.subject).toBe("You have been invited to the Supermortgage console");
     expect(mail.text).toContain("Drew Example, you have been invited");
     expect(mail.text).toContain("as drew@ours.test");
-    expect(mail.text).toContain("https://servicing.example.test/console/");
+    expect(mail.text).toContain("https://servicing.example.test/console/?door=staff");
+    // The address need not be one of ours, and the mail says the link copes with that.
+    expect(mail.text).toContain("whatever company your address is from");
     expect(mail.text).toContain("six-digit code");
     expect(staffInvitationMessage({ to: "a@ours.test", name: null, signInUrl: "u" }).text).toMatch(
       /^You have been invited/,
     );
+    expect(
+      staffInvitationMessage({ to: "a@ours.test", name: null, signInUrl: "u", again: true })
+        .subject,
+    ).toBe("Your invitation to the Supermortgage console, sent again");
   });
 
   it("refuses a code request too large to be an address", async () => {

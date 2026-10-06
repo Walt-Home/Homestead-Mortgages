@@ -2084,6 +2084,41 @@ model ServicerUser {
   @@map("servicer_users")
 }
 
+/// A person an admin invited to the console from this host, remembered here
+/// because the servicing app, which owns the staff list, keeps each address
+/// hashed and answers only a masked copy. Two things need the address itself:
+/// the staff door's sign-in code, which is mailed only to an address on this
+/// table or on one of our own domains (the servicing app mints and echoes a
+/// code for any address asked, so a door that mailed whoever asked would be
+/// an open relay), and sending the invitation again. The staff id is the
+/// servicing app's; the two databases are not joined.
+model ConsoleStaffInvitation {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Normalized: trimmed, lower-cased. One row per address.
+  email       String  @unique
+  /// The servicing app's staff_users.id, as its answer to the invitation named it.
+  staffUserId String  @map("staff_user_id")
+  name        String?
+
+  /// The first invitation through this console, and the newest.
+  invitedAt     DateTime  @default(now()) @map("invited_at")
+  lastInvitedAt DateTime  @default(now()) @map("last_invited_at")
+  /// When the newest invitation reached our mailer, and whether it went: sent, not_sent.
+  mailedAt      DateTime? @map("mailed_at")
+  mailOutcome   String?   @map("mail_outcome")
+  /// Removed from the staff through the console: the door stops mailing the
+  /// address a code. The servicing app refuses to invite a disabled account
+  /// again, so this is not cleared in practice; an invitation would clear it.
+  removedAt     DateTime? @map("removed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([staffUserId], map: "console_staff_invitations_staff_user")
+  @@map("console_staff_invitations")
+}
+
 /// One six-digit code, mailed, good for ten minutes and one sign-in. The
 /// row holds a hash; the code is in the mail and nowhere else.
 model ServicerSignInCode {

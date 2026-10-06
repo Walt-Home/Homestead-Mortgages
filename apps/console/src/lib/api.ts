@@ -77,15 +77,17 @@ function messageOf(body: Record<string, unknown>, status: number): string {
 
 /**
  * Where a call goes. The servicing app's console API answers `/console/api`;
- * our own API answers `/console/hm/tape` — the tape desk — and
- * `/console/hm/billing`, behind the same session, checked with the
- * servicing app on every call.
+ * our own API answers `/console/hm/tape` — the tape desk —
+ * `/console/hm/billing` and `/console/hm/staff` — the invitation sent
+ * again — behind the same session, checked with the servicing app on
+ * every call.
  */
-export type Door = "servicing" | "hm" | "billing";
+export type Door = "servicing" | "hm" | "billing" | "staff";
 const BASE: Record<Door, string> = {
   servicing: "/console/api",
   hm: "/console/hm/tape",
   billing: "/console/hm/billing",
+  staff: "/console/hm/staff",
 };
 
 export async function call<T>(

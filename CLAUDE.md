@@ -165,7 +165,9 @@ screen, and a claim is mailed from it".
 serves both (28 September 2026).** `servicing.supermortgage.com/console`
 opens on an entry page that takes an e-mail and sends it to the staff door
 (the servicing app's, proxied) or the servicer door (`/api/servicer`, ours)
-by its domain (`INTERNAL_EMAIL_DOMAINS`); whichever session comes back
+by its domain (`INTERNAL_EMAIL_DOMAINS`) — a guess since 6 October, when
+staff became invitable on any address: the invitation's link carries
+`?door=staff` and opens the staff door itself; whichever session comes back
 decides what renders — the ops console, or the portal at
 `/console/portal`. A servicer's people — `services/servicer-team.ts`,
 `servicer_users` — sign in with a code to their e-mail and a password, and
@@ -638,11 +640,20 @@ person's e-mail, then a password. The servicing app's mailer is a FAKE and it
 runs as non-production even in production, so it hands the code back in its
 answer; **since 5 October that code never crosses our proxy where our mailer
 is real** — `console-host.ts` takes it out of every forwarded write's answer
-and mails the staff door's code itself, to our own domains only. Health
+and mails the staff door's code itself, to an address an admin invited
+through the console or one of ours and to nobody else, because the
+servicing app mints a code for any address asked. The invited addresses are
+ours to remember (`console_staff_invitations`, written as the invitation
+crosses the proxy, marked on a removal), which is also what lets an
+invitation be sent again with one click (`/console/hm/staff/:id/invitation`,
+`routes/console-staff.ts`). Health
 reports `staffSignInCodes`, and the production deploy fails unless it reads
 `mailed`. The deploy
 stands the first console admin with its `staff-bootstrap`; that admin
-invites the rest from the console. The servicing app's run.app has no public
+invites the rest from the console, on any address. Removing a member is the
+servicing app's disable and the list hiding the row: it has no delete, and
+a removed address cannot be invited again. See `docs/decisions.md`, "A
+staff member is invited by address, not by domain, and removed by a mark". The servicing app's run.app has no public
 invoker: the API's identity is the one invoker, and the adapter and the
 console proxy carry a Google identity token for it on
 `X-Serverless-Authorization` (`services/google-identity.ts`), so a bare

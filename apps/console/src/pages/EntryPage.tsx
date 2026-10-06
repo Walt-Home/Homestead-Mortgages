@@ -5,10 +5,16 @@
  * lookup, so typing an address tells nobody whether it is on a team; and a
  * link on each door leads to the other for the odd address the rule gets
  * wrong.
+ *
+ * Since 6 October 2026 a staff member may be invited on any address, so the
+ * rule is a guess for them: the invitation's link carries `?door=staff` and
+ * opens the staff door directly, and this page says so for anyone who comes
+ * without it.
  */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button, Field, Input, Notice } from "../components/ui.js";
 import { useAuth } from "../lib/auth.js";
 import { portal } from "../partners/api.js";
@@ -23,8 +29,15 @@ type Door = { kind: "staff" | "servicer"; email: string };
 
 export function EntryPage() {
   const { endedBecause } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
-  const [door, setDoor] = useState<Door | null>(null);
+  // The invitation's link opens the staff door itself, with no address yet.
+  const [door, setDoor] = useState<Door | null>(() =>
+    new URLSearchParams(location.search).get("door") === "staff"
+      ? { kind: "staff", email: "" }
+      : null,
+  );
   const first = useRef<HTMLInputElement>(null);
   const domains = useQuery({
     queryKey: ["entry-door"],
@@ -45,11 +58,16 @@ export function EntryPage() {
     setDoor({ kind: internal ? "staff" : "servicer", email: address });
   };
 
+  const back = () => {
+    setDoor(null);
+    if (location.search) navigate("/", { replace: true });
+  };
+
   if (door?.kind === "staff") {
     return (
       <SignInPage
-        initialEmail={door.email}
-        onBack={() => setDoor(null)}
+        initialEmail={door.email || undefined}
+        onBack={back}
         onServicer={() => setDoor({ kind: "servicer", email: door.email })}
       />
     );
@@ -58,7 +76,7 @@ export function EntryPage() {
     return (
       <ServicerSignInPage
         initialEmail={door.email}
-        onBack={() => setDoor(null)}
+        onBack={back}
         onStaff={() => setDoor({ kind: "staff", email: door.email })}
       />
     );
@@ -106,6 +124,18 @@ export function EntryPage() {
         <p className="mt-6 text-sm text-fg-3">
           Two factors, always: a code to your e-mail and your password. Every action is recorded
           with your name.
+        </p>
+        <p className="mt-3 text-sm text-fg-3">
+          Invited to the console on an address outside Supermortgage? Use the link in your
+          invitation, or{" "}
+          <button
+            type="button"
+            className="text-fg-2 underline hover:text-fg"
+            onClick={() => setDoor({ kind: "staff", email: "" })}
+          >
+            sign in at the staff door
+          </button>
+          .
         </p>
       </div>
     </div>

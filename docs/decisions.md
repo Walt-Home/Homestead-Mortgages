@@ -3410,7 +3410,9 @@ staff door when its domain is one of ours (`INTERNAL_EMAIL_DOMAINS`,
 `GET /api/servicer/auth/door`) and to the servicer door otherwise. A rule
 rather than a lookup, so typing an address tells nobody whether it is on a
 team; each door carries a link to the other for the odd address the rule
-gets wrong.
+gets wrong. Since 6 October a staff member may be on any domain (below), so
+for them the rule is a guess: the invitation's link carries `?door=staff`
+and opens the staff door directly, and the entry page says so.
 
 **The two sessions never cross.** A servicer session carries
 `servicerUserId` and a borrower session carries `userId`; `requireAuth`
@@ -3879,11 +3881,12 @@ tree is untouched. Where our mailer is real:
   can mint a code, so reads still stream. The servicing app has no public
   invoker; this proxy is the only way to it.
 - _The staff door's code is mailed by us_, through the mail port, to the
-  address that asked — and only when that address is on one of
-  `INTERNAL_EMAIL_DOMAINS`, so the door cannot be made to mail a stranger.
-  A stranger's address gets the same answer and no mail, as before. When
-  the mail cannot be sent the answer is a refusal and nobody is told the
-  code.
+  address that asked — and only when that address is one an admin invited
+  through the console or one of `INTERNAL_EMAIL_DOMAINS` (our own domains
+  alone until 6 October; see "A staff member is invited by address"), so
+  the door cannot be made to mail a stranger. A stranger's address gets
+  the same answer and no mail, as before. When the mail cannot be sent the
+  answer is a refusal and nobody is told the code.
 - _Where the mailer is a stand-in_ — development, tests — answers cross
   as they are, which is what lets a developer sign in with no mailbox.
 
@@ -3912,11 +3915,11 @@ servicing app's `staff.invite` makes the account and tells nobody, its
 mailer being a stand-in, and our console's sheet still said that "no mail
 leaves" and the code is read off the page — true until that morning.
 Where our mailer is real the proxy now mails the invited address what
-happened and where to sign in, on a successful invitation only and to our
-own domains only, and adds `invitation_mail` to the answer — `sent`,
-`not_sent` or `not_ours` — so the admin is told when the person was not.
-The account exists either way; an invitation that could not be mailed is
-said, never hidden.
+happened and where to sign in, on a successful invitation only (and, until
+6 October, to our own domains only), and adds `invitation_mail` to the
+answer — `sent` or `not_sent` — so the admin is told when the person was
+not. The account exists either way; an invitation that could not be mailed
+is said, never hidden.
 
 **The raw paths are closed (Joe, the same day).** The servicing app's own
 console at `/ops`, its API at `/api` and its sign-in links at `/login` and
@@ -4025,3 +4028,71 @@ Workload Identity provider's attribute condition and to
 `hm-github-actions@`'s `workloadIdentityUser` binding. Both currently
 allowlist exactly two repositories. The two commands are in the header of
 `.github/workflows/deploy.yml`.
+
+## A staff member is invited by address, not by domain, and removed by a mark
+
+**Decision (6 October 2026, Joe).** The console's staff may be invited on
+any e-mail address; a person can be removed so they leave the staff list;
+and an invitation can be sent again. Three asks in one message, the morning
+after the first real sign-ins.
+
+**Any address.** The day before, the proxy had learned to mail the staff
+door's sign-in code itself, and only to our own domains. That gate was
+doing a job: the servicing app mints a code for _every_ address asked and
+echoes it, known or not — its no-enumeration rule — so a door that mailed
+the code to whoever asked would mail a stranger a "Your Supermortgage
+console sign-in code" on demand, an open relay on our sender. Lifting the
+domain rule needed another gate, and the right one was already implied:
+_the addresses an admin has invited_. The servicing app keeps those hashed
+and answers a masked copy, so this host remembers them itself as they
+cross its proxy — `console_staff_invitations`, one row per address, the
+servicing app's staff id beside it, written on a successful
+`/ops/api/staff/invite` and marked `removed_at` on a successful
+`/staff/:id/disable`. The code gate is now "invited here and not removed,
+or one of ours" (`mayMailStaffCode`); the invitation is mailed to whatever
+address the admin typed; `invitation_mail` is `sent` or `not_sent` and
+`not_ours` is gone. The two databases stay unjoined: the id is a string
+the servicing app answered.
+
+The sign-in page's domain rule still guesses the door, and would send a
+staff address on another domain to the servicer's. So the invitation's
+link is `/console/?door=staff`, which opens the staff door directly, the
+mail says the link copes with any company's address, and the entry page
+offers the staff door in a sentence for anyone who arrives without the
+link. No lookup was added: typing an address still tells nobody whether it
+is on a team.
+
+**Sent again.** The servicing app re-invites an address it holds as
+`invited` — the same account, `reinvited: true` — and refuses one that is
+`active` or `disabled`. The console reads only a masked address, so a
+one-click resend needed the remembered one: `POST
+/console/hm/staff/:id/invitation` (`routes/console-staff.ts`, admin only,
+gated by the servicing app's session like billing) asks the servicing app
+again as the admin asking, with the roles the person holds so none change,
+mails the invitation with "sent again" in the subject, and records the
+outcome on the row. An id this console never held — invited before 6
+October, or from somewhere else — is a 404 that says to invite the address
+afresh; an enrolled or removed person is a 409 that says why there is
+nothing to send.
+
+**Removed, not deleted.** Joe asked for a delete. The servicing app has no
+such endpoint — its staff API ends at `disable` — and some thirty of its
+tables name a staff row (`staff_actions`, `staff_sessions`, `role_grants`,
+every `_by` column on a decision) for the record of who did what, which a
+regulated servicer cannot lose. The vendored tree is not edited here, and
+the seam is HTTP, so a hard delete is neither reachable nor right. What
+Joe wanted from it, the person gone from the list, is what removal does:
+the servicing app's disable (signed out at once, roles and principals
+revoked, never a sign-in again) and the console's list hides the row —
+"Show N removed" brings them back for the record. The console says
+"Removed" where the servicing app says "disabled". One consequence is
+stated on the sheet rather than hidden: a removed address cannot be
+invited again, because the servicing app refuses to re-invite a disabled
+account. Should that ever matter, the ask is an endpoint in the servicing
+app, not a write from here.
+
+`console-host.test.ts` holds the new gate end to end — invite on another
+domain, code mailed, removal, code no longer mailed —
+`console-staff-invitations.test.ts` holds the table and the resend against
+Postgres, and the proxy's "stranger gets the same answer and no mail" test
+stands as it was.

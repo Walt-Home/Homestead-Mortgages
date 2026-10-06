@@ -1,9 +1,15 @@
 /**
  * Staff (the servicing app's 34.1): who can sign in; inviting someone new;
- * disabling. The console has one role — admin, full access — so an
- * invitation grants the four the servicing app spells, and an account
- * invited before there was one role can be made an admin here, with a
- * reason.
+ * sending the invitation again; removing. The console has one role — admin,
+ * full access — so an invitation grants the four the servicing app spells,
+ * and an account invited before there was one role can be made an admin
+ * here, with a reason.
+ *
+ * An invitation may go to any address (6 October 2026): the mail carries a
+ * link that opens the staff door whatever the domain. Removing somebody is
+ * the servicing app's disable — signed out, roles revoked, never again — and
+ * this list stops showing them; the servicing app keeps the row for the
+ * record of what they did, and a removed address cannot be invited again.
  */
 
 import { useState } from "react";
@@ -34,19 +40,24 @@ export interface StaffUser {
 
 const statusTone = (s: StaffUser["status"]): Tone =>
   s === "active" ? "ok" : s === "invited" ? "info" : "neutral";
+/** The servicing app says "disabled"; here it is a removal from the list. */
+const statusWord = (s: StaffUser["status"]): string => (s === "disabled" ? "Removed" : words(s));
 
 export function StaffPage() {
   const { role, me } = useAuth();
   const [inviting, setInviting] = useState(false);
   const [selected, setSelected] = useState<StaffUser | null>(null);
+  const [showRemoved, setShowRemoved] = useState(false);
   const q = useQuery({
     queryKey: ["staff", role],
     queryFn: () => api<{ users: StaffUser[] }>("/staff"),
   });
+  const removed = q.data?.users.filter((u) => u.status === "disabled") ?? [];
+  const shown = showRemoved ? q.data?.users : q.data?.users.filter((u) => u.status !== "disabled");
   return (
     <Page
       title="Staff"
-      description="Who can sign in here. Everyone who can is an admin."
+      description="Who can sign in here. Everyone who can is an admin. Removing someone signs them out and takes them off this list; the record of what they did stays."
       actions={
         <Button variant="primary" icon="plus" onClick={() => setInviting(true)}>
           Invite
@@ -83,7 +94,7 @@ export function StaffPage() {
               {
                 key: "status",
                 header: "Status",
-                render: (u) => <Pill tone={statusTone(u.status)}>{words(u.status)}</Pill>,
+                render: (u) => <Pill tone={statusTone(u.status)}>{statusWord(u.status)}</Pill>,
               },
               {
                 key: "factors",
@@ -99,13 +110,24 @@ export function StaffPage() {
                 render: (u) => <span className="text-fg-2">{u.open_sessions}</span>,
               },
             ]}
-            rows={q.data?.users}
+            rows={shown}
             rowKey={(u) => u.staff_user_id}
             onRowClick={setSelected}
             loading={q.isLoading}
             empty={{ icon: "users", title: "Nobody yet" }}
           />
         </div>
+        {removed.length > 0 ? (
+          <button
+            type="button"
+            className="mt-3 text-sm text-fg-3 hover:text-fg"
+            onClick={() => setShowRemoved((v) => !v)}
+          >
+            {showRemoved
+              ? "Hide the removed"
+              : `Show ${removed.length} removed ${removed.length === 1 ? "person" : "people"}`}
+          </button>
+        ) : null}
         {q.error ? (
           <Notice tone="danger" className="mt-3">
             {(q.error as Error).message}
@@ -133,26 +155,19 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
   const [unsent, setUnsent] = useState<string | null>(null);
   const invite = async () => {
     setUnsent(null);
-    const made = await act.run<{ invitation_mail?: "sent" | "not_sent" | "not_ours" }>(
-      "/staff/invite",
-      {
-        body: {
-          email: email.trim(),
-          legal_name: name.trim() || undefined,
-          roles: [...ADMIN_GRANT],
-          rationale: rationale || undefined,
-        },
-        role: "admin",
+    const made = await act.run<{ invitation_mail?: "sent" | "not_sent" }>("/staff/invite", {
+      body: {
+        email: email.trim(),
+        legal_name: name.trim() || undefined,
+        roles: [...ADMIN_GRANT],
+        rationale: rationale || undefined,
       },
-    );
+      role: "admin",
+    });
     if (!made) return;
     if (made.invitation_mail === "not_sent") {
       setUnsent(
-        `${email.trim()} is invited, but the e-mail could not be sent. Tell them to sign in here with that address; the sign-in code is mailed separately.`,
-      );
-    } else if (made.invitation_mail === "not_ours") {
-      setUnsent(
-        `${email.trim()} is invited, but it is not on one of our domains, so no e-mail was sent and the sign-in page will send that address to the servicer door.`,
+        `${email.trim()} is invited, but the e-mail could not be sent. Open them from the list and send the invitation again, or tell them to sign in at the staff door with that address; the sign-in code is mailed separately.`,
       );
     } else {
       onClose();
@@ -187,7 +202,7 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="colleague@trywalt.ai"
+            placeholder="colleague@example.com"
           />
         </Field>
         <Field label="Name" htmlFor="inv-name" hint="As it should appear on what they do.">
@@ -201,8 +216,9 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
           <Textarea id="inv-why" value={rationale} onChange={(e) => setRationale(e.target.value)} />
         </Field>
         <Notice tone="neutral">
-          The invitation and every sign-in code go to this address, so it has to be one of ours and
-          one they can read.
+          The invitation and every sign-in code go to this address, so it has to be one they can
+          read. Any company&rsquo;s address will do: the invitation carries a link that opens the
+          staff door.
         </Notice>
         {unsent ? (
           <Notice tone="warn" title="Invited, and not told">
@@ -224,8 +240,11 @@ function PersonSheet({
   self: boolean;
 }) {
   const act = useAct({ invalidate: [["staff"]], done: "Saved" });
+  const resend = useAct({ done: "Invitation sent again" });
   const [rationale, setRationale] = useState("");
   const [disabling, setDisabling] = useState(false);
+  // What became of the invitation sent again, when it did not simply go.
+  const [resendNote, setResendNote] = useState<string | null>(null);
   const admin = isAdmin(user.roles);
   const save = async () => {
     const ok = await act.run(`/staff/${user.staff_user_id}/roles`, {
@@ -242,6 +261,18 @@ function PersonSheet({
     });
     if (ok) onClose();
   };
+  const sendAgain = async () => {
+    setResendNote(null);
+    const r = await resend.run<{ invitation_mail: "sent" | "not_sent" }>(
+      `/${user.staff_user_id}/invitation`,
+      { door: "staff", body: { roles: user.roles }, role: "admin" },
+    );
+    if (r && r.invitation_mail === "not_sent") {
+      setResendNote(
+        "The servicing app re-invited them, but the e-mail could not be sent. Try again in a few minutes, or tell them to sign in at the staff door with their address.",
+      );
+    }
+  };
   return (
     <Sheet
       open
@@ -249,7 +280,7 @@ function PersonSheet({
       title={user.legal_name ?? user.email_masked}
       subtitle={
         <span className="inline-flex gap-2">
-          <Pill tone={statusTone(user.status)}>{words(user.status)}</Pill>
+          <Pill tone={statusTone(user.status)}>{statusWord(user.status)}</Pill>
           <span className="font-mono text-xs">{user.email_masked}</span>
         </span>
       }
@@ -265,14 +296,19 @@ function PersonSheet({
               disabled={!rationale.trim()}
               onClick={() => void disable()}
             >
-              Disable account
+              Remove from staff
             </Button>
           </>
         ) : (
           <>
             {user.status !== "disabled" && !self ? (
               <Button variant="danger" onClick={() => setDisabling(true)}>
-                Disable…
+                Remove…
+              </Button>
+            ) : null}
+            {user.status === "invited" && !self ? (
+              <Button variant="ghost" loading={resend.busy} onClick={() => void sendAgain()}>
+                Send the invitation again
               </Button>
             ) : null}
             {!admin && !self ? (
@@ -296,6 +332,7 @@ function PersonSheet({
             label: "Enrolled",
             value: user.enrolled_at ? fmtDateTime(user.enrolled_at) : "Not yet",
           },
+          ...(user.disabled_at ? [{ label: "Removed", value: fmtDateTime(user.disabled_at) }] : []),
           { label: "Signs in with", value: user.factors.map(words).join(", ") || "—" },
           { label: "Open sessions", value: user.open_sessions },
           ...(user.locked_until
@@ -308,7 +345,20 @@ function PersonSheet({
       />
       {user.status === "invited" ? (
         <Notice tone="info" className="mt-4">
-          Invited and not yet enrolled. They set their password the first time they sign in.
+          Invited and not yet enrolled. They set their password the first time they sign in. If the
+          invitation never reached them, send it again: the same account, a fresh e-mail with the
+          staff door&rsquo;s link.
+        </Notice>
+      ) : null}
+      {user.status === "disabled" ? (
+        <Notice tone="neutral" className="mt-4">
+          Removed from the staff. They cannot sign in, and the servicing app keeps the record of
+          what they did. A removed address cannot be invited again.
+        </Notice>
+      ) : null}
+      {resendNote ? (
+        <Notice tone="warn" className="mt-4" title="Re-invited, and not told">
+          {resendNote}
         </Notice>
       ) : null}
       {!self ? (
@@ -321,9 +371,15 @@ function PersonSheet({
               servicing app spells.
             </Notice>
           )}
+          {disabling ? (
+            <Notice tone="warn" title="Removing them">
+              They are signed out now, their roles are revoked, and they leave this list. The record
+              of what they did stays, and a removed address cannot be invited again.
+            </Notice>
+          ) : null}
           {!admin || disabling ? (
             <Field
-              label={disabling ? "Why disable" : "Why the change"}
+              label={disabling ? "Why remove" : "Why the change"}
               htmlFor="why"
               hint="Recorded with your name."
             >
@@ -336,9 +392,9 @@ function PersonSheet({
           Your own access is changed by another admin, never by you.
         </Notice>
       )}
-      {act.error ? (
+      {(act.error ?? resend.error) ? (
         <Notice tone="danger" className="mt-4">
-          {act.error.message}
+          {(act.error ?? resend.error)!.message}
         </Notice>
       ) : null}
     </Sheet>

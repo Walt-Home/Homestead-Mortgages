@@ -36,6 +36,16 @@ const ResendBody = z
   .object({
     /** The roles the person holds, so the re-invitation changes none of them. All four when absent. */
     roles: z.array(z.enum(STAFF_ROLES)).min(1).max(4).optional(),
+    /**
+     * The address, typed by the admin, for a person this console never held
+     * one for — invited before 6 October 2026, or from somewhere else. The
+     * console shows the masked form to type against; the servicing app
+     * re-invites whichever account the address belongs to, and the answer
+     * names it, so a slip is seen rather than hidden.
+     */
+    email: z.string().trim().toLowerCase().email().max(254).optional(),
+    /** Their name, as the list shows it, kept on the row we remember. */
+    name: z.string().trim().max(200).optional(),
   })
   .strict();
 
@@ -51,10 +61,10 @@ export function consoleStaffRouter(gate: ConsoleStaffGateOptions): Router {
 
   /**
    * Send the invitation again. 404 when this console never held the
-   * address (invited before 6 October 2026, or somewhere else): the admin
-   * invites it afresh from Invite instead. 409 when the person was removed,
-   * or has already enrolled — the servicing app refuses both and there is
-   * nothing to send.
+   * address (invited before 6 October 2026, or somewhere else) and none
+   * was typed: the sheet then asks for it and sends again with it. 409
+   * when the person was removed, or has already enrolled — the servicing
+   * app refuses both and there is nothing to send.
    */
   router.post(
     "/:id/invitation",
@@ -62,14 +72,17 @@ export function consoleStaffRouter(gate: ConsoleStaffGateOptions): Router {
       const id = StaffId.parse(req.params.id);
       const body = ResendBody.parse(req.body ?? {});
       const held = await heldInvitation(id);
-      if (!held) {
+      // The typed address wins when there is one: the admin may be correcting what is held.
+      const to = body.email ?? held?.email ?? null;
+      const name = body.name ?? held?.name ?? null;
+      if (to === null) {
         throw new AppError(
           404,
-          "This console does not hold that person's address: they were invited before it remembered addresses, or from somewhere else. Invite the address again from Invite.",
+          "This console does not hold that person's address: they were invited before it remembered addresses, or from somewhere else. Type the address to send the invitation again.",
           "INVITATION_NOT_HELD",
         );
       }
-      if (held.removedAt) {
+      if (held?.removedAt && body.email === undefined) {
         throw new AppError(
           409,
           "That person was removed from the staff, and a removed account is not invited again.",
@@ -93,8 +106,8 @@ export function consoleStaffRouter(gate: ConsoleStaffGateOptions): Router {
           method: "POST",
           headers,
           body: JSON.stringify({
-            email: held.email,
-            legal_name: held.name ?? undefined,
+            email: to,
+            legal_name: name ?? undefined,
             roles: body.roles ?? [...STAFF_ROLES],
             rationale: "Invitation sent again from the console",
             role: "admin",
@@ -144,8 +157,8 @@ export function consoleStaffRouter(gate: ConsoleStaffGateOptions): Router {
       try {
         const outcome = await connectors().mail.send(
           staffInvitationMessage({
-            to: held.email,
-            name: held.name,
+            to,
+            name,
             signInUrl: staffSignInUrl(req.hostname || config.servicing.publicHost || "localhost"),
             again: true,
           }),
@@ -154,9 +167,11 @@ export function consoleStaffRouter(gate: ConsoleStaffGateOptions): Router {
       } catch {
         mailed = "not_sent";
       }
-      await rememberInvitation({ email: held.email, name: held.name, staffUserId, mailed });
+      await rememberInvitation({ email: to, name, staffUserId, mailed });
       res.json({
         staff_user_id: staffUserId,
+        // False when the typed address belonged to no invited account and
+        // the servicing app made one: the admin is shown that, not a toast.
         reinvited: out.reinvited === true,
         invitation_mail: mailed,
       });

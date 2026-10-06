@@ -245,6 +245,13 @@ function PersonSheet({
   const [disabling, setDisabling] = useState(false);
   // What became of the invitation sent again, when it did not simply go.
   const [resendNote, setResendNote] = useState<string | null>(null);
+  // The console holds no address for them (invited before 6 October 2026):
+  // the admin types it here, against the masked form, and it is sent to that.
+  const [needAddress, setNeedAddress] = useState(false);
+  const [address, setAddress] = useState("");
+  const maskedPrefix = user.email_masked.replace(/\*+$/, "").toLowerCase();
+  const addressFits =
+    address.includes("@") && address.trim().toLowerCase().startsWith(maskedPrefix);
   const admin = isAdmin(user.roles);
   const save = async () => {
     const ok = await act.run(`/staff/${user.staff_user_id}/roles`, {
@@ -261,13 +268,32 @@ function PersonSheet({
     });
     if (ok) onClose();
   };
-  const sendAgain = async () => {
+  const sendAgain = async (typed?: string) => {
     setResendNote(null);
-    const r = await resend.run<{ invitation_mail: "sent" | "not_sent" }>(
-      `/${user.staff_user_id}/invitation`,
-      { door: "staff", body: { roles: user.roles }, role: "admin" },
-    );
-    if (r && r.invitation_mail === "not_sent") {
+    const r = await resend.run<{
+      staff_user_id: string;
+      reinvited: boolean;
+      invitation_mail: "sent" | "not_sent";
+    }>(`/${user.staff_user_id}/invitation`, {
+      door: "staff",
+      body: {
+        roles: user.roles,
+        ...(typed ? { email: typed.trim(), name: user.legal_name ?? undefined } : {}),
+      },
+      role: "admin",
+    });
+    if (!r) {
+      if (resend.error?.code === "INVITATION_NOT_HELD") setNeedAddress(true);
+      return;
+    }
+    setNeedAddress(false);
+    if (r.staff_user_id !== user.staff_user_id || !r.reinvited) {
+      setResendNote(
+        `${typed?.trim() ?? "That address"} is not this person's: the servicing app ${
+          r.reinvited ? "re-invited a different account" : "made a new account for it"
+        }. Check the list, and remove what should not be there.`,
+      );
+    } else if (r.invitation_mail === "not_sent") {
       setResendNote(
         "The servicing app re-invited them, but the e-mail could not be sent. Try again in a few minutes, or tell them to sign in at the staff door with their address.",
       );
@@ -307,9 +333,20 @@ function PersonSheet({
               </Button>
             ) : null}
             {user.status === "invited" && !self ? (
-              <Button variant="ghost" loading={resend.busy} onClick={() => void sendAgain()}>
-                Send the invitation again
-              </Button>
+              needAddress ? (
+                <Button
+                  variant="primary"
+                  loading={resend.busy}
+                  disabled={!addressFits}
+                  onClick={() => void sendAgain(address)}
+                >
+                  Send to this address
+                </Button>
+              ) : (
+                <Button variant="ghost" loading={resend.busy} onClick={() => void sendAgain()}>
+                  Send the invitation again
+                </Button>
+              )
             ) : null}
             {!admin && !self ? (
               <Button
@@ -356,8 +393,26 @@ function PersonSheet({
           what they did. A removed address cannot be invited again.
         </Notice>
       ) : null}
+      {needAddress ? (
+        <div className="mt-4 space-y-3">
+          <Notice tone="neutral" title="Type their address">
+            This console holds only <span className="font-mono">{user.email_masked}</span> for them:
+            they were invited before it kept addresses. Type the whole address and the invitation is
+            sent to it, and kept for next time.
+          </Notice>
+          <Field label="E-mail" htmlFor="resend-email" hint={`Begins with ${maskedPrefix}.`}>
+            <Input
+              id="resend-email"
+              type="email"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder={`${maskedPrefix}…@…`}
+            />
+          </Field>
+        </div>
+      ) : null}
       {resendNote ? (
-        <Notice tone="warn" className="mt-4" title="Re-invited, and not told">
+        <Notice tone="warn" className="mt-4" title="Sent, and not as expected">
           {resendNote}
         </Notice>
       ) : null}
@@ -392,7 +447,7 @@ function PersonSheet({
           Your own access is changed by another admin, never by you.
         </Notice>
       )}
-      {(act.error ?? resend.error) ? (
+      {(act.error ?? (resend.error && !needAddress ? resend.error : null)) ? (
         <Notice tone="danger" className="mt-4">
           {(act.error ?? resend.error)!.message}
         </Notice>

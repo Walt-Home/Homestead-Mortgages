@@ -4071,9 +4071,13 @@ gated by the servicing app's session like billing) asks the servicing app
 again as the admin asking, with the roles the person holds so none change,
 mails the invitation with "sent again" in the subject, and records the
 outcome on the row. An id this console never held — invited before 6
-October, or from somewhere else — is a 404 that says to invite the address
-afresh; an enrolled or removed person is a 409 that says why there is
-nothing to send.
+October, or from somewhere else — is a 404 the sheet answers by asking
+for the address: the admin types it against the masked form the servicing
+app shows, the route sends to that and remembers it, and the answer names
+the account the address belonged to, so a slip re-inviting somebody else
+is shown rather than hidden (Joe hit the dead end on Drew's row the same
+afternoon: "Well that sucks"). An enrolled or removed person is a 409
+that says why there is nothing to send.
 
 **Removed, not deleted.** Joe asked for a delete. The servicing app has no
 such endpoint — its staff API ends at `disable` — and some thirty of its

@@ -247,6 +247,34 @@ describe("sending an invitation again", () => {
     expect(held!.mailOutcome).toBe("sent");
   });
 
+  it("takes the address typed by the admin when this console never held one, and remembers it", async () => {
+    invites.length = 0;
+    const before = outbox().length;
+    // Drew and Doug, invited on 5 October before the console remembered addresses.
+    const r = await resend("staff-7", {
+      email: " Drew@Partnerbank.test ",
+      name: "Drew Example",
+      roles: ["admin"],
+    });
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ staff_user_id: "staff-7", reinvited: true, invitation_mail: "sent" });
+    expect(invites[0]!.body).toMatchObject({
+      email: "drew@partnerbank.test",
+      legal_name: "Drew Example",
+      roles: ["admin"],
+    });
+    expect(outbox().length).toBe(before + 1);
+    expect(outbox().at(-1)!.to).toBe("drew@partnerbank.test");
+    // Held from now on: the next resend is one click.
+    expect(await heldInvitation("staff-7")).toMatchObject({
+      email: "drew@partnerbank.test",
+      name: "Drew Example",
+      mailOutcome: "sent",
+    });
+    expect((await resend("staff-7")).status).toBe(200);
+    expect((await resend("staff-7", { email: "not an address" })).status).toBe(400);
+  });
+
   it("is refused for an address this console never held, a removed member, or somebody enrolled", async () => {
     invites.length = 0;
     const unknown = await resend("staff-unknown");

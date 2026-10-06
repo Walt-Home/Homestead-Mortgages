@@ -4096,3 +4096,42 @@ domain, code mailed, removal, code no longer mailed —
 `console-staff-invitations.test.ts` holds the table and the resend against
 Postgres, and the proxy's "stranger gets the same answer and no mail" test
 stands as it was.
+
+## A billing page says how its number is computed, and the run rate is an estimate
+
+**Decision (6 October 2026, Joe).** Three things on a servicer's billing
+page: an MRR and an ARR estimate, helper text under the Charge card saying
+how that number is computed, and the cadence at which the loans are
+analyzed.
+
+**The run rate is the meter's own arithmetic, not a second one.**
+`runRate` in `@hm/billing` takes the same metered book the month's
+statement does and charges a whole month at the balance the newest tape
+reports for every loan loaded by today, not reported ended, with a
+balance — each loan rounded once, as the meter rounds a loan-month, so a
+full month at those balances would agree to the token — and multiplies by
+twelve. It is called an estimate on the page for the two reasons it is
+one: principal amortizes, so a real year runs lower than twelve of this
+month, and a tape may add loans or end them. Offer touches are events,
+not a rate, and are left out. It is read live beside the running month
+(`runRateFor`), never stored: a statement is what was consumed, and the
+run rate is what would be.
+
+**The helper text reads the sheet, never a typed number.** `meterTerms()`
+answers the two rows the tape meter bills and the sheet's exchange rate,
+and `ChargeExplainer` writes the sentence from them, so a price-sheet
+change moves the page. The same component sits under the servicer's own
+statement in the portal, because the question "how is this computed" is
+the customer's before it is ours.
+
+**The cadence is Terraform's schedule, copied and held equal.** The jobs
+run on cron expressions in `infra/variables.tf`; `services/schedules.ts`
+carries copies of the two a billing page states — the daily review and the
+month-close — and makes the words from the expression ("every morning at
+7:00 AM Eastern", "the 1st of each month at 6:00 AM Eastern"), refusing a
+shape it has no words for. `schedules.test.ts` reads the Terraform file
+and fails when the copy drifts, because a page that said seven after the
+job moved to eight would be believed. The sentence is careful about what
+a run does: the analysis runs every morning; the charge accrues by
+calendar day whether or not a morning's review changes a verdict, since
+the sheet prices a loan-month and not a run.

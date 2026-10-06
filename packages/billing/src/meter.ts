@@ -417,3 +417,104 @@ export function statementWire(s: Statement): StatementWire {
     })),
   };
 }
+
+/* ── the sheet's terms, for a page that says how a charge is computed ──── */
+
+export interface MeterTerms {
+  readonly sheet: { readonly version: string; readonly date: string };
+  /** The self-improving mortgage row: tokens per $100,000 of UPB per loan-month. */
+  readonly tokensPer100kPerLoanMonth: number;
+  /** The offer-touch row: tokens per touch, flat. */
+  readonly touchTokens: number;
+  /** Cents per token, as a decimal string. */
+  readonly tokenCents: string;
+  /** The balance unit the rate is quoted on, in cents: $100,000. */
+  readonly balanceUnitCents: string;
+}
+
+/** The two rows the tape meter bills, and the sheet's one exchange rate, as a page states them. */
+export function meterTerms(): MeterTerms {
+  return {
+    sheet: { version: PRICE_SHEET.version, date: PRICE_SHEET.date },
+    tokensPer100kPerLoanMonth: priceRow(RATE_ROW).tokens,
+    touchTokens: priceRow(TOUCH_ROW).tokens,
+    tokenCents: PRICE_SHEET.tokenCents.toString(),
+    balanceUnitCents: PRICE_SHEET.balanceUnitCents.toString(),
+  };
+}
+
+/* ── the run rate: MRR and ARR, as estimates ────────────────────────────── */
+
+/**
+ * What the book would consume in a whole month at the balances the newest
+ * tapes report, and that twelve times over. An estimate twice: a balance
+ * amortizes, so a real year runs lower than twelve of this month, and a
+ * tape may add loans or report them ended. Offer touches are not in it;
+ * they are events, not a rate. Each loan is rounded as the meter rounds
+ * it, so a full month's statement at these balances would agree.
+ */
+export interface RunRate {
+  readonly asOf: PlainDate;
+  /** Loans in the rate: loaded by `asOf`, not reported ended, with a balance. */
+  readonly loans: number;
+  readonly loansOnBook: number;
+  readonly balanceCents: bigint;
+  readonly monthlyTokens: bigint;
+  readonly monthlyCents: bigint;
+  readonly annualTokens: bigint;
+  readonly annualCents: bigint;
+}
+
+export function runRate(loans: readonly MeteredLoan[], asOf: PlainDate): RunRate {
+  const rate = priceRow(RATE_ROW);
+  let counted = 0;
+  let balanceCents = 0n;
+  let monthlyTokens = 0n;
+  for (const loan of loans) {
+    if (compare(loan.watchedFrom, asOf) > 0) continue;
+    const observations = loan.observations.filter((o) => compare(o.asOf, asOf) <= 0).sort(byAsOf);
+    // Ended as the meter reads it: any tape on or before the day said so.
+    if (observations.some((o) => ENDED_STATUSES.has(o.status))) continue;
+    const newest = observations.at(-1);
+    if (!newest || newest.principalBalanceCents <= 0n) continue;
+    counted += 1;
+    balanceCents += newest.principalBalanceCents;
+    // A whole month: the fraction is one.
+    monthlyTokens += tokensForBalance(newest.principalBalanceCents, rate.tokens, 1, 1);
+  }
+  const annualTokens = monthlyTokens * 12n;
+  return {
+    asOf,
+    loans: counted,
+    loansOnBook: loans.length,
+    balanceCents,
+    monthlyTokens,
+    monthlyCents: centsOfTokens(monthlyTokens),
+    annualTokens,
+    annualCents: centsOfTokens(annualTokens),
+  };
+}
+
+export interface RunRateWire {
+  readonly asOf: string;
+  readonly loans: number;
+  readonly loansOnBook: number;
+  readonly balanceCents: string;
+  readonly monthlyTokens: string;
+  readonly monthlyCents: string;
+  readonly annualTokens: string;
+  readonly annualCents: string;
+}
+
+export function runRateWire(r: RunRate): RunRateWire {
+  return {
+    asOf: r.asOf,
+    loans: r.loans,
+    loansOnBook: r.loansOnBook,
+    balanceCents: r.balanceCents.toString(),
+    monthlyTokens: r.monthlyTokens.toString(),
+    monthlyCents: r.monthlyCents.toString(),
+    annualTokens: r.annualTokens.toString(),
+    annualCents: r.annualCents.toString(),
+  };
+}

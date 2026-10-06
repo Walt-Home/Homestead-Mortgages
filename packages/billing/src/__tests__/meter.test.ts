@@ -205,3 +205,56 @@ describe("the month's statement", () => {
     expect(monthKey(day("2026-01-01"))).toBe("2026-01");
   });
 });
+
+describe("the run rate", () => {
+  it("is a whole month at the newest balances, twelve times over, and leaves out what the meter would", async () => {
+    const { meterTerms, runRate, runRateWire } = await import("../meter.js");
+    const loans = [
+      // $200,000 at the newest tape: 2 × 1,750 tokens a month.
+      loan("A", "2026-09-01", [
+        { asOf: "2026-09-30", balance: 25_000_000n },
+        { asOf: "2026-10-05", balance: 20_000_000n },
+      ]),
+      // Reported paid off: nothing.
+      loan("B", "2026-09-01", [
+        { asOf: "2026-09-30", balance: 10_000_000n },
+        { asOf: "2026-10-05", balance: 0n, status: "paid_off" },
+      ]),
+      // Loaded after the day: not yet in the rate.
+      loan("C", "2026-10-20", [{ asOf: "2026-10-05", balance: 10_000_000n }]),
+      // No balance: nothing.
+      loan("D", "2026-09-01", [{ asOf: "2026-10-05", balance: 0n }]),
+      // $123,456.78: rounded once, as the meter rounds a loan-month.
+      loan("E", "2026-09-01", [{ asOf: "2026-10-05", balance: 12_345_678n }]),
+    ];
+    const r = runRate(loans, day("2026-10-06"));
+    expect(r.loans).toBe(2);
+    expect(r.loansOnBook).toBe(5);
+    expect(r.balanceCents).toBe(32_345_678n);
+    // 3,500 + round(12,345,678 × 1,750 ÷ 10,000,000) = 3,500 + 2,160 (2,160.49…).
+    expect(r.monthlyTokens).toBe(5_660n);
+    expect(r.monthlyCents).toBe(5_660n);
+    expect(r.annualTokens).toBe(67_920n);
+    expect(r.annualCents).toBe(67_920n);
+    // A whole month of the loans in the rate agrees with it to the token.
+    const whole = meterMonth([loans[0]!, loans[4]!], day("2026-10-01"));
+    expect(whole.tokens).toBe(r.monthlyTokens);
+    expect(runRateWire(r)).toEqual({
+      asOf: "2026-10-06",
+      loans: 2,
+      loansOnBook: 5,
+      balanceCents: "32345678",
+      monthlyTokens: "5660",
+      monthlyCents: "5660",
+      annualTokens: "67920",
+      annualCents: "67920",
+    });
+    expect(meterTerms()).toEqual({
+      sheet: { version: "1.0", date: "2026-09-28" },
+      tokensPer100kPerLoanMonth: 1750,
+      touchTokens: 100,
+      tokenCents: "1",
+      balanceUnitCents: "10000000",
+    });
+  });
+});

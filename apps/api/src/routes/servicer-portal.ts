@@ -30,6 +30,7 @@ import {
   monthFromKey,
   statementFor,
   type StatementAnswer,
+  billingTerms,
 } from "../services/billing.js";
 import {
   bankAccounts,
@@ -40,6 +41,7 @@ import {
   memberInvoices,
 } from "../services/billing-invoices.js";
 import { portalOrigin } from "./console-billing.js";
+import { cadenceWire } from "../services/schedules.js";
 import { dayEt } from "../services/refi-offers.js";
 import {
   acceptServicerInvitation,
@@ -251,6 +253,10 @@ servicerPortalRouter.get(
         annualTokenPool: current.servicer.annualTokenPool,
         since: current.servicer.since,
       },
+      // How a charge is computed and when the loans are analyzed, in the
+      // servicer's own words on their page as on ours.
+      terms: billingTerms(),
+      cadence: cadenceWire(),
       current: statementForMember(current),
       invoices: statements.map(({ closedBy: _closedBy, ...invoice }) => {
         void _closedBy;

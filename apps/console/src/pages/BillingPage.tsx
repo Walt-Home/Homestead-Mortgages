@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../components/Page.js";
 import { Table, type Column } from "../components/Table.js";
 import { StatementLines, StatementLoans } from "../components/StatementTables.js";
+import { ChargeExplainer, tokenPriceWords } from "../components/ChargeExplainer.js";
 import { AchPayments } from "../components/AchPayments.js";
 import { BillingProfileForm } from "../components/BillingProfileForm.js";
 import { INVOICE_WORDS, InvoicePanel } from "../components/InvoicePanel.js";
@@ -263,8 +264,19 @@ export function BillingServicerPage() {
       </Page>
     );
   }
-  const { servicer, today, sheet, statements, profile, profileGaps, invoices, invoicing } =
-    page.data;
+  const {
+    servicer,
+    today,
+    sheet,
+    statements,
+    profile,
+    profileGaps,
+    invoices,
+    invoicing,
+    runRate,
+    terms,
+    cadence,
+  } = page.data;
   const running = page.data.current.statement;
   const months = monthsSince(servicer.since, today);
   // The month's invoice: the live one if there is one, else the last voided.
@@ -323,6 +335,33 @@ export function BillingServicerPage() {
         </>
       }
     >
+      {/* The run rate: what the book would consume in a whole month at the newest balances, and twelve of them. */}
+      <Section title="Run rate" className="mb-8">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat
+            label="MRR estimate"
+            value={money(runRate.monthlyCents)}
+            hint={`a whole month at the newest tape's balances; ${plural(runRate.loans, "loan")}, no offer touches`}
+            tone="accent"
+          />
+          <Stat
+            label="ARR estimate"
+            value={money(runRate.annualCents)}
+            hint="MRR × 12 at today's balances; principal amortizes, so a year runs lower"
+          />
+          <Stat
+            label="UPB in the rate"
+            value={money(runRate.balanceCents, { compact: true })}
+            hint={`of ${plural(runRate.loansOnBook, "loan")} on the book: those loaded, with a balance, not ended`}
+          />
+          <Stat
+            label="Tokens a month"
+            value={Number(runRate.monthlyTokens).toLocaleString("en-US")}
+            hint={`${terms.tokensPer100kPerLoanMonth.toLocaleString("en-US")} per $100,000 of UPB per loan-month; ${tokenPriceWords(terms)}`}
+          />
+        </div>
+      </Section>
+
       {statement.isPending || !s || !answer || !standing ? (
         statement.isError ? (
           <Notice tone="danger">The statement could not be read.</Notice>
@@ -348,7 +387,12 @@ export function BillingServicerPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label="Charge" value={money(s.cents)} hint={tokensWord(s.tokens)} tone="accent" />
+            <Stat
+              label={answer.standing === "running" ? "Charge so far" : "Charge"}
+              value={money(s.cents)}
+              hint={`${tokensWord(s.tokens)}; ${tokenPriceWords(terms)}`}
+              tone="accent"
+            />
             <Stat
               label="Loans billed"
               value={s.loansBilled.toLocaleString()}
@@ -372,6 +416,11 @@ export function BillingServicerPage() {
               }
             />
           </div>
+          <ChargeExplainer
+            terms={terms}
+            cadence={cadence}
+            running={answer.standing === "running"}
+          />
 
           {answer.standing === "closed" && month ? (
             <Section title="Invoice" className="mt-8">

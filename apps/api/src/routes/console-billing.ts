@@ -21,6 +21,8 @@ import {
   monthFromKey,
   setAnnualTokenPool,
   statementFor,
+  billingTerms,
+  runRateFor,
 } from "../services/billing.js";
 import {
   approveInvoice,
@@ -47,6 +49,7 @@ import {
 } from "../services/billing-invoices.js";
 import { PRICE_SHEET } from "@hm/billing";
 import { config } from "../config.js";
+import { cadenceWire } from "../services/schedules.js";
 import { dayEt } from "../services/refi-offers.js";
 import { startOfMonth } from "@hm/kernel/calendar";
 
@@ -155,6 +158,11 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
         today: dayEt(new Date()),
         servicer: current.servicer,
         current,
+        // MRR and ARR as the meter estimates them, and what the page says
+        // about how a charge is computed and when the loans are analyzed.
+        runRate: await runRateFor(slug),
+        terms: billingTerms(),
+        cadence: cadenceWire(),
         statements,
         profile: profile.profile,
         profileGaps: profile.gaps,
@@ -289,15 +297,13 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
     asyncRoute(async (req, res) => {
       const slug = z.string().min(1).parse(req.params.slug);
       const back = `${portalOrigin()}/console/portal/billing`;
-      res
-        .status(201)
-        .json(
-          await bankSetupLink({
-            slug,
-            successUrl: `${back}?ach=done`,
-            cancelUrl: `${back}?ach=left`,
-          }),
-        );
+      res.status(201).json(
+        await bankSetupLink({
+          slug,
+          successUrl: `${back}?ach=done`,
+          cancelUrl: `${back}?ach=left`,
+        }),
+      );
     }),
   );
 

@@ -24,12 +24,16 @@
 import { prisma, Prisma } from "@hm/db";
 import {
   meterMonth,
+  meterTerms,
+  runRate,
+  runRateWire,
   monthKey,
   PRICE_SHEET,
   statementWire,
   type MeteredLoan,
   type MeteredObservation,
   type ObservedStatus,
+  type RunRateWire,
   type StatementWire,
 } from "@hm/billing";
 import {
@@ -189,6 +193,25 @@ export async function statementFor(
     closed: null,
   };
 }
+
+/**
+ * The book's run rate today — MRR and ARR, as the meter's own estimates
+ * (`@hm/billing`, `runRate`): a whole month at the newest balances, and
+ * twelve of them. Read live, like the running month.
+ */
+export async function runRateFor(
+  slug: string,
+  opts: { readonly now?: Date } = {},
+  db: Db = prisma,
+): Promise<RunRateWire> {
+  const today = dayEt(opts.now ?? new Date());
+  const servicer = await servicerBySlug(slug, db);
+  const book = await meteredBook(servicer.id, today, db);
+  return runRateWire(runRate(book, today));
+}
+
+/** The sheet's terms the meter runs on, for the page that says how a charge is computed. */
+export const billingTerms = meterTerms;
 
 export interface ClosedStatement {
   readonly id: string;

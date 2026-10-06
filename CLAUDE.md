@@ -250,7 +250,12 @@ else until it boards, which a servicer's own book never does here.
 `services/billing.ts` feeds it and keeps one append-only
 `billing_statements` row per servicer per month, closed by the
 `billing-close` job on the first at 06:00 Eastern (`npm run billing:close`)
-or by hand; the running month is computed through today on read. The
+or by hand; the running month is computed through today on read. Beside it
+the servicer's page reads an MRR and ARR estimate (`runRate`, the meter's
+own arithmetic over a whole month at the newest balances, twelve times),
+and says how the charge is computed and when the loans are analyzed —
+the sheet's rows from `meterTerms()`, the jobs' schedules from
+`services/schedules.ts`, which a test holds equal to `infra/variables.tf`. The
 door is `/console/hm/billing`, beside the tape desk, and it opens for
 admin alone. The console itself has one role: every page opens for every
 admin, an invitation grants the servicing app's four roles together, no

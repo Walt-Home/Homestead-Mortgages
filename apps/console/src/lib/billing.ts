@@ -297,11 +297,49 @@ export interface InvoiceHistoryEntry {
   readonly at: string;
 }
 
+/** The sheet's terms the meter runs on, as the API states them. */
+export interface MeterTerms {
+  readonly sheet: { readonly version: string; readonly date: string };
+  readonly tokensPer100kPerLoanMonth: number;
+  readonly touchTokens: number;
+  /** Cents per token, a decimal string. */
+  readonly tokenCents: string;
+  readonly balanceUnitCents: string;
+}
+
+/** MRR and ARR as the meter estimates them: a whole month at the newest balances, and twelve. */
+export interface RunRate {
+  readonly asOf: string;
+  readonly loans: number;
+  readonly loansOnBook: number;
+  readonly balanceCents: string;
+  readonly monthlyTokens: string;
+  readonly monthlyCents: string;
+  readonly annualTokens: string;
+  readonly annualCents: string;
+}
+
+export interface ScheduleWire {
+  readonly cron: string;
+  readonly timeZone: string;
+  /** "every morning at 7:00 AM Eastern". */
+  readonly words: string;
+}
+
+/** When the loans are analyzed, and when a month is closed. */
+export interface Cadence {
+  readonly review: ScheduleWire;
+  readonly billingClose: ScheduleWire;
+}
+
 export interface BillingServicerPage {
   readonly sheet: { readonly version: string; readonly date: string };
   readonly today: string;
   readonly servicer: BillingServicer;
   readonly current: StatementAnswer;
+  readonly runRate: RunRate;
+  readonly terms: MeterTerms;
+  readonly cadence: Cadence;
   readonly statements: readonly ClosedStatement[];
   readonly profile: BillingProfile;
   readonly profileGaps: readonly ProfileGap[];

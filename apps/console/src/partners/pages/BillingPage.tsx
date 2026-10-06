@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../../components/Page.js";
 import { Table, type Column } from "../../components/Table.js";
 import { StatementLines, StatementLoans } from "../../components/StatementTables.js";
+import { ChargeExplainer, tokenPriceWords } from "../../components/ChargeExplainer.js";
 import { Button, Notice, Pill, Rows, Stat, type Tone } from "../../components/ui.js";
 import { Sheet } from "../../components/Sheet.js";
 import { Loading } from "../../components/Loading.js";
@@ -23,6 +24,7 @@ import {
   monthLabel,
   openInvoicePage,
   tokensWord,
+  type MeterTerms,
   type InvoiceLink,
   type Statement,
   type StatementStanding,
@@ -167,14 +169,14 @@ function PortalAch() {
 const BASIS =
   "A loan is billed from the day its tape is loaded, on the interest-bearing unpaid principal the newest tape on or before the month's end reported. A loan-month is pro-rated by calendar day and stops the day a tape reports the loan paid off, transferred, charged off or matured. A token is a cent.";
 
-function StatementStats({ answer }: { answer: PortalStatement }) {
+function StatementStats({ answer, terms }: { answer: PortalStatement; terms?: MeterTerms }) {
   const s = answer.statement;
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Stat
         label={answer.standing === "running" ? "Charge so far" : "Charge"}
         value={money(s.cents)}
-        hint={tokensWord(s.tokens)}
+        hint={terms ? `${tokensWord(s.tokens)}; ${tokenPriceWords(terms)}` : tokensWord(s.tokens)}
       />
       <Stat
         label="Loans billed"
@@ -392,7 +394,7 @@ export function PortalBillingPage() {
       </Page>
     );
   }
-  const { servicer, sheet, today, current, invoices } = page.data;
+  const { servicer, sheet, today, current, invoices, terms, cadence } = page.data;
   const s = current.statement;
   const year = today.slice(0, 4);
   const invoicedThisYear = invoices
@@ -415,7 +417,8 @@ export function PortalBillingPage() {
           </Link>
         }
       >
-        <StatementStats answer={current} />
+        <StatementStats answer={current} terms={terms} />
+        <ChargeExplainer terms={terms} cadence={cadence} running={current.standing === "running"} />
         <p className="mt-3 text-sm text-fg-3">{runningWords(s)}</p>
       </Section>
 

@@ -5,6 +5,7 @@
  * ...facts } }`, folded into one error the pages can read.
  */
 
+import type { Cadence, MeterTerms } from "../lib/billing.js";
 import type { Statement, StatementStanding } from "../lib/billing.js";
 
 export class PortalError extends Error {
@@ -219,6 +220,8 @@ export interface PortalBilling {
   sheet: { version: string; date: string };
   today: string;
   servicer: { displayName: string; annualTokenPool: string | null; since: string | null };
+  terms: MeterTerms;
+  cadence: Cadence;
   current: PortalStatement;
   invoices: PortalInvoice[];
 }

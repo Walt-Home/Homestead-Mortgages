@@ -5,12 +5,14 @@
  * tape names — the first of the month it is for, or the day it is loaded
  * (`docs/decisions.md`, "The book is tracked from the day it is loaded" and
  * "A tape is for a month, and the book is billed from it"); the caller
- * passes that day as `watchedFrom`. The price sheet says what a watched loan on a partner's book
- * consumes — the self-improving mortgage row, per $100,000 of unpaid
- * principal balance per loan-month, and offer touches, flat — and nothing
- * else until the loan boards, which a servicer's own book never does here.
- * So the month's statement is one balance-driven line plus a count of
- * touches, and this is the arithmetic, pure, over the rows the tape wrote.
+ * passes that day as `watchedFrom`. The price sheet says what a watched
+ * loan on a partner's book consumes — the monitored-book rate, 25 basis
+ * points a year on its unpaid principal balance (25,000 tokens per
+ * $100,000 per loan-year, a twelfth each month, since sheet 1.1), and
+ * offer touches, flat — and nothing else until the loan boards, which a
+ * servicer's own book never does here. So the month's statement is one
+ * balance-driven line plus a count of touches, and this is the
+ * arithmetic, pure, over the rows the tape wrote.
  *
  * The decisions, each taken 29 September 2026 with Joe:
  *
@@ -30,9 +32,10 @@
  *     count the caller passes is zero and the line shows it.
  *
  * Tokens are cents, and the arithmetic is integer: a loan's tokens for the
- * month are `balance × rate × days ÷ ($100,000 × days in month)`, rounded
- * half-up once, per loan. The totals are sums of those, so a statement
- * agrees with its own lines to the token.
+ * month are `balance × rate × days ÷ ($100,000 × days in month × months
+ * the rate covers)`, rounded half-up once, per loan — twelve months for
+ * the loan-year rate. The totals are sums of those, so a statement agrees
+ * with its own lines to the token.
  */
 
 import {
@@ -48,7 +51,14 @@ import {
   type PlainDate,
 } from "@hm/kernel/calendar";
 import { Decimal, divRound } from "@hm/kernel/money";
-import { centsOfTokens, PRICE_SHEET, priceRow, type PriceRow } from "./price-sheet.js";
+import {
+  basisPointsPerYear,
+  centsOfTokens,
+  monthsPer,
+  PRICE_SHEET,
+  priceRow,
+  type PriceRow,
+} from "./price-sheet.js";
 
 /** What a tape may say a loan's standing is, in the feed contract's words. */
 export type ObservedStatus =
@@ -116,7 +126,9 @@ export interface StatementLine {
   readonly action: string;
   readonly fires: string;
   readonly basis: PriceRow["basis"];
-  /** The sheet's tokens: per $100,000 per loan-month, or per event. */
+  /** Per loan-month or per loan-year for a balance-priced row; per event for a flat one. */
+  readonly cadence: PriceRow["cadence"];
+  /** The sheet's tokens: per $100,000 per loan-month or loan-year, or per event. */
   readonly tokensEach: number;
   readonly quantity: LineQuantity;
   readonly tokens: bigint;
@@ -153,7 +165,7 @@ export interface MeterOptions {
   readonly through?: PlainDate;
 }
 
-const RATE_ROW = "A.self_improving_mortgage";
+const RATE_ROW = "A.monitored_book";
 const TOUCH_ROW = "A.offer_touch";
 
 /** "YYYY-MM" for any day of the month. */
@@ -173,11 +185,13 @@ export function tokensForBalance(
   tokensPer100k: number,
   days: number,
   daysInTheMonth: number,
+  /** The months one unit of the rate covers: one for a loan-month rate, twelve for a loan-year one. */
+  monthsInRate = 1,
 ): bigint {
   if (days <= 0 || balanceCents <= 0n) return 0n;
   return divRound(
     balanceCents * BigInt(tokensPer100k) * BigInt(days),
-    PRICE_SHEET.balanceUnitCents * BigInt(daysInTheMonth),
+    PRICE_SHEET.balanceUnitCents * BigInt(daysInTheMonth) * BigInt(monthsInRate),
     "HALF_UP",
   );
 }
@@ -211,7 +225,13 @@ function chargeLoan(
   const tokens =
     basis === null
       ? 0n
-      : tokensForBalance(basis.principalBalanceCents, rate.tokens, days, daysInTheMonth);
+      : tokensForBalance(
+          basis.principalBalanceCents,
+          rate.tokens,
+          days,
+          daysInTheMonth,
+          monthsPer(rate.cadence),
+        );
 
   let notBilled: NotBilled | null = null;
   if (tokens === 0n && touchTokens === 0n) {
@@ -271,6 +291,7 @@ export function meterMonth(
       action: rate.action,
       fires: rate.fires,
       basis: rate.basis,
+      cadence: rate.cadence,
       tokensEach: rate.tokens,
       quantity: {
         kind: "loan_months",
@@ -287,6 +308,7 @@ export function meterMonth(
       action: touch.action,
       fires: touch.fires,
       basis: touch.basis,
+      cadence: touch.cadence,
       tokensEach: touch.tokens,
       quantity: { kind: "events", count: touches },
       tokens: touchTokens,
@@ -347,6 +369,7 @@ export interface StatementLineWire {
   readonly action: string;
   readonly fires: string;
   readonly basis: PriceRow["basis"];
+  readonly cadence: PriceRow["cadence"];
   readonly tokensEach: number;
   readonly quantity: LineQuantityWire;
   readonly tokens: string;
@@ -392,6 +415,7 @@ export function statementWire(s: Statement): StatementWire {
       action: l.action,
       fires: l.fires,
       basis: l.basis,
+      cadence: l.cadence,
       tokensEach: l.tokensEach,
       quantity:
         l.quantity.kind === "loan_months"
@@ -424,8 +448,12 @@ export function statementWire(s: Statement): StatementWire {
 
 export interface MeterTerms {
   readonly sheet: { readonly version: string; readonly date: string };
-  /** The self-improving mortgage row: tokens per $100,000 of UPB per loan-month. */
-  readonly tokensPer100kPerLoanMonth: number;
+  /** The monitored-book rate: tokens per $100,000 of UPB per unit of its cadence. */
+  readonly rateTokensPer100k: number;
+  /** "loan_year" since sheet 1.1: charged a twelfth each month. */
+  readonly rateCadence: PriceRow["cadence"];
+  /** The same rate as basis points a year on the balance: 25. */
+  readonly basisPointsPerYear: number;
   /** The offer-touch row: tokens per touch, flat. */
   readonly touchTokens: number;
   /** Cents per token, as a decimal string. */
@@ -436,9 +464,12 @@ export interface MeterTerms {
 
 /** The two rows the tape meter bills, and the sheet's one exchange rate, as a page states them. */
 export function meterTerms(): MeterTerms {
+  const rate = priceRow(RATE_ROW);
   return {
     sheet: { version: PRICE_SHEET.version, date: PRICE_SHEET.date },
-    tokensPer100kPerLoanMonth: priceRow(RATE_ROW).tokens,
+    rateTokensPer100k: rate.tokens,
+    rateCadence: rate.cadence,
+    basisPointsPerYear: basisPointsPerYear(rate),
     touchTokens: priceRow(TOUCH_ROW).tokens,
     tokenCents: PRICE_SHEET.tokenCents.toString(),
     balanceUnitCents: PRICE_SHEET.balanceUnitCents.toString(),
@@ -481,8 +512,14 @@ export function runRate(loans: readonly MeteredLoan[], asOf: PlainDate): RunRate
     if (!newest || newest.principalBalanceCents <= 0n) continue;
     counted += 1;
     balanceCents += newest.principalBalanceCents;
-    // A whole month: the fraction is one.
-    monthlyTokens += tokensForBalance(newest.principalBalanceCents, rate.tokens, 1, 1);
+    // A whole month: the fraction is one, of the months the rate covers.
+    monthlyTokens += tokensForBalance(
+      newest.principalBalanceCents,
+      rate.tokens,
+      1,
+      1,
+      monthsPer(rate.cadence),
+    );
   }
   const annualTokens = monthlyTokens * 12n;
   return {

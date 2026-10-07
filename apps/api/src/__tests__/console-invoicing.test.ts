@@ -344,7 +344,7 @@ describe("drafting an invoice", () => {
       hm_invoice_id: invoice.id,
       hm_statement_id: statement.id,
       hm_month: "2026-08",
-      hm_sheet_version: "1.0",
+      hm_sheet_version: "1.1",
       hm_issuer: "Tomorrow OS Inc. dba Supermortgage",
       hm_terms_url: "https://supermortgage.com/terms.html",
     });

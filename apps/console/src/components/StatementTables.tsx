@@ -13,7 +13,9 @@ import { tokensWord, type LoanCharge, type Statement, type StatementLine } from 
 
 const rateWord = (l: StatementLine): string =>
   l.basis === "per_100k"
-    ? `${l.tokensEach.toLocaleString("en-US")} tokens per $100,000 per loan-month`
+    ? `${l.tokensEach.toLocaleString("en-US")} tokens per $100,000 per ${
+        l.cadence === "loan_year" ? "loan-year, a twelfth each month" : "loan-month"
+      }`
     : `${l.tokensEach.toLocaleString("en-US")} tokens ${l.fires}`;
 
 function quantityWord(l: StatementLine): string {

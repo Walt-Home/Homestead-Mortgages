@@ -81,6 +81,7 @@ export interface StatementLine {
   readonly action: string;
   readonly fires: string;
   readonly basis: "per_100k" | "flat";
+  readonly cadence: "loan_month" | "loan_year" | "run" | "event";
   readonly tokensEach: number;
   readonly quantity: LineQuantity;
   readonly tokens: string;
@@ -300,7 +301,11 @@ export interface InvoiceHistoryEntry {
 /** The sheet's terms the meter runs on, as the API states them. */
 export interface MeterTerms {
   readonly sheet: { readonly version: string; readonly date: string };
-  readonly tokensPer100kPerLoanMonth: number;
+  /** The monitored-book rate: tokens per $100,000 per unit of its cadence. */
+  readonly rateTokensPer100k: number;
+  readonly rateCadence: "loan_month" | "loan_year" | "run" | "event";
+  /** The same rate as basis points a year on the balance. */
+  readonly basisPointsPerYear: number;
   readonly touchTokens: number;
   /** Cents per token, a decimal string. */
   readonly tokenCents: string;

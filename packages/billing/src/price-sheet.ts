@@ -16,18 +16,24 @@
  * refinance run to 60,000, and the five worked examples in section E
  * reproduce to the token.
  *
- * The one rule that decides a servicer's bill is the sheet's last line of
- * section A, kept as `MONITORED_BOOK_CODES`: a monitored loan on a
- * partner's book consumes the self-improving mortgage row and offer
- * touches from the day it is loaded, and the servicing rows start the day
- * the loan boards. A servicer's own book never boards here, so the tape
- * meter (`meter.ts`) reads exactly those two rows and no other.
+ * The one rule that decides a servicer's bill is kept as
+ * `MONITORED_BOOK_CODES`. Version 1.0's last line of section A had a
+ * monitored loan on a partner's book consume the self-improving mortgage
+ * row alone — 1,750 a month, 21 basis points a year — with the servicing
+ * rows starting the day the loan boards. Version 1.1 (7 October 2026) is
+ * that one rule changed, by Joe's word: "it should be 25 basis points; that
+ * is what our partners are agreeing to." A monitored loan on a partner's
+ * book consumes the standard cycle's rate — 25,000 tokens per $100,000 per
+ * loan-year, a twelfth each month — as the `A.monitored_book` row, plus
+ * offer touches. Every other row is 1.0's, the PDF is 1.0's, and the sums
+ * the tests hold are 1.0's. A servicer's own book never boards here, so
+ * the tape meter (`meter.ts`) reads exactly those two rows and no other.
  */
 
 export const PRICE_SHEET = {
   title: "Supermortgage price sheet",
-  version: "1.0",
-  date: "2026-09-28",
+  version: "1.1",
+  date: "2026-10-07",
   /** 1 token = $0.01. */
   tokenCents: 1n,
   /** Section A is priced per this much unpaid principal balance: $100,000. */
@@ -166,6 +172,25 @@ const A_ANNUAL: readonly PriceRow[] = [
     "per_100k",
     "loan_year",
     40,
+  ),
+];
+
+/**
+ * The rate a monitored loan on a partner's book consumes (version 1.1):
+ * the standard cycle's 25 basis points a year on its balance, as one row
+ * priced per loan-year and charged a twelfth each month. Outside the
+ * cycle's sums, which are 1.0's.
+ */
+const A_MONITORED: readonly PriceRow[] = [
+  row(
+    "A.monitored_book",
+    "A",
+    "Monitored loan on a partner's book: daily rate review, refinance readiness kept current, an offer when the borrower benefits — the standard cycle's rate",
+    ["20.1", "33.3"],
+    "daily; per loan-year, a twelfth each month",
+    "per_100k",
+    "loan_year",
+    25_000,
   ),
 ];
 
@@ -746,6 +771,7 @@ const D: readonly PriceRow[] = [
 export const PRICE_ROWS: readonly PriceRow[] = [
   ...A_MONTHLY,
   ...A_ANNUAL,
+  ...A_MONITORED,
   ...A_FEATURE,
   ...B_RUN,
   ...B_EXTRA,
@@ -767,12 +793,28 @@ export function rowsIn(section: Section): readonly PriceRow[] {
 }
 
 /**
- * The one rule the tape meter runs on, from the foot of section A: "A
- * monitored loan on a partner's book consumes the self-improving mortgage
- * row and offer touches from the day it is loaded; the servicing rows
- * start the day the loan boards."
+ * The one rule the tape meter runs on. Version 1.0's foot of section A
+ * read "a monitored loan on a partner's book consumes the self-improving
+ * mortgage row and offer touches from the day it is loaded; the servicing
+ * rows start the day the loan boards"; since 1.1 the first of those rows
+ * is the monitored-book rate, 25 basis points a year (see the header).
  */
-export const MONITORED_BOOK_CODES = ["A.self_improving_mortgage", "A.offer_touch"] as const;
+export const MONITORED_BOOK_CODES = ["A.monitored_book", "A.offer_touch"] as const;
+
+/** How many months one unit of a balance-priced row covers: a loan-month is one, a loan-year twelve. */
+export function monthsPer(cadence: Cadence): number {
+  if (cadence === "loan_month") return 1;
+  if (cadence === "loan_year") return 12;
+  throw new Error(`a ${cadence} row is not priced on a balance over time`);
+}
+
+/** A balance-priced row as basis points a year on the balance: 25,000 tokens per $100,000 per loan-year is 25. */
+export function basisPointsPerYear(r: PriceRow): number {
+  if (r.basis !== "per_100k") throw new Error(`${r.code} is not priced on a balance`);
+  const centsPerYearPer100k =
+    r.tokens * Number(PRICE_SHEET.tokenCents) * (12 / monthsPer(r.cadence));
+  return (centsPerYearPer100k / Number(PRICE_SHEET.balanceUnitCents)) * 10_000;
+}
 
 /** Section A's own arithmetic: the monthly subtotal, the annual rows, and the standard year. */
 export function standardCycleTokensPer100k(): {

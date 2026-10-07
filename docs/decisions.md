@@ -4179,3 +4179,39 @@ September statement had nothing on it.
   day (`--all` for every loan), prints what it changed, and touches no
   closed statement, because a closed statement is what was invoiced. The
   month it opens is closed from the console as any open month is.
+
+## The partner rate is 25 basis points a year
+
+**Decision (7 October 2026, Joe).** "It should be 25 basis points. That is
+what our partners are agreeing to." The tape meter had billed a monitored
+loan on a partner's book off the self-improving mortgage row alone —
+1,750 tokens per $100,000 per loan-month, which is 21 basis points a year
+— because that was the last line of section A on price sheet 1.0.
+Grander's September statement closed at that rate: $11,554.44 on about
+$66.0 million of balance, 1.75 basis points for the month.
+
+- **Price sheet 1.1 is 1.0 with one rule changed.** A new row,
+  `A.monitored_book`, carries the rate a monitored loan on a partner's book
+  consumes: 25,000 tokens per $100,000 per loan-year, charged a twelfth
+  each month — the standard cycle's 25 basis points, which the sheet's own
+  header already named as what a standard loan consumes in a year.
+  `MONITORED_BOOK_CODES` names it beside offer touches. Every other row,
+  the PDF, and the sums the tests hold are 1.0's; the self-improving row
+  stands at 1,750 for a boarded loan, which no partner's book is here.
+- **The meter charges a loan-year rate a twelfth a month.** `tokensForBalance`
+  takes the months the rate covers (one for a loan-month row, twelve for a
+  loan-year one), so a loan's tokens for a month are
+  `balance × 25,000 × days ÷ ($100,000 × days in month × 12)`, rounded
+  half-up once per loan as before. A whole year at a steady balance is
+  exactly 25,000 per $100,000. The statement line carries the row's
+  cadence so the console says "per loan-year, a twelfth each month".
+- **The page says basis points.** `meterTerms()` answers the rate as
+  tokens and as basis points a year (`basisPointsPerYear`, computed from
+  the row, never typed), and the explainer and the run-rate card lead
+  with "25 basis points a year on the balance".
+- **A statement records the sheet it was closed under.** Grander's
+  September row says 1.0 and $11,554.44. Nothing was invoiced from it. A
+  closed statement cannot be rewritten (the trigger), but it can be
+  deleted and the month closed again under 1.1 — at 25 basis points,
+  $13,755.29 — which is Joe's call, and the recommended one while no
+  invoice exists.

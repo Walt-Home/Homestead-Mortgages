@@ -15,12 +15,14 @@ import {
   standardCycleTokensPer100k,
   standardPurchaseRunTokens,
   standardRefinanceRunTokens,
+  basisPointsPerYear,
+  monthsPer,
 } from "../price-sheet.js";
 
 describe("the price sheet", () => {
-  it("is version 1.0 of 28 September 2026, at a cent a token", () => {
-    expect(PRICE_SHEET.version).toBe("1.0");
-    expect(PRICE_SHEET.date).toBe("2026-09-28");
+  it("is version 1.1 of 7 October 2026, at a cent a token", () => {
+    expect(PRICE_SHEET.version).toBe("1.1");
+    expect(PRICE_SHEET.date).toBe("2026-10-07");
     expect(PRICE_SHEET.tokenCents).toBe(1n);
     expect(PRICE_SHEET.balanceUnitCents).toBe(10_000_000n);
   });
@@ -104,12 +106,17 @@ describe("the price sheet", () => {
     });
   });
 
-  it("names the two rows a monitored loan on a partner's book consumes", () => {
-    expect(MONITORED_BOOK_CODES).toEqual(["A.self_improving_mortgage", "A.offer_touch"]);
-    const rate = priceRow("A.self_improving_mortgage");
-    expect(rate.tokens).toBe(1750);
+  it("names the two rows a monitored loan on a partner's book consumes: 25 basis points a year, and touches", () => {
+    expect(MONITORED_BOOK_CODES).toEqual(["A.monitored_book", "A.offer_touch"]);
+    const rate = priceRow("A.monitored_book");
+    expect(rate.tokens).toBe(25_000);
     expect(rate.basis).toBe("per_100k");
-    expect(rate.cadence).toBe("loan_month");
+    expect(rate.cadence).toBe("loan_year");
+    expect(monthsPer(rate.cadence)).toBe(12);
+    expect(basisPointsPerYear(rate)).toBe(25);
+    // 1.0's rule, the self-improving row alone, was 21 basis points; the row itself is unchanged.
+    expect(basisPointsPerYear(priceRow("A.self_improving_mortgage"))).toBe(21);
+    expect(() => basisPointsPerYear(priceRow("A.offer_touch"))).toThrow(/not priced on a balance/);
     const touch = priceRow("A.offer_touch");
     expect(touch.tokens).toBe(100);
     expect(touch.basis).toBe("flat");

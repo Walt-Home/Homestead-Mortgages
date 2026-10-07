@@ -8,6 +8,8 @@ export {
   PRICE_SHEET,
   PRICE_ROWS,
   MONITORED_BOOK_CODES,
+  basisPointsPerYear,
+  monthsPer,
   priceRow,
   rowsIn,
   standardCycleTokensPer100k,

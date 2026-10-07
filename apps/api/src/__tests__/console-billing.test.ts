@@ -133,7 +133,11 @@ function expectedTokens(
   days: number,
   inMonth: number,
 ): bigint {
-  return book.loans.reduce((n, l) => n + tokensForBalance(l.upb_cents, 1750, days, inMonth), 0n);
+  // Sheet 1.1: 25,000 tokens per $100,000 per loan-year, a twelfth each month.
+  return book.loans.reduce(
+    (n, l) => n + tokensForBalance(l.upb_cents, 25_000, days, inMonth, 12),
+    0n,
+  );
 }
 
 describe("billing's gate", () => {
@@ -179,7 +183,7 @@ describe("the month running", () => {
       }[];
     }>("GET", "/servicers");
     expect(r.status).toBe(200);
-    expect(r.body.sheet).toEqual({ version: "1.0", date: "2026-09-28" });
+    expect(r.body.sheet).toEqual({ version: "1.1", date: "2026-10-07" });
     expect(r.body.today).toBe(today);
     expect(r.body.servicers).toHaveLength(1);
     const s = r.body.servicers[0]!;
@@ -210,7 +214,7 @@ describe("the month running", () => {
     expect(r.body.current.standing).toBe("running");
     expect(r.body.current.closed).toBeNull();
     expect(r.body.current.statement.lines.map((l) => l.code)).toEqual([
-      "A.self_improving_mortgage",
+      "A.monitored_book",
       "A.offer_touch",
     ]);
     expect(r.body.current.statement.lines[1]!.quantity).toEqual({ kind: "events", count: 0 });
@@ -290,7 +294,7 @@ describe("a month that has ended", () => {
       },
     });
     expect(row.closedBy).toBe("staff-admin");
-    expect(row.sheetVersion).toBe("1.0");
+    expect(row.sheetVersion).toBe("1.1");
     expect(row.loansBilled).toBe(12);
     expect(row.loanMonths.toFixed(2)).toBe("6.58");
     expect(row.tokens).toBe(expectedTokens(book, 17, 31));

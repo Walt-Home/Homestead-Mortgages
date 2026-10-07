@@ -357,7 +357,7 @@ export function BillingServicerPage() {
           <Stat
             label="Tokens a month"
             value={Number(runRate.monthlyTokens).toLocaleString("en-US")}
-            hint={`${terms.tokensPer100kPerLoanMonth.toLocaleString("en-US")} per $100,000 of UPB per loan-month; ${tokenPriceWords(terms)}`}
+            hint={`${terms.basisPointsPerYear} basis points a year on the balance, a twelfth each month; ${tokenPriceWords(terms)}`}
           />
         </div>
       </Section>

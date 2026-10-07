@@ -17,6 +17,7 @@ import {
   coreLogicConnector,
   duConnector,
   fencedMailConnector,
+  borrowerMailSwitch,
   fixtureRegistry,
   googlePlacesConnector,
   mismoAusResponseReader,
@@ -339,6 +340,12 @@ export function connectors(): ConnectorRegistry {
       chosen.mail = mail.capabilities.provider;
     }
   }
+  // Borrower and homeowner mail is held at the port by the deployment's
+  // switch, whichever mailer stands behind it and whichever route asked:
+  // the tape desk's claim links and the applicant's co-borrower invitation
+  // both answer "not delivered" while HOMEOWNER_MAIL is off. Read per send,
+  // so a test can flip the switch in place. Staff and servicer mail passes.
+  mail = borrowerMailSwitch(mail, { on: () => config.homeownerMail });
 
   // The servicing platform. Its fixture answers what his engine answered for
   // the sample book; the real adapter needs to know where he is, and refuses

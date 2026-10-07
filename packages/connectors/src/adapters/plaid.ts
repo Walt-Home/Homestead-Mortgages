@@ -30,24 +30,40 @@
  *      assembled asynchronously, so the last calls legitimately answer
  *      "not yet", which is a wait and not a failure.
  *
- * ⚠ Written against Plaid's documented CRA API and NOT yet exercised against a
- * live sandbox — there were no credentials when this was written. The response
- * mapping is the part most likely to need correcting once a real payload is in
- * hand, which is why it is concentrated in `toAssetReport` and the two
- * exported detectors below rather than spread through the adapter.
+ * ── What has been checked against Plaid, and what has not ──────────────
+ *
+ * The REQUEST side was corrected against Plaid's sandbox and its SDK's types
+ * (plaid@48) on 7 October 2026. `/user/create` issues a `user_id` and no
+ * `user_token` — the token is the shape of integrations older than December
+ * 2025, and reading its absence as "not enabled for CRA" refused every
+ * borrower — it wants the borrower's identity before it will order a Check
+ * report, and every later call is keyed on that id. Link is where the report
+ * is ordered: generation starts when the borrower finishes, the public token
+ * Link hands back belongs to the hybrid flow with Plaid's other products, and
+ * `/cra/check_report/create` is for ordering ANOTHER report, which a report
+ * that has expired (they live 24 hours) needs.
+ *
+ * The RESPONSE mapping in `toAssetReport` follows the SDK's `BaseReport` and
+ * `CraBankIncomeSource` types and has NOT been exercised against a live
+ * report: the account was enabled for neither product in either environment
+ * when this was written (`npm run plaid:products` says what it holds
+ * today). The mapping is concentrated in `toAssetReport` and the detectors
+ * below so a real payload corrects it in one place.
  */
 
 import type {
   PurposeToken,
   AlternativeReference,
   AssetReport,
+  Borrower,
   Deposit,
   DepositAccount,
   EmploymentRecord,
   IncomeSource,
+  IncomeSourceType,
   LoanFile,
 } from "@hm/shared";
-import { requireCategory, requireSubject } from "../guard.js";
+import { requireCategory, requireSubject, subjectOf } from "../guard.js";
 import type {
   AssetReportResult,
   BankConnector,
@@ -117,12 +133,74 @@ const HOSTS: Record<PlaidEnvironment, string> = {
 };
 
 /** Keys under which this adapter's credentials live in the token store. */
-const USER_TOKEN = "plaid.user_token";
 const ACCESS_TOKEN = "plaid.access_token";
 const ASSET_REPORT_TOKEN = "plaid.asset_report_token";
+/**
+ * A consumer report is a PERSON's, so the Plaid user that keys it is kept per
+ * party on the file: a co-borrower who links their own bank on the same
+ * application is another user and another report. Assets mode keeps its item
+ * per file, as it always has.
+ */
+const userIdKey = (partyId: string) => `plaid.user_id.${partyId}`;
+/** When Link finished for this person — the moment Plaid started their report. */
+const linkedAtKey = (partyId: string) => `plaid.cra_linked_at.${partyId}`;
+/** When a report was last ordered again, so an error cannot order one per poll. */
+const reorderedAtKey = (partyId: string) => `plaid.cra_reordered_at.${partyId}`;
+const REORDER_COOLDOWN_MS = 10 * 60 * 1000;
+
+/**
+ * The borrower as Plaid Check wants them. A Check report is a consumer report
+ * about a person, and `/user/create` refuses to make one for a user with no
+ * identity ("User identity is invalid for Plaid Check"). Name, date of birth,
+ * e-mail, phone in E.164, address, and the last four of the social security
+ * number. The full number is sent only by a lender sharing the report with a
+ * GSE, and there is no vault to read one from (docs/du-readiness.md), so it
+ * is not sent — which is also the honest shape until there is.
+ */
+export function checkIdentityFor(borrower: Borrower) {
+  const digits = borrower.phone.replace(/\D/g, "");
+  const phone =
+    digits.length === 10
+      ? `+1${digits}`
+      : digits.length === 11 && digits.startsWith("1")
+        ? `+${digits}`
+        : borrower.phone;
+  const address = borrower.currentAddress;
+  return {
+    name: { given_name: borrower.firstName, family_name: borrower.lastName },
+    date_of_birth: borrower.dateOfBirth,
+    emails: [{ data: borrower.email, primary: true }],
+    phone_numbers: [{ data: phone, primary: true }],
+    addresses: [
+      {
+        street_1: address.line1,
+        ...(address.line2 ? { street_2: address.line2 } : {}),
+        city: address.city,
+        region: address.state,
+        postal_code: address.postalCode,
+        country: "US",
+        primary: true,
+      },
+    ],
+    ...(borrower.ssn.last4
+      ? { id_numbers: [{ value: borrower.ssn.last4, type: "us_ssn_last_4" }] }
+      : {}),
+  };
+}
 
 /** CRD-017 and CRD-018 both want a full year; 365 days is what buys both. */
 const DAYS_REQUESTED = 365;
+
+/** What Link shows the borrower as who is asking. The product's name, not the repository's. */
+const CLIENT_NAME = "Supermortgage";
+
+/**
+ * Plaid's handle for the person, which must carry no PII: the file and the
+ * party, both UUIDs, which is also what keys the report on our side.
+ */
+function clientUserId(file: LoanFile, partyId: string): string {
+  return `${file.id}:${partyId}`;
+}
 
 export class PlaidRequestError extends Error {
   constructor(
@@ -159,6 +237,9 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
 
   const product: PlaidProduct = options.product ?? "cra";
   const cra = product === "cra";
+  const webhookUrl =
+    options.webhookUrl ??
+    (options.publicOrigin ? `${options.publicOrigin}/api/webhooks/plaid` : undefined);
 
   const capabilities: ConnectorCapabilities = {
     provider: `plaid-${product} (${options.environment})`,
@@ -265,7 +346,7 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
         // consumer report, which is the entire difference.
         const link = await call<{ link_token: string; expiration: string }>("/link/token/create", {
           user: { client_user_id: file.id },
-          client_name: "Homestead Mortgages",
+          client_name: CLIENT_NAME,
           language: "en",
           country_codes: ["US"],
           products: ["assets"],
@@ -279,47 +360,73 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
         };
       }
 
-      // The user token outlives the link token and is what the report is keyed
-      // on, so reuse it if this borrower has been here before. A second
-      // /user/create would orphan the first report.
-      let userToken = await options.tokens.get(file.id, USER_TOKEN);
-      if (!userToken) {
-        const created = await call<{ user_token?: string; user_id?: string }>("/user/create", {
-          client_user_id: file.id,
+      // One Plaid user per person on the file, made once: a second
+      // `/user/create` would be another person to Plaid, with another
+      // report, and the first would be orphaned.
+      const partyId = subjectOf(token);
+      const borrower = file.borrowers.find((b) => b.partyId === partyId);
+      if (!borrower) {
+        // Unreachable while requireSubject holds — it refuses a party with no
+        // borrower row, which is a co-borrower named and not yet stated — and
+        // kept because the identity below must come from a row, never a guess.
+        throw new PlaidRequestError(
+          "NO_BORROWER_IDENTITY",
+          "This person has not said who they are yet, so no consumer report can be ordered about them.",
+        );
+      }
+      let userId = await options.tokens.get(file.id, userIdKey(partyId));
+      if (!userId) {
+        const created = await call<{ user_id?: string }>("/user/create", {
+          client_user_id: clientUserId(file, partyId),
+          identity: checkIdentityFor(borrower),
         });
-        // On an account without CRA enabled, /user/create succeeds and returns
-        // only `user_id` — no token. Storing that undefined would surface three
-        // calls later as INVALID_USER_TOKEN, which reads like a bug in this
-        // adapter rather than a missing entitlement. Say what is actually wrong.
-        if (!created.user_token) {
+        if (!created.user_id) {
           throw new PlaidRequestError(
-            "NO_USER_TOKEN_ISSUED",
-            "Plaid issued no user_token. This account is almost certainly not enabled " +
-              "for the CRA products — request them at " +
-              "https://dashboard.plaid.com/overview/request-products",
+            "NO_USER_ID_ISSUED",
+            "Plaid issued no user_id for this borrower, and a Check report is keyed on one.",
           );
         }
-        userToken = created.user_token;
-        await options.tokens.put(file.id, USER_TOKEN, userToken);
+        userId = created.user_id;
+        await options.tokens.put(file.id, userIdKey(partyId), userId);
       }
 
-      const link = await call<{ link_token: string; expiration: string }>("/link/token/create", {
-        user: { client_user_id: file.id },
-        user_token: userToken,
-        client_name: "Homestead Mortgages",
-        language: "en",
-        country_codes: ["US"],
-        // The CRA products go in `products`, like any other. There is a
-        // `cra_enabled_products` field in some of Plaid's older CRA material;
-        // the live API rejects it as UNKNOWN_FIELDS, and setting
-        // `consumer_report_permissible_purpose` without a CRA product in
-        // `products` is rejected too. Verified against sandbox.
-        products: ["cra_base_report", "cra_income_insights"],
-        consumer_report_permissible_purpose:
-          options.permissiblePurpose ?? "WRITTEN_INSTRUCTION_PREQUALIFICATION",
-        cra_options: { days_requested: DAYS_REQUESTED },
-        ...(options.redirectUri ? { redirect_uri: options.redirectUri } : {}),
-      });
+      let link: { link_token: string; expiration: string };
+      try {
+        link = await call<{ link_token: string; expiration: string }>("/link/token/create", {
+          user: { client_user_id: clientUserId(file, partyId) },
+          user_id: userId,
+          client_name: CLIENT_NAME,
+          language: "en",
+          country_codes: ["US"],
+          // The CRA products go in `products`, like any other. There is a
+          // `cra_enabled_products` field in some of Plaid's older CRA material;
+          // the live API rejects it as UNKNOWN_FIELDS, and setting
+          // `consumer_report_permissible_purpose` without a CRA product in
+          // `products` is rejected too. Verified against sandbox.
+          products: ["cra_base_report", "cra_income_insights"],
+          consumer_report_permissible_purpose:
+            options.permissiblePurpose ?? "WRITTEN_INSTRUCTION_PREQUALIFICATION",
+          // Link is where the report is ordered, so this is where its window
+          // and our reference to it are said.
+          cra_options: { days_requested: DAYS_REQUESTED, client_report_id: file.id },
+          ...(webhookUrl ? { webhook: webhookUrl } : {}),
+          ...(options.redirectUri ? { redirect_uri: options.redirectUri } : {}),
+        });
+      } catch (err) {
+        // The sandbox refuses these two products the same way production
+        // does until Plaid enables them on the account. Say so in a way an
+        // operator can act on, with Plaid's own words after.
+        if (err instanceof PlaidRequestError && err.code === "INVALID_PRODUCT") {
+          throw new PlaidRequestError(
+            "INVALID_PRODUCT",
+            `This Plaid account is not enabled for the consumer-report products ` +
+              `(cra_base_report, cra_income_insights) in ${options.environment}. Ask Plaid to ` +
+              `enable them at https://dashboard.plaid.com/overview/request-products, or run ` +
+              `PLAID_PRODUCT=assets meanwhile. Plaid said: ${err.message}`,
+          );
+        }
+        throw err;
+      }
 
       return {
         sessionId: file.id,
@@ -351,49 +458,42 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
 
       if (!cra) return fetchAssetsReport(file, handoff);
 
-      const userToken = await options.tokens.get(file.id, USER_TOKEN);
-      if (!userToken) {
+      const partyId = subjectOf(token);
+      const userId = await options.tokens.get(file.id, userIdKey(partyId));
+      if (!userId) {
         throw new PlaidRequestError(
-          "NO_USER_TOKEN",
-          "No Plaid user for this file — the link session was never created.",
+          "NO_USER",
+          "No Plaid user for this borrower — the link session was never created.",
         );
       }
 
-      // The report is keyed on the user token, not on the item, so the
-      // exchange below is about item lifecycle (disconnecting later) and is
-      // not a precondition for reading the report. Hence: exchange when Link
-      // has handed something back and we have not stored one yet, and do not
-      // refuse to read a report just because this call has no public token —
-      // every poll after the first legitimately arrives without one.
-      const stored = await options.tokens.get(file.id, ACCESS_TOKEN);
-      const firstArrival = !stored && Boolean(handoff.publicToken);
-      if (firstArrival) {
-        const exchanged = await call<{ access_token: string }>("/item/public_token/exchange", {
-          public_token: handoff.publicToken,
-        });
-        await options.tokens.put(file.id, ACCESS_TOKEN, exchanged.access_token);
-        await call("/cra/check_report/create", {
-          user_token: userToken,
-          days_requested: DAYS_REQUESTED,
-          consumer_report_permissible_purpose:
-            options.permissiblePurpose ?? "WRITTEN_INSTRUCTION_PREQUALIFICATION",
-          // Required, not optional — the endpoint rejects the call without it.
-          // The report is still polled rather than driven by this webhook; it
-          // exists because Plaid insists on somewhere to announce completion.
-          webhook: options.webhookUrl ?? `${options.publicOrigin ?? ""}/api/webhooks/plaid`,
-        });
+      // Link is where the report is ordered: Plaid starts generating it the
+      // moment the borrower finishes, and the public token Link hands back
+      // is for the hybrid flow with Plaid's other products, which this is
+      // not — so nothing is exchanged. What the first arrival records is
+      // that Link finished, so a poll that follows with no token (every one
+      // after the first) is a poll and not a mistake.
+      const linkedAt = await options.tokens.get(file.id, linkedAtKey(partyId));
+      if (!linkedAt) {
+        if (!handoff.publicToken) {
+          throw new PlaidRequestError(
+            "NO_PUBLIC_TOKEN",
+            "Plaid Link has not finished for this borrower yet.",
+          );
+        }
+        await options.tokens.put(file.id, linkedAtKey(partyId), new Date().toISOString());
       }
 
       try {
         const base = await call<PlaidBaseReport>("/cra/check_report/base_report/get", {
-          user_token: userToken,
+          user_id: userId,
         });
         // Income insights is the weaker of the two: if it is unavailable the
         // report is still worth returning, and `incomeConfidence` degrades to
         // "insufficient", which routes the borrower to the payroll step
         // instead of silently qualifying them on nothing.
         const income = await call<PlaidIncomeInsights>("/cra/check_report/income_insights/get", {
-          user_token: userToken,
+          user_id: userId,
         }).catch(() => null);
 
         return {
@@ -406,12 +506,33 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
           },
         };
       } catch (err) {
+        if (!(err instanceof PlaidRequestError)) throw err;
         // Plaid says PRODUCT_NOT_READY while it is still assembling. That is a
         // wait, not a failure, and the difference is what the borrower is told.
-        if (err instanceof PlaidRequestError && err.code === "PRODUCT_NOT_READY") {
+        if (err.code === "PRODUCT_NOT_READY") {
           return { status: "pending", retryAfterMs: 4_000 };
         }
-        throw err;
+        // A report lives 24 hours. Any other refusal of a person who has
+        // linked is read as "there is no current report" — expired, or the
+        // last one failed — and answered by ordering another and waiting.
+        // Once: a second refusal inside ten minutes is the error it says,
+        // not another order per poll.
+        const last = await options.tokens.get(file.id, reorderedAtKey(partyId));
+        if (last && Date.now() - Date.parse(last) < REORDER_COOLDOWN_MS) throw err;
+        await call("/cra/check_report/create", {
+          user_id: userId,
+          days_requested: DAYS_REQUESTED,
+          client_report_id: file.id,
+          products: ["cra_income_insights"],
+          consumer_report_permissible_purpose:
+            options.permissiblePurpose ?? "WRITTEN_INSTRUCTION_PREQUALIFICATION",
+          // Required, not optional — the endpoint rejects the call without it.
+          // The report is still polled rather than driven by this webhook; it
+          // exists because Plaid insists on somewhere to announce completion.
+          webhook: webhookUrl ?? "/api/webhooks/plaid",
+        });
+        await options.tokens.put(file.id, reorderedAtKey(partyId), new Date().toISOString());
+        return { status: "pending", retryAfterMs: 4_000 };
       }
     },
   };
@@ -466,19 +587,79 @@ export interface PlaidBaseReport {
   };
 }
 
+/** One stream of deposits Plaid's income model called income. SDK `CraBankIncomeSource`. */
+export interface PlaidBankIncomeSource {
+  income_source_id?: string;
+  /** SDK `CreditBankIncomeCategory`: SALARY, GIG_ECONOMY, RENTAL, TAX_REFUND, … */
+  income_category?: string;
+  income_description?: string;
+  start_date?: string;
+  end_date?: string;
+  pay_frequency?: string;
+  /** ACTIVE, INACTIVE or UNKNOWN. An inactive stream is one that stopped. */
+  status?: string;
+  total_amount?: number;
+  transaction_count?: number;
+  historical_average_monthly_gross_income?: number | null;
+  historical_average_monthly_income?: number | null;
+  forecasted_average_monthly_income?: number | null;
+  employer?: { name?: string | null } | null;
+  income_provider?: { name?: string; is_normalized?: boolean } | null;
+  /** One entry per month covered. */
+  historical_summary?: { start_date?: string; end_date?: string }[];
+}
+
 export interface PlaidIncomeInsights {
   report?: {
+    report_id?: string;
     items?: {
-      bank_income_sources?: {
-        income_category?: string;
-        income_description?: string;
-        employer_name?: string;
-        historical_summary?: unknown[];
-        mean_amount?: { amount?: number } | number;
-        total_amount?: { amount?: number } | number;
-      }[];
+      institution_name?: string;
+      bank_income_sources?: PlaidBankIncomeSource[];
     }[];
   };
+}
+
+/**
+ * Plaid's categories onto the sheet's. Only what an underwriter may count as
+ * qualifying income is mapped; a category that is money arriving but not
+ * income — a tax refund, a transfer from the borrower's own application, a
+ * cash deposit, bank interest, unemployment — is null and dropped. The first
+ * draft mapped every unplaced category to base wage, which counts in full,
+ * and that overstates rather than understates. Long-term disability is
+ * qualifying income Fannie accepts and the sheet has no type for; dropped
+ * here rather than misnamed, and the payroll step is where it is picked up.
+ */
+const INCOME_CATEGORY: Record<string, IncomeSourceType> = {
+  SALARY: "base_wage",
+  MILITARY: "military_entitlement",
+  GIG_ECONOMY: "self_employment",
+  RENTAL: "rental",
+  RETIREMENT: "retirement",
+  CHILD_SUPPORT: "child_support",
+};
+
+/** What a source's month is worth to qualifying: Plaid's gross estimate, else its net, else its total spread over its months. */
+function monthlyAmountOf(s: PlaidBankIncomeSource, months: number): number {
+  const figure =
+    s.historical_average_monthly_gross_income ??
+    s.historical_average_monthly_income ??
+    (months > 0 && typeof s.total_amount === "number" ? s.total_amount / months : 0);
+  return Math.round(figure);
+}
+
+function monthsOf(s: PlaidBankIncomeSource): number {
+  if (s.historical_summary?.length) return s.historical_summary.length;
+  if (s.start_date && s.end_date) {
+    const [sy, sm] = s.start_date.split("-").map(Number);
+    const [ey, em] = s.end_date.split("-").map(Number);
+    if (sy && sm && ey && em) return Math.max(0, (ey - sy) * 12 + (em - sm) + 1);
+  }
+  return 0;
+}
+
+function employerOf(s: PlaidBankIncomeSource): string | null {
+  const name = s.employer?.name ?? s.income_provider?.name ?? null;
+  return name && name.trim() ? name.trim() : null;
 }
 
 /**
@@ -574,12 +755,6 @@ export function monthEndBalances(
     .map(([month, v]) => ({ month, balance: v.balance }));
 }
 
-/** Plaid returns money as either a bare number or a {amount, iso_currency_code}. */
-function money(v: { amount?: number } | number | undefined): number {
-  if (typeof v === "number") return v;
-  return v?.amount ?? 0;
-}
-
 export interface MappingOptions {
   /**
    * False in Assets mode. CRD-017 turns on this flag, and turning it on for a
@@ -629,32 +804,39 @@ export function toAssetReport(
       .flatMap((a) => (a.transactions ?? []).map((t) => ({ ...t, accountId: a.account_id ?? "" }))),
   );
 
-  const sources = (income?.report?.items ?? []).flatMap((i) => i.bank_income_sources ?? []);
+  // Every stream Plaid's model called income, then only the ones an
+  // underwriter may count: a current stream in a qualifying category. The
+  // rest are dropped here, not relabelled.
+  const streams = (income?.report?.items ?? []).flatMap((i) => i.bank_income_sources ?? []);
+  const sources = streams
+    .filter((s) => s.status !== "INACTIVE")
+    .map((s) => ({ source: s, type: INCOME_CATEGORY[s.income_category ?? ""] ?? null }))
+    .filter((x): x is { source: PlaidBankIncomeSource; type: IncomeSourceType } => x.type !== null);
 
   const inferred = opts.deriveIncome ? detectRecurringDeposits(allTransactions) : [];
 
   const incomeSources: IncomeSource[] = sources.length
-    ? sources.map((s) => ({
-        // Plaid's categories are coarser than the sheet's. Anything it cannot
-        // place becomes base wage, which is the conservative reading: base
-        // wage counts toward qualifying income in full.
-        type:
-          s.income_category === "SELF_EMPLOYMENT"
-            ? ("self_employment" as const)
-            : ("base_wage" as const),
-        monthlyAmount: Math.round(money(s.mean_amount)),
-        historyMonths: (s.historical_summary ?? []).length,
-        // Continuance is an underwriting judgment about the next three years,
-        // not a fact in a bank feed. Null is "not yet determined" — which is
-        // exactly the state INC-027 exists to resolve, and is not "no".
-        continuanceEstablished: null,
-        evidenceDocumentIds: [],
-      }))
+    ? sources.map(({ source, type }) => {
+        const months = monthsOf(source);
+        return {
+          type,
+          monthlyAmount: monthlyAmountOf(source, months),
+          historyMonths: months,
+          // Continuance is an underwriting judgment about the next three
+          // years, not a fact in a bank feed. Null is "not yet determined" —
+          // exactly the state INC-027 exists to resolve, and is not "no".
+          continuanceEstablished: null,
+          evidenceDocumentIds: [],
+        };
+      })
     : inferred;
 
+  const employers = sources
+    .map(({ source }) => employerOf(source))
+    .filter((name): name is string => name !== null);
   const employments: EmploymentRecord[] = (
     sources.length
-      ? sources.filter((s) => s.employer_name).map((s) => ({ employer_name: s.employer_name! }))
+      ? [...new Set(employers)].map((name) => ({ employer_name: name }))
       : inferredPayers(opts.deriveIncome ? allTransactions : [])
   ).map((s) => ({
     employerName: s.employer_name,
@@ -669,7 +851,11 @@ export function toAssetReport(
 
   const monthlyIncome = incomeSources.reduce((s, i) => s + i.monthlyAmount, 0);
   const payers = new Set(
-    sources.flatMap((s) => [s.employer_name, s.income_description].filter(Boolean).map(norm)),
+    sources.flatMap(({ source }) =>
+      [employerOf(source), source.income_description, source.income_provider?.name]
+        .filter((v): v is string => Boolean(v))
+        .map(norm),
+    ),
   );
 
   const obligations = detectRecurringObligations(allTransactions);

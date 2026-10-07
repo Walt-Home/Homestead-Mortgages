@@ -66,3 +66,42 @@ export function fencedMailConnector(
     },
   };
 }
+
+/**
+ * The switch that holds borrower mail. Joe, 5 October 2026: "We are NOT
+ * sending emails to borrowers yet. Ensure this is always a clear and manual
+ * step." The tape desk honored that on its own; this makes the port honor
+ * it, so every message to a borrower or a homeowner — a co-borrower's
+ * invitation, a claim link, whatever comes next — is answered "not
+ * delivered" while the deployment's switch is off, whichever route sent it
+ * and whatever mailer stands behind it. Staff and servicer mail passes:
+ * those people asked to be written to, and the second factor of their
+ * sign-in is the message.
+ *
+ * `on` is read per send rather than at build, because a deployment reads
+ * its switch from the environment once and a test flips it in place.
+ */
+export interface BorrowerMailSwitchOptions {
+  readonly on: () => boolean;
+}
+
+export const BORROWER_MAIL_OFF_REASON =
+  "This deployment does not e-mail borrowers or homeowners (HOMEOWNER_MAIL is off).";
+
+export function borrowerMailSwitch(
+  inner: MailConnector,
+  options: BorrowerMailSwitchOptions,
+): MailConnector {
+  return {
+    // Everything the inner mailer is — the fixture's outbox included, which
+    // is how a test reads what went — with one answer changed.
+    ...inner,
+    capabilities: inner.capabilities,
+    async send(message: MailMessage): Promise<MailOutcome> {
+      if (message.audience === "borrower" && !options.on()) {
+        return { status: "not_delivered", reason: BORROWER_MAIL_OFF_REASON };
+      }
+      return inner.send(message);
+    },
+  };
+}

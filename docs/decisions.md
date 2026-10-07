@@ -3968,12 +3968,24 @@ way it could go out by mistake.
   theirs; and the homeowner step is in the desk's steps only where the
   switch is on, reached by a button that says what it does.
 
-What this does not cover, and should be decided: an applicant in the
-borrower app can still send their own co-borrower an invitation
-(`services/invitations.ts`). That is one person writing to somebody they
-named, not us writing to a servicer's book, so it is left as it was.
+**The rule reaches the port (7 October 2026).** The applicant's own
+co-borrower invitation (`services/invitations.ts`) was the one message to
+a borrower this did not cover, and Joe's word was every real user. So
+every `MailMessage` now names its `audience` — `borrower`, `servicer` or
+`staff` — and `borrowerMailSwitch` wraps the mailer in `connectors()`,
+whichever adapter stands behind it: a message for a borrower is answered
+"not delivered" while `HOMEOWNER_MAIL` is off, whoever built it, and a new
+route cannot send one without saying who it is for. Staff and servicer
+mail passes; those people asked to be written to, and the second factor
+of their sign-in is the message. The invitation service refuses first,
+before a row, with the desk's own code (`HOMEOWNER_MAIL_OFF`, 503), so
+the applicant is told the truth rather than "try again" and nobody is
+left half-invited. The sample household's seed walks through the fixture
+outbox, which the switch leaves alone outside production.
 
-Held by `console-tape.test.ts`, "e-mailing homeowners is a deliberate act".
+Held by `console-tape.test.ts`, "e-mailing homeowners is a deliberate act";
+`co-borrower-claim.test.ts`, "is held while the deployment's borrower mail
+is off"; and `mail-switch.test.ts` in `@hm/connectors`.
 
 ## Production's bank connections are Plaid's production
 
@@ -3999,6 +4011,60 @@ consumer-report product answered differently (it wants a user token before
 it will say), so it may be what the account holds. Until a product the
 bank screen asks for is enabled on the production account, that screen on
 production cannot connect a bank.
+
+## Plaid Check is keyed on a user, and the account holds nothing yet
+
+**Finding (7 October 2026).** Joe signed with Plaid for Assets and the
+consumer-report products. Asked directly — a link token per product, which
+is the only way Plaid answers the question, now `npm run plaid:products` —
+the account the deploys use (`PLAID_CLIENT_ID` `6a986e48…`) is enabled for
+none of them in production, and for neither CRA product in the sandbox
+either: `INVALID_PRODUCT`, "your account is not enabled for". The section
+above said the sandbox needs no approval; for Check it does ("contact
+sales", in Plaid's own words), so the agreement has to reach this client
+id in both environments before anything here can be exercised. Until it
+does, the bank screen runs the `assets` stand-in on both environments, and
+the flip is one variable per environment rather than a deploy:
+`PLAID_PRODUCT=cra`, read by both workflows (unset is `assets`), with
+`/api/health` reporting `plaid-cra (…)` and the production promotion
+saying which it found.
+
+**What the sandbox corrected before it refused.** Plaid's User API changed
+on 10 December 2025, and the adapter had been written to the older shape
+from documentation. `/user/create` issues a `user_id` and no `user_token`,
+so the adapter's tell for "not enabled for CRA" — no token — was true of
+every borrower; it wants the person's identity (name, date of birth,
+e-mail, E.164 phone, address, the last four of the SSN — the full number
+only when sharing with a GSE, which there is no vault to read from) before
+it will order a report; the link token, the order and every read are keyed
+on that id; Link is where the report is ordered, generation starting when
+the borrower finishes; the public token Link returns belongs to the hybrid
+flow with Plaid's other products and is not exchanged; and
+`/cra/check_report/create` orders ANOTHER report, which one that has
+expired (they live 24 hours) needs — so the adapter orders again on any
+refusal that is not `PRODUCT_NOT_READY`, once per ten minutes, and waits.
+The Plaid user is kept per party on the file, because a consumer report is
+a person's and a co-borrower linking their own bank is another person.
+The response mapping was corrected to the SDK's types (plaid@48):
+`employer.name` rather than `employer_name`, the historical monthly
+averages (gross preferred) rather than a `mean_amount` that does not
+exist, and only a current stream in a qualifying category counts — a tax
+refund, a transfer, a cash deposit or a stream that stopped is dropped,
+where the first draft relabelled every unplaced category as base wage,
+which counts in full and overstates.
+
+**Not exercised, and said so.** The mapping has not met a live report.
+The webhook Plaid is told about (`/api/webhooks/plaid`,
+`USER_CHECK_REPORT_READY`) has no route, so each delivery is a 404 Plaid
+retries and drops; the report is polled, which is what the bank screen
+does anyway. And Day 1 Certainty is a separate product on the same
+report — the Home Lending Report, `home_lending_report_options` with
+`VOA`, `INCOME` and `EMPLOYMENT_REFRESH`, read back through
+`/cra/check_report/verification/get` — which is not asked for; Fannie
+Mae's validation service is opted in per lender and wants the lender to
+have ordered the report, so whose contract this is decides whether what we
+pull can be validated at all. Both wait on the account before they are
+worth a line of code.
 
 ## Still outstanding
 

@@ -35,6 +35,7 @@ import { underwrite, APOR_TABLE } from "@hm/underwriting";
 import { createUser } from "./support/factories.js";
 import { callAs } from "./support/http.js";
 import { inviteCoBorrower } from "../services/invitations.js";
+import { config } from "../config.js";
 import { appendCoBorrowerWithFacts } from "../services/co-borrowers.js";
 
 const SCREEN_ONE = {
@@ -185,6 +186,39 @@ describe("sending the invitation", () => {
     // The party is now "invited" rather than merely "named".
     const file = (await loadLoanFile(h.fileId))!;
     expect(file.invitedBorrowers[0]).toMatchObject({ id: h.borrowerId, status: "invited" });
+  });
+
+  it("is held while the deployment's borrower mail is off, and mints nothing", async () => {
+    // Joe, 5 October 2026: no e-mail to a borrower until a deployment's
+    // switch says so. The same switch as the tape desk's claim links, and
+    // the port holds it too — but the service refuses first, before a row,
+    // so the applicant is told the truth and nobody is left half-invited.
+    const h = await namedHousehold();
+    const before = outbox().length;
+    const mutable = config as { homeownerMail: boolean };
+    const was = mutable.homeownerMail;
+    mutable.homeownerMail = false;
+    try {
+      const res = await invite(h.user.id, h.fileId, h.borrowerId);
+      expect(res.status).toBe(503);
+      expect((res.body as { error?: { code?: string } }).error?.code).toBe("HOMEOWNER_MAIL_OFF");
+      expect(outbox().length).toBe(before);
+      expect(await prisma.coBorrowerInvitation.count({ where: { loanFileId: h.fileId } })).toBe(0);
+      const party = await prisma.party.findUniqueOrThrow({ where: { id: h.partyId } });
+      expect(party.claimStatus).toBe("PROVISIONAL");
+      // And the port itself holds a borrower's message, whoever built it.
+      const held = await connectors().mail.send({
+        to: "theo@example.test",
+        subject: "x",
+        text: "x",
+        audience: "borrower",
+      });
+      expect(held.status).toBe("not_delivered");
+      expect(outbox().length).toBe(before);
+    } finally {
+      mutable.homeownerMail = was;
+    }
+    expect((await invite(h.user.id, h.fileId, h.borrowerId)).status).toBe(201);
   });
 
   it("echoes the link only where developer sign-in is available", async () => {

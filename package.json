@@ -33,6 +33,7 @@
     "book:billed-from": "tsx apps/api/src/scripts/book-billed-from.ts",
     "billing:reconcile": "tsx apps/api/src/scripts/reconcile-billing.ts",
     "billing:smoke": "tsx apps/api/src/scripts/smoke-invoicing.ts",
+    "plaid:products": "node scripts/plaid-products.mjs",
     "apor:vendor": "tsx apps/api/src/scripts/fetch-apor.ts --vendor && node scripts/build-apor.mjs",
     "servicing:db:setup": "npm run db:setup -w @hm/servicing",
     "test:servicing": "npm_config_node_options=\"--experimental-strip-types --disable-warning=ExperimentalWarning\" npm run test -w @hm/servicing --"

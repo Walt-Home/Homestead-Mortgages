@@ -7,7 +7,12 @@
 import { describe, expect, it } from "vitest";
 import { domainOf, fencedMailConnector, fixtureMailConnector } from "@hm/connectors";
 
-const message = (to: string) => ({ to, subject: "Hello", text: "A line." });
+const message = (to: string) => ({
+  to,
+  subject: "Hello",
+  text: "A line.",
+  audience: "staff" as const,
+});
 
 describe("the mail fence", () => {
   it("lets our domains through, tagged addresses included, and refuses the rest without sending", async () => {

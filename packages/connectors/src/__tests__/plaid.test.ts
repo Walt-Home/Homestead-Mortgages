@@ -16,7 +16,9 @@ import {
   monthEndBalances,
   plaidConnector,
   toAssetReport,
+  checkIdentityFor,
   type PlaidBaseReport,
+  type PlaidIncomeInsights,
   type VendorTokenStore,
 } from "../index.js";
 
@@ -216,17 +218,23 @@ const BASE_REPORT: PlaidBaseReport = {
   },
 };
 
-const INCOME_INSIGHTS = {
+/** The shape the SDK types (`CraBankIncomeSource`), not the one the first draft guessed. */
+const INCOME_INSIGHTS: PlaidIncomeInsights = {
   report: {
+    report_id: "inc_123",
     items: [
       {
+        institution_name: "First Fictional",
         bank_income_sources: [
           {
             income_category: "SALARY",
             income_description: "ACME CORP DIRECT DEP",
-            employer_name: "ACME CORP",
+            status: "ACTIVE",
+            employer: { name: "ACME CORP" },
+            income_provider: { name: "Acme Corp", is_normalized: true },
             historical_summary: Array.from({ length: 12 }, () => ({})),
-            mean_amount: { amount: 6_250 },
+            historical_average_monthly_gross_income: 6_250,
+            historical_average_monthly_income: 4_700,
           },
         ],
       },
@@ -293,11 +301,11 @@ describe("plaid adapter — the guard", () => {
 
 describe("plaid adapter — the link session", () => {
   const routes = {
-    "/user/create": { user_token: "user-tok" },
+    "/user/create": { user_id: "usr_1" },
     "/link/token/create": { link_token: "link-tok", expiration: "2026-09-01T04:00:00Z" },
   };
 
-  it("asks for the CRA products, not plain assets", async () => {
+  it("asks for the CRA products, not plain assets, keyed on the user Plaid issued", async () => {
     const { impl, calls } = stubFetch(routes);
     const { c } = connector(impl);
     const session = await c.createLinkSession(file(), token());
@@ -317,19 +325,75 @@ describe("plaid adapter — the link session", () => {
     expect(link.body.consumer_report_permissible_purpose).toBe(
       "WRITTEN_INSTRUCTION_PREQUALIFICATION",
     );
-    expect(link.body.user_token).toBe("user-tok");
+    // The fourth, caught by the sandbox on 7 October 2026: `/user/create`
+    // issues a `user_id` and no `user_token`, and everything is keyed on it.
+    expect(link.body.user_id).toBe("usr_1");
+    expect(link.body.user_token).toBeUndefined();
+    // Link is where the report is ordered, so its window is said here.
+    expect(link.body.cra_options).toEqual({
+      days_requested: 365,
+      client_report_id: "11111111-1111-1111-1111-111111111111",
+    });
+  });
+
+  it("tells Plaid who the person is, in Plaid's shape, and never the whole SSN", async () => {
+    const { impl, calls } = stubFetch(routes);
+    const { c } = connector(impl);
+    await c.createLinkSession(file(), token());
+
+    const user = calls.find((k) => k.path === "/user/create")!;
+    expect(user.body.identity).toEqual({
+      name: { given_name: "Test", family_name: "Borrower" },
+      date_of_birth: "1990-01-01",
+      emails: [{ data: "b1@example.test", primary: true }],
+      phone_numbers: [{ data: "+15555550100", primary: true }],
+      addresses: [
+        {
+          street_1: "1 Fixture St",
+          city: "Demo City",
+          region: "CA",
+          postal_code: "94000",
+          country: "US",
+          primary: true,
+        },
+      ],
+      id_numbers: [{ value: "0000", type: "us_ssn_last_4" }],
+    });
+    // No PII in the handle either: the file and the party, both UUIDs.
+    expect(String(user.body.client_user_id)).not.toContain("Borrower");
+    expect(JSON.stringify(user.body)).not.toContain("vault:b1");
+  });
+
+  it("writes an E.164 phone whatever the borrower typed", () => {
+    const b = file().borrowers[0]!;
+    expect(checkIdentityFor({ ...b, phone: "(555) 555-0100" }).phone_numbers[0]!.data).toBe(
+      "+15555550100",
+    );
+    expect(checkIdentityFor({ ...b, phone: "1-555-555-0100" }).phone_numbers[0]!.data).toBe(
+      "+15555550100",
+    );
   });
 
   it("says what is actually wrong when the account has no CRA entitlement", async () => {
-    // /user/create SUCCEEDS on a non-CRA account and returns only user_id.
-    // Storing that undefined surfaced three calls later as INVALID_USER_TOKEN,
-    // which reads like a bug here rather than a missing product.
-    const { impl } = stubFetch({ ...routes, "/user/create": { user_id: "usr_1" } });
+    // The sandbox and production both answer INVALID_PRODUCT at the link
+    // token, naming the two products, until Plaid enables them on the
+    // account. The old tell — no user_token — is no tell at all now.
+    const { impl } = stubFetch({
+      ...routes,
+      "/link/token/create": {
+        error_code: "INVALID_PRODUCT",
+        error_message:
+          'Your account is not enabled for the following products: ["cra_base_report" "cra_income_insights"].',
+      },
+    });
     const { c } = connector(impl);
-    await expect(c.createLinkSession(file(), token())).rejects.toThrow(/request-products/);
+    const refused = c.createLinkSession(file(), token());
+    await expect(refused).rejects.toThrow(/request-products/);
+    await expect(refused).rejects.toThrow(/sandbox/);
+    await expect(refused).rejects.toThrow(/PLAID_PRODUCT=assets/);
   });
 
-  it("reuses the user token rather than orphaning the first report", async () => {
+  it("reuses the user rather than orphaning the first report", async () => {
     const { impl, calls } = stubFetch(routes);
     const { c } = connector(impl);
     await c.createLinkSession(file(), token());
@@ -338,11 +402,54 @@ describe("plaid adapter — the link session", () => {
     expect(calls.filter((k) => k.path === "/user/create")).toHaveLength(1);
     expect(calls.filter((k) => k.path === "/link/token/create")).toHaveLength(2);
   });
+
+  it("keeps one Plaid user per person on the file, and none for a person with no row", async () => {
+    // A consumer report is a person's. The second borrower on the file is a
+    // second user to Plaid; a party with no borrower row — a co-borrower
+    // named and not yet stated — is refused by the guard before this
+    // adapter is reached, which is the same answer one step earlier.
+    const { impl, calls } = stubFetch(routes);
+    const { c } = connector(impl);
+    const partyId = "22222222-2222-2222-2222-222222222222";
+    const named: LoanFile = {
+      ...file(),
+      invitedBorrowers: [],
+      consents: [
+        ...file().consents,
+        {
+          kind: "verification_authorization",
+          borrowerId: "b2",
+          grantedAt: "2026-01-01T00:00:00.000Z",
+          ipAddress: "127.0.0.1",
+          userAgent: "test",
+        },
+      ],
+      borrowers: [...file().borrowers, { ...file().borrowers[0]!, id: "b2", partyId }],
+    };
+    const theirs = mintPurposeToken({
+      partyId,
+      fileId: FILE,
+      purpose: "fcra_written_instruction",
+      dataCategory: "bank_transactions",
+      grants: [{ ...GRANT, partyId }],
+      now: new Date("2026-09-08T12:00:00.000Z"),
+    });
+    if (!theirs.ok) throw new Error(theirs.message);
+    // With their row, a second person is a second Plaid user on the same file.
+    await c.createLinkSession(file(), token());
+    await c.createLinkSession(named, theirs.token);
+    expect(calls.filter((k) => k.path === "/user/create")).toHaveLength(2);
+    // Without it, nobody to order a report about.
+    const unstated: LoanFile = { ...named, borrowers: file().borrowers };
+    await expect(c.createLinkSession(unstated, theirs.token)).rejects.toThrow(
+      /not for a borrower on this file/,
+    );
+  });
 });
 
 describe("plaid adapter — the report", () => {
   const routes = {
-    "/user/create": { user_token: "user-tok" },
+    "/user/create": { user_id: "usr_1" },
     "/link/token/create": { link_token: "link-tok", expiration: "2026-09-01T04:00:00Z" },
     "/item/public_token/exchange": { access_token: "access-tok" },
     "/cra/check_report/create": { request_id: "r1" },
@@ -350,7 +457,7 @@ describe("plaid adapter — the report", () => {
     "/cra/check_report/income_insights/get": INCOME_INSIGHTS,
   };
 
-  it("exchanges, creates and reads on the first arrival", async () => {
+  it("reads the report Link ordered, exchanging nothing and ordering nothing more", async () => {
     const { impl, calls } = stubFetch(routes);
     const { c } = connector(impl);
     await c.createLinkSession(file(), token());
@@ -366,25 +473,33 @@ describe("plaid adapter — the report", () => {
     expect(out.result.externalId).toBe("rep_123");
     expect(out.result.data.accounts).toHaveLength(2);
     expect(out.result.data.vendorAuthorizedForDu).toBe(true);
-    expect(calls.map((k) => k.path)).toContain("/cra/check_report/create");
-    // The endpoint rejects the call without both of these.
-    const create = calls.find((k) => k.path === "/cra/check_report/create")!;
-    expect(create.body.webhook).toBeTruthy();
-    expect(create.body.consumer_report_permissible_purpose).toBe(
-      "WRITTEN_INSTRUCTION_PREQUALIFICATION",
-    );
+    // Plaid started the report when Link finished. The public token is the
+    // hybrid flow's, and a second order would be a second report.
+    expect(calls.map((k) => k.path)).not.toContain("/item/public_token/exchange");
+    expect(calls.map((k) => k.path)).not.toContain("/cra/check_report/create");
+    const get = calls.find((k) => k.path === "/cra/check_report/base_report/get")!;
+    expect(get.body.user_id).toBe("usr_1");
+    expect(get.body.user_token).toBeUndefined();
   });
 
-  it("does not re-exchange on a later poll that has no public token", async () => {
+  it("polls again without a public token once Link has finished", async () => {
     const { impl, calls } = stubFetch(routes);
     const { c } = connector(impl);
     await c.createLinkSession(file(), token());
     await c.fetchAssetReport(file(), token(), { sessionId: "s", publicToken: "pub" }, 12);
     await c.fetchAssetReport(file(), token(), { sessionId: "s" }, 12);
 
-    expect(calls.filter((k) => k.path === "/item/public_token/exchange")).toHaveLength(1);
-    expect(calls.filter((k) => k.path === "/cra/check_report/create")).toHaveLength(1);
     expect(calls.filter((k) => k.path === "/cra/check_report/base_report/get")).toHaveLength(2);
+    expect(calls.filter((k) => k.path === "/cra/check_report/create")).toHaveLength(0);
+  });
+
+  it("refuses a poll from a person whose Link never finished", async () => {
+    const { impl } = stubFetch(routes);
+    const { c } = connector(impl);
+    await c.createLinkSession(file(), token());
+    await expect(c.fetchAssetReport(file(), token(), { sessionId: "s" }, 12)).rejects.toThrow(
+      /not finished/,
+    );
   });
 
   it("reports PRODUCT_NOT_READY as a wait, not a failure", async () => {
@@ -404,6 +519,37 @@ describe("plaid adapter — the report", () => {
     expect(out.status).toBe("pending");
     if (out.status !== "pending") return;
     expect(out.retryAfterMs).toBeGreaterThan(0);
+  });
+
+  it("orders another report when the last one is gone, waits, and does not order one per poll", async () => {
+    const { impl, calls } = stubFetch({
+      ...routes,
+      "/cra/check_report/base_report/get": {
+        error_code: "INVALID_RESULT",
+        error_message: "the consumer report has expired; call /cra/check_report/create",
+      },
+    });
+    const { c } = connector(impl);
+    await c.createLinkSession(file(), token());
+    const first = await c.fetchAssetReport(
+      file(),
+      token(),
+      { sessionId: "s", publicToken: "pub" },
+      12,
+    );
+    expect(first.status).toBe("pending");
+    const create = calls.find((k) => k.path === "/cra/check_report/create")!;
+    expect(create.body.user_id).toBe("usr_1");
+    // The endpoint rejects the call without both of these.
+    expect(create.body.webhook).toBeTruthy();
+    expect(create.body.consumer_report_permissible_purpose).toBe(
+      "WRITTEN_INSTRUCTION_PREQUALIFICATION",
+    );
+    // Still gone a moment later: the error it is, not a second order.
+    await expect(c.fetchAssetReport(file(), token(), { sessionId: "s" }, 12)).rejects.toThrow(
+      /expired/,
+    );
+    expect(calls.filter((k) => k.path === "/cra/check_report/create")).toHaveLength(1);
   });
 
   it("still returns the report when income insights is unavailable", async () => {
@@ -465,6 +611,40 @@ describe("plaid mapping", () => {
     expect(report.employments[0]!.employerName).toBe("ACME CORP");
     expect(report.employments[0]!.position).toBe("");
     expect(report.employments[0]!.verificationMethod).toBe("bank_inference");
+  });
+
+  it("counts only what an underwriter may: a refund, a transfer and a stopped stream are not income", () => {
+    const salary = INCOME_INSIGHTS.report!.items![0]!.bank_income_sources![0]!;
+    const insights: PlaidIncomeInsights = {
+      report: {
+        items: [
+          {
+            bank_income_sources: [
+              salary,
+              { ...salary, income_category: "TAX_REFUND", employer: { name: "IRS TREAS" } },
+              { ...salary, income_category: "TRANSFER_FROM_APPLICATION", employer: null },
+              { ...salary, status: "INACTIVE", employer: { name: "OLD EMPLOYER" } },
+              {
+                ...salary,
+                income_category: "GIG_ECONOMY",
+                employer: null,
+                income_provider: { name: "Uber", is_normalized: true },
+                historical_average_monthly_gross_income: null,
+                historical_average_monthly_income: 900,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const report = toAssetReport(BASE_REPORT, insights, { vendorAuthorizedForDu: true });
+    expect(report.incomeSources.map((i) => [i.type, i.monthlyAmount])).toEqual([
+      ["base_wage", 6_250],
+      ["self_employment", 900],
+    ]);
+    expect(report.employments.map((e) => e.employerName)).toEqual(["ACME CORP", "Uber"]);
+    // Two sources: not one steady paycheque, so not "verified".
+    expect(report.incomeConfidence).toBe("estimated");
   });
 
   it("leaves the cash flow assessment unperformed rather than claiming one", () => {

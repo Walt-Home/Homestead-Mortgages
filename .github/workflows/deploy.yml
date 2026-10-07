@@ -751,7 +751,17 @@ jobs:
           # check below fails the deploy if it is not what was asked for.
           ENV_VARS="$ENV_VARS,DEMO_PERSONAS=true"
           ENV_VARS="$ENV_VARS,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}"
-          ENV_VARS="$ENV_VARS,BANK_PROVIDER=plaid,PLAID_ENV=sandbox,PLAID_PRODUCT=assets"
+          # Which Plaid product backs the bank screen. `cra` is the consumer
+          # report CRD-017 turns on; `assets` is the stand-in. The sandbox
+          # refuses the CRA products until Plaid enables them on the account
+          # (checked 7 October 2026 — not yet), so the repository variable
+          # PLAID_PRODUCT says which, and unset is the stand-in.
+          PLAID_PRODUCT="${{ vars.PLAID_PRODUCT || 'assets' }}"
+          case "$PLAID_PRODUCT" in
+            assets|cra) ;;
+            *) echo "::error::PLAID_PRODUCT is '$PLAID_PRODUCT'; it is assets or cra"; exit 1 ;;
+          esac
+          ENV_VARS="$ENV_VARS,BANK_PROVIDER=plaid,PLAID_ENV=sandbox,PLAID_PRODUCT=$PLAID_PRODUCT"
           ENV_VARS="$ENV_VARS,PLAID_CLIENT_ID=${{ vars.PLAID_CLIENT_ID }}"
           ENV_VARS="$ENV_VARS,IDENTITY_PROVIDER=stripe,PROPERTY_DATA_PROVIDER=google_places"
           SECRETS="DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_STAGING:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET:latest,PLAID_SECRET=HOMESTEAD_MORTGAGES_PLAID_SECRET:latest,VENDOR_TOKEN_KEY=HOMESTEAD_MORTGAGES_VENDOR_TOKEN_KEY:latest,STRIPE_SECRET_KEY_SANDBOX=HOMESTEAD_MORTGAGES_STRIPE_SECRET_KEY_SANDBOX:latest,GOOGLE_PLACES_API_KEY=HOMESTEAD_MORTGAGES_GOOGLE_PLACES_API_KEY:latest"
@@ -971,7 +981,7 @@ jobs:
             --format="value(status.url)")
           PROVIDERS=$(curl -fsS --max-time 30 "$URL/api/health")
           echo "$PROVIDERS"
-          for expected in "plaid-assets (sandbox)" "stripe-identity (test)" "google-places"; do
+          for expected in "plaid-${{ vars.PLAID_PRODUCT || 'assets' }} (sandbox)" "stripe-identity (test)" "google-places"; do
             case "$PROVIDERS" in
               *"$expected"*) echo "ok: $expected" ;;
               *) echo "::error::expected provider not running: $expected"; exit 1 ;;

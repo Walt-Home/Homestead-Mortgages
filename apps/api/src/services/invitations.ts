@@ -69,6 +69,7 @@ export function invitationMessage(input: {
   const until = input.expiresAt.toISOString().slice(0, 10);
   return {
     to: input.to,
+    audience: "borrower" as const,
     subject: `${input.applicantName} added you to a mortgage application`,
     text: [
       `Hi ${input.coBorrowerFirstName},`,
@@ -114,6 +115,18 @@ export async function inviteCoBorrower(
   db: Db = prisma,
 ): Promise<Invited> {
   const developerEchoAllowed = config.nodeEnv !== "production" && !config.googleClientId;
+  if (!config.homeownerMail) {
+    // Joe, 5 October 2026: no e-mail to a borrower until a deployment's
+    // switch says so. The port would answer "not delivered" anyway; refusing
+    // here, before the row, leaves nobody half-invited and tells the
+    // applicant what is true rather than "try again". The same switch, and
+    // the same code, as the tape desk's claim links.
+    throw new AppError(
+      503,
+      "Invitations to co-borrowers are not sent from this deployment yet.",
+      "HOMEOWNER_MAIL_OFF",
+    );
+  }
   if (mail.capabilities.mode === "fixture" && config.nodeEnv === "production") {
     // Saying "we invited them" over a mailer that keeps messages in memory
     // would be the API lying to the applicant. Refuse instead, and say why.

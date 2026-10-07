@@ -117,6 +117,7 @@ export function servicerInvitationMessage(input: {
   const until = input.expiresAt.toISOString().slice(0, 10);
   return {
     to: input.to,
+    audience: "servicer" as const,
     subject: `${input.servicerName}'s book on Supermortgage`,
     text: [
       `Hi${input.name ? ` ${input.name}` : ""},`,
@@ -136,6 +137,7 @@ export function servicerInvitationMessage(input: {
 export function signInCodeMessage(input: { readonly to: string; readonly code: string }) {
   return {
     to: input.to,
+    audience: "servicer" as const,
     subject: `Your Supermortgage sign-in code: ${input.code}`,
     text: [
       `Your sign-in code is ${input.code}.`,

@@ -145,6 +145,7 @@ export async function heldInvitation(staffUserId: string): Promise<HeldInvitatio
 export function staffSignInCodeMessage(input: { readonly to: string; readonly code: string }) {
   return {
     to: input.to,
+    audience: "staff" as const,
     subject: `Your Supermortgage console sign-in code: ${input.code}`,
     text: [
       `Your sign-in code for the Supermortgage console is ${input.code}.`,
@@ -176,6 +177,7 @@ export function staffInvitationMessage(input: {
 }) {
   return {
     to: input.to,
+    audience: "staff" as const,
     subject: input.again
       ? "Your invitation to the Supermortgage console, sent again"
       : "You have been invited to the Supermortgage console",

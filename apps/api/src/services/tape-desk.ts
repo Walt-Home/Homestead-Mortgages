@@ -564,6 +564,7 @@ export function claimMessage(input: {
   const where = input.place ? ` on your home in ${input.place}` : "";
   return {
     to: input.to,
+    audience: "borrower" as const,
     subject: `Confirm your mortgage with Supermortgage`,
     text: [
       "Hi,",

@@ -145,7 +145,11 @@ that address lands nowhere but `loan_claims.delivered_to`. **That invitation
 is the only place a homeowner is ever written to, and it is never automatic**
 (5 October): it is off on a deployment until its environment says
 `HOMEOWNER_MAIL=on`, no load or review calls it, and the request must carry
-the number of homeowners it e-mails, typed by the person sending. The as-of is the
+the number of homeowners it e-mails, typed by the person sending. Since 7
+October the same switch is held at the mail port: every `MailMessage` names
+its `audience`, and one for a `borrower` is "not delivered" while the switch
+is off, whichever route sent it — the applicant's co-borrower invitation
+included, which refuses before it mints a row. The as-of is the
 tape's own when it carries one. After the load the desk runs the book's
 first review — the daily review over the servicer's book, today rather than
 tomorrow morning, its offers made and waiting for the claim — and the
@@ -324,6 +328,16 @@ ours to decide".
   demo page — type an address, fetch what each adapter answers, read the raw
   response — mounted wherever `DEMO_PERSONAS` is, open to a sample borrower's
   session because the lookup is a `GET` and touches no file.
+- **The bank screen is Plaid's `assets` stand-in, and the consumer report
+  waits on the account.** `adapters/plaid.ts` has the Check path written to
+  Plaid's current User API (a `user_id`, an identity, Link ordering the
+  report) and corrected against its sandbox and SDK on 7 October 2026, but
+  the account the deploys use is enabled for no product in production and
+  for neither CRA product in the sandbox, so nothing there has met a live
+  report. `npm run plaid:products` asks Plaid what the account holds;
+  `PLAID_PRODUCT=cra` on an environment is the flip once it does. See
+  `docs/decisions.md`, "Plaid Check is keyed on a user, and the account
+  holds nothing yet".
 - **Manual bank-statement upload collects filenames and sends nothing.**
   `apps/web/src/pages/BankPage.tsx`. Deliberate — where the bytes go is a real
   decision, and `routes/documents.ts` never transmits them today.
@@ -400,7 +414,8 @@ ours to decide".
   then. The vesting on the review screen has no such gap: it is asked.
 - **A co-borrower walks their own half, and the engine reads everybody.**
   Screen 2 names one,
-  the applicant sends them a link (Resend when `MAIL_PROVIDER=resend`,
+  the applicant sends them a link (only while `HOMEOWNER_MAIL=on`, like
+  every message to a borrower; Resend when `MAIL_PROVIDER=resend`,
   which the deploys set once the `MAIL_FROM` variable names a verified
   sender; on staging the real mailer is fenced to our own domains because
   staging holds a servicer's real book — `docs/decisions.md`, "Mail is

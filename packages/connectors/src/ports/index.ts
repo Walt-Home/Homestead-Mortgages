@@ -753,10 +753,23 @@ export interface AporSeriesConnector {
  * has to record that the invitation exists and was not sent, which is a
  * different thing from an invitation that does not exist.
  */
+/**
+ * Who a message is for. Not a template or a tone: the one fact the port
+ * needs to hold Joe's rule of 5 October 2026 — nobody who is a borrower or
+ * a homeowner is written to until a deployment's switch says so, and then
+ * only by a person's confirmed act. `borrower` is a person we are trying to
+ * lend to or whose mortgage sits on a servicer's book; `servicer` is a
+ * member of a servicer's team; `staff` is one of ours. A new message cannot
+ * be sent without saying which, and the switch is applied at the port, so
+ * a new route cannot forget it.
+ */
+export type MailAudience = "borrower" | "servicer" | "staff";
+
 export interface MailMessage {
   readonly to: string;
   readonly subject: string;
   readonly text: string;
+  readonly audience: MailAudience;
 }
 export type MailOutcome =
   | { readonly status: "sent"; readonly externalId: string; readonly provider: string }

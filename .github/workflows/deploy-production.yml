@@ -305,7 +305,16 @@ jobs:
           elif [ "$PLAID_ENV_NAME" != "sandbox" ]; then
             echo "::error::PLAID_ENV is '$PLAID_ENV_NAME'; it is sandbox or production"; exit 1
           fi
-          ENV_VARS="$ENV_VARS,BANK_PROVIDER=plaid,PLAID_ENV=$PLAID_ENV_NAME,PLAID_PRODUCT=assets"
+          # The product is the production environment's PLAID_PRODUCT: `cra`
+          # once Plaid has enabled the consumer-report products on the
+          # production account, `assets` (the stand-in) until then and when
+          # unset. Probed 7 October 2026: production is enabled for neither.
+          PLAID_PRODUCT="${{ vars.PLAID_PRODUCT || 'assets' }}"
+          case "$PLAID_PRODUCT" in
+            assets|cra) ;;
+            *) echo "::error::PLAID_PRODUCT is '$PLAID_PRODUCT'; it is assets or cra"; exit 1 ;;
+          esac
+          ENV_VARS="$ENV_VARS,BANK_PROVIDER=plaid,PLAID_ENV=$PLAID_ENV_NAME,PLAID_PRODUCT=$PLAID_PRODUCT"
           ENV_VARS="$ENV_VARS,PLAID_CLIENT_ID=${{ vars.PLAID_CLIENT_ID }}"
           ENV_VARS="$ENV_VARS,IDENTITY_PROVIDER=stripe,PROPERTY_DATA_PROVIDER=google_places"
           SECRETS="DATABASE_URL=HOMESTEAD_MORTGAGES_DATABASE_URL_PROD:latest,SESSION_SECRET=HOMESTEAD_MORTGAGES_SESSION_SECRET_PROD:latest,PLAID_SECRET=$PLAID_SECRET_NAME:latest,VENDOR_TOKEN_KEY=HOMESTEAD_MORTGAGES_VENDOR_TOKEN_KEY_PROD:latest,STRIPE_SECRET_KEY_SANDBOX=HOMESTEAD_MORTGAGES_STRIPE_SECRET_KEY_SANDBOX:latest,GOOGLE_PLACES_API_KEY=HOMESTEAD_MORTGAGES_GOOGLE_PLACES_API_KEY:latest"
@@ -438,7 +447,8 @@ jobs:
             *) echo "::error::the deployed service does not say whether homeowners can be e-mailed"; exit 1 ;;
           esac
           case "$BODY" in
-            *"plaid-assets (production)"*) echo "ok: bank connections are Plaid's production" ;;
+            *"plaid-cra (production)"*) echo "ok: bank connections are Plaid's production, and the report is the consumer report" ;;
+            *"plaid-assets (production)"*) echo "::warning::bank connections are Plaid's production on the assets stand-in; CRD-017 stays unsatisfied until PLAID_PRODUCT=cra" ;;
             *"(sandbox)"*"plaid"*|*"plaid"*"(sandbox)"*) echo "::warning::bank connections are Plaid's sandbox" ;;
           esac
           case "$BODY" in

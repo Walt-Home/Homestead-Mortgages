@@ -753,9 +753,10 @@ jobs:
           ENV_VARS="$ENV_VARS,GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}"
           # Which Plaid product backs the bank screen. `cra` is the consumer
           # report CRD-017 turns on; `assets` is the stand-in. The sandbox
-          # refuses the CRA products until Plaid enables them on the account
-          # (checked 7 October 2026 — not yet), so the repository variable
-          # PLAID_PRODUCT says which, and unset is the stand-in.
+          # refuses the CRA products until Plaid enables them there (checked
+          # 7 October 2026 — production has them, the sandbox does not), so
+          # the repository variable PLAID_PRODUCT says which, and unset is
+          # the stand-in.
           PLAID_PRODUCT="${{ vars.PLAID_PRODUCT || 'assets' }}"
           case "$PLAID_PRODUCT" in
             assets|cra) ;;

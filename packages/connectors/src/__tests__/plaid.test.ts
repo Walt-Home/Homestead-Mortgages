@@ -19,6 +19,7 @@ import {
   checkIdentityFor,
   type PlaidBaseReport,
   type PlaidIncomeInsights,
+  type PlaidIncomeStream,
   type VendorTokenStore,
 } from "../index.js";
 
@@ -218,8 +219,34 @@ const BASE_REPORT: PlaidBaseReport = {
   },
 };
 
-/** The shape the SDK types (`CraBankIncomeSource`), not the one the first draft guessed. */
+/** The II2 schema: streams, with modeled gross and net (SDK `CraIncomeStream`). */
 const INCOME_INSIGHTS: PlaidIncomeInsights = {
+  report: {
+    report_id: "inc_123",
+    income_streams: [
+      {
+        income_stream_id: "str_1",
+        start_date: "2025-09-15",
+        end_date: "2026-08-15",
+        description: "ACME CORP DIRECT DEP",
+        insights: {
+          income_category: { primary: "EARNED_INCOME", secondary: "SALARY" },
+          pay_frequency: "SEMI_MONTHLY",
+          income_provider: { name: "ACME CORP", is_normalized: true },
+          status: "ACTIVE",
+        },
+        income_metrics: {
+          current: { monthly: { gross_income: 6_250, net_income: 4_700 } },
+          projected: { monthly: { gross_income: 6_250, net_income: 4_700 } },
+        },
+      },
+    ],
+    items: [{ institution_name: "First Fictional", bank_income_sources: [] }],
+  },
+};
+
+/** The older II1 schema (SDK `CraBankIncomeSource`), which the mapping still reads. */
+const INCOME_INSIGHTS_II1: PlaidIncomeInsights = {
   report: {
     report_id: "inc_123",
     items: [
@@ -333,6 +360,7 @@ describe("plaid adapter — the link session", () => {
     expect(link.body.cra_options).toEqual({
       days_requested: 365,
       client_report_id: "11111111-1111-1111-1111-111111111111",
+      income_insights: { income_insights_version: "II2" },
     });
   });
 
@@ -614,37 +642,86 @@ describe("plaid mapping", () => {
   });
 
   it("counts only what an underwriter may: a refund, a transfer and a stopped stream are not income", () => {
-    const salary = INCOME_INSIGHTS.report!.items![0]!.bank_income_sources![0]!;
+    const salary = INCOME_INSIGHTS.report!.income_streams![0]!;
+    const stream = (
+      category: string,
+      extra: Partial<PlaidIncomeStream> & {
+        readonly insights?: Partial<PlaidIncomeStream["insights"]>;
+      },
+    ): PlaidIncomeStream => {
+      const [primary, secondary] = category.split(".");
+      return {
+        ...salary,
+        ...extra,
+        insights: {
+          ...salary.insights,
+          ...extra.insights,
+          income_category: { primary, secondary },
+        },
+      };
+    };
     const insights: PlaidIncomeInsights = {
+      report: {
+        income_streams: [
+          salary,
+          stream("OTHER.TAX_REFUND", { insights: { income_provider: { name: "IRS TREAS" } } }),
+          stream("TRANSFER.TRANSFER_FROM_P2P", { insights: { income_provider: null } }),
+          stream("LOAN.EARNED_WAGE_ACCESS", {
+            insights: { income_provider: { name: "DAILYPAY" } },
+          }),
+          stream("EARNED_INCOME.SALARY", {
+            insights: { status: "INACTIVE", income_provider: { name: "OLD EMPLOYER" } },
+          }),
+          stream("EARNED_INCOME.GIG_ECONOMY", {
+            insights: { income_provider: { name: "Uber", is_normalized: true } },
+            income_metrics: { current: { monthly: { net_income: 900 } } },
+          }),
+          stream("RETIREMENT.GOVERNMENT_DERIVED", {
+            insights: { income_provider: { name: "SSA TREAS 310" } },
+            income_metrics: { current: { monthly: { gross_income: 1_800, net_income: 1_800 } } },
+          }),
+        ],
+      },
+    };
+    const report = toAssetReport(BASE_REPORT, insights, { vendorAuthorizedForDu: true });
+    expect(report.incomeSources.map((i) => [i.type, i.monthlyAmount, i.historyMonths])).toEqual([
+      ["base_wage", 6_250, 12],
+      ["self_employment", 900, 12],
+      ["social_security", 1_800, 12],
+    ]);
+    expect(report.employments.map((e) => e.employerName)).toEqual([
+      "ACME CORP",
+      "Uber",
+      "SSA TREAS 310",
+    ]);
+    // Three sources: not one steady paycheque, so not "verified".
+    expect(report.incomeConfidence).toBe("estimated");
+  });
+
+  it("still reads the older II1 schema, with its own names for the same things", () => {
+    const report = toAssetReport(BASE_REPORT, INCOME_INSIGHTS_II1, { vendorAuthorizedForDu: true });
+    expect(report.incomeSources).toHaveLength(1);
+    expect(report.incomeSources[0]!.monthlyAmount).toBe(6_250);
+    expect(report.incomeSources[0]!.historyMonths).toBe(12);
+    expect(report.employments[0]!.employerName).toBe("ACME CORP");
+
+    const salary = INCOME_INSIGHTS_II1.report!.items![0]!.bank_income_sources![0]!;
+    const mixed: PlaidIncomeInsights = {
       report: {
         items: [
           {
             bank_income_sources: [
               salary,
               { ...salary, income_category: "TAX_REFUND", employer: { name: "IRS TREAS" } },
-              { ...salary, income_category: "TRANSFER_FROM_APPLICATION", employer: null },
               { ...salary, status: "INACTIVE", employer: { name: "OLD EMPLOYER" } },
-              {
-                ...salary,
-                income_category: "GIG_ECONOMY",
-                employer: null,
-                income_provider: { name: "Uber", is_normalized: true },
-                historical_average_monthly_gross_income: null,
-                historical_average_monthly_income: 900,
-              },
             ],
           },
         ],
       },
     };
-    const report = toAssetReport(BASE_REPORT, insights, { vendorAuthorizedForDu: true });
-    expect(report.incomeSources.map((i) => [i.type, i.monthlyAmount])).toEqual([
-      ["base_wage", 6_250],
-      ["self_employment", 900],
-    ]);
-    expect(report.employments.map((e) => e.employerName)).toEqual(["ACME CORP", "Uber"]);
-    // Two sources: not one steady paycheque, so not "verified".
-    expect(report.incomeConfidence).toBe("estimated");
+    expect(
+      toAssetReport(BASE_REPORT, mixed, { vendorAuthorizedForDu: true }).incomeSources,
+    ).toHaveLength(1);
   });
 
   it("leaves the cash flow assessment unperformed rather than claiming one", () => {

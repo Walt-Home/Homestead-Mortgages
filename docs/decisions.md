@@ -4012,22 +4012,37 @@ it will say), so it may be what the account holds. Until a product the
 bank screen asks for is enabled on the production account, that screen on
 production cannot connect a bank.
 
-## Plaid Check is keyed on a user, and the account holds nothing yet
+## Plaid Check is keyed on a user, and production holds it while the sandbox does not
 
-**Finding (7 October 2026).** Joe signed with Plaid for Assets and the
-consumer-report products. Asked directly — a link token per product, which
-is the only way Plaid answers the question, now `npm run plaid:products` —
-the account the deploys use (`PLAID_CLIENT_ID` `6a986e48…`) is enabled for
-none of them in production, and for neither CRA product in the sandbox
-either: `INVALID_PRODUCT`, "your account is not enabled for". The section
-above said the sandbox needs no approval; for Check it does ("contact
-sales", in Plaid's own words), so the agreement has to reach this client
-id in both environments before anything here can be exercised. Until it
-does, the bank screen runs the `assets` stand-in on both environments, and
-the flip is one variable per environment rather than a deploy:
-`PLAID_PRODUCT=cra`, read by both workflows (unset is `assets`), with
-`/api/health` reporting `plaid-cra (…)` and the production promotion
-saying which it found.
+**Finding (7 October 2026).** Joe signed with Plaid for the consumer-report
+products. Asked directly — a link token per product, which is the only way
+Plaid answers the question, now `npm run plaid:products` — the account the
+deploys use (`PLAID_CLIENT_ID` `6a986e48…`, the Supermortgage team) holds,
+by environment:
+
+| Environment | Consumer report (`cra_base_report`, `cra_income_insights`) | Assets, transactions, auth, identity, bank income |
+| ----------- | ---------------------------------------------------------- | ------------------------------------------------- |
+| Production  | enabled                                                    | not enabled                                       |
+| Sandbox     | not enabled                                                | enabled                                           |
+
+So production's bank screen could never open Link on the `assets` stand-in
+it was set to, and can on the consumer report; and the sandbox, where a
+report could be walked with Plaid's test users, cannot order one. The
+section above said the sandbox needs no approval; for Check it does
+("contact sales", in Plaid's own words), per environment. The product is
+one variable per environment rather than a deploy: `PLAID_PRODUCT=cra`,
+read by both workflows (unset is `assets`), with `/api/health` reporting
+`plaid-cra (…)` and the production promotion saying which it found. The
+`production` environment's variable says `cra` since the same day;
+staging stays on `assets` until Plaid enables Check in the sandbox.
+
+A first probe that morning read the sandbox as refusing the CRA products
+and production as refusing everything, and the decision was written that
+way for an hour. The sandbox's answer was its own; production's came from
+a probe that asked with no user at all, which Plaid refuses before it
+looks at the product. The script now makes a user, names the same person
+at the link token, and reads Plaid's demand for that person's identity as
+what it is: the product check passed.
 
 **What the sandbox corrected before it refused.** Plaid's User API changed
 on 10 December 2025, and the adapter had been written to the older shape
@@ -4045,16 +4060,32 @@ expired (they live 24 hours) needs — so the adapter orders again on any
 refusal that is not `PRODUCT_NOT_READY`, once per ten minutes, and waits.
 The Plaid user is kept per party on the file, because a consumer report is
 a person's and a co-borrower linking their own bank is another person.
-The response mapping was corrected to the SDK's types (plaid@48):
-`employer.name` rather than `employer_name`, the historical monthly
-averages (gross preferred) rather than a `mean_amount` that does not
-exist, and only a current stream in a qualifying category counts — a tax
-refund, a transfer, a cash deposit or a stream that stopped is dropped,
-where the first draft relabelled every unplaced category as base wage,
-which counts in full and overstates.
+The response mapping was corrected to the SDK's types (plaid@48) and
+Plaid's own samples. Income insights has two schemas: the one Plaid's
+reference moved to in April 2026 (`II2`: `income_streams`, a two-tier
+category from the Income V2 taxonomy, a modeled monthly gross and net) and
+the older one (`II1`: `bank_income_sources` per item, `employer.name`,
+historical monthly averages). A client made after July 2026 cannot ask for
+a version at read time, so the adapter names `II2` where the report is
+ordered and reads either shape. Only a current stream in a qualifying
+category counts — a tax refund, a transfer, a wage advance, a cash deposit
+or a stream that stopped is dropped — where the first draft relabelled
+every unplaced category as base wage, which counts in full and overstates.
+Gross is preferred over net, because qualifying income is gross.
 
-**Not exercised, and said so.** The mapping has not met a live report.
-The webhook Plaid is told about (`/api/webhooks/plaid`,
+There is a newer generation of the report API beside these endpoints:
+`/cra/report/create` and `/cra/report/get`, one call for every product
+with a version each, a `scope` and a `decision_stage`, answered per
+product under `attributes`. Plaid's reference now leads with it and files
+`/cra/check_report/*` under "legacy", though the SDK still ships both and
+the sandbox routes the latter for this client. The adapter stays on the
+endpoints whose response shapes are typed and sampled; moving is a bounded
+change — same user, same Link, a different create and a different read —
+worth making the day a report can be looked at.
+
+**Not exercised, and said so.** The mapping has not met a live report:
+the sandbox cannot order one, and production has no test users, only
+people. The webhook Plaid is told about (`/api/webhooks/plaid`,
 `USER_CHECK_REPORT_READY`) has no route, so each delivery is a 404 Plaid
 retries and drops; the report is polled, which is what the bank screen
 does anyway. And Day 1 Certainty is a separate product on the same
@@ -4063,8 +4094,8 @@ report — the Home Lending Report, `home_lending_report_options` with
 `/cra/check_report/verification/get` — which is not asked for; Fannie
 Mae's validation service is opted in per lender and wants the lender to
 have ordered the report, so whose contract this is decides whether what we
-pull can be validated at all. Both wait on the account before they are
-worth a line of code.
+pull can be validated at all. Both wait on a report that can be looked at
+before they are worth a line of code.
 
 ## Still outstanding
 

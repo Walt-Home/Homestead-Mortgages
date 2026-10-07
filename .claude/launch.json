@@ -4,19 +4,42 @@
     {
       "name": "dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5173
     },
     {
       "name": "web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace=@hm/web"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace=@hm/web"
+      ],
       "port": 5173
     },
     {
       "name": "api-demo",
       "runtimeExecutable": "env",
       "runtimeArgs": [
+        "DEMO_PERSONAS=true",
+        "GOOGLE_CLIENT_ID=",
+        "SERVICING_API_URL=http://localhost:8090",
+        "INTERNAL_EMAIL_DOMAINS=supermortgage.com,trywalt.ai,example.test",
+        "npm",
+        "run",
+        "dev",
+        "--workspace=@hm/api"
+      ],
+      "port": 8080
+    },
+    {
+      "name": "api-plaid-cra",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "PLAID_PRODUCT=cra",
         "DEMO_PERSONAS=true",
         "GOOGLE_CLIENT_ID=",
         "SERVICING_API_URL=http://localhost:8090",
@@ -47,7 +70,11 @@
     {
       "name": "servicing",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace=@hm/servicing"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace=@hm/servicing"
+      ],
       "port": 8090
     },
     {
@@ -66,7 +93,11 @@
     {
       "name": "console",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace=@hm/console"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace=@hm/console"
+      ],
       "port": 5174,
       "url": "http://localhost:5174"
     }

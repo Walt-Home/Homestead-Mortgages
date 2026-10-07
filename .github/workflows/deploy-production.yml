@@ -306,9 +306,10 @@ jobs:
             echo "::error::PLAID_ENV is '$PLAID_ENV_NAME'; it is sandbox or production"; exit 1
           fi
           # The product is the production environment's PLAID_PRODUCT: `cra`
-          # once Plaid has enabled the consumer-report products on the
-          # production account, `assets` (the stand-in) until then and when
-          # unset. Probed 7 October 2026: production is enabled for neither.
+          # since 7 October 2026, when a probe found the production account
+          # enabled for the consumer-report products and for nothing else —
+          # on `assets` the bank screen could not open Link at all. Unset is
+          # the stand-in.
           PLAID_PRODUCT="${{ vars.PLAID_PRODUCT || 'assets' }}"
           case "$PLAID_PRODUCT" in
             assets|cra) ;;

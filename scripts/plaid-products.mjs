@@ -58,8 +58,14 @@ async function call(path, body) {
   return res.json();
 }
 
-/** The consumer-report products need a user; the others refuse one. */
-const user = await call("/user/create", { client_user_id: `plaid-products-${Date.now()}` });
+/**
+ * The consumer-report products and bank income need a user, and the link
+ * token has to name the SAME person Plaid made the user for — the handle
+ * at `/user/create` and `user.client_user_id` at the link token are one
+ * string, exactly as the adapter sends them.
+ */
+const handle = `plaid-products-${Date.now()}`;
+const user = await call("/user/create", { client_user_id: handle });
 const userId = typeof user.user_id === "string" ? user.user_id : null;
 
 const PRODUCTS = [
@@ -68,21 +74,21 @@ const PRODUCTS = [
   { products: ["transactions"] },
   { products: ["auth"] },
   { products: ["identity"] },
-  { products: ["income_verification"] },
+  { products: ["income_verification"], user: true },
 ];
 
 console.log(`Plaid ${env}, client ${clientId.slice(0, 8)}…`);
 let enabledAny = false;
 for (const p of PRODUCTS) {
   const r = await call("/link/token/create", {
-    user: { client_user_id: "plaid-products" },
+    user: { client_user_id: handle },
     client_name: "Supermortgage",
     language: "en",
     country_codes: ["US"],
     products: p.products,
-    ...(p.cra && userId
+    ...((p.cra || p.user) && userId ? { user_id: userId } : {}),
+    ...(p.cra
       ? {
-          user_id: userId,
           consumer_report_permissible_purpose: "WRITTEN_INSTRUCTION_PREQUALIFICATION",
           cra_options: { days_requested: 365 },
         }
@@ -94,6 +100,14 @@ for (const p of PRODUCTS) {
     console.log(`  enabled   ${label}`);
   } else if (r.error_code === "INVALID_PRODUCT") {
     console.log(`  NOT enabled ${label}`);
+  } else if (p.cra && /identity/i.test(String(r.error_message))) {
+    // Past the product check: Plaid wants a person's identity before it
+    // makes a consumer-report user, and this probe deliberately gives none.
+    // The adapter does. So this is "enabled", said with the reason.
+    enabledAny = true;
+    console.log(
+      `  enabled   ${label} (Plaid asked for the person's identity, which the adapter sends)`,
+    );
   } else {
     console.log(`  ?         ${label}: ${r.error_code ?? "no answer"} ${r.error_message ?? ""}`);
   }

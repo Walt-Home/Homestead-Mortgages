@@ -194,6 +194,9 @@ const DAYS_REQUESTED = 365;
 /** What Link shows the borrower as who is asking. The product's name, not the repository's. */
 const CLIENT_NAME = "Supermortgage";
 
+/** The income-insights schema this adapter parses: streams with modeled gross and net. */
+const INCOME_INSIGHTS_VERSION = "II2";
+
 /**
  * Plaid's handle for the person, which must carry no PII: the file and the
  * party, both UUIDs, which is also what keys the report on our side.
@@ -408,7 +411,15 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
             options.permissiblePurpose ?? "WRITTEN_INSTRUCTION_PREQUALIFICATION",
           // Link is where the report is ordered, so this is where its window
           // and our reference to it are said.
-          cra_options: { days_requested: DAYS_REQUESTED, client_report_id: file.id },
+          cra_options: {
+            days_requested: DAYS_REQUESTED,
+            client_report_id: file.id,
+            // The income schema this adapter parses. Plaid's reference moved
+            // to it in April 2026 and a client made after July 2026 cannot
+            // ask for the old one at read time, so it is said where the
+            // report is ordered.
+            income_insights: { income_insights_version: INCOME_INSIGHTS_VERSION },
+          },
           ...(webhookUrl ? { webhook: webhookUrl } : {}),
           ...(options.redirectUri ? { redirect_uri: options.redirectUri } : {}),
         });
@@ -524,6 +535,7 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
           days_requested: DAYS_REQUESTED,
           client_report_id: file.id,
           products: ["cra_income_insights"],
+          income_insights: { income_insights_version: INCOME_INSIGHTS_VERSION },
           consumer_report_permissible_purpose:
             options.permissiblePurpose ?? "WRITTEN_INSTRUCTION_PREQUALIFICATION",
           // Required, not optional — the endpoint rejects the call without it.
@@ -609,14 +621,127 @@ export interface PlaidBankIncomeSource {
   historical_summary?: { start_date?: string; end_date?: string }[];
 }
 
+/**
+ * One stream of deposits in the II2 schema (SDK `CraIncomeStream`): the
+ * category is two-tiered, and the money is a modeled monthly gross and net
+ * rather than an average of what landed.
+ */
+export interface PlaidIncomeStream {
+  income_stream_id?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  description?: string;
+  insights?: {
+    /** `primary.secondary`, from Plaid's Income V2 taxonomy: EARNED_INCOME.SALARY, RETIREMENT.PLAN_DISTRIBUTION, OTHER.TAX_REFUND, … */
+    income_category?: { primary?: string; secondary?: string };
+    pay_frequency?: string;
+    income_provider?: { name?: string; is_normalized?: boolean } | null;
+    /** ACTIVE, INACTIVE or UNKNOWN. */
+    status?: string;
+  };
+  income_metrics?: {
+    current?: { monthly?: { gross_income?: number; net_income?: number } } | null;
+    projected?: { monthly?: { gross_income?: number; net_income?: number } } | null;
+  } | null;
+}
+
 export interface PlaidIncomeInsights {
   report?: {
     report_id?: string;
+    /** II2: the streams, and the whole of the income data. */
+    income_streams?: PlaidIncomeStream[];
+    /** II1: per item, with `bank_income_sources`; empty under II2. */
     items?: {
       institution_name?: string;
       bank_income_sources?: PlaidBankIncomeSource[];
     }[];
   };
+}
+
+/**
+ * Plaid's Income V2 taxonomy onto the sheet's types, by `primary.secondary`.
+ * Same rule as the older table below: only what an underwriter may count as
+ * qualifying income is mapped, and the rest — a transfer, a loan or wage
+ * advance, a refund, a cash deposit, gambling, crypto, interest a lender
+ * would want two years of returns for — is dropped, never relabelled.
+ * Disability and unemployment have no type on the sheet; dropped rather
+ * than misnamed, and the payroll step is where disability is picked up.
+ */
+const INCOME_CATEGORY_V2: Record<string, IncomeSourceType> = {
+  "EARNED_INCOME.SALARY": "base_wage",
+  "EARNED_INCOME.GIG_ECONOMY": "self_employment",
+  "EARNED_INCOME.SELF_EMPLOYED": "self_employment",
+  "RETIREMENT.GOVERNMENT_DERIVED": "social_security",
+  "RETIREMENT.PRIVATE_RETIREMENT": "pension",
+  "RETIREMENT.PLAN_DISTRIBUTION": "retirement",
+  "BENEFITS.CHILD_SUPPORT": "child_support",
+  "OTHER.RENTAL": "rental",
+};
+
+/** What the mapping reads off either income schema, before the sheet's shape. */
+interface IncomeStream {
+  readonly type: IncomeSourceType;
+  readonly monthlyAmount: number;
+  readonly months: number;
+  readonly employer: string | null;
+  /** Names the payer might go by on a bank line, for AST-005's deposit sourcing. */
+  readonly names: readonly string[];
+}
+
+function monthsBetween(start?: string | null, end?: string | null): number {
+  if (!start || !end) return 0;
+  const [sy, sm] = start.split("-").map(Number);
+  const [ey, em] = end.split("-").map(Number);
+  if (!sy || !sm || !ey || !em) return 0;
+  return Math.max(0, (ey - sy) * 12 + (em - sm) + 1);
+}
+
+/** II2: a current stream in a qualifying category, at its modeled gross, else its net. */
+function fromStream(s: PlaidIncomeStream): IncomeStream | null {
+  if (s.insights?.status === "INACTIVE") return null;
+  const category = `${s.insights?.income_category?.primary ?? ""}.${s.insights?.income_category?.secondary ?? ""}`;
+  const type = INCOME_CATEGORY_V2[category];
+  if (!type) return null;
+  const monthly = s.income_metrics?.current?.monthly;
+  const figure = monthly?.gross_income ?? monthly?.net_income ?? 0;
+  const provider = s.insights?.income_provider?.name?.trim() || null;
+  return {
+    type,
+    monthlyAmount: Math.round(figure),
+    months: monthsBetween(s.start_date, s.end_date),
+    employer: provider,
+    names: [provider, s.description].filter((v): v is string => Boolean(v)),
+  };
+}
+
+/** II1: the same, off the older per-item sources. */
+function fromSource(s: PlaidBankIncomeSource): IncomeStream | null {
+  if (s.status === "INACTIVE") return null;
+  const type = INCOME_CATEGORY[s.income_category ?? ""];
+  if (!type) return null;
+  const months = monthsOf(s);
+  const employer = employerOf(s);
+  return {
+    type,
+    monthlyAmount: monthlyAmountOf(s, months),
+    months,
+    employer,
+    names: [employer, s.income_description, s.income_provider?.name].filter((v): v is string =>
+      Boolean(v),
+    ),
+  };
+}
+
+/** Every stream Plaid's model called income, whichever schema answered, then only the ones an underwriter may count. */
+function incomeStreamsOf(income: PlaidIncomeInsights | null): IncomeStream[] {
+  const streams = income?.report?.income_streams ?? [];
+  if (streams.length) {
+    return streams.map(fromStream).filter((x): x is IncomeStream => x !== null);
+  }
+  return (income?.report?.items ?? [])
+    .flatMap((i) => i.bank_income_sources ?? [])
+    .map(fromSource)
+    .filter((x): x is IncomeStream => x !== null);
 }
 
 /**
@@ -804,36 +929,27 @@ export function toAssetReport(
       .flatMap((a) => (a.transactions ?? []).map((t) => ({ ...t, accountId: a.account_id ?? "" }))),
   );
 
-  // Every stream Plaid's model called income, then only the ones an
-  // underwriter may count: a current stream in a qualifying category. The
-  // rest are dropped here, not relabelled.
-  const streams = (income?.report?.items ?? []).flatMap((i) => i.bank_income_sources ?? []);
-  const sources = streams
-    .filter((s) => s.status !== "INACTIVE")
-    .map((s) => ({ source: s, type: INCOME_CATEGORY[s.income_category ?? ""] ?? null }))
-    .filter((x): x is { source: PlaidBankIncomeSource; type: IncomeSourceType } => x.type !== null);
+  // Every stream Plaid's model called income, whichever schema answered,
+  // then only the ones an underwriter may count: a current stream in a
+  // qualifying category. The rest are dropped there, not relabelled.
+  const sources = incomeStreamsOf(income);
 
   const inferred = opts.deriveIncome ? detectRecurringDeposits(allTransactions) : [];
 
   const incomeSources: IncomeSource[] = sources.length
-    ? sources.map(({ source, type }) => {
-        const months = monthsOf(source);
-        return {
-          type,
-          monthlyAmount: monthlyAmountOf(source, months),
-          historyMonths: months,
-          // Continuance is an underwriting judgment about the next three
-          // years, not a fact in a bank feed. Null is "not yet determined" —
-          // exactly the state INC-027 exists to resolve, and is not "no".
-          continuanceEstablished: null,
-          evidenceDocumentIds: [],
-        };
-      })
+    ? sources.map((s) => ({
+        type: s.type,
+        monthlyAmount: s.monthlyAmount,
+        historyMonths: s.months,
+        // Continuance is an underwriting judgment about the next three
+        // years, not a fact in a bank feed. Null is "not yet determined" —
+        // exactly the state INC-027 exists to resolve, and is not "no".
+        continuanceEstablished: null,
+        evidenceDocumentIds: [],
+      }))
     : inferred;
 
-  const employers = sources
-    .map(({ source }) => employerOf(source))
-    .filter((name): name is string => name !== null);
+  const employers = sources.map((s) => s.employer).filter((name): name is string => name !== null);
   const employments: EmploymentRecord[] = (
     sources.length
       ? [...new Set(employers)].map((name) => ({ employer_name: name }))
@@ -850,13 +966,7 @@ export function toAssetReport(
   }));
 
   const monthlyIncome = incomeSources.reduce((s, i) => s + i.monthlyAmount, 0);
-  const payers = new Set(
-    sources.flatMap(({ source }) =>
-      [employerOf(source), source.income_description, source.income_provider?.name]
-        .filter((v): v is string => Boolean(v))
-        .map(norm),
-    ),
-  );
+  const payers = new Set(sources.flatMap((s) => s.names.map(norm)));
 
   const obligations = detectRecurringObligations(allTransactions);
   const rent = obligations.find((o) => o.kind === "rent");

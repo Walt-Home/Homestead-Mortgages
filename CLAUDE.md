@@ -244,10 +244,12 @@ September 2026).** `packages/billing` is Doug's price sheet as data —
 version 1.0, `docs/Supermortgage-Price-Sheet-v1.0.pdf`, every row, held to
 its own sums by tests, plus one rule changed as version 1.1 on 7 October —
 and the tape meter over it: a monitored loan on a partner's book consumes
-the monitored-book rate (25 basis points a year on interest-bearing UPB:
-25,000 tokens per $100,000 per loan-year, a twelfth each month, a token a
-cent; it was the self-improving row alone, 21 basis points, under 1.0) and
-offer touches from the day it is watched from — `loans.watched_from`, the first
+the whole standard servicing cycle — every section A row, the monthly
+ones per loan-month and the two annual ones a twelfth each month, one
+statement line each, adding to 25 basis points a year on interest-bearing
+UPB (25,000 tokens per $100,000, a token a cent; it was the self-improving
+row alone, 21 basis points, under 1.0) — and offer touches from the day it
+is watched from — `loans.watched_from`, the first
 of the month the tape was said to be for, or the load day (6 October: a
 tape loaded late is for the month it was for; the desk asks, and
 `npm run book:billed-from` moves a book loaded before it asked) — pro-rated

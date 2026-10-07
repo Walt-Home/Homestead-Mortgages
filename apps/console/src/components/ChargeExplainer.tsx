@@ -24,19 +24,23 @@ export function ChargeExplainer({
   /** The month is still running: the figure counts through today. */
   running: boolean;
 }) {
-  const per100k = terms.rateTokensPer100k.toLocaleString("en-US");
+  const perYear = terms.tokensPer100kPerYear.toLocaleString("en-US");
   const perTouch = terms.touchTokens.toLocaleString("en-US");
-  const unit = terms.rateCadence === "loan_year" ? "loan-year, a twelfth each month" : "loan-month";
+  const monthly = terms.rows.filter((r) => r.cadence === "loan_month").length;
+  const annual = terms.rows.filter((r) => r.cadence === "loan_year").length;
   return (
     <div className="mt-4 space-y-2 rounded-lg border border-line-2 bg-surface-2 p-4 text-sm text-fg-2">
       <p>
         <span className="font-medium text-fg">How the charge is computed.</span> Each loan on the
-        book consumes {terms.basisPointsPerYear} basis points a year on its interest-bearing unpaid
-        principal balance: {per100k} tokens per $100,000 per {unit}, on the balance the newest tape
-        reports, pro-rated by calendar day from the day it is billed from until a tape reports it
-        paid off, transferred, charged off or matured, plus {perTouch} tokens per offer touch. Every
-        loan is rounded once, and the total is the sum of the loans; {tokenPriceWords(terms)}.
-        {running ? " This month counts through today." : ""}
+        book consumes the standard servicing cycle, the {terms.rows.length} rows of the price
+        sheet&rsquo;s section A listed on the statement below, which add to{" "}
+        {terms.basisPointsPerYear} basis points a year on its interest-bearing unpaid principal
+        balance ({perYear} tokens per $100,000 per loan-year). The {monthly} monthly rows are
+        charged per loan-month and the {annual} annual rows a twelfth each month, on the balance the
+        newest tape reports, pro-rated by calendar day from the day it is billed from until a tape
+        reports it paid off, transferred, charged off or matured, plus {perTouch} tokens per offer
+        touch. Every row is rounded once per loan, and the total is the sum of the rows;{" "}
+        {tokenPriceWords(terms)}.{running ? " This month counts through today." : ""}
       </p>
       <p>
         <span className="font-medium text-fg">When the analysis runs.</span> Every loan on the book

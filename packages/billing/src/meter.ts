@@ -6,13 +6,13 @@
  * (`docs/decisions.md`, "The book is tracked from the day it is loaded" and
  * "A tape is for a month, and the book is billed from it"); the caller
  * passes that day as `watchedFrom`. The price sheet says what a watched
- * loan on a partner's book consumes — the monitored-book rate, 25 basis
- * points a year on its unpaid principal balance (25,000 tokens per
- * $100,000 per loan-year, a twelfth each month, since sheet 1.1), and
- * offer touches, flat — and nothing else until the loan boards, which a
- * servicer's own book never does here. So the month's statement is one
- * balance-driven line plus a count of touches, and this is the
- * arithmetic, pure, over the rows the tape wrote.
+ * loan on a partner's book consumes — since sheet 1.1 the whole standard
+ * servicing cycle, every section A row on its unpaid principal balance,
+ * which add to 25 basis points a year (25,000 tokens per $100,000), the
+ * monthly rows per loan-month and the two annual rows a twelfth each
+ * month — and offer touches, flat. So the month's statement is one line
+ * per cycle row plus a count of touches, each loan's charge is the sum of
+ * its rows, and this is the arithmetic, pure, over the rows the tape wrote.
  *
  * The decisions, each taken 29 September 2026 with Joe:
  *
@@ -31,11 +31,12 @@
  *     invitation the desk mails. Offers are a card and no mail today, so the
  *     count the caller passes is zero and the line shows it.
  *
- * Tokens are cents, and the arithmetic is integer: a loan's tokens for the
- * month are `balance × rate × days ÷ ($100,000 × days in month × months
- * the rate covers)`, rounded half-up once, per loan — twelve months for
- * the loan-year rate. The totals are sums of those, so a statement agrees
- * with its own lines to the token.
+ * Tokens are cents, and the arithmetic is integer: a loan's tokens for a
+ * row are `balance × row tokens × days ÷ ($100,000 × days in month × months
+ * the row covers)`, rounded half-up once — twelve months for an annual row.
+ * A loan's tokens are the sum of its rows and a line's are the sum of its
+ * loans, so a statement agrees with its lines and with its loans to the
+ * token.
  */
 
 import {
@@ -52,8 +53,9 @@ import {
 } from "@hm/kernel/calendar";
 import { Decimal, divRound } from "@hm/kernel/money";
 import {
-  basisPointsPerYear,
+  CYCLE_CODES,
   centsOfTokens,
+  cycleBasisPointsPerYear,
   monthsPer,
   PRICE_SHEET,
   priceRow,
@@ -103,6 +105,8 @@ export interface LoanCharge {
   readonly days: number;
   /** The observation the balance was read from; null when none stood. */
   readonly basis: MeteredObservation | null;
+  /** The cycle's rows on this loan, in the sheet's order; `tokens` is their sum. */
+  readonly rows: readonly { readonly code: string; readonly tokens: bigint }[];
   readonly tokens: bigint;
   readonly touches: number;
   readonly touchTokens: bigint;
@@ -165,8 +169,9 @@ export interface MeterOptions {
   readonly through?: PlainDate;
 }
 
-const RATE_ROW = "A.monitored_book";
 const TOUCH_ROW = "A.offer_touch";
+/** The cycle's rows, as the sheet lists them. */
+const cycleRows = (): readonly PriceRow[] => CYCLE_CODES.map(priceRow);
 
 /** "YYYY-MM" for any day of the month. */
 export function monthKey(day: PlainDate): string {
@@ -202,7 +207,7 @@ function chargeLoan(
   to: PlainDate,
   through: PlainDate,
   daysInTheMonth: number,
-  rate: PriceRow,
+  rates: readonly PriceRow[],
   touch: PriceRow,
 ): LoanCharge {
   const observations = [...loan.observations].sort(byAsOf);
@@ -222,17 +227,20 @@ function chargeLoan(
   const last = endedOn === null ? lastCandidate : min(lastCandidate, addDays(endedOn, -1));
   const days = Math.max(0, toEpochDays(last) - toEpochDays(first) + 1);
 
-  const tokens =
-    basis === null
-      ? 0n
-      : tokensForBalance(
-          basis.principalBalanceCents,
-          rate.tokens,
-          days,
-          daysInTheMonth,
-          monthsPer(rate.cadence),
-        );
-
+  const rows = rates.map((rate) => ({
+    code: rate.code,
+    tokens:
+      basis === null
+        ? 0n
+        : tokensForBalance(
+            basis.principalBalanceCents,
+            rate.tokens,
+            days,
+            daysInTheMonth,
+            monthsPer(rate.cadence),
+          ),
+  }));
+  const tokens = rows.reduce((n, r) => n + r.tokens, 0n);
   let notBilled: NotBilled | null = null;
   if (tokens === 0n && touchTokens === 0n) {
     if (compare(loan.watchedFrom, through) > 0) notBilled = "not_yet_loaded";
@@ -246,6 +254,7 @@ function chargeLoan(
     endedOn,
     days: basis === null ? 0 : days,
     basis,
+    rows,
     tokens,
     touches: loan.touches,
     touchTokens,
@@ -268,11 +277,11 @@ export function meterMonth(
   const through = opts.through ? min(max(opts.through, addDays(from, -1)), to) : to;
   const { y, m } = parts(from);
   const days = daysInMonth(y, m);
-  const rate = priceRow(RATE_ROW);
+  const rates = cycleRows();
   const touch = priceRow(TOUCH_ROW);
 
   const charges = loans
-    .map((l) => chargeLoan(l, from, to, through, days, rate, touch))
+    .map((l) => chargeLoan(l, from, to, through, days, rates, touch))
     .sort((a, b) => (a.number < b.number ? -1 : a.number > b.number ? 1 : 0));
   const billed = charges.filter((c) => c.notBilled === null);
 
@@ -281,28 +290,31 @@ export function meterMonth(
     (n, c) => n + (c.days > 0 ? (c.basis?.principalBalanceCents ?? 0n) : 0n),
     0n,
   );
-  const rateTokens = billed.reduce((n, c) => n + c.tokens, 0n);
   const touches = billed.reduce((n, c) => n + c.touches, 0);
   const touchTokens = billed.reduce((n, c) => n + c.touchTokens, 0n);
-
+  const quantity: LineQuantity = {
+    kind: "loan_months",
+    loanMonths: Decimal.ratio(BigInt(loanDays), BigInt(days)).toFixed(2),
+    loanDays,
+    loans: billed.filter((c) => c.days > 0).length,
+    balanceCents,
+  };
   const lines: StatementLine[] = [
-    {
-      code: rate.code,
-      action: rate.action,
-      fires: rate.fires,
-      basis: rate.basis,
-      cadence: rate.cadence,
-      tokensEach: rate.tokens,
-      quantity: {
-        kind: "loan_months",
-        loanMonths: Decimal.ratio(BigInt(loanDays), BigInt(days)).toFixed(2),
-        loanDays,
-        loans: billed.filter((c) => c.days > 0).length,
-        balanceCents,
-      },
-      tokens: rateTokens,
-      cents: centsOfTokens(rateTokens),
-    },
+    // One line per cycle row: its tokens are that row summed over the loans.
+    ...rates.map((rate, r) => {
+      const tokens = billed.reduce((n, c) => n + (c.rows[r]?.tokens ?? 0n), 0n);
+      return {
+        code: rate.code,
+        action: rate.action,
+        fires: rate.fires,
+        basis: rate.basis,
+        cadence: rate.cadence,
+        tokensEach: rate.tokens,
+        quantity,
+        tokens,
+        cents: centsOfTokens(tokens),
+      };
+    }),
     {
       code: touch.code,
       action: touch.action,
@@ -342,6 +354,7 @@ export interface LoanChargeWire {
   readonly loanId: string;
   readonly number: string;
   readonly watchedFrom: string;
+  readonly rows: readonly { readonly code: string; readonly tokens: string }[];
   readonly endedOn: string | null;
   readonly days: number;
   readonly basis: {
@@ -425,6 +438,7 @@ export function statementWire(s: Statement): StatementWire {
       cents: l.cents.toString(),
     })),
     loans: s.loans.map((c) => ({
+      rows: c.rows.map((r) => ({ code: r.code, tokens: r.tokens.toString() })),
       loanId: c.loanId,
       number: c.number,
       watchedFrom: c.watchedFrom,
@@ -448,11 +462,16 @@ export function statementWire(s: Statement): StatementWire {
 
 export interface MeterTerms {
   readonly sheet: { readonly version: string; readonly date: string };
-  /** The monitored-book rate: tokens per $100,000 of UPB per unit of its cadence. */
-  readonly rateTokensPer100k: number;
-  /** "loan_year" since sheet 1.1: charged a twelfth each month. */
-  readonly rateCadence: PriceRow["cadence"];
-  /** The same rate as basis points a year on the balance: 25. */
+  /** The cycle's rows a monitored loan consumes, in the sheet's order. */
+  readonly rows: readonly {
+    readonly code: string;
+    readonly action: string;
+    readonly tokensEach: number;
+    readonly cadence: PriceRow["cadence"];
+  }[];
+  /** The cycle's rows together: tokens per $100,000 of UPB per loan-year, 25,000. */
+  readonly tokensPer100kPerYear: number;
+  /** The same as basis points a year on the balance: 25. */
   readonly basisPointsPerYear: number;
   /** The offer-touch row: tokens per touch, flat. */
   readonly touchTokens: number;
@@ -464,12 +483,17 @@ export interface MeterTerms {
 
 /** The two rows the tape meter bills, and the sheet's one exchange rate, as a page states them. */
 export function meterTerms(): MeterTerms {
-  const rate = priceRow(RATE_ROW);
+  const rows = cycleRows();
   return {
     sheet: { version: PRICE_SHEET.version, date: PRICE_SHEET.date },
-    rateTokensPer100k: rate.tokens,
-    rateCadence: rate.cadence,
-    basisPointsPerYear: basisPointsPerYear(rate),
+    rows: rows.map((r) => ({
+      code: r.code,
+      action: r.action,
+      tokensEach: r.tokens,
+      cadence: r.cadence,
+    })),
+    tokensPer100kPerYear: rows.reduce((n, r) => n + r.tokens * (12 / monthsPer(r.cadence)), 0),
+    basisPointsPerYear: cycleBasisPointsPerYear(),
     touchTokens: priceRow(TOUCH_ROW).tokens,
     tokenCents: PRICE_SHEET.tokenCents.toString(),
     balanceUnitCents: PRICE_SHEET.balanceUnitCents.toString(),
@@ -499,7 +523,7 @@ export interface RunRate {
 }
 
 export function runRate(loans: readonly MeteredLoan[], asOf: PlainDate): RunRate {
-  const rate = priceRow(RATE_ROW);
+  const rates = cycleRows();
   let counted = 0;
   let balanceCents = 0n;
   let monthlyTokens = 0n;
@@ -512,14 +536,16 @@ export function runRate(loans: readonly MeteredLoan[], asOf: PlainDate): RunRate
     if (!newest || newest.principalBalanceCents <= 0n) continue;
     counted += 1;
     balanceCents += newest.principalBalanceCents;
-    // A whole month: the fraction is one, of the months the rate covers.
-    monthlyTokens += tokensForBalance(
-      newest.principalBalanceCents,
-      rate.tokens,
-      1,
-      1,
-      monthsPer(rate.cadence),
-    );
+    // A whole month of every row: the fraction is one, of the months each row covers.
+    for (const rate of rates) {
+      monthlyTokens += tokensForBalance(
+        newest.principalBalanceCents,
+        rate.tokens,
+        1,
+        1,
+        monthsPer(rate.cadence),
+      );
+    }
   }
   const annualTokens = monthlyTokens * 12n;
   return {

@@ -4180,38 +4180,45 @@ September statement had nothing on it.
   closed statement, because a closed statement is what was invoiced. The
   month it opens is closed from the console as any open month is.
 
-## The partner rate is 25 basis points a year
+## The partner rate is 25 basis points a year, itemized
 
 **Decision (7 October 2026, Joe).** "It should be 25 basis points. That is
-what our partners are agreeing to." The tape meter had billed a monitored
-loan on a partner's book off the self-improving mortgage row alone —
-1,750 tokens per $100,000 per loan-month, which is 21 basis points a year
-— because that was the last line of section A on price sheet 1.0.
-Grander's September statement closed at that rate: $11,554.44 on about
-$66.0 million of balance, 1.75 basis points for the month.
+what our partners are agreeing to." And, when asked whether one row would
+do: "based on Doug's pricing sheet, there are multiple line items that
+should add up to 25 basis points … this way partners are billed not just
+for one thing, but for various services that add up to that number." The
+tape meter had billed a monitored loan on a partner's book off the
+self-improving mortgage row alone — 1,750 tokens per $100,000 per
+loan-month, 21 basis points a year — because that was the last line of
+section A on price sheet 1.0, which held the servicing rows back until a
+loan boards. Grander's September statement closed at that rate: $11,554.44
+on about $66.0 million of balance.
 
-- **Price sheet 1.1 is 1.0 with one rule changed.** A new row,
-  `A.monitored_book`, carries the rate a monitored loan on a partner's book
-  consumes: 25,000 tokens per $100,000 per loan-year, charged a twelfth
-  each month — the standard cycle's 25 basis points, which the sheet's own
-  header already named as what a standard loan consumes in a year.
-  `MONITORED_BOOK_CODES` names it beside offer touches. Every other row,
-  the PDF, and the sums the tests hold are 1.0's; the self-improving row
-  stands at 1,750 for a boarded loan, which no partner's book is here.
-- **The meter charges a loan-year rate a twelfth a month.** `tokensForBalance`
-  takes the months the rate covers (one for a loan-month row, twelve for a
-  loan-year one), so a loan's tokens for a month are
-  `balance × 25,000 × days ÷ ($100,000 × days in month × 12)`, rounded
-  half-up once per loan as before. A whole year at a steady balance is
-  exactly 25,000 per $100,000. The statement line carries the row's
-  cadence so the console says "per loan-year, a twelfth each month".
-- **The page says basis points.** `meterTerms()` answers the rate as
-  tokens and as basis points a year (`basisPointsPerYear`, computed from
-  the row, never typed), and the explainer and the run-rate card lead
-  with "25 basis points a year on the balance".
+- **Price sheet 1.1 is 1.0 with that one rule changed.** A monitored loan
+  on a partner's book consumes the whole standard servicing cycle — every
+  section A row, the six monthly rows per loan-month and the two annual
+  rows a twelfth each month — from the day it is billed from, plus offer
+  touches. The rows and their tokens are Doug's unchanged, so the cycle
+  still sums to 25,000 tokens per $100,000 a year, which is the 25 basis
+  points the sheet's own header names; `CYCLE_CODES` lists them,
+  `MONITORED_BOOK_CODES` is them plus the touch row, and the PDF stays 1.0.
+  (For an hour on 7 October the change shipped as one synthetic row at
+  25,000 per loan-year; Joe's clarification replaced it with the itemized
+  cycle before any statement closed under it.)
+- **The statement is one line per row.** The meter charges each row on
+  each loan — `balance × row tokens × days ÷ ($100,000 × days in month ×
+months the row covers)`, rounded half-up once — so a loan's charge is
+  the sum of its rows and a line's is the sum of its loans, and the
+  statement agrees both ways to the token. The console and the portal
+  list the eight lines under the month's figures; an annual row reads
+  "per loan-year, a twelfth each month".
+- **The page says basis points.** `meterTerms()` answers the rows, their
+  sum per loan-year and the basis points a year (`cycleBasisPointsPerYear`,
+  computed from the rows, never typed), and the explainer leads with "the
+  standard servicing cycle, the eight rows … which add to 25 basis points
+  a year".
 - **A statement records the sheet it was closed under.** Grander's
   September row says 1.0 and $11,554.44. Nothing was invoiced from it. A
   closed statement cannot be rewritten (the trigger), but it can be
-  deleted and the month closed again under 1.1 — at 25 basis points,
-  $13,755.29 — which is Joe's call, and the recommended one while no
-  invoice exists.
+  deleted and the month closed again under 1.1 — Joe's call, and the
+  recommended one while no invoice exists.

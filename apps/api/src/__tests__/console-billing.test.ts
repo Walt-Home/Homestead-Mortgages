@@ -15,7 +15,13 @@ import express from "express";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import { NORTHLIGHT, sampleBook } from "@hm/partner-book";
-import { tokensForBalance, type StatementWire } from "@hm/billing";
+import {
+  CYCLE_CODES,
+  monthsPer,
+  priceRow,
+  tokensForBalance,
+  type StatementWire,
+} from "@hm/billing";
 import { daysInMonth, parts, plainDate } from "@hm/kernel/calendar";
 import { errorHandler } from "../middleware/error-handler.js";
 import { consoleBillingRouter } from "../routes/console-billing.js";
@@ -133,9 +139,14 @@ function expectedTokens(
   days: number,
   inMonth: number,
 ): bigint {
-  // Sheet 1.1: 25,000 tokens per $100,000 per loan-year, a twelfth each month.
+  // Sheet 1.1: every cycle row on every loan, each rounded once; the annual rows a twelfth a month.
   return book.loans.reduce(
-    (n, l) => n + tokensForBalance(l.upb_cents, 25_000, days, inMonth, 12),
+    (n, l) =>
+      n +
+      CYCLE_CODES.map(priceRow).reduce(
+        (t, r) => t + tokensForBalance(l.upb_cents, r.tokens, days, inMonth, monthsPer(r.cadence)),
+        0n,
+      ),
     0n,
   );
 }
@@ -214,10 +225,10 @@ describe("the month running", () => {
     expect(r.body.current.standing).toBe("running");
     expect(r.body.current.closed).toBeNull();
     expect(r.body.current.statement.lines.map((l) => l.code)).toEqual([
-      "A.monitored_book",
+      ...CYCLE_CODES,
       "A.offer_touch",
     ]);
-    expect(r.body.current.statement.lines[1]!.quantity).toEqual({ kind: "events", count: 0 });
+    expect(r.body.current.statement.lines.at(-1)!.quantity).toEqual({ kind: "events", count: 0 });
     expect(r.body.statements).toEqual([]);
     expect((await call("GET", "/servicers/nobody")).status).toBe(404);
   });

@@ -17,6 +17,8 @@ import {
   standardRefinanceRunTokens,
   basisPointsPerYear,
   monthsPer,
+  CYCLE_CODES,
+  cycleBasisPointsPerYear,
 } from "../price-sheet.js";
 
 describe("the price sheet", () => {
@@ -106,16 +108,25 @@ describe("the price sheet", () => {
     });
   });
 
-  it("names the two rows a monitored loan on a partner's book consumes: 25 basis points a year, and touches", () => {
-    expect(MONITORED_BOOK_CODES).toEqual(["A.monitored_book", "A.offer_touch"]);
-    const rate = priceRow("A.monitored_book");
-    expect(rate.tokens).toBe(25_000);
-    expect(rate.basis).toBe("per_100k");
-    expect(rate.cadence).toBe("loan_year");
-    expect(monthsPer(rate.cadence)).toBe(12);
-    expect(basisPointsPerYear(rate)).toBe(25);
-    // 1.0's rule, the self-improving row alone, was 21 basis points; the row itself is unchanged.
+  it("names what a monitored loan on a partner's book consumes: every cycle row, 25 basis points a year, and touches", () => {
+    expect(CYCLE_CODES).toEqual([
+      "A.self_improving_mortgage",
+      "A.payment_processing",
+      "A.investor_reporting",
+      "A.escrow_monitoring",
+      "A.statements",
+      "A.credit_furnishing",
+      "A.escrow_analysis",
+      "A.year_end_tax",
+    ]);
+    expect(MONITORED_BOOK_CODES).toEqual([...CYCLE_CODES, "A.offer_touch"]);
+    // The rows add to 25 basis points a year; the self-improving row alone, 1.0's rule, was 21.
+    expect(cycleBasisPointsPerYear()).toBe(25);
     expect(basisPointsPerYear(priceRow("A.self_improving_mortgage"))).toBe(21);
+    expect(basisPointsPerYear(priceRow("A.escrow_analysis"))).toBeCloseTo(0.06, 10);
+    expect(monthsPer("loan_month")).toBe(1);
+    expect(monthsPer("loan_year")).toBe(12);
+    expect(() => monthsPer("event")).toThrow(/not priced on a balance/);
     expect(() => basisPointsPerYear(priceRow("A.offer_touch"))).toThrow(/not priced on a balance/);
     const touch = priceRow("A.offer_touch");
     expect(touch.tokens).toBe(100);

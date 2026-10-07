@@ -357,7 +357,7 @@ export function BillingServicerPage() {
           <Stat
             label="Tokens a month"
             value={Number(runRate.monthlyTokens).toLocaleString("en-US")}
-            hint={`${terms.basisPointsPerYear} basis points a year on the balance, a twelfth each month; ${tokenPriceWords(terms)}`}
+            hint={`${terms.basisPointsPerYear} basis points a year on the balance across the cycle's ${terms.rows.length} rows; ${tokenPriceWords(terms)}`}
           />
         </div>
       </Section>

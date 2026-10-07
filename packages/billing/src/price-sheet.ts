@@ -19,15 +19,17 @@
  * The one rule that decides a servicer's bill is kept as
  * `MONITORED_BOOK_CODES`. Version 1.0's last line of section A had a
  * monitored loan on a partner's book consume the self-improving mortgage
- * row alone — 1,750 a month, 21 basis points a year — with the servicing
- * rows starting the day the loan boards. Version 1.1 (7 October 2026) is
- * that one rule changed, by Joe's word: "it should be 25 basis points; that
- * is what our partners are agreeing to." A monitored loan on a partner's
- * book consumes the standard cycle's rate — 25,000 tokens per $100,000 per
- * loan-year, a twelfth each month — as the `A.monitored_book` row, plus
- * offer touches. Every other row is 1.0's, the PDF is 1.0's, and the sums
- * the tests hold are 1.0's. A servicer's own book never boards here, so
- * the tape meter (`meter.ts`) reads exactly those two rows and no other.
+ * row alone — 21 basis points a year — with the servicing rows waiting
+ * for the day the loan boards. Version 1.1 (7 October 2026) is that one
+ * rule changed, by Joe's word: "it should be 25 basis points; that is what
+ * our partners are agreeing to … multiple line items that add up to 25
+ * basis points." A monitored loan on a partner's book consumes the whole
+ * standard cycle — every section A row, monthly rows per loan-month and
+ * the two annual rows a twelfth each month — from the day it is billed
+ * from, plus offer touches. The rows and their tokens are 1.0's, so the
+ * cycle still sums to 25,000 a year; the PDF is 1.0's. A servicer's own
+ * book never boards here, so the tape meter (`meter.ts`) reads exactly
+ * those rows and no other.
  */
 
 export const PRICE_SHEET = {
@@ -172,25 +174,6 @@ const A_ANNUAL: readonly PriceRow[] = [
     "per_100k",
     "loan_year",
     40,
-  ),
-];
-
-/**
- * The rate a monitored loan on a partner's book consumes (version 1.1):
- * the standard cycle's 25 basis points a year on its balance, as one row
- * priced per loan-year and charged a twelfth each month. Outside the
- * cycle's sums, which are 1.0's.
- */
-const A_MONITORED: readonly PriceRow[] = [
-  row(
-    "A.monitored_book",
-    "A",
-    "Monitored loan on a partner's book: daily rate review, refinance readiness kept current, an offer when the borrower benefits — the standard cycle's rate",
-    ["20.1", "33.3"],
-    "daily; per loan-year, a twelfth each month",
-    "per_100k",
-    "loan_year",
-    25_000,
   ),
 ];
 
@@ -771,7 +754,6 @@ const D: readonly PriceRow[] = [
 export const PRICE_ROWS: readonly PriceRow[] = [
   ...A_MONTHLY,
   ...A_ANNUAL,
-  ...A_MONITORED,
   ...A_FEATURE,
   ...B_RUN,
   ...B_EXTRA,
@@ -792,14 +774,17 @@ export function rowsIn(section: Section): readonly PriceRow[] {
   return PRICE_ROWS.filter((r) => r.section === section);
 }
 
+/** The standard servicing cycle: section A's monthly rows and its two annual rows, in the sheet's order. */
+export const CYCLE_CODES: readonly string[] = [...A_MONTHLY, ...A_ANNUAL].map((r) => r.code);
+
 /**
  * The one rule the tape meter runs on. Version 1.0's foot of section A
  * read "a monitored loan on a partner's book consumes the self-improving
  * mortgage row and offer touches from the day it is loaded; the servicing
- * rows start the day the loan boards"; since 1.1 the first of those rows
- * is the monitored-book rate, 25 basis points a year (see the header).
+ * rows start the day the loan boards"; since 1.1 it consumes the whole
+ * cycle, every row of it, from the day it is billed from (see the header).
  */
-export const MONITORED_BOOK_CODES = ["A.monitored_book", "A.offer_touch"] as const;
+export const MONITORED_BOOK_CODES: readonly string[] = [...CYCLE_CODES, "A.offer_touch"];
 
 /** How many months one unit of a balance-priced row covers: a loan-month is one, a loan-year twelve. */
 export function monthsPer(cadence: Cadence): number {
@@ -808,12 +793,17 @@ export function monthsPer(cadence: Cadence): number {
   throw new Error(`a ${cadence} row is not priced on a balance over time`);
 }
 
-/** A balance-priced row as basis points a year on the balance: 25,000 tokens per $100,000 per loan-year is 25. */
+/** A balance-priced row as basis points a year on the balance: 1,750 tokens per $100,000 per loan-month is 21. */
 export function basisPointsPerYear(r: PriceRow): number {
   if (r.basis !== "per_100k") throw new Error(`${r.code} is not priced on a balance`);
   const centsPerYearPer100k =
     r.tokens * Number(PRICE_SHEET.tokenCents) * (12 / monthsPer(r.cadence));
   return (centsPerYearPer100k / Number(PRICE_SHEET.balanceUnitCents)) * 10_000;
+}
+
+/** The cycle's rows together, as basis points a year on the balance: 25. */
+export function cycleBasisPointsPerYear(): number {
+  return CYCLE_CODES.reduce((n, code) => n + basisPointsPerYear(priceRow(code)), 0);
 }
 
 /** Section A's own arithmetic: the monthly subtotal, the annual rows, and the standard year. */

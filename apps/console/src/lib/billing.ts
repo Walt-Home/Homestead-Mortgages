@@ -51,6 +51,8 @@ export type ObservedStatus =
   "current" | "delinquent" | "paid_off" | "charged_off" | "matured" | "transferred";
 
 export interface LoanCharge {
+  /** The cycle's rows on this loan; `tokens` is their sum. */
+  readonly rows?: readonly { readonly code: string; readonly tokens: string }[];
   readonly loanId: string;
   readonly number: string;
   readonly watchedFrom: string;
@@ -301,10 +303,16 @@ export interface InvoiceHistoryEntry {
 /** The sheet's terms the meter runs on, as the API states them. */
 export interface MeterTerms {
   readonly sheet: { readonly version: string; readonly date: string };
-  /** The monitored-book rate: tokens per $100,000 per unit of its cadence. */
-  readonly rateTokensPer100k: number;
-  readonly rateCadence: "loan_month" | "loan_year" | "run" | "event";
-  /** The same rate as basis points a year on the balance. */
+  /** The cycle's rows a monitored loan consumes, in the sheet's order. */
+  readonly rows: readonly {
+    readonly code: string;
+    readonly action: string;
+    readonly tokensEach: number;
+    readonly cadence: "loan_month" | "loan_year" | "run" | "event";
+  }[];
+  /** The rows together: tokens per $100,000 per loan-year. */
+  readonly tokensPer100kPerYear: number;
+  /** The same as basis points a year on the balance. */
   readonly basisPointsPerYear: number;
   readonly touchTokens: number;
   /** Cents per token, a decimal string. */

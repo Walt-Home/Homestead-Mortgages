@@ -37,6 +37,30 @@ the engine counts only income whose continuance has been decided, and no
 step decides it yet. Debt-to-income stays pending for the same reason, and
 the decision ends **Referred**. That is the expected ending today.
 
+## Plaid test users
+
+Plaid's default user has no usable income. These three are ours, built for
+what each screen asks, and each has been walked through Plaid Check and
+the app. The files are in `data/plaid-sandbox-users/`.
+
+| User            | Who they are                                                   | What the bank screen finds                                                                                |
+| --------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `w2`            | Salaried, rents, one steady paycheck                           | $8,500/mo salary found, 13 months of rent at $2,150, a utility; income reads as verified, no payroll step |
+| `gig`           | Drives for Uber and DoorDash, rents                            | Two gig streams found, about $3,800/mo together; estimated, so the payroll step appears                   |
+| `large-deposit` | Salaried, rents, with $25,000 and $12,000 arriving unexplained | Salary found, and both deposits flagged as unsourced                                                      |
+
+Two ways to use one, both at **First Platypus Bank** in Link:
+
+- **Paste it.** Run `npm run plaid:sandbox-user w2` (or `gig`,
+  `large-deposit`); it copies the user to your clipboard. In Link, the
+  username is `user_custom` and the password is what you paste.
+- **Save it once.** In Plaid's dashboard, Build → Sandbox → Users → Create,
+  paste the file's contents and give it a username such as `user_sm_w2`.
+  From then on that username with any password opens it, for everyone.
+
+Plaid's own `user_bank_income` (password `{}`) is a fourth: three streams
+of mixed income, good for a quick look.
+
 ## Co-borrowers
 
 Name one on screen 2 with a **supermortgage.com or trywalt.ai** address.

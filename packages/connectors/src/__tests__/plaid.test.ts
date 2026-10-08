@@ -17,6 +17,7 @@ import {
   plaidConnector,
   toAssetReport,
   checkIdentityFor,
+  payerFromDescription,
   type PlaidBaseReport,
   type PlaidIncomeInsights,
   type PlaidIncomeStream,
@@ -759,6 +760,27 @@ describe("plaid mapping", () => {
     ]);
     // Three sources: not one steady paycheque, so not "verified".
     expect(report.incomeConfidence).toBe("estimated");
+  });
+
+  it("names the payer off the bank line when Plaid did not normalize one", () => {
+    // Seen live: income_provider null, description "HARBORLIGHT MEDICAL
+    // Direct Dep". Income with no employer is a file the engine cannot read.
+    const salary = INCOME_INSIGHTS.report!.income_streams![0]!;
+    const insights: PlaidIncomeInsights = {
+      report: {
+        income_streams: [
+          {
+            ...salary,
+            description: "HARBORLIGHT MEDICAL Direct Dep",
+            insights: { ...salary.insights, income_provider: null },
+          },
+        ],
+      },
+    };
+    const report = toAssetReport(BASE_REPORT, insights, { vendorAuthorizedForDu: true });
+    expect(report.employments.map((e) => e.employerName)).toEqual(["HARBORLIGHT MEDICAL"]);
+    expect(payerFromDescription("ACH Electronic CreditGUSTO PAY 123456")).toBe("GUSTO PAY 123456");
+    expect(payerFromDescription("PAYROLL")).toBeNull();
   });
 
   it("still reads the older II1 schema, with its own names for the same things", () => {

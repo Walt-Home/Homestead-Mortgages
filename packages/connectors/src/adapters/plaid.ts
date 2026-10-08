@@ -711,6 +711,27 @@ function monthsBetween(start?: string | null, end?: string | null): number {
   return Math.max(0, (ey - sy) * 12 + (em - sm) + 1);
 }
 
+/**
+ * The payer's name off a bank line, for a stream Plaid did not normalize.
+ *
+ * Seen against the sandbox on 8 October 2026: a salary stream with
+ * `income_provider: null` and the description "HARBORLIGHT MEDICAL Direct
+ * Dep", which left the file with income and no employer. The description
+ * minus the deposit boilerplate is a name an underwriter can act on, and
+ * the payroll step is where it becomes an employer of record.
+ */
+export function payerFromDescription(description: string | undefined): string | null {
+  const name = (description ?? "")
+    // "ACH Electronic CreditGUSTO PAY": the boilerplate runs into the payer
+    // with no boundary, so the phrase goes first and the bounded words after.
+    .replace(/electronic\s*credit/gi, " ")
+    .replace(/\b(direct\s*dep(osit)?|payroll|ach|ppd|ccd|des)\b/gi, " ")
+    .replace(/[^A-Za-z0-9&'. -]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return name.length >= 2 ? name : null;
+}
+
 /** II2: a current stream in a qualifying category, at its modeled gross, else its net. */
 function fromStream(s: PlaidIncomeStream): IncomeStream | null {
   if (s.insights?.status === "INACTIVE") return null;
@@ -719,7 +740,7 @@ function fromStream(s: PlaidIncomeStream): IncomeStream | null {
   if (!type) return null;
   const monthly = s.income_metrics?.current?.monthly;
   const figure = monthly?.gross_income ?? monthly?.net_income ?? 0;
-  const provider = s.insights?.income_provider?.name?.trim() || null;
+  const provider = s.insights?.income_provider?.name?.trim() || payerFromDescription(s.description);
   return {
     type,
     monthlyAmount: Math.round(figure),

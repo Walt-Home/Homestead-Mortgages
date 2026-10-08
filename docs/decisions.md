@@ -4130,6 +4130,28 @@ have ordered the report, so whose contract this is decides whether what we
 pull can be validated at all. Both wait on a report that can be looked at
 before they are worth a line of code.
 
+## A test deployment admits one fixed code at the second step
+
+**Decision (Joe, 8 October 2026).** "Can we just simulate this in
+staging instead of using an actual authenticator app?" Yes, and the gate
+is the flag that already marks a deployment as not real. Where
+`DEMO_PERSONAS=true` — which mints sign-ins with no credential at all,
+and which the production promotion fails on — the code `000000` passes
+the second step beside a real one, at enrollment and at every later
+sign-in. The screen, the enrollment, the row written and the session
+elevated are production's; the only difference is one admitted string,
+said on the screen by `/auth/config` and to an operator by `/api/health`
+(`secondFactor: "demo code accepted"`), which the production promotion
+refuses. The second-factor suite mounts the sample sign-ins, so its
+"certainly wrong" code steers clear of that one.
+
+Not done, and asked about the same morning: a code sent by e-mail as a
+second step, the way the console's staff door works. It would be a real
+second factor for people who have no authenticator app, which most
+borrowers do not; it is a table, a message and a screen, and a message
+to a borrower, which the borrower-mail switch holds, so it would need an
+audience of its own. A day's work when wanted, not a morning's.
+
 ## Still outstanding
 
 Five vendor decisions plus sandbox credentials, none obtainable from inside

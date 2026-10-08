@@ -24,6 +24,9 @@ export const SECOND_FACTOR_COPY = {
     body: "If you ever lose your phone, any one of these codes signs you in instead. Each works once, and this is the only time they are shown.",
     confirm: "I’ve saved them",
   },
+  /** Shown on a test deployment only, beside the real instructions. */
+  testDeployment: "This is a test deployment. Here, the code",
+  testDeploymentAfter: "works with no authenticator app.",
   verify: {
     title: "Enter your code",
     body: "Open your authenticator app and enter the six-digit code it shows for Supermortgage.",

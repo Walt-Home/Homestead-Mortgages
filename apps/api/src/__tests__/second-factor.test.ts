@@ -40,6 +40,7 @@ import { personaReadOnly } from "../middleware/persona-read-only.js";
 import { errorHandler } from "../middleware/error-handler.js";
 import { base32Decode, hotp, totpStep } from "../services/totp.js";
 import { LOCK_AFTER_FAILURES, RECOVERY_CODE_COUNT } from "../services/second-factor.js";
+import { config } from "../config.js";
 import { createUser } from "./support/factories.js";
 
 interface Reply<T = Record<string, unknown>> {
@@ -133,7 +134,9 @@ function wrongCode(secret: string): string {
   const live = new Set(
     [-1, 0, 1, 2].map((d) => hotp(base32Decode(secret), totpStep(Date.now()) + d)),
   );
-  let candidate = 0;
+  // This file mounts the sample sign-ins, so the demo code is a RIGHT code
+  // here; "certainly wrong" has to steer clear of it too.
+  let candidate = 1;
   while (live.has(String(candidate).padStart(6, "0"))) candidate += 1;
   return String(candidate).padStart(6, "0");
 }
@@ -489,6 +492,91 @@ describe("who is exempt", () => {
       expect(signedIn.body.secondFactor).toBe("satisfied");
       expect((await b.probe()).status).toBe(200);
     } finally {
+      await b.close();
+    }
+  });
+});
+
+describe("the demo code, where sample sign-ins are mounted", () => {
+  const mutable = config as { demoPersonasEnabled: boolean };
+
+  it("passes enrollment and a later sign-in, and /auth/config says so", async () => {
+    const was = mutable.demoPersonasEnabled;
+    mutable.demoPersonasEnabled = true;
+    const b = await browser();
+    try {
+      const user = await createUser();
+      await b.signIn(user.id);
+      expect((await b.probe()).status).toBe(401);
+      const cfg = await b.call<{ secondFactorDemoCode: string | null }>("GET", "/api/auth/config");
+      expect(cfg.body.secondFactorDemoCode).toBe("000000");
+
+      await b.call("POST", "/api/auth/second-factor/enroll");
+      const done = await b.call("POST", "/api/auth/second-factor/enroll/confirm", {
+        code: "000000",
+      });
+      expect(done.status).toBe(201);
+      expect((await b.probe()).status).toBe(200);
+
+      // A later sign-in: the same six zeros, with no app anywhere.
+      const again = await browser();
+      try {
+        await again.signIn(user.id);
+        expect((await again.probe()).status).toBe(401);
+        const ok = await again.call("POST", "/api/auth/second-factor/verify", { code: "000000" });
+        expect(ok.status).toBe(200);
+        expect((await again.probe()).status).toBe(200);
+      } finally {
+        await again.close();
+      }
+    } finally {
+      mutable.demoPersonasEnabled = was;
+      await b.close();
+    }
+  });
+
+  it("is six wrong digits anywhere else", async () => {
+    const was = mutable.demoPersonasEnabled;
+    mutable.demoPersonasEnabled = false;
+    const b = await browser();
+    try {
+      const user = await createUser();
+      const cfg = await b.call<{ secondFactorDemoCode: string | null }>("GET", "/api/auth/config");
+      expect(cfg.body.secondFactorDemoCode).toBeNull();
+
+      const { secret } = await enrolled(b, user.id);
+      const again = await browser();
+      try {
+        await again.signIn(user.id);
+        const no = await again.call("POST", "/api/auth/second-factor/verify", { code: "000000" });
+        // A wrong code at sign-in is 401, as every wrong code there is.
+        expect(no.status, JSON.stringify(no.body)).toBe(401);
+        expect(code(no)).toBe("WRONG_CODE");
+        expect((await again.probe()).status).toBe(401);
+        // And the real code still works, so the refusal was the code's.
+        const yes = await again.call("POST", "/api/auth/second-factor/verify", {
+          code: freshCode(secret),
+        });
+        expect(yes.status).toBe(200);
+      } finally {
+        await again.close();
+      }
+
+      const fresh = await browser();
+      try {
+        const other = await createUser();
+        await fresh.signIn(other.id);
+        await fresh.call("POST", "/api/auth/second-factor/enroll");
+        const refused = await fresh.call("POST", "/api/auth/second-factor/enroll/confirm", {
+          code: "000000",
+        });
+        expect(refused.status, JSON.stringify(refused.body)).toBe(400);
+        expect(code(refused)).toBe("WRONG_CODE");
+      } finally {
+        await fresh.close();
+      }
+    } finally {
+      mutable.demoPersonasEnabled = was;
       await b.close();
     }
   });

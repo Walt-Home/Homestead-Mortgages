@@ -31,7 +31,28 @@ import { prisma } from "@hm/db";
 import { config } from "../config.js";
 import { AppError } from "../middleware/error-handler.js";
 import { decryptToken, encryptToken, loadKey } from "./vendor-tokens.js";
-import { base32Decode, matchTotp, newSecret, otpauthUri } from "./totp.js";
+import { base32Decode, matchTotp, newSecret, otpauthUri, totpStep } from "./totp.js";
+
+/**
+ * The code that passes the second step on a deployment with sample sign-ins.
+ *
+ * Joe, 8 October 2026: the team should be able to test staging without an
+ * authenticator app. The gate is `DEMO_PERSONAS`, the flag that already
+ * marks a deployment as not real — it mounts sign-ins with no credential at
+ * all, and the production promotion fails if it is on — so this code can
+ * exist exactly where a sample borrower can, and nowhere else. The screen,
+ * the enrollment and the session are the same as production's; only this
+ * one string is admitted beside a real code, and /api/health says so.
+ */
+export const DEMO_SECOND_FACTOR_CODE = "000000";
+
+export function demoSecondFactorCodeAccepted(): boolean {
+  return config.demoPersonasEnabled;
+}
+
+function isDemoCode(input: string): boolean {
+  return demoSecondFactorCodeAccepted() && normalizeCode(input) === DEMO_SECOND_FACTOR_CODE;
+}
 
 /** What the authenticator app files the account under. */
 export const ISSUER = "Supermortgage";
@@ -117,7 +138,9 @@ export async function confirmEnrollment(
   code: string,
   now = new Date(),
 ): Promise<{ recoveryCodes: string[] }> {
-  const step = matchTotp(base32Decode(secret), normalizeCode(code), now.getTime());
+  const step = isDemoCode(code)
+    ? totpStep(now.getTime())
+    : matchTotp(base32Decode(secret), normalizeCode(code), now.getTime());
   if (step === null) {
     throw new AppError(400, "That code did not match.", "WRONG_CODE");
   }
@@ -163,6 +186,14 @@ export async function verifySecondFactor(
   // A lock that has lifted starts the count over; one that never existed
   // carries it.
   const failuresSoFar = row.lockedUntil ? 0 : row.failedAttempts;
+
+  if (isDemoCode(input)) {
+    await prisma.userAuthenticator.update({
+      where: { userId },
+      data: { failedAttempts: 0, lockedUntil: null },
+    });
+    return;
+  }
 
   const code = normalizeCode(input);
   if (/^\d{6}$/.test(code)) {

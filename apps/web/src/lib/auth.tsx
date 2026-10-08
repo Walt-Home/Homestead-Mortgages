@@ -49,6 +49,12 @@ interface AuthConfig {
   allowedDomain: string | null;
   developerSignInAvailable: boolean;
   /**
+   * The code that passes the second step on a deployment with sample
+   * sign-ins, so a tester needs no authenticator app; null everywhere real.
+   * The screen says it beside the real instructions, which stay true.
+   */
+  secondFactorDemoCode?: string | null;
+  /**
    * Which adapter is behind each connector on this deployment.
    *
    * It replaced `identityRequiresRedirect`, a boolean that answered two

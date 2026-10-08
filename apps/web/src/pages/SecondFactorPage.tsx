@@ -74,7 +74,7 @@ function SignOutLine() {
 }
 
 function Enroll({ replacing }: { replacing: boolean }) {
-  const { completeSecondFactor } = useAuth();
+  const { completeSecondFactor, config: authConfig } = useAuth();
   const navigate = useNavigate();
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [qr, setQr] = useState<string | null>(null);
@@ -163,6 +163,12 @@ function Enroll({ replacing }: { replacing: boolean }) {
         </div>
       )}
 
+      {authConfig?.secondFactorDemoCode && (
+        <p className="super-notice mt-6 text-sm text-ink-soft">
+          {COPY.testDeployment} <code className="text-ink">{authConfig.secondFactorDemoCode}</code>{" "}
+          {COPY.testDeploymentAfter}
+        </p>
+      )}
       <form onSubmit={(e) => void confirm(e)} className="mt-6">
         <label className="super-label" htmlFor="second-factor-code">
           {COPY.enroll.codeLabel}
@@ -198,7 +204,7 @@ function Enroll({ replacing }: { replacing: boolean }) {
 }
 
 function Verify() {
-  const { completeSecondFactor } = useAuth();
+  const { completeSecondFactor, config: authConfig } = useAuth();
   const [useRecovery, setUseRecovery] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -231,6 +237,12 @@ function Verify() {
         {useRecovery ? COPY.verify.recoveryBody : COPY.verify.body}
       </p>
 
+      {authConfig?.secondFactorDemoCode && (
+        <p className="super-notice mt-6 text-sm text-ink-soft">
+          {COPY.testDeployment} <code className="text-ink">{authConfig.secondFactorDemoCode}</code>{" "}
+          {COPY.testDeploymentAfter}
+        </p>
+      )}
       <form onSubmit={(e) => void submit(e)} className="mt-8">
         <label className="super-label" htmlFor="second-factor-code">
           {useRecovery ? COPY.verify.recoveryLabel : COPY.verify.codeLabel}

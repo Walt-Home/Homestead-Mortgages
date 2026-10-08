@@ -441,6 +441,12 @@ jobs:
             *'"staffSignInCodes":"mailed"'*) echo "ok: a staff sign-in code is mailed, never shown" ;;
             *) echo "::error::the console would show a staff sign-in code on the page; MAIL_PROVIDER must be a real mailer here"; exit 1 ;;
           esac
+          # A fixed code passing the second step is a staging convenience
+          # that rides the sample-sign-in flag; here it is one factor short.
+          case "$BODY" in
+            *'"secondFactor":"authenticator only"'*) echo "ok: the second step takes an authenticator and nothing else" ;;
+            *) echo "::error::the second step of sign-in accepts a demo code on production"; exit 1 ;;
+          esac
           # Said out loud on every promotion, whichever way it is set.
           case "$BODY" in
             *'"homeownerMail":"on"'*) echo "::warning::the tape desk CAN e-mail the homeowners on a servicer's book (HOMEOWNER_MAIL=on); each send is still one person's confirmed act" ;;

@@ -8,6 +8,7 @@ import { connectors, providerMix, providerModes } from "../services/connectors.j
 import { originatorPlaceholdersIn } from "@hm/du";
 import { originatorFromConfig } from "../services/originator.js";
 import { staffSignInCodes } from "../console-host.js";
+import { demoSecondFactorCodeAccepted } from "../services/second-factor.js";
 
 export const healthRouter = Router();
 
@@ -62,6 +63,10 @@ healthRouter.get("/", async (_req, res) => {
     // rather than merely set, because the one thing that must never happen to
     // this flag is that nobody notices it is on.
     personas: config.demoPersonasEnabled ? "enabled" : "disabled",
+    // Whether a fixed code passes the second step of sign-in here, beside a
+    // real one. It rides the same flag as the sample sign-ins, and the
+    // production promotion fails on anything but the authenticator.
+    secondFactor: demoSecondFactorCodeAccepted() ? "demo code accepted" : "authenticator only",
     // Whether the NMLSR numbers a casefile names are ours or the
     // placeholders, reported rather than merely set.
     originator:

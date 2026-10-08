@@ -24,6 +24,8 @@ import {
   isEnrolled,
   recoveryCodesRemaining,
   secondFactorStanding,
+  DEMO_SECOND_FACTOR_CODE,
+  demoSecondFactorCodeAccepted,
   verifySecondFactor,
 } from "../services/second-factor.js";
 
@@ -46,6 +48,9 @@ authRouter.get("/config", (_req, res) => {
     // flag is not set, and the routes behind it are not mounted at all — so a
     // client that asked anyway gets the same 404 as a path that never existed.
     demoPersonasEnabled: config.demoPersonasEnabled,
+    // The code that passes the second step here without an authenticator
+    // app, on a deployment with sample sign-ins; null everywhere real.
+    secondFactorDemoCode: demoSecondFactorCodeAccepted() ? DEMO_SECOND_FACTOR_CODE : null,
     /*
      * What is actually behind each connector on this deployment.
      *

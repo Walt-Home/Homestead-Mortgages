@@ -476,8 +476,11 @@ from an authenticator app authenticates, and `requireAuth` refuses everything
 past `/api/auth` until a session has done both. `requireSession` is the weaker
 gate and only `/me` and the `/second-factor` routes may use it — a test reads
 the routes to hold that. Sample borrowers and the local developer are exempt,
-marked on the session by the route that minted it and by nothing else. See
-`docs/decisions.md`, "Sign-in has a second step".
+marked on the session by the route that minted it and by nothing else.
+Where `DEMO_PERSONAS=true`, the code `000000` passes the step too, said on
+the screen and in health, and refused by the production promotion. See
+`docs/decisions.md`, "Sign-in has a second step" and "A test deployment
+admits one fixed code at the second step".
 
 **A partner is a key, not a sign-in.** `/api/partner/*` is the one prefix a
 session does not open: a servicer's integration is a machine, so it presents

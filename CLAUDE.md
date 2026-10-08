@@ -17,6 +17,10 @@ where the six generated DU tables come from and what CI checks about them; read
 it before touching `scripts/build-du.mjs` or anything under
 `packages/du/src/generated`, which is never hand-edited.
 
+`docs/testing.md` is the team's guide to testing on staging: where, what to
+type on each screen, which vendors are real and which are fixtures. Keep it
+short, and keep it true when a provider or a test credential changes.
+
 `docs/du-readiness.md` is where the Desktop Underwriter work stands, item by
 item, against the readiness audit. Read it before building anything a DU
 submission would have to carry — borrowers, assets, liabilities, declarations,

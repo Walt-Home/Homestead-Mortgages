@@ -12,7 +12,6 @@
 
 import { GoogleSignIn } from "../components/GoogleSignIn.js";
 import { HomeHero } from "../components/HomeHero.js";
-import { StreetScene } from "../components/StreetScene.js";
 import { useAuth } from "../lib/auth.js";
 
 export function LandingPage() {
@@ -28,7 +27,6 @@ export function LandingPage() {
             : "Sign in to start. It takes about five minutes."}
         </p>
       </HomeHero>
-      <StreetScene />
     </>
   );
 }

@@ -51,7 +51,7 @@ a component. Add the token and the utility exists.
 | `@hm/brand/tokens.css`     | generated custom properties on `:root`                                         |
 | `@hm/brand/base.css`       | element defaults in `@layer base`                                              |
 | `@hm/brand/components.css` | `.super-*` components in `@layer components`                                   |
-| `@hm/brand/assets/*`       | the mark, the wordmark, the favicon                                            |
+| `@hm/brand/assets/*`       | the wordmark and the favicon, as supermortgage.com carries them                |
 
 Stylesheet order in a consumer (`apps/web/src/index.css` is the reference):
 

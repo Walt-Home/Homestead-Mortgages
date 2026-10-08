@@ -15,13 +15,13 @@
  * the role — `text-2xl`, not `text-${step}`. Tailwind scans this file as text,
  * so an interpolated class name generates no CSS at all.
  *
- * Keep this page to color, type and the mark. The full identity — voice,
+ * Keep this page to color, type and the wordmark. The full identity — voice,
  * motion, the pixel world, open questions — lives in docs/brand.md, and the
  * package API in packages/brand/README.md.
  */
 
 import { useEffect, useState } from "react";
-import { Lockup, Mark, PRODUCT_NAME, Wordmark } from "../components/Wordmark.js";
+import { Lockup, PRODUCT_NAME, Wordmark } from "../components/Wordmark.js";
 
 /** Semantic color roles, grouped the way somebody picking one would think. */
 const COLOR_GROUPS: { title: string; note: string; roles: [string, string][] }[] = [
@@ -57,7 +57,7 @@ const COLOR_GROUPS: { title: string; note: string; roles: [string, string][] }[]
     title: "Action",
     note: "Red is what you can act on. White is the one thing you came to do.",
     roles: [
-      ["accent", "Links, secondary buttons, the mark"],
+      ["accent", "Links, secondary buttons, the wordmark in the nav"],
       ["accent-ink", "Text on a solid red button"],
       ["primary", "The single primary button a screen gets"],
       ["primary-ink", "Text on that button"],
@@ -80,8 +80,8 @@ const COLOR_GROUPS: { title: string; note: string; roles: [string, string][] }[]
  *
  * Named with primitives rather than semantic roles on purpose. This page
  * documents the palette, and two of the four renderings sit on a black no
- * role points at any more — it is the street scene's and the marketing
- * site's. Everywhere other than this page, a component names a role.
+ * role points at any more — it was the street scene's, and the street is
+ * gone. Everywhere other than this page, a component names a role.
  */
 const LOGO_VARIANTS = [
   {
@@ -100,13 +100,13 @@ const LOGO_VARIANTS = [
     name: "White on black",
     fg: "var(--sm-white)",
     bg: "var(--sm-black)",
-    use: "Marketing, and the street.",
+    use: "Marketing, over a photograph.",
   },
   {
     name: "Red on black",
     fg: "var(--sm-red-500)",
     bg: "var(--sm-black)",
-    use: "The mark on the moving van.",
+    use: "Kept for a dark surface, should one return.",
   },
 ];
 
@@ -173,8 +173,8 @@ export function BrandPage() {
       <p className="super-eyebrow text-accent">{PRODUCT_NAME}</p>
       <h1 className="mt-3 font-display text-4xl text-ink sm:text-5xl">Brand</h1>
       <p className="mt-5 max-w-measure-prose text-lg text-ink-soft">
-        A serious promise, told in a friendly world. The words are a classical serif on solid black.
-        Everything you can act on is one red.
+        A serious promise, in plain words. The words are a classical serif on paper, under a
+        wordmark and nothing else. Everything you can act on is one red.
       </p>
       <p className="mt-4 max-w-measure-prose text-base text-ink-muted">
         Every value below is read from the stylesheet this page is rendered with, so it cannot drift
@@ -183,44 +183,30 @@ export function BrandPage() {
 
       {/* ── Logo ─────────────────────────────────────────────────────────── */}
       <Section title="Logo">
-        <h3 className="text-base font-medium text-ink">The mark</h3>
-        <p className="mt-1 max-w-measure-prose text-sm text-ink-muted">
-          A house on a 12 × 12 grid. The lit doorway is a hole, not black paint, so it takes
-          whatever is behind it.
+        <p className="max-w-measure-prose text-sm text-ink-muted">
+          There is no mark. The house on its grid, and the street it stood on, were retired on 8
+          October 2026; the logo is the wordmark, as supermortgage.com carries it.
         </p>
-        <div className="super-card mt-3 flex flex-wrap items-end gap-8">
-          <Specimen label="96px">
-            <Mark size={96} className="text-accent" />
-          </Specimen>
-          <Specimen label="48px">
-            <Mark size={48} className="text-accent" />
-          </Specimen>
-          <Specimen label="26px · nav">
-            <Mark size={26} className="text-accent" />
-          </Specimen>
-          <Specimen label="22px · minimum">
-            <Mark size={22} className="text-accent" />
-          </Specimen>
-        </div>
 
-        <h3 className="mt-8 text-base font-medium text-ink">Wordmark and lockup</h3>
+        <h3 className="mt-4 text-base font-medium text-ink">Wordmark</h3>
         <p className="mt-1 max-w-measure-prose text-sm text-ink-muted">
-          SUPER light, MORTGAGE heavy — the ordinary half is the bold one.
+          SUPER heavy, MORTGAGE light, as the artwork has it. The lockup is the wordmark at the
+          nav&apos;s size, with nothing beside it.
         </p>
         <div className="super-card mt-3 flex flex-col gap-6">
           <Specimen label="wordmark">
             <Wordmark className="text-xl text-accent" />
           </Specimen>
           <Specimen label="lockup">
-            <Lockup size={26} className="text-accent" />
+            <Lockup className="text-accent" />
           </Specimen>
         </div>
 
         <h3 className="mt-8 text-base font-medium text-ink">Color</h3>
         <p className="mt-1 max-w-measure-prose text-sm text-ink-muted">
-          Four treatments, and no others. Every piece paints with{" "}
-          <code className="font-mono">currentColor</code>, so these are the same three components
-          with the text color changed.
+          Four treatments, and no others. The wordmark paints with{" "}
+          <code className="font-mono">currentColor</code>, so these are one component with the text
+          color changed.
         </p>
         <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {LOGO_VARIANTS.map((variant) => (
@@ -229,9 +215,8 @@ export function BrandPage() {
                 className="flex flex-col items-center justify-center gap-5 px-5 py-8"
                 style={{ background: variant.bg, color: variant.fg }}
               >
-                <Mark size={44} />
                 <Wordmark className="text-lg" />
-                <Lockup size={22} />
+                <Lockup />
               </div>
               <div className="border-t border-rule px-4 py-3">
                 <p className="text-sm text-ink">{variant.name}</p>
@@ -246,7 +231,7 @@ export function BrandPage() {
           <li>· Crisp edges, whole multiples, never anti-aliased and never re-drawn by hand.</li>
           <li>· Only the four treatments above. No gradient, no outline, no second color.</li>
           <li>· Never below 22px, where the doorway stops resolving.</li>
-          <li>· Clear space of one mark-width on every side.</li>
+          <li>· Clear space of one cap-height on every side.</li>
           <li>· In prose the name is one word, capital S: {PRODUCT_NAME}.</li>
         </ul>
       </Section>

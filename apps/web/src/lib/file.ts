@@ -79,6 +79,17 @@ export interface InvitedBorrowerView {
 }
 
 export interface LoanFileView {
+  /**
+   * The income rows the API wrote from the bank or payroll pull, as the
+   * engine reads them. The bank screen says what was found beside what the
+   * engine counted, which is only the rows with an established continuance.
+   */
+  incomeSources?: readonly {
+    readonly type: string;
+    readonly monthlyAmount: number;
+    readonly historyMonths: number;
+    readonly continuanceEstablished: boolean | null;
+  }[];
   id: string;
   stage: FlowStage;
   isDemo: boolean;

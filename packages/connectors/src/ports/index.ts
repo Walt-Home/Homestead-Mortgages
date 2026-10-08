@@ -151,8 +151,15 @@ export interface VendorTokenStore {
 /** What the vendor's widget handed back, on its way to the report fetch. */
 export interface LinkHandoff {
   readonly sessionId: string;
-  /** Absent for a fixture, required by an aggregator. */
+  /** Absent for a fixture, required by an aggregator whose report is keyed on an item. */
   readonly publicToken?: string;
+  /**
+   * The widget finished and handed back no token. Plaid Check orders the
+   * consumer report inside Link and keys it on the person, so Link's success
+   * carries nothing to exchange; the event itself is what the fetch needs
+   * to know, and the client says so with this rather than inventing a token.
+   */
+  readonly linkCompleted?: boolean;
 }
 
 /**

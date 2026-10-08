@@ -22,6 +22,36 @@ export class AppError extends Error {
   }
 }
 
+/**
+ * Which identity fields Plaid refused, in words a borrower can act on. The
+ * message is Plaid's JSON of field errors, keyed by the identity object's
+ * fields; a message that is not that reads as the whole screen.
+ */
+const IDENTITY_FIELD_WORDS: Record<string, string> = {
+  phone_numbers: "your phone number",
+  emails: "your e-mail address",
+  addresses: "your address",
+  date_of_birth: "your date of birth",
+  name: "your name",
+  id_numbers: "your social security number",
+};
+
+export function identityFieldsRefused(message: string): string {
+  let keys: string[] = [];
+  try {
+    const parsed = JSON.parse(message) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      keys = Object.keys(parsed as Record<string, unknown>);
+    }
+  } catch {
+    keys = [];
+  }
+  const words = keys.map((k) => IDENTITY_FIELD_WORDS[k]).filter((w): w is string => Boolean(w));
+  if (words.length === 0) return "your details";
+  if (words.length === 1) return words[0]!;
+  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+}
+
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction): void {
   // An authorization failure is a 403 with the requirement id attached, not a
   // generic error. The client's job is to route the borrower to the consent
@@ -47,6 +77,21 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   if (err instanceof PlaidRequestError) {
     const relink = err.code === "ITEM_LOGIN_REQUIRED" || err.code === "INVALID_PUBLIC_TOKEN";
     console.error(`plaid ${err.code}: ${err.message}`);
+    // Plaid validates the person's identity against real-world shapes before
+    // it makes a consumer-report user — a phone number has to be a number
+    // that could ring, even in the sandbox — and refuses with the fields it
+    // did not accept. That is the borrower's to fix on screen 2, so it is a
+    // 422 that names the fields in our words, never Plaid's text.
+    if (err.code === "INVALID_USER_IDENTITY_DATA") {
+      const fields = identityFieldsRefused(err.message);
+      res.status(422).json({
+        error: {
+          message: `Plaid could not accept ${fields} as entered on the About you screen. Check it and try again.`,
+          code: "BANK_IDENTITY_REJECTED",
+        },
+      });
+      return;
+    }
     res.status(relink ? 409 : 502).json({
       error: {
         message: relink

@@ -328,18 +328,21 @@ ours to decide".
   demo page — type an address, fetch what each adapter answers, read the raw
   response — mounted wherever `DEMO_PERSONAS` is, open to a sample borrower's
   session because the lookup is a `GET` and touches no file.
-- **The bank screen is the consumer report on production and the `assets`
-  stand-in on staging, and the mapping has not met a live report.**
-  `adapters/plaid.ts` has the Check path written to Plaid's current User
-  API (a `user_id`, an identity, Link ordering the report) and corrected
-  against its sandbox and SDK on 7 October 2026. The account holds the
-  consumer-report products in production and not in the sandbox, and the
-  other products the other way round, so staging walks Assets with Plaid's
-  test users and production orders a report nobody has read back yet.
-  `npm run plaid:products` asks Plaid what the account holds;
-  `PLAID_PRODUCT` per environment is the switch. See `docs/decisions.md`,
-  "Plaid Check is keyed on a user, and production holds it while the
-  sandbox does not".
+- **The bank screen is Plaid's consumer report on both environments, and
+  a live sandbox report has walked through the app.** `adapters/plaid.ts`
+  has the Check path written to Plaid's current User API (a `user_id`, an
+  identity, Link ordering the report and handing back no token) and held
+  to a real sandbox report on 8 October 2026: three income streams mapped,
+  monthly averages read as balance history. What no step does yet is
+  decide an income source's continuance, so the engine's qualifying income
+  reads $0 on a real file and the screen says what the report found beside
+  it. A sample borrower cannot connect a bank (sample files are read-only);
+  a Google sign-in on staging walks it with Plaid's test users
+  (`user_bank_income`, password `{}`, First Platypus Bank), and a phone
+  number that could ring. `npm run plaid:products` asks Plaid what the
+  account holds; `PLAID_PRODUCT` per environment is the switch. See
+  `docs/decisions.md`, "Plaid Check is keyed on a user, and production
+  holds it while the sandbox does not".
 - **Manual bank-statement upload collects filenames and sends nothing.**
   `apps/web/src/pages/BankPage.tsx`. Deliberate — where the bytes go is a real
   decision, and `routes/documents.ts` never transmits them today.

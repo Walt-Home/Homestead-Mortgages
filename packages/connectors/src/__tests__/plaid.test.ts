@@ -510,6 +510,26 @@ describe("plaid adapter — the report", () => {
     expect(get.body.user_token).toBeUndefined();
   });
 
+  it("takes Link's word that it finished, which is all a Check session hands back", async () => {
+    // Seen against the sandbox on 8 October 2026: onSuccess arrives with
+    // public_token null for a consumer-report session. The client says the
+    // session finished and the adapter reads that as the first arrival.
+    const { impl, calls } = stubFetch(routes);
+    const { c } = connector(impl);
+    await c.createLinkSession(file(), token());
+    const out = await c.fetchAssetReport(
+      file(),
+      token(),
+      { sessionId: "s", linkCompleted: true },
+      12,
+    );
+    expect(out.status).toBe("ready");
+    expect(calls.map((k) => k.path)).not.toContain("/item/public_token/exchange");
+    // And a later poll with nothing at all is a poll.
+    await c.fetchAssetReport(file(), token(), { sessionId: "s" }, 12);
+    expect(calls.filter((k) => k.path === "/cra/check_report/base_report/get")).toHaveLength(2);
+  });
+
   it("polls again without a public token once Link has finished", async () => {
     const { impl, calls } = stubFetch(routes);
     const { c } = connector(impl);
@@ -639,6 +659,49 @@ describe("plaid mapping", () => {
     expect(report.employments[0]!.employerName).toBe("ACME CORP");
     expect(report.employments[0]!.position).toBe("");
     expect(report.employments[0]!.verificationMethod).toBe("bank_inference");
+  });
+
+  it("reads a Check base report's monthly averages as the balance history it has no daily series for", () => {
+    // Seen live on 8 October 2026: no `historical_balances` on any account,
+    // and `balances.average_monthly_balances` with one entry per month.
+    const checking = BASE_REPORT.report!.items![0]!.accounts![0]!;
+    const { historical_balances: _daily, ...rest } = checking;
+    const report: PlaidBaseReport = {
+      report: {
+        ...BASE_REPORT.report,
+        items: [
+          {
+            institution_name: "Tartan Bank",
+            accounts: [
+              {
+                ...rest,
+                balances: {
+                  current: 110,
+                  available: 100,
+                  average_monthly_balances: [
+                    {
+                      start_date: "2026-07-01",
+                      end_date: "2026-07-31",
+                      average_balance: { amount: 3_200 },
+                    },
+                    {
+                      start_date: "2026-08-01",
+                      end_date: "2026-08-31",
+                      average_balance: { amount: 2_950.5 },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const mapped = toAssetReport(report, null, { vendorAuthorizedForDu: true });
+    expect(mapped.accounts[0]!.balanceHistory).toEqual([
+      { month: "2026-08", balance: 2_950.5 },
+      { month: "2026-07", balance: 3_200 },
+    ]);
   });
 
   it("counts only what an underwriter may: a refund, a transfer and a stopped stream are not income", () => {

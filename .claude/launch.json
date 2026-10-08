@@ -40,6 +40,7 @@
       "runtimeExecutable": "env",
       "runtimeArgs": [
         "PLAID_PRODUCT=cra",
+        "IDENTITY_PROVIDER=fixture",
         "DEMO_PERSONAS=true",
         "GOOGLE_CLIENT_ID=",
         "SERVICING_API_URL=http://localhost:8090",

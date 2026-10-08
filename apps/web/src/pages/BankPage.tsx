@@ -223,6 +223,16 @@ export function BankPage() {
         setError("Your bank needs signing into again.");
         return;
       }
+      if (err instanceof ApiError && err.code === "BANK_IDENTITY_REJECTED") {
+        // Plaid would not make a consumer-report user from the details on
+        // screen 2 — a phone number that could not ring, most often. The
+        // server's message names the field in our words; screen 2 is where
+        // it is fixed, and the bank link is not at fault.
+        if (fileId) clearAttempt(fileId);
+        setError(err.message);
+        setRecovery({ label: "Back to your details", to: `/f/${fileId}/identity` });
+        return;
+      }
       if (fileId) clearAttempt(fileId);
       setError("That connection did not go through.");
     },
@@ -276,7 +286,7 @@ export function BankPage() {
   }, [fileId, finish, fail]);
 
   const startAssembling = useCallback(
-    async (publicToken: string) => {
+    async (publicToken: string | null) => {
       if (!fileId) return;
       const rec = readAttempt(fileId);
       if (rec) writeAttempt({ ...rec, phase: "assembling", startedAt: Date.now() });
@@ -284,8 +294,12 @@ export function BankPage() {
       attempts.current = 0;
       failures.current = 0;
       try {
+        // A consumer-report session finishes with no public token: Plaid
+        // ordered the report inside Link. The route is told Link finished
+        // rather than sent a bare body, which it would read as "mint a new
+        // session" and loop the borrower back into the widget.
         const body = await api.post<Record<string, unknown>>(`/files/${fileId}/bank`, {
-          publicToken,
+          ...(publicToken ? { publicToken } : { linkCompleted: true }),
           sessionId: sessionId.current,
         });
         const res = classifyBankResponse(body);
@@ -418,13 +432,10 @@ export function BankPage() {
 
   const handleSuccess = useCallback(
     (publicToken: string | null) => {
-      if (!publicToken) {
-        // Never POSTed: the route reads a missing public token as "mint a new
-        // link session", which would loop the borrower back into the widget.
-        setPhase({ kind: "idle" });
-        setError("That connection did not finish. Try it once more.");
-        return;
-      }
+      // Null is not a failure. Plaid Check's Link hands back no token,
+      // because the report is ordered inside Link and keyed on the person;
+      // the assets stand-in hands back one. Either way Link finished, and
+      // `startAssembling` tells the route which it was.
       void startAssembling(publicToken);
     },
     [startAssembling],
@@ -495,6 +506,17 @@ export function BankPage() {
   if (result) {
     const total = result.accounts.reduce((sum, a) => sum + a.currentBalance, 0);
     const rent = result.identifiedRentPayments;
+    // The engine counts only income whose continuance is established, and
+    // nothing in the flow establishes one yet (INC-027 is a judgment nobody
+    // makes), so the figure reads $0 on a report that found three paychecks.
+    // Said beside it: what the report found, and why it is not counted. The
+    // headline stays the engine's; the caption is the report's own number.
+    const found = (data?.file.incomeSources ?? []).reduce((sum, i) => sum + i.monthlyAmount, 0);
+    const counted = figures?.totalQualifyingIncome ?? 0;
+    const incomeNote =
+      found > 0 && counted === 0
+        ? `${money(found)}/mo found in your deposits, counted once its continuance is reviewed`
+        : undefined;
     return (
       <>
         {creditBar}
@@ -523,6 +545,7 @@ export function BankPage() {
                   ? qualifyingIncome(figures.totalQualifyingIncome)
                   : null
               }
+              note={incomeNote}
             />
             <Figure
               label="Monthly payment"

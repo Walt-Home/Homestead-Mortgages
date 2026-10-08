@@ -479,16 +479,18 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
       }
 
       // Link is where the report is ordered: Plaid starts generating it the
-      // moment the borrower finishes, and the public token Link hands back
-      // is for the hybrid flow with Plaid's other products, which this is
-      // not — so nothing is exchanged. What the first arrival records is
-      // that Link finished, so a poll that follows with no token (every one
-      // after the first) is a poll and not a mistake.
+      // moment the borrower finishes, and Link's success hands back no
+      // public token at all for a Check session (seen against the sandbox,
+      // 8 October 2026) — the token belongs to the hybrid flow with Plaid's
+      // other products, which this is not. So the client says Link finished,
+      // nothing is exchanged, and what the first arrival records is that it
+      // finished, so a poll that follows with nothing (every one after the
+      // first) is a poll and not a mistake.
       const linkedAt = await options.tokens.get(file.id, linkedAtKey(partyId));
       if (!linkedAt) {
-        if (!handoff.publicToken) {
+        if (!handoff.publicToken && !handoff.linkCompleted) {
           throw new PlaidRequestError(
-            "NO_PUBLIC_TOKEN",
+            "LINK_NOT_FINISHED",
             "Plaid Link has not finished for this borrower yet.",
           );
         }
@@ -576,6 +578,13 @@ function describe(t: PlaidTransaction): string {
   return t.description ?? t.original_description ?? "";
 }
 
+/** One month's average balance, which is what a Check base report carries instead of a daily series. */
+export interface PlaidAverageMonthlyBalance {
+  start_date?: string;
+  end_date?: string;
+  average_balance?: { amount?: number } | number | null;
+}
+
 export interface PlaidAccount {
   account_id?: string;
   name?: string;
@@ -583,7 +592,13 @@ export interface PlaidAccount {
   /** depository | credit | loan | investment | brokerage | other */
   type?: string;
   subtype?: string;
-  balances?: { current?: number; available?: number };
+  balances?: {
+    current?: number | null;
+    available?: number | null;
+    /** The Check base report's history: one average per month (seen live, 8 October 2026). */
+    average_monthly_balances?: PlaidAverageMonthlyBalance[];
+  };
+  /** The asset report's history: a daily series. Absent from a Check base report. */
   historical_balances?: { date?: string; current?: number }[];
   transactions?: PlaidTransaction[];
 }
@@ -880,6 +895,27 @@ export function monthEndBalances(
     .map(([month, v]) => ({ month, balance: v.balance }));
 }
 
+/**
+ * One balance per month off the monthly averages a Check base report
+ * carries, newest first — the same shape `monthEndBalances` makes from an
+ * asset report's daily series. An average is not a statement balance, but
+ * it is a month the account was open with money observed in it, which is
+ * what AST-001's months of history ask.
+ */
+export function monthlyAverageBalances(
+  averages: readonly PlaidAverageMonthlyBalance[],
+): { month: string; balance: number }[] {
+  return averages
+    .map((a) => {
+      const month = (a.end_date ?? a.start_date ?? "").slice(0, 7);
+      const raw = a.average_balance;
+      const balance = typeof raw === "number" ? raw : (raw?.amount ?? 0);
+      return { month, balance };
+    })
+    .filter((m) => m.month.length === 7)
+    .sort((a, b) => b.month.localeCompare(a.month));
+}
+
 export interface MappingOptions {
   /**
    * False in Assets mode. CRD-017 turns on this flag, and turning it on for a
@@ -908,12 +944,16 @@ export function toAssetReport(
       type: accountType(a),
       mask: a.mask ?? "",
       currentBalance: a.balances?.current ?? 0,
-      // Plaid returns DAILY balances — 357 rows for a year. Slicing each to
-      // YYYY-MM produced 357 entries with the same month over and over, which
-      // satisfied AST-001's "two months of history" check with one month of
-      // data repeated. Collapse to the last observed balance in each month,
-      // newest first, which is what a statement shows.
-      balanceHistory: monthEndBalances(a.historical_balances ?? []),
+      // An asset report returns DAILY balances — 357 rows for a year.
+      // Slicing each to YYYY-MM produced 357 entries with the same month
+      // over and over, which satisfied AST-001's "two months of history"
+      // check with one month of data repeated. Collapse to the last observed
+      // balance in each month, newest first, which is what a statement
+      // shows. A Check base report carries no daily series at all, only one
+      // average per month, which is read the same way.
+      balanceHistory: a.historical_balances?.length
+        ? monthEndBalances(a.historical_balances)
+        : monthlyAverageBalances(a.balances?.average_monthly_balances ?? []),
       // Every connected asset account is presumed usable. The borrower
       // deselecting one is a product decision this adapter does not make.
       usedForQualifying: true,

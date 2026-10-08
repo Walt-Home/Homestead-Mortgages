@@ -59,33 +59,33 @@ flowchart LR
 🟢 built, enforced, tested · 🟡 built, with a named gap · 🔴 not built, or
 blocked outside the code
 
-| #   | Item                                |     | Today                                                                                                                            |
-| --- | ----------------------------------- | --- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | One casefile per loan               | 🟢  | Ours is stable; DU's is write-once, written only by `recordDuResponse`                                                           |
-| 2   | Income survives a re-pull           | 🟢  | Snapshot lineage on every row; nothing deletes and recreates                                                                     |
-| 3   | Borrower declarations               | 🟢  | Asked on screen 3, stored per person, chains held by CHECKs                                                                      |
-| —   | Current residence                   | 🟢  | The fabricated `"rent"` is gone; screen 3 asks                                                                                   |
-| 4   | Verification report identifier      | 🟡  | Every row names its snapshot; the asset arc to a verification is disputed in the tab                                             |
-| 5   | Up to four borrowers                | 🟢  | Named, invited, claimed, own half walked; the engine reads everybody's reports                                                   |
-| 6   | Assets, liabilities, owned property | 🟢  | Tables, ownership, writers; the credit and bank pulls write them per person                                                      |
-| 7   | Employer as an entity               | 🟡  | Every pulled job has one; two current employers leave wage income unattached                                                     |
-| 8   | What we compute vs. what DU does    | 🟢  | Boundary written, both columns typed and CHECKed, a corpus test holds it                                                         |
-| —   | Identity model                      | 🟢  | Party is the person; facts carry provenance                                                                                      |
-| —   | Ownership shape                     | 🟢  | Join tables with roles; nothing emittable without an owner                                                                       |
-| —   | Product and property                | 🟢  | A product table, two building facts retrieved, one estate question asked                                                         |
-| —   | Property record vendor              | 🟡  | CoreLogic when the flag is on, read off the land-use code; a trial budget nothing counts                                         |
-| —   | Vesting and non-borrower parties    | 🟢  | Asked on review; originator rows at birth; ten-party ceiling enforced                                                            |
-| —   | Generators and `du:verify`          | 🟢  | Six tables from the corpus, rebuilt and checked in CI                                                                            |
-| —   | Assembler and emitter               | 🟢  | MISMO 3.4 with arcs, round-tripped on all eighteen samples                                                                       |
-| —   | Preflight gate                      | 🟢  | Graph, cardinality, conditionality, format; every check has a fixture                                                            |
-| —   | Transport                           | 🟡  | Built to the credential boundary; tested against a stubbed `fetch`                                                               |
-| —   | Response recording                  | 🟢  | Append-only tables, unknown verdicts refused, read back to the owner                                                             |
-| —   | The decision route submits          | 🟢  | Assemble, gate, emit, send, record after every decision; every refusal a row                                                     |
-| —   | Taxpayer identifiers on the wire    | 🔴  | No vault; the fixture path uses an unissued number, the real path is refused                                                     |
-| —   | Who we submit under                 | 🔴  | Institution and originator are placeholders, refused in production                                                               |
-| —   | The consumer report (CRD-017)       | 🟡  | Plaid Check written to the current API and on in production; the sandbox cannot order one, so the mapping has met no live report |
+| #   | Item                                |     | Today                                                                                                                       |
+| --- | ----------------------------------- | --- | --------------------------------------------------------------------------------------------------------------------------- |
+| 1   | One casefile per loan               | 🟢  | Ours is stable; DU's is write-once, written only by `recordDuResponse`                                                      |
+| 2   | Income survives a re-pull           | 🟢  | Snapshot lineage on every row; nothing deletes and recreates                                                                |
+| 3   | Borrower declarations               | 🟢  | Asked on screen 3, stored per person, chains held by CHECKs                                                                 |
+| —   | Current residence                   | 🟢  | The fabricated `"rent"` is gone; screen 3 asks                                                                              |
+| 4   | Verification report identifier      | 🟡  | Every row names its snapshot; the asset arc to a verification is disputed in the tab                                        |
+| 5   | Up to four borrowers                | 🟢  | Named, invited, claimed, own half walked; the engine reads everybody's reports                                              |
+| 6   | Assets, liabilities, owned property | 🟢  | Tables, ownership, writers; the credit and bank pulls write them per person                                                 |
+| 7   | Employer as an entity               | 🟡  | Every pulled job has one; two current employers leave wage income unattached                                                |
+| 8   | What we compute vs. what DU does    | 🟢  | Boundary written, both columns typed and CHECKed, a corpus test holds it                                                    |
+| —   | Identity model                      | 🟢  | Party is the person; facts carry provenance                                                                                 |
+| —   | Ownership shape                     | 🟢  | Join tables with roles; nothing emittable without an owner                                                                  |
+| —   | Product and property                | 🟢  | A product table, two building facts retrieved, one estate question asked                                                    |
+| —   | Property record vendor              | 🟡  | CoreLogic when the flag is on, read off the land-use code; a trial budget nothing counts                                    |
+| —   | Vesting and non-borrower parties    | 🟢  | Asked on review; originator rows at birth; ten-party ceiling enforced                                                       |
+| —   | Generators and `du:verify`          | 🟢  | Six tables from the corpus, rebuilt and checked in CI                                                                       |
+| —   | Assembler and emitter               | 🟢  | MISMO 3.4 with arcs, round-tripped on all eighteen samples                                                                  |
+| —   | Preflight gate                      | 🟢  | Graph, cardinality, conditionality, format; every check has a fixture                                                       |
+| —   | Transport                           | 🟡  | Built to the credential boundary; tested against a stubbed `fetch`                                                          |
+| —   | Response recording                  | 🟢  | Append-only tables, unknown verdicts refused, read back to the owner                                                        |
+| —   | The decision route submits          | 🟢  | Assemble, gate, emit, send, record after every decision; every refusal a row                                                |
+| —   | Taxpayer identifiers on the wire    | 🔴  | No vault; the fixture path uses an unissued number, the real path is refused                                                |
+| —   | Who we submit under                 | 🔴  | Institution and originator are placeholders, refused in production                                                          |
+| —   | The consumer report (CRD-017)       | 🟢  | Plaid Check on in both environments; a live sandbox report walked through the app on 8 October, three income streams mapped |
 
-Sixteen green, five yellow, two red. Re-derive the tally from the table, not
+Seventeen green, four yellow, two red. Re-derive the tally from the table, not
 the other way around.
 
 ## What's left, in dependency order

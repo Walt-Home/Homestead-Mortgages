@@ -4083,9 +4083,42 @@ endpoints whose response shapes are typed and sampled; moving is a bounded
 change — same user, same Link, a different create and a different read —
 worth making the day a report can be looked at.
 
-**Not exercised, and said so.** The mapping has not met a live report:
-the sandbox cannot order one, and production has no test users, only
-people. The webhook Plaid is told about (`/api/webhooks/plaid`,
+**Exercised on 8 October 2026, the morning Plaid enabled Check in the
+sandbox.** A developer file walked screens 2 to 4 locally on
+`PLAID_PRODUCT=cra` against the sandbox, First Platypus Bank, Plaid's
+`user_bank_income` test user. Four things the live walk corrected, each
+now held by a test:
+
+- _Plaid validates the person before it makes a user._ A phone number
+  that could not ring (`555-555-0100`) is refused as
+  `INVALID_USER_IDENTITY_DATA`, in the sandbox too. That refusal now
+  reaches the borrower as a 422 naming the field in our words
+  (`BANK_IDENTITY_REJECTED`) with the way back to screen 2, instead of
+  "did not go through".
+- _Link's success hands back no public token for a Check session._ The
+  report is ordered inside Link and keyed on the person. The screen read
+  a null token as "did not finish" and never told the API; now it tells
+  the route Link finished (`linkCompleted`), the port carries that beside
+  the token, and the adapter reads either as the first arrival.
+- _A base report carries no daily balance series._ Each account carries
+  one average per month instead (`balances.average_monthly_balances`),
+  which the mapping now reads as the balance history when the daily
+  series is absent, so AST-001's months of history are answered.
+- _The income mapping held._ Three streams came through as what they
+  are — salary from Plaid, gig income from Grubhub, government-derived
+  retirement from the Department of Veterans Affairs — with their months
+  and modeled gross, and were written as income rows with employers.
+
+What the walk also showed, and this commit does not close: the bank
+screen's income figure read $0 beside those three rows, because the
+engine counts only income whose continuance is established and nothing
+in the flow establishes one — INC-027 is a judgment no step makes, and
+the sample borrowers have figures only because their seed asserts it.
+The screen now says what the report found beside the engine's figure and
+why it is not counted. Deciding continuance is a piece of the engine
+still to build.
+
+The webhook Plaid is told about (`/api/webhooks/plaid`,
 `USER_CHECK_REPORT_READY`) has no route, so each delivery is a 404 Plaid
 retries and drops; the report is polled, which is what the bank screen
 does anyway. And Day 1 Certainty is a separate product on the same

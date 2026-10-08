@@ -288,6 +288,9 @@ connectorRouter.post(
     const subject = await retrievalSubject(file, req.user!.id);
     const bank = connectors().bank;
     const publicToken = req.body?.publicToken as string | undefined;
+    // Plaid Check's Link finishes with no public token; the client says it
+    // finished instead, and the adapter reads that as the first arrival.
+    const linkCompleted = req.body?.linkCompleted === true;
     let sessionId = req.body?.sessionId as string | undefined;
 
     // Only open a session when the client does not already hold one. The
@@ -319,7 +322,7 @@ connectorRouter.post(
     const outcome = await bank.fetchAssetReport(
       file,
       await tokenFor(file, subject, "bank_transactions"),
-      { sessionId: sessionId ?? id, publicToken },
+      { sessionId: sessionId ?? id, publicToken, linkCompleted },
       12,
     );
 

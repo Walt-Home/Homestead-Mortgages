@@ -90,13 +90,26 @@ const TYPE_LABEL: Record<string, string> = {
   co_op: "Co-op",
 };
 
-/** One figure off the record. A zero is a count nobody reported, so it is left off. */
-function Fact({ label, value }: { label: string; value: string | number | null | undefined }) {
+/**
+ * One figure off the record. A zero is a count nobody reported, so it is left
+ * off. The note is a second line under the figure, for a date that would
+ * otherwise break in the middle of a narrow column.
+ */
+function Fact({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+  note?: string;
+}) {
   if (value === null || value === undefined || value === "" || value === 0) return null;
   return (
     <div>
       <dt className="text-xs text-ink-muted">{label}</dt>
       <dd className="super-figure mt-0.5 text-base text-ink">{value}</dd>
+      {note && <p className="mt-0.5 text-xs text-ink-muted">{note}</p>}
     </div>
   );
 }
@@ -169,7 +182,8 @@ export function LookupView({ result, ms }: { result: LookupResponse; ms: number 
           <Fact label="Owner of record" value={r.ownerOfRecord} />
           <Fact
             label="Last sale"
-            value={r.lastSale ? `${money(r.lastSale.price)} on ${r.lastSale.soldOn}` : null}
+            value={r.lastSale ? money(r.lastSale.price) : null}
+            note={r.lastSale ? `on ${r.lastSale.soldOn}` : undefined}
           />
         </dl>
         {r.legalDescription && <p className="mt-5 text-xs text-ink-faint">{r.legalDescription}</p>}

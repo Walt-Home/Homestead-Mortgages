@@ -72,7 +72,8 @@ describe("the answer", () => {
     expect(markup).toContain("$389,000");
     expect(markup).toContain("$8,216/yr");
     expect(markup).toContain("1,840 sq ft");
-    expect(markup).toContain("$268,000 on 2017-06-15");
+    expect(markup).toContain("$268,000");
+    expect(markup).toContain("on 2017-06-15");
     expect(markup).toContain("None on record");
     // Zero bathrooms is a count nobody reported, not a house without one.
     expect(markup).not.toContain("Bathrooms");

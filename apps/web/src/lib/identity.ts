@@ -20,6 +20,10 @@ export interface IdentityDraft {
   readonly phone: string;
   readonly citizenship: string;
   readonly maritalStatus: string;
+  /** The three asked since 12 October 2026; optional so an older draft still parses. */
+  readonly preferredLanguage?: string;
+  readonly military?: "yes" | "no" | "";
+  readonly spouseName?: string;
   readonly authorized: boolean;
   readonly econsent: boolean;
   /** Carried on router state from screen 1, and lost to the redirect too. */

@@ -176,7 +176,9 @@ export function prefillFrom(file: Pick<LoanFileView, "loan" | "property"> | unde
   return {
     address: file.property.address as Address,
     query: `${file.property.address.line1}, ${file.property.address.city}`,
-    purpose: file.loan?.purpose ?? "purchase",
+    // Nothing stands in for a purpose the file does not carry: a blank is a
+    // question, "purchase" was an answer nobody gave.
+    purpose: file.loan?.purpose ?? "",
     occupancy: file.property.occupancy,
     propertyType: file.property.propertyType,
     price: String(file.property.valueOrPrice || ""),
@@ -215,10 +217,17 @@ export function PropertyLoanPage() {
   });
   // Only asked when the lookup could not tell us. Six fields stays six fields
   // for anybody whose address we can actually retrieve.
-  const [propertyType, setPropertyType] = useState("single_family");
+  //
+  // All three start unanswered. They started on "single_family", "purchase"
+  // and "primary_residence", so a borrower who touched none of them had a
+  // purpose, an occupancy and a dwelling type recorded as their own
+  // statements, and occupancy is the one answer the LTV ceiling runs on.
+  // `docs/states.md`: occupancy may not be defaulted. A blank is refused at
+  // Continue and named.
+  const [propertyType, setPropertyType] = useState("");
 
-  const [purpose, setPurpose] = useState("purchase");
-  const [occupancy, setOccupancy] = useState("primary_residence");
+  const [purpose, setPurpose] = useState("");
+  const [occupancy, setOccupancy] = useState("");
   const [price, setPrice] = useState("");
   const [down, setDown] = useState("");
   const [income, setIncome] = useState("");
@@ -231,11 +240,11 @@ export function PropertyLoanPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refinancing = purpose !== "purchase";
+  const refinancing = purpose !== "" && purpose !== "purchase";
   // True only on a file opened before V1's scope was settled. Nothing on this
   // screen can put somebody into this state; it is what a returning borrower
-  // finds, and it is what stops the save.
-  const outOfScope = !V1_LOAN_PURPOSES.includes(purpose as LoanPurpose);
+  // finds, and it is what stops the save. Unanswered is not out of scope.
+  const outOfScope = purpose !== "" && !V1_LOAN_PURPOSES.includes(purpose as LoanPurpose);
 
   // Prefill when returning to edit. The address is already confirmed, so the
   // card comes back with it rather than making somebody re-search.
@@ -337,6 +346,16 @@ export function PropertyLoanPage() {
     // route refuses it as well; this is the faster half of one rule.
     if (outOfScope) {
       setError(CASH_OUT_NOT_YET);
+      return;
+    }
+    // Asked, never assumed. The selects refuse a blank natively; this is the
+    // same rule for a submit that reached here another way.
+    if (!purpose || !occupancy) {
+      setError("Tell us whether you are buying or refinancing, and how you will use the home.");
+      return;
+    }
+    if (!propertyType) {
+      setError("Tell us what kind of property it is.");
       return;
     }
     const priceNum = Number(price) || 0;
@@ -623,9 +642,13 @@ export function PropertyLoanPage() {
             <select
               id="ptype"
               className="super-input"
+              required
               value={propertyType}
               onChange={(e) => setPropertyType(e.target.value)}
             >
+              <option value="" disabled>
+                Choose one
+              </option>
               <option value="single_family">Single family house</option>
               <option value="condo">Condo</option>
               <option value="townhouse">Townhouse</option>
@@ -642,9 +665,13 @@ export function PropertyLoanPage() {
         <select
           id="purpose"
           className="super-input"
+          required
           value={purpose}
           onChange={(e) => setPurpose(e.target.value)}
         >
+          <option value="" disabled>
+            Choose one
+          </option>
           {V1_LOAN_PURPOSES.map((value) => (
             <option key={value} value={value}>
               {PURPOSE_LABEL[value]}
@@ -664,9 +691,13 @@ export function PropertyLoanPage() {
         <select
           id="occupancy"
           className="super-input"
+          required
           value={occupancy}
           onChange={(e) => setOccupancy(e.target.value)}
         >
+          <option value="" disabled>
+            Choose one
+          </option>
           <option value="primary_residence">My primary home</option>
           <option value="second_home">A second home</option>
           <option value="investment">An investment property</option>
@@ -676,7 +707,13 @@ export function PropertyLoanPage() {
       {/* 4 & 5 — Money */}
       <Field
         className="mt-5"
-        label={refinancing ? "What is it worth, roughly?" : "Purchase price"}
+        label={
+          purpose === ""
+            ? "Purchase price, or what it is worth"
+            : refinancing
+              ? "What is it worth, roughly?"
+              : "Purchase price"
+        }
         htmlFor="price"
       >
         <input
@@ -696,7 +733,13 @@ export function PropertyLoanPage() {
 
       <Field
         className="mt-5"
-        label={refinancing ? "How much equity are you keeping?" : "Down payment"}
+        label={
+          purpose === ""
+            ? "Down payment, or equity you are keeping"
+            : refinancing
+              ? "How much equity are you keeping?"
+              : "Down payment"
+        }
         htmlFor="down"
       >
         <input

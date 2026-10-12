@@ -79,21 +79,20 @@ describe("identity is the party's", () => {
     expect((await loadLoanFile(a.id))!.borrowers[0]!.lastName).toBe("Whitfield-Okafor");
   });
 
-  it("takes the old column defaults when an optional fact is absent", async () => {
+  it("reads an absent optional fact as unasked, never as the old column default", async () => {
     const user = await createUser();
     const file = await createLoanFile({ userId: user.id });
-    const row = await saveBorrower(file.id, { ...dana, firstTimeHomebuyer: null });
-    // Retire the language fact too; the projection defaults it rather than failing.
-    const lang = await prisma.fact.findFirstOrThrow({
-      where: { partyId: row.partyId, predicate: "preferred_language", supersededById: null },
-    });
-    await prisma.fact.update({
-      where: { id: lang.id },
-      data: { retractedAt: new Date(), retractionReason: "test" },
-    });
+    // Saved without the three optional answers, which writes no fact for any
+    // of them: absent is "not asked", the same rule `currentHousing` keeps.
+    const { preferredLanguage: _language, isMilitary: _military, ...asked } = dana;
+    await saveBorrower(file.id, { ...asked, firstTimeHomebuyer: null });
     const b = (await loadLoanFile(file.id))!.borrowers[0]!;
     expect(b.firstTimeHomebuyer).toBeNull();
-    expect(b.preferredLanguage).toBe("en");
+    // These two read "en" and false for a missing fact until 12 October
+    // 2026, which made every party an English-speaking civilian nobody had
+    // asked. Null is the only honest reading of a fact that is not there.
+    expect(b.preferredLanguage).toBeNull();
+    expect(b.isMilitary).toBeNull();
   });
 });
 

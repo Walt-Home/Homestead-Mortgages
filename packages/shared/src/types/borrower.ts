@@ -118,12 +118,26 @@ export interface Borrower {
   /** Community-property states require the spouse even when not borrowing. */
   readonly nonBorrowingSpouseName?: string;
   readonly nonBorrowingSpouseSignatureRequired: boolean;
-  /** BCP-47. Anything but "en" puts the file in LEP handling (APP-017). */
-  readonly preferredLanguage: string;
+  /**
+   * BCP-47, or "declined" for a person who was asked and would rather not
+   * say. Anything else but "en" puts the file in LEP handling (APP-017).
+   * Null is "nobody has asked", which is not "en": the projection read a
+   * missing fact as English until 12 October 2026, so `borrower_lep` could
+   * never be true.
+   */
+  readonly preferredLanguage: string | null;
   readonly demographics: Demographics | null;
-  /** No ownership interest in a primary residence in the prior 3 years. */
+  /**
+   * No ownership interest in a residential property in the prior three
+   * years. Derived from the person's own answer to URLA 5a.1.1 on screen 3
+   * when they were asked it, false on a refinance (they own the home being
+   * refinanced), and otherwise whatever fact the party carries, or null.
+   * Nothing on screen 2 states it any more: it used to be read off the
+   * county record and sent as `true` when there was no record at all.
+   */
   readonly firstTimeHomebuyer: boolean | null;
-  readonly isMilitary: boolean;
+  /** URLA 1a: served, or serving. Null is "nobody has asked", not "no". */
+  readonly isMilitary: boolean | null;
   /**
    * Whether this person will live in the home, off their role on the
    * application: false for a `NON_OCCUPANT_CO_BORROWER`. A DU casefile with

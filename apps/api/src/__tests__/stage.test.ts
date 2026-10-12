@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
-import { advanceStage, stageIndex, STAGE_ORDER } from "../services/stage.js";
+import { advanceStage, stageAfter, stageIndex, STAGE_ORDER } from "../services/stage.js";
 import { createLoanFile } from "./support/factories.js";
 
 const MISSING = "11111111-1111-1111-1111-111111111111";
@@ -26,6 +26,20 @@ describe("stage ordering", () => {
     expect(stageIndex("PROPERTY_LOAN")).toBeLessThan(stageIndex("IDENTITY"));
     expect(stageIndex("IRS_TRANSCRIPT")).toBeLessThan(stageIndex("DECISION"));
     expect(stageIndex("DECISION")).toBeLessThan(stageIndex("COMPLETE"));
+  });
+
+  it("hands a finished step to the next one in the order, never two on", () => {
+    // The credit route named BANK by hand, two steps past CREDIT, so a
+    // borrower who closed the tab after screen 2 resumed on the bank screen
+    // with Section 5 unasked. Every route reads the order now.
+    expect(stageAfter("IDENTITY")).toBe("CREDIT");
+    expect(stageAfter("CREDIT")).toBe("DECLARATIONS");
+    expect(stageAfter("DECLARATIONS")).toBe("BANK");
+    expect(stageAfter("BANK")).toBe("PAYROLL");
+    for (let i = 0; i < STAGE_ORDER.length - 1; i++) {
+      expect(stageIndex(stageAfter(STAGE_ORDER[i]!))).toBe(i + 1);
+    }
+    expect(stageAfter("COMPLETE")).toBe("COMPLETE");
   });
 
   it("sorts an unknown stage first, so it can only ever be advanced past", () => {

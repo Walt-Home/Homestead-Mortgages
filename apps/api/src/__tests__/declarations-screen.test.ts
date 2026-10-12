@@ -189,10 +189,14 @@ describe("what the screen posts", () => {
     expect(loaded!.borrowers[0]!.residences).toEqual([]);
   });
 
-  it("moves the file to the declarations stage, and never backwards", async () => {
+  it("hands the file to the bank step, and never backwards", async () => {
+    // The stage is the step reached. Answering screen 3 reaches screen 4;
+    // this used to advance to DECLARATIONS, the step just finished, which was
+    // a no-op behind the credit route's BANK and would otherwise have resumed
+    // a borrower to the questions they had just answered.
     const { user, file } = await applicationFile();
     expect((await post(user.id, file.id, NOTHING_TO_DECLARE)).status).toBe(201);
-    expect((await loadLoanFile(file.id))!.stage).toBe("declarations");
+    expect((await loadLoanFile(file.id))!.stage).toBe("bank");
 
     // A borrower correcting one answer after connecting their bank is not
     // dragged back to this screen: the stage is a high-water mark.

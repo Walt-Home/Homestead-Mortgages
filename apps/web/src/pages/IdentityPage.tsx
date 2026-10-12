@@ -29,6 +29,30 @@ import { SAMPLE_FILE_START_YOUR_OWN } from "../lib/home-copy.js";
 import { Working } from "../components/Working.js";
 import { creditCheckCopy, identityCheckCopy, modeOf, ssnDisclosure } from "../lib/disclosures.js";
 import { WAITING_COPY } from "../lib/outcomes.js";
+import { YesNoQuestion } from "../components/YesNoQuestion.js";
+import type { YesNo } from "../lib/declarations.js";
+import { COMMUNITY_PROPERTY_STATES } from "@hm/shared";
+
+/**
+ * URLA's language-preference list, in its order, plus the answer it lets a
+ * person give instead. Codes are BCP-47 where one exists; "declined" is the
+ * form's "I do not wish to respond", and `borrower_lep` reads it as no
+ * preference expressed rather than as a language.
+ */
+export const LANGUAGE_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: "en", label: "English" },
+  { value: "zh", label: "Chinese" },
+  { value: "ko", label: "Korean" },
+  { value: "es", label: "Spanish" },
+  { value: "tl", label: "Tagalog" },
+  { value: "vi", label: "Vietnamese" },
+  { value: "other", label: "Another language" },
+  { value: "declined", label: "I would rather not say" },
+];
+
+/** URLA 1a's military question, in its words. */
+export const MILITARY_PROMPT =
+  "Have you (or a deceased spouse) ever served, or are you currently serving, in the United States Armed Forces?";
 
 interface DocumentRead {
   requiresRedirect?: boolean;
@@ -138,6 +162,9 @@ export function revisitFrom(
   phone: string;
   citizenship: string;
   maritalStatus: string;
+  preferredLanguage: string;
+  military: YesNo;
+  spouseName: string;
 } | null {
   // The person signed in, never "whoever is first". Screen 2 is about
   // whoever is filling it in: the applicant on their own file, and a
@@ -154,8 +181,14 @@ export function revisitFrom(
       address: who.currentAddress,
     },
     phone: who.phone,
-    citizenship: who.citizenship ?? "us_citizen",
+    // A blank is the question again. This fell back to a U.S. citizen, which
+    // put a citizenship the file never recorded into the form as though
+    // the person had chosen it.
+    citizenship: who.citizenship ?? "",
     maritalStatus: who.maritalStatus,
+    preferredLanguage: who.preferredLanguage ?? "",
+    military: who.isMilitary == null ? "" : who.isMilitary ? "yes" : "no",
+    spouseName: who.nonBorrowingSpouseName ?? "",
   };
 }
 
@@ -186,6 +219,11 @@ export function IdentityPage() {
   const { data } = useLoanFile(fileId);
   const { user, config: authConfig } = useAuth();
   const readOnly = data?.file.isDemo === true;
+  // Whether a married person's spouse has to be named: a community property
+  // question about the PROPERTY's state, which screen 1 settled.
+  const communityProperty = COMMUNITY_PROPERTY_STATES.includes(
+    data?.file.property?.address.state ?? "",
+  );
 
   // They signed in to get here, so we already have this. Asking again is asking
   // somebody to prove they are the person we just authenticated.
@@ -198,17 +236,36 @@ export function IdentityPage() {
   // browser storage, so it is retyped after a redirect.
   const [ssn, setSsn] = useState("");
   const [phone, setPhone] = useState(() => (fileId ? (readDraft(fileId)?.phone ?? "") : ""));
+  /*
+   * Every question starts unanswered, including the consent.
+   *
+   * Citizenship started on "us_citizen", marital status on "unmarried" and
+   * the E-SIGN box ticked, so a borrower who touched none of them was
+   * recorded as a single U.S. citizen who had agreed to electronic
+   * disclosures, under their own principal, above a signature. A select on
+   * "Choose one" is refused at Continue; a box starts unticked because a
+   * consent is something a person gives.
+   */
   const [citizenship, setCitizenship] = useState(
-    () => (fileId ? readDraft(fileId)?.citizenship : null) ?? "us_citizen",
+    () => (fileId ? readDraft(fileId)?.citizenship : null) ?? "",
   );
   const [maritalStatus, setMaritalStatus] = useState(
-    () => (fileId ? readDraft(fileId)?.maritalStatus : null) ?? "unmarried",
+    () => (fileId ? readDraft(fileId)?.maritalStatus : null) ?? "",
+  );
+  const [preferredLanguage, setPreferredLanguage] = useState(
+    () => (fileId ? readDraft(fileId)?.preferredLanguage : null) ?? "",
+  );
+  const [military, setMilitary] = useState<YesNo>(
+    () => (fileId ? readDraft(fileId)?.military : null) ?? "",
+  );
+  const [spouseName, setSpouseName] = useState(
+    () => (fileId ? readDraft(fileId)?.spouseName : null) ?? "",
   );
   const [authorized, setAuthorized] = useState(
     () => (fileId ? readDraft(fileId)?.authorized : null) ?? false,
   );
   const [econsent, setEconsent] = useState(
-    () => (fileId ? readDraft(fileId)?.econsent : null) ?? true,
+    () => (fileId ? readDraft(fileId)?.econsent : null) ?? false,
   );
 
   /** Only used when the vendor's verified outputs carry no date of birth. */
@@ -225,9 +282,12 @@ export function IdentityPage() {
   const [coFirstName, setCoFirstName] = useState("");
   const [coLastName, setCoLastName] = useState("");
   const [coEmail, setCoEmail] = useState("");
-  const [coLivesHere, setCoLivesHere] = useState(true);
+  // Unanswered, not ticked: the role on the application (and the 95 LTV cap
+  // that rides on a non-occupant) follows this answer.
+  const [coLivesHere, setCoLivesHere] = useState<YesNo>("");
   const named = data?.file.invitedBorrowers ?? [];
-  const coBorrowerFilled = Boolean(coFirstName.trim() && coLastName.trim() && coEmail.trim());
+  const coBorrowerFilled =
+    Boolean(coFirstName.trim() && coLastName.trim() && coEmail.trim()) && coLivesHere !== "";
   /*
    * Which side of the invitation this session is on. A co-borrower who took
    * their link is on the file and not yet a borrower — `you` names their
@@ -266,6 +326,9 @@ export function IdentityPage() {
     setPhone((current) => current || known.phone);
     setCitizenship(known.citizenship);
     setMaritalStatus(known.maritalStatus);
+    setPreferredLanguage(known.preferredLanguage);
+    setMilitary(known.military);
+    setSpouseName(known.spouseName);
     // `draft` is read once at mount, like the return effect below; re-running
     // on its identity would loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -349,6 +412,9 @@ export function IdentityPage() {
           phone,
           citizenship,
           maritalStatus,
+          preferredLanguage,
+          military,
+          spouseName,
           authorized,
           econsent,
           statedIncome,
@@ -382,6 +448,12 @@ export function IdentityPage() {
       setError("We need your date of birth — your ID did not carry one.");
       return;
     }
+    // The selects refuse a blank natively; this is the same rule for a submit
+    // that reached here another way, and it names what is missing.
+    if (!citizenship || !maritalStatus || !preferredLanguage || !military) {
+      setError("Choose an answer for citizenship, marital status, military service and language.");
+      return;
+    }
     if (withSomeone && named.length === 0 && !coBorrowerFilled) {
       setError(WAITING_COPY.incomplete);
       return;
@@ -405,25 +477,22 @@ export function IdentityPage() {
         phone,
         maritalStatus,
         citizenship,
-        preferredLanguage: "en",
+        preferredLanguage,
+        isMilitary: military === "yes",
+        // Only shown in a community property state, and only for a spouse who
+        // is not applying. A blank names nobody; it is not a name.
+        ...(spouseName.trim() ? { nonBorrowingSpouseName: spouseName.trim() } : {}),
         ...(digits.length >= 4
           ? {
               ssnVaultHandle: `vault:${digits.slice(-4)}:${crypto.randomUUID()}`,
               ssnLast4: digits.slice(-4),
             }
           : {}),
-        // Derived from the county record rather than asked, where the record
-        // carries it — the fixture answers for its persona; a real vendor's
-        // record answers null, because a parcel knows nothing about who is
-        // buying it, and null asserts nothing. On the repair path the file
-        // never loaded, so there is no record to derive from either.
-        firstTimeHomebuyer: data?.file
-          ? data.file.propertyRecord
-            ? data.file.propertyRecord.priorOwnershipInLastThreeYears === null
-              ? null
-              : !data.file.propertyRecord.priorOwnershipInLastThreeYears
-            : true
-          : null,
+        // Not this screen's to say. It was derived from the county record
+        // here, and sent as `true` when there was no record at all, which put
+        // a yes nobody gave onto a federal data point. Screen 3 asks the
+        // person (URLA 5a.1.1), and the file reads the flag off their answer.
+        firstTimeHomebuyer: null,
         // No housing basis, because this screen does not ask for one.
         //
         // It used to send the literal "rent" — an assertion nobody made, on a
@@ -452,7 +521,7 @@ export function IdentityPage() {
           firstName: coFirstName.trim(),
           lastName: coLastName.trim(),
           email: coEmail.trim(),
-          occupiesProperty: coLivesHere,
+          occupiesProperty: coLivesHere === "yes",
         });
         // And the link, in the same act: a person named and not told is a
         // person waiting on nothing. The token is in the email and nowhere
@@ -750,9 +819,13 @@ export function IdentityPage() {
         <select
           id="citizenship"
           className="super-input"
+          required
           value={citizenship}
           onChange={(e) => setCitizenship(e.target.value)}
         >
+          <option value="" disabled>
+            Choose one
+          </option>
           <option value="us_citizen">U.S. citizen</option>
           <option value="permanent_resident">Permanent resident</option>
           <option value="non_permanent_resident">Non-permanent resident</option>
@@ -767,13 +840,73 @@ export function IdentityPage() {
         <select
           id="marital"
           className="super-input"
+          required
           value={maritalStatus}
           onChange={(e) => setMaritalStatus(e.target.value)}
         >
+          <option value="" disabled>
+            Choose one
+          </option>
           <option value="unmarried">Unmarried</option>
           <option value="married">Married</option>
           <option value="separated">Separated</option>
         </select>
+      </div>
+
+      {/* 5a — The spouse who is not applying, where the state makes them a party */}
+      {maritalStatus === "married" && communityProperty && (
+        <div className="mt-5">
+          <label className="super-label" htmlFor="spouse">
+            Your spouse&rsquo;s name
+          </label>
+          <input
+            id="spouse"
+            className="super-input"
+            autoComplete="off"
+            value={spouseName}
+            onChange={(e) => setSpouseName(e.target.value)}
+          />
+          <Why>
+            {data?.file.property?.address.state} is a community property state, so a spouse who is
+            not applying with you may have to sign some of the paperwork. Leave this blank if your
+            spouse is applying with you.
+          </Why>
+        </div>
+      )}
+
+      {/* 5b — Military service, URLA 1a. Asked, never assumed. */}
+      <YesNoQuestion
+        id="military"
+        prompt={MILITARY_PROMPT}
+        value={military}
+        onChange={setMilitary}
+      />
+
+      {/* 5c — Language preference, the URLA supplement. */}
+      <div className="mt-5">
+        <label className="super-label" htmlFor="language">
+          Which language would you prefer to communicate in?
+        </label>
+        <select
+          id="language"
+          className="super-input"
+          required
+          value={preferredLanguage}
+          onChange={(e) => setPreferredLanguage(e.target.value)}
+        >
+          <option value="" disabled>
+            Choose one
+          </option>
+          {LANGUAGE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <Why>
+          Your answer will not affect your application. It does not mean we can communicate in that
+          language, but it helps us find help for you if we cannot.
+        </Why>
       </div>
 
       {/* 6 & 7 — The two consents */}
@@ -859,15 +992,17 @@ export function IdentityPage() {
                       onChange={(e) => setCoEmail(e.target.value)}
                     />
                   </label>
-                  <label className="flex items-start gap-3 text-base text-ink-soft">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={coLivesHere}
-                      onChange={(e) => setCoLivesHere(e.target.checked)}
-                    />
-                    <span>{WAITING_COPY.livesHere}</span>
-                  </label>
+                  {/*
+                    A question with two answers and a blank, not a ticked box.
+                    Ticked by default, every co-borrower nobody thought about
+                    was an occupant, and the role on the application followed.
+                  */}
+                  <YesNoQuestion
+                    id="co-lives-here"
+                    prompt={WAITING_COPY.livesHere}
+                    value={coLivesHere}
+                    onChange={setCoLivesHere}
+                  />
                 </div>
               )}
             </>

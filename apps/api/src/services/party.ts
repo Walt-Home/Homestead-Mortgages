@@ -305,9 +305,11 @@ export interface BorrowerInput {
   };
   readonly maritalStatus: string;
   readonly citizenship: string;
-  readonly preferredLanguage: string;
+  /** Absent is "not asked", and writes no fact. */
+  readonly preferredLanguage?: string;
   readonly firstTimeHomebuyer?: boolean | null;
-  readonly isMilitary: boolean;
+  /** Absent is "not asked", and writes no fact. */
+  readonly isMilitary?: boolean;
   /**
    * Absent is "not asked". Screen 2 does not collect it — screen 3 does, into
    * `du_residences`, and this column is the copy derived from that row. The
@@ -388,7 +390,11 @@ export async function recordBorrowerFacts(
     { predicate: "current_address", value: { ...input.currentAddress } },
     { predicate: "marital_status", value: input.maritalStatus },
     { predicate: "citizenship", value: input.citizenship },
-    { predicate: "is_military", value: input.isMilitary },
+    // Asked on screen 2 since 12 October 2026, and three-state like the two
+    // below it: absent writes nothing, so a revisit that does not carry the
+    // answer leaves the earlier one standing and nobody is recorded a
+    // civilian for not having been asked.
+    ...(input.isMilitary != null ? [{ predicate: "is_military", value: input.isMilitary }] : []),
     // Three-state: yes, no, or not asked. "Not asked" is the ABSENCE of a
     // fact, not a fact whose value is null — a null-valued fact says nothing,
     // and the pin guard refuses one on exactly that principle.
@@ -400,7 +406,9 @@ export async function recordBorrowerFacts(
     ...(input.currentHousing != null
       ? [{ predicate: "current_housing", value: input.currentHousing }]
       : []),
-    { predicate: "preferred_language", value: input.preferredLanguage },
+    ...(input.preferredLanguage
+      ? [{ predicate: "preferred_language", value: input.preferredLanguage }]
+      : []),
     // Stated, not verified. One of TRID's six pieces, and the reason screen 2
     // asks for it — see packages/shared/src/trid.ts. Only a real figure is a
     // fact: an absent one leaves the earlier assertion standing, and a zero

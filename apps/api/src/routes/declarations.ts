@@ -32,7 +32,7 @@ import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { assertFileAccess, ownsFile } from "../services/repository.js";
 import { loadDeclaration, recordDeclaration } from "../services/declarations.js";
 import { partyForUser, partyOfUser, principalForParty } from "../services/party.js";
-import { advanceStage } from "../services/stage.js";
+import { advanceStage, stageAfter } from "../services/stage.js";
 
 export const declarationRouter = Router();
 
@@ -301,7 +301,10 @@ declarationRouter.post(
     // The applicant's mark. The stage is where THEIR flow resumes, and a
     // co-borrower answering on their own screen 3 has walked none of it — so
     // their save leaves it where the applicant left it.
-    if (await ownsFile(id, req.user!.id)) await advanceStage(id, "DECLARATIONS");
+    // Answered, so the file has reached the step after this one. It used to
+    // advance to DECLARATIONS, the step just finished, which was a no-op
+    // behind the credit route's BANK and would have resumed to this screen.
+    if (await ownsFile(id, req.user!.id)) await advanceStage(id, stageAfter("DECLARATIONS"));
     res.status(201).json({ declaration: view });
   }),
 );

@@ -22,7 +22,7 @@ import { reconcileLiabilities } from "../services/liabilities.js";
 import { assertSignsForThemselves, retrievalSubject, tokenFor } from "../services/authorization.js";
 import { borrowingRoleFor } from "../services/borrower-order.js";
 import { signedOn } from "../services/signature.js";
-import { advanceStage } from "../services/stage.js";
+import { advanceStage, stageAfter } from "../services/stage.js";
 import { applicationForFile, ensureApplicationParty } from "../services/applications.js";
 import {
   settleBorrowerAct,
@@ -268,7 +268,9 @@ connectorRouter.post(
     });
 
     await recordEvent(id, "connector_pull", result.provider, { kind: "credit" }, "CRD-001");
-    await advanceStage(id, "BANK");
+    // The step after the credit pull, whichever the order says it is. Naming
+    // `BANK` here skipped screen 3 for anybody who resumed.
+    await advanceStage(id, stageAfter("CREDIT"));
 
     res.status(201).json({ report: result.data, provider: result.provider });
   }),
@@ -386,7 +388,7 @@ connectorRouter.post(
         beginsWorkFromIntake: true,
       });
     });
-    await advanceStage(id, "PAYROLL");
+    await advanceStage(id, stageAfter("BANK"));
 
     res.status(201).json({
       report: result.data,

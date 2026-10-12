@@ -37,6 +37,21 @@ export function stageIndex(stage: FlowStage): number {
 }
 
 /**
+ * The stage a finished step hands the file to: the next one in the order.
+ *
+ * A route that finishes a step used to name the stage after it by hand, and
+ * the credit route named `BANK`, two steps on, so a borrower who closed the
+ * tab after screen 2 resumed on the bank screen with Section 5 unasked. The
+ * stage is "the step reached"; reading it off the order keeps every route
+ * honest about which step that is, and makes reordering the steps an edit to
+ * `STAGE_ORDER` rather than a hunt through the routes. The last stage hands
+ * the file to itself.
+ */
+export function stageAfter(stage: FlowStage): FlowStage {
+  return STAGE_ORDER[Math.min(stageIndex(stage) + 1, STAGE_ORDER.length - 1)]!;
+}
+
+/**
  * Advance to `stage` only if it is further along than where the file already
  * is. Returns the stage the file ends up at.
  *

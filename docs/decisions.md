@@ -4374,3 +4374,41 @@ months the row covers)`, rounded half-up once — so a loan's charge is
   closed statement cannot be rewritten (the trigger), but it can be
   deleted and the month closed again under 1.1 — Joe's call, and the
   recommended one while no invoice exists.
+
+## A screen starts unanswered, and a finished step hands the file to the next one
+
+**Decided 12 October 2026**, the first two items of `docs/autofill.md`'s
+order of work, because an autofill built on top of a screen that answers
+its own questions would prefill over the top of a manufactured answer.
+
+**Every select starts on "Choose one".** Screen 1 started on purchase, a
+primary residence and a single-family house; screen 2 on a U.S. citizen,
+unmarried, with the E-SIGN box ticked; and the route defaulted language to
+`en` and military service to `false`, so `borrower_lep` could never be true
+and no file ever had a military borrower it was not told of. Each was a
+statement nobody made, written under the borrower's own principal and
+attested by their signature, and occupancy is the one the LTV ceiling runs
+on (`docs/states.md`: occupancy may not be defaulted). The defaults are
+gone from the screens and the schema; the selects refuse a blank; language,
+military service and, in a community-property state, a non-borrowing
+spouse's name are asked on screen 2 (APP-017 and APP-015 had no ask at
+all); the projection reads a missing language or military fact as null; and
+the two conditions are three-valued like every other one. The consent
+starts unticked because a consent is something a person gives.
+
+**The first-time-buyer flag is read, not guessed.** Screen 2 derived it from
+the county record and sent `true` when there was no record, and both review
+screens re-sent `?? true` at signing. It now reads off the person's own
+answer to URLA 5a.1.1 on screen 3, is false on a refinance (a home the
+person owns is an ownership interest inside three years), and is otherwise
+the party's own fact or null. A non-occupant purchase borrower has no ask
+yet, so APP-021 blocks for them and the decision refers, which is the truth.
+
+**A finished step advances to `stageAfter(step)`.** The credit route named
+`BANK` by hand, two steps past `CREDIT`, so a borrower who closed the tab
+after screen 2 resumed on the bank screen with Section 5 unasked, and the
+declaration route's later `DECLARATIONS` was a no-op behind it. The stage
+is "the step reached"; every route now reads the next one off
+`STAGE_ORDER`, which also makes reordering the steps an edit to one list.
+Joe said the same day that the sequence is not solidified and should be
+optimized for prefill; this is what makes that cheap.

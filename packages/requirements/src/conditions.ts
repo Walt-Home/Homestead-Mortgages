@@ -100,8 +100,16 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
 
   electronic_delivery: (f) => f.deliveryMethod === "electronic",
 
+  // Three-valued like the rest: a person nobody has asked is not an English
+  // speaker, and a person who would rather not say has expressed no
+  // preference to handle. The projection read a missing fact as "en" until
+  // 12 October 2026, so this could never be true.
   borrower_lep: (f) =>
-    f.borrowers.length === 0 ? null : f.borrowers.some((b) => b.preferredLanguage !== "en"),
+    ofAnyBorrower(f.borrowers, (b) =>
+      b.preferredLanguage === null
+        ? null
+        : b.preferredLanguage !== "en" && b.preferredLanguage !== "declined",
+    ),
 
   borrowed_funds_used: (f) =>
     ofAnyMember(f, (m) => (m.assets ? m.assets.borrowedFunds.length > 0 : null)),
@@ -220,8 +228,9 @@ export const CONDITIONS: Record<ConditionKey, Predicate> = {
     );
   },
 
-  military_borrower: (f) =>
-    f.borrowers.length === 0 ? null : f.borrowers.some((b) => b.isMilitary),
+  // Null until asked. `isMilitary` defaulted to false in the schema and the
+  // projection, so no file ever had a military borrower it was not told of.
+  military_borrower: (f) => ofAnyBorrower(f.borrowers, (b) => b.isMilitary),
 
   self_employed_variable_or_rental: (f) =>
     f.incomeSources.length === 0

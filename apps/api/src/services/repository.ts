@@ -36,11 +36,7 @@ import type {
 import { DECISION_OUTCOMES, TERMINAL } from "@hm/shared";
 import type { Prisma } from "@hm/db";
 import { AppError } from "../middleware/error-handler.js";
-import {
-  displayNameFrom,
-  factMapsByParty,
-  requireIdentity,
-} from "./borrower-projection.js";
+import { displayNameFrom, factMapsByParty, requireIdentity } from "./borrower-projection.js";
 import type { Db } from "./db.js";
 import { liveFactsByParty, partyOfUser } from "./party.js";
 import { declarationsOnFile } from "./declarations.js";
@@ -204,6 +200,33 @@ export const STAGE_TO_DOMAIN = {
   PERSISTENT_CONSENT: "persistent_consent",
   COMPLETE: "complete",
 } as const;
+
+/**
+ * First-time homebuyer, read from what the person actually said.
+ *
+ * Screen 3 asks URLA 5a.1.1, "Have you owned a home in the past three
+ * years?", of a borrower who intends to occupy a purchase; that answer IS
+ * the flag, and it wins over any fact on the party. A refinance is of a home
+ * the person owns, which is an ownership interest inside three years, so the
+ * flag is false without asking. Everything else reads the party's own
+ * `first_time_homebuyer` fact (the persona seed writes one) or null.
+ *
+ * Until 12 October 2026 screen 2 derived this from the county record and
+ * sent `true` when there was no record, and both review screens re-sent
+ * `?? true` at signing, so a question nobody asked was answered yes above a
+ * signature. A non-occupant purchase borrower now reads null, and APP-021
+ * blocks rather than passes, until a screen asks them.
+ */
+export function firstTimeHomebuyerOf(
+  purpose: string | null,
+  stated: boolean | null,
+  declaration: { readonly homeownerPastThreeYears?: "Yes" | "No" | null } | null,
+): boolean | null {
+  const owned = declaration?.homeownerPastThreeYears;
+  if (owned === "Yes" || owned === "No") return owned === "No";
+  if (purpose && purpose !== "purchase") return false;
+  return stated;
+}
 
 export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFile | null> {
   const row = await db.loanFile.findUnique({
@@ -387,7 +410,11 @@ export async function loadLoanFile(id: string, db: Db = prisma): Promise<LoanFil
       preferredLanguage: who.preferredLanguage,
       // Per application by law (HMDA), so never from the party.
       demographics: (b.demographics as Borrower["demographics"]) ?? null,
-      firstTimeHomebuyer: who.firstTimeHomebuyer,
+      firstTimeHomebuyer: firstTimeHomebuyerOf(
+        row.purpose ? PURPOSE_TO_DOMAIN[row.purpose] : null,
+        who.firstTimeHomebuyer,
+        answersByBorrower.get(b.id)?.declaration ?? null,
+      ),
       isMilitary: who.isMilitary,
       occupiesProperty: roleByParty.get(b.partyId) !== "NON_OCCUPANT_CO_BORROWER",
       // Situational: what they pay NOW, on THIS file. Stays on the row.

@@ -26,7 +26,7 @@ import { memberView, redactOthers } from "../services/member-view.js";
 import { assertPurposeInScope } from "../services/scope.js";
 import { connectors } from "../services/connectors.js";
 import { quoteSubjectProduct } from "../services/pricing.js";
-import { advanceStage } from "../services/stage.js";
+import { advanceStage, stageAfter } from "../services/stage.js";
 import {
   assertFacts,
   liveFact,
@@ -397,16 +397,26 @@ export const identitySchema = z.object({
   ssnLast4: z.string().length(4).optional(),
   currentAddress: addressSchema,
   maritalStatus: z.enum(["married", "unmarried", "separated"]),
-  citizenship: z
-    .enum(["us_citizen", "permanent_resident", "non_permanent_resident"])
-    .default("us_citizen"),
-  nonBorrowingSpouseName: z.string().optional(),
-  preferredLanguage: z.string().default("en"),
+  // Required and never defaulted. This carried `.default("us_citizen")`, so a
+  // body that said nothing recorded a citizenship nobody had stated, as a fact
+  // under the borrower's principal. Screen 2 asks, and a save without an
+  // answer is refused rather than filled in.
+  citizenship: z.enum(["us_citizen", "permanent_resident", "non_permanent_resident"]),
+  nonBorrowingSpouseName: z.string().trim().optional(),
+  /**
+   * Absent asserts nothing, the same rule as `firstTimeHomebuyer` below. This
+   * was `.default("en")`, and `isMilitary` was `.default(false)`: every save
+   * that did not ask declared the person an English-speaking civilian, so
+   * `borrower_lep` could never be true and the military question was never
+   * put to anyone. Screen 2 asks both now; a revisit that does not carry them
+   * leaves the earlier answers standing, and a party nobody asked reads null.
+   */
+  preferredLanguage: z.string().trim().min(1).optional(),
   // null means "assert nothing": the repair path has no county record to
   // derive from, and a guess would supersede a real fact. recordBorrowerFacts
   // writes no first_time_homebuyer fact for null.
   firstTimeHomebuyer: z.boolean().nullable(),
-  isMilitary: z.boolean().default(false),
+  isMilitary: z.boolean().optional(),
   /**
    * Optional, and absent means "not asked" rather than "rent".
    *
@@ -590,7 +600,7 @@ fileRouter.post(
     // The stage is the applicant's resume point. A co-borrower's screen 2 is
     // theirs, and moving the applicant's file to CREDIT on it sent the
     // applicant's next visit past a screen they had not finished.
-    if (aboutTheApplicant) await advanceStage(id, "CREDIT");
+    if (aboutTheApplicant) await advanceStage(id, stageAfter("IDENTITY"));
 
     // Read the file back once, so a party whose facts will not project fails
     // here — as a 500 the client routes to the repair screen — rather than on

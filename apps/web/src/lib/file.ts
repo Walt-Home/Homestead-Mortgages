@@ -113,6 +113,10 @@ export interface LoanFileView {
     currentAddress: { line1: string; city: string; state: string; postalCode: string };
     maritalStatus: string;
     citizenship: string | null;
+    /** Null is "nobody has asked" for both; the review saves re-send what is there. */
+    preferredLanguage: string | null;
+    isMilitary: boolean | null;
+    nonBorrowingSpouseName?: string;
     /** Null until screen 3 asks; derived there from the residence answer. */
     currentHousing: string | null;
     monthlyRent?: number;

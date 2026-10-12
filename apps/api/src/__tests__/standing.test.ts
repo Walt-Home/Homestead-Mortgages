@@ -82,6 +82,7 @@ const SCREEN_TWO = {
   ssnLast4: "6789",
   currentAddress: { line1: "1 Fixture St", city: "Demo City", state: "CA", postalCode: "94000" },
   maritalStatus: "unmarried",
+  citizenship: "us_citizen",
   firstTimeHomebuyer: true,
   currentHousing: "rent",
   demographics: null,

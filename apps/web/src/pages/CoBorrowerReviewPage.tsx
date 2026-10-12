@@ -85,9 +85,12 @@ export function CoBorrowerReviewPage() {
         dateOfBirth: me.dateOfBirth,
         currentAddress: me.currentAddress,
         maritalStatus: me.maritalStatus,
-        citizenship: me.citizenship ?? null,
-        preferredLanguage: "en",
-        firstTimeHomebuyer: me.firstTimeHomebuyer ?? true,
+        citizenship: me.citizenship,
+        // Re-sent from the row, never invented. See the applicant's screen.
+        ...(me.preferredLanguage != null ? { preferredLanguage: me.preferredLanguage } : {}),
+        ...(me.isMilitary != null ? { isMilitary: me.isMilitary } : {}),
+        ...(me.nonBorrowingSpouseName ? { nonBorrowingSpouseName: me.nonBorrowingSpouseName } : {}),
+        firstTimeHomebuyer: me.firstTimeHomebuyer ?? null,
         currentHousing: me.currentHousing,
         monthlyRent: me.monthlyRent,
         demographics: primaryResidence

@@ -315,9 +315,15 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
         dateOfBirth: b.dateOfBirth,
         currentAddress: b.currentAddress,
         maritalStatus: b.maritalStatus,
-        citizenship: b.citizenship ?? null,
-        preferredLanguage: "en",
-        firstTimeHomebuyer: b.firstTimeHomebuyer ?? true,
+        citizenship: b.citizenship,
+        // What the row already says, re-sent so this save does not blank it.
+        // Nothing is invented for a person nobody asked: this sent "en" and
+        // `?? true` for the first-time flag, so a signature attested to a
+        // language and a buyer status that came from this line.
+        ...(b.preferredLanguage != null ? { preferredLanguage: b.preferredLanguage } : {}),
+        ...(b.isMilitary != null ? { isMilitary: b.isMilitary } : {}),
+        ...(b.nonBorrowingSpouseName ? { nonBorrowingSpouseName: b.nonBorrowingSpouseName } : {}),
+        firstTimeHomebuyer: b.firstTimeHomebuyer ?? null,
         currentHousing: b.currentHousing,
         monthlyRent: b.monthlyRent,
         demographics: primaryResidence

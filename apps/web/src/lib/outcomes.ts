@@ -224,7 +224,7 @@ export const WAITING_COPY = {
   applyingWithHelp:
     "Add a co-borrower by name and email. They complete their own profile and give their own permissions — you will not be asked for their details.",
   /** The one thing asked about them that is not a name or an email. */
-  livesHere: "They will live in the home",
+  livesHere: "Will they live in the home?",
   /** Read back on a revisit, in place of the question. */
   applyingWithNamed: (names: readonly string[]) => `Applying with ${names.join(" and ")}`,
   /** The box is ticked and the fields are not filled. */

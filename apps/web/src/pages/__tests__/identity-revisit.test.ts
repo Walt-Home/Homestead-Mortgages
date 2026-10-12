@@ -32,6 +32,9 @@ const file = {
       phone: "512-555-0134",
       citizenship: "permanent_resident",
       maritalStatus: "married",
+      preferredLanguage: "es",
+      isMilitary: true,
+      nonBorrowingSpouseName: "Rosa Whitfield",
       ssn: { last4: "4417" },
       currentAddress: { line1: "12 Kestrel Ct", city: "Austin", state: "TX", postalCode: "78745" },
     },
@@ -64,12 +67,39 @@ describe("a borrower coming back to screen 2", () => {
   });
 
   it("assumes nothing about citizenship the file did not record", () => {
+    // A blank is the question again. This used to fall back to "us_citizen",
+    // which put a citizenship the file never recorded into the form as though
+    // the person had chosen it.
     const missing = {
       borrowers: [
         { ...(file as { borrowers: Record<string, unknown>[] }).borrowers[0], citizenship: null },
       ],
     } as unknown as Parameters<typeof revisitFrom>[0];
-    expect(revisitFrom(missing)!.citizenship).toBe("us_citizen");
+    expect(revisitFrom(missing)!.citizenship).toBe("");
+  });
+
+  it("brings back the three answers asked since the defaults went", () => {
+    const known = revisitFrom(file)!;
+    expect(known.preferredLanguage).toBe("es");
+    expect(known.military).toBe("yes");
+    expect(known.spouseName).toBe("Rosa Whitfield");
+  });
+
+  it("leaves what nobody has asked blank rather than answered", () => {
+    const unasked = {
+      borrowers: [
+        {
+          ...(file as { borrowers: Record<string, unknown>[] }).borrowers[0],
+          preferredLanguage: null,
+          isMilitary: null,
+          nonBorrowingSpouseName: undefined,
+        },
+      ],
+    } as unknown as Parameters<typeof revisitFrom>[0];
+    const known = revisitFrom(unasked)!;
+    expect(known.preferredLanguage).toBe("");
+    expect(known.military).toBe("");
+    expect(known.spouseName).toBe("");
   });
 });
 

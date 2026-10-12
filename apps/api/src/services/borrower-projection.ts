@@ -55,8 +55,9 @@ export interface Identity {
   readonly currentAddress: Borrower["currentAddress"];
   readonly maritalStatus: Borrower["maritalStatus"];
   readonly citizenship: Borrower["citizenship"];
-  readonly preferredLanguage: string;
-  readonly isMilitary: boolean;
+  /** Null is "nobody has asked", like the two below it. */
+  readonly preferredLanguage: string | null;
+  readonly isMilitary: boolean | null;
   readonly firstTimeHomebuyer: boolean | null;
 }
 
@@ -121,8 +122,11 @@ export function requireIdentity(borrowerId: string, facts: FactMap): Identity {
     currentAddress,
     maritalStatus: marital as Borrower["maritalStatus"],
     citizenship: citizenship as Borrower["citizenship"],
-    preferredLanguage: str(facts.get("preferred_language")) ?? "en",
-    isMilitary: bool(facts.get("is_military")) ?? false,
+    // Three-state, all three. These two read `?? "en"` and `?? false`, so a
+    // party with no such fact projected as an English-speaking civilian and
+    // the engine could never say "we have not asked".
+    preferredLanguage: str(facts.get("preferred_language")) ?? null,
+    isMilitary: bool(facts.get("is_military")) ?? null,
     firstTimeHomebuyer: bool(facts.get("first_time_homebuyer")) ?? null,
   };
 }

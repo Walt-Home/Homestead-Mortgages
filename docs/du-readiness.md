@@ -309,9 +309,12 @@ one, and the assembler loads neither snapshot. A parcel the model will not
 price and an address the fixture cannot place, both null on the card since
 `383e937`, leave the casefile as it was. Two gaps stand beside the vendor. The
 trial account allows 100 property requests and 25 valuations a day, three and
-one per borrower lookup, and nothing counts them. And on a real record screen
-2 writes no first-time-homebuyer fact, then the review screen fills it with
-`true` at signing: APP-021, never a DU data point, but a guess all the same.
+one per borrower lookup, and nothing counts them. The first-time-buyer flag
+used to come off the county record on screen 2, as `true` when there was no
+record, and `?? true` again at signing. Since 12 October 2026 it reads off the
+person's own answer to URLA 5a.1.1 on screen 3, is false on a refinance, and
+is null for a non-occupant purchase borrower, whom no screen asks yet: APP-021
+blocks for them rather than passing on a guess.
 
 **Vesting and the non-borrower parties.** `du_vestings` holds the sentence that
 will read on title, asked on the review screen and refused at signing when

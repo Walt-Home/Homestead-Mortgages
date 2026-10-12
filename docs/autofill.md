@@ -367,34 +367,303 @@ cannot be back-filled, which is why typing `owners[]`, `credit_category`,
 `merchant_name`, `transaction_id` and `pending` comes before any rule that
 names them.
 
-## 6. The timing problem on screen 3, and the answer
+## 6. The sequence, optimized for prefill
 
-**Reopened 12 October.** Joe: the sequence of steps is not solidified; treat
-it as fluid and optimize for where and how we can prefill. What follows was
-reached with the order held fixed and is being redone on that premise. Until
-it is, read it as the case for the current order, not as the decision.
+**The premise.** Joe, 12 October: the sequence of steps is not solidified;
+treat it as fluid and optimize for where and how we can prefill. The first
+version of this section held the order fixed and argued the current one down
+to "one caption, not worth it". This version was reached the other way: five
+orders were drawn (today's, tuned; the bank ahead of the questions; identity
+before the property; the questions folded into the review; thirteen steps
+interleaved by what each needs), each scored against the 65 live rows and
+the 201 ruled-out rows, each checked against rules (a) to (j), and three
+reviewers scored them. The top three finished within two points of each
+other. What follows is the winner with the reviewers' grafts taken.
 
-The bank report lands on screen 4, one screen after the residence questions
-and Section 5 were answered. Everything Plaid can say about screen 3 is
-therefore a retrospective check, unless screen 3 moves behind the bank.
+**The honest number first.** No order moves a row up a mode. Rule (b) pins
+every Plaid row about screens 1 and 2 as a retrospective check, because
+Plaid makes its user from the very identity those screens collect
+(`checkIdentityFor`, `adapters/plaid.ts`). Rule (d) pins every Section 5 and
+residence row at check, whatever precedes it. None of the 201 ruled-out rows
+was refuted on timing alone. So an order is worth exactly this: one caption
+at its first ask instead of on a revisit, six checks that run at the save
+instead of at the pull (so a contradiction is met the moment the answer is
+given rather than above the signature), and a better place for the asks
+screen 4 does not make yet. The case for changing the order is that the
+change is cheap, not that it is large.
 
-**Nothing moves.** Screen 3 asks every question bare, as today. At the pull
-the API compares the stored residence and the stated income to the report and
-writes an event for a human. On a later visit the rent field shows the stored
-answer with the found figure under it. Section 5 is never beside bank data,
-which is the configuration `buildDeclarations` was removed from.
+### The recommended order
 
-Why not reorder, in three lines: every row a reorder would help was argued
-down to a check (basis, months, borrowed funds), leaving one caption; the
-reorder gates APP-026, a universal borrower input, behind the step with the
-highest abandonment; and a borrower who declines Plaid would answer the same
-block cold while a connected one got help, an asymmetry not worth creating for
-one caption.
+**Property, About you, Your bank, A few questions, Review.** One swap: the
+bank moves ahead of the questions. Five screens, the same labels, eleven
+stages, no new stage, no new screen, no moved SSN, no moved income.
 
-**What does move is a stage, and it is a fix.** The credit route advances to
-`DECLARATIONS` instead of `BANK`; the declaration route advances to `BANK`;
-the bank route keeps `PAYROLL`, which already resumes to the review screen.
-`FLOW_STAGES`, `SCREENS` and the prose counts are untouched.
+| Step                      | What it needs                                           | What it produces                                                                                                                   | What becomes prefillable here                                                                                            |
+| ------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 1 Property                | a session                                               | the file, scenario 1, the `monthly_income` fact, the county record, AVM and flood by address, the affordability verdict            | the returning person's prior income (one tap); the AVM hint on a refinance. Unchanged.                                   |
+| 2 About you               | the file                                                | the ID scan; the borrower row; APP-005 and E-SIGN; the TRID receipt inside the consent; identity verification; credit, OFAC, liens | the three fields off the ID; the returning person's phone and address; the county's two names on a refinance. Unchanged. |
+| 3 Your bank (was 4)       | the row's Plaid fields (rule b), the grant (rule a)     | the Plaid Check report, income, employers, assets; in increment 2 the elections and deposit explanations                           | the screen-4 asks of section 3, none of which needed the order                                                           |
+| 4 A few questions (was 3) | the row and the application edge; nothing of the report | `du_declarations`, `du_residences`, the estate type; the six bank-sourced checks run inside the save                               | the rent caption at its first ask, after Rent is chosen; the on-the-spot re-asks below                                   |
+| 5 Review                  | everything above                                        | vesting, demographics, URLA 1b, the read-backs, one signature                                                                      | the 1b job list; the reader's own demographics on a revisit; the servicer read-backs. Unchanged.                         |
+
+**The order is a default, not a wall.** A borrower who declines the bank
+has to be able to reach Section 5 without it. Today the idle bank screen has
+no forward control: the result panel's Continue renders only after a report
+lands, the slow-report "Carry on" only after Link succeeded, and the
+statement-upload hatch navigates nowhere. Under the swap that person would
+be stuck one screen before seven universal requirements. So the bank screen
+gains "Answer the questions first" on its idle and upload states, the stage
+stays `BANK` until the declaration save advances it, and the bank remains
+outstanding work the review's standing names. The identity-first order said
+this best and it is taken from there.
+
+### What the matrix says moves
+
+Rows are named `questionId|source`, as section 3 names them.
+
+- **Up a mode: 0 of 65.**
+- **From a revisit to the first ask: 1.** `current_monthly_rent|plaid`. Today
+  the caption under the rent input renders only on a return to the questions,
+  which almost nobody makes. Under this order it renders once Rent is chosen:
+  "Your bank shows $2,150 a month to OAKRIDGE PROPERTY MGMT · From your bank
+  activity", one tap, the input empty until the tap or the typing. Rule (d)
+  does not bind it (the rent is URLA 1a housing, not Section 5 or 1b); rule
+  (e) holds because the caption exists only for a positive, category-gated
+  run, so section 7 step 4's gating lands first or a homeowner's HOA fee reads
+  as their rent.
+- **Checks that keep their mode and move their run-time: 6.** From the bank
+  pull to the declaration save: `q_C_undisclosed_borrowed_funds|plaid`,
+  `q_C_undisclosed_borrowed_funds_amount|plaid`, `q_F_comaker|plaid`,
+  `connect_bank.borrowed_funds|plaid` (the check row),
+  `connect_bank.rent_history_vs_declared|plaid`, `coborrower_section5|plaid`.
+- **Rows no order can move: 10.** `stated_monthly_income|plaid`,
+  `existing_loan|plaid`, `legal_name|plaid`, `current_address|plaid`,
+  `email|plaid`, `phone|plaid`, `is_military|plaid`,
+  `applying_with_someone|plaid`, `coborrower_identity_half|plaid` (rule b)
+  and `is_military|other` (the payroll branch follows the bank in every order).
+- **Ruled-out rows that come back: 0 of 201.** The residence rows that
+  mention a reorder (`current_residence_basis|plaid`,
+  `current_residence_months|plaid`, `prior_residence|plaid`) fell on data,
+  rules and harm; the basis in particular was refused as an anchor, which is
+  why nothing of the report sits beside the Own/Rent control under this order
+  either.
+- **Rows that become live by a graft, not by the order: 2.**
+  `coborrower_stated_income|plaid`, once their income is asked on their own
+  screen 2 before their bank; `coborrower_urla_1b|plaid`, once their review has
+  a "Your work" block.
+
+**The on-the-spot re-asks**, and how rule (d) is held while they happen. A
+check that fires inside the declaration save can meet the borrower on the
+same visit. It does so only after the save: the questions screen then renders
+the stored answers read-only, as the review's read-back already draws them,
+so no Section 5 control is live beside anything. The box names no figure and
+no counterparty ("One of the deposits you explained on your bank screen was a
+loan. If that money is for this purchase, tell us about it here."), is never
+a required field, says "your answer stands" in those words, and writes into
+the person's own per-letter explanations, never into a declaration column;
+`du_declarations_are_self_attested` is the backstop. The four:
+
+1. Section 5 C, when the person's own deposit explanation from the bank
+   screen says "a loan" and C says No. Increment 2, because it needs
+   `deposit_explanations`.
+2. Section 5 F, when a recurring outflow to a lender matches no tradeline on
+   the person's own report. Fixture-bound on the credit half.
+3. The rent amount at its first ask, the caption above.
+4. Rent versus declared, when a typed rent is outside the band of the
+   confirmed run: "Your bank shows about $2,150 a month. Which is right?", the
+   typed figure standing unless the borrower changes it. Own beside a rent
+   run asks nothing.
+
+The amount for 5a.3.1 stays a check even though the data now precedes the
+question: it is a Section 5 data point, and the harm lens refused a dollar
+figure beside an empty money input above a signature. The "questions at the
+end" order shipped exactly that caption under the C line and lost on it.
+
+### The rules that held it back
+
+- **Every Section 5 and 1b answer** (rule d). The questions screen reads
+  `me.declaration`, `me.residences` and `file.property.estateType` and nothing
+  else. Today that is a habit; under this order the report is on file before
+  the page renders, so it becomes a test in the same commit as the swap.
+- **The ten Plaid rows about screens 1 and 2** (rule b).
+- **Occupancy, the residence basis, months at the address, the prior
+  residence, the first-time flag** from any report: refused on data, rules or
+  harm, not on timing. The bank panel's "N months of rent paid on time" notice
+  would now sit one screen before Own/Rent is asked, the anchor the basis row
+  was refused on, so it is hidden until a residence basis is on file and the
+  review reads it back.
+- **Demographics** (rule f): the review, the applicant's own control, the
+  reader's own stored row on a revisit. The revisit defect on the review
+  (an untouched control writes "declined") ships before any seeding does.
+- **Any money figure filled into a field**, the rent included: the caption is
+  one tap and the input is empty.
+- **Anything bank-sourced at all** until the bank route certifies
+  `EXTENSION_OF_CREDIT` to Plaid (section 8's first question). Until then the
+  swap buys structure and nothing visible.
+
+### The TRID moment under the new order
+
+No change to the clock. The six pieces are stated where they are today:
+address, value and loan amount on screen 1's scenario; the income as screen
+1's `monthly_income` fact; name and SSN at screen 2's `/borrowers` save. For a
+first-time borrower the receipt fires inside the APP-005 consent POST on
+screen 2 (`routes/connectors.ts`, the consent route, through
+`settleReconciledEvidence` in `services/evidence.ts`); for a borrower holding
+a live grant it fires one POST earlier at the `/borrowers` save. Both precede
+the bank in either order, and no pull runs on a draft. The one ledger
+difference: `bank_connection_needed` is open for one screen rather than two.
+
+### The co-borrower's half and the refinance path
+
+**The co-borrower** walks claim, their own screen 2, their own bank, their own
+questions, their review and one signature. Nothing stores a stage for them, so
+the change is `resumeForCoBorrower` checking `bankLinked` before `declared`,
+and the navigate targets their pages share with the applicant's. Their
+Section 5 check runs at their own declaration save over their own report; the
+event carries their `partyId`, nothing borrower-facing reads `file_events`
+today, and a test must hold any future history reader to the reader's own
+`partyId`. One graft from the interleaved order: their stated monthly income
+is asked bare on their own screen 2, before their bank, the only placement the
+harm lens allows (the figure is what the report is validated against, so the
+control has to exist before the report).
+
+**The refinance from an offer** is born at `IDENTITY` with screen 1 seeded, so
+it walks screen 2, the bank, the questions, the review; `refinanceReadiness`
+counts outstanding work by screen id, which does not change. Two grafts from
+the identity-first order, taken without its reorder: the seed stops
+defaulting occupancy and property type when the tape and the loan are silent
+and writes null, and that file's questions screen asks them bare with the
+tape's value as a check after the save; and the offer card's income question
+becomes the one-tap suggest from the person's prior `monthly_income` fact.
+
+### What moves in the code
+
+Steps 1 to 7 are one commit; 8 follows; 9 to 12 are the grafts and stand on
+their own.
+
+1. **The stage order.** `services/stage.ts` `STAGE_ORDER` and
+   `packages/shared/src/types/loan-file.ts` `FLOW_STAGES` swap `BANK` and
+   `DECLARATIONS`; `stageAfter` does the rest, since every route reads it.
+   The set is unchanged, so no enum migration; the `DECLARATIONS` comment in
+   `schema.prisma` ("between the credit pull and the bank connection") is
+   rewritten. Tests: `stage.test.ts` (the pairs), `pulls-write-rows.test.ts`
+   (the credit pull hands the file to `bank`), `declarations-screen.test.ts`
+   (the save hands to `payroll`).
+2. **The stranded files.** Under the old order `DECLARATIONS` meant "credit
+   done, questions next"; under the new one that file has reached the bank:
+   `UPDATE loan_files SET stage = 'BANK' WHERE stage = 'DECLARATIONS'`. A
+   file at old `BANK` already holds its answers; the bank route advances a
+   file whose applicant has a declaration row to `stageAfter("DECLARATIONS")`
+   rather than to the questions it answered. The persona seed walks the
+   declarations before the bank in every story and parks three personas at
+   `BANK` with Section 5 answered; its walks reorder so the sample cannot
+   drift from the flow. Tests, real Postgres: both migration cases, and the
+   bank route's advance with and without a declaration row.
+3. **The screens.** `lib/flow.ts` `SCREENS` and `resumeForCoBorrower`; the
+   six navigate sites in `IdentityPage`, `IdentityReturnPage`, `BankPage`
+   and `DeclarationsPage`; the skip control on the bank screen; the bank
+   copy "the last one you have to do anything for" (no longer true) and
+   `DebugPanel`'s hard-coded screen labels; the home-copy sentence; a sweep of
+   the comments that name the order. Tests: `routing.test.ts` flips and gains
+   the idle-state forward control; `flow.test.ts` for `resumeForCoBorrower`;
+   `home-copy.test.ts`; a `BankPage` case that the idle state offers the
+   questions with no report on file.
+4. **The sheet and the generator.** `data/v1-build.csv`: the seven
+   "4 Declarations" rows become "5 Declarations", the ten "5 Bank" rows
+   become "4 Bank", the summary table with them; `scripts/build-requirements.mjs`
+   renames its two keys, and both edits land together because an unknown name
+   throws. `npm run requirements:build`; `ScreenId` is unchanged. Test: a
+   requirements case that outstanding work lists the bank's ten before
+   Section 5's seven.
+5. **Rule (d) as a test.** `DeclarationsPage` renders only `me.declaration`,
+   `me.residences` and `file.property.estateType`, written as an enumeration
+   of what it may read; no money figure and no payee string from
+   `file.assets` renders anywhere on it, read-only mode included; no `Found`
+   line under any `YesNoQuestion`; the rent caption only after Rent is chosen.
+6. **The bank panel's rent notice** only when the reader's own residence
+   basis is on file.
+7. **Docs, in the same commit.** `CLAUDE.md` (the five-screen diagram and
+   "Screen 3 is a STEP"), `README.md`, `docs/testing.md` (rows 3 and 4 swap),
+   `docs/states.md`, `docs/du-readiness.md` ("screen 3 asks" becomes "screen
+   4 asks"), this document (section 3's When column, section 7 steps 5 and 8,
+   this section), and `docs/decisions.md`, "The bank comes before the
+   questions": the swap, the migration, the rule (d) test, and the one new way
+   the order loses something today's keeps: the Plaid redirect comes a screen
+   earlier, so a borrower who abandons mid-Link has neither a bank nor
+   Section 5. The funnel over the `screen_completed` events the ledger already
+   writes is what measures it.
+8. **Increment 2, what the order enables.** The six checks called from the
+   declaration save as well as the bank route; the on-the-spot box; the
+   one-tap rent caption; the bank result panel as a form (the elections, the
+   deposit explanations, "is this your employer", "did that job end"), its
+   pending answers drafted in `sessionStorage` keyed on the file the way
+   `lib/identity.ts` drafts screen 2, because the Plaid redirect wipes a form.
+   AST-011 on that panel is an evidence question about one deposit and
+   Section 5 C is the representation under signature; the rule (d) test holds
+   that the questions screen renders none of the panel's answers. Once the
+   elections exist, the bank route stops finishing the step and their save
+   does.
+9. **Graft: the pulls as the consent's tail.** Credit, OFAC screening and the
+   lien search run server-side after the consent is recorded, a vendor failure
+   never failing the consent or the receipt; a sanctions hold lands before any
+   Plaid spend. The identity and return pages lose the three posts.
+10. **Graft: adoption before the consent box**, so a first-time borrower whose
+    ID fails is not already a received application. For a returning person
+    with a live grant the receipt fires at the `/borrowers` save regardless,
+    and the test says so.
+11. **Graft: the co-borrower's income on their screen 2.** One control, asked
+    bare before their bank; `files.ts` stops exempting them. Their review
+    gains "Your work".
+12. **Graft: the refinance seed asks instead of defaulting.** Occupancy and
+    property type null on a silent tape, asked on that file's questions
+    screen; the offer card offers the prior fact as one tap.
+
+**Cost.** Medium. The swap is one commit: two order lists, one screens list,
+six navigate sites, one skip control, the sheet's seventeen rows and two
+generator keys, one data migration, the seed's walk order, six test files and
+four new tests, eight documents. No enum migration, no route change, no new
+stage, no new screen. Reverting it is reverting one commit.
+
+### Open decisions for Joe
+
+- **When to ship the swap.** Now, or with the first bank-sourced caption?
+  Lean: with the caption. Alone it buys nothing visible until the Plaid
+  purpose is settled, it moves the highest-friction step a screen earlier,
+  and its one cost (mid-Link abandonment before Section 5) is unmeasured.
+  Land the funnel now, so the decision is made from a number.
+- **The pulls as the consent's tail (step 9).** Lean: yes, as its own commit;
+  it is small and it puts the sanctions hold before the Plaid spend.
+- **Not re-asking a returning person's SSN.** The row's `ssn_last4` copied
+  server-side from the party's own live `ssn_token`; the pin still fires at
+  the consent. No test holds `SSN_REQUIRED` today (`files.ts`, the first-save
+  rule), so the change adds one. Lean: yes, for the reason CLAUDE.md gives.
+- **The co-borrower's income on their screen 2 (step 11).** Lean: yes; it is
+  the one placement the matrix allows.
+- **When the bank route stops finishing the step.** With the elections, or
+  never? Lean: with the elections; until they exist the link is the step's
+  only write.
+
+### The sequences that lost
+
+**Identity first** (you, the home, your bank, the questions, review) buys the
+autofill nothing of its own and says so: the three live Stripe rows keep their
+mode at the top of screen 1 exactly as at the top of screen 2, and all of its
+yield is the bank-before-questions half this order has; it costs a file with
+no scenario, the SSN asked before the affordability gate (the one place the
+product stops a borrower early on purpose), and a screen-1 abandoner who
+becomes a person with a vault handle and no loan. **Questions at the end**
+gets the same timing moves for a large fold (five screens to four, the
+questions page inside two review pages) and fails rule (d) on its own row,
+the 5a.3.1 amount as a caption under C. **The interleaved order** (the bank
+hosting the residence questions, Section 5 alone after it, the pulls at the
+consent) is the best analysis of what each step needs and the source of three
+grafts here; it lost by one point because it puts Own/Rent under a panel that
+renders the found rent, the anchor the basis row was refused on, and makes
+the bank screen the longest page in the product across a redirect. **Today's
+order, tuned** is the floor every order stands on and the right accounting of
+what an order costs, one caption; it lost by two points because it leaves
+every bank-sourced contradiction to surface above the signature or never. Its
+tuning list ships first under this order as under any.
 
 ## 7. The order of work
 
@@ -444,9 +713,9 @@ Each step is one or two commits and names the test that holds it. Steps 0 to
    (no key names a Section 5 field, a demographics field, occupancy, property
    type, citizenship, marital status, military service or first-time buyer;
    `evidenceTier` is exactly `{attested, estimated}`). A pure `autofill.test.ts`:
-   no snapshots and no prior facts yield `[]`; a Rent residence with an
-   answered rent and a category-gated run yields one caption and no prefill;
-   an unanswered basis yields nothing; a dismissed `key@snapshotId` is dropped
+   no snapshots and no prior facts yield `[]`; a residence whose basis is
+   Rent, answered or not yet, with a category-gated run yields one caption and
+   no prefill; an unchosen basis yields nothing; a dismissed `key@snapshotId` is dropped
    and the same key on a newer snapshot is not; a member's input built from
    `own` yields nothing from `file.assets`; a returning party with no row
    yields prior-statement suggestions and the same party with a row yields
@@ -465,11 +734,12 @@ Each step is one or two commits and names the test that holds it. Steps 0 to
    exactly one `autofill_corrected` with the requester's `partyId`.
 8. **The screens.** `Found.tsx` and `.super-source`; the returning person's
    phone with a Found line; screen 1's one-tap income and the refinance-only
-   AVM hint; screen 3's revisit caption under the rent input only when the
-   basis is Rent, with "Not my rent"; screen 5's two read-back kinds, "This
+   AVM hint; the questions screen's caption under the rent input, rendered
+   once Rent is chosen on any pass (the first pass too, once the bank precedes
+   the questions, section 6), with "Not my rent"; screen 5's two read-back kinds, "This
    is not my employer" with "Who is your employer?", the stale-vesting refusal,
    and demographics seeded from the reader's own stored row on a revisit.
-   Tests: no Found on a first pass of screen 3 and none under any
+   Tests: no Found before the basis is chosen and none under any
    `YesNoQuestion`; a co-borrower is seeded nothing from a prior statement;
    the correction sends `proposed` and `given`; the servicer lines render only
    with `prior_loan_id` and only for values the tape carried.

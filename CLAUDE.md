@@ -28,6 +28,12 @@ employers, or anything that computes a ratio. **Update it in the commit that
 changes what it says**, the same way `docs/decisions.md` is kept: a status page
 that lags the code is worse than none, because it gets believed.
 
+`docs/autofill.md` is the design for prefilling answers from Stripe Identity,
+the Plaid Check report and the records a file already holds: what each source
+may suggest, what it may only check, what it may never touch, and the defects
+found on the way. Read it before adding a prefill, a default or a derived
+answer to any screen.
+
 ## The shape
 
 npm workspaces + Turbo, following the HMX pattern. Express 5 API, React 19 SPA,

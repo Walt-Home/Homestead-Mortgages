@@ -490,7 +490,7 @@ export function IdentityPage() {
           : {}),
         // Not this screen's to say. It was derived from the county record
         // here, and sent as `true` when there was no record at all, which put
-        // a yes nobody gave onto a federal data point. Screen 3 asks the
+        // a yes nobody gave onto a federal data point. Screen 4 asks the
         // person (URLA 5a.1.1), and the file reads the flag off their answer.
         firstTimeHomebuyer: null,
         // No housing basis, because this screen does not ask for one.
@@ -610,16 +610,17 @@ export function IdentityPage() {
       await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
       await queryClient.invalidateQueries({ queryKey: ["assessment"] });
 
-      // Screen 3, which is the next step and not a branch. The stepper only
-      // goes backwards, so this call is the ONLY way a borrower reaches the
-      // declarations — sending them to the bank screen left Section 5 unasked
-      // forever and the signature on screen 5 with nothing to attest to.
+      // Screen 3, the bank, which is the next step and not a branch (the
+      // questions follow it since 12 October 2026, and the bank screen offers
+      // a way to answer them first). The stepper only goes backwards, so the
+      // next step is reached by this call and nothing else; `routing.test.ts`
+      // holds that each screen names the one after it and no other.
       //
       // No interstitial for the credit result either. That was a screen whose
       // entire content was a number and a Continue button, which is a step the
       // borrower pays for and we get nothing from. It is now a bar at the top
       // of the bank screen — same reassurance, no extra click.
-      navigate(`/f/${fileId}/declarations`);
+      navigate(`/f/${fileId}/bank`);
     } catch (err) {
       if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {
         setError(SAMPLE_FILE_START_YOUR_OWN);

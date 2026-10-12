@@ -34,6 +34,25 @@ export const REFERRED_COPY = {
 } as const;
 
 /**
+ * The bank, owed on the review.
+ *
+ * "Answer the questions first" on the bank screen is a product path to the
+ * review with no report (12 October 2026), and the signature is accepted
+ * without one: the server records it and asks for the bank again. So the
+ * review says so, before the signature and after it, where the referred
+ * ending would otherwise say nothing is needed. Both reviews, each about
+ * the reader's own bank.
+ */
+export const BANK_OWED_COPY = {
+  title: "Your bank is still to connect.",
+  beforeSigning:
+    "You answered the questions first, which is fine. You can sign now and connect it after, but we cannot work out your figures until you do.",
+  afterSigning:
+    "Your application is signed and with us. The figures a Loan Estimate needs come from twelve months of your bank activity, so nothing moves until you connect it.",
+  button: "Connect your bank",
+} as const;
+
+/**
  * The ending for `denied`.
  *
  * Every figure block is deliberately absent. A declined borrower reading a
@@ -117,7 +136,7 @@ export const SIGN_LEAD = "Sign to send it";
  * asked somebody to sign ours; and an unrun pull left every line reading clean,
  * so the absence of a search became a finding in their favor above a signature.
  *
- * The questions are asked on screen 3 now, and this block reads back what was
+ * The questions are asked on screen 4 now, and this block reads back what was
  * stored. So the words say what is true of it: these are your answers, and
  * signing says they are true. There is still no separate confirmation
  * checkbox, and the reason is unchanged and now actually holds — the
@@ -154,8 +173,8 @@ export const SIGNING_COPY = {
  * URLA 1b, per current job, in the words a borrower is asked them in.
  *
  * Two questions the form puts about every job somebody holds now, and the
- * reason they are on screen 5 rather than on screen 3 is that there is no job
- * to ask about until screen 4 has run. A payroll or a bank connection reports
+ * reason they are on screen 5 rather than on screen 4 is that there is no job
+ * to ask about until screen 3 has run. A payroll or a bank connection reports
  * the employer, the position and the dates; neither can report whether the
  * borrower owns the business or whether the employer is the seller of the
  * house. So the pull says WHICH jobs, and the person says what the pull cannot

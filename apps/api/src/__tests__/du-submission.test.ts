@@ -117,7 +117,7 @@ type BorrowerAnswers = "standard" | "declarationOnly" | "none";
  * What the file is quoted against and what is known about the building.
  *
  * `"quoted"` is the ordinary file: the seeded product, the unit count screen
- * 1's assessor lookup writes, and the estate type screen 3 asks. The other two
+ * 1's assessor lookup writes, and the estate type screen 4 asks. The other two
  * withhold one half each, and the tests that use them are about the refusal
  * rather than about the document.
  */
@@ -1261,7 +1261,7 @@ describe("the gate, over rows rather than over bytes", () => {
 
   it("refuses a file nobody has answered the property for, and names the two", async () => {
     // An address no property-data vendor holds a record for, on a borrower who
-    // has not reached screen 3. Both columns are null and neither is invented,
+    // has not reached screen 4. Both columns are null and neither is invented,
     // so the casefile stops here rather than stating that a building somebody
     // may never have looked at has one unit on a fee simple estate.
     //

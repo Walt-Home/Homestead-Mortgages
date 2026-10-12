@@ -123,15 +123,16 @@ async function pulled(
 }
 
 describe("the credit pull", () => {
-  it("hands the file to screen 3, not to the bank", async () => {
+  it("hands the file to the step after it, the bank", async () => {
     // Resume goes by the stage alone, and the stage only moves forward. This
-    // route named BANK, two steps past CREDIT, so a borrower who closed the
-    // tab after screen 2 reopened on the bank screen with Section 5 unasked,
-    // and the declaration save's DECLARATIONS could never catch up.
+    // route once named a stage by hand, two steps on, so a borrower who
+    // closed the tab after screen 2 reopened with the questions unasked and
+    // the declaration save could never catch up. The next step is read off
+    // the order, which has the bank before the questions.
     const h = await authorized();
     const res = await callAs(h.user.id, [connectorRouter], "POST", `/${h.fileId}/credit`, {});
     expect(res.status, JSON.stringify(res.body)).toBe(201);
-    expect((await loadLoanFile(h.fileId))!.stage).toBe("declarations");
+    expect((await loadLoanFile(h.fileId))!.stage).toBe("bank");
   });
 
   it("writes each tradeline as a liability the borrower owes, in one transaction with the snapshot", async () => {

@@ -92,11 +92,21 @@ somebody finally had to be asked URLA Section 5 and where they live. The engine
 tracks eleven `FlowStage` values and evaluates 85 requirements.
 
 ```
-1 Property   →  2 About you  →  3 A few questions  →  4 Your bank  →  5 Review
-   property_loan   identity+credit   declarations        bank          decision
+1 Property   →  2 About you  →  3 Your bank  →  4 A few questions  →  5 Review
+   property_loan   identity+credit   bank           declarations          decision
 ```
 
-Screen 3 is a STEP and not a branch, and that is forced rather than chosen:
+**The bank comes before the questions (12 October 2026).** The report is on
+file before Section 5 and the residence are asked, so a contradiction is met
+at the answer rather than above the signature; the questions screen still
+reads nothing of it (`questions-blind-to-the-bank.test.ts`). The order is a
+default, not a wall: the bank screen offers "Answer the questions first", and
+the bank route hands a file whose questions are answered past them. Every
+route advances to `stageAfter(step)` off `STAGE_ORDER`, so the order lives in
+that list, `FLOW_STAGES` and the sheet's screen column, which a test holds
+equal. See `docs/autofill.md`, section 6.
+
+Screen 4 is a STEP and not a branch, and that is forced rather than chosen:
 `branchesFor()` renders work the engine reports as outstanding, and the engine
 cannot report work that has no requirement. So the questions are seven rows in
 `data/v1-build.csv` with `source = borrower_input`, they have a `FlowStage` of
@@ -356,7 +366,7 @@ ours to decide".
 - **Manual bank-statement upload collects filenames and sends nothing.**
   `apps/web/src/pages/BankPage.tsx`. Deliberate — where the bytes go is a real
   decision, and `routes/documents.ts` never transmits them today.
-- **`currentHousing` is nullable, and screen 3 is what fills it.** It was
+- **`currentHousing` is nullable, and screen 4 is what fills it.** It was
   `String @default("rent")` NOT NULL and screen 2 sent the literal `"rent"`;
   the column, the route enum and the screen stopped manufacturing it together.
   `du_residences` holds the real answer, `POST /files/:id/declaration` writes

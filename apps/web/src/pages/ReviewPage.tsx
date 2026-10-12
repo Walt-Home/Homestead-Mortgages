@@ -12,10 +12,10 @@
  * the rationale only holds because they are the borrower's OWN answers now.
  * This screen used to build five of them out of a credit report, a lien
  * search, an asset report and a county record, which meant a checkbox or a
- * signature attesting to our inference; screen 3 asks the questions, and this
+ * signature attesting to our inference; screen 4 asks the questions, and this
  * block reads back what was stored.
  *
- * Which is also why this screen refuses the signature until screen 3 has been
+ * Which is also why this screen refuses the signature until screen 4 has been
  * answered. With nothing stored, the panel's words attest to a statement the
  * borrower never made — the same defect as the derived declarations, with the
  * inference removed and nothing put in its place.
@@ -56,6 +56,7 @@ import {
   CO_BORROWER_COPY,
   COUNTEROFFER_COPY,
   ENDING_COPY,
+  BANK_OWED_COPY,
   REFERRED_COPY,
   SIGNING_COPY,
   SIGN_LEAD,
@@ -151,6 +152,11 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   // block per person, and a file-level copy rendered under a second name is
   // one borrower's statement attributed to another.
   const primary = primaryBorrower(file);
+  // The applicant's own bank, which is the file's `assets`. Owed whenever it
+  // is absent: the bank screen's "Answer the questions first" reaches this
+  // screen without a report, and the signature is accepted without one, so
+  // this screen has to offer the bank rather than read as finished.
+  const bankOwed = Boolean(file) && file?.assets == null;
   const others = coBorrowers(file);
   // Who has been named and has not arrived. The server refuses the signature
   // while this is non-empty, in the same words this screen uses, so the
@@ -175,7 +181,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
             {CO_BORROWER_COPY.awaitingTheirSignature(borrowerName(who))}
           </p>
         ));
-  // What the signer answered on screen 3, read back. Null is unasked, which
+  // What the signer answered on screen 4, read back. Null is unasked, which
   // is why the block below says so rather than rendering an empty list.
   const declaration = primary?.declaration ?? null;
   // What the signature says is true. One POST writes the declaration and the
@@ -191,8 +197,8 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   /*
    * The signer's current jobs, and whether they have been answered about.
    *
-   * Asked here and not on screen 3 because there was nothing to ask about
-   * then: a job arrives with the bank or payroll pull on screen 4, so the
+   * Asked here and not on screen 4 because there was nothing to ask about
+   * then: a job arrives with the bank or payroll pull on screen 3, so the
    * questions cannot exist until the connector has said which employers there
    * are. The same signature covers them — see `SIGNING_COPY.panelTerms`.
    *
@@ -493,10 +499,24 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
     return (
       <div className="super-card">
         {header}
+        {/* Not "nothing is needed from you" when the ledger's newest row says
+            the bank is: this is the one screen that can offer it. One heading
+            either way, under the one header, which the timeline test counts. */}
         <h1 className="mt-6 font-display text-2xl text-ink sm:text-3xl">
-          {REFERRED_COPY.headline}
+          {bankOwed ? BANK_OWED_COPY.title : REFERRED_COPY.headline}
         </h1>
-        <p className="mt-2 text-base text-ink-soft">{REFERRED_COPY.body}</p>
+        <p className="mt-2 text-base text-ink-soft">
+          {bankOwed ? BANK_OWED_COPY.afterSigning : REFERRED_COPY.body}
+        </p>
+        {bankOwed && (
+          <button
+            type="button"
+            className="super-btn super-btn-primary mt-4"
+            onClick={() => navigate(`/f/${fileId}/bank`)}
+          >
+            {BANK_OWED_COPY.button}
+          </button>
+        )}
         {/* "Nothing is needed from you right now" is the applicant's own
             position, and on a joint file it is not the file's. */}
         {stillToSign}
@@ -697,7 +717,7 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
           nothing else.
 
           The signer's block keeps the words it had and the link to change an
-          answer. A co-borrower's carries neither: screen 3 posts as whoever
+          answer. A co-borrower's carries neither: screen 4 posts as whoever
           is signed in, so a link from here would send the applicant to answer
           in their own name, which is the thing the separate blocks exist to
           stop.
@@ -805,6 +825,20 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
         )}
 
         {error && <p className="mt-4 text-sm text-danger">{error}</p>}
+
+        {bankOwed && (
+          <div className="super-notice super-notice-warn mt-7">
+            <p className="font-display text-base text-ink">{BANK_OWED_COPY.title}</p>
+            <p className="mt-2 text-base text-ink-soft">{BANK_OWED_COPY.beforeSigning}</p>
+            <button
+              type="button"
+              className="super-btn super-btn-outline mt-4"
+              onClick={() => navigate(`/f/${fileId}/bank`)}
+            >
+              {BANK_OWED_COPY.button}
+            </button>
+          </div>
+        )}
 
         <div className="mt-7 border-t border-rule-soft pt-6">
           {invited.length > 0 ? (
@@ -934,7 +968,7 @@ function Reasons({
  *
  * The controls stay on the screen after the answers are stored, prefilled,
  * rather than collapsing into a read-back with a link somewhere else. Section
- * 5 can do that because screen 3 exists to go back to; there is no screen for
+ * 5 can do that because screen 4 exists to go back to; there is no screen for
  * these, so the control IS the answer read back and the way to change it. A
  * separate list above them would print the same statement twice.
  */
@@ -982,7 +1016,7 @@ function MyWork({
 /**
  * One person's own answers, read back above the signature.
  *
- * Every line is something a person typed on screen 3. Nothing on this path
+ * Every line is something a person typed on screen 4. Nothing on this path
  * reads a connector: the list this replaced was built from a credit report, a
  * lien search, an asset report and a county record, so a file whose pulls had
  * not run showed five clean declarations above a signature — absence of
@@ -993,7 +1027,7 @@ function MyWork({
  * told us" over a co-borrower's block is the same misattribution the derived
  * declarations were, with the person swapped instead of the source.
  *
- * `to` is null when the reader is not the person who answers. Screen 3 posts
+ * `to` is null when the reader is not the person who answers. Screen 4 posts
  * as whoever is signed in, so a link out of somebody else's block would take
  * the applicant to answer in their own name.
  */

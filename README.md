@@ -35,7 +35,7 @@ API on `:8080`, web on `:5173`.
 
 ## The borrower sees five screens
 
-Property → About you → A few questions → Your bank → Review. The engine
+Property → About you → Your bank → A few questions → Review. The engine
 evaluates all 85 requirements across its own ten screens; it simply stopped
 rendering most of them to the borrower. "A few questions" is the URLA
 Section 5 declarations and where the borrower lives — a step rather than a

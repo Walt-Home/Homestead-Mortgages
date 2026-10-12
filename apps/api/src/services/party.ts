@@ -311,7 +311,7 @@ export interface BorrowerInput {
   /** Absent is "not asked", and writes no fact. */
   readonly isMilitary?: boolean;
   /**
-   * Absent is "not asked". Screen 2 does not collect it — screen 3 does, into
+   * Absent is "not asked". Screen 2 does not collect it — screen 4 does, into
    * `du_residences`, and this column is the copy derived from that row. The
    * fact this used to assert on every save was the string `"rent"`.
    */

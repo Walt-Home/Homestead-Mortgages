@@ -1,7 +1,7 @@
 /**
  * The review screen, for the person applying WITH the applicant.
  *
- * Their own half and nothing else: the answers they gave on their screen 3,
+ * Their own half and nothing else: the answers they gave on their screen 4,
  * the three demographic questions asked of every applicant, and one
  * signature that attests to their own answers and authorizes their own
  * Form 4506-C. The applicant's answers, reports and standing are not here —
@@ -24,7 +24,7 @@ import {
 } from "../components/DemographicQuestions.js";
 import { Working } from "../components/Working.js";
 import { answerLines } from "../lib/declarations.js";
-import { CO_BORROWER_REVIEW_COPY, SIGNING_COPY } from "../lib/outcomes.js";
+import { BANK_OWED_COPY, CO_BORROWER_REVIEW_COPY, SIGNING_COPY } from "../lib/outcomes.js";
 import { Answers } from "./ReviewPage.js";
 
 /**
@@ -51,6 +51,21 @@ export function CoBorrowerReviewPage() {
   const declared = declaration != null;
   const primaryResidence = file?.property?.occupancy === "primary_residence";
   const signed = hasConsent(file, "application_signature", me?.id);
+  // Their own bank. The file a member reads carries only their own links, so
+  // this is theirs and not the applicant's; owed whenever it is absent, for
+  // the reason the applicant's review gives.
+  const bankLinked = file?.links.some((l) => l.kind === "bank") ?? false;
+  const bankCard = !bankLinked && (
+    <div className="super-notice super-notice-warn mt-7">
+      <p className="font-display text-base text-ink">{BANK_OWED_COPY.title}</p>
+      <p className="mt-2 text-base text-ink-soft">
+        {signed ? BANK_OWED_COPY.afterSigning : BANK_OWED_COPY.beforeSigning}
+      </p>
+      <Link to={`/f/${fileId}/bank`} className="super-btn super-btn-outline mt-4 inline-block">
+        {BANK_OWED_COPY.button}
+      </Link>
+    </div>
+  );
 
   const [demographics, setDemographics] = useState<DemographicAnswers>({
     ethnicity: [],
@@ -143,6 +158,7 @@ export function CoBorrowerReviewPage() {
         <p className="mt-2 text-base text-ink-soft">
           {CO_BORROWER_REVIEW_COPY.doneBody(applicantFirstName)}
         </p>
+        {bankCard}
         <Link to="/" className="super-btn super-btn-outline mt-7 inline-block">
           Back to your applications
         </Link>
@@ -169,6 +185,8 @@ export function CoBorrowerReviewPage() {
       {primaryResidence && <DemographicQuestions value={demographics} onChange={setDemographics} />}
 
       {error && <p className="mt-4 text-sm text-danger">{error}</p>}
+
+      {bankCard}
 
       <div className="mt-7 border-t border-rule-soft pt-6">
         <div className="super-notice">

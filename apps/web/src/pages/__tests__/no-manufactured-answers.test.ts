@@ -46,7 +46,7 @@ describe("screen 2", () => {
     expect(page.match(/Choose one/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
   });
 
-  it("states nothing about first-time buying, which screen 3 asks", () => {
+  it("states nothing about first-time buying, which screen 4 asks", () => {
     expect(page).toMatch(/firstTimeHomebuyer:\s*null/);
     expect(page).not.toContain("priorOwnershipInLastThreeYears");
   });

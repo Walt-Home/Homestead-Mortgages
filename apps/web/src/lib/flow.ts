@@ -65,8 +65,13 @@ export type { FlowStage };
 export const SCREENS = [
   { path: "property", label: "Property" },
   { path: "identity", label: "About you" },
-  { path: "declarations", label: "A few questions" },
+  // The bank before the questions since 12 October 2026, so the report is on
+  // file before Section 5 and the residence are asked; the questions screen
+  // reads nothing of it (a test holds that). A borrower who declines the bank
+  // still reaches the questions: the bank screen offers "Answer the questions
+  // first", so the order is a default, not a wall.
   { path: "bank", label: "Your bank" },
+  { path: "declarations", label: "A few questions" },
   { path: "review", label: "Review" },
 ] as const;
 
@@ -102,9 +107,11 @@ export const STAGE_TO_SCREEN: Record<FlowStage, ScreenPath> = {
  *
  * The file's stage is the applicant's — where THEIR flow stands — and a
  * person applying with them has a shorter road of their own: say who they
- * are, answer Section 5 about themselves, link their bank, sign. Read off
+ * are, link their bank, answer Section 5 about themselves, sign. Read off
  * the person's own row and links rather than off any stage, because nothing
- * stores one for them.
+ * stores one for them. The bank before the questions, as for the applicant;
+ * a co-borrower who answered the questions first is sent to the bank, which
+ * is the step they have not done.
  */
 export function resumeForCoBorrower(input: {
   readonly invited: boolean;
@@ -112,8 +119,8 @@ export function resumeForCoBorrower(input: {
   readonly bankLinked: boolean;
 }): ScreenPath {
   if (input.invited) return "identity";
-  if (!input.declared) return "declarations";
   if (!input.bankLinked) return "bank";
+  if (!input.declared) return "declarations";
   return "review";
 }
 

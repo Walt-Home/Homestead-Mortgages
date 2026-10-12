@@ -397,7 +397,7 @@ export const UNKNOWN_STANDING_BODY =
 export const START_LEAD = "Let's start your application.";
 
 export const START_BODY =
-  "Five steps — the property, you, a few questions, your bank, and a review. You can stop anywhere and pick it back up here.";
+  "Five steps — the property, you, your bank, a few questions, and a review. You can stop anywhere and pick it back up here.";
 
 export const START_NOW = "Start now";
 

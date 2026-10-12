@@ -286,8 +286,8 @@ describe("the sentence that counts the steps", () => {
     expect(listed(START_BODY)).toEqual([
       "the property",
       "you",
-      "a few questions",
       "your bank",
+      "a few questions",
       "a review",
     ]);
     // And the middle one is the screen's own label, so the sentence and the

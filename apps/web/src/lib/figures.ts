@@ -125,7 +125,7 @@ export function assetsLabel(mode: ConnectorMode): string {
 /**
  * What the bank does to income, for the two screens that say it.
  *
- * Screen 1 asks for a rough figure and screen 4 explains what connecting reads,
+ * Screen 1 asks for a rough figure and screen 3 explains what connecting reads,
  * and both used to promise that we VERIFY what a borrower earns. Assets mode
  * has no income product; income is inferred from recurring deposits. One export
  * so the two screens cannot drift apart again, and so what they promise matches

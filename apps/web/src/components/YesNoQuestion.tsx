@@ -5,10 +5,10 @@
  * unticked box reading as "no" is how a borrower is recorded as denying
  * something nobody asked them.
  *
- * It lives here rather than on screen 3 because two screens ask questions now.
- * Screen 3 asks URLA Section 5; screen 5 asks URLA 1b about each job, which
+ * It lives here rather than on screen 4 because two screens ask questions now.
+ * Screen 4 asks URLA Section 5; screen 5 asks URLA 1b about each job, which
  * cannot be asked any earlier — there is no job to ask about until the pulls
- * on screen 4 have said which ones there are. A second copy of this markup
+ * on screen 3 have said which ones there are. A second copy of this markup
  * would be a second answer to "what does an unanswered question look like",
  * and the copy that drifts would be the one sitting above the signature.
  */

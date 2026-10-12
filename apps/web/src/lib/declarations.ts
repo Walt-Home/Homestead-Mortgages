@@ -1,7 +1,7 @@
 /**
- * The questions of screen 3, in the one place they are worded.
+ * The questions of screen 4, in the one place they are worded.
  *
- * Two screens read this file. Screen 3 asks the questions; screen 5 shows the
+ * Two screens read this file. Screen 4 asks the questions; screen 5 shows the
  * answers back above the signature. They have to use the same words, because
  * "here is what you told us" is only true if it is the same question — a
  * second wording is a second question, and the borrower attests to the one

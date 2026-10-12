@@ -67,17 +67,19 @@ function parseCsv(text) {
 }
 
 // ── Exhaustive mappings ────────────────────────────────────────────────────
-// Declarations is the fourth, and the six screens after it moved up a number
-// when it landed. The sheet numbers the screens in flow order and the ordinal
-// is what sorts outstanding work, so a new screen wedged in at the end with a
-// tenth ordinal would list Section 5 after the decision — which is neither
-// where it is asked nor where it has to be answered.
+// The sheet numbers the screens in flow order and the ordinal is what sorts
+// outstanding work, so a screen wedged in at the end with a tenth ordinal
+// would list its work after the decision — which is neither where it is
+// asked nor where it has to be answered. The bank is the fourth and the
+// declarations the fifth since 12 October 2026 (they were the other way
+// round): the report is on file before the questions it bears on. The ids
+// never move; only the names and the ordinals do.
 const SCREENS = {
   "1 Property & loan": { id: "property_loan", ordinal: 1 },
   "2 Identity": { id: "identity", ordinal: 2 },
   "3 Credit": { id: "credit", ordinal: 3 },
-  "4 Declarations": { id: "declarations", ordinal: 4 },
-  "5 Bank": { id: "bank", ordinal: 5 },
+  "4 Bank": { id: "bank", ordinal: 4 },
+  "5 Declarations": { id: "declarations", ordinal: 5 },
   "6 Payroll": { id: "payroll", ordinal: 6 },
   "7 IRS transcript": { id: "irs_transcript", ordinal: 7 },
   "8 Upload fallback": { id: "upload_fallback", ordinal: 8 },

@@ -113,7 +113,7 @@ describe("which branches a borrower is offered", () => {
  * pinned to. A rule widened on either side moves one of the two lists.
  *
  * The four `declarations` items are outstanding on every fixture — none of
- * them has answered screen 3 — and they must produce no card at all: the
+ * them has answered screen 4 — and they must produce no card at all: the
  * questions are a step the flow walks a borrower through, not work a document
  * upload could clear.
  */

@@ -121,11 +121,38 @@ describe("each step navigates to the one after it", () => {
 
   it("sends the resumed identity submit the same way", () => {
     // The ID vendor redirects mid-submit, so this page finishes screen 2's
-    // work — the pulls and the navigation. Left pointing at the bank screen
-    // it is a second way past the declarations, and the one taken by every
-    // borrower who scanned a document.
+    // work — the pulls and the navigation. It owes the borrower the same
+    // next step as screen 2 itself, and no later one: pointing past the next
+    // step is a second way to skip it, taken by every borrower who scanned a
+    // document.
     const resumed = src("pages/IdentityReturnPage.tsx");
-    expect(resumed).toMatch(goesTo("declarations"));
-    expect(resumed).not.toMatch(goesTo("bank"));
+    const [, next, beyond] = steps.find(([from]) => from === "identity")!;
+    expect(resumed).toMatch(goesTo(next));
+    for (const path of beyond) expect(resumed).not.toMatch(goesTo(path));
+  });
+
+  it("lets a borrower past the bank to the questions without a report", () => {
+    // The order is a default, not a wall. The bank sits before the questions
+    // now, and the seven universal answers behind it are owed by everybody;
+    // a borrower who declines the bank has to be able to give them. The
+    // result panel's Continue and the slow-report Carry on both render only
+    // after Link succeeded, so the idle state and the upload hatch carry the
+    // forward control themselves.
+    const bank = src("pages/BankPage.tsx");
+    expect(bank).toMatch(goesTo("declarations"));
+    expect(bank.match(/ANSWER_THE_QUESTIONS_FIRST/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+  });
+
+  it("has the review offer the bank to a borrower who went past it", () => {
+    // The way past the bank reaches the review with no report, and the
+    // server accepts the signature without one and asks for the bank again.
+    // Without this the review read "nothing is needed from you" over a
+    // ledger that said the bank was, with no control to reach it.
+    const review = src("pages/ReviewPage.tsx");
+    expect(review).toMatch(goesTo("bank"));
+    expect(review.match(/BANK_OWED_COPY/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
+    const theirs = src("pages/CoBorrowerReviewPage.tsx");
+    expect(theirs).toContain("BANK_OWED_COPY");
+    expect(theirs).toMatch(/to=\{`\/f\/\$\{fileId\}\/bank`\}/);
   });
 });

@@ -439,7 +439,13 @@ async function grantConsent(
 }
 
 /**
- * Screen 3 — Section 5 and where each of them lives.
+ * Screen 4 — Section 5 and where each of them lives. Walked after the bank
+ * since 12 October 2026, the order the borrower walks it in. The three
+ * stories parked at BANK answered it with no bank linked: the shape the
+ * migration leaves a file that walked the old order in (questions answered,
+ * bank next), which the bank route hands past the questions. A borrower who
+ * takes "Answer the questions first" today ends at PAYROLL instead, on the
+ * review with the bank still owed.
  *
  * Every persona answers, and that is not tidiness. Six new borrower-input
  * requirements went into the sheet with this screen, and a sample borrower who
@@ -732,7 +738,7 @@ async function linked(w: Walk, kind: string, provider: string): Promise<void> {
   });
 }
 
-/** Screen 3 — the twelve-month asset report, and the move it causes. */
+/** Screen 3, before the questions since 12 October 2026 — the twelve-month asset report, and the move it causes. */
 async function bank(w: Walk): Promise<void> {
   const file = await currentFile(w);
   const outcome = await w.registry.bank.fetchAssetReport(
@@ -1023,7 +1029,10 @@ async function decide(w: Walk): Promise<void> {
  * receipt — is in `seedPersona`; these are what each of them did next.
  */
 const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
-  /** Told us who she is and what she is buying. Her bank is the next thing. */
+  /**
+   * Told us who she is and what she is buying, and answered the questions
+   * under the old order. Her bank is the next thing.
+   */
   async maya_okafor(w) {
     await propertyData(w);
     await credit(w);
@@ -1075,8 +1084,8 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     );
     await screening(w);
     await liens(w);
-    await declarations(w);
     await bank(w);
+    await declarations(w);
   },
 
   /** Two people, commission income and a gift, with two branches on the way. */
@@ -1089,11 +1098,11 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await creditAsCoBorrower(w, dev);
     await screening(w);
     await liens(w);
-    await declarations(w);
     // Her bank report cannot verify commission income, so the payroll branch
     // is owed; her credit report carries a late payment, so a letter is owed
     // after it. Both are walked, in the order the reconciler asks for them.
     await bank(w);
+    await declarations(w);
     await payroll(w);
     await uploadDocument(w, "CRD-008", "letter-of-explanation.pdf");
     await vesting(w);
@@ -1110,8 +1119,8 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await credit(w);
     await screening(w);
     await liens(w);
-    await declarations(w);
     await bank(w);
+    await declarations(w);
     await vesting(w);
     await signApplication(w);
     await decide(w);
@@ -1150,8 +1159,8 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await credit(w);
     await screening(w);
     await liens(w);
-    await declarations(w);
     await bank(w);
+    await declarations(w);
     await vesting(w);
     await signApplication(w);
     await decide(w);
@@ -1186,8 +1195,8 @@ const WALKS: Record<SeededKey, (w: Walk) => Promise<void>> = {
     await credit(w);
     await screening(w);
     await liens(w);
-    await declarations(w);
     await bank(w);
+    await declarations(w);
     await vesting(w);
     await signApplication(w);
     await decide(w);

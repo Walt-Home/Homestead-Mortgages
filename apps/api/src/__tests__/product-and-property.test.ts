@@ -182,7 +182,7 @@ describe("what the county answers", () => {
 });
 
 describe("what only the borrower can answer", () => {
-  it("writes the estate type screen 3 asks for", async () => {
+  it("writes the estate type screen 4 asks for", async () => {
     const { user, file } = await applicationOn(AUSTIN_HOUSE);
 
     const res = await callAs(

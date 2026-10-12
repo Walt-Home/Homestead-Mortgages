@@ -44,8 +44,10 @@ export const FLOW_STAGES = [
   "property_loan",
   "identity",
   "credit",
-  "declarations",
+  // The bank before the questions (12 October 2026). The API's STAGE_ORDER is
+  // the same list upper-cased, and the resume screen is read off this order.
   "bank",
+  "declarations",
   "payroll",
   "irs_transcript",
   "upload_fallback",

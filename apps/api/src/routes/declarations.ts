@@ -1,7 +1,7 @@
 /**
  * Where Section 5 and the residence answers come in.
  *
- * Screen 3 posts here. The route shipped a commit ahead of it because the
+ * Screen 4 posts here. The route shipped a commit ahead of it because the
  * column it makes true had to stop being fabricated then:
  * `borrowers.current_housing` was NOT NULL with a default of `'rent'` and no
  * screen ever asked, so the alternative to shipping somewhere for the real
@@ -144,7 +144,7 @@ const bodySchema = z
     /**
      * Which person on this file is answering. Absent is borrower 1 — the
      * person whose request it is — which is what every file with one borrower
-     * on it sends and what screen 3 sends for itself.
+     * on it sends and what screen 4 sends for itself.
      *
      * A co-borrower's answers are their own row on their own edge. Before this
      * existed there was one edge a save could reach, so a second person's
@@ -287,7 +287,7 @@ declarationRouter.post(
     const assertedByPrincipalId = await principalForParty(prisma, partyId);
 
     // Whose answers these are when the screen does not say: the person
-    // asking, by their own row on this file. Screen 3 posts no `borrowerId`,
+    // asking, by their own row on this file. Screen 4 posts no `borrowerId`,
     // and read as Borrower 1 that put a co-borrower's answers onto the
     // applicant's edge — which the principal rule then refused, so a
     // co-borrower could not answer at all. Absent a row of their own — the
@@ -299,7 +299,7 @@ declarationRouter.post(
     // one answer after connecting their bank is not moved back to this screen.
     //
     // The applicant's mark. The stage is where THEIR flow resumes, and a
-    // co-borrower answering on their own screen 3 has walked none of it — so
+    // co-borrower answering on their own screen 4 has walked none of it — so
     // their save leaves it where the applicant left it.
     // Answered, so the file has reached the step after this one. It used to
     // advance to DECLARATIONS, the step just finished, which was a no-op

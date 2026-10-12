@@ -19,8 +19,13 @@ export const STAGE_ORDER: readonly FlowStage[] = [
   "PROPERTY_LOAN",
   "IDENTITY",
   "CREDIT",
-  "DECLARATIONS",
+  // The bank before the questions since 12 October 2026, so the report is on
+  // file before Section 5 and the residence are asked and a contradiction is
+  // met at the answer rather than above the signature. `packages/shared`'s
+  // FLOW_STAGES and the sheet's screen column say the same order; a test
+  // holds the three together.
   "BANK",
+  "DECLARATIONS",
   "PAYROLL",
   "IRS_TRANSCRIPT",
   "UPLOAD_FALLBACK",

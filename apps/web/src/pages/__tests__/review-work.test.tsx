@@ -2,8 +2,8 @@
  * URLA 1b, on the screen that asks it: what the borrower says about each job
  * they hold now, above the signature that attests to it.
  *
- * Asked on screen 5 rather than on screen 3 because there is nothing to ask
- * about until screen 4 has run — a job arrives with the bank or payroll pull,
+ * Asked on screen 5 rather than on screen 4 because there is nothing to ask
+ * about until screen 3 has run — a job arrives with the bank or payroll pull,
  * and the questions are per job. So this is the one block on the flow whose
  * SUBJECT comes from a connector and whose ANSWERS cannot: a pull reports the
  * employer, the position and the dates, and no pull can report whether the

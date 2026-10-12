@@ -121,12 +121,14 @@ enum FlowStage {
   PROPERTY_LOAN
   IDENTITY
   CREDIT
-  /// Section 5 and where the borrower lives — asked between the credit pull
-  /// and the bank connection, which is where the screen sits. A stage of its
-  /// own rather than a second meaning for IDENTITY, because the stage is what
+  /// Section 5 and where the borrower lives — asked after the bank connection
+  /// since 12 October 2026 (it sat between the credit pull and the bank before),
+  /// so the report is on file before the questions it bears on. A stage of its
+  /// own rather than a second meaning for BANK, because the stage is what
   /// "resume where you left off" reads: without one, a borrower who stops
   /// halfway through the questions comes back to the top of the screen before
-  /// them and cannot be resumed to the one they were on.
+  /// them and cannot be resumed to the one they were on. The enum's order here
+  /// is not the flow's: STAGE_ORDER in the API is.
   DECLARATIONS
   BANK
   PAYROLL

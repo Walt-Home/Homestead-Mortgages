@@ -152,7 +152,7 @@ describe("coming back to screen 1 on a file that already exists", () => {
       address: { line1: "12 Kestrel Ct", city: "Austin", state: "TX", postalCode: "78745" },
       propertyType: "condominium",
       // Screen 1 neither shows nor sets this. It is here because the file type
-      // carries it, and screen 3 is what answers it.
+      // carries it, and screen 4 is what answers it.
       estateType: null,
       occupancy: "second_home",
       valueOrPrice: 415_000,

@@ -116,7 +116,7 @@ export interface DeclarationView {
  * `borrowerId` names WHICH person is answering, and it is required as soon as
  * a file carries more than one. Absent, it is the person whose request this is
  * — Borrower 1, resolved through `primaryBorrowerRow`, which is the same
- * ordinal every reader of a file is sorted by. Screen 3 posts without one, so
+ * ordinal every reader of a file is sorted by. Screen 4 posts without one, so
  * resolving it any other way put the signer's Section 5 answers onto a
  * different person's edge on a file whose ordinal 1 had been refilled: the
  * review screen then showed the bankruptcy under somebody else's name and told
@@ -238,7 +238,7 @@ export async function recordDeclaration(
     borrowerId?: string;
     /**
      * The estate the subject property is held on, which belongs to the FILE and
-     * not to the person answering. Written here because screen 3 is where it is
+     * not to the person answering. Written here because screen 4 is where it is
      * asked; a co-borrower answering later restates the same fact about the
      * same house.
      */
@@ -316,7 +316,7 @@ export async function recordDeclaration(
   // derived copy outlives the row it is derived from.
   // The one answer on this screen that is not the borrower's own. It is in this
   // transaction rather than beside it because a borrower who reached the end of
-  // screen 3 answered all of it or none of it, and a declaration that committed
+  // screen 4 answered all of it or none of it, and a declaration that committed
   // without the estate type would leave the file looking asked and the casefile
   // still refused.
   await db.loanFile.update({

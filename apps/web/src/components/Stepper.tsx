@@ -7,7 +7,7 @@
  * something you have finished.
  *
  * Conditional branches are deliberately absent. A borrower sent to confirm
- * their employer is still on step 4 of 5 — the branch is work inside a step,
+ * their employer is still on step 3 of 5 — the branch is work inside a step,
  * not a step of its own, and showing it here would turn "five screens" into
  * "five screens, or seven, depending".
  */

@@ -4412,3 +4412,51 @@ is "the step reached"; every route now reads the next one off
 `STAGE_ORDER`, which also makes reordering the steps an edit to one list.
 Joe said the same day that the sequence is not solidified and should be
 optimized for prefill; this is what makes that cheap.
+
+## The bank comes before the questions
+
+**Decided 12 October 2026**, by Joe, from `docs/autofill.md` section 6:
+Property, About you, Your bank, A few questions, Review. One swap. Five
+screens, the same labels, eleven stages, no new stage, no moved SSN, no
+moved income, no enum change.
+
+**What it buys, honestly.** No order moves an answer up a mode: Plaid is
+keyed on the identity screens 1 and 2 collect, and a declaration is asked
+bare whatever precedes it. The order buys the rent caption at its first ask
+once the autofill ships, and six checks that can run at the declaration save
+instead of above the signature, so a contradiction is met the moment the
+answer is given. That, and the asks screen 3 does not make yet, is the whole
+yield, and the swap is one commit.
+
+**The order is a default, not a wall.** The idle bank screen had no forward
+control: Continue rendered only after a report, "Carry on" only after Link,
+and the statement-upload hatch navigated nowhere. Under the swap a borrower
+who declines the bank would have been stuck one screen before seven universal
+requirements. The idle state and the hatch now offer "Answer the questions
+first"; the stage moves on at the declaration save; the review offers the bank before the signature and after it, in place of the referred ending's "nothing is needed from you", and the standing names it. The server accepts a signature with no bank and asks for the bank again, as it always has.
+
+**The questions screen reads nothing of the bank.** It reads the person's own
+`declaration` and `residences` and the file's estate type, and no report,
+income, job or snapshot; `questions-blind-to-the-bank.test.ts` enumerates
+what it may read and lists what it may not. Before the swap that was a
+habit. The bank panel's "months of rent paid on time" line renders only once
+the person has said how they live, because one screen before Own/Rent it
+would be an anchor on the answer.
+
+**The stranded files.** The stage is "the step reached". Under the old order
+`DECLARATIONS` meant "credit done, questions next", which under the new one
+is a file at `BANK`; the migration says so in one statement. A file at `BANK`
+keeps its label whether or not its questions are answered, and the bank
+route reads `du_declarations` to decide where to hand it afterwards: to the
+questions, or past them when the applicant already answered (the old order,
+or the way past the bank). The persona seed walks the bank before the questions now; the three stories parked at `BANK` with their questions answered hold the shape the migration leaves an old-order file in, which the bank route hands past the questions.
+
+**The one new way to lose something.** The Plaid redirect comes a screen
+earlier, so a borrower who abandons mid-Link has neither a bank nor Section
+5, where before they had the answers. Unmeasured; the funnel over the
+`screen_completed` events the ledger already writes is how it will be.
+
+**The co-borrower** resumes bank before questions too (`resumeForCoBorrower`);
+nothing stores a stage for them. **The refinance from an offer** is born at
+`IDENTITY` and walks screen 2, the bank, the questions, the review;
+`refinanceReadiness` counts by screen id, which did not change.

@@ -131,7 +131,7 @@ export const creditNextStep = (mode: ConnectorMode) =>
  * What is open in the other window.
  *
  * The asymmetry this ends: screen 2 disclosed that Stripe was in test mode and
- * screen 4 disclosed nothing, while the window it opened was `sandbox.plaid.com`
+ * screen 3 disclosed nothing, while the window it opened was `sandbox.plaid.com`
  * serving invented institutions. A tester puts their own bank credentials into
  * it, is rejected, and has nothing on screen to explain why.
  *

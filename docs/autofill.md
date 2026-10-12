@@ -30,12 +30,13 @@ says.**
   funds, bankruptcy) are asked bare and compared afterwards, and a disagreement
   is a diary row for a human, never a changed answer.
 - **The honest headline.** For a first-time applicant, almost nothing can be
-  prefilled from Plaid, because the bank connects on screen 4 and the questions
-  it bears on sit on screen 3; and almost nothing may be prefilled from Stripe
-  beyond what screen 2 already takes. The value is in three other places: the
+  prefilled from Plaid: it is keyed on the identity screens 1 and 2 collect,
+  and the questions it bears on are asked bare whatever precedes them (the
+  bank comes before them since 12 October, section 6); and almost nothing may
+  be prefilled from Stripe beyond what screen 2 already takes. The value is in three other places: the
   returning person, whose own facts are already on the party; the refinance
   opened from a servicer's loan, whose tape is seeded and never shown; and the
-  questions screen 4 does not ask yet (which accounts count, whose pay this is,
+  bank screen does not ask yet (which accounts count, whose pay this is,
   what a deposit was, whether a job ended).
 - **Where it lives.** `packages/shared/src/types/autofill.ts` (the type),
   `apps/api/src/services/autofill.ts` (the rules), `apps/web/src/components/Found.tsx`
@@ -95,7 +96,7 @@ argue for; a clean report argues for nothing. **When** says which increment.
 | Military service                                     | asked blank; DFAS or VA streams                                             | check for the underwriter; never a value (DFAS pays civilians too)                                                                                                            | yes only                       | inc. 2                                                    |
 | Co-borrower's screen 2                               | their own Stripe session, keyed on their user                               | prefill_confirm, in their session only                                                                                                                                        | their document's               | inc. 1                                                    |
 | Co-borrower's name                                   | the applicant's spelling vs their document                                  | check (`claim_name_differs`); adopting a session whose document names somebody else is refused                                                                                | none                           | inc. 1                                                    |
-| **Screen 3**                                         |                                                                             |                                                                                                                                                                               |                                |                                                           |
+| **The questions (screen 4)**                         |                                                                             |                                                                                                                                                                               |                                |                                                           |
 | Monthly rent                                         | Plaid rent run, category-gated                                              | suggest under the rent input on a revisit only, only after Rent is chosen: "Your bank shows $2,150 a month to OAKRIDGE PROPERTY MGMT"; a typed amount outside ±25% is a check | a positive amount              | caption inc. 1; check inc. 2                              |
 | Rent and basis                                       | the person's own prior `du_residences` at the same address                  | prefill_confirm, dated                                                                                                                                                        | their own                      | second application · inc. 2                               |
 | Basis                                                | county owner of record, refinance; a mortgage tradeline on their own credit | check (owner matches and they said Rent; Rent beside a live mortgage)                                                                                                         | none                           | inc. 2; credit is fixture-only today                      |
@@ -104,7 +105,7 @@ argue for; a clean report argues for nothing. **When** says which increment.
 | Section 5 C, borrowed funds                          | a lender disbursement in their own report; a new tradeline                  | check only, through AST-005's sourcing answer: an event exists only when the borrower's own explanation says "a loan" and C says No                                           | yes only                       | inc. 2                                                    |
 | Co-borrower's Section 5                              | their own reports only                                                      | check; nothing beside the question; evidence shown only after a contradicting answer, with an explanation box                                                                 | yes only                       | inc. 2; credit is fixture-only                            |
 | Co-borrower's intent to occupy                       | the applicant's checkbox vs their own A                                     | check (`occupancy_role_differs`); the role follows their own answer at their save                                                                                             | either                         | inc. 2                                                    |
-| **Screen 4**                                         |                                                                             |                                                                                                                                                                               |                                |                                                           |
+| **The bank (screen 3)**                              |                                                                             |                                                                                                                                                                               |                                |                                                           |
 | Which accounts count                                 | the report's account list                                                   | prefill_confirm of the list; the election is three-valued (`du_assets.used_for_qualifying` NULL until acted on), nothing pre-checked                                          | the list only                  | inc. 2 (a column; changes what reserves and AST-008 read) |
 | Is the borrower an owner                             | `owners[]` vs their own attested name                                       | check; a match is ESTIMATED at most                                                                                                                                           | none                           | inc. 2                                                    |
 | Retirement liquidity                                 | the balance as a ceiling                                                    | suggest, only for an elected account; no retirement account arrives until `include_investments` is sent                                                                       | the ceiling only               | inc. 2                                                    |
@@ -232,7 +233,7 @@ The file target names no `occupancy` and no `property_type`: on a refinance
 the seed defaults both when the tape is silent, and a default read back as
 "From your servicer's records" would be a manufactured answer wearing a tag.
 The refinance seed should write them as null when the tape and the loan are
-silent, and ask occupancy on that file's screen 3, with the tape value as a
+silent, and ask occupancy on that file's questions screen, with the tape value as a
 check.
 
 ### Where it is computed
@@ -389,7 +390,7 @@ was refuted on timing alone. So an order is worth exactly this: one caption
 at its first ask instead of on a revisit, six checks that run at the save
 instead of at the pull (so a contradiction is met the moment the answer is
 given rather than above the signature), and a better place for the asks
-screen 4 does not make yet. The case for changing the order is that the
+screen 3 does not make yet. The case for changing the order is that the
 change is cheap, not that it is large.
 
 ### The recommended order
@@ -412,9 +413,7 @@ no forward control: the result panel's Continue renders only after a report
 lands, the slow-report "Carry on" only after Link succeeded, and the
 statement-upload hatch navigates nowhere. Under the swap that person would
 be stuck one screen before seven universal requirements. So the bank screen
-gains "Answer the questions first" on its idle and upload states, the stage
-stays `BANK` until the declaration save advances it, and the bank remains
-outstanding work the review's standing names. The identity-first order said
+gains "Answer the questions first" on its idle and upload states, the declaration save moves the stage on, and the review offers the bank before the signature and after it, in place of the referred ending's "nothing is needed from you". The identity-first order said
 this best and it is taken from there.
 
 ### What the matrix says moves
@@ -538,8 +537,9 @@ becomes the one-tap suggest from the person's prior `monthly_income` fact.
 
 ### What moves in the code
 
-Steps 1 to 7 are one commit; 8 follows; 9 to 12 are the grafts and stand on
-their own.
+Steps 1 to 7 shipped 12 October 2026 as one commit ("The bank comes before
+the questions", `docs/decisions.md`); 8 follows; 9 to 12 are the grafts and
+stand on their own.
 
 1. **The stage order.** `services/stage.ts` `STAGE_ORDER` and
    `packages/shared/src/types/loan-file.ts` `FLOW_STAGES` swap `BANK` and
@@ -626,11 +626,11 @@ stage, no new screen. Reverting it is reverting one commit.
 
 ### Open decisions for Joe
 
-- **When to ship the swap.** Now, or with the first bank-sourced caption?
-  Lean: with the caption. Alone it buys nothing visible until the Plaid
-  purpose is settled, it moves the highest-friction step a screen earlier,
-  and its one cost (mid-Link abandonment before Section 5) is unmeasured.
-  Land the funnel now, so the decision is made from a number.
+- **When to ship the swap.** Decided 12 October: now, with the way past the
+  bank. The lean was to wait for the first bank-sourced caption; Joe took the
+  order on its own. Its one cost, mid-Link abandonment before Section 5, is
+  still unmeasured, and the funnel over `screen_completed` events is the next
+  thing to land.
 - **The pulls as the consent's tail (step 9).** Lean: yes, as its own commit;
   it is small and it puts the sanctions hold before the Plaid spend.
 - **Not re-asking a returning person's SSN.** The row's `ssn_last4` copied
@@ -759,7 +759,7 @@ Each step is one or two commits and names the test that holds it. Steps 0 to
     rule names them. Then, as its own design: the console reader and the
     system checks; `du_assets.used_for_qualifying` (nullable, with
     `elected_by_principal_id` and `elected_at`) and the accounts list on
-    screen 4, read as "cannot know yet" when NULL; `deposit_explanations`; a
+    screen 3, read as "cannot know yet" when NULL; `deposit_explanations`; a
     borrower-side retire path for a disowned employer; INACTIVE streams kept
     for "did that job end"; the co-borrower's own "Your work" and income
     question; the Reg B 1002.5(d)(2) sentence before any "should this count".

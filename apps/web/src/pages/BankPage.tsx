@@ -1,5 +1,9 @@
 /**
- * Screen 4 — the bank connection.
+ * Screen 3 — the bank connection, ahead of the questions since 12 October
+ * 2026 so the report is on file before Section 5 and the residence are asked.
+ * The order is a default, not a wall: the idle state and the upload hatch
+ * both offer "Answer the questions first", because a borrower who declines
+ * the bank still owes seven universal answers and must be able to give them.
  *
  * The borrower does exactly one thing: press a button. Everything after that
  * is their bank's own login, and then us.
@@ -101,6 +105,16 @@ const STEP = {
 const OPENING_STEPS = [STEP.opening, STEP.reading, STEP.finding, STEP.standing];
 const ASSEMBLING_STEPS = [STEP.reading, STEP.finding, STEP.standing];
 
+/**
+ * Said while the bank's window opens and while the report assembles. It read
+ * "the last one you have to do anything for" until the questions moved
+ * behind this screen, which made it a promise the next screen broke.
+ */
+const LONGEST_STEP = "This is the longest step. A few questions follow it, then the review.";
+
+/** The way past the bank, offered in the idle state and under the upload hatch. */
+const ANSWER_THE_QUESTIONS_FIRST = "Answer the questions first";
+
 /** When the wait stops feeling ordinary and the note should acknowledge it. */
 const REASSURE_AFTER_MS = 25_000;
 
@@ -114,6 +128,16 @@ export function BankPage() {
   const { data } = useLoanFile(fileId);
   const { config: authConfig } = useAuth();
   const readOnly = data?.file.isDemo === true;
+  // The reader's own row: the applicant's, or a co-borrower's on their half.
+  const me = data?.file.borrowers.find((b) => b.id === data?.you) ?? data?.file.borrowers[0];
+  // Whether the reader has said how they live. The questions follow this
+  // screen now, so until they have, nothing here may lean on an answer.
+  const basisStated = me?.currentHousing != null;
+  // Where Continue goes. The questions, unless this person has answered them
+  // already (the old order, or "Answer the questions first"): then the bank
+  // was their last step, and the bare file route resumes to wherever the
+  // bank route put the stage, which is the review.
+  const onward = me?.declaration != null ? `/f/${fileId}` : `/f/${fileId}/declarations`;
 
   const existing = data?.file.assets as AssetReport | null | undefined;
   const credit = data?.file.credit as CreditReport | null | undefined;
@@ -558,17 +582,20 @@ export function BankPage() {
             <Figure label="Loan-to-value" value={figures?.ltv != null ? `${figures.ltv}%` : null} />
           </dl>
 
-          {typeof rent === "number" && rent >= 12 && (
+          {/*
+            Only once the person has said how they live. This screen now comes
+            before the question, and a "months of rent paid on time" line one
+            screen before Own/Rent is asked would be an anchor on the answer;
+            the review reads it back for everybody.
+          */}
+          {basisStated && typeof rent === "number" && rent >= 12 && (
             <p className="super-notice super-notice-ok mt-6 text-base text-ink-soft">
               {rentHistorySource(bankMode)} {rent} months of rent paid on time. That counts in your
               favor, and it is the kind of thing a credit score alone would miss.
             </p>
           )}
 
-          <button
-            className="super-btn super-btn-primary mt-7"
-            onClick={() => navigate(`/f/${fileId}/review`)}
-          >
+          <button className="super-btn super-btn-primary mt-7" onClick={() => navigate(onward)}>
             Continue
           </button>
         </div>
@@ -591,12 +618,7 @@ export function BankPage() {
           It replaces every statement you would otherwise have to find, download and upload.
         </p>
 
-        {phase.kind === "opening" && (
-          <Working
-            steps={OPENING_STEPS}
-            note="This is the longest step, and the last one you have to do anything for."
-          />
-        )}
+        {phase.kind === "opening" && <Working steps={OPENING_STEPS} note={LONGEST_STEP} />}
 
         {phase.kind === "linking" && (
           <>
@@ -617,7 +639,7 @@ export function BankPage() {
             note={
               reassure
                 ? "Still going. Twelve months is a lot of history, and some banks are slower than others."
-                : "This is the longest step, and the last one you have to do anything for."
+                : LONGEST_STEP
             }
           />
         )}
@@ -629,10 +651,7 @@ export function BankPage() {
               nothing is wrong, and you don&rsquo;t have to wait here.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                className="super-btn super-btn-primary"
-                onClick={() => navigate(`/f/${fileId}/review`)}
-              >
+              <button className="super-btn super-btn-primary" onClick={() => navigate(onward)}>
                 Carry on
               </button>
               <button
@@ -664,6 +683,20 @@ export function BankPage() {
               what you have. We cannot move money, and we do not keep your bank password — you sign
               in with your bank, not with us.
             </Why>
+            {/*
+              The way past the bank. The questions after this screen are owed
+              by everybody, bank or no bank, and the stepper only goes
+              backwards, so without this a borrower who will not connect is
+              stuck here with Section 5 unasked. The bank stays outstanding
+              work; the review says so.
+            */}
+            <button
+              type="button"
+              className="super-link-quiet mt-4 text-sm"
+              onClick={() => navigate(`/f/${fileId}/declarations`)}
+            >
+              {ANSWER_THE_QUESTIONS_FIRST}
+            </button>
           </>
         )}
 
@@ -734,6 +767,13 @@ export function BankPage() {
                       takes longer than connecting, so if the connection starts working, use that
                       instead.
                     </p>
+                    <button
+                      type="button"
+                      className="super-link-quiet mt-3 text-sm"
+                      onClick={() => navigate(`/f/${fileId}/declarations`)}
+                    >
+                      {ANSWER_THE_QUESTIONS_FIRST}
+                    </button>
                   </>
                 )}
               </>

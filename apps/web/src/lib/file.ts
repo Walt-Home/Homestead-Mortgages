@@ -117,7 +117,7 @@ export interface LoanFileView {
     preferredLanguage: string | null;
     isMilitary: boolean | null;
     nonBorrowingSpouseName?: string;
-    /** Null until screen 3 asks; derived there from the residence answer. */
+    /** Null until screen 4 asks; derived there from the residence answer. */
     currentHousing: string | null;
     monthlyRent?: number;
     firstTimeHomebuyer: boolean | null;
@@ -129,7 +129,7 @@ export interface LoanFileView {
     } | null;
     /**
      * Section 5 and the residence history, as THIS person answered them on
-     * screen 3. Null until they have been asked — which the review screen says
+     * screen 4. Null until they have been asked — which the review screen says
      * out loud rather than rendering as a set of clean answers.
      *
      * Per person, because the questions are about the person answering. The
@@ -177,7 +177,7 @@ export interface LoanFileView {
   property: {
     address: { line1: string; city: string; state: string; postalCode: string };
     propertyType: string;
-    /** Null until screen 3 asks. Nothing we retrieve carries it. */
+    /** Null until screen 4 asks. Nothing we retrieve carries it. */
     estateType: PropertyEstateType | null;
     occupancy: string;
     valueOrPrice: number;

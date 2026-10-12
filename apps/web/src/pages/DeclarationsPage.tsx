@@ -1,11 +1,14 @@
 /**
- * Screen 3 — where you live, and the questions only you can answer.
+ * Screen 4 — where you live, and the questions only you can answer.
  *
  * The fourteen lettered questions of URLA Section 5, their three follow-ups,
  * and the residence history. Everything on this screen is a statement by the
  * borrower: no connector output reaches it, and nothing it collects is
  * inferred from anything we pulled. That is the whole reason it exists as a
- * screen rather than as a block of derived checkmarks on the last one.
+ * screen rather than as a block of derived checkmarks on the last one. Since
+ * 12 October 2026 the bank comes first, so the report is on file when this
+ * screen renders; it still reads only the person's own answers and the
+ * file's estate type, and `questions-blind-to-the-bank.test.ts` holds it.
  *
  * It is a STEP and not a branch. The branches render outstanding work the
  * engine reports, and the engine can only report work that has a requirement —
@@ -136,7 +139,7 @@ export function DeclarationsPage() {
       await api.post(`/files/${fileId}/declaration`, bodyFrom(form, purchase));
       await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
       await queryClient.invalidateQueries({ queryKey: ["assessment"] });
-      navigate(`/f/${fileId}/bank`);
+      navigate(`/f/${fileId}/review`);
     } catch (err) {
       if (err instanceof ApiError && err.code === "DEMO_FILE_READ_ONLY") {
         setError(SAMPLE_FILE_START_YOUR_OWN);

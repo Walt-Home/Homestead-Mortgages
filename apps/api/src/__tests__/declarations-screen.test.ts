@@ -48,7 +48,7 @@ const dana: BorrowerInput = {
   statedMonthlyIncome: 8_500,
 };
 
-async function applicationFile(stage: "CREDIT" | "BANK" = "CREDIT") {
+async function applicationFile(stage: "CREDIT" | "BANK" | "PAYROLL" | "DECISION" = "CREDIT") {
   const user = await createUser();
   const file = await createLoanFile({ userId: user.id, stage });
   // The address screen 1 took, without which the projection has no property to
@@ -189,20 +189,22 @@ describe("what the screen posts", () => {
     expect(loaded!.borrowers[0]!.residences).toEqual([]);
   });
 
-  it("hands the file to the bank step, and never backwards", async () => {
-    // The stage is the step reached. Answering screen 3 reaches screen 4;
-    // this used to advance to DECLARATIONS, the step just finished, which was
-    // a no-op behind the credit route's BANK and would otherwise have resumed
-    // a borrower to the questions they had just answered.
-    const { user, file } = await applicationFile();
+  it("hands the file past the questions, and never backwards", async () => {
+    // The stage is the step reached. Answering the questions reaches the
+    // review (PAYROLL resumes there); this used to advance to DECLARATIONS,
+    // the step just finished, which was a no-op behind the credit route and
+    // would otherwise have resumed a borrower to answers they had given.
+    const { user, file } = await applicationFile("BANK");
     expect((await post(user.id, file.id, NOTHING_TO_DECLARE)).status).toBe(201);
-    expect((await loadLoanFile(file.id))!.stage).toBe("bank");
+    expect((await loadLoanFile(file.id))!.stage).toBe("payroll");
 
-    // A borrower correcting one answer after connecting their bank is not
-    // dragged back to this screen: the stage is a high-water mark.
-    const later = await applicationFile("BANK");
+    // A borrower correcting one answer from the review is not dragged back:
+    // the stage is a high-water mark. Parked PAST the save's own target, so
+    // an unconditional write would fail this where a file at PAYROLL would
+    // not.
+    const later = await applicationFile("DECISION");
     expect((await post(later.user.id, later.file.id, NOTHING_TO_DECLARE)).status).toBe(201);
-    expect((await loadLoanFile(later.file.id))!.stage).toBe("bank");
+    expect((await loadLoanFile(later.file.id))!.stage).toBe("decision");
   });
 });
 

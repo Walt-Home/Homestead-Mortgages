@@ -294,8 +294,8 @@ FlowStage (11)     the 10 above + COMPLETE
                      disagrees with the database, which is what caught the
                      eleventh name being added in four places instead of five
 
-borrower screens   1 Property → 2 About you → 3 A few questions →
-        (5)        4 Your bank → 5 Review
+borrower screens   1 Property → 2 About you → 3 Your bank →
+        (5)        4 A few questions → 5 Review
                    + payroll / irs / documents as BRANCHES, never steps
 ```
 
@@ -754,7 +754,7 @@ permanent, tamper-evident record of a breach we never had the means to avoid.
 - **Manual bank-statement upload collects filenames and sends nothing.** Document
   upload records metadata with `storageUri: "fixture://content-not-transmitted"`.
   Where the bytes go is a real decision.
-- **`currentHousing` is nullable, and screen 3 is what fills it.** It was
+- **`currentHousing` is nullable, and screen 4 is what fills it.** It was
   `String @default("rent")` NOT NULL and screen 2 sent the literal `"rent"`;
   the column, the route and the screen all stopped manufacturing it together.
   `du_residences` holds the real answer, `POST /files/:id/declaration` writes

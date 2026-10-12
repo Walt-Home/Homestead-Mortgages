@@ -119,7 +119,7 @@ describe("the words above the signature", () => {
       panelTitle: "Your application",
       // The work answers are named in both, because the same signature
       // attests to them and they are asked on this screen rather than on
-      // screen 3 — a panel listing what it covers and leaving out the one
+      // screen 4 — a panel listing what it covers and leaving out the one
       // block the borrower answered directly above it is the panel being
       // wrong about its own subject.
       panelBody:

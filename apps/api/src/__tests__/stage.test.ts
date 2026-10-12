@@ -29,13 +29,14 @@ describe("stage ordering", () => {
   });
 
   it("hands a finished step to the next one in the order, never two on", () => {
-    // The credit route named BANK by hand, two steps past CREDIT, so a
-    // borrower who closed the tab after screen 2 resumed on the bank screen
-    // with Section 5 unasked. Every route reads the order now.
+    // The credit route named a stage by hand, two steps past CREDIT, so a
+    // borrower who closed the tab after screen 2 resumed with the questions
+    // unasked. Every route reads the order now, and the order has the bank
+    // before the questions since 12 October 2026.
     expect(stageAfter("IDENTITY")).toBe("CREDIT");
-    expect(stageAfter("CREDIT")).toBe("DECLARATIONS");
-    expect(stageAfter("DECLARATIONS")).toBe("BANK");
-    expect(stageAfter("BANK")).toBe("PAYROLL");
+    expect(stageAfter("CREDIT")).toBe("BANK");
+    expect(stageAfter("BANK")).toBe("DECLARATIONS");
+    expect(stageAfter("DECLARATIONS")).toBe("PAYROLL");
     for (let i = 0; i < STAGE_ORDER.length - 1; i++) {
       expect(stageIndex(stageAfter(STAGE_ORDER[i]!))).toBe(i + 1);
     }

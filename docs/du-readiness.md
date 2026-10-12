@@ -63,8 +63,8 @@ blocked outside the code
 | --- | ----------------------------------- | --- | --------------------------------------------------------------------------------------------------------------------------- |
 | 1   | One casefile per loan               | 🟢  | Ours is stable; DU's is write-once, written only by `recordDuResponse`                                                      |
 | 2   | Income survives a re-pull           | 🟢  | Snapshot lineage on every row; nothing deletes and recreates                                                                |
-| 3   | Borrower declarations               | 🟢  | Asked on screen 3, stored per person, chains held by CHECKs                                                                 |
-| —   | Current residence                   | 🟢  | The fabricated `"rent"` is gone; screen 3 asks                                                                              |
+| 3   | Borrower declarations               | 🟢  | Asked on screen 4, stored per person, chains held by CHECKs                                                                 |
+| —   | Current residence                   | 🟢  | The fabricated `"rent"` is gone; screen 4 asks                                                                              |
 | 4   | Verification report identifier      | 🟡  | Every row names its snapshot; the asset arc to a verification is disputed in the tab                                        |
 | 5   | Up to four borrowers                | 🟢  | Named, invited, claimed, own half walked; the engine reads everybody's reports                                              |
 | 6   | Assets, liabilities, owned property | 🟢  | Tables, ownership, writers; the credit and bank pulls write them per person                                                 |
@@ -290,7 +290,7 @@ sendable casefile, all built, in three places:
   then names `FinancedUnitCount`. `AttachmentType` is the twelfth column,
   found by the gate the moment a unit count existed to require it. All
   eighteen samples carry it, seven `Attached` and eleven `Detached`.
-- `property_estate_type` is asked on screen 3 as APP-028, because no vendor
+- `property_estate_type` is asked on screen 4 as APP-028, because no vendor
   record carries it and the title commitment does not exist at submission.
 - The three on a job: `EmploymentClassificationType` is derived (the current job
   with the most employment income is Primary), and the two URLA 1b answers are
@@ -312,7 +312,7 @@ trial account allows 100 property requests and 25 valuations a day, three and
 one per borrower lookup, and nothing counts them. The first-time-buyer flag
 used to come off the county record on screen 2, as `true` when there was no
 record, and `?? true` again at signing. Since 12 October 2026 it reads off the
-person's own answer to URLA 5a.1.1 on screen 3, is false on a refinance, and
+person's own answer to URLA 5a.1.1 on screen 4, is false on a refinance, and
 is null for a non-occupant purchase borrower, whom no screen asks yet: APP-021
 blocks for them rather than passing on a guess.
 

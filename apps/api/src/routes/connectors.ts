@@ -12,6 +12,7 @@ import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import {
   assertFileAccess,
   loadLoanFile,
+  ownsFile,
   recordEvent,
   recordSnapshot,
 } from "../services/repository.js";
@@ -269,7 +270,7 @@ connectorRouter.post(
 
     await recordEvent(id, "connector_pull", result.provider, { kind: "credit" }, "CRD-001");
     // The step after the credit pull, whichever the order says it is. Naming
-    // `BANK` here skipped screen 3 for anybody who resumed.
+    // a stage here by hand once skipped the questions for anybody who resumed.
     await advanceStage(id, stageAfter("CREDIT"));
 
     res.status(201).json({ report: result.data, provider: result.provider });
@@ -388,7 +389,20 @@ connectorRouter.post(
         beginsWorkFromIntake: true,
       });
     });
-    await advanceStage(id, stageAfter("BANK"));
+    // The stage is the applicant's resume point, as on the declaration save.
+    // The step after the bank is the questions, unless the applicant has
+    // already answered them: a file that walked the old order, or a person who
+    // took "Answer the questions first" on the bank screen. Then the bank was
+    // the last step before the review.
+    if (await ownsFile(id, req.user!.id)) {
+      const answered = await prisma.duDeclaration.findFirst({
+        where: {
+          applicationParty: { application: { loanFileId: id }, partyId: subject.partyId },
+        },
+        select: { id: true },
+      });
+      await advanceStage(id, answered ? stageAfter("DECLARATIONS") : stageAfter("BANK"));
+    }
 
     res.status(201).json({
       report: result.data,

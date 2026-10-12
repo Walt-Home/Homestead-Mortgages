@@ -132,9 +132,8 @@ export function IdentityReturnPage() {
           await queryClient.invalidateQueries({ queryKey: ["assessment"] });
           // Where screen 2 itself goes. This path IS screen 2's submit,
           // resumed after a redirect, so it owes the borrower the same next
-          // step — and the next step is the declarations, which nothing but a
-          // forward navigation reaches.
-          if (!cancelled) navigate(`/f/${fileId}/declarations`);
+          // step — the bank, which nothing but a forward navigation reaches.
+          if (!cancelled) navigate(`/f/${fileId}/bank`);
           return;
         }
         if (r.status === "failed") {
@@ -225,7 +224,7 @@ export function IdentityReturnPage() {
 
               After Continue, the form and the consents are already saved, so
               the rest of the flow works while the check finishes, and forward
-              is screen 3. From the ID button nothing is saved at all — no
+              is screen 3, the bank. From the ID button nothing is saved at all — no
               borrower, no APP-005 — so a later screen answers 403 and the
               borrower is told they need an authorization they were never
               offered. Back to screen 2, where the form they were filling in
@@ -233,7 +232,7 @@ export function IdentityReturnPage() {
             */}
             <button
               className="super-btn super-btn-primary"
-              onClick={() => navigate(`/f/${fileId}/${fromPrefill ? "identity" : "declarations"}`)}
+              onClick={() => navigate(`/f/${fileId}/${fromPrefill ? "identity" : "bank"}`)}
             >
               {fromPrefill ? "Back to your details" : "Carry on"}
             </button>

@@ -146,7 +146,7 @@ describe("the onboarding flow", () => {
       .filter((a) => a.satisfaction.status === "satisfied")
       .map((a) => a.requirement.id);
     // APP-028 is on the file rather than on each borrower — one house is held
-    // on one estate — and it is named here because screen 3 is the only place
+    // on one estate — and it is named here because screen 4 is the only place
     // it can be answered: nothing retrieved carries it, so a walk that reached
     // this point with it already satisfied would be a fixture answering for a
     // borrower who was never asked.

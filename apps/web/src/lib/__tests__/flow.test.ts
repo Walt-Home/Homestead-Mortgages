@@ -19,7 +19,7 @@
 
 import { describe, expect, it } from "vitest";
 import { FLOW_STAGES } from "@hm/shared";
-import { SCREENS, STAGE_TO_SCREEN, reachedIndex } from "../flow.js";
+import { SCREENS, STAGE_TO_SCREEN, reachedIndex, resumeForCoBorrower } from "../flow.js";
 
 const PATHS: readonly string[] = SCREENS.map((s) => s.path);
 
@@ -50,5 +50,42 @@ describe("every stage the server can send", () => {
 describe("a file nobody has started", () => {
   it("is at the first step, not before it", () => {
     expect(reachedIndex(undefined)).toBe(0);
+  });
+});
+
+describe("where a co-borrower's own half resumes", () => {
+  // Nothing stores a stage for them, so this reads their rows and links. The
+  // bank before the questions, as for the applicant (12 October 2026); a
+  // co-borrower who answered the questions first is sent to the step they
+  // have not done.
+  it("walks identity, bank, questions, review", () => {
+    expect(resumeForCoBorrower({ invited: true, declared: false, bankLinked: false })).toBe(
+      "identity",
+    );
+    expect(resumeForCoBorrower({ invited: false, declared: false, bankLinked: false })).toBe(
+      "bank",
+    );
+    expect(resumeForCoBorrower({ invited: false, declared: false, bankLinked: true })).toBe(
+      "declarations",
+    );
+    expect(resumeForCoBorrower({ invited: false, declared: true, bankLinked: true })).toBe(
+      "review",
+    );
+  });
+
+  it("sends a person who answered the questions first to the bank, not past it", () => {
+    expect(resumeForCoBorrower({ invited: false, declared: true, bankLinked: false })).toBe("bank");
+  });
+
+  it("walks the steps in the order SCREENS names them", () => {
+    const walked = [
+      resumeForCoBorrower({ invited: false, declared: false, bankLinked: false }),
+      resumeForCoBorrower({ invited: false, declared: false, bankLinked: true }),
+      resumeForCoBorrower({ invited: false, declared: true, bankLinked: true }),
+    ];
+    const order = SCREENS.map((s) => s.path);
+    expect(walked.map((p) => order.indexOf(p))).toEqual(
+      [...walked.map((p) => order.indexOf(p))].sort((a, b) => a - b),
+    );
   });
 });

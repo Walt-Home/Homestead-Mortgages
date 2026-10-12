@@ -204,7 +204,7 @@ export const STAGE_TO_DOMAIN = {
 /**
  * First-time homebuyer, read from what the person actually said.
  *
- * Screen 3 asks URLA 5a.1.1, "Have you owned a home in the past three
+ * Screen 4 asks URLA 5a.1.1, "Have you owned a home in the past three
  * years?", of a borrower who intends to occupy a purchase; that answer IS
  * the flag, and it wins over any fact on the party. A refinance is of a home
  * the person owns, which is an ownership interest inside three years, so the

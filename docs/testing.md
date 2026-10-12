@@ -5,12 +5,13 @@ data only**: no real Social Security number, no real ID, no real bank.
 
 ## Where
 
-| What               | Where                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| The borrower app   | https://staging.app.supermortgage.com                                                |
-| The ops console    | https://staging.servicing.supermortgage.com/console                                  |
-| What is real today | https://staging.app.supermortgage.com/api/health, under `providers`                  |
-| The engine's view  | add `?debug=1` to any file URL (requirement ids, blocked roots; never for borrowers) |
+| What                 | Where                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------ |
+| The borrower app     | https://staging.app.supermortgage.com                                                |
+| The ops console      | https://staging.servicing.supermortgage.com/console                                  |
+| What is real today   | https://staging.app.supermortgage.com/api/health, under `providers`                  |
+| The engine's view    | add `?debug=1` to any file URL (requirement ids, blocked roots; never for borrowers) |
+| The property vendors | https://staging.app.supermortgage.com/demo/property, as anyone signed in             |
 
 ## Sign in
 
@@ -36,6 +37,23 @@ caption saying what the report found. That is not the connection failing:
 the engine counts only income whose continuance has been decided, and no
 step decides it yet. Debt-to-income stays pending for the same reason, and
 the decision ends **Referred**. That is the expected ending today.
+
+## The property record, live
+
+`/demo/property` is screen 1's lookup on its own: type an address, pick
+the one Google offers, and read the county record and the estimate
+CoreLogic answers, with the raw response beneath. It touches no file, so a
+sample borrower's session can use it too.
+
+- **Pick a real building.** Google also offers house numbers it has guessed
+  between two it knows, and CoreLogic holds no record for those. "No record
+  for that address" is a true answer, not a fault.
+- A parcel that is not a home (an office, a monument) is refused rather than
+  guessed onto an application, and the notice says so.
+- The flood zone reads "not determined" everywhere. No flood vendor is wired.
+- CoreLogic is on a trial key, about 100 records and 25 estimates a day for
+  everyone together, so a lookup that stops answering late in the day is the
+  cap.
 
 ## Plaid test users
 

@@ -10,6 +10,7 @@ import { vendorDemoVisible } from "../../lib/auth.js";
 import {
   LookupView,
   PropertyDemoPage,
+  elapsed,
   lookupFailureCopy,
   type LookupResponse,
 } from "../PropertyDemoPage.js";
@@ -51,19 +52,23 @@ const ANSWER: LookupResponse = {
   },
 };
 
+const pill = (name: string) => `<span class="super-pill">${name}</span>`;
+
 describe("the answer", () => {
   const markup = renderToStaticMarkup(<LookupView result={ANSWER} ms={412.6} />);
 
   it("names who answered each part, and never claims the vendor for the fixture's half", () => {
     expect(markup).toContain("Answered in 413 ms");
-    expect(markup).toContain("<code>corelogic</code>");
-    expect(markup).toContain("<code>corelogic-thvOriginations</code>");
-    expect(markup).toContain("<code>fixture-flood</code>");
+    expect(markup).toContain(pill("corelogic"));
+    expect(markup).toContain(pill("corelogic-thvOriginations"));
+    expect(markup).toContain(pill("fixture-flood"));
+    expect(markup).not.toContain(pill("nobody"));
   });
 
   it("lays the record out to be read, and leaves a figure the county did not report out", () => {
     expect(markup).toContain("Single-family, detached");
-    expect(markup).toContain("TRAVIS County · APN 01-1423-0209");
+    // The county shouts its own name; the page does not.
+    expect(markup).toContain("Travis County · APN 01-1423-0209");
     expect(markup).toContain("$389,000");
     expect(markup).toContain("$8,216/yr");
     expect(markup).toContain("1,840 sq ft");
@@ -81,6 +86,11 @@ describe("the answer", () => {
     expect(markup).toContain("The raw response");
     expect(markup).toContain("&quot;apn&quot;: &quot;01-1423-0209&quot;");
   });
+
+  it("reads the time in the unit a person would", () => {
+    expect(elapsed(412.6)).toBe("413 ms");
+    expect(elapsed(1498)).toBe("1.5 s");
+  });
 });
 
 describe("an answer with no valuation and no flood determination", () => {
@@ -97,34 +107,36 @@ describe("an answer with no valuation and no flood determination", () => {
   );
 
   it("says so in words, and names nobody for them", () => {
-    expect(markup).toContain("No automated valuation for this parcel.");
+    expect(markup).toContain("No automated valuation.");
     expect(markup).toContain("Not determined. No flood vendor is wired yet");
-    expect(markup).toContain("valuation from nobody");
-    expect(markup).toContain("flood from nobody");
+    expect(markup.split(pill("nobody")).length - 1).toBe(2);
     expect(markup).not.toContain("Zone ");
     expect(markup).toContain("$389,000");
   });
 });
 
 describe("a lookup that did not answer", () => {
-  it("says no record, in the server's words", () => {
+  it("says no record, in the server's words, as a notice and not a failure", () => {
     const copy = lookupFailureCopy(
       new ApiError(404, "No public record found for 1 Nowhere Ln.", "ADDRESS_NOT_FOUND"),
     );
     expect(copy.title).toBe("No record for that address");
     expect(copy.body).toBe("No public record found for 1 Nowhere Ln.");
+    expect(copy.tone).toBe("notice");
   });
 
   it("says the session may not ask, and otherwise that the lookup did not come back", () => {
-    expect(lookupFailureCopy(new ApiError(403, "read only", "PERSONA_READ_ONLY")).title).toBe(
-      "This session may not ask",
-    );
-    expect(lookupFailureCopy(new Error("boom")).title).toBe("The lookup did not come back");
+    const refused = lookupFailureCopy(new ApiError(403, "read only", "PERSONA_READ_ONLY"));
+    expect(refused.title).toBe("This session may not ask");
+    expect(refused.tone).toBe("notice");
+    const broken = lookupFailureCopy(new Error("boom"));
+    expect(broken.title).toBe("The lookup did not come back");
+    expect(broken.tone).toBe("danger");
   });
 });
 
 describe("the page", () => {
-  it("opens with the input and a button that waits for an address", () => {
+  it("opens with the input and nothing fetched: picking an address is the fetch", () => {
     const markup = renderToStaticMarkup(
       <MemoryRouter>
         <PropertyDemoPage />
@@ -132,7 +144,8 @@ describe("the page", () => {
     );
     expect(markup).toContain("The county record, live");
     expect(markup).toContain('id="demo-address"');
-    expect(markup).toMatch(/<button[^>]*disabled[^>]*>Fetch the property record<\/button>/);
+    expect(markup).not.toContain("<button");
+    expect(markup).not.toContain("Answered in");
   });
 
   it("is reachable where the sample borrowers are, sample borrower or not, and nowhere else", () => {

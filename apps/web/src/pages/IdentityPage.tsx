@@ -30,6 +30,8 @@ import { Working } from "../components/Working.js";
 import { creditCheckCopy, identityCheckCopy, modeOf, ssnDisclosure } from "../lib/disclosures.js";
 import { WAITING_COPY } from "../lib/outcomes.js";
 import { YesNoQuestion } from "../components/YesNoQuestion.js";
+import { Found } from "../components/Found.js";
+import { outcomeFor, sameValue, suggestionFor } from "../lib/autofill.js";
 import type { YesNo } from "../lib/declarations.js";
 import { COMMUNITY_PROPERTY_STATES } from "@hm/shared";
 
@@ -236,6 +238,14 @@ export function IdentityPage() {
   // browser storage, so it is retyped after a redirect.
   const [ssn, setSsn] = useState("");
   const [phone, setPhone] = useState(() => (fileId ? (readDraft(fileId)?.phone ?? "") : ""));
+  /*
+   * The phone a returning person gave on an earlier application, offered as
+   * one line under the field until they have said who they are on this one;
+   * after that the server stops offering it, because the field reads their
+   * stored answer back. Never put into the field without their tap.
+   */
+  const phoneFound = suggestionFor(data?.suggestions, "phone");
+  const [phoneDismissed, setPhoneDismissed] = useState(false);
   /*
    * Every question starts unanswered, including the consent.
    *
@@ -511,6 +521,11 @@ export function IdentityPage() {
         // let the receipt count it as one of the six pieces. Absent asserts
         // nothing, and the figure screen 1 recorded stands.
         ...(statedIncome > 0 ? { statedMonthlyIncome: statedIncome } : {}),
+        // What became of the phone line, which renders whenever there is one
+        // to offer, because the field starts empty on a new application.
+        ...(phoneFound
+          ? { autofill: [outcomeFor(phoneFound, phone || null, phoneDismissed)] }
+          : {}),
       });
 
       // The person they are applying with, named and nothing more. Once: a
@@ -810,6 +825,14 @@ export function IdentityPage() {
           value={phone}
           onChange={(e) => setPhone(formatPhone(e.target.value))}
         />
+        {phoneFound && !phoneDismissed && !sameValue(phoneFound.value, phone) && (
+          <Found
+            suggestion={phoneFound}
+            onUse={() => setPhone(formatPhone(String(phoneFound.value)))}
+            onDismiss={() => setPhoneDismissed(true)}
+            dismissLabel="Not this number"
+          />
+        )}
       </div>
 
       {/* 4 — Citizenship */}

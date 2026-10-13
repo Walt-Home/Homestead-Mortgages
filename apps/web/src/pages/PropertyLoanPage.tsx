@@ -25,6 +25,8 @@ import { INCOME_WORKED_OUT_FROM_BANK, money } from "../lib/figures.js";
 import { PROPERTY_CORRECTION_PROMPT, PROPERTY_CORRECTION_RECORDED } from "../lib/disclosures.js";
 import { Why } from "../components/Why.js";
 import { Working } from "../components/Working.js";
+import { Found } from "../components/Found.js";
+import { outcomeFor, suggestionFor, usePersonSuggestions } from "../lib/autofill.js";
 
 interface Address {
   line1: string;
@@ -231,6 +233,15 @@ export function PropertyLoanPage() {
   const [price, setPrice] = useState("");
   const [down, setDown] = useState("");
   const [income, setIncome] = useState("");
+  /*
+   * The income this person last stated, offered as one line under the field:
+   * on a new application, and on a revisit, where the field is not restored.
+   * Never put into the field; "Use it" is the person's own tap. Served about
+   * the person rather than beside a file, because a new application has none.
+   */
+  const { data: personal } = usePersonSuggestions();
+  const incomeFound = suggestionFor(personal, "stated_monthly_income");
+  const [incomeDismissed, setIncomeDismissed] = useState(false);
 
   const [correction, setCorrection] = useState<{
     note: string;
@@ -425,6 +436,11 @@ export function PropertyLoanPage() {
         loanAmount: Math.max(0, priceNum - downNum),
         downPayment: downNum,
         statedMonthlyIncome: incomeNum,
+        // What became of the income line, which renders whenever there is one
+        // to offer: the field starts empty on every visit.
+        ...(incomeFound
+          ? { autofill: [outcomeFor(incomeFound, incomeNum || null, incomeDismissed)] }
+          : {}),
       };
 
       const id = editing
@@ -441,6 +457,8 @@ export function PropertyLoanPage() {
         await api.post(`/files/${id}/property-correction`, correction).catch(() => undefined);
       }
       await queryClient.invalidateQueries({ queryKey: ["file", id] });
+      // The figure just stated is the one to offer next time.
+      await queryClient.invalidateQueries({ queryKey: ["suggestions"] });
       // The server records the stated income as a fact on the person, so it is
       // no longer carried here to keep it. It rides along only so screen 2 can
       // prefill the field the borrower has already answered.
@@ -763,6 +781,14 @@ export function PropertyLoanPage() {
           value={income}
           onChange={(e) => setIncome(e.target.value.replace(/[^\d]/g, ""))}
         />
+        {incomeFound && !incomeDismissed && Number(income) !== incomeFound.value && (
+          <Found
+            suggestion={incomeFound}
+            onUse={() => setIncome(String(incomeFound.value))}
+            onDismiss={() => setIncomeDismissed(true)}
+            dismissLabel="It's changed"
+          />
+        )}
         <Why>
           A rough number is enough — later we {INCOME_WORKED_OUT_FROM_BANK}. We ask now because it
           lets us tell you straight away if the loan will not work.

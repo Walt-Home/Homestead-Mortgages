@@ -151,7 +151,7 @@ const RENT_FOUND = {
   source: "bank",
   tag: "From your bank activity",
   basis: "Your bank shows $2,150 a month to OAKRIDGE PROPERTY MGMT",
-  evidence: { snapshotId: "s1", retrievedAt: "2026-10-12T12:00:00Z" },
+  evidence: { kind: "snapshot", id: "s1", at: "2026-10-12T12:00:00Z" },
   evidenceTier: "estimated",
   partyId: "p1",
 } as const;

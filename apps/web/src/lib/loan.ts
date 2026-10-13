@@ -16,6 +16,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import type { AutofillOutcomeInput } from "@hm/shared";
 import { api, ApiError } from "./api.js";
 import { money } from "./figures.js";
 import { entryFor } from "./states.js";
@@ -257,7 +258,12 @@ export function useLoanServicing(loanId: string | undefined) {
 export function answerOffer(
   loanId: string,
   offerId: string,
-  body: { answer: OfferAnswer; statedMonthlyIncome?: number },
+  body: {
+    answer: OfferAnswer;
+    statedMonthlyIncome?: number;
+    /** What became of the income line the card rendered, if it rendered one. */
+    autofill?: AutofillOutcomeInput[];
+  },
 ) {
   return api.post<AnsweredOffer>(`/loans/${loanId}/offers/${offerId}/answer`, body);
 }

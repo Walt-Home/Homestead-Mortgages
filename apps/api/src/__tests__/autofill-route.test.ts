@@ -18,6 +18,8 @@ import type { Suggestion } from "@hm/shared";
 import { connectorRouter } from "../routes/connectors.js";
 import { declarationRouter } from "../routes/declarations.js";
 import { fileRouter } from "../routes/files.js";
+import { suggestionRouter } from "../routes/suggestions.js";
+import { assertFacts, servicePrincipal } from "../services/party.js";
 import { loadLoanFile } from "../services/repository.js";
 import { createUser } from "./support/factories.js";
 import { callAs } from "./support/http.js";
@@ -158,7 +160,7 @@ describe("saving the questions", () => {
       autofill: [
         {
           key: "current_monthly_rent",
-          snapshotId: rent!.evidence.snapshotId,
+          evidenceId: rent!.evidence.id,
           outcome: "accepted",
           proposed: rent!.value,
           given: 2_150,
@@ -173,7 +175,7 @@ describe("saving the questions", () => {
     expect(accepted).toHaveLength(1);
     expect(accepted[0]!.payload).toMatchObject({
       key: "current_monthly_rent",
-      snapshotId: rent!.evidence.snapshotId,
+      evidenceId: rent!.evidence.id,
       partyId: h.partyId,
       proposed: rent!.value,
       given: 2_150,
@@ -188,7 +190,7 @@ describe("saving the questions", () => {
       autofill: [
         {
           key: "current_monthly_rent",
-          snapshotId: rent!.evidence.snapshotId,
+          evidenceId: rent!.evidence.id,
           outcome: "dismissed",
         },
       ],
@@ -211,10 +213,183 @@ describe("saving the questions", () => {
     });
     const res = await callAs(h.user.id, [declarationRouter], "POST", `/${h.fileId}/declaration`, {
       ...RENTING,
-      autofill: [{ key: "current_monthly_rent", snapshotId: theirs.id, outcome: "accepted" }],
+      autofill: [{ key: "current_monthly_rent", evidenceId: theirs.id, outcome: "accepted" }],
     });
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ error: { code: "AUTOFILL_NOT_YOURS" } });
     expect(await events(h.fileId, "autofill_accepted")).toHaveLength(0);
+  });
+});
+
+describe("the phone a returning person gave before", () => {
+  it("is offered on their next file before screen 2, and not once they have saved it there", async () => {
+    const h = await linked();
+    const next = await callAs<{ id: string }>(h.user.id, [fileRouter], "POST", "/", SCREEN_ONE);
+    expect(next.status).toBe(201);
+
+    const before = await read(h.user.id, next.body.id);
+    const phone = before.body.suggestions.find((s) => s.key === "phone");
+    expect(phone).toMatchObject({
+      value: "555-555-0144",
+      source: "prior_statement",
+      tag: "What you told us before",
+      partyId: h.partyId,
+    });
+    expect(phone!.evidence.kind).toBe("fact");
+    expect(await events(next.body.id, "autofill_shown")).toHaveLength(1);
+
+    const saved = await callAs(h.user.id, [fileRouter], "POST", `/${next.body.id}/borrowers`, {
+      ...DANA,
+      autofill: [
+        {
+          key: "phone",
+          evidenceId: phone!.evidence.id,
+          outcome: "accepted",
+          proposed: phone!.value,
+          given: "555-555-0144",
+        },
+      ],
+    });
+    expect(saved.status, JSON.stringify(saved.body)).toBe(201);
+    const accepted = await prisma.fileEvent.findMany({
+      where: { loanFileId: next.body.id, kind: "autofill_accepted" },
+      select: { payload: true, requirementId: true, actor: true },
+    });
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0]).toMatchObject({ requirementId: "APP-001", actor: "borrower" });
+    expect(accepted[0]!.payload).toMatchObject({
+      key: "phone",
+      evidenceId: phone!.evidence.id,
+      partyId: h.partyId,
+    });
+
+    // Their row is here now, and screen 2 reads their own answer back.
+    const after = await read(h.user.id, next.body.id);
+    expect(after.body.suggestions.find((s) => s.key === "phone")).toBeUndefined();
+  });
+
+  it("is never what somebody else said about them", async () => {
+    // A SELF_ATTESTED row asserted by a principal that is not the person's
+    // own is a statement about them, not by them: "what you told us before"
+    // would be false of it.
+    const user = await createUser();
+    const created = await callAs<{ id: string }>(user.id, [fileRouter], "POST", "/", SCREEN_ONE);
+    const { partyId } = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: { partyId: true },
+    });
+    const service = await servicePrincipal(prisma, "claim_flow");
+    await prisma.$transaction((tx) =>
+      assertFacts(tx, partyId!, service, [{ predicate: "phone", value: "5125550142" }]),
+    );
+    const res = await read(user.id, created.body.id);
+    expect(res.body.suggestions).toEqual([]);
+  });
+
+  it("refuses an outcome naming a statement that is not the reader's own, and writes nothing", async () => {
+    const h = await linked();
+    const other = await linked();
+    const theirs = await prisma.fact.findFirstOrThrow({
+      where: { partyId: other.partyId, predicate: "phone" },
+      select: { id: true },
+    });
+    const next = await callAs<{ id: string }>(h.user.id, [fileRouter], "POST", "/", SCREEN_ONE);
+    const res = await callAs(h.user.id, [fileRouter], "POST", `/${next.body.id}/borrowers`, {
+      ...DANA,
+      autofill: [{ key: "phone", evidenceId: theirs.id, outcome: "accepted" }],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: { code: "AUTOFILL_NOT_YOURS" } });
+    expect(await prisma.borrower.count({ where: { loanFileId: next.body.id } })).toBe(0);
+  });
+});
+
+describe("before a file exists", () => {
+  type Offered = { suggestions: Suggestion[] };
+  const offered = (userId: string) =>
+    callAs<Offered>(userId, [suggestionRouter], "GET", "/", undefined, "/api/suggestions");
+
+  it("offers somebody new nothing, and a sample borrower nothing", async () => {
+    const fresh = await createUser();
+    expect((await offered(fresh.id)).body.suggestions).toEqual([]);
+    const maya = await createUser({ personaKey: "maya_okafor" });
+    expect((await offered(maya.id)).body.suggestions).toEqual([]);
+  });
+
+  it("offers the income the person last stated, and records what screen 1 did with it", async () => {
+    const user = await createUser();
+    expect((await callAs(user.id, [fileRouter], "POST", "/", SCREEN_ONE)).status).toBe(201);
+
+    const [income, ...rest] = (await offered(user.id)).body.suggestions;
+    expect(rest).toHaveLength(0);
+    expect(income).toMatchObject({
+      key: "stated_monthly_income",
+      screen: "property",
+      value: 9_400,
+      source: "prior_statement",
+      tag: "What you told us before",
+    });
+    expect(income!.evidence.kind).toBe("fact");
+
+    // The next application, taking the line with one tap.
+    const second = await callAs<{ id: string }>(user.id, [fileRouter], "POST", "/", {
+      ...SCREEN_ONE,
+      autofill: [
+        {
+          key: "stated_monthly_income",
+          evidenceId: income!.evidence.id,
+          outcome: "accepted",
+          proposed: 9_400,
+          given: 9_400,
+        },
+      ],
+    });
+    expect(second.status, JSON.stringify(second.body)).toBe(201);
+    const accepted = await prisma.fileEvent.findMany({
+      where: { loanFileId: second.body.id, kind: "autofill_accepted" },
+      select: { payload: true, requirementId: true },
+    });
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0]).toMatchObject({ requirementId: "APP-002" });
+    expect(accepted[0]!.payload).toMatchObject({ key: "stated_monthly_income", given: 9_400 });
+
+    // A revisit of screen 1 that types a different figure is a correction,
+    // recorded on the file it was made on, and the figure becomes the next
+    // one offered.
+    const [again] = (await offered(user.id)).body.suggestions;
+    const edited = await callAs(user.id, [fileRouter], "PATCH", `/${second.body.id}`, {
+      statedMonthlyIncome: 10_200,
+      autofill: [
+        {
+          key: "stated_monthly_income",
+          evidenceId: again!.evidence.id,
+          outcome: "corrected",
+          proposed: 9_400,
+          given: 10_200,
+        },
+      ],
+    });
+    expect(edited.status, JSON.stringify(edited.body)).toBe(200);
+    expect(await events(second.body.id, "autofill_corrected")).toHaveLength(1);
+    expect((await offered(user.id)).body.suggestions[0]!.value).toBe(10_200);
+  });
+
+  it("refuses an income outcome that is not the reader's own, and creates no file", async () => {
+    const someone = await createUser();
+    await callAs(someone.id, [fileRouter], "POST", "/", SCREEN_ONE);
+    const [theirs] = (await offered(someone.id)).body.suggestions;
+
+    const me = await createUser();
+    await callAs(me.id, [fileRouter], "POST", "/", SCREEN_ONE);
+    const before = await prisma.loanFile.count({ where: { userId: me.id } });
+    const res = await callAs(me.id, [fileRouter], "POST", "/", {
+      ...SCREEN_ONE,
+      autofill: [
+        { key: "stated_monthly_income", evidenceId: theirs!.evidence.id, outcome: "accepted" },
+      ],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: { code: "AUTOFILL_NOT_YOURS" } });
+    expect(await prisma.loanFile.count({ where: { userId: me.id } })).toBe(before);
   });
 });

@@ -1,21 +1,29 @@
 /**
- * The pure half of the autofill: what a reader is offered, from rows that
+ * The pure halves of the autofill: what a reader is offered, from rows that
  * already exist, and under what the rules refuse.
  *
- * No database here. `suggestionsFor` takes the reader's own newest bank
- * snapshot and what they dismissed, and the cases below are the refusals the
- * design lists: nothing without a report, nothing from a report ordered under
- * any purpose but an extension of credit, nothing the reader dismissed on the
- * same snapshot (a newer one offers again), nothing for a run the detector did
- * not call rent, and never a figure that is not positive.
+ * No database here. The file scope takes the reader's own newest bank
+ * snapshot, their own earlier phone, whether they have a row on the file yet
+ * and what they dismissed; the person scope takes their own earlier income.
+ * The cases are the refusals the design lists: nothing without evidence,
+ * nothing bank-sourced under any purpose but an extension of credit, nothing
+ * the reader dismissed on the same evidence (newer evidence offers again),
+ * nothing for a run the detector did not call rent, never a figure that is
+ * not positive, and a phone only before the person has said who they are.
  */
 
 import { describe, expect, it } from "vitest";
 import type { AssetReport } from "@hm/shared";
 import { dismissalKey, EXTENSION_OF_CREDIT, SUGGESTION_KEYS } from "@hm/shared";
-import { suggestionsFor, type OwnBankSnapshot } from "../services/autofill.js";
+import {
+  fileSuggestionsFor,
+  personSuggestionsFor,
+  type OwnBankSnapshot,
+  type PriorStatement,
+} from "../services/autofill.js";
 
 const PARTY = "11111111-1111-4111-8111-111111111111";
+const FACT = "44444444-4444-4444-8444-444444444444";
 
 function report(over: Partial<AssetReport> = {}): AssetReport {
   return {
@@ -59,12 +67,28 @@ function own(
   };
 }
 
-const read = (o: OwnBankSnapshot | null, dismissed: string[] = []) =>
-  suggestionsFor({ partyId: PARTY, own: o, dismissed: new Set(dismissed) });
+const said = (value: unknown, over: Partial<PriorStatement> = {}): PriorStatement => ({
+  id: FACT,
+  value,
+  observedAt: "2026-03-14T15:00:00Z",
+  ...over,
+});
+
+const onFile = (
+  o: OwnBankSnapshot | null,
+  opts: { phone?: PriorStatement | null; hasOwnRow?: boolean; dismissed?: string[] } = {},
+) =>
+  fileSuggestionsFor({
+    partyId: PARTY,
+    own: o,
+    priorPhone: opts.phone ?? null,
+    hasOwnRow: opts.hasOwnRow ?? true,
+    dismissed: new Set(opts.dismissed ?? []),
+  });
 
 describe("the rent caption", () => {
   it("is offered from the person's own category-gated rent run, with the figure and the payee in it", () => {
-    const [rent, ...rest] = read(own());
+    const [rent, ...rest] = onFile(own());
     expect(rest).toHaveLength(0);
     expect(rent).toMatchObject({
       key: "current_monthly_rent",
@@ -78,28 +102,32 @@ describe("the rent caption", () => {
       partyId: PARTY,
     });
     expect(rent!.basis).toBe("Your bank shows $2,150 a month to OAKRIDGE PROPERTY MGMT");
-    expect(rent!.evidence.snapshotId).toBe("22222222-2222-4222-8222-222222222222");
+    expect(rent!.evidence).toEqual({
+      kind: "snapshot",
+      id: "22222222-2222-4222-8222-222222222222",
+      at: "2026-10-12T12:00:00Z",
+    });
   });
 
   it("offers nothing without a report of the person's own", () => {
-    expect(read(null)).toEqual([]);
+    expect(onFile(null)).toEqual([]);
   });
 
   it("offers nothing from a report the bureau was not told is for an extension of credit", () => {
     // FCRA 1681b(f): the purpose certified at order time is the one the
     // report may serve. A purpose nobody recorded is not a purpose.
-    expect(read(own({ permissiblePurpose: null }))).toEqual([]);
-    expect(read(own({ permissiblePurpose: "WRITTEN_INSTRUCTION_PREQUALIFICATION" }))).toEqual([]);
+    expect(onFile(own({ permissiblePurpose: null }))).toEqual([]);
+    expect(onFile(own({ permissiblePurpose: "WRITTEN_INSTRUCTION_PREQUALIFICATION" }))).toEqual([]);
   });
 
   it("offers nothing where the detector found no rent, and never a figure that is not positive", () => {
-    expect(read(own({}, { alternativeReferences: [], identifiedMonthlyRent: undefined }))).toEqual(
-      [],
-    );
-    expect(read(own({}, { identifiedMonthlyRent: 0 }))).toEqual([]);
+    expect(
+      onFile(own({}, { alternativeReferences: [], identifiedMonthlyRent: undefined })),
+    ).toEqual([]);
+    expect(onFile(own({}, { identifiedMonthlyRent: 0 }))).toEqual([]);
     // A utility run is not a rent run, however steady.
     expect(
-      read(
+      onFile(
         own(
           {},
           {
@@ -118,11 +146,97 @@ describe("the rent caption", () => {
     ).toEqual([]);
   });
 
-  it("stays dismissed on the snapshot it was dismissed on, and comes back on a newer one", () => {
+  it("stays dismissed on the report it was dismissed on, and comes back on a newer one", () => {
     const first = own();
-    expect(read(first, [dismissalKey("current_monthly_rent", first.id)])).toEqual([]);
+    expect(onFile(first, { dismissed: [dismissalKey("current_monthly_rent", first.id)] })).toEqual(
+      [],
+    );
     const newer = own({ id: "33333333-3333-4333-8333-333333333333" });
-    expect(read(newer, [dismissalKey("current_monthly_rent", first.id)])).toHaveLength(1);
+    expect(
+      onFile(newer, { dismissed: [dismissalKey("current_monthly_rent", first.id)] }),
+    ).toHaveLength(1);
+  });
+});
+
+describe("the phone a returning person gave before", () => {
+  it("is offered on a file where they have not said who they are yet", () => {
+    const [phone, ...rest] = onFile(null, { phone: said("5125550142"), hasOwnRow: false });
+    expect(rest).toHaveLength(0);
+    expect(phone).toMatchObject({
+      key: "phone",
+      screen: "identity",
+      mode: "suggest",
+      target: { kind: "fact", predicate: "phone" },
+      value: "512-555-0142",
+      source: "prior_statement",
+      tag: "What you told us before",
+      basis: "512-555-0142",
+      evidenceTier: "attested",
+      partyId: PARTY,
+    });
+    expect(phone!.evidence).toEqual({ kind: "fact", id: FACT, at: "2026-03-14T15:00:00Z" });
+  });
+
+  it("is not offered once they have a row here, because the screen reads their answer back", () => {
+    expect(onFile(null, { phone: said("5125550142"), hasOwnRow: true })).toEqual([]);
+  });
+
+  it("is not offered when it is not a ten-digit number, which the bank screen would refuse", () => {
+    expect(onFile(null, { phone: said("555-0100"), hasOwnRow: false })).toEqual([]);
+    expect(onFile(null, { phone: said(5125550142), hasOwnRow: false })).toEqual([]);
+  });
+
+  it("takes the last ten digits of a number written with its country code", () => {
+    const [phone] = onFile(null, { phone: said("+1 (512) 555-0142"), hasOwnRow: false });
+    expect(phone!.value).toBe("512-555-0142");
+  });
+
+  it("stays dismissed on the statement it was dismissed on", () => {
+    expect(
+      onFile(null, {
+        phone: said("5125550142"),
+        hasOwnRow: false,
+        dismissed: [dismissalKey("phone", FACT)],
+      }),
+    ).toEqual([]);
+  });
+
+  it("rides beside the rent, each on its own evidence", () => {
+    const keys = onFile(own(), { phone: said("5125550142"), hasOwnRow: false }).map((s) => s.key);
+    expect(keys).toEqual(["current_monthly_rent", "phone"]);
+  });
+});
+
+describe("the income a person stated before", () => {
+  const before = (value: unknown) =>
+    personSuggestionsFor({ partyId: PARTY, priorIncome: value === null ? null : said(value) });
+
+  it("is offered as a one-tap line, with the figure and when it was said", () => {
+    const [income, ...rest] = before(9_400);
+    expect(rest).toHaveLength(0);
+    expect(income).toMatchObject({
+      key: "stated_monthly_income",
+      screen: "property",
+      mode: "suggest",
+      target: { kind: "fact", predicate: "monthly_income" },
+      value: 9_400,
+      source: "prior_statement",
+      tag: "What you told us before",
+      basis: "$9,400 a month, in March 2026",
+      evidenceTier: "attested",
+    });
+    expect(income!.evidence).toEqual({ kind: "fact", id: FACT, at: "2026-03-14T15:00:00Z" });
+  });
+
+  it("is a whole-dollar figure, which is what the field takes", () => {
+    expect(before(9_400.6)[0]!.value).toBe(9_401);
+  });
+
+  it("is never offered as nothing, as a negative, or as something that is not a figure", () => {
+    expect(before(null)).toEqual([]);
+    expect(before(0)).toEqual([]);
+    expect(before(-50)).toEqual([]);
+    expect(before("a lot")).toEqual([]);
   });
 });
 

@@ -21,8 +21,10 @@ import { reviewLoans } from "../services/loan-review.js";
 import { createOriginatedLoan } from "../services/loans.js";
 import { importPartnerBook } from "../services/partner-book.js";
 import {
+  assertFacts,
   partnerPrincipal,
   partyForUser,
+  principalForParty,
   servicePrincipal,
   staffPrincipal,
 } from "../services/party.js";
@@ -263,6 +265,54 @@ describe("an offer", () => {
 });
 
 describe("the yes", () => {
+  it("records what the card did with the income the person stated before, on the file the yes opens", async () => {
+    // The offer card asks for an income before a file exists, so the line
+    // under its field is the person-scoped suggestion screen 1 also renders:
+    // their own earlier statement, under their own principal. A tape's figure
+    // is not one, which is why the person has to have said it themselves.
+    const { loanId, userId } = await claimed("NL-100001");
+    await review("2026-09-21");
+    const offer = await prisma.refiOffer.findFirstOrThrow({ where: { loanId } });
+    const partyId = await partyForUser(prisma, userId);
+    const own = await principalForParty(prisma, partyId);
+    await prisma.$transaction((tx) =>
+      assertFacts(tx, partyId, own, [{ predicate: "monthly_income", value: 9_000 }]),
+    );
+    const said = await prisma.fact.findFirstOrThrow({
+      where: { partyId, predicate: "monthly_income", supersededById: null },
+      select: { id: true },
+    });
+
+    const answered = await callAs<{ answer: string; fileId: string }>(
+      userId,
+      [loanRouter],
+      "POST",
+      `/${loanId}/offers/${offer.id}/answer`,
+      {
+        answer: "yes",
+        statedMonthlyIncome: 9_000,
+        autofill: [
+          {
+            key: "stated_monthly_income",
+            evidenceId: said.id,
+            outcome: "accepted",
+            proposed: 9_000,
+            given: 9_000,
+          },
+        ],
+      },
+      "/api/loans",
+    );
+    expect(answered.status, JSON.stringify(answered.body)).toBe(201);
+    const accepted = await prisma.fileEvent.findMany({
+      where: { loanFileId: answered.body.fileId, kind: "autofill_accepted" },
+      select: { requirementId: true, actor: true, payload: true },
+    });
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0]).toMatchObject({ requirementId: "APP-002", actor: "borrower" });
+    expect(accepted[0]!.payload).toMatchObject({ evidenceId: said.id, partyId });
+  });
+
   it("opens a refinance in our five screens, born from the loan with screen 1 answered", async () => {
     const { loanId, userId } = await claimed("NL-100001");
     await review("2026-09-21");

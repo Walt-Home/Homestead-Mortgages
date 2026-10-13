@@ -28,60 +28,18 @@ import { recordEmploymentDeclarations } from "../services/employment-declaration
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "@hm/db";
-import { AUTOFILL_OUTCOMES, AUTOFILL_RULES, SUGGESTION_KEYS } from "@hm/shared";
-import type { AutofillOutcome, SuggestionKey } from "@hm/shared";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
-import { assertFileAccess, ownsFile, recordEvent } from "../services/repository.js";
+import { assertFileAccess, ownsFile } from "../services/repository.js";
+import {
+  assertOutcomesAreTheirs,
+  autofillOutcomesSchema,
+  recordAutofillOutcomes,
+} from "../services/autofill.js";
 import { loadDeclaration, recordDeclaration } from "../services/declarations.js";
 import { partyForUser, partyOfUser, principalForParty } from "../services/party.js";
 import { advanceStage, stageAfter } from "../services/stage.js";
 
 export const declarationRouter = Router();
-
-/**
- * The outcomes a screen reports with its save, as diary rows.
- *
- * Each names the snapshot the suggestion was computed from, which has to be
- * this file's and this person's: a row naming somebody else's report would
- * be a client writing another person's evidence into this person's diary.
- * Actor `borrower`, requirement APP-026 (the residence), and the rules
- * version the suggestion was made under.
- */
-async function recordAutofillOutcomes(
-  loanFileId: string,
-  partyId: string,
-  outcomes: readonly {
-    key: SuggestionKey;
-    snapshotId: string;
-    outcome: AutofillOutcome;
-    proposed?: unknown;
-    given?: unknown;
-  }[],
-): Promise<void> {
-  for (const o of outcomes) {
-    const snapshot = await prisma.connectorSnapshot.findFirst({
-      where: { id: o.snapshotId, loanFileId, partyId },
-      select: { id: true },
-    });
-    if (!snapshot) {
-      throw new AppError(400, "That suggestion is not one of yours.", "AUTOFILL_NOT_YOURS");
-    }
-    await recordEvent(
-      loanFileId,
-      `autofill_${o.outcome}`,
-      "borrower",
-      {
-        key: o.key,
-        snapshotId: o.snapshotId,
-        partyId,
-        proposed: o.proposed ?? null,
-        given: o.given ?? null,
-        rules: AUTOFILL_RULES,
-      },
-      "APP-026",
-    );
-  }
-}
 
 const yesNo = z.enum(["Yes", "No"]);
 
@@ -227,18 +185,7 @@ const bodySchema = z
      * would be without this. A body carrying outcomes and no save is still
      * just a save. See `docs/autofill.md`.
      */
-    autofill: z
-      .array(
-        z.object({
-          key: z.enum(SUGGESTION_KEYS),
-          snapshotId: z.string().uuid(),
-          outcome: z.enum(AUTOFILL_OUTCOMES),
-          proposed: z.unknown().optional(),
-          given: z.unknown().optional(),
-        }),
-      )
-      .max(20)
-      .optional(),
+    autofill: autofillOutcomesSchema,
   })
   .superRefine((body, ctx) => {
     const d = body.declaration;
@@ -360,8 +307,11 @@ declarationRouter.post(
     // applicant before screen 2, or staff — it is still Borrower 1.
     const borrowerId = input.borrowerId ?? (await ownRowOn(id, partyId));
 
+    // Refused before the save, so an outcome naming somebody else's evidence
+    // writes nothing at all.
+    await assertOutcomesAreTheirs(prisma, id, partyId, input.autofill ?? []);
     const view = await recordDeclaration(id, { ...input, borrowerId, assertedByPrincipalId });
-    await recordAutofillOutcomes(id, partyId, input.autofill ?? []);
+    if (input.autofill?.length) await recordAutofillOutcomes(prisma, id, partyId, input.autofill);
     // The high-water mark, not a cursor: a borrower who comes back to correct
     // one answer after connecting their bank is not moved back to this screen.
     //

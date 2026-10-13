@@ -34,7 +34,9 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Figure } from "../components/Figure.js";
+import { Found } from "../components/Found.js";
 import { StatusPill } from "../components/StatusPill.js";
+import { outcomeFor, suggestionFor, usePersonSuggestions } from "../lib/autofill.js";
 import { api, ApiError } from "../lib/api.js";
 import { PERSONA_READ_ONLY } from "../lib/auth.js";
 import { SCREENS, STAGE_TO_SCREEN, type FlowStage } from "../lib/flow.js";
@@ -48,7 +50,6 @@ import {
   useLoanServicing,
   type LiveServicing,
   type LoanReviewWire,
-  type OfferAnswer,
   type RefiOfferWire,
   type RefinanceReadinessWire,
   type ServicingObservation,
@@ -356,10 +357,18 @@ function OfferCard({
   const [income, setIncome] = useState("");
   const [error, setError] = useState<string | null>(null);
   const incomeNum = Number(income);
+  /*
+   * The income this person last stated, offered under the card's field as on
+   * screen 1, and for the same reason: the card asks before a file exists.
+   * The line is theirs and only theirs: a figure the servicer's tape carried
+   * is never "what you told us before".
+   */
+  const { data: personal } = usePersonSuggestions();
+  const incomeFound = suggestionFor(personal, "stated_monthly_income");
+  const [incomeDismissed, setIncomeDismissed] = useState(false);
 
   const answer = useMutation({
-    mutationFn: (body: { answer: OfferAnswer; statedMonthlyIncome?: number }) =>
-      answerOffer(loanId, offer.id, body),
+    mutationFn: (body: Parameters<typeof answerOffer>[2]) => answerOffer(loanId, offer.id, body),
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ["loan", loanId, "servicing"] });
       await queryClient.invalidateQueries({ queryKey: ["loans"] });
@@ -448,7 +457,13 @@ function OfferCard({
               e.preventDefault();
               if (!(incomeNum > 0)) return;
               setError(null);
-              answer.mutate({ answer: "yes", statedMonthlyIncome: incomeNum });
+              answer.mutate({
+                answer: "yes",
+                statedMonthlyIncome: incomeNum,
+                ...(incomeFound
+                  ? { autofill: [outcomeFor(incomeFound, incomeNum || null, incomeDismissed)] }
+                  : {}),
+              });
             }}
           >
             <p className="text-lg text-ink">{YES_LEAD}</p>
@@ -467,6 +482,14 @@ function OfferCard({
               onChange={(e) => setIncome(e.target.value)}
               autoFocus
             />
+            {incomeFound && !incomeDismissed && incomeNum !== incomeFound.value && (
+              <Found
+                suggestion={incomeFound}
+                onUse={() => setIncome(String(incomeFound.value))}
+                onDismiss={() => setIncomeDismissed(true)}
+                dismissLabel="It's changed"
+              />
+            )}
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="submit"

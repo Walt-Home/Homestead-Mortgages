@@ -27,9 +27,11 @@ export function Found({
   return (
     <p className="super-source mt-2" data-found={suggestion.key}>
       {suggestion.basis} · {suggestion.tag}
+      {/* A dot between the links as between the words: run together, "Use it
+          It's changed" read as one phrase on a phone. */}
       {onUse && (
         <>
-          {" "}
+          {" · "}
           <button type="button" className="super-link-quiet" onClick={onUse}>
             Use it
           </button>
@@ -37,7 +39,7 @@ export function Found({
       )}
       {onDismiss && (
         <>
-          {" "}
+          {" · "}
           <button type="button" className="super-link-quiet" onClick={onDismiss}>
             {dismissLabel}
           </button>

@@ -26,7 +26,13 @@ import { z } from "zod";
 import { prisma } from "@hm/db";
 import type { ServicingRecord } from "@hm/shared";
 import { asyncRoute } from "../middleware/error-handler.js";
+import {
+  assertOutcomesAreTheirs,
+  autofillOutcomesSchema,
+  recordAutofillOutcomes,
+} from "../services/autofill.js";
 import { connectors } from "../services/connectors.js";
+import { partyOfUser } from "../services/party.js";
 import { latestLoanReview } from "../services/loan-review.js";
 import { toDomainLoanState } from "../services/loan-transition.js";
 import { assertLoanAccess } from "../services/loans.js";
@@ -257,6 +263,8 @@ const answerSchema = z.object({
   answer: z.enum(["yes", "not_now", "never"]),
   /** The one thing screen 1 asks that no tape knows. Required for a yes; the service refuses without it. */
   statedMonthlyIncome: z.number().positive().optional(),
+  /** What became of the income line the card rendered, recorded on the file a yes opens. */
+  autofill: autofillOutcomesSchema,
 });
 
 /**
@@ -273,6 +281,10 @@ loanRouter.post(
     const loanId = z.string().uuid().parse(req.params.id);
     const offerId = z.string().uuid().parse(req.params.offerId);
     const input = answerSchema.parse(req.body);
+    // The income line names the person's own earlier statement, and there is
+    // no file yet. Refused before the answer, so a refusal opens nothing.
+    const asking = await partyOfUser(prisma, req.user!.id);
+    await assertOutcomesAreTheirs(prisma, null, asking, input.autofill ?? []);
     const answered = await answerOffer({
       loanId,
       offerId,
@@ -280,6 +292,10 @@ loanRouter.post(
       answer: input.answer,
       statedMonthlyIncome: input.statedMonthlyIncome,
     });
+    // Only a yes opens a file to record it on, and only a yes renders the line.
+    if (answered.answer === "yes" && input.autofill?.length && asking) {
+      await recordAutofillOutcomes(prisma, answered.fileId, asking, input.autofill);
+    }
     res.status(answered.answer === "yes" ? 201 : 200).json(answered);
   }),
 );

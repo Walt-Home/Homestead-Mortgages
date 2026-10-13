@@ -4532,3 +4532,40 @@ packages, the decision service and the refi analyst for the word.
 AI principal, so a SERVICE principal writing `DERIVED` at `VERIFIED` passed.
 `facts_inference_may_not_verify` caps by source: a derived fact tops out at
 ESTIMATED, an AI's inference at INFERRED, whoever asserts it.
+
+## What you told us before
+
+**Decided 13 October 2026**, the second source on the suggestion machinery
+above, and two keys on it: a returning person's last stated monthly income,
+and their phone.
+
+**A prior statement is the person's own.** It is a live SELF_ATTESTED fact
+asserted under the person's own principal, and nothing else: a figure a
+servicer's tape carried and a name an applicant typed for a co-borrower are
+things said about the person, and "What you told us before" would be false
+of them. The reader finds the principal and never makes one, so a person
+nobody has heard from has nothing to be offered.
+
+**The income is served about the person, not beside a file.** Screen 1 and
+the refinance offer card both ask before a file exists, so `GET
+/api/suggestions` answers for the person signed in (and nothing for a sample
+borrower). It is offered on a revisit of screen 1 too, because that screen
+does not restore the figure into its field. Whole dollars, as a line under
+an empty field: "$9,400 a month, in March 2026 · What you told us before ·
+Use it · It's changed". Nothing is written when it is served, because there
+is no file to write to; what the screen did with it is recorded on the file
+the save creates or edits, under APP-002, the TRID piece it is.
+
+**The phone is served beside the file, until it is theirs there.** It is
+offered on screen 2 only while the reader has no borrower row of their own
+on the file; once they do, the screen reads their stored answer back, which
+is not a suggestion. A number without ten digits is not offered, because
+the bank screen would refuse it. Recorded under APP-001.
+
+**Evidence is a row, whichever kind.** A suggestion now names its evidence
+as `{ kind: "snapshot" | "fact", id, at }`, and a save's outcome names
+`evidenceId`. The check before the save is per source: bank evidence is a
+bank snapshot of the reader's on this file; a prior statement is a
+SELF_ATTESTED fact of the reader's on the key's predicate, live or not,
+since the save about to run may be the one that supersedes it. A refusal is
+a 400 and nothing is written, the file included.

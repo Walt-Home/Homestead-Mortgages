@@ -26,6 +26,7 @@ import { declarationRouter } from "./routes/declarations.js";
 import { partnerRouter } from "./routes/partner.js";
 import { loanRouter } from "./routes/loans.js";
 import { servicerPortalRouter } from "./routes/servicer-portal.js";
+import { suggestionRouter } from "./routes/suggestions.js";
 import { securityHeaders } from "./security-policy.js";
 
 const app = express();
@@ -87,6 +88,7 @@ app.use("/api", personaReadOnly);
 
 app.use("/api/requirements", requirementRouter);
 app.use("/api/property", propertyRouter);
+app.use("/api/suggestions", suggestionRouter);
 app.use("/api/files", fileRouter);
 app.use("/api/files", connectorRouter);
 app.use("/api/files", decisionRouter);

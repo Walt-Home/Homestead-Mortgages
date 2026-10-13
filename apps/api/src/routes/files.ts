@@ -27,7 +27,12 @@ import { assertPurposeInScope } from "../services/scope.js";
 import { connectors } from "../services/connectors.js";
 import { quoteSubjectProduct } from "../services/pricing.js";
 import { advanceStage, stageAfter } from "../services/stage.js";
-import { readSuggestions } from "../services/autofill.js";
+import {
+  assertOutcomesAreTheirs,
+  autofillOutcomesSchema,
+  readFileSuggestions,
+  recordAutofillOutcomes,
+} from "../services/autofill.js";
 import {
   assertFacts,
   liveFact,
@@ -94,6 +99,8 @@ const propertyLoanSchema = z.object({
    */
   cashToBorrower: z.number().min(0).optional(),
   cashOutPurpose: z.string().min(1).optional(),
+  /** What became of the income line the screen rendered, if it rendered one. */
+  autofill: autofillOutcomesSchema,
 });
 
 const PURPOSE_TO_DB = {
@@ -109,6 +116,9 @@ fileRouter.patch(
     const id = z.string().uuid().parse(req.params.id);
     const input = propertyLoanSchema.partial().parse(req.body);
     await assertFileAccess(id, req.user!.id, "own");
+    // Refused before anything is written, so a save never lands half-recorded.
+    const asking = await partyOfUser(prisma, req.user!.id);
+    await assertOutcomesAreTheirs(prisma, id, asking, input.autofill ?? []);
     // Before the transaction, so a purpose we do not underwrite never retires
     // a scenario or mints a version on the way to being refused. A file that
     // ALREADY says cash-out is not rewritten here: it keeps what the borrower
@@ -246,6 +256,9 @@ fileRouter.patch(
       );
       return updated;
     });
+    if (input.autofill?.length && asking) {
+      await recordAutofillOutcomes(prisma, id, asking, input.autofill);
+    }
 
     // The REAL stage. This answered a literal "identity" whatever the file had
     // reached, so a borrower who edited a term from the review screen was told
@@ -265,6 +278,11 @@ fileRouter.post(
     // Before the quote, because asking a pricing vendor for a rate on a loan
     // we will not take is a round trip spent to reach a refusal.
     assertPurposeInScope(input.purpose);
+    // The income line on this screen names the person's own earlier statement,
+    // and there is no file yet for bank evidence to be on. Refused before the
+    // quote and the write, so a refusal creates nothing.
+    const asking = await partyOfUser(prisma, req.user!.id);
+    await assertOutcomesAreTheirs(prisma, null, asking, input.autofill ?? []);
 
     // Priced before the transaction opens, because a quote is a round trip to
     // a vendor and a transaction held open across one holds row locks for as
@@ -373,6 +391,9 @@ fileRouter.post(
     });
 
     await recordEvent(file.id, "screen_completed", "borrower", { screen: "property_loan" });
+    if (input.autofill?.length && asking) {
+      await recordAutofillOutcomes(prisma, file.id, asking, input.autofill);
+    }
     res.status(201).json({
       id: file.id,
       stage: "identity",
@@ -447,6 +468,8 @@ export const identitySchema = z.object({
    * with it.
    */
   statedMonthlyIncome: z.number().positive().optional(),
+  /** What became of the phone line the screen rendered, if it rendered one. */
+  autofill: autofillOutcomesSchema,
 });
 
 fileRouter.post(
@@ -488,6 +511,9 @@ fileRouter.post(
         : null;
     const existingBorrower = own ?? primary;
     const aboutTheApplicant = own === null;
+    // The phone line names the asker's own earlier statement. Refused before
+    // the save, so a refusal writes nothing.
+    await assertOutcomesAreTheirs(prisma, id, asking, input.autofill ?? []);
 
     // A first save is the first time a NUMBER is stated: a named co-borrower
     // has a row before they have typed anything, and `ssn_last4` is what
@@ -602,6 +628,9 @@ fileRouter.post(
     // theirs, and moving the applicant's file to CREDIT on it sent the
     // applicant's next visit past a screen they had not finished.
     if (aboutTheApplicant) await advanceStage(id, stageAfter("IDENTITY"));
+    if (input.autofill?.length && asking) {
+      await recordAutofillOutcomes(prisma, id, asking, input.autofill);
+    }
 
     // Read the file back once, so a party whose facts will not project fails
     // here — as a 500 the client routes to the repair screen — rather than on
@@ -775,7 +804,12 @@ fileRouter.get(
     // demo file offers nothing: a sample borrower's file is everybody's to
     // read and nobody's to answer, and nothing a reader is not a party on
     // can be their own.
-    const suggestions = owner.isDemo || !you ? [] : await readSuggestions(prisma, id, you);
+    const suggestions =
+      owner.isDemo || !you
+        ? []
+        : await readFileSuggestions(prisma, id, you, {
+            hasOwnRow: file.borrowers.some((b) => b.partyId === you),
+          });
     // The promise holds in both directions: the owner reads the whole file
     // and everybody on it but themselves reduced to a name and a status, so
     // a co-borrower's date of birth and answers are theirs alone too.

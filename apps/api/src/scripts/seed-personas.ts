@@ -760,6 +760,7 @@ async function bank(w: Walk): Promise<void> {
     result.retrievedAt,
     w.partyId,
     w.tx,
+    { permissiblePurpose: result.permissiblePurpose ?? null },
   );
   await linked(w, "bank", result.provider);
   await reconcileIncomeAndEmployment(w.tx, {

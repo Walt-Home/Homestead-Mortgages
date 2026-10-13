@@ -681,11 +681,14 @@ Each step is one or two commits and names the test that holds it. Steps 0 to
 1. **Done, 12 October.** Every step advances to `stageAfter(step)`, read off
    `STAGE_ORDER`; the credit pull hands the file to screen 3
    (`pulls-write-rows.test.ts`, `stage.test.ts`).
-2. **The trigger.** `facts_inference_may_not_verify` keyed on `source_kind`.
-   Test: `facts.test.ts` gains SERVICE + DERIVED at VERIFIED refused, at
-   ESTIMATED accepted, SERVICE + VENDOR_RETRIEVED at VERIFIED still accepted,
-   AI_AGENT + AI_INFERRED at ESTIMATED refused.
-3. **The ID read, done right.** First a sandbox experiment: add
+2. **Done, 13 October.** `facts_inference_may_not_verify`, keyed on `source_kind`, in the migration "a suggestion is computed, never stored"; the four cases are in `facts.test.ts`.
+3. **Partly done, 13 October.** The purpose is threaded once (the bank route
+   says it to the adapter, the adapter returns what it sent, `recordSnapshot`
+   writes that) and the rent detector is gated on Plaid's `credit_category`
+   where the lines carry one, with the words as the fallback where they do
+   not (a sandbox custom user, the assets product). The rest of the Stripe
+   and Plaid hygiene in the two steps below is still to do.
+4. **The ID read, done right.** First a sandbox experiment: add
    `expand[]=verified_outputs.dob` under a restricted key
    (`STRIPE_IDENTITY_RESULTS_KEY`, `rk_test_` or `rk_live_`, refused the way
    `stripe-invoicing.ts` refuses a live key) and record in `docs/decisions.md`
@@ -698,7 +701,7 @@ Each step is one or two commits and names the test that holds it. Steps 0 to
    typed entry. Tests: two users mid-scan on one file; the mismatch refusal;
    the request string pins both expansions; the mapped fields are exactly
    first, last, dob, address with line2, created.
-4. **The purpose, threaded once.** The bank route sets `permissiblePurpose`
+5. **The purpose, threaded once.** The bank route sets `permissiblePurpose`
    on the adapter at Link-token time, `EXTENSION_OF_CREDIT` for a file past
    APP-005 once Joe says so; the adapter returns it on the result;
    `recordSnapshot` writes the returned value. Adapter hygiene in the same
@@ -709,7 +712,7 @@ Each step is one or two commits and names the test that holds it. Steps 0 to
    `ownership_type`, `credit_category`, `merchant_name`, `transaction_id`,
    `days_available` typed. Test: `plaid.test.ts` over the three sandbox
    fixtures, one case per rule, and a snapshot row carrying the purpose.
-5. **The type and the service.** `autofill.ts` and `autofill-keys.test.ts`
+6. **Done, 13 October, for the one key.** `packages/shared/src/types/autofill.ts`, `apps/api/src/services/autofill.ts` (`suggestionsFor` pure, `readSuggestions` the impure half), `autofill.test.ts` with the refusals and the key test. As designed, for the one key; the rest of the step as written: `autofill.ts` and `autofill-keys.test.ts`
    (no key names a Section 5 field, a demographics field, occupancy, property
    type, citizenship, marital status, military service or first-time buyer;
    `evidenceTier` is exactly `{attested, estimated}`). A pure `autofill.test.ts`:
@@ -721,18 +724,18 @@ Each step is one or two commits and names the test that holds it. Steps 0 to
    yields prior-statement suggestions and the same party with a row yields
    none; a snapshot whose purpose is not `EXTENSION_OF_CREDIT` yields nothing
    bank-sourced.
-6. **The route.** `GET /files/:id` attaches `suggestions`, computes `own` for
+7. **Done, 13 October.** `GET /files/:id` attaches `suggestions` from the reader's own newest bank snapshot and writes `autofill_shown` once per key and snapshot (`autofill-route.test.ts`). As designed: computes `own` for
    the owner too, reads `autofill_dismissed` for the filter, writes
    `autofill_shown` once per key and snapshot; `IncomeSource` gains `partyId`
    and `memberView` filters by it. Test, real Postgres: an owner whose Borrower
    1 was replaced reads suggestions from their own snapshot and none naming
    the other party's; a claimed co-borrower reads only theirs; a demo file
    reads `[]`; a second GET writes no second `autofill_shown`.
-7. **The saves.** The six routes accept `autofill[]` (zod, max 20, an unknown
+8. **Done for the questions screen, 13 October.** `POST /files/:id/declaration` accepts `autofill[]` and writes the outcomes; the other five routes as designed: (zod, max 20, an unknown
    key is a 400) and write the events. Test: the facts and the
    `du_residences` row written are byte-identical with and without the array;
    exactly one `autofill_corrected` with the requester's `partyId`.
-8. **The screens.** `Found.tsx` and `.super-source`; the returning person's
+9. **Done for the rent caption, 13 October.** `Found.tsx`, `.super-source`, the caption under the rent input once Rent is chosen with "Use it" and "Not my rent", reported with the save. The rest as designed: the returning person's
    phone with a Found line; screen 1's one-tap income and the refinance-only
    AVM hint; the questions screen's caption under the rent input, rendered
    once Rent is chosen on any pass (the first pass too, once the bank precedes
@@ -743,16 +746,16 @@ Each step is one or two commits and names the test that holds it. Steps 0 to
    `YesNoQuestion`; a co-borrower is seeded nothing from a prior statement;
    the correction sends `proposed` and `given`; the servicer lines render only
    with `prior_loan_id` and only for values the tape carried.
-9. **The engine-blind tests and the docs.** `engine-reads-nothing.test.ts`
-   walks the requirements and underwriting packages, `services/decide.ts` and
-   `services/refi-analyst.ts` for `autofill` and `fileEvent`; `LoanFile` has
-   no `suggestions` key; the decision is byte-identical with and without
-   suggestion inputs; no production path writes a fact with a `sourceKind`
-   other than SELF_ATTESTED or PARTNER_SHARED on a TRID predicate.
-   `docs/decisions.md` gains "A suggestion is computed, never stored";
-   `docs/states.md` one line under the tier table; `docs/testing.md` where a
-   tester sees a caption on staging.
-10. **The gate on increment 2.** One scripted sandbox call against a retained
+10. **Done for the tests, 13 October.** `engine-reads-nothing.test.ts`
+    walks the requirements and underwriting packages, `services/decide.ts` and
+    `services/refi-analyst.ts` for `autofill` and `fileEvent`; `LoanFile` has
+    no `suggestions` key; the decision is byte-identical with and without
+    suggestion inputs; no production path writes a fact with a `sourceKind`
+    other than SELF_ATTESTED or PARTNER_SHARED on a TRID predicate.
+    `docs/decisions.md` gains "A suggestion is computed, never stored";
+    `docs/states.md` one line under the tier table; `docs/testing.md` where a
+    tester sees a caption on staging.
+11. **The gate on increment 2.** One scripted sandbox call against a retained
     Check base report to settle `owners[]` and `ownership_type`, whether loan
     accounts arrive, and whether `include_investments` and `require_identity`
     can be said at Link time; the answer goes in `docs/decisions.md` before any
@@ -766,11 +769,7 @@ Each step is one or two commits and names the test that holds it. Steps 0 to
 
 ## 8. Open questions for Joe
 
-- **Plaid purpose.** May the bank route certify `EXTENSION_OF_CREDIT` for a
-  file past APP-005? Lean: yes, it is the code FCRA 604(a)(3)(A) names for a
-  credit transaction the consumer initiated, and prequalification was a
-  placeholder; counsel confirms, and until then nothing bank-sourced reaches
-  staging, which holds a real book.
+- **Plaid purpose.** Decided 13 October, by Joe: the adapter certifies `EXTENSION_OF_CREDIT` where the report is ordered and where it is ordered again, returns it on the result, and the snapshot row records it; a reader that would use a report refuses any other purpose and refuses null. Rows written before the column have null and offer nothing.
 - **The `shown` event.** Keep the bounded `autofill_shown` or count outcomes
   only? Lean: keep it; it is the only way "who was offered what" is a query,
   and the cost is one insert per distinct suggestion.

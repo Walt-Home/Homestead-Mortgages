@@ -350,9 +350,10 @@ describe("plaid adapter — the link session", () => {
     // UNKNOWN_FIELDS; and the purpose enum is INSTRUCTION, not INSTRUCTIONS.
     expect(link.body.products).toEqual(["cra_base_report", "cra_income_insights"]);
     expect(link.body.cra_enabled_products).toBeUndefined();
-    expect(link.body.consumer_report_permissible_purpose).toBe(
-      "WRITTEN_INSTRUCTION_PREQUALIFICATION",
-    );
+    // FCRA 604(a)(3)(A), the credit transaction the consumer initiated by
+    // signing APP-005. Prequalification was the placeholder until 13 October
+    // 2026.
+    expect(link.body.consumer_report_permissible_purpose).toBe("EXTENSION_OF_CREDIT");
     // The fourth, caught by the sandbox on 7 October 2026: `/user/create`
     // issues a `user_id` and no `user_token`, and everything is keyed on it.
     expect(link.body.user_id).toBe("usr_1");
@@ -591,9 +592,9 @@ describe("plaid adapter — the report", () => {
     expect(create.body.user_id).toBe("usr_1");
     // The endpoint rejects the call without both of these.
     expect(create.body.webhook).toBeTruthy();
-    expect(create.body.consumer_report_permissible_purpose).toBe(
-      "WRITTEN_INSTRUCTION_PREQUALIFICATION",
-    );
+    // The same purpose where the report is ordered again, and the result
+    // carries what was sent so the snapshot row can record it.
+    expect(create.body.consumer_report_permissible_purpose).toBe("EXTENSION_OF_CREDIT");
     // Still gone a moment later: the error it is, not a second order.
     await expect(c.fetchAssetReport(file(), token(), { sessionId: "s" }, 12)).rejects.toThrow(
       /expired/,
@@ -841,6 +842,38 @@ describe("recurring obligations", () => {
     expect(found[0]!.monthsOfHistory).toBe(12);
     expect(found[0]!.monthlyAmount).toBe(2_150);
     expect(found[0]!.onTime).toBe(true);
+  });
+
+  it("lets Plaid's own category decide what a run is, when the lines carry one", () => {
+    // RENT_WORDS reads WASTE MANAGEMENT and an HOA's management company as
+    // rent. Where the bureau has placed the line, its taxonomy wins and the
+    // words are not consulted; where it has not (a sandbox custom user, the
+    // assets product), the words are all there is.
+    const categorized = (category: string, description: string, amount: number) =>
+      monthly(description, amount, 12).map((t) => ({
+        ...t,
+        credit_category: { primary: category.split("_").slice(0, 3).join("_"), detailed: category },
+      }));
+    const rent = detectRecurringObligations(
+      categorized("RENT_AND_UTILITIES_RENT", "OAKRIDGE PROPERTY MGMT", 2_150),
+    );
+    expect(rent.map((r) => r.kind)).toEqual(["rent"]);
+
+    const waste = detectRecurringObligations(
+      categorized("RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT", "WASTE MANAGEMENT", 60),
+    );
+    expect(waste.map((r) => r.kind)).toEqual(["utility"]);
+
+    // Placed by the bureau somewhere that is not an obligation at all: not
+    // rent, however the payee reads.
+    const hoa = detectRecurringObligations(
+      categorized("GENERAL_SERVICES_OTHER_GENERAL_SERVICES", "LAKESIDE PROPERTY MANAGEMENT", 300),
+    );
+    expect(hoa).toHaveLength(0);
+
+    // No category on the lines: the words decide, as before.
+    const words = detectRecurringObligations(monthly("WASTE MANAGEMENT", 60, 12));
+    expect(words.map((r) => r.kind)).toEqual(["rent"]);
   });
 
   it("ignores credits — a paycheque is not an obligation", () => {

@@ -27,6 +27,7 @@ import { assertPurposeInScope } from "../services/scope.js";
 import { connectors } from "../services/connectors.js";
 import { quoteSubjectProduct } from "../services/pricing.js";
 import { advanceStage, stageAfter } from "../services/stage.js";
+import { readSuggestions } from "../services/autofill.js";
 import {
   assertFacts,
   liveFact,
@@ -765,10 +766,16 @@ fileRouter.get(
     // the household's half and their own, and nobody else's person.
     const owner = await prisma.loanFile.findUniqueOrThrow({
       where: { id },
-      select: { userId: true },
+      select: { userId: true, isDemo: true },
     });
     const yours = owner.userId === req.user!.id;
     const own = !yours && you ? await ownReportsFor(id, you) : null;
+    // What the product found that the reader may be offered, computed from
+    // the reader's own rows and stored nowhere (`services/autofill.ts`). A
+    // demo file offers nothing: a sample borrower's file is everybody's to
+    // read and nobody's to answer, and nothing a reader is not a party on
+    // can be their own.
+    const suggestions = owner.isDemo || !you ? [] : await readSuggestions(prisma, id, you);
     // The promise holds in both directions: the owner reads the whole file
     // and everybody on it but themselves reduced to a name and a status, so
     // a co-borrower's date of birth and answers are theirs alone too.
@@ -779,6 +786,7 @@ fileRouter.get(
       // and not its owner, and the screens they see are theirs alone.
       owner: yours,
       applicationState: await applicationStanding(prisma, id),
+      suggestions,
     });
   }),
 );

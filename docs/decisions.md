@@ -4460,3 +4460,75 @@ earlier, so a borrower who abandons mid-Link has neither a bank nor Section
 nothing stores a stage for them. **The refinance from an offer** is born at
 `IDENTITY` and walks screen 2, the bank, the questions, the review;
 `refinanceReadiness` counts by screen id, which did not change.
+
+## The bank report is ordered as an extension of credit
+
+**Decided 13 October 2026**, by Joe. The adapter certified
+`WRITTEN_INSTRUCTION_PREQUALIFICATION` to Plaid as the consumer-report purpose
+for every report, which was the placeholder from the day the Check products
+were wired. The bank is never reached before APP-005 is signed, and a signed
+application for a mortgage is the credit transaction FCRA 604(a)(3)(A)
+names, so the code is `EXTENSION_OF_CREDIT`.
+
+It is threaded once. The bank route says it to the adapter (the registry
+passes it explicitly, so changing it is a visible edit); the adapter sends it
+where the report is ordered and where it is ordered again, and returns what
+it sent on the result; `recordSnapshot` writes that onto the row as
+`permissible_purpose`, never a constant from the route. The assets product
+carries no purpose, because it is a bank-data feed and not a consumer
+report; rows written before the column carry null. A reader that would use a
+report for anything beyond the pull it was ordered for (the rent caption
+below) checks the row first and refuses null: a purpose nobody recorded is
+not a purpose. The fixture bank answers the same code, because it stands in
+for the report a bureau would issue under the same authorization and what
+reads the purpose would otherwise be untestable without one.
+
+## A suggestion is computed, never stored
+
+**Decided 13 October 2026**, from `docs/autofill.md`, and built for one key:
+the rent. The product computes what a reader may be offered on every read of
+their file, from rows that already exist (their own newest bank snapshot,
+what they have dismissed), hands it back beside the file as `suggestions[]`,
+and stores nothing. The reason is the ledger's reader: `liveFact` picks the
+newest live row and reads neither `sourceKind` nor `confidence`, so a stored
+suggestion that was a fact would become the live value and the TRID pins
+would pin it; a stored suggestion that was its own row would need a reader, a
+redactor and a retention rule the diary already has.
+
+**A suggestion is a caption, never a filled control.** The questions screen
+renders the rent the bank found under the rent input, after the person has
+chosen Rent, as "Your bank shows $2,150 a month to OAKRIDGE PROPERTY MGMT ·
+From your bank activity" with "Use it" and "Not my rent"; the input stays
+empty until the tap or the typing, and the line is absent while the input
+already says the figure. It is never beside a Section 5 question
+(`questions-blind-to-the-bank.test.ts` holds that there is one `Found` on the
+page and it is behind the Rent basis), and the page reads `suggestions` and
+nothing of the report. The confirmation is the save the screen already
+makes, under the borrower's own principal, written exactly as a typed answer
+is; the suggestion is never the fact.
+
+**What is recorded is the outcome.** `autofill_shown` once per suggestion and
+snapshot when it is first served (the one write on a read path, so
+fair-lending monitoring can tell never-offered from offered-and-declined),
+and with the save one of `autofill_accepted`, `autofill_corrected`,
+`autofill_dismissed`, actor `borrower`, each naming the snapshot, which has to
+be the reader's own on this file or the save is refused. A dismissal holds
+for that snapshot; a re-pull is a newer one and offers again.
+
+**The refusals live in the service.** Nothing bank-sourced from a snapshot
+whose recorded purpose is not an extension of credit; nothing for a run the
+detector did not call rent, and the detector takes Plaid's own category over
+the payee's words wherever the lines carry one (WASTE MANAGEMENT and an HOA's
+management company both read as rent by their words); never a figure that is
+not positive; nothing on a demo file; nothing for a reader who is not a party
+on the file. The key union is closed and a test holds that no key can name a
+declaration, a demographic, citizenship, marital status, military service,
+occupancy or the first-time flag. The engine reads none of it:
+`engine-reads-nothing.test.ts` walks the requirements and underwriting
+packages, the decision service and the refi analyst for the word.
+
+**And a trigger for whoever writes the first derived fact.**
+`facts_ai_may_not_verify` keyed on the principal's kind and refused only an
+AI principal, so a SERVICE principal writing `DERIVED` at `VERIFIED` passed.
+`facts_inference_may_not_verify` caps by source: a derived fact tops out at
+ESTIMATED, an AI's inference at INFERRED, whoever asserts it.

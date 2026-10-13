@@ -173,6 +173,16 @@
     text-decoration-color: currentColor;
   }
 
+  /* A found value's line beside a question: the basis sentence, where it came
+     from, and at most two quiet links. Neutral on purpose. Color on this
+     product is reserved for outcome states, and what the product found is
+     not an outcome; it is something the person may take or leave. */
+  .super-source {
+    font-size: var(--sm-text-sm);
+    line-height: var(--sm-leading-sm);
+    color: var(--sm-color-ink-muted);
+  }
+
   /* ── Fields ────────────────────────────────────────────────────────── */
   .super-label {
     display: block;

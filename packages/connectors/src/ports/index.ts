@@ -99,6 +99,14 @@ export interface ConnectorResult<T> {
   readonly retrievedAt: string;
   /** Vendor's own id for the pull, kept for the audit trail. */
   readonly externalId: string;
+  /**
+   * The permissible purpose the adapter certified to a consumer reporting
+   * agency when it ordered this report, in the agency's own code. Set by the
+   * adapter from what it actually sent, never by a route from what it meant
+   * to send, and written onto the snapshot row so a later reader knows what
+   * the report may serve. Absent on a pull that is not a consumer report.
+   */
+  readonly permissiblePurpose?: string;
 }
 
 /**

@@ -10,6 +10,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import type { Suggestion } from "@hm/shared";
 import type {
   ApplicationReceipt,
   BorrowerDeclaration,
@@ -376,6 +377,13 @@ export interface LoanFileResponse {
   owner: boolean;
   /** Null for a file made before applications existed. Never a draft. */
   applicationState: ApplicationStandingView | null;
+  /**
+   * What the product found that this reader may be offered, computed on the
+   * server from the reader's own rows and stored nowhere. Empty on a demo
+   * file and for a reader who is not a party on the file. A screen renders
+   * one as a `Found` line and never as a filled control.
+   */
+  suggestions: Suggestion[];
 }
 
 export function useLoanFile(fileId: string | undefined) {

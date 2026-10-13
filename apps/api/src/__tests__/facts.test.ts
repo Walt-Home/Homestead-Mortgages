@@ -147,6 +147,42 @@ describe("an AI principal may not certify", () => {
   });
 });
 
+describe("an inference may not certify, whoever asserts it", () => {
+  // `facts_ai_may_not_verify` keys on the principal's kind, so a SERVICE
+  // principal writing a DERIVED row at VERIFIED passed. The cap is on the
+  // source now too: a derived fact tops out at ESTIMATED, an AI's inference
+  // at INFERRED. Nothing writes such a row yet; this is for the first thing
+  // that does (13 October 2026, docs/autofill.md).
+  it("refuses a derived fact at verified, from a service", async () => {
+    const p = await party();
+    const service = await principal("SERVICE");
+    await expect(
+      assertFact(p.id, service.id, { confidence: "VERIFIED", sourceKind: "DERIVED" }),
+    ).rejects.toThrow(/may not assert confidence/);
+    await expect(
+      assertFact(p.id, service.id, { confidence: "CORROBORATED", sourceKind: "DERIVED" }),
+    ).rejects.toThrow(/may not assert confidence/);
+  });
+
+  it("lets a derived fact be an estimate", async () => {
+    const p = await party();
+    const service = await principal("SERVICE");
+    const f = await assertFact(p.id, service.id, {
+      confidence: "ESTIMATED",
+      sourceKind: "DERIVED",
+    });
+    expect(f.confidence).toBe("ESTIMATED");
+  });
+
+  it("holds an AI's inference at inferred, even below what its principal may write", async () => {
+    const p = await party();
+    const ai = await principal("AI_AGENT");
+    await expect(
+      assertFact(p.id, ai.id, { confidence: "ESTIMATED", sourceKind: "AI_INFERRED" }),
+    ).rejects.toThrow(/may not assert confidence/);
+  });
+});
+
 describe("subject and party stay consistent", () => {
   it("refuses a party fact with no party id", async () => {
     const p = await party();

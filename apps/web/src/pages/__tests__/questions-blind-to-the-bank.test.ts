@@ -23,6 +23,10 @@ describe("the questions screen", () => {
   });
 
   it("touches no report, no income, no job and no snapshot", () => {
+    // The one thing it renders from the bank is the rent caption, which the
+    // server computes from the person's own report and hands back beside the
+    // file as a suggestion; the page reads `data.suggestions` and never the
+    // report. Nothing of the report's own fields may appear here.
     for (const forbidden of [
       "file.assets",
       "file.credit",
@@ -30,12 +34,20 @@ describe("the questions screen", () => {
       "employments",
       "identifiedMonthlyRent",
       "identifiedRentPayments",
+      "alternativeReferences",
       "largeDeposits",
-      "snapshot",
-      "Found",
+      "connectorSnapshot",
     ]) {
       expect(page, forbidden).not.toContain(forbidden);
     }
+  });
+
+  it("renders the one found value under the rent input and nowhere else", () => {
+    // One `Found`, inside the residence block, behind the Rent basis. Never
+    // under a `YesNoQuestion`: a declaration is asked bare.
+    expect(page.match(/<Found/g)).toHaveLength(1);
+    expect(page).toMatch(/value\.basis === "Rent" && \([\s\S]*?<Found/);
+    expect(page).not.toMatch(/<YesNoQuestion[\s\S]{0,400}<Found/);
   });
 
   it("leaves for the review and for nowhere past it", () => {

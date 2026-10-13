@@ -101,6 +101,8 @@ export type PlaidProduct = "cra" | "assets";
  * app ever pulls a report for a reason APP-005 does not cover, this has to
  * change with it.
  */
+export const DEFAULT_PERMISSIBLE_PURPOSE = "EXTENSION_OF_CREDIT" as const;
+
 export type PermissiblePurpose =
   | "WRITTEN_INSTRUCTION_PREQUALIFICATION"
   | "WRITTEN_INSTRUCTION_OTHER"
@@ -216,6 +218,10 @@ export class PlaidRequestError extends Error {
 }
 
 export function plaidConnector(options: PlaidOptions): BankConnector {
+  // One value, certified where the report is ordered and where it is ordered
+  // again, and returned on the result so the snapshot row records what was
+  // actually sent.
+  const purpose: PermissiblePurpose = options.permissiblePurpose ?? DEFAULT_PERMISSIBLE_PURPOSE;
   const doFetch = options.fetchImpl ?? fetch;
   const host = HOSTS[options.environment];
 
@@ -325,6 +331,8 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
           provider: capabilities.provider,
           retrievedAt: new Date().toISOString(),
           externalId: base.report?.asset_report_id ?? file.id,
+          // No purpose: the assets product is a bank-data feed, not a
+          // consumer report, and nothing was certified to a bureau for it.
         },
       };
     } catch (err) {
@@ -407,8 +415,12 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
           // `consumer_report_permissible_purpose` without a CRA product in
           // `products` is rejected too. Verified against sandbox.
           products: ["cra_base_report", "cra_income_insights"],
-          consumer_report_permissible_purpose:
-            options.permissiblePurpose ?? "WRITTEN_INSTRUCTION_PREQUALIFICATION",
+          // FCRA 604(a)(3)(A): a credit transaction involving the consumer,
+          // which this is from the moment APP-005 is signed, and the bank is
+          // never reached before it. Prequalification was the placeholder
+          // until 13 October 2026; what is sent here is what the snapshot
+          // row records, so a later reader knows what the report may serve.
+          consumer_report_permissible_purpose: purpose,
           // Link is where the report is ordered, so this is where its window
           // and our reference to it are said.
           cra_options: {
@@ -516,6 +528,7 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
             provider: capabilities.provider,
             retrievedAt: new Date().toISOString(),
             externalId: base.report?.report_id ?? file.id,
+            permissiblePurpose: purpose,
           },
         };
       } catch (err) {
@@ -538,8 +551,7 @@ export function plaidConnector(options: PlaidOptions): BankConnector {
           client_report_id: file.id,
           products: ["cra_income_insights"],
           income_insights: { income_insights_version: INCOME_INSIGHTS_VERSION },
-          consumer_report_permissible_purpose:
-            options.permissiblePurpose ?? "WRITTEN_INSTRUCTION_PREQUALIFICATION",
+          consumer_report_permissible_purpose: purpose,
           // Required, not optional — the endpoint rejects the call without it.
           // The report is still polled rather than driven by this webhook; it
           // exists because Plaid insists on somewhere to announce completion.
@@ -571,6 +583,14 @@ export interface PlaidTransaction {
   description?: string;
   /** Asset reports use this name for the same thing. */
   original_description?: string;
+  /**
+   * Plaid's own category for the line (`credit_category` on a Check base
+   * report: a primary and a detailed value from its credit taxonomy). Read
+   * where it is present, which decides what a recurring payee IS; absent on
+   * a sandbox custom user's lines and on the assets product, where the
+   * payee's words are all there is.
+   */
+  credit_category?: { primary?: string | null; detailed?: string | null } | null;
 }
 
 /** Whichever of the two names this payload happens to use. */
@@ -1114,7 +1134,36 @@ const PHONE_WORDS = /VERIZON|ATT|T MOBILE|TMOBILE|SPRINT|WIRELESS|MOBILE|XFINITY
  * month is a subscription. Under-claiming here costs a borrower an alternative
  * route they might have had; over-claiming grants credit on a coffee habit.
  */
-function classify(key: string): AlternativeReference["kind"] | null {
+/**
+ * Plaid's credit taxonomy onto the four kinds Fannie counts, where a line
+ * carries it. Everything else in the taxonomy is not an obligation, however
+ * the payee reads: WASTE MANAGEMENT and an HOA's management company both
+ * match RENT_WORDS, and under the taxonomy neither is rent.
+ */
+const CATEGORY_KIND: Readonly<Record<string, AlternativeReference["kind"]>> = {
+  RENT_AND_UTILITIES_RENT: "rent",
+  RENT_AND_UTILITIES_GAS_AND_ELECTRICITY: "utility",
+  RENT_AND_UTILITIES_WATER: "utility",
+  RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT: "utility",
+  RENT_AND_UTILITIES_OTHER_UTILITIES: "utility",
+  RENT_AND_UTILITIES_TELEPHONE: "phone",
+  RENT_AND_UTILITIES_INTERNET_AND_CABLE: "phone",
+  GENERAL_SERVICES_INSURANCE: "insurance",
+};
+
+function classify(
+  key: string,
+  categories: ReadonlySet<string>,
+): AlternativeReference["kind"] | null {
+  // The taxonomy decides when the lines carry it. A run the bureau placed
+  // somewhere else is dropped here, not relabelled by its words.
+  if (categories.size > 0) {
+    for (const c of categories) {
+      const kind = CATEGORY_KIND[c];
+      if (kind) return kind;
+    }
+    return null;
+  }
   if (RENT_WORDS.test(key)) return "rent";
   if (UTILITY_WORDS.test(key)) return "utility";
   if (INSURANCE_WORDS.test(key)) return "insurance";
@@ -1149,7 +1198,7 @@ function monthIndex(yyyymm: string): number {
 export function detectRecurringObligations(
   transactions: readonly PlaidTransaction[],
 ): AlternativeReference[] {
-  const groups = new Map<string, Map<string, number>>();
+  const groups = new Map<string, { byMonth: Map<string, number>; categories: Set<string> }>();
 
   for (const t of transactions) {
     // Positive is money out. Credits are somebody paying the borrower and are
@@ -1159,14 +1208,16 @@ export function detectRecurringObligations(
     if (month.length !== 7) continue;
     const key = norm(describe(t));
     if (key.length < 3) continue;
-    const byMonth = groups.get(key) ?? new Map<string, number>();
-    byMonth.set(month, (byMonth.get(month) ?? 0) + t.amount);
-    groups.set(key, byMonth);
+    const group = groups.get(key) ?? { byMonth: new Map<string, number>(), categories: new Set() };
+    group.byMonth.set(month, (group.byMonth.get(month) ?? 0) + t.amount);
+    const category = t.credit_category?.detailed ?? t.credit_category?.primary;
+    if (category) group.categories.add(category.toUpperCase());
+    groups.set(key, group);
   }
 
   const found: AlternativeReference[] = [];
 
-  for (const [key, byMonth] of groups) {
+  for (const [key, { byMonth, categories }] of groups) {
     const months = [...byMonth.keys()].sort();
     if (months.length < 3) continue;
 
@@ -1195,7 +1246,7 @@ export function detectRecurringObligations(
     const consistent = amounts.every((a) => Math.abs(a - median) <= median * 0.25);
     if (!consistent) continue;
 
-    const kind = classify(key);
+    const kind = classify(key, categories);
     if (!kind || median < MIN_OBLIGATION) continue;
 
     found.push({

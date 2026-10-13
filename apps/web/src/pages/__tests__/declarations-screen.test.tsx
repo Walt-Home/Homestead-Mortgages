@@ -141,6 +141,75 @@ function render(node: React.ReactNode, file: LoanFileResponse): string {
     .replaceAll("&amp;", "&");
 }
 
+/** The rent the bank found, as the server hands it back beside the file. */
+const RENT_FOUND = {
+  key: "current_monthly_rent",
+  screen: "declarations",
+  mode: "suggest",
+  target: { kind: "residence", residencyType: "Current", field: "monthlyRent" },
+  value: 2_150,
+  source: "bank",
+  tag: "From your bank activity",
+  basis: "Your bank shows $2,150 a month to OAKRIDGE PROPERTY MGMT",
+  evidence: { snapshotId: "s1", retrievedAt: "2026-10-12T12:00:00Z" },
+  evidenceTier: "estimated",
+  partyId: "p1",
+} as const;
+
+describe("the rent the bank found", () => {
+  // The one suggestion this screen renders: a caption under the rent input,
+  // after Rent is chosen, never a filled field, never beside a question.
+  it("is a caption under the rent input once Rent is chosen", () => {
+    const markup = render(<DeclarationsPage />, {
+      ...answered(),
+      suggestions: [RENT_FOUND],
+    } as unknown as LoanFileResponse);
+    // RENTING stores $1,850, which is not what the bank found, so the line
+    // renders; it names the figure, the payee and the source, with one tap.
+    expect(markup).toContain(RENT_FOUND.basis);
+    expect(markup).toContain(RENT_FOUND.tag);
+    expect(markup).toContain("Use it");
+    expect(markup).toContain("Not my rent");
+    // The field is never filled on the person's behalf.
+    expect(markup).toContain('value="1850"');
+    expect(markup).not.toContain('value="2150"');
+  });
+
+  it("renders nothing before the basis is chosen", () => {
+    const markup = render(<DeclarationsPage />, {
+      ...response({}),
+      suggestions: [RENT_FOUND],
+    } as unknown as LoanFileResponse);
+    expect(markup).not.toContain(RENT_FOUND.basis);
+    expect(markup).not.toContain("Use it");
+  });
+
+  it("says nothing the input already says", () => {
+    const same = answered({
+      borrowers: [
+        borrower({ declaration: DECLARED, residences: [{ ...RENTING, monthlyRent: 2_150 }] }),
+      ],
+    });
+    const markup = render(<DeclarationsPage />, {
+      ...same,
+      suggestions: [RENT_FOUND],
+    } as unknown as LoanFileResponse);
+    expect(markup).not.toContain(RENT_FOUND.basis);
+  });
+
+  it("is never beside a Section 5 question", () => {
+    const markup = render(<DeclarationsPage />, {
+      ...answered(),
+      suggestions: [RENT_FOUND],
+    } as unknown as LoanFileResponse);
+    const caption = markup.indexOf(RENT_FOUND.basis);
+    const firstQuestion = markup.indexOf(INTENT_TO_OCCUPY.prompt);
+    expect(caption).toBeGreaterThan(-1);
+    expect(caption).toBeLessThan(firstQuestion);
+    expect(markup.match(/data-found=/g)).toHaveLength(1);
+  });
+});
+
 describe("the screen that asks", () => {
   it("puts every question on the page", async () => {
     const markup = render(<DeclarationsPage />, response({}));

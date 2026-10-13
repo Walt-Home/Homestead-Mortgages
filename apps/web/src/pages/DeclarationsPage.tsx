@@ -33,10 +33,13 @@ import type {
 import { api, ApiError } from "../lib/api.js";
 import { PERSONA_READ_ONLY } from "../lib/auth.js";
 import { SAMPLE_FILE_START_YOUR_OWN } from "../lib/home-copy.js";
-import { useLoanFile } from "../lib/file.js";
+import { useLoanFile, type LoanFileView } from "../lib/file.js";
 import { primaryBorrower } from "../lib/borrowers.js";
 import { Why } from "../components/Why.js";
 import { YesNoQuestion } from "../components/YesNoQuestion.js";
+import { Found } from "../components/Found.js";
+import { outcomeFor, suggestionFor, typedAmount } from "../lib/autofill.js";
+import type { AutofillOutcomeInput, Suggestion, SuggestionKey } from "@hm/shared";
 import {
   BANKRUPTCY_CHAPTERS,
   BASIS_LABELS,
@@ -74,7 +77,23 @@ export function DeclarationsPage() {
   const file = data?.file;
   const readOnly = file?.isDemo === true;
 
-  const [form, setForm] = useState<DeclarationForm>(blankForm);
+  // Seeded from what was already answered when the file is already here (a
+  // cached read, which is every revisit from the review), and by the effect
+  // below when it arrives later. See the note on the effect.
+  const [form, setForm] = useState<DeclarationForm>(
+    () => seededForm(file, data?.you) ?? blankForm(),
+  );
+  /*
+   * What the server found that this person may be offered, and what they
+   * have said no to on this visit. The one suggestion this screen renders is
+   * the rent, under the rent input, after Rent is chosen: a caption with one
+   * tap, never a filled field, and never beside a Section 5 question. The
+   * server computes it from the person's own bank report and nothing of that
+   * report reaches this page (`questions-blind-to-the-bank.test.ts`).
+   */
+  const rentFound = suggestionFor(data?.suggestions, "current_monthly_rent");
+  const [dismissed, setDismissed] = useState<ReadonlySet<SuggestionKey>>(new Set());
+  const dismiss = (key: SuggestionKey) => setDismissed((d) => new Set([...d, key]));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showMissing, setShowMissing] = useState(false);
@@ -88,23 +107,12 @@ export function DeclarationsPage() {
    * watched the file would put the stored answer back over what they are
    * currently typing.
    */
-  const seeded = useRef(false);
+  const seeded = useRef(Boolean(file));
   useEffect(() => {
     if (seeded.current || !file) return;
     seeded.current = true;
-    // The reader's own stored answers, not the file's. This screen posts
-    // without naming a borrower, which the route reads as the person asking
-    // — the applicant, or a co-borrower on their own half — so seeding from
-    // anybody else would put one person's answers into a form that saves as
-    // another's.
-    const me = file.borrowers.find((b) => b.id === data?.you) ?? primaryBorrower(file);
-    // The estate comes off the FILE rather than off this person: it is one
-    // answer about one house, so a co-borrower who answered first has already
-    // given it and this form shows it back rather than asking again.
-    const estate = file.property?.estateType ?? null;
-    if (estate || (me && (me.declaration || me.residences.length > 0))) {
-      setForm(formFrom(me?.declaration ?? null, me?.residences ?? [], estate));
-    }
+    const stored = seededForm(file, data?.you);
+    if (stored) setForm(stored);
   }, [file, data?.you]);
 
   const purchase = file?.loan?.purpose === "purchase";
@@ -136,7 +144,22 @@ export function DeclarationsPage() {
     setSaving(true);
     setError(null);
     try {
-      await api.post(`/files/${fileId}/declaration`, bodyFrom(form, purchase));
+      // What became of the suggestion this screen rendered, if it rendered
+      // one: shown only after Rent was chosen, so an owner reports nothing.
+      const outcomes: AutofillOutcomeInput[] = [];
+      if (rentFound && (form.current.basis === "Rent" || dismissed.has(rentFound.key))) {
+        outcomes.push(
+          outcomeFor(
+            rentFound,
+            form.current.basis === "Rent" ? typedAmount(form.current.monthlyRent) : null,
+            dismissed.has(rentFound.key),
+          ),
+        );
+      }
+      await api.post(`/files/${fileId}/declaration`, {
+        ...bodyFrom(form, purchase),
+        ...(outcomes.length > 0 ? { autofill: outcomes } : {}),
+      });
       await queryClient.invalidateQueries({ queryKey: ["file", fileId] });
       await queryClient.invalidateQueries({ queryKey: ["assessment"] });
       navigate(`/f/${fileId}/review`);
@@ -228,6 +251,9 @@ export function DeclarationsPage() {
           value={form.current}
           onChange={setCurrent}
           askAddress={false}
+          found={rentFound && !dismissed.has(rentFound.key) ? rentFound : null}
+          onUse={() => rentFound && setCurrent({ monthlyRent: String(rentFound.value) })}
+          onDismiss={() => rentFound && dismiss(rentFound.key)}
         />
         <Why>
           Two years of address history goes on every application. If you have been where you are for
@@ -399,17 +425,48 @@ export function DeclarationsPage() {
   );
 }
 
+/**
+ * The reader's own stored answers as a form, or null when nothing is stored.
+ *
+ * The reader's own, not the file's: this screen posts without naming a
+ * borrower, which the route reads as the person asking — the applicant, or a
+ * co-borrower on their own half — so seeding from anybody else would put one
+ * person's answers into a form that saves as another's. The estate comes off
+ * the FILE rather than off the person: it is one answer about one house, so a
+ * co-borrower who answered first has already given it and this form shows it
+ * back rather than asking again.
+ */
+function seededForm(
+  file: LoanFileView | undefined,
+  you: string | null | undefined,
+): DeclarationForm | null {
+  if (!file) return null;
+  const me = file.borrowers.find((b) => b.id === you) ?? primaryBorrower(file);
+  const estate = file.property?.estateType ?? null;
+  if (estate || (me && (me.declaration || me.residences.length > 0))) {
+    return formFrom(me?.declaration ?? null, me?.residences ?? [], estate);
+  }
+  return null;
+}
+
 /** Basis, months, and the rent — plus an address, on the prior one only. */
 function Residence({
   idPrefix,
   value,
   onChange,
   askAddress,
+  found = null,
+  onUse,
+  onDismiss,
 }: {
   idPrefix: string;
   value: ResidenceForm;
   onChange: (patch: Partial<ResidenceForm>) => void;
   askAddress: boolean;
+  /** The rent the bank found, offered under the rent input once Rent is chosen. */
+  found?: Suggestion | null;
+  onUse?: () => void;
+  onDismiss?: () => void;
 }) {
   return (
     <div className="mt-4 flex flex-col gap-4">
@@ -466,6 +523,20 @@ function Residence({
             value={value.monthlyRent}
             onChange={(e) => onChange({ monthlyRent: e.target.value })}
           />
+          {/*
+            Under the input, after Rent is chosen, and only while the input
+            does not already say it. One tap fills the field; "Not my rent"
+            takes the line away for this visit and is reported with the save.
+            The input is never filled on the person's behalf.
+          */}
+          {found && typedAmount(value.monthlyRent) !== found.value && (
+            <Found
+              suggestion={found}
+              onUse={onUse}
+              onDismiss={onDismiss}
+              dismissLabel="Not my rent"
+            />
+          )}
         </div>
       )}
 

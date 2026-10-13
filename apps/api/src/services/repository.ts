@@ -749,6 +749,10 @@ export async function recordSnapshot(
    */
   partyId: string | null,
   db: Db = prisma,
+  extra: {
+    /** What the adapter certified to the bureau, from the result it returned. */
+    readonly permissiblePurpose?: string | null;
+  } = {},
 ): Promise<{ id: string }> {
   return db.connectorSnapshot.create({
     data: {
@@ -759,6 +763,7 @@ export async function recordSnapshot(
       externalId,
       payload: payload as Prisma.InputJsonValue,
       retrievedAt: new Date(retrievedAt),
+      permissiblePurpose: extra.permissiblePurpose ?? null,
     },
     select: { id: true },
   });

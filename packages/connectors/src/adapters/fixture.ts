@@ -195,7 +195,14 @@ export function fixtureBankConnector(options: FixtureOptions = {}): BankConnecto
       await sleep(latencyMs);
       return {
         status: "ready",
-        result: result(PERSONAS[persona].assets(ref), "fixture-bank", `assets-${persona}`),
+        result: {
+          ...result(PERSONAS[persona].assets(ref), "fixture-bank", `assets-${persona}`),
+          // The fixture stands in for the consumer report a bureau would
+          // answer under the same APP-005 authorization, so it answers the
+          // purpose that report would carry. What reads the purpose (the
+          // rent caption) would otherwise be untestable without a bureau.
+          permissiblePurpose: "EXTENSION_OF_CREDIT",
+        },
       };
     },
   };

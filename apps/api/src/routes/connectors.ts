@@ -358,6 +358,9 @@ connectorRouter.post(
         result.retrievedAt,
         subject.partyId,
         tx,
+        // What the adapter actually certified, so a later reader of this row
+        // knows what the report may serve. Never a constant from this route.
+        { permissiblePurpose: result.permissiblePurpose ?? null },
       );
       await upsertLink(id, "bank", result.provider, subject.partyId, tx);
 

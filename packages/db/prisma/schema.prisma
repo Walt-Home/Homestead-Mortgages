@@ -600,6 +600,15 @@ model ConnectorSnapshot {
   raw         Json?
   retrievedAt DateTime @map("retrieved_at")
 
+  /// The permissible purpose the adapter certified to a consumer reporting
+  /// agency when it ordered this report, in the agency's own code (FCRA
+  /// 604(a)(3)(A) is `EXTENSION_OF_CREDIT`). Written from what the adapter
+  /// reports it sent, never from a route's intent, and null on a pull that is
+  /// not a consumer report or predates the column. A reader that would use
+  /// the report for anything (a suggestion on a screen) checks this first and
+  /// refuses null: a purpose nobody recorded is not a purpose.
+  permissiblePurpose String? @map("permissible_purpose")
+
   /// The order this row was written in, which is the only thing on the table
   /// that can say which of two pulls came last. `retrieved_at` is the vendor's
   /// moment and two pulls can share it; the id is a random uuid, so breaking a

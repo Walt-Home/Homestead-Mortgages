@@ -247,6 +247,10 @@ export function connectors(): ConnectorRegistry {
       // Throws if VENDOR_TOKEN_KEY is missing or the wrong length. Better here
       // than at the first borrower's bank login.
       tokens: vendorTokenStore(prisma, config.vendorTokenKey),
+      // What the bureau is told the report is for, in FCRA's words: a credit
+      // transaction the consumer initiated. Said here rather than left to the
+      // adapter's default so that changing it is a visible edit.
+      permissiblePurpose: "EXTENSION_OF_CREDIT",
       // Only when it is registered. Plaid refuses every link token — not just
       // the OAuth ones — if this is sent and not on the dashboard allowlist.
       ...(config.plaid.redirectUri ? { redirectUri: config.plaid.redirectUri } : {}),

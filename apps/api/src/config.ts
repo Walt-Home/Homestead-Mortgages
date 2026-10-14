@@ -288,6 +288,16 @@ export const config = {
    */
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY_SANDBOX ?? process.env.STRIPE_SECRET_KEY,
+    /**
+     * A restricted key for the one sensitive output the product reads, the
+     * date of birth on the ID, which a secret key never receives. Optional:
+     * without it screen 2 asks for the date. Sandbox first, like the secret
+     * key, and the adapter refuses one whose mode differs from it. Create it
+     * in the Stripe dashboard with Identity Verification Results and Recent
+     * Detailed Verification Results set to Read and nothing else.
+     */
+    identityResultsKey:
+      process.env.STRIPE_IDENTITY_RESULTS_KEY_SANDBOX ?? process.env.STRIPE_IDENTITY_RESULTS_KEY,
     publishableKey:
       process.env.STRIPE_PUBLISHABLE_KEY_SANDBOX ?? process.env.STRIPE_PUBLISHABLE_KEY,
     allowLiveIdentity: process.env.STRIPE_ALLOW_LIVE_IDENTITY === "true",

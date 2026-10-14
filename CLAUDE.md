@@ -754,6 +754,7 @@ npm run seed-demo -w @hm/servicing       # his 100-loan batch and 12-loan partne
 npm run billing:close        # close the billing month that has ended (-- 2026-09 for a named one)
 npm run billing:reconcile    # retry Stripe's deliveries and re-read every invoice that can still move
 npm run billing:smoke        # walk one invoice through a real Stripe SANDBOX (STRIPE_BILLING_KEY_SANDBOX=rk_test_…)
+npm run identity:dob -- vs_… # does the restricted key read the ID's date of birth? (STRIPE_IDENTITY_RESULTS_KEY_SANDBOX=rk_test_…)
 ```
 
 `seed:personas` refuses to run unless `DEMO_PERSONAS=true` is in its own

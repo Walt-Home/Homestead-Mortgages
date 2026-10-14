@@ -230,6 +230,9 @@ export function connectors(): ConnectorRegistry {
       // after the hosted flow; screen 2 reads the result when they land.
       origin: config.publicOrigin,
       allowLiveMode: config.stripe.allowLiveIdentity,
+      // The date of birth, when a restricted key is set. The provider string
+      // says "reads date of birth" when it is, which the boot log prints.
+      ...(config.stripe.identityResultsKey ? { resultsKey: config.stripe.identityResultsKey } : {}),
     });
     chosen.identity = identity.capabilities.provider;
   }

@@ -1342,8 +1342,7 @@ screen 1 passed on router state — is gone on return. A draft in
 `sessionStorage` carries it, minus the SSN, which is the one field that must
 never sit in browser storage.
 
-**Stripe returns no date of birth.** Its verified outputs carry name and
-address; its own test identity has no `dob` at all. Refusing the whole result
+**Stripe returns no date of birth.** Its verified outputs carry name and address; its own test identity has no `dob` at all. (Corrected 14 October 2026: the date of birth is a sensitive output a secret key never receives, and a restricted key reads it. See "The date of birth on the ID needs a restricted key".) Refusing the whole result
 over one absent field would strand a borrower whose ID genuinely verified, so
 the screen shows a date field and says why: "Your ID confirmed your name and
 address but not your date of birth."
@@ -4601,3 +4600,43 @@ for a band, and INC-009 is the transcript reconciliation with no number in
 it. Whether two figures are far enough apart to matter is a check for an
 underwriter, written as an event for a human, and it waits for a chosen
 tolerance and for the console reader that would show it to somebody.
+
+## The date of birth on the ID needs a restricted key
+
+**Found and built 14 October 2026.** Screen 2 has asked every Stripe-verified
+borrower for their date of birth, and the reason recorded for it ("its own
+test identity has no `dob` at all") was wrong. Against the sandbox, reading a
+verified session with the secret key and `expand[]=verified_outputs` returns
+the name, the address, the email, the phone and `id_number_type`, and no
+`dob` key at all; asking for `expand[]=verified_outputs.dob` with the same
+key is refused outright: "To access sensitive verification results,
+configure a restricted API key with appropriate permissions." Stripe's own
+table (Identity, "Access verification results") puts the date of birth, the
+ID number, the document number and its expiry behind a restricted key with
+**Identity Verification Results** and **Recent Detailed Verification
+Results** set to Read, and only for sessions verified in the last 48 hours
+unless the key is IP-restricted.
+
+**What is built.** The adapter takes an optional restricted key
+(`STRIPE_IDENTITY_RESULTS_KEY_SANDBOX`, or `STRIPE_IDENTITY_RESULTS_KEY`
+for live) and uses it for one thing: a second read of a session that has
+verified, expanding `verified_outputs.dob` and nothing else sensitive. It
+refuses at boot a key that is not `rk_`, a key in a different mode from the
+secret key, and a live one without the live opt-in the secret key already
+needs. A refused second read (no permission, past the window, a rolled key)
+leaves the verification standing and screen 2 asks for the date, as it does
+with no key at all. A date that cannot be a person's (a redacted session's
+1/1/1, a day not on the calendar, a future date) is dropped rather than put
+in a field, and a redacted session puts nothing of its outputs on a form.
+The boot log names it: "stripe-identity (test), reads date of birth".
+`npm run identity:dob -- vs_...` reads a session through the adapter and
+says, without printing any of it, whether a name, an address and a date of
+birth came back, and Stripe's reason when the date did not.
+
+**Not built: the key itself.** Creating one is a change to the Stripe
+account, and Joe's to make: in the dashboard, Create restricted key, those
+two permissions on Read and nothing else, then `STRIPE_IDENTITY_RESULTS_KEY_SANDBOX`
+in the local `.env`, in Secret Manager for staging, and on the deploy's
+secret list beside `STRIPE_SECRET_KEY_SANDBOX`. Until it is set, nothing
+changes for a borrower. The prefill reads minutes after the person verifies,
+well inside the 48-hour window, so the key needs no IP restriction.

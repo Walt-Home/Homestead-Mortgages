@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { statusFor, stripeIdentityConnector } from "../adapters/stripe-identity.js";
+import { statusFor, stripeIdentityConnector, toIsoDate } from "../adapters/stripe-identity.js";
 import type { LoanFile } from "@hm/shared";
 
 const file = { id: "file-123" } as unknown as LoanFile;
@@ -91,14 +91,19 @@ describe("sessions", () => {
 });
 
 describe("reading a result", () => {
+  // What a secret key's read of a verified session carries, as the sandbox
+  // answered it on 14 October 2026: the name, the address, the email, the
+  // phone, and no `dob` key at all.
   const verified = {
     id: "vs_1",
     status: "verified",
     verified_outputs: {
       first_name: "Dana",
       last_name: "Whitfield",
-      dob: { day: 12, month: 4, year: 1988 },
       address: { line1: "9 Rent Rd", city: "Austin", state: "TX", postal_code: "78704" },
+      email: null,
+      phone: null,
+      id_number_type: null,
     },
   };
 
@@ -111,7 +116,8 @@ describe("reading a result", () => {
     const r = await c.getVerification("vs_1");
     expect(r?.status).toBe("verified");
     expect(r?.documentName).toBe("Dana Whitfield");
-    expect(r?.documentDateOfBirth).toBe("1988-04-12");
+    // A secret key never receives it; without a restricted key, screen 2 asks.
+    expect(r?.documentDateOfBirth).toBeUndefined();
     expect(r?.documentAddress).toEqual({
       line1: "9 Rent Rd",
       line2: undefined,
@@ -169,6 +175,177 @@ describe("reading a result", () => {
 });
 
 /* ── Status, and the one Stripe overloads ───────────────────────────────── */
+
+/** Responses in order, one per call, and every call kept for inspection. */
+function sequence(...responses: { status: number; body: unknown }[]) {
+  const calls: { url: string; auth: string }[] = [];
+  const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push({
+      url: String(url),
+      auth: String((init?.headers as Record<string, string>)?.Authorization ?? ""),
+    });
+    const next = responses.shift() ?? { status: 500, body: {} };
+    return new Response(JSON.stringify(next.body), {
+      status: next.status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as unknown as typeof fetch;
+  return { fetchImpl, calls };
+}
+
+describe("the date of birth", () => {
+  const secretRead = {
+    id: "vs_1",
+    status: "verified",
+    verified_outputs: {
+      first_name: "Dana",
+      last_name: "Whitfield",
+      address: { line1: "9 Rent Rd", city: "Austin", state: "TX", postal_code: "78704" },
+    },
+  };
+  const restrictedRead = {
+    id: "vs_1",
+    status: "verified",
+    verified_outputs: { ...secretRead.verified_outputs, dob: { day: 12, month: 4, year: 1988 } },
+  };
+  // What Stripe answers a secret key that asks for it, seen 14 October 2026.
+  const refusal = {
+    error: {
+      type: "invalid_request_error",
+      message:
+        "To access sensitive verification results, configure a restricted API key with appropriate permissions.",
+    },
+  };
+
+  it("is read with the restricted key, in a second read the secret key cannot make", async () => {
+    const { fetchImpl, calls } = sequence(
+      { status: 200, body: secretRead },
+      { status: 200, body: restrictedRead },
+    );
+    const c = stripeIdentityConnector({
+      secretKey: "sk_test_x",
+      resultsKey: "rk_test_r",
+      origin: ORIGIN,
+      fetchImpl,
+    });
+    const r = await c.getVerification("vs_1");
+    expect(r?.documentDateOfBirth).toBe("1988-04-12");
+    expect(r?.documentName).toBe("Dana Whitfield");
+    expect(calls).toHaveLength(2);
+    expect(calls[0]!.auth).toBe("Bearer sk_test_x");
+    expect(calls[0]!.url).toContain("expand[]=verified_outputs");
+    expect(calls[0]!.url).not.toContain("verified_outputs.dob");
+    expect(calls[1]!.auth).toBe("Bearer rk_test_r");
+    expect(calls[1]!.url).toContain("expand[]=verified_outputs.dob");
+  });
+
+  it("is not asked for without a restricted key: one read, and screen 2 asks", async () => {
+    const { fetchImpl, calls } = sequence({ status: 200, body: secretRead });
+    const c = stripeIdentityConnector({ secretKey: "sk_test_x", origin: ORIGIN, fetchImpl });
+    const r = await c.getVerification("vs_1");
+    expect(r?.documentDateOfBirth).toBeUndefined();
+    expect(calls).toHaveLength(1);
+  });
+
+  it("leaves the verification standing when the restricted read is refused", async () => {
+    // No permission, past the 48-hour window, a rolled key: the person still
+    // verified, and the date is asked rather than the result thrown away.
+    const { fetchImpl } = sequence(
+      { status: 200, body: secretRead },
+      { status: 400, body: refusal },
+    );
+    const c = stripeIdentityConnector({
+      secretKey: "sk_test_x",
+      resultsKey: "rk_test_r",
+      origin: ORIGIN,
+      fetchImpl,
+    });
+    const r = await c.getVerification("vs_1");
+    expect(r?.status).toBe("verified");
+    expect(r?.documentName).toBe("Dana Whitfield");
+    expect(r?.documentDateOfBirth).toBeUndefined();
+  });
+
+  it("is not read for a session that has not verified", async () => {
+    const { fetchImpl, calls } = sequence({
+      status: 200,
+      body: { id: "vs_1", status: "processing" },
+    });
+    const c = stripeIdentityConnector({
+      secretKey: "sk_test_x",
+      resultsKey: "rk_test_r",
+      origin: ORIGIN,
+      fetchImpl,
+    });
+    await c.getVerification("vs_1");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("puts nothing from a redacted session on a form, and does not ask for its date", async () => {
+    const { fetchImpl, calls } = sequence({
+      status: 200,
+      body: {
+        ...secretRead,
+        redaction: { status: "redacted" },
+        verified_outputs: {
+          first_name: "[redacted]",
+          last_name: "[redacted]",
+          dob: { day: 1, month: 1, year: 1 },
+        },
+      },
+    });
+    const c = stripeIdentityConnector({
+      secretKey: "sk_test_x",
+      resultsKey: "rk_test_r",
+      origin: ORIGIN,
+      fetchImpl,
+    });
+    const r = await c.getVerification("vs_1");
+    expect(r?.status).toBe("verified");
+    expect(r?.documentName).toBeUndefined();
+    expect(r?.documentDateOfBirth).toBeUndefined();
+    expect(calls).toHaveLength(1);
+  });
+
+  it("is never a date that cannot be a person's", () => {
+    const now = new Date("2026-10-14T12:00:00Z");
+    expect(toIsoDate({ day: 12, month: 4, year: 1988 }, now)).toBe("1988-04-12");
+    expect(toIsoDate({ day: 1, month: 1, year: 1 }, now)).toBeUndefined();
+    expect(toIsoDate({ day: 31, month: 2, year: 1990 }, now)).toBeUndefined();
+    expect(toIsoDate({ day: 1, month: 1, year: 2030 }, now)).toBeUndefined();
+    expect(toIsoDate({ month: 4, year: 1988 }, now)).toBeUndefined();
+  });
+
+  it("refuses a secret key where the restricted key goes", () => {
+    expect(() =>
+      stripeIdentityConnector({ secretKey: "sk_test_x", resultsKey: "sk_test_y", origin: ORIGIN }),
+    ).toThrow(/restricted key/);
+  });
+
+  it("refuses keys from two modes", () => {
+    expect(() =>
+      stripeIdentityConnector({ secretKey: "sk_test_x", resultsKey: "rk_live_y", origin: ORIGIN }),
+    ).toThrow(/different modes/);
+  });
+
+  it("refuses a live restricted key without the live opt-in, because the live secret key is", () => {
+    expect(() =>
+      stripeIdentityConnector({ secretKey: "sk_live_x", resultsKey: "rk_live_y", origin: ORIGIN }),
+    ).toThrow(/Refusing a live Stripe key/);
+  });
+
+  it("says it reads the date of birth when it does, which the boot log prints", () => {
+    const c = stripeIdentityConnector({
+      secretKey: "sk_test_x",
+      resultsKey: "rk_test_r",
+      origin: ORIGIN,
+    });
+    expect(c.capabilities.provider).toBe("stripe-identity (test), reads date of birth");
+    expect(
+      stripeIdentityConnector({ secretKey: "sk_test_x", origin: ORIGIN }).capabilities.provider,
+    ).toBe("stripe-identity (test)");
+  });
+});
 
 describe("requires_input means two opposite things", () => {
   /**

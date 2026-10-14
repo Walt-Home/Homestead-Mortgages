@@ -14,7 +14,7 @@
 import { describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import { EXTENSION_OF_CREDIT } from "@hm/shared";
-import type { Suggestion } from "@hm/shared";
+import type { AssetReport, ReadBack, Suggestion } from "@hm/shared";
 import { connectorRouter } from "../routes/connectors.js";
 import { declarationRouter } from "../routes/declarations.js";
 import { fileRouter } from "../routes/files.js";
@@ -75,7 +75,12 @@ const RENTING = {
   propertyEstateType: "FeeSimple",
 };
 
-type Read = { file: { id: string }; you: string | null; suggestions: Suggestion[] };
+type Read = {
+  file: { id: string };
+  you: string | null;
+  suggestions: Suggestion[];
+  readBacks: ReadBack[];
+};
 
 /** Screens 1 and 2, the authorization, the credit pull and the bank. */
 async function linked() {
@@ -148,6 +153,52 @@ describe("reading a file", () => {
     const res = await read(maya.id, h.fileId);
     expect(res.status).toBe(200);
     expect(res.body.suggestions).toEqual([]);
+    expect(res.body.readBacks).toEqual([]);
+  });
+});
+
+describe("the income read-back", () => {
+  it("hands the applicant what they told us beside what their own bank shows", async () => {
+    const h = await linked();
+    const res = await read(h.user.id, h.fileId);
+    const [back, ...rest] = res.body.readBacks;
+    expect(rest).toHaveLength(0);
+
+    const snapshot = await prisma.connectorSnapshot.findFirstOrThrow({
+      where: { loanFileId: h.fileId, kind: "bank" },
+      orderBy: { writeSeq: "desc" },
+      select: { id: true, payload: true },
+    });
+    const streams = (snapshot.payload as unknown as AssetReport).incomeSources.filter(
+      (s) => s.monthlyAmount > 0,
+    );
+    const said = await prisma.fact.findFirstOrThrow({
+      where: { partyId: h.partyId, predicate: "monthly_income", supersededById: null },
+      select: { id: true },
+    });
+    expect(back).toMatchObject({
+      key: "stated_vs_found_income",
+      partyId: h.partyId,
+      stated: { value: 9_400, evidence: { kind: "fact", id: said.id } },
+      found: {
+        value: Math.round(streams.reduce((sum, s) => sum + s.monthlyAmount, 0)),
+        streams: streams.length,
+        evidence: { kind: "snapshot", id: snapshot.id },
+      },
+    });
+
+    // Display only: reading it twice writes nothing about it.
+    await read(h.user.id, h.fileId);
+    const written = await prisma.fileEvent.count({
+      where: { loanFileId: h.fileId, kind: { startsWith: "autofill_" } },
+    });
+    expect(written).toBe(1); // the rent caption's one `autofill_shown`, and nothing else
+  });
+
+  it("has nothing to read back before the bank", async () => {
+    const user = await createUser();
+    const created = await callAs<{ id: string }>(user.id, [fileRouter], "POST", "/", SCREEN_ONE);
+    expect((await read(user.id, created.body.id)).body.readBacks).toEqual([]);
   });
 });
 

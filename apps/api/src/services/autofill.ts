@@ -9,6 +9,10 @@
  * from the reader's own bank report, and a returning person's phone on a
  * file where they have not said who they are yet.
  *
+ * Read-backs (`fileReadBacksFor`, served beside `GET /files/:id` too): the
+ * income the applicant told us beside what their own bank report shows, on
+ * the review screen above the signature. Display only.
+ *
  * Person scope (`personSuggestionsFor`, served at `GET /api/suggestions`):
  * the income a person last stated, for screen 1 and the refinance offer card,
  * both of which ask before a file exists (and screen 1 again on a revisit,
@@ -35,7 +39,13 @@ import {
   SUGGESTION_SOURCE,
   SUGGESTION_TAG,
 } from "@hm/shared";
-import type { AssetReport, AutofillOutcomeInput, Suggestion, SuggestionKey } from "@hm/shared";
+import type {
+  AssetReport,
+  AutofillOutcomeInput,
+  ReadBack,
+  Suggestion,
+  SuggestionKey,
+} from "@hm/shared";
 import type { Db } from "./db.js";
 import { AppError } from "../middleware/error-handler.js";
 
@@ -177,6 +187,64 @@ export function fileSuggestionsFor(input: FileSuggestionInput): Suggestion[] {
   return FILE_RULES.map((rule) => rule(input)).filter((s): s is Suggestion => s !== null);
 }
 
+/* ── Read-backs ───────────────────────────────────────────────────────── */
+
+export interface ReadBackInput {
+  readonly partyId: string;
+  /**
+   * Whether the reader is the applicant. Only the applicant states an income
+   * on this application (screen 1, or the offer card); a co-borrower is never
+   * asked one here, and an income they gave on some other application is not
+   * "what you told us" about this one.
+   */
+  readonly isOwner: boolean;
+  readonly own: OwnBankSnapshot | null;
+  /** The applicant's own live income statement, which this application pins. */
+  readonly stated: PriorStatement | null;
+}
+
+/**
+ * What they told us beside what their bank shows, both or nothing.
+ *
+ * Both figures have to be there and positive. A report that recognized no
+ * income stream says nothing about what the person earns (they may be paid
+ * in cash, or into an account they did not connect), and "your bank shows
+ * nothing" would be an absence read as an answer. No tolerance and no flag:
+ * the person sees two figures, and whether they are far enough apart to be
+ * somebody's concern is a check for a human, not a line on this screen.
+ */
+function incomeReadBack(input: ReadBackInput): ReadBack | null {
+  const { own, stated } = input;
+  if (!input.isOwner || !own || own.permissiblePurpose !== EXTENSION_OF_CREDIT || !stated) {
+    return null;
+  }
+  const said = typeof stated.value === "number" ? stated.value : Number(stated.value);
+  if (!Number.isFinite(said) || said <= 0) return null;
+  const streams = own.assets.incomeSources.filter((s) => s.monthlyAmount > 0);
+  const found = Math.round(streams.reduce((sum, s) => sum + s.monthlyAmount, 0));
+  if (found <= 0) return null;
+  return {
+    key: "stated_vs_found_income",
+    screen: "review",
+    stated: {
+      value: Math.round(said),
+      evidence: { kind: "fact", id: stated.id, at: stated.observedAt },
+    },
+    found: {
+      value: found,
+      streams: streams.length,
+      evidence: { kind: "snapshot", id: own.id, at: own.retrievedAt },
+    },
+    tag: SUGGESTION_TAG.bank,
+    partyId: input.partyId,
+  };
+}
+
+export function fileReadBacksFor(input: ReadBackInput): ReadBack[] {
+  const r = incomeReadBack(input);
+  return r ? [r] : [];
+}
+
 /* ── Person scope ─────────────────────────────────────────────────────── */
 
 /**
@@ -313,16 +381,20 @@ export async function dismissedBy(
  * a duplicate under a race is harmless, a missing one would make "never
  * rendered" and "rendered and abandoned" the same thing.
  */
-export async function readFileSuggestions(
+export async function readFileAutofill(
   db: Db,
   loanFileId: string,
   partyId: string,
-  opts: { readonly hasOwnRow: boolean },
-): Promise<Suggestion[]> {
-  const [own, phone, dismissed] = await Promise.all([
+  opts: { readonly hasOwnRow: boolean; readonly isOwner: boolean },
+): Promise<{ suggestions: Suggestion[]; readBacks: ReadBack[] }> {
+  const [own, phone, stated, dismissed] = await Promise.all([
     ownBankSnapshot(db, loanFileId, partyId),
     // Only asked when it could be offered, which is before screen 2.
     opts.hasOwnRow ? Promise.resolve(null) : priorStatement(db, partyId, "phone"),
+    // Only the applicant states an income on this application.
+    opts.isOwner
+      ? priorStatement(db, partyId, PRIOR_STATEMENT_PREDICATE.stated_monthly_income)
+      : Promise.resolve(null),
     dismissedBy(db, loanFileId, partyId),
   ]);
   const suggestions = fileSuggestionsFor({
@@ -332,7 +404,20 @@ export async function readFileSuggestions(
     hasOwnRow: opts.hasOwnRow,
     dismissed,
   });
-  if (suggestions.length === 0) return suggestions;
+  // Nothing is recorded for a read-back: there is nothing to take, and it
+  // changes nothing. The suggestions below are recorded as served.
+  const readBacks = fileReadBacksFor({ partyId, isOwner: opts.isOwner, own, stated });
+  await recordShown(db, loanFileId, partyId, suggestions);
+  return { suggestions, readBacks };
+}
+
+async function recordShown(
+  db: Db,
+  loanFileId: string,
+  partyId: string,
+  suggestions: readonly Suggestion[],
+): Promise<void> {
+  if (suggestions.length === 0) return;
 
   const shown = await db.fileEvent.findMany({
     where: { loanFileId, kind: "autofill_shown" },
@@ -370,7 +455,6 @@ export async function readFileSuggestions(
       },
     });
   }
-  return suggestions;
 }
 
 /**

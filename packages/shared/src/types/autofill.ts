@@ -91,6 +91,32 @@ export interface Suggestion {
   readonly partyId: string;
 }
 
+/**
+ * A read-back: two figures side by side above the signature, and nothing to
+ * take. Where a suggestion offers a value for a field, a read-back shows the
+ * person what they told us beside what was found, so the signature attests
+ * with both in view. No edit in place, no outcome, no diary row: it changes
+ * nothing, and the engine reads neither figure from it.
+ */
+export const READ_BACK_KEYS = ["stated_vs_found_income"] as const;
+export type ReadBackKey = (typeof READ_BACK_KEYS)[number];
+
+export interface ReadBack {
+  readonly key: ReadBackKey;
+  readonly screen: "review";
+  /** What the person told us, and the fact it was told in. */
+  readonly stated: { readonly value: number; readonly evidence: SuggestionEvidence };
+  /** What their own bank report shows, how many streams make it up, and the report. */
+  readonly found: {
+    readonly value: number;
+    readonly streams: number;
+    readonly evidence: SuggestionEvidence;
+  };
+  readonly tag: (typeof SUGGESTION_TAG)["bank"];
+  /** The reader's party, and never anyone else's. */
+  readonly partyId: string;
+}
+
 export const AUTOFILL_OUTCOMES = ["accepted", "corrected", "dismissed"] as const;
 export type AutofillOutcome = (typeof AUTOFILL_OUTCOMES)[number];
 

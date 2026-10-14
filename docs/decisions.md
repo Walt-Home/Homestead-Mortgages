@@ -4569,3 +4569,35 @@ bank snapshot of the reader's on this file; a prior statement is a
 SELF_ATTESTED fact of the reader's on the key's predicate, live or not,
 since the save about to run may be the one that supersedes it. A refusal is
 a 400 and nothing is written, the file included.
+
+## A read-back is two figures and nothing to take
+
+**Decided 14 October 2026**, built for the income. The review screen shows
+the applicant what they told us beside what their own bank report shows,
+above the signature: "Your income · You told us $9,500 a month, before tax ·
+Your bank shows about $7,843 a month · We underwrite on the income we can
+verify, not on the figure you gave us · From your bank activity". The last
+sentence is true of the engine: qualifying income is computed from verified
+sources, and no ratio reads the stated figure, which is a piece of the TRID
+application and the affordability gate's input.
+
+**Its own type, not a suggestion.** A suggestion offers a value for a field
+and records what became of it; a read-back offers nothing, so it has no
+control, no outcome and no diary row, and it is served as `readBacks[]`
+beside `suggestions[]` on the file read. The engine reads neither figure
+from it.
+
+**Both figures or none, and the applicant's alone.** The stated figure is
+the applicant's live SELF_ATTESTED income under their own principal, which
+is what the application pins. The found figure is the sum of the income
+streams in their own newest bank report, ordered as an extension of credit.
+A report with no recognizable income stream produces no read-back rather
+than "your bank shows nothing", because a person paid in cash or into an
+account they did not connect has not been shown to earn nothing. A
+co-borrower gets none: they are not asked an income on this application.
+
+**No tolerance, and no judgment on the gap.** The design pointed at INC-009
+for a band, and INC-009 is the transcript reconciliation with no number in
+it. Whether two figures are far enough apart to matter is a check for an
+underwriter, written as an event for a human, and it waits for a chosen
+tolerance and for the console reader that would show it to somebody.

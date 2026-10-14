@@ -10,7 +10,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import type { Suggestion } from "@hm/shared";
+import type { ReadBack, Suggestion } from "@hm/shared";
 import type {
   ApplicationReceipt,
   BorrowerDeclaration,
@@ -384,6 +384,13 @@ export interface LoanFileResponse {
    * one as a `Found` line and never as a filled control.
    */
   suggestions: Suggestion[];
+  /**
+   * What the reader told us beside what was found, for the review screen:
+   * today the income the applicant stated beside what their own bank report
+   * shows. Display only. Empty for a co-borrower, who is not asked an income
+   * here, and before the bank.
+   */
+  readBacks: ReadBack[];
 }
 
 export function useLoanFile(fileId: string | undefined) {

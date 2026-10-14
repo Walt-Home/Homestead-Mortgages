@@ -57,6 +57,7 @@ import {
   COUNTEROFFER_COPY,
   ENDING_COPY,
   BANK_OWED_COPY,
+  INCOME_READ_BACK_COPY,
   REFERRED_COPY,
   SIGNING_COPY,
   SIGN_LEAD,
@@ -75,7 +76,7 @@ import {
 } from "../lib/work.js";
 import { borrowerName, coBorrowers, primaryBorrower } from "../lib/borrowers.js";
 import type { Assessment } from "../lib/api.js";
-import type { FileEmployment } from "@hm/shared";
+import type { FileEmployment, ReadBack } from "@hm/shared";
 import {
   CURRENT_VESTING,
   defaultVestingSentence,
@@ -211,6 +212,9 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
   const workComplete = workAnswered(myJobs, work);
   const decision = file?.decision;
   const ratios = decision?.ratios;
+  // Computed by the server from the applicant's own statement and their own
+  // bank report; absent for a co-borrower and before the bank.
+  const incomeReadBack = data?.readBacks?.find((r) => r.key === "stated_vs_found_income") ?? null;
   const payrollLinked = file?.payroll != null;
   const branches = branchesFor(assessment, payrollLinked);
   // Undefined until the file has been read, null once it has been read and
@@ -743,6 +747,12 @@ export function ReviewPage({ assessment }: { assessment?: Assessment }) {
           signature's subject. A borrower with no current job on the file gets
           nothing at all here — not an empty heading, not "no jobs on file".
         */}
+        {/*
+          What they told us beside what their bank shows, above the jobs it
+          found. Display only: the figure they stated is changed on the first
+          screen, which the stepper already offers, and nothing here asks.
+        */}
+        {incomeReadBack && <IncomeReadBack readBack={incomeReadBack} />}
         <MyWork jobs={myJobs} form={work} onChange={setWork} />
         {others.length > 0 && (
           /* Everybody else on the application, as a status and not as their
@@ -1031,6 +1041,35 @@ function MyWork({
  * as whoever is signed in, so a link out of somebody else's block would take
  * the applicant to answer in their own name.
  */
+/** The income they told us, beside what their bank shows. */
+export function IncomeReadBack({ readBack }: { readBack: ReadBack }) {
+  return (
+    <div className="mt-7 border-t border-rule-soft pt-5" data-read-back={readBack.key}>
+      <p className="font-display text-base text-ink">{INCOME_READ_BACK_COPY.heading}</p>
+      <dl className="mt-4 flex flex-col gap-3">
+        <div className="flex flex-col gap-0.5">
+          <dt className="text-sm text-ink-muted">{INCOME_READ_BACK_COPY.told}</dt>
+          <dd className="text-base text-ink">
+            <span className="super-figure">{money(readBack.stated.value)}</span>{" "}
+            {INCOME_READ_BACK_COPY.beforeTax}
+          </dd>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <dt className="text-sm text-ink-muted">{INCOME_READ_BACK_COPY.found}</dt>
+          <dd className="text-base text-ink">
+            <span className="super-figure">{money(readBack.found.value)}</span>{" "}
+            {INCOME_READ_BACK_COPY.perMonth}
+            {INCOME_READ_BACK_COPY.streams(readBack.found.streams)}
+          </dd>
+        </div>
+      </dl>
+      <p className="super-source mt-3">
+        {INCOME_READ_BACK_COPY.why} · {readBack.tag}
+      </p>
+    </div>
+  );
+}
+
 export function Answers({
   heading,
   lines,

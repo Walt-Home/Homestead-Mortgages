@@ -30,7 +30,7 @@ import { advanceStage, stageAfter } from "../services/stage.js";
 import {
   assertOutcomesAreTheirs,
   autofillOutcomesSchema,
-  readFileSuggestions,
+  readFileAutofill,
   recordAutofillOutcomes,
 } from "../services/autofill.js";
 import {
@@ -804,11 +804,12 @@ fileRouter.get(
     // demo file offers nothing: a sample borrower's file is everybody's to
     // read and nobody's to answer, and nothing a reader is not a party on
     // can be their own.
-    const suggestions =
+    const { suggestions, readBacks } =
       owner.isDemo || !you
-        ? []
-        : await readFileSuggestions(prisma, id, you, {
+        ? { suggestions: [], readBacks: [] }
+        : await readFileAutofill(prisma, id, you, {
             hasOwnRow: file.borrowers.some((b) => b.partyId === you),
+            isOwner: yours,
           });
     // The promise holds in both directions: the owner reads the whole file
     // and everybody on it but themselves reduced to a name and a status, so
@@ -821,6 +822,8 @@ fileRouter.get(
       owner: yours,
       applicationState: await applicationStanding(prisma, id),
       suggestions,
+      // What the reader told us beside what was found, for the review screen.
+      readBacks,
     });
   }),
 );

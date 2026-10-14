@@ -14,8 +14,9 @@
 
 import { describe, expect, it } from "vitest";
 import type { AssetReport } from "@hm/shared";
-import { dismissalKey, EXTENSION_OF_CREDIT, SUGGESTION_KEYS } from "@hm/shared";
+import { dismissalKey, EXTENSION_OF_CREDIT, READ_BACK_KEYS, SUGGESTION_KEYS } from "@hm/shared";
 import {
+  fileReadBacksFor,
   fileSuggestionsFor,
   personSuggestionsFor,
   type OwnBankSnapshot,
@@ -240,6 +241,80 @@ describe("the income a person stated before", () => {
   });
 });
 
+describe("the income read-back", () => {
+  const STREAMS: AssetReport["incomeSources"] = [
+    {
+      type: "base_wage",
+      monthlyAmount: 6_250.4,
+      historyMonths: 12,
+      continuanceEstablished: null,
+      evidenceDocumentIds: [],
+    },
+    {
+      type: "self_employment",
+      monthlyAmount: 1_420,
+      historyMonths: 9,
+      continuanceEstablished: null,
+      evidenceDocumentIds: [],
+    },
+  ];
+  const back = (
+    over: Partial<{
+      isOwner: boolean;
+      own: OwnBankSnapshot | null;
+      stated: PriorStatement | null;
+    }> = {},
+  ) =>
+    fileReadBacksFor({
+      partyId: PARTY,
+      isOwner: true,
+      own: own({}, { incomeSources: STREAMS }),
+      stated: said(9_400),
+      ...over,
+    });
+
+  it("sets what the applicant told us beside what their own bank shows, with the rows each came from", () => {
+    const [r, ...rest] = back();
+    expect(rest).toHaveLength(0);
+    expect(r).toEqual({
+      key: "stated_vs_found_income",
+      screen: "review",
+      stated: {
+        value: 9_400,
+        evidence: { kind: "fact", id: FACT, at: "2026-03-14T15:00:00Z" },
+      },
+      found: {
+        value: 7_670,
+        streams: 2,
+        evidence: {
+          kind: "snapshot",
+          id: "22222222-2222-4222-8222-222222222222",
+          at: "2026-10-12T12:00:00Z",
+        },
+      },
+      tag: "From your bank activity",
+      partyId: PARTY,
+    });
+  });
+
+  it("is the applicant's alone: a co-borrower is not asked an income on this application", () => {
+    expect(back({ isOwner: false })).toEqual([]);
+  });
+
+  it("needs both figures, and never reads a report with no income in it as an answer", () => {
+    expect(back({ stated: null })).toEqual([]);
+    expect(back({ stated: said(0) })).toEqual([]);
+    expect(back({ own: null })).toEqual([]);
+    expect(back({ own: own({}, { incomeSources: [] }) })).toEqual([]);
+  });
+
+  it("reads nothing from a report the bureau was not told is for an extension of credit", () => {
+    expect(back({ own: own({ permissiblePurpose: null }, { incomeSources: STREAMS }) })).toEqual(
+      [],
+    );
+  });
+});
+
 describe("the keys", () => {
   it("can name nothing a declaration, a demographic or an identity answer is stored under", () => {
     // Rule c: a Section 5 or 1b answer is asked bare and never suggested; a
@@ -274,7 +349,7 @@ describe("the keys", () => {
       "first_time",
       "language",
     ];
-    for (const key of SUGGESTION_KEYS) {
+    for (const key of [...SUGGESTION_KEYS, ...READ_BACK_KEYS]) {
       for (const word of forbidden) expect(key, `${key} names ${word}`).not.toContain(word);
     }
   });

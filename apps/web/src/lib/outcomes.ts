@@ -190,6 +190,26 @@ export const SIGNING_COPY = {
  * vendor. Which connector reported the job is not this block's business, and a
  * sentence that named one would be true on a deployment and false on the next.
  */
+/**
+ * The income read-back above the signature: what the applicant told us
+ * beside what their own bank report shows.
+ *
+ * Two figures and one sentence about which of them counts, which is true of
+ * the engine: qualifying income is computed from verified sources only, and
+ * the stated figure is a piece of the application that no ratio reads. No
+ * judgment about the gap. Whether two figures are far enough apart to matter
+ * is a question for an underwriter, not a line on the borrower's screen.
+ */
+export const INCOME_READ_BACK_COPY = {
+  heading: "Your income",
+  told: "You told us",
+  found: "Your bank shows about",
+  perMonth: "a month",
+  beforeTax: "a month, before tax",
+  streams: (n: number) => (n > 1 ? `, from ${n} sources` : ""),
+  why: "We underwrite on the income we can verify, not on the figure you gave us.",
+} as const;
+
 export const WORK_COPY = {
   heading: "Your work",
   lead: "A payroll or bank connection tells us where you work. These two it cannot tell us, so they are yours to answer — both of them, about each job you have now.",

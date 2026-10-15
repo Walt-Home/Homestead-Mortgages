@@ -4640,3 +4640,40 @@ in the local `.env`, in Secret Manager for staging, and on the deploy's
 secret list beside `STRIPE_SECRET_KEY_SANDBOX`. Until it is set, nothing
 changes for a borrower. The prefill reads minutes after the person verifies,
 well inside the 48-hour window, so the key needs no IP restriction.
+
+## Model weights are kept in our project, under their publisher's name
+
+**Moved and checked 15 October 2026.** The open model the team had
+downloaded sat in Walt's project as `gs://homestead-weights/homestead-1.0`,
+named as if it were a fork of ours, with Walt's default compute and Cloud
+Build accounts holding objectAdmin on it. It is not a fork. It is
+DeepSeek-V4-Flash-0731 at Hugging Face revision
+`7872f01b1d1fe23eabc4c98b48bffcef5a386062`, all 74 files byte for byte: the
+48 weight shards by the SHA-256 the Hub publishes for each, the 26 code and
+config files by git's blob hash. The code matters as much as the weights,
+because serving the model runs `inference/*.py` and the `encoding` scripts.
+By its own safetensors headers the checkpoint holds about 304 billion
+parameters, about 19 billion of them in three speculative-decoding layers.
+
+**What is built.** `infra/models.tf` declares one bucket,
+`homestead-mortgages-models`. It is in us-central1 like everything else and
+shared by both environments, because a model is not an environment's. Public
+access is prevented, access is uniform, and nothing is granted on it. It is
+versioned, keeping a noncurrent version thirty days beyond the seven soft
+delete already holds.
+
+A model lives under its publisher's name and revision, never a name of ours:
+`deepseek-ai/DeepSeek-V4-Flash-0731/7872f01b…/`. Beside it, `SHA256SUMS`
+lists every file (`sha256sum -c` re-runs the check against any copy), and
+`PROVENANCE.json` says where the bytes came from and when they were checked.
+Whatever serves a model gets objectViewer on this bucket by name when it
+exists. Weights trained on a partner's data never land here; they would get
+a bucket and a key of the partner's own.
+
+**How it was checked.** The copy was a server-side rewrite: same region, six
+seconds, and it never left Google. Every object was then streamed from our
+bucket and hashed. One stream broke off partway through shard 27 and was
+re-read whole. The source, the holding copy and the final path agree on
+every name, size and CRC32C.
+
+**Not done: the copy in Walt's project.** Deleting it is Joe's call.

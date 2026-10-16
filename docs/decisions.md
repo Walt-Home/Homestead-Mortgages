@@ -4682,3 +4682,56 @@ CRC32C. Walt's bucket soft-deletes for seven days, so the files can be
 restored there until 23 October. The empty `homestead-weights` bucket is
 left standing, because nothing on our side shows what in Walt's project
 might still name it.
+
+## The first environment grades the refi review, and the engine is the grader
+
+**Built 16 October 2026.** `packages/environments` holds `refi-review` 1.0.0.
+It has three parts: a task (one loan as the review sees it, on one day), the
+tools a model may use, and a grader the model never sees. It is the first
+item of Phase 1 in the plan to build environments over our own engines on
+synthetic loans. `docs/environments.md` says how to run it.
+
+**Why the refi review first.** It is the one engine already held to its
+source to the cent: 22 tests check it against the servicing spec's worked
+examples and the sample book. It is pure, so a task needs no database. An
+agent already does this job, the refi analyst, and its model is pluggable.
+Underwriting comes second. Its file builder is test-only and covers three
+fixture borrowers, and its known gaps (qualifying income reads $0 on real
+Plaid files, no flood determination, placeholder NMLS numbers) must stay
+out of anything graded.
+
+**What was decided.**
+
+- **The grader is `reviewLoan` itself, run at grading time.** There is no
+  second implementation of the rules for a model to be graded against.
+- **The rulebook is the engine written out,** and it is the system prompt.
+  The money tools are the engine's own exported primitives (`levelPaymentPct`,
+  `balanceAfter`, `perDiem365`, `npvOfDelta`), so a tool and the grader can
+  never disagree about a cent. No tool takes a loan or returns a verdict.
+- **A reference policy proves every task can be solved.** It follows the
+  rulebook through the tools alone and reads only the rendered task. The
+  tests hold it to 100 % of the held-out suite, so a task it fails is a
+  defect in the environment, not a hard question. Building it found the
+  turn limit too tight (a careful review is about forty calls) and a
+  calculator that resolved `constructor` to JavaScript's `Object`; both are
+  fixed.
+- **Version 1 starts from the engine's row, not from a raw tape line.** It
+  grades the review, not the tape reader.
+- **A pass is every field right.** The share of fields right is recorded
+  beside the pass and never replaces it, because partial credit for a
+  guessed verdict is the first thing a model learns to collect.
+- **The held-out suite is fixed:** seed 1, 200 tasks, drawn from a stream
+  that no training seed can reach. It never appears in a prompt or a
+  training run.
+- **No refusal fallback on the Claude policy.** A fallback answers with
+  another model and credits its score to the one that refused. A refusal is
+  an outcome, scored as a miss.
+- **Runs are append-only JSONL files, not a table.** A run is evaluation
+  evidence about synthetic loans, not product data. A line carries
+  everything a score rests on: the task's coordinates and text, the rulebook
+  and tools hashes, the engine's versions, the transcript and every graded
+  field.
+
+**Not done.** No model has been run yet. Phase 1's gate ends with a hand
+read of 50 passing model runs, and a model run spends money, so it waits
+for Joe's word.

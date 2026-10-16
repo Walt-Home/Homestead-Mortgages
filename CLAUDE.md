@@ -34,6 +34,12 @@ may suggest, what it may only check, what it may never touch, and the defects
 found on the way. Read it before adding a prefill, a default or a derived
 answer to any screen.
 
+`docs/environments.md` is the training and evaluation environments in
+`packages/environments`: a task, primitive tools, and a grader that is the
+engine itself, on synthetic loans only. Read it before changing
+`packages/refi-review`, because the refi-review environment's rulebook says
+what that engine does and a test holds the two equal.
+
 ## The shape
 
 npm workspaces + Turbo, following the HMX pattern. Express 5 API, React 19 SPA,
@@ -48,6 +54,7 @@ packages/shared            domain types; LoanFile is the object everything reads
 packages/kernel            Doug's kernel, vendored: money, calendar, ledger, fsm, timers, events
 packages/partner-book      the tape reader: a servicer's book onto the partner-feed contract
 packages/refi-review       the daily refinance review: Doug's §33.2 over his §20.1, pure, over the kernel
+packages/environments      RL environments: the refi review as a task, primitive tools, the engine as grader
 packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5

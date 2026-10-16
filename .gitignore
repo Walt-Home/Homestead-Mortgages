@@ -5,9 +5,13 @@ dist/
 .env
 .env.local
 .DS_Store
-infra/.terraform/
-infra/*.tfstate
-infra/*.tfstate.backup
+
+# Terraform state is local and applied by hand, and none of it is ever
+# committed: the state, its backups (terraform.tfstate.backup, and the
+# timestamped ones `terraform state` writes) and the lock file.
+infra/**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.*
 
 # tsc --incremental state for apps/servicing (his tsconfig writes it)
 .cache/

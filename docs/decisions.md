@@ -4676,4 +4676,9 @@ bucket and hashed. One stream broke off partway through shard 27 and was
 re-read whole. The source, the holding copy and the final path agree on
 every name, size and CRC32C.
 
-**Not done: the copy in Walt's project.** Deleting it is Joe's call.
+**The copy in Walt's project was deleted on 16 October 2026,** at Joe's word,
+after its 74 objects were listed again and matched ours by name, size and
+CRC32C. Walt's bucket soft-deletes for seven days, so the files can be
+restored there until 23 October. The empty `homestead-weights` bucket is
+left standing, because nothing on our side shows what in Walt's project
+might still name it.

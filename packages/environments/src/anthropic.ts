@@ -85,6 +85,9 @@ export class AnthropicPolicy implements Policy {
         const response = await this.client.messages.create({
           model: this.model,
           max_tokens: this.maxTokens,
+          // The conversation grows by one turn at a time, so the history
+          // up to the newest block is cached too, not only the rulebook.
+          cache_control: { type: "ephemeral" },
           system,
           tools,
           messages,

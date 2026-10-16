@@ -86,6 +86,7 @@ describe("the Claude policy", () => {
       { type: "text", text: refiReview.system, cache_control: { type: "ephemeral" } },
     ]);
     expect(first.output_config).toEqual({ effort: "high" });
+    expect(first.cache_control).toEqual({ type: "ephemeral" });
     expect(first.tool_choice).toBeUndefined();
     expect(first.tools?.map((t) => (t as Anthropic.Tool).name)).toEqual(
       refiReview.tools.map((t) => t.name),

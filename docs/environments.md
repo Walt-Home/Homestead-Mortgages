@@ -111,5 +111,5 @@ There are two model policies, and neither falls back to another model:
 - The two gates that read Fannie Mae delivery records. The engine treats
   them as open, so the task does too.
 - Cash-out candidates, and the analyst's written rationale.
-- A hand read of 50 passing model runs. This is the last item on Phase 1's
-  gate, and it needs model runs first.
+- The full hand read. Phase 1's gate asks for 50 passing model runs read
+  by hand; six are read as of 19 October (see docs/decisions.md).

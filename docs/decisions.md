@@ -4732,6 +4732,23 @@ out of anything graded.
   and tools hashes, the engine's versions, the transcript and every graded
   field.
 
-**Not done.** No model has been run yet. Phase 1's gate ends with a hand
-read of 50 passing model runs, and a model run spends money, so it waits
-for Joe's word.
+**The first model runs (19 October 2026).** The model was DeepSeek-V4.1-Flash
+as a managed Vertex API on our project, through `VertexOpenModelPolicy`. It
+ran on the training split, seed 1, tasks 0 to 4.
+
+- **The first run lost four of five episodes to the transport, not the
+  model.** Node's fetch gives up waiting for headers after five minutes
+  (`UND_ERR_HEADERS_TIMEOUT`), and some of this endpoint's turns take
+  longer. The policy now streams.
+- **The re-run passed all five,** every field right: 1 candidate, 3
+  watching, 1 not now. It cost $0.11 in all, about $0.02 an episode, at 6 to
+  8 turns and 20 to 28 tool calls each. The slowest turn took 313 seconds and
+  went through.
+- **A hand read of all six passing episodes found none that passed without
+  the work.** Every money figure came from a tool. A few simple steps were
+  done in the model's head (the round-up to $1,000, the rate gap, the watch
+  rate), and all were right. That is the likeliest way a run will miss a
+  cent, and it is the model's weakness, not the environment's.
+
+**Not done.** The gate needs 50 passing model runs read by hand; six are
+read. At the measured cost the rest is about $1.

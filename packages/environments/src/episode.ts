@@ -112,6 +112,8 @@ export type TranscriptEntry =
       readonly text: string;
       readonly calls: readonly ToolCall[];
       readonly stop: TurnStop;
+      /** How long the policy took to answer this turn. */
+      readonly ms: number;
     }
   | {
       readonly kind: "observations";
@@ -158,7 +160,9 @@ export async function runEpisode<T, A>(
   try {
     const session = policy.start({ system: env.system, user: env.render(task), tools: env.tools });
     for (; turns < limits.maxTurns;) {
+      const asked = Date.now();
       const turn = await session.act(observations);
+      const ms = Date.now() - asked;
       turns += 1;
       const u = turn.usage ?? NO_USAGE;
       usage.input_tokens += u.input_tokens;
@@ -171,6 +175,7 @@ export async function runEpisode<T, A>(
         text: turn.text,
         calls: turn.calls,
         stop: turn.stop,
+        ms,
       });
       if (turn.stop === "refusal" || turn.stop === "max_tokens") {
         outcome = turn.stop;

@@ -9,4 +9,5 @@ export * from "./record.js";
 export * from "./rng.js";
 export * from "./calculate.js";
 export * from "./anthropic.js";
+export * from "./vertex.js";
 export * as refi from "./refi/index.js";

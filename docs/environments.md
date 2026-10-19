@@ -63,10 +63,32 @@ Runs land in `packages/environments/runs/`, which git ignores.
 npm run build -w @hm/environments
 npm run env:refi -w @hm/environments -- --policy reference
 npm run env:refi -w @hm/environments -- --policy anthropic --model claude-opus-5-5 --effort high --n 20
+npm run env:refi -w @hm/environments -- --policy vertex --split train --n 5
 ```
 
 The default is the reference policy on the held-out suite. A model run
 spends real money, and it is never the default.
+
+There are two model policies, and neither falls back to another model:
+
+- **`anthropic`** calls Claude over the Messages API. It needs an Anthropic
+  key in the environment.
+- **`vertex`** calls an open model that Vertex AI serves as a managed API on
+  our own project. The default is `deepseek-ai/deepseek-v4.1-flash-maas`, at
+  $0.30 / $1.20 per million input / output tokens ($0.03 cached), billed to
+  the Google Cloud project.
+  - It authorizes with `gcloud auth print-access-token` and names
+    `homestead-mortgages` in the URL and in `x-goog-user-project`, because
+    gcloud's default project on the Mac is Walt's.
+  - Google's docs say DeepSeek's function calling is worse with a system
+    prompt, so this policy puts the rulebook at the top of the first user
+    message instead.
+  - Thinking is on (`--thinking off` turns it off), and the reasoning goes
+    back with its assistant turn.
+  - Every request streams. The endpoint takes 2 to 70 seconds a turn, and
+    some turns run past five minutes. Unstreamed, that is where Node's fetch
+    gives up waiting for headers, which ended four of the first five smoke
+    episodes. A dropped connection is retried whole.
 
 ## What keeps it honest
 

@@ -168,13 +168,11 @@ async function assemble(res: FetchResponse): Promise<WireResponse> {
         message: {
           content,
           reasoning_content: reasoning || null,
-          tool_calls: calls
-            .filter(Boolean)
-            .map((c) => ({
-              id: c.id,
-              type: "function" as const,
-              function: { name: c.name, arguments: c.arguments },
-            })),
+          tool_calls: calls.filter(Boolean).map((c) => ({
+            id: c.id,
+            type: "function" as const,
+            function: { name: c.name, arguments: c.arguments },
+          })),
         },
       },
     ],
@@ -182,16 +180,26 @@ async function assemble(res: FetchResponse): Promise<WireResponse> {
   };
 }
 
-/** A Google access token from the gcloud CLI, reused for 45 minutes of its hour. */
-export function gcloudAccessToken(): () => Promise<string> {
+/**
+ * A Google access token from the gcloud CLI, reused for two minutes.
+ *
+ * Short on purpose. gcloud hands back the token it already holds until that
+ * token expires, so a fresh-looking answer can have minutes to live: a
+ * 45-minute reuse cost the first gate run five episodes, all failing with
+ * 401 at the hour. `force` drops the reuse, for the one retry a 401 earns.
+ */
+export function gcloudAccessToken(): AccessToken {
   let token: { value: string; at: number } | null = null;
-  return async () => {
-    if (token && Date.now() - token.at < 45 * 60_000) return token.value;
+  return async (force = false) => {
+    if (!force && token && Date.now() - token.at < 2 * 60_000) return token.value;
     const { stdout } = await promisify(execFile)("gcloud", ["auth", "print-access-token"]);
     token = { value: stdout.trim(), at: Date.now() };
     return token.value;
   };
 }
+
+/** A bearer token; `force` asks for one that is not the last one handed out. */
+export type AccessToken = (force?: boolean) => Promise<string>;
 
 const stopOf = (reason: string | null): TurnStop =>
   reason === "tool_calls"
@@ -217,7 +225,7 @@ export interface VertexPolicyOptions {
   readonly project?: string;
   readonly thinking?: boolean;
   readonly maxTokens?: number;
-  readonly accessToken?: () => Promise<string>;
+  readonly accessToken?: AccessToken;
   readonly fetch?: Fetch;
   /** Waits between retries of a 429, a 5xx or a dropped connection; a test sets these to zero. */
   readonly retryDelaysMs?: readonly number[];
@@ -227,7 +235,7 @@ export class VertexOpenModelPolicy implements Policy {
   readonly id: string;
   private readonly url: string;
   private readonly opts: Required<Omit<VertexPolicyOptions, "accessToken" | "fetch">> & {
-    readonly accessToken: () => Promise<string>;
+    readonly accessToken: AccessToken;
     readonly fetch: Fetch;
   };
 
@@ -246,6 +254,7 @@ export class VertexOpenModelPolicy implements Policy {
   }
 
   private async post(body: unknown): Promise<WireResponse> {
+    let refreshed = false;
     for (let attempt = 0; ; attempt++) {
       const wait = this.opts.retryDelaysMs[attempt];
       const asked = Date.now();
@@ -253,7 +262,7 @@ export class VertexOpenModelPolicy implements Policy {
         const res = await this.opts.fetch(this.url, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${await this.opts.accessToken()}`,
+            Authorization: `Bearer ${await this.opts.accessToken(refreshed)}`,
             "x-goog-user-project": this.opts.project,
             "Content-Type": "application/json; charset=utf-8",
           },
@@ -261,6 +270,12 @@ export class VertexOpenModelPolicy implements Policy {
         });
         if (res.ok) return await assemble(res);
         const text = await res.text();
+        // An expired token is not a failed request: one fresh token, at once.
+        if (res.status === 401 && !refreshed) {
+          refreshed = true;
+          attempt -= 1;
+          continue;
+        }
         if (!(res.status === 429 || res.status >= 500) || wait === undefined) {
           throw new Error(`Vertex answered ${res.status}: ${text.slice(0, 500)}`);
         }

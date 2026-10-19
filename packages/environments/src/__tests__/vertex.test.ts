@@ -243,4 +243,48 @@ describe("the Vertex open-model policy", () => {
     expect(r.outcome).toBe("error");
     expect(r.error).toMatch(/3 tries: ECONNRESET/);
   });
+
+  it("takes a 401 as an expired token: one fresh token, at once, then a real error", async () => {
+    const forced: boolean[] = [];
+    const accessToken = async (force = false) => {
+      forced.push(force);
+      return force ? "fresh" : "stale";
+    };
+    const expired = fakeVertex([
+      { status: 401, body: { error: "UNAUTHENTICATED" } },
+      reply({
+        calls: [
+          [
+            "c1",
+            SUBMIT_TOOL,
+            { verdict: "watching", reasons: [], offer: null, watch_rate_pct: null },
+          ],
+        ],
+      }),
+    ]);
+    const ok = await runEpisode(
+      refiReview,
+      workedExample,
+      new VertexOpenModelPolicy({ fetch: expired.fetch, accessToken, retryDelaysMs: [0, 0] }),
+    );
+    expect(ok.outcome).toBe("submitted");
+    expect(forced).toEqual([false, true]);
+    expect(expired.sent.map((x) => x.headers["Authorization"])).toEqual([
+      "Bearer stale",
+      "Bearer fresh",
+    ]);
+
+    const refused = fakeVertex([
+      { status: 401, body: { error: "UNAUTHENTICATED" } },
+      { status: 401, body: { error: "UNAUTHENTICATED" } },
+    ]);
+    const r = await runEpisode(
+      refiReview,
+      workedExample,
+      new VertexOpenModelPolicy({ fetch: refused.fetch, accessToken, retryDelaysMs: [0, 0] }),
+    );
+    expect(r.outcome).toBe("error");
+    expect(r.error).toMatch(/401/);
+    expect(refused.sent).toHaveLength(2);
+  });
 });

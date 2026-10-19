@@ -111,5 +111,6 @@ There are two model policies, and neither falls back to another model:
 - The two gates that read Fannie Mae delivery records. The engine treats
   them as open, so the task does too.
 - Cash-out candidates, and the analyst's written rationale.
-- The full hand read. Phase 1's gate asks for 50 passing model runs read
-  by hand; six are read as of 19 October (see docs/decisions.md).
+- Nothing outstanding on Phase 1's gate. It was met on 19 October:
+  DeepSeek-V4.1-Flash passed 58 of 60 training tasks, and none of 64
+  passing episodes passed without the work (see docs/decisions.md).

@@ -66,7 +66,21 @@ npm run env:refi -w @hm/environments -- --policy anthropic --model claude-opus-5
 npm run env:refi -w @hm/environments -- --policy vertex --split train --n 5
 npm run env:refi -w @hm/environments -- --policy anthropic-vertex --split train --n 5
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
+npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 ```
+
+`env:audit` gives one line per episode and then totals. It flags the things
+that point a reader at a transcript:
+
+- every submitted figure that no tool ever returned, meaning arithmetic done
+  in the model's head;
+- a pass that skipped a tool a full review needs;
+- tool calls that came back as errors.
+
+It also shows the slowest turn and the fields missed. Phase 1's gate was
+read this way. `--read` prints an episode's turns, and refuses for a
+held-out task: that suite is what every reported score is measured on, and
+reading its transcripts tunes toward them.
 
 `env:compare` pairs two policies' runs by task. For each side it gives:
 

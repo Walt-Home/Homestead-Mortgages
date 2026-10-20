@@ -18,7 +18,8 @@
     "test": "vitest run",
     "clean": "rm -rf dist",
     "env:refi": "tsx src/cli.ts",
-    "env:compare": "tsx src/compare-cli.ts"
+    "env:compare": "tsx src/compare-cli.ts",
+    "env:audit": "tsx src/audit-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

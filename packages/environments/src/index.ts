@@ -13,4 +13,5 @@ export * from "./vertex.js";
 export * from "./anthropic-vertex.js";
 export * from "./compare.js";
 export * from "./audit.js";
+export * from "./archive.js";
 export * as refi from "./refi/index.js";

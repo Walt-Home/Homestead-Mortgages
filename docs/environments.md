@@ -55,7 +55,14 @@ rewritten. A line records:
 - the whole transcript, the answer, every graded field, and the token usage
   (uncached, cache read, cache write, output).
 
-Runs land in `packages/environments/runs/`, which git ignores.
+Runs land in `packages/environments/runs/`, which git ignores. Once a run
+has finished, `npm run env:archive -w @hm/environments` copies it to
+`gs://homestead-mortgages-eval-runs` (`infra/evals.tf`).
+
+- The bucket keeps every object for a year and replaces none, so the archive
+  is as append-only as the files.
+- A file written to in the last 15 minutes is left for the next archive,
+  because once uploaded it could not be finished.
 
 ## Commands
 
@@ -67,6 +74,7 @@ npm run env:refi -w @hm/environments -- --policy vertex --split train --n 5
 npm run env:refi -w @hm/environments -- --policy anthropic-vertex --split train --n 5
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
+npm run env:archive -w @hm/environments
 ```
 
 `env:audit` gives one line per episode and then totals. It flags the things

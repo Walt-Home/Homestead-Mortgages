@@ -17,7 +17,8 @@
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
     "clean": "rm -rf dist",
-    "env:refi": "tsx src/cli.ts"
+    "env:refi": "tsx src/cli.ts",
+    "env:compare": "tsx src/compare-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

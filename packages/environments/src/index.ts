@@ -10,4 +10,5 @@ export * from "./rng.js";
 export * from "./calculate.js";
 export * from "./anthropic.js";
 export * from "./vertex.js";
+export * from "./compare.js";
 export * as refi from "./refi/index.js";

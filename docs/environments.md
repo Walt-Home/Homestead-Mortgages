@@ -64,7 +64,19 @@ npm run build -w @hm/environments
 npm run env:refi -w @hm/environments -- --policy reference
 npm run env:refi -w @hm/environments -- --policy anthropic --model claude-opus-5-5 --effort high --n 20
 npm run env:refi -w @hm/environments -- --policy vertex --split train --n 5
+npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 ```
+
+`env:compare` pairs two policies' runs by task. For each side it gives:
+
+- the pass rate with a Wilson 95 % interval;
+- the cost per episode, at the providers' list prices;
+- per-verdict counts.
+
+It also puts the tasks the two disagree on to McNemar's exact test. An
+episode that ended in a transport error is not scored, the newest scored
+episode for each task counts, and a task not scored on both sides is left
+out by name. Phase 2's gate is read from it.
 
 The default is the reference policy on the held-out suite. A model run
 spends real money, and it is never the default.

@@ -4822,3 +4822,35 @@ behavior change:
 - the grader's comparison is split from its expectation.
 
 The tests that pin every refi-review task byte for byte still pass.
+
+## Phase 2's baseline: the two models cannot be told apart on refi-review
+
+**Measured 20 October 2026,** on refi-review 1.0.0's held-out suite (seed 1,
+200 tasks), scored with `env:compare`.
+
+|                  | Claude Opus 5.5 (Anthropic API)    | DeepSeek-V4.1-Flash (Vertex, managed) |
+| ---------------- | ---------------------------------- | ------------------------------------- |
+| Passed           | 199 / 200, 99.5 % (95 % 97.2–99.9) | 198 / 200, 99.0 % (95 % 96.4–99.7)    |
+| Cost per episode | $0.073                             | $0.016                                |
+| Misses           | a stale value not applied          | an NPV; cash back 48 cents off        |
+
+**What it says.** The models disagree on 3 of 200 tasks (McNemar exact
+p = 1.0), and no miss is shared, so no wording defect is in play. On this
+environment DeepSeek scores within about 3 points of Claude at a fifth of
+the cost.
+
+**What it does not say.**
+
+- Whether DeepSeek is "as good": 99 % against 99.5 % is the ceiling, not a
+  measurement, which is why the harder versions were built.
+- Anything about our own DeepSeek-V4-Flash-0731 weights. The model scored
+  is the managed V4.1, a newer release that Vertex serves, not the bytes in
+  our bucket.
+
+**Why Opus 5.5 is the baseline.** The refi analyst is configured for Claude
+Opus 5 but switched off in both environments: both stacks set it off, and
+the deploy's Anthropic secret is not set. So the baseline is the current
+Opus.
+
+**Cost of the measurement:** $14.55 for Claude and $3.23 for DeepSeek. Both
+records are archived in `gs://homestead-mortgages-eval-runs`.

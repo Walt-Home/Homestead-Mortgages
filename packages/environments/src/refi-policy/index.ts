@@ -19,12 +19,14 @@ export const POLICY_ENVIRONMENT_NAME = "refi-policy";
 /**
  * Bump on any change to the policy, or to anything refi-tape's version covers.
  *
- * 1.1.0 (20 Oct 2026): the existing loan's premium no longer shares a bare
- * name with the quote's field. Under 1.0.0 both models read "its
- * mi_monthly_cents" as a field the loan does not carry and missed the same
- * NPV on the same task, a miss of the wording, not of the model.
+ * 1.2.0 (20 Oct 2026): the PMI sentence is two. In 1.0.0 and 1.1.0 it ended
+ * "…divided by 100 to three decimals, whenever it is above 5; otherwise the
+ * premium is 0", and both models read the "otherwise" as belonging to the
+ * rate of 5: on a loan with PMI at 0.25 % both took the premium as 0 and
+ * missed the same NPV. 1.1.0 had renamed the premium apart from the quote's
+ * field, which was a guess at the cause and did not fix it.
  */
-export const POLICY_ENVIRONMENT_VERSION = "1.1.0";
+export const POLICY_ENVIRONMENT_VERSION = "1.2.0";
 
 /** refi-tape's task, with "the rulebook" read as "the policy". */
 export const renderPolicyTask = (task: RefiTapeTask): string =>

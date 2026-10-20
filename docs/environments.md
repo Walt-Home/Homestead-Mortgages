@@ -182,10 +182,15 @@ There are three model policies, and none falls back to another model:
 
 - **A miss two models share is checked as wording first.** `env:compare`
   lists every task both sides missed on the same field. Two models that
-  fail the same way are usually reading the same unclear sentence. The first
-  case was refi-policy 1.0.0: both models read "its mi_monthly_cents" as a
-  field the loan does not carry, because the policy used one name for the
-  loan's premium and the quote's. 1.1.0 names them apart.
+  fail the same way are usually reading the same unclear sentence.
+  - The first case was refi-policy. Both models dropped the existing loan's
+    mortgage-insurance premium on the same task, because a sentence ending
+    "…whenever it is above 5; otherwise the premium is 0" read as applying
+    to any PMI rate of 5 or less.
+  - 1.1.0 renamed the premium, which was a guess and did not fix it.
+  - 1.2.0 split the sentence in two. Claude then passed the task.
+    DeepSeek's remaining miss was its own: it multiplied by 0.25 instead of
+    0.25 %.
 
 ## Not in 1.0.0
 

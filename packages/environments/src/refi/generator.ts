@@ -52,7 +52,14 @@ const STATES: readonly (readonly [string, number])[] = [
   ["OH", 5],
 ];
 
-function draw(r: Rng, id: string, split: Split, suiteSeed: number, index: number): RefiTask {
+/** One task from a stream; exported so a variant environment can start from the same loans. */
+export function drawRefiTask(
+  r: Rng,
+  id: string,
+  split: Split,
+  suiteSeed: number,
+  index: number,
+): RefiTask {
   const review_date = addDays(FIRST_REVIEW_DATE, r.int(0, REVIEW_DATE_SPAN_DAYS));
   const { y, m } = parts(review_date);
   const next_due_date = addMonths(ymd(y, m, 1), 1);
@@ -203,7 +210,7 @@ export function generateTask(
   index: number,
 ): RefiTask {
   const id = taskId(split, suiteSeed, index);
-  return draw(rngFor(id), id, split, suiteSeed, index);
+  return drawRefiTask(rngFor(id), id, split, suiteSeed, index);
 }
 
 /** A suite: `n` tasks of one split from one seed. */

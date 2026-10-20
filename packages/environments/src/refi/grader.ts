@@ -19,8 +19,11 @@ export interface RefiOffer extends Readonly<Record<OfferCentsField, string>> {
   readonly present_same_term_first: boolean;
 }
 
+/** The review's four verdicts, and the tape variant's fifth for a row the tape cannot describe. */
+export type RefiVerdict = ReviewVerdict | "not_reviewable";
+
 export interface RefiAnswer {
-  readonly verdict: ReviewVerdict;
+  readonly verdict: RefiVerdict;
   readonly reasons: readonly string[];
   readonly offer: RefiOffer | null;
   readonly watch_rate_pct: string | null;
@@ -74,7 +77,11 @@ export function expectedAnswer(review: Review): RefiAnswer {
 const reasonSet = (rs: readonly string[]): string => [...new Set(rs)].sort().join(",");
 
 export function gradeAnswer(task: RefiTask, answer: RefiAnswer | null): Grade {
-  const want = expectedAnswer(expectedReview(task));
+  return gradeAgainst(expectedAnswer(expectedReview(task)), answer);
+}
+
+/** An answer held to the expected one, field by field. */
+export function gradeAgainst(want: RefiAnswer, answer: RefiAnswer | null): Grade {
   const fields: FieldGrade[] = [];
   const check = (field: string, expected: string, got: string | null) =>
     fields.push({ field, expected, got, ok: got === expected });
@@ -99,7 +106,7 @@ export function gradeAnswer(task: RefiTask, answer: RefiAnswer | null): Grade {
 
 /* ── the submission, read strictly ──────────────────────────────────────── */
 
-const VERDICTS: readonly ReviewVerdict[] = ["candidate", "watching", "not_now", "excluded"];
+const VERDICTS: readonly RefiVerdict[] = ["candidate", "watching", "not_now", "excluded"];
 
 const centsText = (v: unknown): string | null =>
   typeof v === "string" && /^-?\d+$/.test(v.trim())
@@ -108,7 +115,10 @@ const centsText = (v: unknown): string | null =>
       ? String(v)
       : null;
 
-export function parseSubmission(raw: unknown): Parsed<RefiAnswer> {
+export function parseSubmission(
+  raw: unknown,
+  verdicts: readonly RefiVerdict[] = VERDICTS,
+): Parsed<RefiAnswer> {
   const fail = (error: string): Parsed<RefiAnswer> => ({
     ok: false,
     error: `${error}. Nothing was submitted; fix it and call submit_review again.`,
@@ -117,8 +127,8 @@ export function parseSubmission(raw: unknown): Parsed<RefiAnswer> {
     return fail("the submission must be an object");
   const s = raw as Record<string, unknown>;
   const verdict = s["verdict"];
-  if (typeof verdict !== "string" || !VERDICTS.includes(verdict as ReviewVerdict)) {
-    return fail(`verdict must be one of ${VERDICTS.join(", ")}`);
+  if (typeof verdict !== "string" || !verdicts.includes(verdict as RefiVerdict)) {
+    return fail(`verdict must be one of ${verdicts.join(", ")}`);
   }
   const reasons = s["reasons"];
   if (!Array.isArray(reasons) || !reasons.every((r) => typeof r === "string")) {
@@ -157,7 +167,7 @@ export function parseSubmission(raw: unknown): Parsed<RefiAnswer> {
   return {
     ok: true,
     answer: {
-      verdict: verdict as ReviewVerdict,
+      verdict: verdict as RefiVerdict,
       reasons: reasons.map((r: string) => r.trim()),
       offer,
       watch_rate_pct: w,

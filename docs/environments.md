@@ -64,6 +64,35 @@ has finished, `npm run env:archive -w @hm/environments` copies it to
 - A file written to in the last 15 minutes is left for the next archive,
   because once uploaded it could not be finished.
 
+## refi-tape
+
+refi-tape 1.0.0 is option A of the plan's harder versions: the same review,
+starting from what the daily review is actually handed.
+
+**The task.** It is our loan record and the servicer's newest tape
+observation, the tape's own fields in `facts`, instead of the cleaned row.
+
+**Step 0** of its rulebook is `universeLoanOf` written out. It reads every
+field the review needs from the record and the tape:
+
+- dates that may be in the record, the facts, or nowhere;
+- delinquency counted to the tape's own date, or said late by a pay string
+  or status;
+- the newer of two valuations;
+- a PMI rate as a percent or in basis points;
+- bankruptcy from filing, discharge and dismissal dates.
+
+Then comes refi-review's rulebook unchanged. A tape the reader cannot
+describe takes a fifth verdict, `not_reviewable`, with the reader's reason.
+
+**The tasks.** The generator starts from the loan refi-review would draw
+under the same coordinates and writes it out the way a book arrives. The
+held-out suite is again seed 1 with 200 tasks, in its own namespace.
+
+**The proof of fairness.** The grader is the tape reader and then the review.
+The reference policy reads Step 0 and passes all 701 tasks it was checked
+on.
+
 ## Commands
 
 ```bash
@@ -72,6 +101,7 @@ npm run env:refi -w @hm/environments -- --policy reference
 npm run env:refi -w @hm/environments -- --policy anthropic --model claude-opus-5-5 --effort high --n 20
 npm run env:refi -w @hm/environments -- --policy vertex --split train --n 5
 npm run env:refi -w @hm/environments -- --policy anthropic-vertex --split train --n 5
+npm run env:refi -w @hm/environments -- --env refi-tape --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

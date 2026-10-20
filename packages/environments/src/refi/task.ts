@@ -28,7 +28,8 @@ export interface RefiTask {
   readonly exceptions: readonly string[];
 }
 
-const plain = (v: unknown): unknown =>
+/** A value as JSON: bigints as numbers (every figure here is far below 2^53). */
+export const plain = (v: unknown): unknown =>
   typeof v === "bigint"
     ? Number(v)
     : Array.isArray(v)

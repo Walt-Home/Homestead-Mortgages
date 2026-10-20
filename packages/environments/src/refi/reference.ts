@@ -13,8 +13,9 @@ import type { Observation, Policy, PolicySession, PolicyTurn, ToolCall } from ".
 import { payloadOf } from "./task.js";
 import { SUBMIT_TOOL } from "./tools.js";
 
-type Json = Record<string, unknown>;
-type Step<R> = Generator<ToolCall[], R, readonly Observation[]>;
+export type Json = Record<string, unknown>;
+export type Step<R> = Generator<ToolCall[], R, readonly Observation[]>;
+export type Call = <R>(name: string, input: Json, key: string) => Step<R>;
 
 const EXCLUSIONS: readonly (readonly [string, (l: Json) => boolean])[] = [
   ["not_active", (l) => l["status"] !== "active"],
@@ -32,10 +33,8 @@ const LIMITS: Readonly<Record<string, number>> = {
 };
 const SUPPRESSIONS = ["cooldown", "frequency_cap", "marketing_suppression"];
 
-function* review(
-  p: Json,
-  call: <R>(name: string, input: Json, key: string) => Step<R>,
-): Step<Json> {
+/** Steps 1 to 11 over a payload whose `loan` is the review's row; a variant reuses it once it has built the row. */
+export function* reviewSteps(p: Json, call: Call): Step<Json> {
   const loan = p["loan"] as Json;
   const date = p["review_date"] as string;
   const quote = p["quote"] as Json | null;
@@ -251,8 +250,12 @@ function* review(
   };
 }
 
-export class ReferencePolicy implements Policy {
-  readonly id = "reference";
+/** A policy that plays a solver: the solver yields tool calls and returns the submission. */
+export class ScriptedPolicy implements Policy {
+  constructor(
+    readonly id: string,
+    private readonly solve: (payload: Json, call: Call) => Step<Json>,
+  ) {}
 
   start(episode: { readonly user: string }): PolicySession {
     let n = 0;
@@ -263,7 +266,7 @@ export class ReferencePolicy implements Policy {
       if (obs.is_error) throw new Error(`${name} failed: ${obs.content}`);
       return (JSON.parse(obs.content) as Record<string, R>)[key] as R;
     };
-    const steps = review(payloadOf(episode.user), call);
+    const steps = this.solve(payloadOf(episode.user), call);
     let started = false;
     let submitted = false;
     return {
@@ -280,5 +283,11 @@ export class ReferencePolicy implements Policy {
         };
       },
     };
+  }
+}
+
+export class ReferencePolicy extends ScriptedPolicy {
+  constructor() {
+    super("reference", reviewSteps);
   }
 }

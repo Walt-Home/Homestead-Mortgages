@@ -5,6 +5,7 @@
  *   npm run env:refi -w @hm/environments -- --policy anthropic --model claude-opus-5-5 --effort high --n 20
  *   npm run env:refi -w @hm/environments -- --policy vertex --split train --n 5
  *   npm run env:refi -w @hm/environments -- --policy anthropic-vertex --split train --n 5
+ *   npm run env:refi -w @hm/environments -- --env refi-tape --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -19,6 +20,7 @@ import { DEFAULT_VERTEX_MODEL, DEFAULT_VERTEX_PROJECT, VertexOpenModelPolicy } f
 import { vertexClaudeClient } from "./anthropic-vertex.js";
 import { DEFAULT_LIMITS, runEpisode, type Policy } from "./episode.js";
 import { RECORD_VERSION, RunRecorder, sha256 } from "./record.js";
+import type { Environment } from "./episode.js";
 import {
   HELDOUT_SUITE,
   REFI_FINGERPRINT,
@@ -28,13 +30,67 @@ import {
   generateTask,
   refiReview,
   specTasks,
-  type RefiTask,
+  type RefiAnswer,
+  type Split,
 } from "./refi/index.js";
+import {
+  TAPE_FINGERPRINT,
+  TAPE_HELDOUT_SUITE,
+  TapeReferencePolicy,
+  expectedTapeAnswer,
+  generateTapeSuite,
+  generateTapeTask,
+  refiTape,
+  tapeSpecTasks,
+} from "./refi-tape/index.js";
+
+interface TaskCoordinates {
+  readonly id: string;
+  readonly split: Split;
+  readonly suite_seed: number;
+  readonly index: number;
+}
+
+/** What the runner needs of an environment: its tasks, its reference, and what a task should conclude. */
+interface Bench<T extends TaskCoordinates> {
+  readonly env: Environment<T, RefiAnswer>;
+  readonly fingerprint: typeof REFI_FINGERPRINT | typeof TAPE_FINGERPRINT;
+  readonly heldout: { readonly seed: number; readonly n: number };
+  readonly suite: (split: Exclude<Split, "spec">, seed: number, n: number) => T[];
+  readonly one: (split: Exclude<Split, "spec">, seed: number, index: number) => T;
+  readonly spec: () => T[];
+  readonly verdictOf: (task: T) => string;
+  readonly reference: () => Policy;
+}
+
+const BENCHES = {
+  "refi-review": {
+    env: refiReview,
+    fingerprint: REFI_FINGERPRINT,
+    heldout: HELDOUT_SUITE,
+    suite: generateSuite,
+    one: generateTask,
+    spec: specTasks,
+    verdictOf: (t) => expectedReview(t).verdict,
+    reference: () => new ReferencePolicy(),
+  } satisfies Bench<ReturnType<typeof generateTask>>,
+  "refi-tape": {
+    env: refiTape,
+    fingerprint: TAPE_FINGERPRINT,
+    heldout: TAPE_HELDOUT_SUITE,
+    suite: generateTapeSuite,
+    one: generateTapeTask,
+    spec: tapeSpecTasks,
+    verdictOf: (t) => expectedTapeAnswer(t).verdict,
+    reference: () => new TapeReferencePolicy(),
+  } satisfies Bench<ReturnType<typeof generateTapeTask>>,
+};
 
 const { values } = parseArgs({
   options: {
+    env: { type: "string", default: "refi-review" },
     policy: { type: "string", default: "reference" },
-    split: { type: "string", default: HELDOUT_SUITE.split },
+    split: { type: "string", default: "heldout" },
     seed: { type: "string" },
     n: { type: "string" },
     index: { type: "string" },
@@ -47,19 +103,19 @@ const { values } = parseArgs({
   },
 });
 
-function suite(): RefiTask[] {
+function suite<T extends TaskCoordinates>(bench: Bench<T>): T[] {
   const split = values.split;
-  if (split === "spec") return specTasks();
+  if (split === "spec") return bench.spec();
   if (split !== "train" && split !== "heldout")
     throw new Error(`--split must be train, heldout or spec`);
-  const seed = Number(values.seed ?? (split === "heldout" ? HELDOUT_SUITE.seed : 1));
-  if (values.index !== undefined) return [generateTask(split, seed, Number(values.index))];
-  const n = Number(values.n ?? (split === "heldout" ? HELDOUT_SUITE.n : 50));
-  return generateSuite(split, seed, n);
+  const seed = Number(values.seed ?? (split === "heldout" ? bench.heldout.seed : 1));
+  if (values.index !== undefined) return [bench.one(split, seed, Number(values.index))];
+  const n = Number(values.n ?? (split === "heldout" ? bench.heldout.n : 50));
+  return bench.suite(split, seed, n);
 }
 
-function policyOf(): Policy {
-  if (values.policy === "reference") return new ReferencePolicy();
+function policyOf(reference: () => Policy): Policy {
+  if (values.policy === "reference") return reference();
   if (values.policy === "anthropic") {
     // An eval key of its own name, so it never turns on the API's refi
     // analyst, which starts calling Claude whenever ANTHROPIC_API_KEY is set
@@ -89,28 +145,29 @@ function policyOf(): Policy {
   throw new Error(`--policy must be reference, anthropic, anthropic-vertex or vertex`);
 }
 
-async function main(): Promise<void> {
-  const tasks = suite();
-  const policy = policyOf();
+async function run<T extends TaskCoordinates>(bench: Bench<T>): Promise<void> {
+  const env = bench.env;
+  const tasks = suite(bench);
+  const policy = policyOf(bench.reference);
   const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
-  const out = values.out ?? `runs/${refiReview.name}/${runId}.jsonl`;
+  const out = values.out ?? `runs/${env.name}/${runId}.jsonl`;
   const recorder = new RunRecorder(out);
   const concurrency = Math.max(1, Number(values.concurrency));
   console.log(
-    `${policy.id}: ${tasks.length} episodes of ${refiReview.name} ${refiReview.version}, ${values.split}, recorded to ${out}`,
+    `${policy.id}: ${tasks.length} episodes of ${env.name} ${env.version}, ${values.split}, recorded to ${out}`,
   );
 
-  const results: { task: RefiTask; pass: boolean; score: number; outcome: string }[] = [];
+  const results: { task: T; pass: boolean; score: number; outcome: string }[] = [];
   let next = 0;
   const worker = async () => {
     for (let i = next++; i < tasks.length; i = next++) {
-      const task = tasks[i] as RefiTask;
-      const rendered = refiReview.render(task);
-      const result = await runEpisode(refiReview, task, policy, DEFAULT_LIMITS);
+      const task = tasks[i] as T;
+      const rendered = env.render(task);
+      const result = await runEpisode(env, task, policy, DEFAULT_LIMITS);
       recorder.append({
         record_version: RECORD_VERSION,
         run_id: runId,
-        ...REFI_FINGERPRINT,
+        ...bench.fingerprint,
         task: {
           id: task.id,
           split: task.split,
@@ -143,7 +200,7 @@ async function main(): Promise<void> {
   );
   const byVerdict = new Map<string, { n: number; passed: number }>();
   for (const r of results) {
-    const v = expectedReview(r.task).verdict;
+    const v = bench.verdictOf(r.task);
     const b = byVerdict.get(v) ?? { n: 0, passed: 0 };
     b.n += 1;
     if (r.pass) b.passed += 1;
@@ -153,6 +210,12 @@ async function main(): Promise<void> {
   const outcomes = new Map<string, number>();
   for (const r of results) outcomes.set(r.outcome, (outcomes.get(r.outcome) ?? 0) + 1);
   console.log(`  outcomes: ${[...outcomes].map(([k, v]) => `${k} ${v}`).join(", ")}`);
+}
+
+async function main(): Promise<void> {
+  if (values.env === "refi-review") return run(BENCHES["refi-review"]);
+  if (values.env === "refi-tape") return run(BENCHES["refi-tape"]);
+  throw new Error(`--env must be refi-review or refi-tape`);
 }
 
 main().catch((e: unknown) => {

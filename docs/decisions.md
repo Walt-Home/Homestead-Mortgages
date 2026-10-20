@@ -4787,3 +4787,38 @@ training tasks (seed 2), four at a time, and **58 passed (96.7 %)**:
 **Next is Phase 2's baseline:** the held-out suite, scored for the record
 rather than read. On DeepSeek it is about $3. Claude needs an Anthropic key,
 or Claude enabled on Vertex.
+
+## A harder environment starts from the tape
+
+**Built 20 October 2026.** On the held-out suite, Claude Opus 5.5 passed
+refi-review 199 of 200 times, and DeepSeek-V4.1-Flash passed every one of
+its first 115. An environment frontier models nearly always pass cannot
+separate them, and gives training nothing to learn from. Of the plan's three
+harder versions Joe chose A: start from the tape.
+
+**What was built.** `refi-tape` 1.0.0 lives beside refi-review, which is
+unchanged, so its scores stay comparable.
+
+- **The task** is the record and the tape as the daily review receives them.
+- **The rulebook** opens with `universeLoanOf` written out field by field,
+  then repeats refi-review's.
+- **The grader** is that function, then `reviewLoan`.
+- **A fifth verdict, `not_reviewable`,** answers a tape that cannot describe
+  its loan, with the reader's reason.
+
+**Why this layer.** It is where the 5 October production bug was:
+delinquency counted to the review day instead of the tape's day excluded
+243 current loans. The generator writes each loan with that layer's real
+variety: dates in one of three places, a tape weeks older than the review,
+two valuations, PMI in basis points, a late pay string on a current loan, a
+bankruptcy filed and then discharged. Tests hold each of those to turning up
+in a 2,000-task suite.
+
+**What changed in refi-review to allow it.** Three refactors, with no
+behavior change:
+
+- the draw is exported;
+- the solver is a reusable function driven by a `ScriptedPolicy`;
+- the grader's comparison is split from its expectation.
+
+The tests that pin every refi-review task byte for byte still pass.

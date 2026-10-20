@@ -4643,14 +4643,13 @@ well inside the 48-hour window, so the key needs no IP restriction.
 
 ## Model weights are kept in our project, under their publisher's name
 
-**Moved and checked 15 October 2026.** The open model the team had
-downloaded sat in Walt's project as `gs://homestead-weights/homestead-1.0`,
-named as if it were a fork of ours, with Walt's default compute and Cloud
-Build accounts holding objectAdmin on it. It is not a fork. It is
+**Moved and checked 15 October 2026.** The open model the team staged in
+August as `gs://homestead-weights/homestead-1.0` sat in Walt's project, where
+Walt's default compute and Cloud Build accounts held objectAdmin on it. It is
 DeepSeek-V4-Flash-0731 at Hugging Face revision
-`7872f01b1d1fe23eabc4c98b48bffcef5a386062`, all 74 files byte for byte: the
-48 weight shards by the SHA-256 the Hub publishes for each, the 26 code and
-config files by git's blob hash. The code matters as much as the weights,
+`7872f01b1d1fe23eabc4c98b48bffcef5a386062`, verified file by file against
+that release: the 48 weight shards by the SHA-256 the Hub publishes for
+each, the 26 code and config files by git's blob hash. The code matters as much as the weights,
 because serving the model runs `inference/*.py` and the `encoding` scripts.
 By its own safetensors headers the checkpoint holds about 304 billion
 parameters, about 19 billion of them in three speculative-decoding layers.
@@ -4662,7 +4661,8 @@ access is prevented, access is uniform, and nothing is granted on it. It is
 versioned, keeping a noncurrent version thirty days beyond the seven soft
 delete already holds.
 
-A model lives under its publisher's name and revision, never a name of ours:
+A model lives under its publisher's name and the revision it was verified
+against, so the path says exactly which bytes these are:
 `deepseek-ai/DeepSeek-V4-Flash-0731/7872f01b…/`. Beside it, `SHA256SUMS`
 lists every file (`sha256sum -c` re-runs the check against any copy), and
 `PROVENANCE.json` says where the bytes came from and when they were checked.

@@ -5,11 +5,11 @@
 # not an environment's: staging and production would serve the same bytes.
 #
 # A model is stored under its publisher's name and the exact revision it was
-# taken from — `deepseek-ai/DeepSeek-V4-Flash-0731/<revision>/` — never under
-# a name of ours, because a name of ours is what made a stock download read
-# as a fork. Beside it sits `SHA256SUMS`, every file's digest checked against
-# what the publisher states, so "these are the bytes they released" is a file
-# anyone can re-run rather than a claim.
+# verified against — `deepseek-ai/DeepSeek-V4-Flash-0731/<revision>/` — so
+# the path itself says which bytes these are. Beside it sits `SHA256SUMS`,
+# every file's digest checked against what the publisher states, so "these
+# are the bytes they released" is a file anyone can re-run rather than a
+# claim.
 #
 # The first copy came from Walt's project (gs://homestead-weights), which is
 # exactly the arrangement this project exists to end: there, Walt's default

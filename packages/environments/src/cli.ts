@@ -13,6 +13,7 @@
 
 import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
+import Anthropic from "@anthropic-ai/sdk";
 import { AnthropicPolicy, DEFAULT_MODEL, type Effort } from "./anthropic.js";
 import { DEFAULT_VERTEX_MODEL, DEFAULT_VERTEX_PROJECT, VertexOpenModelPolicy } from "./vertex.js";
 import { vertexClaudeClient } from "./anthropic-vertex.js";
@@ -60,7 +61,12 @@ function suite(): RefiTask[] {
 function policyOf(): Policy {
   if (values.policy === "reference") return new ReferencePolicy();
   if (values.policy === "anthropic") {
+    // An eval key of its own name, so it never turns on the API's refi
+    // analyst, which starts calling Claude whenever ANTHROPIC_API_KEY is set
+    // (and the API's tests load the root .env).
+    const evalKey = process.env["ANTHROPIC_EVAL_API_KEY"]?.trim();
     return new AnthropicPolicy({
+      ...(evalKey ? { client: new Anthropic({ apiKey: evalKey }) } : {}),
       model: values.model ?? DEFAULT_MODEL,
       effort: values.effort as Effort,
     });

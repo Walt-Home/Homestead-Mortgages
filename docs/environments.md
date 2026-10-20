@@ -84,8 +84,10 @@ spends real money, and it is never the default.
 
 There are three model policies, and none falls back to another model:
 
-- **`anthropic`** calls Claude over the Messages API. It needs an Anthropic
-  key in the environment.
+- **`anthropic`** calls Claude over the Messages API. It reads
+  `ANTHROPIC_EVAL_API_KEY` first, then the SDK's usual credentials. Keep the
+  eval key under that name: the API's refi analyst calls Claude whenever
+  `ANTHROPIC_API_KEY` is set, and the API's tests load the root `.env`.
 - **`anthropic-vertex`** runs the same Claude loop through Anthropic's Vertex
   SDK (pinned at 0.20.2), billed to our project.
   - That SDK version ignores its `accessToken` option and reads the machine's

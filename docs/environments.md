@@ -93,6 +93,45 @@ held-out suite is again seed 1 with 200 tasks, in its own namespace.
 The reference policy reads Step 0 and passes all 701 tasks it was checked
 on.
 
+## refi-hard
+
+refi-hard 1.0.0 is option D: refi-tape's rulebook, tools and grader, over
+tasks placed on the rules' edges. Only the generator differs, so a score
+beside refi-tape's measures what the edges cost. `refi-hard-policy` puts
+refi-policy's wording over the same tasks.
+
+**Why.** Both models score near 100 % on refi-review and refi-tape, and
+every miss they made landed where one slip changes the answer: PMI
+arithmetic, a percent, a rounding step. A book's loans rarely sit there.
+
+**The ten edges.** Each task sits on one, on one side of it:
+
+| Edge               | One side                                                                                 | The other                 |
+| ------------------ | ---------------------------------------------------------------------------------------- | ------------------------- |
+| `rate_floor`       | a 25 bps reduction                                                                       | 12.5 bps                  |
+| `cash_cap`         | cash back on the rounded amount up to $5 under its cap                                   | up to $5 over             |
+| `ltv_limit`        | exactly at 9700, 9000 (second home, or a low-confidence value), 7500 or the 8000 MI line | one over                  |
+| `value_confidence` | LTV over 9000, value dated 12 months back to the day                                     | a day earlier             |
+| `value_stale`      | value dated 24 months back to the day                                                    | a day earlier             |
+| `ma_window`        | Massachusetts, consummated 60 months before the candidate to the day                     | a day later               |
+| `gates`            | declined 90 days ago, or first offer 12 months ago to the day                            | 89 days, or a day inside  |
+| `month_end`        | disbursement on the last day of a month (29 February among them)                         | the first day             |
+| `paid_ahead`       | next due date after disbursement                                                         | before it                 |
+| `pmi_unit`         | PMI rate 5 or just under: a percent                                                      | just over 5: basis points |
+
+**The tasks.** The edge is the index modulo ten and the side alternates, so
+any ten tasks hold every edge and any twenty hold each on both sides. Each
+starts as a refi-tape draw made clean (active, current, unsuppressed, a
+recent value, a quote a point under the note rate) so the edge decides. It
+is kept only if it does: its answer must differ from the answer on the
+other side, and an edge that moves figures rather than the verdict must be
+a candidate. Otherwise it is redrawn under the next key. The held-out suite
+is seed 1, 200 tasks, pinned by hash.
+
+**The proof of fairness.** The reference passes all 520 tasks it was
+checked on. A test re-reads every one of 1,200 tasks off its tape, apart
+from the generator, and confirms it sits where its edge says.
+
 ## Commands
 
 ```bash
@@ -102,6 +141,7 @@ npm run env:refi -w @hm/environments -- --policy anthropic --model claude-opus-5
 npm run env:refi -w @hm/environments -- --policy vertex --split train --n 5
 npm run env:refi -w @hm/environments -- --policy anthropic-vertex --split train --n 5
 npm run env:refi -w @hm/environments -- --env refi-tape --policy reference
+npm run env:refi -w @hm/environments -- --env refi-hard --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

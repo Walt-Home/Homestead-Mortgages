@@ -7,6 +7,8 @@
  *   npm run env:refi -w @hm/environments -- --policy anthropic-vertex --split train --n 5
  *   npm run env:refi -w @hm/environments -- --env refi-tape --policy reference
  *   npm run env:refi -w @hm/environments -- --env refi-policy --policy reference
+ *   npm run env:refi -w @hm/environments -- --env refi-hard --policy reference
+ *   npm run env:refi -w @hm/environments -- --env refi-hard-policy --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -43,8 +45,18 @@ import {
   generateTapeTask,
   refiTape,
   tapeSpecTasks,
+  type RefiTapeTask,
 } from "./refi-tape/index.js";
 import { POLICY_FINGERPRINT, refiPolicy } from "./refi-policy/index.js";
+import {
+  HARD_FINGERPRINT,
+  HARD_HELDOUT_SUITE,
+  HARD_POLICY_FINGERPRINT,
+  generateHardSuite,
+  generateHardTask,
+  refiHard,
+  refiHardPolicy,
+} from "./refi-hard/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -57,7 +69,11 @@ interface TaskCoordinates {
 interface Bench<T extends TaskCoordinates> {
   readonly env: Environment<T, RefiAnswer>;
   readonly fingerprint:
-    typeof REFI_FINGERPRINT | typeof TAPE_FINGERPRINT | typeof POLICY_FINGERPRINT;
+    | typeof REFI_FINGERPRINT
+    | typeof TAPE_FINGERPRINT
+    | typeof POLICY_FINGERPRINT
+    | typeof HARD_FINGERPRINT
+    | typeof HARD_POLICY_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   readonly suite: (split: Exclude<Split, "spec">, seed: number, n: number) => T[];
   readonly one: (split: Exclude<Split, "spec">, seed: number, index: number) => T;
@@ -98,6 +114,27 @@ const BENCHES = {
     verdictOf: (t) => expectedTapeAnswer(t).verdict,
     reference: () => new TapeReferencePolicy(),
   } satisfies Bench<ReturnType<typeof generateTapeTask>>,
+  // refi-tape's rules over tasks placed on their edges, and refi-policy's wording over the same.
+  "refi-hard": {
+    env: refiHard,
+    fingerprint: HARD_FINGERPRINT,
+    heldout: HARD_HELDOUT_SUITE,
+    suite: generateHardSuite,
+    one: generateHardTask,
+    spec: tapeSpecTasks,
+    verdictOf: (t) => expectedTapeAnswer(t).verdict,
+    reference: () => new TapeReferencePolicy(),
+  } satisfies Bench<RefiTapeTask>,
+  "refi-hard-policy": {
+    env: refiHardPolicy,
+    fingerprint: HARD_POLICY_FINGERPRINT,
+    heldout: HARD_HELDOUT_SUITE,
+    suite: generateHardSuite,
+    one: generateHardTask,
+    spec: tapeSpecTasks,
+    verdictOf: (t) => expectedTapeAnswer(t).verdict,
+    reference: () => new TapeReferencePolicy(),
+  } satisfies Bench<RefiTapeTask>,
 };
 
 const { values } = parseArgs({
@@ -230,7 +267,11 @@ async function main(): Promise<void> {
   if (values.env === "refi-review") return run(BENCHES["refi-review"]);
   if (values.env === "refi-tape") return run(BENCHES["refi-tape"]);
   if (values.env === "refi-policy") return run(BENCHES["refi-policy"]);
-  throw new Error(`--env must be refi-review, refi-tape or refi-policy`);
+  if (values.env === "refi-hard") return run(BENCHES["refi-hard"]);
+  if (values.env === "refi-hard-policy") return run(BENCHES["refi-hard-policy"]);
+  throw new Error(
+    `--env must be refi-review, refi-tape, refi-policy, refi-hard or refi-hard-policy`,
+  );
 }
 
 main().catch((e: unknown) => {

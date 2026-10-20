@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import { levelPaymentPct, scheduledUpb } from "@hm/refi-review";
-import { toJsonLine } from "../record.js";
+import { sha256, toJsonLine } from "../record.js";
 import {
   HELDOUT_SUITE,
   expectedReview,
@@ -21,6 +21,13 @@ describe("a task is a function of its name", () => {
     const suite = generateSuite("train", 7, 30);
     expect(toJsonLine(generateTask("train", 7, 17))).toBe(toJsonLine(suite[17]));
     expect(toJsonLine(generateSuite("train", 7, 30))).toBe(toJsonLine(suite));
+  });
+
+  it("still draws the held-out suite every reported score was measured on", () => {
+    // A change here moves every score: bump ENVIRONMENT_VERSION, then the pin.
+    expect(sha256(generateSuite("heldout", 1, 200).map(toJsonLine).join(""))).toBe(
+      "a213039d67ee7a1a45970a572fb3c6b937568597b1db3a831d157840da8b39e7",
+    );
   });
 
   it("never draws a held-out loan into training", () => {

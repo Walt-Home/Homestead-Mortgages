@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 import { universeLoanOf } from "@hm/refi-review";
 import { runEpisode } from "../episode.js";
-import { toJsonLine } from "../record.js";
+import { sha256, toJsonLine } from "../record.js";
 import { expectedAnswer, expectedReview, specTasks } from "../refi/index.js";
 import {
   TAPE_HELDOUT_SUITE,
@@ -59,6 +59,13 @@ describe("refi-tape", () => {
     const fp = (t: RefiTapeTask) => toJsonLine(tapePayload(t));
     const heldout = new Set(generateTapeSuite("heldout", 1, 200).map(fp));
     expect(generateTapeSuite("train", 1, 1000).filter((t) => heldout.has(fp(t)))).toEqual([]);
+  });
+
+  it("still draws the held-out suite every reported score was measured on", () => {
+    // A change here moves every score: bump TAPE_ENVIRONMENT_VERSION, then the pin.
+    expect(sha256(generateTapeSuite("heldout", 1, 200).map(toJsonLine).join(""))).toBe(
+      "0fe0cf8307732da6e8b0f717f44ce32306b1f15c74db97fefb06e2a4ea2c3151",
+    );
   });
 
   it("takes a not_reviewable answer, and grades it", () => {

@@ -25,7 +25,7 @@ import {
 import { scheduledUpb, type Observation, type ObservedLoan } from "@hm/refi-review";
 import { rngFor, type Rng } from "../rng.js";
 import { drawRefiTask } from "../refi/generator.js";
-import type { Split } from "../refi/task.js";
+import type { RefiTask, Split } from "../refi/task.js";
 import { TAPE_ENVIRONMENT_NAME, TAPE_ENVIRONMENT_VERSION, type RefiTapeTask } from "./task.js";
 
 type Facts = Record<string, string | number | boolean | null>;
@@ -42,9 +42,13 @@ const money = (r: Rng, c: bigint): number | string => (r.chance(0.5) ? Number(c)
 const yes = (r: Rng) => r.pick(["Y", "y", "Yes", "true", "1"] as const);
 const no = (r: Rng) => r.pick(["N", "n", "No", "false", "0"] as const);
 
-function writeTape(id: string, split: Split, suiteSeed: number, index: number): RefiTapeTask {
-  const base = drawRefiTask(rngFor(id), id, split, suiteSeed, index);
-  const r = rngFor(`${id}/tape`);
+/**
+ * A refi-review task written out as a record and a tape, drawing the tape's
+ * variety from `r`. Exported so a variant can prepare the loan first and
+ * still have it written the way every other tape is.
+ */
+export function tapeOf(base: RefiTask, r: Rng): RefiTapeTask {
+  const { id, split, suite_seed: suiteSeed, index } = base;
   const b = base.loan;
   const review = base.review_date;
   const term = b.original_term_months;
@@ -270,7 +274,8 @@ export function generateTapeTask(
   suiteSeed: number,
   index: number,
 ): RefiTapeTask {
-  return writeTape(tapeTaskId(split, suiteSeed, index), split, suiteSeed, index);
+  const id = tapeTaskId(split, suiteSeed, index);
+  return tapeOf(drawRefiTask(rngFor(id), id, split, suiteSeed, index), rngFor(`${id}/tape`));
 }
 
 export function generateTapeSuite(

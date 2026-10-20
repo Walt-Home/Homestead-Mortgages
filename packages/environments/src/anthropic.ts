@@ -31,6 +31,8 @@ export interface AnthropicPolicyOptions {
   readonly model?: string;
   readonly effort?: Effort;
   readonly maxTokens?: number;
+  /** Where the model is served, for the record's policy id: `anthropic` (the API) or `anthropic-vertex`. */
+  readonly provider?: string;
 }
 
 const stopOf = (reason: Anthropic.Message["stop_reason"]): TurnStop =>
@@ -54,7 +56,7 @@ export class AnthropicPolicy implements Policy {
     this.model = opts.model ?? DEFAULT_MODEL;
     this.effort = opts.effort ?? "high";
     this.maxTokens = opts.maxTokens ?? 16000;
-    this.id = `anthropic:${this.model}:${this.effort}`;
+    this.id = `${opts.provider ?? "anthropic"}:${this.model}:${this.effort}`;
   }
 
   start(episode: EpisodeStart): PolicySession {

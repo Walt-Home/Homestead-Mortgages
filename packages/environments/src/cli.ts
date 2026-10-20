@@ -4,6 +4,7 @@
  *   npm run env:refi -w @hm/environments -- --policy reference
  *   npm run env:refi -w @hm/environments -- --policy anthropic --model claude-opus-5-5 --effort high --n 20
  *   npm run env:refi -w @hm/environments -- --policy vertex --split train --n 5
+ *   npm run env:refi -w @hm/environments -- --policy anthropic-vertex --split train --n 5
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -14,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
 import { AnthropicPolicy, DEFAULT_MODEL, type Effort } from "./anthropic.js";
 import { DEFAULT_VERTEX_MODEL, DEFAULT_VERTEX_PROJECT, VertexOpenModelPolicy } from "./vertex.js";
+import { vertexClaudeClient } from "./anthropic-vertex.js";
 import { DEFAULT_LIMITS, runEpisode, type Policy } from "./episode.js";
 import { RECORD_VERSION, RunRecorder, sha256 } from "./record.js";
 import {
@@ -63,6 +65,14 @@ function policyOf(): Policy {
       effort: values.effort as Effort,
     });
   }
+  if (values.policy === "anthropic-vertex") {
+    return new AnthropicPolicy({
+      client: vertexClaudeClient({ project: values.project }),
+      model: values.model ?? DEFAULT_MODEL,
+      effort: values.effort as Effort,
+      provider: "anthropic-vertex",
+    });
+  }
   if (values.policy === "vertex") {
     return new VertexOpenModelPolicy({
       model: values.model ?? DEFAULT_VERTEX_MODEL,
@@ -70,7 +80,7 @@ function policyOf(): Policy {
       thinking: values.thinking !== "off",
     });
   }
-  throw new Error(`--policy must be reference, anthropic or vertex`);
+  throw new Error(`--policy must be reference, anthropic, anthropic-vertex or vertex`);
 }
 
 async function main(): Promise<void> {

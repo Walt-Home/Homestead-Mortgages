@@ -64,6 +64,7 @@ npm run build -w @hm/environments
 npm run env:refi -w @hm/environments -- --policy reference
 npm run env:refi -w @hm/environments -- --policy anthropic --model claude-opus-5-5 --effort high --n 20
 npm run env:refi -w @hm/environments -- --policy vertex --split train --n 5
+npm run env:refi -w @hm/environments -- --policy anthropic-vertex --split train --n 5
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 ```
 
@@ -81,10 +82,18 @@ out by name. Phase 2's gate is read from it.
 The default is the reference policy on the held-out suite. A model run
 spends real money, and it is never the default.
 
-There are two model policies, and neither falls back to another model:
+There are three model policies, and none falls back to another model:
 
 - **`anthropic`** calls Claude over the Messages API. It needs an Anthropic
   key in the environment.
+- **`anthropic-vertex`** runs the same Claude loop through Anthropic's Vertex
+  SDK (pinned at 0.20.2), billed to our project.
+  - That SDK version ignores its `accessToken` option and reads the machine's
+    application-default credentials instead, which are stale on Joe's Mac.
+    So the policy gives it an auth client that returns the gcloud token on
+    every request.
+  - Claude Opus on Vertex needs a quota grant before the first call; our
+    project's is unset (zero) until one is approved.
 - **`vertex`** calls an open model that Vertex AI serves as a managed API on
   our own project. The default is `deepseek-ai/deepseek-v4.1-flash-maas`, at
   $0.30 / $1.20 per million input / output tokens ($0.03 cached), billed to

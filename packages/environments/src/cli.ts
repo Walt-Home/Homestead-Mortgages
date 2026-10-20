@@ -6,6 +6,7 @@
  *   npm run env:refi -w @hm/environments -- --policy vertex --split train --n 5
  *   npm run env:refi -w @hm/environments -- --policy anthropic-vertex --split train --n 5
  *   npm run env:refi -w @hm/environments -- --env refi-tape --policy reference
+ *   npm run env:refi -w @hm/environments -- --env refi-policy --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -43,6 +44,7 @@ import {
   refiTape,
   tapeSpecTasks,
 } from "./refi-tape/index.js";
+import { POLICY_FINGERPRINT, refiPolicy } from "./refi-policy/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -54,7 +56,8 @@ interface TaskCoordinates {
 /** What the runner needs of an environment: its tasks, its reference, and what a task should conclude. */
 interface Bench<T extends TaskCoordinates> {
   readonly env: Environment<T, RefiAnswer>;
-  readonly fingerprint: typeof REFI_FINGERPRINT | typeof TAPE_FINGERPRINT;
+  readonly fingerprint:
+    typeof REFI_FINGERPRINT | typeof TAPE_FINGERPRINT | typeof POLICY_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   readonly suite: (split: Exclude<Split, "spec">, seed: number, n: number) => T[];
   readonly one: (split: Exclude<Split, "spec">, seed: number, index: number) => T;
@@ -77,6 +80,17 @@ const BENCHES = {
   "refi-tape": {
     env: refiTape,
     fingerprint: TAPE_FINGERPRINT,
+    heldout: TAPE_HELDOUT_SUITE,
+    suite: generateTapeSuite,
+    one: generateTapeTask,
+    spec: tapeSpecTasks,
+    verdictOf: (t) => expectedTapeAnswer(t).verdict,
+    reference: () => new TapeReferencePolicy(),
+  } satisfies Bench<ReturnType<typeof generateTapeTask>>,
+  // refi-tape's tasks and reference, with the review stated as a policy.
+  "refi-policy": {
+    env: refiPolicy,
+    fingerprint: POLICY_FINGERPRINT,
     heldout: TAPE_HELDOUT_SUITE,
     suite: generateTapeSuite,
     one: generateTapeTask,
@@ -215,7 +229,8 @@ async function run<T extends TaskCoordinates>(bench: Bench<T>): Promise<void> {
 async function main(): Promise<void> {
   if (values.env === "refi-review") return run(BENCHES["refi-review"]);
   if (values.env === "refi-tape") return run(BENCHES["refi-tape"]);
-  throw new Error(`--env must be refi-review or refi-tape`);
+  if (values.env === "refi-policy") return run(BENCHES["refi-policy"]);
+  throw new Error(`--env must be refi-review, refi-tape or refi-policy`);
 }
 
 main().catch((e: unknown) => {

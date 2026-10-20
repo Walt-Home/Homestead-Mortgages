@@ -24,7 +24,11 @@ export interface EpisodeLine {
     readonly finished_at: string;
     readonly grade: {
       readonly pass: boolean;
-      readonly fields: readonly { readonly field: string; readonly expected: string }[];
+      readonly fields: readonly {
+        readonly field: string;
+        readonly expected: string;
+        readonly ok?: boolean;
+      }[];
     };
     readonly usage: {
       readonly input_tokens: number;
@@ -39,6 +43,7 @@ export interface Scored {
   readonly pass: boolean;
   readonly verdict: string;
   readonly cost: number | null;
+  readonly missed: readonly string[];
 }
 
 /** USD per token, by policy id prefix, from each provider's published list price. */
@@ -86,6 +91,7 @@ export function scoreSide(lines: readonly EpisodeLine[]): {
       pass: l.result.grade.pass,
       verdict: l.result.grade.fields.find((f) => f.field === "verdict")?.expected ?? "?",
       cost: costOf(l.policy.id, l.result.usage),
+      missed: l.result.grade.fields.filter((f) => f.ok === false).map((f) => f.field),
     });
   }
   return {
@@ -138,6 +144,12 @@ export interface Comparison {
   readonly costA: number | null;
   readonly costB: number | null;
   readonly unpaired: readonly string[];
+  /**
+   * Tasks both sides missed on the same field. Two models that fail the same
+   * way are more often reading the same unclear sentence than sharing a
+   * weakness, so each is a wording check before it counts as difficulty.
+   */
+  readonly sharedMisses: readonly { readonly id: string; readonly fields: readonly string[] }[];
 }
 
 export function compare(
@@ -157,6 +169,7 @@ export function compare(
   let costA: number | null = 0;
   let costB: number | null = 0;
   const byVerdict = new Map<string, { n: number; a: number; b: number }>();
+  const sharedMisses: { id: string; fields: string[] }[] = [];
   for (const id of ids) {
     const x = a.byTask.get(id) as Scored;
     const y = b.byTask.get(id) as Scored;
@@ -164,6 +177,8 @@ export function compare(
     if (y.pass) passB++;
     if (x.pass && !y.pass) onlyA++;
     if (!x.pass && y.pass) onlyB++;
+    const both = x.missed.filter((f) => y.missed.includes(f));
+    if (both.length) sharedMisses.push({ id, fields: both });
     costA = costA === null || x.cost === null ? null : costA + x.cost;
     costB = costB === null || y.cost === null ? null : costB + y.cost;
     const v = byVerdict.get(x.verdict) ?? { n: 0, a: 0, b: 0 };
@@ -184,6 +199,7 @@ export function compare(
     costA: costA === null || n === 0 ? null : costA / n,
     costB: costB === null || n === 0 ? null : costB / n,
     unpaired,
+    sharedMisses,
   };
 }
 

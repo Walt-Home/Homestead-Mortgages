@@ -16,8 +16,15 @@ import { renderTapeTask, type RefiTapeTask } from "../refi-tape/task.js";
 import { POLICY } from "./policy.js";
 
 export const POLICY_ENVIRONMENT_NAME = "refi-policy";
-/** Bump on any change to the policy, or to anything refi-tape's version covers. */
-export const POLICY_ENVIRONMENT_VERSION = "1.0.0";
+/**
+ * Bump on any change to the policy, or to anything refi-tape's version covers.
+ *
+ * 1.1.0 (20 Oct 2026): the existing loan's premium no longer shares a bare
+ * name with the quote's field. Under 1.0.0 both models read "its
+ * mi_monthly_cents" as a field the loan does not carry and missed the same
+ * NPV on the same task, a miss of the wording, not of the model.
+ */
+export const POLICY_ENVIRONMENT_VERSION = "1.1.0";
 
 /** refi-tape's task, with "the rulebook" read as "the policy". */
 export const renderPolicyTask = (task: RefiTapeTask): string =>

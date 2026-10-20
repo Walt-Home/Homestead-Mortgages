@@ -43,6 +43,11 @@ console.log(
 );
 for (const [v, x] of [...c.byVerdict].sort())
   console.log(`  ${v}: A ${x.a}/${x.n}, B ${x.b}/${x.n}`);
+for (const m of c.sharedMisses) {
+  console.log(
+    `  both missed ${m.id} on ${m.fields.join(", ")}: check the wording before counting it`,
+  );
+}
 console.log(
   c.p < 0.05
     ? `${c.onlyA > c.onlyB ? "A" : "B"} scores higher, and the difference is unlikely to be chance.`

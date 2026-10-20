@@ -180,6 +180,13 @@ There are three model policies, and none falls back to another model:
   turns up every verdict at more than 12 % and every reason code in the
   rulebook.
 
+- **A miss two models share is checked as wording first.** `env:compare`
+  lists every task both sides missed on the same field. Two models that
+  fail the same way are usually reading the same unclear sentence. The first
+  case was refi-policy 1.0.0: both models read "its mi_monthly_cents" as a
+  field the loan does not carry, because the policy used one name for the
+  loan's premium and the quote's. 1.1.0 names them apart.
+
 ## Not in 1.0.0
 
 - Reading the raw tape line. The task starts after `universeLoanOf`.

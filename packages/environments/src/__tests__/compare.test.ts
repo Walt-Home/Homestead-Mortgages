@@ -17,7 +17,13 @@ const line = (
   result: {
     outcome: o.outcome ?? "submitted",
     finished_at: o.at ?? "2026-10-20T00:00:00Z",
-    grade: { pass, fields: [{ field: "verdict", expected: o.verdict ?? "watching" }] },
+    grade: {
+      pass,
+      fields: [
+        { field: "verdict", expected: o.verdict ?? "watching", ok: true },
+        { field: "offer.npv_cents", expected: "1", ok: pass },
+      ],
+    },
     usage: {
       input_tokens: 1_000_000,
       cache_read_input_tokens: 0,
@@ -81,5 +87,11 @@ describe("the pairing", () => {
     ]);
     expect([...s.byTask.values()].map((x) => x.pass)).toEqual([false, false]);
     expect(s.unscored).toEqual([]);
+  });
+
+  it("names the tasks both sides missed on the same field, as wording to check", () => {
+    const a = scoreSide([line("t1", false), line("t2", false), line("t3", true)]);
+    const b = scoreSide([line("t1", false), line("t2", true), line("t3", true)]);
+    expect(compare(a, b).sharedMisses).toEqual([{ id: "t1", fields: ["offer.npv_cents"] }]);
   });
 });

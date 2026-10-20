@@ -4854,3 +4854,47 @@ Opus.
 
 **Cost of the measurement:** $14.55 for Claude and $3.23 for DeepSeek. Both
 records are archived in `gs://homestead-mortgages-eval-runs`.
+
+## refi-hard's first read: the edges cost DeepSeek, and a shared miss was the engine's
+
+**Read 20 October 2026,** on refi-hard 1.0.0's first 20 training tasks (seed
+1: every edge on both sides). This is a read, not a score: training tasks,
+transcripts read.
+
+|                  | Claude Opus 5.5 (Anthropic API)    | DeepSeek-V4.1-Flash (Vertex, managed) |
+| ---------------- | ---------------------------------- | ------------------------------------- |
+| Passed           | 11 / 12 run (8 not run, see below) | 17 / 20                               |
+| On the same 12   | 11 / 12                            | 9 / 12                                |
+| Cost per episode | $0.126                             | $0.012                                |
+
+On refi-tape's ordinary tasks both had passed 10 of 10. On the same twelve
+tasks here they differ by two (McNemar exact p = 0.5): too few to separate
+the models, enough to show the edges cost DeepSeek something.
+
+**The misses, read.**
+
+- **Both, task 1, the NPV.** The tape gives the PMI rate as the string
+  `"100"`. The rule — a rate string has one or two digits before the
+  point — makes it absent, so the premium is 0; both models read 100 basis
+  points, 1 %, and the same wrong NPV to the cent. The rule is stated
+  plainly, so this is not wording: it is what `universeLoanOf` does, and on
+  a real tape it is a defect. `parseRatePct` writes a 1 % cell (`1`,
+  `1.00`) and any rate of 100 basis points or more as `"100.000"` and up,
+  which the review then reads as no premium, understating the NPV on the
+  offer. Filed as its own fix, because it changes production reviews and
+  every environment's grader with them.
+- **DeepSeek, task 11, cash at the cap.** It priced the raw amount, then
+  switched to the rounded one and carried the raw amount's payment into the
+  seven-year balance. That is the edge working.
+- **DeepSeek, task 4.** A $30 slip in arithmetic done in its head, on cash
+  back. Not the edge.
+
+**Why Claude ran 12.** The evaluation key reached the spending limit set on
+the Anthropic account partway through; the API refuses it until 1 November.
+The eight unrun tasks are left out, not counted as misses. Claude on Vertex
+cannot stand in: its quota request was refused.
+
+**Next.** The read says the edges bite where the procedure is long (cash at
+the cap feeding everything after it). The held-out run is 200 tasks, about
+$25 for Claude and $2.50 for DeepSeek, once the key can spend again and
+the PMI fix has landed, since that fix changes the grader.

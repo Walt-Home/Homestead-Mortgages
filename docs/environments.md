@@ -231,6 +231,10 @@ There are three model policies, and none falls back to another model:
   - 1.2.0 split the sentence in two. Claude then passed the task.
     DeepSeek's remaining miss was its own: it multiplied by 0.25 instead of
     0.25 %.
+  - The second was refi-hard: both read a PMI rate of `"100"` as 100 basis
+    points. The rule is stated plainly, and it is what the engine does, so
+    the defect is the engine's tape reader, not the wording (see
+    docs/decisions.md, "refi-hard's first read").
 
 ## Not in 1.0.0
 

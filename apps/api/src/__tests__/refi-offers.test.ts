@@ -11,7 +11,7 @@
  * on screen 2, one open at a time, and retiring the loan when it funds.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@hm/db";
 import { NORTHLIGHT, sampleBook, toCsv } from "@hm/partner-book";
 import { plainDate } from "@hm/kernel/calendar";
@@ -265,6 +265,18 @@ describe("an offer", () => {
 });
 
 describe("the yes", () => {
+  // The answer route reads the clock, and these offers are made by a review
+  // dated 2026-09-21 and open thirty days. Read off the wall clock, every one
+  // of them lapsed at noon UTC on 2026-10-21 and these tests failed from then
+  // on: the day after the review is fixed here, and only Date is faked, so
+  // the database driver's own timers keep real time.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"], now: at("2026-09-22") });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("records what the card did with the income the person stated before, on the file the yes opens", async () => {
     // The offer card asks for an income before a file exists, so the line
     // under its field is the person-scoped suggestion screen 1 also renders:

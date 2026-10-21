@@ -4931,8 +4931,15 @@ rule that a PMI rate above 5 is basis points is what turns it back.
 **What it moves.** On each deployment the next morning's review runs under
 v3 and writes its rows beside v2's, as any changed rule does; every reader
 takes the newest. The sample book's one insured loan is at 0.55 % and keeps
-the verdict the servicing app's engine gave it. How many loans on a real
-book carry a 1 % or 100+ basis-point rate has not been counted.
+the verdict the servicing app's engine gave it.
+
+**No real loan was affected.** Counted read-only on 21 October across both
+deployments' books, 14,375 loans, 402 of them insured: none carries a
+three-digit PMI rate. 401 carry a rate of 0 with the homeowner paying 0 % of
+the premium (`pmi_homeowner_payment_pct`), the shape of lender-paid
+insurance, so a premium of 0 to the homeowner is right for them; the one
+borrower-paid loan gives its rate in two-digit basis points, which was
+always read.
 
 **The environments follow the engine.** refi-tape 1.1.0, refi-policy 1.3.0
 and refi-hard 1.1.0 say a PMI rate may have three digits, the reference

@@ -234,6 +234,24 @@ engine rounds down (see docs/decisions.md). The held-out suite is seed 1,
 on. Hand-worked quotes at each edge are held to figures worked by hand,
 apart from the engine.
 
+## escrow-policy and regz-policy
+
+Each is its environment's tasks, tools and grader, with only the system prompt
+changed: the rules stated as a policy, not a procedure. The rules are
+organized by topic and in defined terms, with precedence stated as
+precedence and no order of work given. This is the move that first made
+the models miss on refi.
+
+**Nothing is lost in the rewriting.** A test holds that every field, code
+and term the step rulebook names appears in the policy: 72 names for escrow
+and 39 for Reg Z. Every threshold, constant and rounding the grading turns
+on is there too, and no numbered procedure survives. The reference passes
+under the policy, as it does under the rulebook.
+
+The policies keep refi-policy's lesson: no sentence ends on an "otherwise"
+that could attach to more than one condition. Run on the same tasks as the
+procedure, a score measures what the procedure was doing for the model.
+
 ## Commands
 
 ```bash
@@ -246,6 +264,8 @@ npm run env:refi -w @hm/environments -- --env refi-tape --policy reference
 npm run env:refi -w @hm/environments -- --env refi-hard --policy reference
 npm run env:refi -w @hm/environments -- --env escrow-analysis --policy reference
 npm run env:refi -w @hm/environments -- --env regz-price-tests --policy reference
+npm run env:refi -w @hm/environments -- --env escrow-policy --policy reference
+npm run env:refi -w @hm/environments -- --env regz-policy --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

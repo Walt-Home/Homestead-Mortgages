@@ -18,7 +18,7 @@
  * exactly what the original did, and a test holds that.
  */
 
-import { addDays, addMonths, parts, ymd, type PlainDate } from "@hm/kernel/calendar";
+import { addDays, addMonths, parts, ymd } from "@hm/kernel/calendar";
 import { rngFor, type Rng } from "../rng.js";
 import type { Split } from "../refi/task.js";
 import { drawEscrowTask } from "../escrow/generator.js";

@@ -5561,3 +5561,108 @@ The rest:
 - `env:audit` and `env:compare` read no verdict from a payoff;
 - whole-number cents were refused where every other environment takes
   them.
+
+## The shadow AUS's decision is graded by the engine, outside the questions it raises
+
+**Built 21 October 2026,** as `aus-decision` 1.0.0 in
+`packages/environments`: one loan file decided the way `underwrite` decides
+it, from the credit scores to the outcome.
+
+**Why this one, and why now.** The survey of origination ranked the whole
+decision first for importance, and regz-price-tests graded only the
+compliance block inside it, because the decision was not clean enough to
+grade (see "The origination side's first environment is Regulation Z's price
+tests"). Two of the three reasons have since gone: seasoning is counted in
+UTC from a zoned instant, and the record that decides is the one tested
+("Seasoning is counted in UTC, and the record that decides is the one
+tested"); second homes and investment properties are no longer referred on
+HOEPA. What remains is the placeholders and the questions of policy, and
+this environment grades the decision around both.
+
+**The map, and its two checks.** The engine was mapped as a grader before
+anything was built: every figure, rule, block and edge, with the file and
+line it comes from. A refuter checked each claim against the code, and a
+reproducer re-ran them through `underwrite`. Where they corrected the map,
+the corrections are followed:
+
+- the engine's rounding is binary, so a figure exactly on a half can round
+  down at several bright lines (the contribution ratio, the transcript
+  variance, reserve months, the recoup, an LTV in cents), not only at the
+  APR;
+- a credit report with no scores blocks only CRD-002 and UW-010, where a
+  missing report blocks the debts too;
+- a file carrying `reports` and no borrowers is an empty household;
+- the APR is refused for more than mortgage insurance and an adjustable
+  rate, and below about $1,598 the fee schedule leaves nothing financed;
+- CRD-016 belongs in the blocked set beside the debts.
+
+**The grader is the engine, imported.** The task is built into the
+`LoanFile` the decision route builds, every borrower's reports under
+`reports` and Borrower 1's mirrored onto the file-level fields, and
+`underwrite` is called as the route calls it, with no stated market, so the
+fee schedule, the APOR and the APR are derived as in production. Two things
+differ, both for reproducibility: the APOR table is a frozen copy of the
+engine's checked-in table, pinned by its hash, so `apor:vendor` never moves
+a graded answer; and the decision instant is the task's. The figures the
+engine computes from placeholders (the housing payment, with its escrow
+assumption and mortgage-insurance estimate; the closing cost total, with its
+national title premium) are given to the model as the lender's estimates and
+never graded, and the grader checks them against the engine's own before it
+grades anything. The LLPA basis points are not graded either: the grid is
+illustrative, and only its block is.
+
+**What v1 leaves out.** "Seasoning is counted in UTC, and the record that
+decides is the one tested" lists the questions of policy the engine raises:
+a ratio over 50 that is not ineligible, a score under 620 referred only
+through the grid's floor, funds to close never compared with assets, non-QM
+and higher-priced results with no finding, a refinance's maximum that
+ignores occupancy, INC-004 on households with no wage income, a net tangible
+benefit on every refinance, ability to repay read from Borrower 1's reports,
+and bright lines compared on rounded binary figures. v1 never draws a file
+whose graded answer depends on one of them, and its rulebook states only
+what the engine does where the files are drawn. `ausInScope` runs on the
+engine's own derivations and rejects each, and a test builds a file for
+each clause and shows what the engine does there:
+
+- every borrower's own score is 620 or more, and the rulebook says so;
+- every back-end ratio is 50.00 or less, exactly and as rounded;
+- eligible assets always cover funds to close, and funds are never below
+  zero;
+- no file is non-QM or higher-priced. A file whose ability to repay is
+  undocumented (a missing report, no established income) has its APR or
+  APOR refused as well, so QM is undecided rather than non-QM;
+- every refinance is of a primary residence;
+- every household has wage income, so INC-004 reaches it under the sheet's
+  scope too;
+- every refinance is one whose investor requires a net tangible benefit,
+  and the rulebook says so;
+- asset reports come from every borrower or none, where the two readings of
+  ability to repay agree;
+- no bright line falls between the rounded figure and the exact one, and no
+  rounded figure lands exactly on a half.
+
+The same mapping found places the sheet scopes a rule and the engine does
+not, or the engine's maximum reads less than a guide does, and v1 stays out
+of those too: transcripts only on households with variable, self-employed
+or rental income (INC-009); no two-to-four-unit property over 75%,
+manufactured home over 80%, jumbo loan over 80% or loan past the
+high-balance limit; junior liens only on refinances and never past the
+maximum; and seasoning records dated on or before the decision's day of the
+month and never on the 1st, where calendar months and whole months agree.
+
+**What it showed.** The guard rejects none of 40,000 training candidates,
+because the generator aims around all of it, and the reference agrees with
+the engine on every one of 10,000 more. The reference passes the held-out
+200 through `env:refi`, a 300-task training suite and twelve worked cases,
+in at most 26 tool calls and 4 turns; no task is redrawn. The grade is 35
+answers in 11 fields (12 on a refinance). Grading the findings, the blocked
+requirements, the recommendation and the outcome as four fields let an
+answer that works nothing score 0.22, because nearly half the files clear to
+close; as the engine's result and the outcome, it scores 0.10. Run in New
+York and in Tokyo, the same sample hashes the same.
+
+**What a later version can lift.** Each hold above goes when its question
+is decided and the engine changes with it: a ratio over 50 drawn once it is
+an eligibility finding, scores under 620 once the minimum is one, and so on.
+The environment's version moves with any of them, and so does the frozen
+table if it is ever refreshed.

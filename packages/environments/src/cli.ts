@@ -19,6 +19,7 @@
  *   npm run env:refi -w @hm/environments -- --env payments-posting --policy reference
  *   npm run env:refi -w @hm/environments -- --env arm-adjustment --policy reference
  *   npm run env:refi -w @hm/environments -- --env payoff-statement --policy reference
+ *   npm run env:refi -w @hm/environments -- --env aus-decision --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -170,6 +171,19 @@ import {
   type PayoffAnswer,
   type PayoffTask,
 } from "./payoff/index.js";
+import {
+  AUS_FINGERPRINT,
+  AUS_HELDOUT_SUITE,
+  AusReferencePolicy,
+  ausDecision,
+  ausSpecTasks,
+  ausTaskId,
+  expectedAus,
+  generateAusSuite,
+  generateAusTask,
+  type AusAnswer,
+  type AusTask,
+} from "./aus/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -196,7 +210,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof FLEX_FINGERPRINT
     | typeof PAYMENTS_FINGERPRINT
     | typeof ARM_FINGERPRINT
-    | typeof PAYOFF_FINGERPRINT;
+    | typeof PAYOFF_FINGERPRINT
+    | typeof AUS_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -390,6 +405,18 @@ const BENCHES = {
     verdictOf: (t) => expectedPayoff(t).disposition,
     reference: () => new PayoffReferencePolicy(),
   } satisfies Bench<PayoffTask, PayoffAnswer>,
+  // A loan file decided as the shadow AUS decides it, graded by the engine itself.
+  "aus-decision": {
+    env: ausDecision,
+    fingerprint: AUS_FINGERPRINT,
+    heldout: AUS_HELDOUT_SUITE,
+    suite: generateAusSuite,
+    one: generateAusTask,
+    taskId: ausTaskId,
+    spec: ausSpecTasks,
+    verdictOf: (t) => expectedAus(t).outcome,
+    reference: () => new AusReferencePolicy(),
+  } satisfies Bench<AusTask, AusAnswer>,
 };
 
 const { values } = parseArgs({
@@ -546,6 +573,7 @@ async function main(): Promise<void> {
   if (values.env === "payments-posting") return run(BENCHES["payments-posting"]);
   if (values.env === "arm-adjustment") return run(BENCHES["arm-adjustment"]);
   if (values.env === "payoff-statement") return run(BENCHES["payoff-statement"]);
+  if (values.env === "aus-decision") return run(BENCHES["aus-decision"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

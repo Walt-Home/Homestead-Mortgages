@@ -580,7 +580,7 @@ details.plain > summary + * { margin-top: 8px; }
   <section id="overview" aria-labelledby="overview-title">
     <div class="section-head">
       <h2 id="overview-title">Environments</h2>
-      <p id="overview-note">Training reads are how a model did on training tasks, in the newest recorded run of each. They are not scores.</p>
+      <p id="overview-note">A held-out score is how a model did on the 200 held-out tasks, which this page never shows. Training reads are how it did on training tasks, which you can open here; they are not scores.</p>
     </div>
     <div class="sides" id="sides"></div>
   </section>
@@ -1019,6 +1019,7 @@ details.plain > summary + * { margin-top: 8px; }
   var states = {};
   var current = null;
   var RUNS = { status: "loading", records: [], builtAt: null, error: null };
+  var SCORES = { status: "loading", scores: [] };
   var playback = { timer: null, key: null };
 
   function cur() { return H.get(current); }
@@ -1087,6 +1088,32 @@ details.plain > summary + * { margin-top: 8px; }
       foot.textContent = "The recorded runs could not be loaded (" + RUNS.error + "). Everything else on this page works without them.";
     }
   }
+  /** Held-out scores: counts only, from scores.json beside the page. Missing or bad, the page shows none. */
+  function scoreOk(x) {
+    return isObj(x) && typeof x.env === "string" && typeof x.version === "string" && typeof x.policy === "string" &&
+      Number.isInteger(x.scored) && Number.isInteger(x.passed) && x.passed >= 0 && x.passed <= x.scored;
+  }
+  function loadScores() {
+    fetch("scores.json").then(function (res) {
+      if (!res.ok) throw new Error("scores.json answered " + res.status);
+      return res.json();
+    }).then(function (data) {
+      SCORES = { status: "ready", scores: isObj(data) && Array.isArray(data.scores) ? data.scores.filter(scoreOk) : [] };
+    }, function () {
+      SCORES = { status: "failed", scores: [] };
+    }).then(function () {
+      try { renderOverview(); renderHead(); } catch (e) { /* the scores are a footnote; the page works without them */ }
+    });
+  }
+  function scoresFor(key) { return SCORES.scores.filter(function (x) { return x.env === key && x.scored > 0; }); }
+  /** Wilson's 95% interval on a pass rate, in percent. */
+  function wilson(k, n) {
+    var z = 1.96, p = k / n, d = 1 + z * z / n;
+    var c = (p + z * z / (2 * n)) / d, w = (z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / d;
+    return [Math.max(0, c - w) * 100, Math.min(1, c + w) * 100];
+  }
+  function pct(k, n) { return (Math.round(1000 * k / n) / 10).toFixed(1) + "%"; }
+
   function loadRuns() {
     fetch("runs.json").then(function (res) {
       if (!res.ok) throw new Error("runs.json answered " + res.status);
@@ -1109,6 +1136,22 @@ details.plain > summary + * { margin-top: 8px; }
   }
 
   /* ── Overview ─────────────────────────────────────────────────────────── */
+
+  function scoresEl(env) {
+    var list = scoresFor(env.key);
+    if (!list.length) return null;
+    var wrap = h("div", { class: "env-reads" });
+    wrap.append(h("span", { class: "reads-label" }, "Held-out score"));
+    var older = {};
+    list.forEach(function (x) {
+      wrap.append(h("span", null, policyName(x.policy, true) + " ", h("b", null, pct(x.passed, x.scored)),
+        " (" + x.passed + " of " + x.scored + (x.scored < 200 ? ", so far" : "") + ")"));
+      if (x.version !== env.version) older[x.version] = true;
+    });
+    var olderV = Object.keys(older);
+    if (olderV.length) wrap.append(h("span", { class: "muted" }, "measured on " + olderV.join(", ")));
+    return wrap;
+  }
 
   function readsEl(env) {
     var wrap = h("div", { class: "env-reads" });
@@ -1145,6 +1188,7 @@ details.plain > summary + * { margin-top: 8px; }
             h("span", { class: "env-title" }, env.title),
             h("span", { class: "env-version" }, on ? h("span", { class: "env-open" }, "Open below  ") : null, "v" + env.version)),
           h("span", { class: "env-summary" }, firstSentence(env.summary)),
+          scoresEl(env),
           readsEl(env)
         )));
       });
@@ -1169,6 +1213,18 @@ details.plain > summary + * { margin-top: 8px; }
     sel.addEventListener("change", function () { selectEnv(sel.value, false); });
   }
 
+  /** The held-out scores in a sentence, with their intervals; empty when there are none. */
+  function scoreSentence(env) {
+    var list = scoresFor(env.key);
+    if (!list.length) return "";
+    return " Held-out score, on tasks this page never shows: " + list.map(function (x) {
+      var ci = wilson(x.passed, x.scored);
+      return policyName(x.policy) + " passed " + x.passed + " of " + x.scored + " (" + pct(x.passed, x.scored) +
+        ", 95% interval " + ci[0].toFixed(1) + " to " + ci[1].toFixed(1) + "%" +
+        (x.version !== env.version ? ", on version " + x.version : "") + (x.scored < 200 ? ", run still going" : "") + ")";
+    }).join("; ") + ". A run moves a few points either way from one run to the next.";
+  }
+
   function renderHead() {
     var env = cur();
     var side = SIDES.filter(function (x) { return x.key === env.side; })[0];
@@ -1181,7 +1237,8 @@ details.plain > summary + * { margin-top: 8px; }
     $("ws-meta").textContent = plural(tools, "tool") + ", and the answer goes in through " + env.submitTool + ". " +
       (borrowed ? plural(specs.length, "case") + " from the spec, " + borrowed + ". " :
         specs.length ? plural(specs.length, "case") + " from the spec. " : "No spec cases. ") +
-      "A model gets at most " + LIMITS.maxTurns + " turns and " + LIMITS.maxToolCalls + " tool calls.";
+      "A model gets at most " + LIMITS.maxTurns + " turns and " + LIMITS.maxToolCalls + " tool calls." +
+      scoreSentence(env);
     $("env-select").value = env.key;
   }
 
@@ -2208,6 +2265,7 @@ details.plain > summary + * { margin-top: 8px; }
     if (key !== current && ENVS.some(function (e) { return e.key === key; })) selectEnv(key, true);
   });
   loadRuns();
+  loadScores();
 
   window.HMGym = { selectEnv: selectEnv, state: function () { return { current: current, states: states, runs: RUNS }; } };
 })();

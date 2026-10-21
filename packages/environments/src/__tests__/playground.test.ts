@@ -294,4 +294,27 @@ describe("the playground", () => {
       expect(readFileSync(RUNS, "utf8")).not.toMatch(/\/heldout\/|"split":"(heldout|spec)"/);
     },
   );
+
+  const SCORES = here("../../playground/dist/scores.json");
+  it.skipIf(!existsSync(SCORES))(
+    "ships held-out scores as counts, with no task, prompt or transcript",
+    () => {
+      const text = readFileSync(SCORES, "utf8");
+      expect(text).not.toMatch(/\/heldout\/|\/train\/|"rendered"|"transcript"|"fields"|"id"/);
+      const { scores } = JSON.parse(text) as { scores: Record<string, unknown>[] };
+      for (const x of scores)
+        expect(Object.keys(x).sort()).toEqual(
+          [
+            "env",
+            "last_finished_at",
+            "passed",
+            "policy",
+            "scored",
+            "unscored",
+            "usage",
+            "version",
+          ].sort(),
+        );
+    },
+  );
 });

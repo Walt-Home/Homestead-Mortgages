@@ -223,6 +223,32 @@ const slim = (r) => ({
   ),
 });
 
+/*
+ * Held-out scores: how many held-out tasks a model passed, and nothing else.
+ * A held-out record is read for its pass, its outcome and its token usage, to
+ * count; its task id is a key while counting and never leaves this script,
+ * and its prompt and transcript are never read. The newest scored episode of
+ * each task counts, as env:compare counts it; an episode that ended in a
+ * transport error is not scored.
+ */
+/** env|version|policy → task id → { at, pass, usage } (newest scored), plus the errored ids */
+const heldout = new Map();
+const tally = (r) => {
+  if (!MODEL_POLICY.test(r?.policy?.id ?? "") || !r.environment || !r.result) return;
+  const key = `${r.environment.name}|${r.environment.version}|${r.policy.id}`;
+  const g = heldout.get(key) ?? { byTask: new Map(), errored: new Set() };
+  heldout.set(key, g);
+  const id = r.task.id;
+  if (r.result.outcome === "error" || !r.result.grade) {
+    g.errored.add(id);
+    return;
+  }
+  const at = r.result.finished_at ?? "";
+  const was = g.byTask.get(id);
+  if (!was || was.at < at)
+    g.byTask.set(id, { at, pass: !!r.result.grade.pass, usage: r.result.usage ?? {} });
+};
+
 let read = 0;
 let unreadable = 0;
 const skipped = { heldout: 0, spec: 0, stream: 0, reference: 0, other: 0 };
@@ -240,6 +266,7 @@ for (const file of jsonlFiles(join(pkg, "runs")).sort()) {
     }
     read += 1;
     const split = r?.task?.split;
+    if (split === "heldout") tally(r);
     if (split === "heldout" || split === "spec") {
       skipped[split] += 1;
       continue;
@@ -310,6 +337,46 @@ console.log(
   `${relative(pkg, runsPath)}: ${kb(Buffer.byteLength(text))}, ${records.length} episodes of ${read} read (left out: ${skipped.heldout} held-out, ${skipped.spec} spec, ${skipped.stream} on a held-out stream, ${skipped.reference} reference, ${skipped.other} other, ${unreadable} unreadable lines${dropped ? `, ${dropped} over the cap` : ""})`,
 );
 for (const [k, n] of counts) console.log(`  ${k}: ${n}`);
+
+const scores = [...heldout].map(([key, g]) => {
+  const [env, version, policy] = key.split("|");
+  const eps = [...g.byTask.values()];
+  const usage = {
+    input_tokens: 0,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+    output_tokens: 0,
+  };
+  for (const e of eps) for (const k of Object.keys(usage)) usage[k] += Number(e.usage?.[k] ?? 0);
+  return {
+    env,
+    version,
+    policy,
+    scored: eps.length,
+    passed: eps.filter((e) => e.pass).length,
+    unscored: [...g.errored].filter((id) => !g.byTask.has(id)).length,
+    usage,
+    last_finished_at:
+      eps
+        .map((e) => e.at)
+        .sort()
+        .at(-1) ?? null,
+  };
+});
+const scoresText = JSON.stringify({
+  built_at: new Date().toISOString(),
+  about:
+    "Held-out scores: for each environment, version and model, how many held-out tasks the newest scored episode of each passed, and the tokens spent. No task, prompt or transcript is in this file.",
+  scores,
+});
+if (/heldout\/|"rendered"|"transcript"/.test(scoresText))
+  throw new Error("scores.json would carry a held-out task id or text");
+writeFileSync(join(out, "scores.json"), scoresText);
+console.log(`${relative(pkg, join(out, "scores.json"))}: ${scores.length} suites`);
+for (const x of scores)
+  console.log(
+    `  ${x.env} ${x.version}  ${x.policy}: ${x.passed} of ${x.scored} scored${x.unscored ? `, ${x.unscored} unscored` : ""}`,
+  );
 
 // The page beside the two files it loads, so dist/ is the whole site. The
 // source is written for the Artifact host, which wraps it in a document with

@@ -69,7 +69,8 @@ export function auditEpisode(r: AuditRecord): AuditRow {
   );
   const returned = new Set(observations.flatMap(valuesOf));
   const verdict =
-    res.grade.fields.find((f) => f.field === "verdict" || f.field === "decision")?.expected ?? "?";
+    res.grade.fields.find((f) => ["verdict", "decision", "qm_status"].includes(f.field))
+      ?.expected ?? "?";
   const answer = res.answer ?? null;
   const figures =
     answer && "offer" in answer
@@ -77,7 +78,16 @@ export function auditEpisode(r: AuditRecord): AuditRow {
       : answer;
   const mental = figures
     ? Object.entries(figures)
-        .filter(([k, v]) => k.endsWith("_cents") && v !== null && !returned.has(String(v)))
+        // Zero, and a returned figure with its sign flipped (a low point read as a
+        // required balance), are reading rather than arithmetic.
+        .filter(
+          ([k, v]) =>
+            k.endsWith("_cents") &&
+            v !== null &&
+            String(v) !== "0" &&
+            !returned.has(String(v)) &&
+            !returned.has(String(-Number(v))),
+        )
         .map(([k]) => k)
         .sort()
     : [];

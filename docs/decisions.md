@@ -5033,3 +5033,20 @@ limit, but it is the wrong arithmetic for a figure a legal test reads. It
 was every one of the 21 disagreements in 3,000 draws. The fix is to price a
 percentage line in exact cents, the way the limits already are; it was left
 for its own change.
+
+**First reads, 21 October 2026.** DeepSeek-V4.1-Flash on Vertex, 20 training tasks each:
+
+| Environment      | Passed  | Cost per episode |
+| ---------------- | ------- | ---------------- |
+| escrow-analysis  | 20 / 20 | $0.016           |
+| regz-price-tests | 20 / 20 | $0.005           |
+
+Both are at the ceiling, as refi-review was. A rulebook written as exact
+steps is followed almost without fail, edges included. Claude was not run:
+the evaluation key is at its spending limit until 1 November. The harder
+versions are the same moves that separated the models on refi:
+
+- the rules stated as a policy rather than a procedure;
+- the escrow ledger given as a transaction history rather than a balance;
+- the APR solve taken out of the tools, so Appendix J has to be iterated
+  with the calculator.

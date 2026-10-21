@@ -5225,3 +5225,31 @@ twice. Neither miss flipped a test downstream; both were graded wrong.
 
 These are reads on training tasks with transcripts read, not scores. The
 held-out runs, Claude's included, are what the comparisons will be made on.
+
+## First reads on flexmod-terms and payments-posting
+
+**Read 21 October 2026,** DeepSeek-V4.1-Flash on Vertex, 20 training tasks
+each: flexmod-terms before its review, payments-posting after. Claude was
+not run: its evaluation key is at its spending limit until 1 November.
+
+| Environment            | Passed  | Cost each | Misses                            |
+| ---------------------- | ------- | --------- | --------------------------------- |
+| flexmod-terms 1.0.0    | 19 / 20 | 1.4¢      | MTMLTV on the balance alone, once |
+| payments-posting 1.0.0 | 20 / 20 | 1.4¢      |                                   |
+
+**The Flex Modification miss is the gross-up.** On one loan DeepSeek
+divided the interest-bearing balance alone by the value, 123.67 % against
+125.53 %, leaving out the accrued interest and the escrow advance that
+step 1 adds. Nothing downstream changed on that loan; the field is graded
+on its own.
+
+**Payments posted clean, and in few turns.** DeepSeek made its tool calls
+side by side, two to five turns a month. The audit flags one month in
+twenty for arithmetic done without a tool: a late charge assessed in the
+window, added to the charges already due in its head, and right. The audit
+used to flag every figure no tool returned, which counted a balance copied
+unchanged from the task as arithmetic. It now reads a figure the task
+states as reading, and the earlier runs' counts fall with it.
+
+flexmod-terms changed after its read: 1.1.0 draws differently, and its
+rulebook does not. These are reads on training tasks, not scores.

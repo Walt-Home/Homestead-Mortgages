@@ -69,11 +69,12 @@ export function auditEpisode(r: AuditRecord): AuditRow {
   );
   const returned = new Set(observations.flatMap(valuesOf));
   // A posting has no verdict; its first outcome (a receipt's, or a run's) stands in for one.
+  const run = res.grade.fields.find((f) => f.field.startsWith("late_charge["))?.expected;
   const verdict =
     res.grade.fields.find((f) => ["verdict", "decision", "qm_status"].includes(f.field))
       ?.expected ??
     res.grade.fields.find((f) => f.field.endsWith(".outcome"))?.expected ??
-    "?";
+    (run ? String((JSON.parse(run) as { outcome?: unknown }).outcome ?? "?") : "?");
   const answer = res.answer ?? null;
   const figures =
     answer && "offer" in answer
@@ -83,15 +84,17 @@ export function auditEpisode(r: AuditRecord): AuditRow {
         : answer;
   const mental = figures
     ? Object.entries(figures)
-        // Zero, and a returned figure with its sign flipped (a low point read as a
-        // required balance), are reading rather than arithmetic.
+        // Zero, a returned figure with its sign flipped (a low point read as a
+        // required balance), and a figure the task itself states (a balance a held
+        // receipt left alone) are reading rather than arithmetic.
         .filter(
           ([k, v]) =>
             k.endsWith("_cents") &&
             v !== null &&
             String(v) !== "0" &&
             !returned.has(String(v)) &&
-            !returned.has(String(-Number(v))),
+            !returned.has(String(-Number(v))) &&
+            !new RegExp(`(?<![\\d.])${String(v)}(?![\\d.])`).test(r.task.rendered),
         )
         .map(([k]) => k)
         .sort()

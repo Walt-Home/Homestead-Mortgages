@@ -7,6 +7,12 @@
 import { describe, expect, it } from "vitest";
 import { auditEpisode, summarize, transcriptOf, type AuditRecord } from "../audit.js";
 import { runEpisode } from "../episode.js";
+import {
+  PaymentsReferencePolicy,
+  paymentsPosting,
+  paymentsSpecTasks,
+  type PaymentsTask,
+} from "../payments/index.js";
 import { ReferencePolicy, refiReview, specTasks, type RefiTask } from "../refi/index.js";
 
 async function recordOf(task: RefiTask, split = task.split): Promise<AuditRecord> {
@@ -64,6 +70,35 @@ describe("the audit", () => {
     expect(auditEpisode(without).passWithout).toEqual(["balance_after"]);
     // With no quote the review skips the benefit, and needs none of them.
     expect(auditEpisode(await recordOf(noQuote)).passWithout).toEqual([]);
+  });
+
+  it("reads a posting: a stated figure copied is not arithmetic, and a run-only month has a verdict", async () => {
+    const [spec, , , , , , forbearance] = paymentsSpecTasks();
+    const post = async (task: PaymentsTask): Promise<AuditRecord> => {
+      const result = await runEpisode(paymentsPosting, task, new PaymentsReferencePolicy());
+      return {
+        task: {
+          id: task.id,
+          split: task.split,
+          index: task.index,
+          rendered: paymentsPosting.render(task),
+        },
+        policy: { id: "reference" },
+        result: result as unknown as AuditRecord["result"],
+      };
+    };
+    const r = await post(spec!);
+    const answer = r.result.answer as { final: Record<string, unknown> };
+    // The balance the task states, submitted unchanged, is reading; one off by a cent is not.
+    const doctor = (upb: string): AuditRecord => ({
+      ...r,
+      result: { ...r.result, answer: { ...answer, final: { ...answer.final, upb_cents: upb } } },
+    });
+    expect(auditEpisode(doctor(String(spec!.loan.upb_cents))).mental).toEqual([]);
+    expect(auditEpisode(doctor(String(spec!.loan.upb_cents + 1n))).mental).toEqual(["upb_cents"]);
+    expect(auditEpisode(r).verdict).toBe("applied");
+    // Example N has no receipts: its first run's outcome stands in.
+    expect(auditEpisode(await post(forbearance!)).verdict).toBe("not_assessed");
   });
 
   it("totals the rows", async () => {

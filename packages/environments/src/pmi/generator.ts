@@ -6,12 +6,19 @@
  * interest only), its original value from a sales price and an appraisal,
  * its units and occupancy, sometimes ARM rate changes or a modification with
  * forborne principal, borrower-paid MI on a monthly, annual or single
- * premium (or lender-paid), and a ledger of installments and receipts. The
- * amortization is built first, with no dates, and the trigger it gives is
- * placed on a date the edge wants; the note's dates are worked back from it.
- * Then the task is aimed, in turn by index, at one edge:
+ * premium (or lender-paid), and a ledger of installments and receipts. Each
+ * is a loan that could exist: no more borrowed than the property may borrow
+ * (a second home 90%, an investment property 85% and only as a one-unit
+ * purchase), a certificate effective between closing and the first payment,
+ * no more than 30% of a modification forborne. The amortization is built
+ * first, with no dates, and the trigger it gives is placed on a date the
+ * edge wants; the note's dates are worked back from it. The evaluation date
+ * is drawn apart from the trigger, up to thirteen months either side, and
+ * the ledger runs back from it by a span of its own: neither says where the
+ * trigger fell. Then the task is aimed, in turn by index, at one edge:
  *   - threshold: the 78% threshold on a row's scheduled balance to the cent,
- *     a cent either side of it, or on half a cent;
+ *     a cent either side of it, or half a cent under a row's balance, which
+ *     only rounding half up puts on that row;
  *   - midpoint: the 78% row a payment either side of the midpoint, on
  *     interest-only loans and modifications; and a sweep the day before;
  *   - applicability: consummated 1999-07-28 or 29, a second home against an
@@ -23,11 +30,13 @@
  *   - current: the month before the trigger paid on its last day, or on the
  *     trigger; February in a leap year as the test month;
  *   - cure: one to three months behind, cured on the trigger, on a month's
- *     last day, on a 1st, by partial or double receipts, in two steps, or not
- *     by the evaluation date;
+ *     last day, on a 1st, by partial or double receipts, in two steps, or
+ *     never (each in turn by index); an older arrear caught up on the test
+ *     month's last day;
  *   - refund: an annual premium on its anniversary, a day after it, and 365
  *     days into a coverage year with a 29 February; a single premium on a row
- *     of its refund schedule and a month short of one; a monthly premium;
+ *     of its refund schedule and a month short of one; a monthly premium
+ *     (each in turn by index, the certificate's date chosen to land it);
  *   - request_ltv: a request whose evaluation balance is 80.00% (70.00% for
  *     two to four units or an investment property; 75.00% or 80.00% of a
  *     current value) in floored basis points, a basis point either side, at
@@ -35,12 +44,14 @@
  *     principal in the balance; a curtailment posted after the request;
  *   - request_history: a 30-day late in the last 12 months and a 60-day late
  *     in the 12 before, each alone, at 29 and 30 days, 59 and 60, February
- *     in a leap year; disaster exclusions; a loan younger than 24 months;
- *     not current at the request;
+ *     in a leap year; disaster exclusions; a 60-day late on a loan younger
+ *     than 24 months; not current at the request, or current to the day; an
+ *     installment 30 days late due on the request date (outside the windows)
+ *     or due earlier that month and satisfied after it (inside them);
  *   - request_value: an AVM below, at and above the original value, or none;
- *     a borrower-paid valuation; the 120-day expiry to the day; the
- *     current-value path by seasoning (23, 24, 59, 60 months), class and
- *     improvements, and with no valuation yet;
+ *     a borrower-paid valuation; the 120th day after delivery and the 121st;
+ *     the current-value path with a valuation and without one (each in turn
+ *     by index), by seasoning (23, 24, 59, 60 months), class and improvements;
  *   - lender_paid: the options notice.
  * Effective dates on 1sts before federal holidays, which the business-day
  * clocks step over, are drawn throughout.
@@ -74,6 +85,7 @@ import { solveNow } from "../refi/reference.js";
 import type { Split } from "../refi/task.js";
 import {
   analyzePmi,
+  anniversaryOnOrBefore,
   expectedPmi,
   gradePmiAgainst,
   midpointOf,
@@ -184,8 +196,20 @@ function ovForThreshold(t: Cents): Cents {
   return ov;
 }
 
-const STATES = ["TX", "CA", "FL", "OH", "GA", "NC", "AZ", "CO", "WA", "IL", "PA", "NY", "NJ"];
-const STATES_BUT_NY = STATES.filter((s) => s !== "NY");
+/**
+ * No New York: the engine reads a New York purchase's appraisal alone as the original value, and New
+ * York's own 75% stop (N.Y. Ins. Law §6503(d), spec 10.2's overlay) ends the borrower's premium with no
+ * request, which nothing ported computes. `pmiInScope` refuses the state outright.
+ */
+const STATES = ["TX", "CA", "FL", "OH", "GA", "NC", "AZ", "CO", "WA", "IL", "PA", "NJ"];
+
+/**
+ * The most a note lends against the original value, as the spec's extract of Fannie Mae's Eligibility
+ * Matrix has it (23.2): a second home 90%, an investment property 85% and only on a purchase, which a
+ * two- to four-unit investment property never reaches with mortgage insurance on it; otherwise 96.5%.
+ */
+const maxLtvBps = (occupancy: Occupancy): number =>
+  occupancy === "investment" ? 8_500 : occupancy === "second_home" ? 9_000 : 9_650;
 
 /* ── the note and what changed it ──────────────────────────────────────── */
 
@@ -285,11 +309,15 @@ function modificationInTime(note: ScheduleTermsOf, m: Modification, ov: Cents): 
  * Whether the schedule is one v1 grades: every rate change before the 78% row
  * and the midpoint of the schedule then in effect, no rate change on an
  * interest-only note, a modification before the note's own 78% date and
- * midpoint, a 78% row that is not a schedule's last, and an original LTV
- * between 80% and 97%.
+ * midpoint with no more than 30% of its gross balance forborne (the Flex
+ * Modification's cap), a 78% row that is not a schedule's last, and an
+ * original LTV above 80% and within what the property may borrow.
  */
 function scheduleSound(n: Note, c: Changes, ov: Cents): boolean {
-  if (n.principal * 100n <= ov * 80n || n.principal * 1000n > ov * 970n) return false;
+  if (n.principal * 100n <= ov * 80n) return false;
+  if (n.principal * 10_000n > ov * BigInt(maxLtvBps(n.occupancy))) return false;
+  if (n.occupancy === "investment" && (n.units !== 1 || n.isRefi)) return false;
+  if (c.mod && c.mod.forborne_principal_cents * 7n > c.mod.ib_upb_cents * 3n) return false;
   if (c.rateChanges.length > 0 && (n.io > 0 || c.mod)) return false;
   const terms = termsOf(n, c, PLACEHOLDER);
   const p = positionOf(terms, ov);
@@ -330,9 +358,8 @@ function drawNote(
     const kind = r.weighted<string>([
       ["1p", 80],
       ["1s", 8],
-      ["1i", 5],
+      ["1i", 7],
       ["np", 5],
-      ["ni", 2],
     ]);
     units = kind.startsWith("1") ? 1 : r.int(2, 4);
     occupancy = kind.endsWith("p")
@@ -341,7 +368,7 @@ function drawNote(
         ? "second_home"
         : "investment";
   }
-  const ltv = r.int(8_100, 9_650) / 10_000;
+  const ltv = r.int(8_100, maxLtvBps(occupancy)) / 10_000;
   const ov = BigInt(Math.round(Number(principal) / ltv));
   return {
     principal,
@@ -350,7 +377,8 @@ function drawNote(
     io,
     units,
     occupancy,
-    isRefi: o.isRefi ?? r.chance(0.25),
+    // An investment property carries mortgage insurance only on a purchase.
+    isRefi: occupancy === "investment" ? false : (o.isRefi ?? r.chance(0.25)),
     ov,
   };
 }
@@ -397,17 +425,42 @@ function drawMod(r: Rng, n: Note): Changes["mod"] {
 
 type ThresholdAim = "on" | "cent_below" | "cent_above" | "half_cent";
 
-/** The original value that puts the 78% threshold on row `row`'s balance (plus forborne), or a cent either side. */
+/** Row `row`'s balance plus forborne principal on the schedule in effect, or null when it has no such row. */
+function rowBalance(n: Note, c: Changes, row: number): Cents | null {
+  const versions = scheduleVersions(termsOf(n, c, PLACEHOLDER));
+  const v = versions[versions.length - 1]!;
+  const at = v.rows.find((x) => x.n === row);
+  return at ? at.upb_after_cents + v.forborne_principal_cents : null;
+}
+
+/**
+ * The original value that puts the 78% threshold on row `row`'s balance (plus forborne), or a cent
+ * either side; or, for half a cent, exactly half a cent under it. Original value × 78 = 100·B − 50
+ * makes B the threshold rounded half up and B − 1 rounded down, and with B odd (B ≡ 59, mod 78) half
+ * to even rounds down too: so only rounding half up finds row `row`. The balance a row lands on is the
+ * schedule's, so the principal (the modification's balance, on a modification) is moved a cent at a
+ * time until it does; `n` and `c` carry the move.
+ */
 function aimThreshold(n: Note, c: Changes, row: number, aim: ThresholdAim): Cents | null {
-  const p = positionOf(termsOf(n, c, PLACEHOLDER), n.ov);
-  const at = p.version.rows.find((x) => x.n === row);
-  if (!at) return null;
-  if (aim === "half_cent") return n.ov - (n.ov % 50n) + 25n;
-  const t =
-    at.upb_after_cents +
-    p.version.forborne_principal_cents +
-    (aim === "cent_below" ? -1n : aim === "cent_above" ? 1n : 0n);
-  return ovForThreshold(t);
+  if (aim === "half_cent") {
+    for (let k = 0; k < 2_000; k++) {
+      const delta = BigInt(k % 2 === 0 ? k / 2 : -(k + 1) / 2);
+      const nn: Note = c.mod ? n : { ...n, principal: n.principal + delta };
+      const cc: Changes = c.mod
+        ? { ...c, mod: { ...c.mod, ib_upb_cents: c.mod.ib_upb_cents + delta } }
+        : c;
+      const B = rowBalance(nn, cc, row);
+      if (B === null) return null;
+      if (B % 78n !== 59n) continue;
+      n.principal = nn.principal;
+      c.mod = cc.mod;
+      return (100n * B - 50n) / 78n;
+    }
+    return null;
+  }
+  const B = rowBalance(n, c, row);
+  if (B === null) return null;
+  return ovForThreshold(B + (aim === "cent_below" ? -1n : aim === "cent_above" ? 1n : 0n));
 }
 
 /* ── the ledger ────────────────────────────────────────────────────────── */
@@ -488,59 +541,69 @@ const duesBetween = (from: PlainDate, through: PlainDate): PlainDate[] => {
 
 type RefundAim = "on" | "day_after" | "full_year" | "boundary" | "month_short" | "none";
 
-function drawMi(r: Rng, n: Note, plan: MiPlan, consummation: PlainDate): Mi {
+/**
+ * The MI as certified: its effective date any day from consummation to the day before the first
+ * payment, and a single premium's refund schedule a row every twelve months in force from 0.
+ */
+function drawMi(r: Rng, n: Note, plan: MiPlan, consummation: PlainDate, firstDue: PlainDate): Mi {
   const annualBps = BigInt(r.int(25, 120));
   const monthly = (n.principal * annualBps + 60_000n) / 120_000n;
+  const coverage_start = randomDay(r, consummation, addDays(firstDue, -1));
   if (plan === "monthly" || plan === "lender_paid")
-    return { plan, premium_cents: monthly, coverage_start: consummation };
-  if (plan === "annual")
-    return { plan, premium_cents: monthly * 12n, coverage_start: consummation };
+    return { plan, premium_cents: monthly, coverage_start };
+  if (plan === "annual") return { plan, premium_cents: monthly * 12n, coverage_start };
   const premium = (n.principal * BigInt(r.int(125, 375))) / 10_000n;
-  return { plan, premium_cents: premium, coverage_start: consummation, refund_schedule: [] };
+  return { plan, premium_cents: premium, coverage_start, refund_schedule: refundSchedule(r) };
 }
 
-/** A single premium's refund schedule: a row every 12 months from `phase`, falling to nothing. */
-function refundSchedule(r: Rng, phase: number): Mi["refund_schedule"] {
+/** A single premium's refund schedule: a row every 12 months in force from 0, falling to nothing. */
+function refundSchedule(r: Rng): Mi["refund_schedule"] {
   const rows: { months_in_force_from: number; refund_pct: string }[] = [
     { months_in_force_from: 0, refund_pct: (r.int(8_500, 9_800) / 100).toFixed(2) },
   ];
   let pct = Number(rows[0]!.refund_pct);
-  for (let m = phase === 0 ? 12 : phase; m <= 240; m += 12) {
+  for (let m = 12; m <= 240; m += 12) {
     pct = Math.max(0, pct - r.int(300, 900) / 100);
     rows.push({ months_in_force_from: m, refund_pct: pct.toFixed(2) });
   }
   return rows;
 }
 
-/** Sets the annual coverage start or the single premium's schedule so E lands where the aim wants. */
-function aimRefund(r: Rng, mi: Mi, E: PlainDate, consummation: PlainDate, aim: RefundAim): Mi {
-  if (mi.plan === "single") {
-    const months = seasoningMonths(mi.coverage_start, E);
-    const phase =
-      aim === "boundary" ? months % 12 : aim === "month_short" ? (months + 1) % 12 : r.int(0, 11);
-    return { ...mi, refund_schedule: refundSchedule(r, phase) };
-  }
-  if (mi.plan !== "annual" || aim === "none") return mi;
-  let target: PlainDate | null = null;
-  if (aim === "on") target = E;
-  if (aim === "day_after") target = addDays(E, -1);
-  if (aim === "full_year") {
-    const a = addDays(E, -365);
-    if (addMonths(a, 12) > E) target = a;
-  }
-  if (!target) return mi;
-  // The anniversary of the target that falls in the year after consummation.
-  let start = target;
-  while (start > addMonths(consummation, 12)) start = addMonths(start, -12);
-  while (start < consummation) start = addMonths(start, 12);
-  if (start > E) return mi;
-  return { ...mi, coverage_start: start };
+/**
+ * The certificate's effective date that lands E where the aim wants, chosen among the days from
+ * consummation to the day before the first payment, the only days a certificate takes effect; null
+ * when none of them does. The effective date is never moved for it.
+ */
+function aimRefund(
+  r: Rng,
+  mi: Mi,
+  E: PlainDate,
+  consummation: PlainDate,
+  firstDue: PlainDate,
+  aim: RefundAim,
+): Mi | null {
+  if (aim === "none" || mi.plan === "monthly" || mi.plan === "lender_paid") return mi;
+  const lands = (start: PlainDate): boolean => {
+    if (mi.plan === "single") {
+      // Rows fall every twelve months in force: on one, or a month short of one.
+      const months = seasoningMonths(start, E);
+      return aim === "boundary" ? months % 12 === 0 : aim === "month_short" && months % 12 === 11;
+    }
+    const days = daysBetween(anniversaryOnOrBefore(start, E), E);
+    return aim === "on" ? days === 0 : aim === "day_after" ? days === 1 : days === 365;
+  };
+  const starts: PlainDate[] = [];
+  for (let d = consummation; d < firstDue; d = addDays(d, 1)) if (lands(d)) starts.push(d);
+  return starts.length ? { ...mi, coverage_start: r.pick(starts) } : null;
 }
 
 /* ── a sweep: the trigger, the ledger around it, and the MI ────────────── */
 
 type SweepAim = "on_time" | "last_day" | "on_trigger" | "behind" | "nothing_yet";
-type CureAim = "on_trigger" | "month_end" | "first" | "random" | "two_steps" | "never";
+const CURE_AIMS = ["on_trigger", "month_end", "first", "random", "two_steps", "never"] as const;
+type CureAim = (typeof CURE_AIMS)[number];
+/** How far, in days, the evaluation date may fall from the trigger (or the catch-up) either way. */
+const SWEEP_SPAN = 400;
 
 interface Coordinates {
   readonly id: string;
@@ -549,23 +612,25 @@ interface Coordinates {
   readonly index: number;
 }
 
+/** The refund edge's plans and aims, taken in turn by index: a draw that misses its aim is drawn again for the same one. */
+const REFUND_ARMS: readonly (readonly [MiPlan, RefundAim | null])[] = [
+  ["annual", "on"],
+  ["single", "boundary"],
+  ["annual", "full_year"],
+  ["monthly", null],
+  ["annual", "day_after"],
+  ["single", "month_short"],
+  ["annual", "full_year"],
+  ["monthly", null],
+];
+
 function trySweep(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
   // The refund edge settles its plan and aim first: a coverage year with a 29 February in it needs
   // its trigger placed for it.
-  const refundPlan: MiPlan | null =
+  const [refundPlan, refundAim] =
     edge === "refund"
-      ? r.weighted<MiPlan>([
-          ["annual", 50],
-          ["single", 30],
-          ["monthly", 20],
-        ])
-      : null;
-  const refundAim: RefundAim | null =
-    refundPlan === "annual"
-      ? r.pick(["on", "day_after", "full_year", "full_year"] as const)
-      : refundPlan === "single"
-        ? r.pick(["boundary", "month_short", "none"] as const)
-        : null;
+      ? REFUND_ARMS[Math.floor(c.index / PMI_EDGES.length) % REFUND_ARMS.length]!
+      : [null, null];
   // 1. The note, as the edge wants it.
   let applicability: "boundary" | "pre1999" | "occupancy" | "units" | null = null;
   let o: Parameters<typeof drawNote>[1] = {};
@@ -624,8 +689,8 @@ function trySweep(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
       const at = v.rows.find((x) => x.n === row);
       if (!at) return null;
       const forborne = thresholdCents(n.ov, 78) - at.upb_after_cents;
-      const gross = ch.mod.ib_upb_cents + ch.mod.forborne_principal_cents;
-      if (forborne < 0n || forborne * 10n > gross * 4n) return null;
+      // No more than 30% of the gross balance forborne, the Flex Modification's cap (scheduleSound holds it).
+      if (forborne < 0n || forborne * 7n > ch.mod.ib_upb_cents * 3n) return null;
       ch.mod = { ...ch.mod, forborne_principal_cents: forborne };
     } else {
       const ov = aimThreshold(n, ch, row, r.chance(0.8) ? "on" : "cent_below");
@@ -723,39 +788,57 @@ function trySweep(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
           [3, 15],
         ])
       : 0;
+  // The cure edge takes its aims in turn, so a suite of 200 has each of them.
   const cureAim: CureAim | null =
-    sweepAim === "behind"
-      ? r.weighted<CureAim>([
-          ["on_trigger", 18],
-          ["month_end", 18],
-          ["first", 16],
-          ["random", 20],
-          ["two_steps", 14],
-          ["never", 14],
-        ])
-      : null;
-  let from = addMonths(testFirst, -(behind + r.int(1, 4)));
-  from = maxDate(from, firstDue);
-  if (modDue) from = maxDate(from, modDue);
-  if (from > addMonths(testFirst, -(behind > 0 ? behind - 1 : 0))) return null;
+    sweepAim !== "behind"
+      ? null
+      : edge === "cure"
+        ? CURE_AIMS[Math.floor(c.index / PMI_EDGES.length) % CURE_AIMS.length]!
+        : r.weighted<CureAim>([
+            ["on_trigger", 18],
+            ["month_end", 18],
+            ["first", 16],
+            ["random", 20],
+            ["two_steps", 14],
+            ["never", 14],
+          ]);
+  const lateFirst = addMonths(testFirst, -(behind > 0 ? behind - 1 : 0));
+  // Two or more behind, the oldest arrear sometimes caught up on the test month's last day itself: on
+  // time for the test, while the installments after it are not.
+  const oldestOnTestEnd = behind >= 2 && cureAim !== "two_steps" && r.chance(0.3);
 
-  // The catch-up date for a loan behind.
+  // The catch-up date for a loan behind; one that never catches up keeps paying a month at a time,
+  // as far behind as it fell.
   let cure: PlainDate | null = null;
   if (cureAim === "on_trigger") cure = T;
   if (cureAim === "month_end") cure = endOfMonth(addMonths(T, r.int(0, 1)));
   if (cureAim === "first") cure = addMonths(T, r.int(1, 2));
-  if (cureAim === "random" || cureAim === "two_steps" || cureAim === "never")
-    cure = addDays(T, r.int(1, 70));
+  if (cureAim === "random" || cureAim === "two_steps") cure = addDays(T, r.int(1, 70));
 
-  // The evaluation date.
+  // The evaluation date, drawn apart from the trigger: a sweep any day up to thirteen months after it
+  // (after the catch-up, on a loan that caught up), and a review that comes first any day up to
+  // thirteen months before. The ledger runs back from the evaluation date by a span of its own. So
+  // neither the date nor the ledger's first month says where the trigger fell: that is the schedule's.
+  const lastChange = ch.rateChanges.length
+    ? addMonths(firstDue, ch.rateChanges[ch.rateChanges.length - 1]!.payment_number - 1)
+    : null;
   let asOf: PlainDate;
-  if (sweepAim === "nothing_yet") asOf = addDays(T, -r.int(1, 10));
-  else if (cureAim === "never") asOf = addDays(T, r.int(0, Math.max(0, daysBetween(T, cure!) - 1)));
-  else if (cure) asOf = addDays(cure, r.int(0, 25));
-  else asOf = addDays(T, r.int(0, 28));
+  if (sweepAim === "nothing_yet") {
+    const floor = maxDate(
+      addMonths(firstDue, 6),
+      maxDate(modDue ?? firstDue, lastChange ?? firstDue),
+    );
+    const room = daysBetween(floor, T) - 1;
+    if (room < 1) return null;
+    asOf = r.chance(0.25) ? addDays(T, -1) : addDays(T, -r.int(1, Math.min(SWEEP_SPAN, room)));
+  } else asOf = addDays(cure ?? T, r.int(0, SWEEP_SPAN));
+  let from = addMonths(firstOfMonth(asOf), -r.int(12, 24));
+  // A ledger starts no earlier than the payments its installments are: the note's first, the
+  // modification's, the last rate change's.
+  for (const d of [firstDue, modDue, lastChange]) if (d) from = maxDate(from, d);
+  if (sweepAim !== "nothing_yet" && from > lateFirst) return null;
 
   const dues = duesBetween(from, asOf);
-  const lateFirst = addMonths(testFirst, -(behind - 1));
   // Each installment on time (within its own month) unless the aim says otherwise; never earlier
   // than the one before it, as a ledger applied oldest first would show it.
   const dates = monotone(
@@ -764,11 +847,16 @@ function trySweep(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
       if (sweepAim === "on_trigger" && due === testFirst) return T;
       if (sweepAim === "on_trigger" && due === T)
         return r.chance(0.5) ? T : addDays(T, r.int(1, 20));
-      if (sweepAim === "behind" && cure && due >= lateFirst && due <= cure) {
-        // The two-step cure: the oldest arrear paid first, the rest when the catch-up comes.
-        if (cureAim === "two_steps" && due === lateFirst)
-          return minDate(addDays(T, r.int(0, 12)), addDays(cure, -1));
-        return cure;
+      if (sweepAim === "behind" && due >= lateFirst) {
+        if (oldestOnTestEnd && due === lateFirst) return testEnd;
+        // Never caught up: each installment paid as many months late as the loan fell behind.
+        if (cureAim === "never") return addDays(addMonths(due, behind), r.int(0, 12));
+        if (cure && due <= cure) {
+          // The two-step cure: the oldest arrear paid first, the rest when the catch-up comes.
+          if (cureAim === "two_steps" && due === lateFirst)
+            return minDate(addDays(T, r.int(0, 12)), addDays(cure, -1));
+          return cure;
+        }
       }
       return addDays(due, r.int(-6, 12));
     }),
@@ -788,8 +876,8 @@ function trySweep(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
           ["annual", 35],
           ["single", 20],
         ]));
-  let mi = drawMi(r, n, plan, consummation);
-  let state = r.pick(STATES);
+  let mi = drawMi(r, n, plan, consummation, firstDue);
+  const state = r.pick(STATES);
   let sp = n.isRefi ? null : n.ov;
   let ap = n.ov;
   if (!n.isRefi) {
@@ -801,8 +889,6 @@ function trySweep(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
     ]);
     if (which === "sp_lower") ap = other;
     if (which === "ap_lower") sp = other;
-    // New York reads the appraisal alone; drawn only where that is the lesser figure anyway.
-    if (state === "NY" && sp! < ap) state = r.pick(STATES_BUT_NY);
   }
   const draft: PmiTask = {
     ...c,
@@ -823,8 +909,11 @@ function trySweep(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
         : plan === "annual" && r.chance(0.3)
           ? r.pick(["on", "day_after", "full_year", "none"] as const)
           : "none");
-    mi = aimRefund(r, mi, E, consummation, aim);
-  } else if (mi.plan === "single") mi = { ...mi, refund_schedule: refundSchedule(r, r.int(0, 11)) };
+    const aimed = aimRefund(r, mi, E, consummation, firstDue, aim);
+    // The refund edge is drawn again when no certificate date lands its aim; any other keeps its own.
+    if (!aimed && edge === "refund") return null;
+    mi = aimed ?? mi;
+  } else if (edge === "refund" && refundAim !== null) return null;
   return { ...draft, mi };
 }
 
@@ -832,10 +921,39 @@ function trySweep(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
 
 type LtvAim = "bottom" | "top" | "inside";
 
+/**
+ * request_value's arms, taken in turn by index so that a suite of 200 holds each of them: the AVM
+ * above, at or below the original value or none, a borrower's paid valuation, the 120th day after
+ * delivery and the 121st, and the current-value path with a valuation and without one.
+ */
+const VALUE_ARMS = [
+  "avm_above",
+  "cv",
+  "avm_equal",
+  "cv",
+  "avm_below",
+  "expiry_120",
+  "cv",
+  "avm_none",
+  "bpo",
+  "cv_none",
+  "cv",
+  "expiry_121",
+] as const;
+
+type HistoryAim =
+  "b" | "a" | "both" | "disaster" | "young" | "not_current" | "last_day" | "in_month" | "clean";
+
 function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
   // 1. The property and the path.
-  const path: "original_value" | "current_value" = r.chance(
-    edge === "request_value" ? 0.55 : edge === "request_ltv" ? 0.25 : 0.1,
+  const arm =
+    edge === "request_value"
+      ? VALUE_ARMS[Math.floor(c.index / PMI_EDGES.length) % VALUE_ARMS.length]!
+      : null;
+  const path: "original_value" | "current_value" = (
+    arm === null
+      ? r.chance(edge === "request_ltv" ? 0.25 : 0.1)
+      : arm === "cv" || arm === "cv_none" || (arm.startsWith("expiry") && r.chance(0.5))
   )
     ? "current_value"
     : "original_value";
@@ -843,8 +961,7 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
     ["1p", 70],
     ["1s", 10],
     ["np", 12],
-    ["1i", 4],
-    ["ni", 4],
+    ["1i", 8],
   ]);
   const units = kind.startsWith("1") ? 1 : r.int(2, 4);
   const occupancy: Occupancy = kind.endsWith("p")
@@ -875,25 +992,60 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
     addMonths(firstDue, 6),
     maxDate(lastChange ?? firstDue, modDue ? addMonths(modDue, 3) : firstDue),
   );
-  // The request comes before the trigger, and on the scheduled path's class before the scheduled 80% date.
+  // The request comes before the trigger and, on the one-unit class, before the scheduled 80% date on
+  // either path: after it the original-value path, which the spec evaluates first, grants on the
+  // schedule alone, and the engine never looks.
   let latest = addMonths(pos.trigger, -3);
-  if (path === "original_value" && pc === "1u_principal_or_second" && pos.d80)
+  if (pc === "1u_principal_or_second" && pos.d80)
     latest = minDate(latest, addMonths(pos.d80.due_date, -3));
   if (earliest >= latest) return null;
 
-  // The loan's age at the request: aimed at the seasoning lines or the young-loan windows.
-  let received: PlainDate;
+  // The loan's age at the request: aimed at the seasoning lines or the young-loan windows; and the
+  // payment history the request is aimed at.
   const ageAim =
     path === "current_value" && r.chance(0.55)
       ? r.pick([23, 24, 24, 59, 60, 60])
       : edge === "request_history" && r.chance(0.25)
         ? r.int(13, 23)
         : null;
+  const historyAim: HistoryAim =
+    edge === "request_history"
+      ? ageAim !== null
+        ? "young"
+        : r.pick([
+            "b",
+            "b",
+            "a",
+            "a",
+            "a",
+            "both",
+            "disaster",
+            "disaster",
+            "not_current",
+            "last_day",
+            "in_month",
+            "in_month",
+          ] as const)
+      : r.chance(0.12)
+        ? r.pick(["b", "a", "not_current", "last_day", "in_month"] as const)
+        : "clean";
+  let received: PlainDate;
   if (ageAim !== null) {
     received = addMonths(consummation, ageAim);
     if (r.chance(0.3)) received = addDays(received, -1);
-    if (received < earliest || received >= latest) return null;
   } else received = randomDay(r, earliest, latest);
+  if (historyAim === "in_month") {
+    // A month of 31 days: its installment paid on its last day is exactly 30 days late. Received on
+    // its 1st, that installment is due on the request date and outside both windows; received later in
+    // the month, it is inside them, satisfied after the date they end on.
+    const month =
+      parts(endOfMonth(received)).d === 31
+        ? firstOfMonth(received)
+        : addMonths(firstOfMonth(received), 1);
+    const { y, m } = parts(month);
+    received = r.chance(0.5) ? month : ymd(y, m, r.int(2, 30));
+  }
+  if (received < earliest || received >= latest) return null;
 
   // 3. The valuation and the decision date.
   const age = seasoningMonths(consummation, received);
@@ -903,15 +1055,17 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
   let decision = addDays(received, r.int(2, 40));
   let avm: Cents | null = null;
   const ov = n.ov;
-  const valueAim =
-    edge === "request_value"
-      ? r.pick(["avm_above", "avm_equal", "avm_below", "avm_none", "bpo", "expiry"] as const)
-      : r.weighted<string>([
+  const valueAim: string =
+    arm === null
+      ? r.weighted<string>([
           ["avm_above", 85],
           ["avm_equal", 5],
           ["avm_below", 5],
           ["avm_none", 5],
-        ]);
+        ])
+      : arm.startsWith("expiry")
+        ? "expiry"
+        : arm;
   if (path === "original_value") {
     avm =
       valueAim === "avm_none"
@@ -930,7 +1084,8 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
     }
   } else {
     // A current-value request with no threshold is never drawn without a valuation.
-    const none = currentTh !== null && r.chance(edge === "request_value" ? 0.15 : 0.05);
+    const none = arm === "cv_none" || (arm === null && r.chance(0.05));
+    if (none && currentTh === null) return null;
     if (!none) {
       const delivered = addDays(received, r.int(5, 30));
       valuation = { value_cents: 0n, delivered_on: delivered };
@@ -939,17 +1094,14 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
   if (valuation) {
     decision =
       valueAim === "expiry"
-        ? addDays(valuation.delivered_on, r.chance(0.5) ? 120 : 121)
+        ? addDays(valuation.delivered_on, arm === "expiry_121" ? 121 : 120)
         : addDays(valuation.delivered_on, r.int(1, 25));
   }
+  // The installment of the request's own month is paid on its 31st, and the decision comes after.
+  if (historyAim === "in_month")
+    decision = maxDate(decision, addDays(endOfMonth(received), r.int(0, 9)));
   if (decision >= pos.trigger) return null;
-  if (
-    path === "original_value" &&
-    pc === "1u_principal_or_second" &&
-    pos.d80 &&
-    decision >= pos.d80.due_date
-  )
-    return null;
+  if (pc === "1u_principal_or_second" && pos.d80 && decision >= pos.d80.due_date) return null;
 
   // 4. The balances: the scheduled balance at the request, curtailed to the aim.
   const forborne = terms.modification?.forborne_principal_cents ?? 0n;
@@ -981,7 +1133,7 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
       const evalTarget = bandOf(target, ov, edge === "request_ltv" ? ltvAim : "inside");
       const ib = evalTarget - deferred - forborne;
       if (ib <= 0n || ib > scheduled) return null;
-      if (r.chance(edge === "request_ltv" ? 0.35 : 0.15)) {
+      if (historyAim !== "in_month" && r.chance(edge === "request_ltv" ? 0.35 : 0.15)) {
         // Above the line on receipt; a curtailment after it brings it there.
         const before = bandOf(th! + r.int(5, 400), ov, "inside") - deferred - forborne;
         if (before > scheduled || before <= ib) return null;
@@ -993,12 +1145,14 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
       } else upbOnReceipt = ib;
     }
   }
-  // The scheduled payment posted after the request, when one falls due before the decision.
+  // The scheduled payment posted after the request, when one falls due before the decision (not on
+  // the in-month aim, whose windows end on the request date).
   const nextDue = addMonths(firstOfMonth(received), 1);
   const lastBalance = postings.length
     ? postings[postings.length - 1]!.upb_after_cents
     : upbOnReceipt;
   if (
+    historyAim !== "in_month" &&
     nextDue <= decision &&
     r.chance(0.3) &&
     (postings.length === 0 || postings[0]!.posted_on < nextDue)
@@ -1014,6 +1168,11 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
   for (const p of postings) {
     if (p.upb_after_cents > prev) return null;
     prev = p.upb_after_cents;
+  }
+  if (path === "current_value") {
+    // The original-value paths, which the spec evaluates first, fail on the balance: a borrower they
+    // would grant never needs the current value (10.1 R1).
+    if (ltvBps(value(prev), ov) <= originalValueThresholdBps(pc)) return null;
   }
   if (path === "current_value" && valuation) {
     // The value that puts the LTV where it is aimed, against the balance at the decision.
@@ -1069,15 +1228,6 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
   const precedingEnd = addDays(firstOfMonth(received), -1);
   const testDue = firstOfMonth(precedingEnd);
 
-  type HistoryAim = "b" | "a" | "both" | "disaster" | "young" | "not_current" | "clean";
-  const historyAim: HistoryAim =
-    edge === "request_history"
-      ? ageAim !== null
-        ? "young"
-        : r.pick(["b", "b", "a", "a", "both", "disaster", "disaster", "not_current"] as const)
-      : r.chance(0.12)
-        ? r.pick(["b", "a", "not_current"] as const)
-        : "clean";
   const inB = dues.filter((d) => d >= bStart && d < addMonths(D, -1) && d !== testDue);
   const inA = dues.filter((d) => d >= aStart && d < addMonths(bStart, -2));
   const lates = new Map<PlainDate, number>();
@@ -1099,18 +1249,23 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
         : late(inB, historyAim === "disaster" ? [30, 35, 61] : [29, 30, 30, 31, 45, 61]);
     if (historyAim === "disaster" && due) disaster = [due];
   }
-  if (historyAim === "a" || historyAim === "both") late(inA, [59, 60, 60, 61, 75]);
+  if (historyAim === "a" || historyAim === "both") late(inA, [59, 59, 60, 60, 61, 75]);
   if (historyAim === "young") {
-    // A late of about 60 days in a window the loan's age has shortened.
+    // A late of about 60 days on a loan under 24 months old. The windows shortened to the loan's age
+    // reach back before its first installment (the request comes after it), so the late is counted
+    // either way; the age clause is restated for fidelity and never changes an answer here.
     const pool = dues.filter((d) => d < addMonths(bStart, -2));
     late(pool, [59, 60, 61, 70]);
   }
+  if (historyAim === "in_month") lates.set(firstOfMonth(received), 30);
   if (historyAim === "disaster" && r.chance(0.3))
     disaster = [...disaster, r.pick(dues.filter((d) => d < D))];
 
   const dates = dues.map((due): PlainDate | null => {
     let on = lates.has(due) ? addDays(due, lates.get(due)!) : addDays(due, r.int(-6, 10));
     if (historyAim === "not_current" && due === testDue) on = addDays(precedingEnd, r.int(1, 8));
+    // Current to the day: the month before the request paid on its own last day.
+    if (historyAim === "last_day" && due === testDue) on = precedingEnd;
     // Paid by the decision: nothing due on or before it is still open then.
     return on > decision ? decision : on;
   });
@@ -1123,8 +1278,8 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
     ["annual", 30],
     ["single", 20],
   ]);
-  let mi = drawMi(r, n, plan, consummation);
-  let state = r.pick(STATES);
+  let mi = drawMi(r, n, plan, consummation, firstDue);
+  const state = r.pick(STATES);
   let sp = n.isRefi ? null : ov;
   let ap = ov;
   if (!n.isRefi) {
@@ -1132,7 +1287,6 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
     const which = r.pick(["sp_lower", "equal", "ap_lower"]);
     if (which === "sp_lower") ap = other;
     if (which === "ap_lower") sp = other;
-    if (state === "NY" && sp! < ap) state = r.pick(STATES_BUT_NY);
   }
   const draft: PmiTask = {
     ...c,
@@ -1145,10 +1299,10 @@ function tryRequest(r: Rng, edge: PmiEdge, c: Coordinates): PmiTask | null {
     request: { ...draftRequest, disaster_excluded: [...new Set(disaster)].sort() },
   };
   const E = effectiveOf(draft);
-  if (mi.plan === "single")
-    mi = E
-      ? aimRefund(r, mi, E, consummation, r.pick(["boundary", "month_short", "none"] as const))
-      : { ...mi, refund_schedule: refundSchedule(r, r.int(0, 11)) };
+  if (E && mi.plan === "single") {
+    const aim = r.pick(["boundary", "month_short", "none"] as const);
+    mi = aimRefund(r, mi, E, consummation, firstDue, aim) ?? mi;
+  }
   return { ...draft, mi };
 }
 
@@ -1216,16 +1370,21 @@ export function pmiFairToGrade(task: PmiTask): boolean {
  *   - every term is even and every due date a 1st (an odd term's
  *     midpoint is a month late; the current test misses an installment
  *     due after the 1st);
+ *   - no New York loan: the engine reads a New York purchase's appraisal
+ *     alone, and New York's own 75% stop (10.2's overlay, 10.1 R1's path
+ *     (c)) is not ported;
  *   - the original value is the lesser of price and appraisal, or the
- *     appraisal on a refinance (the engine reads a New York purchase's
- *     appraisal alone);
+ *     appraisal on a refinance;
  *   - every rate change falls before the 78% row and the midpoint of the
  *     schedule then in effect, none on an interest-only note, and a
  *     modification falls before the note's own 78% date and midpoint;
  *   - receipts stop at the evaluation date;
- *   - a request is decided before the trigger; on the original-value path
- *     of a one-unit principal residence or second home, before the
- *     scheduled 80% date (the scheduled path is never evaluated);
+ *   - a request is decided before the trigger; on a one-unit principal
+ *     residence or second home, before the scheduled 80% date, on either
+ *     path (the scheduled path is never evaluated);
+ *   - a current-value request's balance is above the original-value
+ *     threshold (the engine evaluates only the path asked for, where 10.1
+ *     R1 evaluates the original-value paths first and grants on any);
  *   - a current-value request with no threshold is never without a
  *     valuation (it asks for a paid valuation that cannot help);
  *   - no borrower-paid valuation below the original value on the
@@ -1248,6 +1407,7 @@ export function pmiInScope(task: PmiTask): boolean {
     ...task.ledger.installments.map((i) => i.due_date),
   ];
   if (dueDates.some((d) => parts(d).d !== 1)) return false;
+  if (l.state === "NY") return false;
   const ov = originalValue({
     sales_price_cents: l.sales_price_cents,
     appraised_value_cents: l.appraised_value_cents,
@@ -1284,13 +1444,13 @@ export function pmiInScope(task: PmiTask): boolean {
   if (task.as_of >= a.trigger || r.received_on > task.as_of) return false;
   const pc = propertyClassOf(l);
   const d80 = scheduledDateForPct(a.version, a.original_value_cents, 80);
+  if (pc === "1u_principal_or_second" && (!d80 || d80.due_date <= task.as_of)) return false;
+  const req = a.request!;
   if (
-    r.path === "original_value" &&
-    pc === "1u_principal_or_second" &&
-    (!d80 || d80.due_date <= task.as_of)
+    r.path === "current_value" &&
+    ltvBps(req.evaluation_upb_cents, a.original_value_cents) <= originalValueThresholdBps(pc)
   )
     return false;
-  const req = a.request!;
   const age = seasoningMonths(l.consummation, r.received_on);
   if (
     r.path === "current_value" &&

@@ -5379,10 +5379,15 @@ must be paid by 29 February, where its own R3 and T3 test March.
 **So v1 stays out of those places.** The generator never draws:
 
 - an odd term, or a due day other than the 1st;
-- a New York purchase priced below its appraisal;
+- a New York loan at all: a purchase priced below its appraisal takes the
+  appraisal, and New York's 75% stop is not ported (below);
 - a rate change on an interest-only note or past the 78% row or midpoint of
   the schedule then in effect;
-- a request past the scheduled 80% date on the scheduled path's class;
+- a request past the scheduled 80% date on a one-unit principal residence
+  or second home, on either path;
+- a current-value request whose balance already meets the original-value
+  threshold. 10.1 R1 evaluates the original-value paths first and grants on
+  any of them; the engine evaluates only the path it is handed;
 - a current-value request with neither a threshold nor a valuation;
 - a paid valuation below the original value;
 - an evidence date other than the delivered valuation's.
@@ -5405,8 +5410,11 @@ of them, each to the cent.
 - LAR 89's period-close deadlines, which are Eastern wall-clock times;
 - the 10.4 annual disclosure, and 10.5's reconciliation, dispute, advance
   and look-back;
-- the denial notice's content, Minnesota's response clock and New York's
-  75% stop;
+- the denial notice's content and Minnesota's response clock;
+- New York's 75% stop (§6503(d)). It ends the borrower's premium at 75% of
+  the original appraisal with no request and no payment-history test, years
+  before the midpoint on a loan the 78% rule does not reach, and nothing
+  ported computes it. So no New York loan is drawn;
 - a pre-1999 loan boarded past its midpoint, which is a restitution
   escalation, not a computation;
 - a modification whose forborne principal alone exceeds 78% of the original
@@ -5415,4 +5423,84 @@ of them, each to the cent.
 **The proof of fairness.** The reference solves the held-out 200, a
 300-task training suite and the 25 worked examples through the tools alone,
 with no task redrawn in 600. It agrees with the engine on 2,000 candidates
-nothing filtered. Its longest task is 34 tool calls in 5,000 draws.
+nothing filtered, and 5,000 were all in scope and fair when last measured.
+Its longest task is 35 tool calls in 5,000 draws.
+
+**An adversarial review, before anything was scored, upheld thirteen
+findings.** In one, the grader gave answers the spec calls wrong, on
+current-value requests. All were fixed at 1.0.0 with a new held-out pin,
+because nothing had been measured on the first. Two mattered most.
+
+- **The evaluation date gave the trigger away.** A sweep was run within 28
+  days after the trigger, and its ledger started two to five months before
+  it. The trigger was the 1st of the evaluation date's month on 128 of 152
+  held-out sweeps. A policy that never searched the schedule for the 78% row
+  scored 0.776 and passed 68 of 200 tasks, and it skipped the
+  threshold-to-the-cent, ARM and modification edges that exist to test that
+  search. Now the evaluation date falls up to thirteen months after the
+  trigger, or before it when nothing has happened yet. The ledger runs back
+  from the evaluation date by a span of its own. A loan that never catches
+  up keeps paying a month at a time, as far behind as it fell. An annual
+  certificate's date no longer comes from the effective date either. The
+  same policy now scores 0.44 against 0.47 for one that takes the midpoint
+  for the trigger, and a test holds that it gains nothing.
+- **A current-value request was judged on its own path alone.** 10.1 R1
+  evaluates the original-value paths first and grants on any. In 10,000
+  training draws, 46 of 735 current-value requests were ones the
+  original-value path grants on the same facts. Half were denied, mostly on
+  seasoning, and half were granted under code 52 rather than 51. Every
+  current-value request is now above the original-value threshold and
+  before the scheduled 80% date, and the guard checks both.
+
+The grade:
+
+- A section answered where none was called for cost one field; one left out
+  cost all of its fields. Claiming a grant or a cure that is not there cost
+  two or three fields, and missing one cost nine or ten, so the grader paid
+  a policy to grant under doubt. Now the two directions cost the same, ten
+  fields for a request or a sweep and nine for a cure, and a test holds that.
+- An answer could also say "ineligible" and hand in the termination
+  anyway. The sections must now agree, as the rulebook ties them, or the
+  submission comes back as an error to correct.
+
+The draws:
+
+- New York loans were drawn although New York's 75% stop is not modeled.
+  They are not drawn now, and the guard refuses them.
+- Investment properties and second homes were drawn above what Fannie Mae
+  buys, and annual certificates took effect up to a year after closing.
+  Now a second home borrows up to 90%, and an investment property up to 85%
+  and only as a one-unit purchase. A certificate takes effect between
+  closing and the first payment.
+- The midpoint edge could forbear more than 30% of a modification's gross
+  balance, past the Flex Modification's cap. It cannot now.
+- The held-out suite had no refused request. The rare arms of the value,
+  cure and refund edges are now taken in turn by index, and a test holds
+  that the held-out 200 has a refusal, a request with no valuation and a
+  sweep never cured.
+
+The tests:
+
+- The half-cent edge put no row near the rounded threshold, so rounding
+  half to even moved the 78% row on 2 tasks in 2,400. Now the row's balance
+  is the threshold rounded half up and an odd cent, so only rounding half
+  up finds the row. That holds on 49 of 1,200.
+- Four boundaries were never or almost never drawn: current to the day,
+  an installment due on the request date, one satisfied after the windows'
+  end, and an older arrear caught up on the test month's last day. Each is
+  now an aim with a count.
+- The holiday triggers and the two-step cure were held only by the pin.
+  Each now has a count that fails without its aim.
+- The test for a rate change after the 78% row was also refused by the
+  as-of clause. It is now swept after the change, so only its own clause
+  refuses it.
+- Step 6 now says which ledger steps are reading, so a model that makes one
+  call a turn has room: at most 57 turns even counting every window
+  installment's days with a tool.
+
+The payment-history windows shorten to the loan's age, and the rulebook
+says so, but in v1 that never changes an answer. The windows shortened back
+from a request reach before the loan's first installment, and the guard
+keeps the late counts at a later threshold date equal to those at receipt.
+The young-loan edge is now described as what it is: a 60-day late on a loan
+under 24 months.

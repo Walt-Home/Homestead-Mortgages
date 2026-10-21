@@ -47,6 +47,8 @@ import {
   pmiSpecTasks,
   pmiTaskId,
   pmiTermination,
+  executePmiTool,
+  refundPlanAt,
   scheduleVersions,
   type PmiAnswer,
   type PmiTask,
@@ -58,6 +60,7 @@ import {
   valueCheck,
 } from "../pmi/ported/cancellation.js";
 import { applyFifo, fnmaDelinquencyStatus } from "../pmi/ported/delinquency.js";
+import { unearnedEstimate } from "../pmi/ported/refund.js";
 import { midpoint, scheduledDateForPct, thresholdCents } from "../pmi/ported/schedule.js";
 import { isCurrent } from "../pmi/ported/termination.js";
 
@@ -538,9 +541,18 @@ describe("pmi-termination", () => {
     expect(wrong({ ...want, automatic: { ...want.automatic!, cure_on: "2035-07-21" } })).toEqual([
       "automatic.cure_on",
     ]);
-    // A section the date does not call for, answered, is a field of its own.
+    // A section the date does not call for, answered, costs every field it holds.
     const hedge = expectedPmi(SPEC[13]!).request;
-    expect(wrong({ ...want, request: hedge })).toEqual(["request"]);
+    expect(wrong({ ...want, request: hedge })).toEqual([
+      "request.evaluation_upb_cents",
+      "request.threshold_bps",
+      "request.ltv_bps",
+      "request.fnma_current",
+      "request.history",
+      "request.result",
+      "request.reasons",
+      "request.decision_due",
+    ]);
     // A section left out misses every field in it.
     expect(wrong({ ...want, termination: null })).toHaveLength(8);
     // On a request, one wrong late count is one field.
@@ -608,6 +620,125 @@ describe("pmi-termination", () => {
       request: { ...many.request!, reasons: [...many.request!.reasons].reverse() },
     });
     expect(shuffled.ok && gradePmiAgainst(many, shuffled.answer).pass).toBe(true);
+    // The sections must agree: no answer says two things at once.
+    const t1 = expectedPmi(SPEC[13]!);
+    expect(ok(t1)).toBe(true);
+    const noTermination = { ...t1, termination: null };
+    expect(ok({ ...t1, automatic: want.automatic })).toBe(false);
+    expect(ok({ ...t1, request: { ...t1.request!, reasons: ["NOT_CURRENT"] } })).toBe(false);
+    expect(ok({ ...t1, request: { ...t1.request!, result: "ineligible" } })).toBe(false);
+    expect(
+      ok({ ...t1, request: { ...t1.request!, result: "ineligible", reasons: ["NOT_CURRENT"] } }),
+    ).toBe(false);
+    expect(
+      ok({
+        ...noTermination,
+        request: { ...t1.request!, result: "ineligible", reasons: ["NOT_CURRENT"] },
+      }),
+    ).toBe(true);
+    expect(ok(noTermination)).toBe(false);
+    expect(ok({ ...t1, termination: { ...t1.termination!, lar89_action_code: "53" } })).toBe(false);
+    expect(ok({ ...t1, lpmi_options_notice_due: "2035-07-31" })).toBe(false);
+    expect(ok({ ...t2, request: { ...t2.request!, result: "value_check_needed" } })).toBe(false);
+    expect(
+      ok({ ...t2, request: { ...t2.request!, result: "refused", reasons: ["VALUATION_EXPIRED"] } }),
+    ).toBe(false);
+    // A sweep: never cured with a termination; current with findings; not current without them.
+    expect(ok({ ...want, automatic: { ...want.automatic!, cure_on: null } })).toBe(false);
+    expect(
+      ok({ ...want, automatic: { ...want.automatic!, cure_on: null }, termination: null }),
+    ).toBe(true);
+    expect(ok({ ...want, automatic: { ...want.automatic!, current_on_trigger: true } })).toBe(
+      false,
+    );
+    expect(ok({ ...want, automatic: { ...want.automatic!, not_current_installments: [] } })).toBe(
+      false,
+    );
+    expect(ok({ ...want, termination: { ...want.termination!, lar89_action_code: "51" } })).toBe(
+      false,
+    );
+  });
+
+  it("costs the same to claim a grant, a cure or a sweep that is not there as to miss one", () => {
+    const wrongCount = (want: PmiAnswer, answer: PmiAnswer) => {
+      const parsed = parsePmiSubmission(JSON.parse(JSON.stringify(answer)));
+      expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
+      return gradePmiAgainst(want, parsed.ok ? parsed.answer : null).fields.filter((f) => !f.ok)
+        .length;
+    };
+    const junk = (on: string, code: "51" | "52" | "53") => ({
+      effective_on: on,
+      lar89_action_code: code,
+      lar89_action_date: "010100",
+      notice_due: on,
+      premium_stop_by: on,
+      refund_due: on,
+      insurer_notice_due: on,
+      escrow_interim_analysis_due: on,
+      unearned_premium_cents: "1",
+    });
+    const costs = new Map<string, Set<number>>();
+    const note = (k: string, n: number) => costs.set(k, (costs.get(k) ?? new Set()).add(n));
+    for (const t of generatePmiSuite("train", 5, 240)) {
+      const w = expectedPmi(t);
+      const r = w.request;
+      if (r && r.result === "eligible")
+        note(
+          "deny a grant",
+          wrongCount(w, {
+            ...w,
+            request: { ...r, result: "ineligible", reasons: ["NOT_CURRENT"] },
+            termination: null,
+          }),
+        );
+      if (r && r.result === "ineligible")
+        note(
+          "grant a denial",
+          wrongCount(w, {
+            ...w,
+            request: { ...r, result: "eligible", reasons: [] },
+            termination: junk(t.as_of, "51"),
+          }),
+        );
+      const s = w.automatic;
+      if (s && !s.current_on_trigger && s.cure_on !== null)
+        note(
+          "miss a cure",
+          wrongCount(w, { ...w, automatic: { ...s, cure_on: null }, termination: null }),
+        );
+      if (s && !s.current_on_trigger && s.cure_on === null)
+        note(
+          "invent a cure",
+          wrongCount(w, {
+            ...w,
+            automatic: { ...s, cure_on: t.as_of },
+            termination: junk(t.as_of, "53"),
+          }),
+        );
+      if (s && s.current_on_trigger)
+        note("skip a sweep", wrongCount(w, { ...w, automatic: null, termination: null }));
+      if (!r && !s && t.mi.plan !== "lender_paid")
+        note(
+          "sweep too early",
+          wrongCount(w, {
+            ...w,
+            automatic: {
+              current_on_trigger: true,
+              not_current_installments: [],
+              not_current_notice_due: null,
+              cure_on: null,
+            },
+            termination: junk(t.as_of, "53"),
+          }),
+        );
+    }
+    const only = (k: string) => [...(costs.get(k) ?? [])];
+    expect(only("deny a grant")).toEqual([10]);
+    expect(only("grant a denial")).toEqual([10]);
+    expect(only("miss a cure")).toEqual([9]);
+    expect(only("invent a cure")).toEqual([9]);
+    expect(only("skip a sweep")).toEqual([10]);
+    expect(only("sweep too early")).toEqual([10]);
   });
 
   it("gives an answer that answers nothing little credit", () => {
@@ -632,7 +763,8 @@ describe("pmi-termination", () => {
       return gradePmiAgainst(want, nothing).score;
     });
     const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
-    // About 0.17, the floor docs/environments.md states.
+    // About 0.16, the empty answer docs/environments.md states. The floor it reads scores against is the
+    // schedule-free policy's, about 0.47 (the held-out test below runs that policy).
     expect(mean).toBeGreaterThan(0.12);
     expect(mean).toBeLessThan(0.2);
   });
@@ -713,7 +845,7 @@ describe("pmi-termination", () => {
       expect(pmiInScope(fifteenth)).toBe(false);
     });
 
-    it("a New York purchase takes the appraisal, and its 78% date eleven months early", () => {
+    it("a New York purchase takes the appraisal, and its 78% date eleven months early; New York is never drawn", () => {
       const ny = loan(A!, { state: "NY" });
       expect(
         originalValue({
@@ -725,17 +857,24 @@ describe("pmi-termination", () => {
       ).toBe(41_000_000n);
       expect(analyzePmi(ny).scheduled_78).toMatchObject({ n: 124, due_date: "2034-08-01" });
       expect(pmiInScope(ny)).toBe(false);
-      // A New York refinance, or a purchase whose appraisal is the lesser figure, reads the same either way.
+      // New York's own 75% stop (10.2's overlay) is not ported either, so no New York loan is in scope,
+      // a refinance or a purchase whose appraisal is the lesser figure included.
       expect(
         pmiInScope(loan(A!, { state: "NY", is_refinance: true, sales_price_cents: null })),
-      ).toBe(true);
-      expect(pmiInScope(loan(A!, { state: "NY", sales_price_cents: 42_000_000n }))).toBe(true);
+      ).toBe(false);
+      expect(pmiInScope(loan(A!, { state: "NY", sales_price_cents: 42_000_000n }))).toBe(false);
     });
 
     it("a rate change after the 78% row, or inside an interest-only period, re-versions wrongly", () => {
-      const late = with_(A!, { rate_changes: [{ payment_number: 140, new_rate_pct: "7.000" }] });
-      // The engine reads the reset row itself as the 78% row.
+      // Swept on 2035-12-10, after the change has taken effect, so only the 78%-row clause can refuse it.
+      const late = with_(A!, {
+        as_of: d("2035-12-10"),
+        ledger: specLedgerWith(A!.ledger, "2035-12-10", {}),
+        rate_changes: [{ payment_number: 140, new_rate_pct: "7.000" }],
+      });
+      // The engine reads the reset row itself as the 78% row; the note's own is 135.
       expect(analyzePmi(late).scheduled_78).toMatchObject({ n: 140, due_date: "2035-12-01" });
+      expect(analyzePmi(A!).scheduled_78).toMatchObject({ n: 135 });
       expect(pmiInScope(late)).toBe(false);
       const ioArm = with_(SPEC[6]!, {
         rate_changes: [{ payment_number: 61, new_rate_pct: "7.500" }],
@@ -788,6 +927,41 @@ describe("pmi-termination", () => {
         reasons: ["LTV_ABOVE_THRESHOLD"],
       });
       expect(pmiInScope(late)).toBe(false);
+      // Asked on the current-value path with a $410,000 BPO, it is denied on that path's table, where the
+      // original-value path the spec evaluates first grants on the schedule alone.
+      const current = with_(late, {
+        as_of: d("2034-09-20"),
+        ledger: specLedgerWith(late.ledger, "2034-09-20", {}),
+        request: {
+          ...late.request!,
+          path: "current_value",
+          avm_cents: null,
+          valuation: { value_cents: 41_000_000n, delivered_on: d("2034-09-15") },
+          evidence_satisfied_on: d("2034-09-15"),
+        },
+      });
+      expect(expectedPmi(current).request).toMatchObject({
+        ltv_bps: 8142,
+        result: "ineligible",
+        reasons: ["LTV_ABOVE_THRESHOLD_CURRENT"],
+      });
+      expect(pmiInScope(current)).toBe(false);
+    });
+
+    it("a current-value request is judged on its own path alone, where the spec evaluates the original value first", () => {
+      // 10.1-T1's balance, 79.98% of the original value, asked on the current-value path with a $455,000
+      // BPO: the engine grants under code 52, where the original-value path grants under 51 (10.1 R1).
+      const t = req(T1, {
+        path: "current_value",
+        avm_cents: null,
+        valuation: { value_cents: 45_500_000n, delivered_on: d("2029-07-12") },
+        evidence_satisfied_on: d("2029-07-12"),
+      });
+      expect(expectedPmi(t).termination).toMatchObject({ lar89_action_code: "52" });
+      expect(expectedPmi(T1).termination).toMatchObject({ lar89_action_code: "51" });
+      expect(pmiInScope(t)).toBe(false);
+      // Above the original-value line the current-value path is the borrower's only one, and in scope.
+      expect(pmiInScope(SPEC[20]!)).toBe(true);
     });
 
     it("a current-value request under 24 months asks for a valuation that cannot help", () => {
@@ -889,11 +1063,136 @@ describe("pmi-termination", () => {
     });
   });
 
+  it("holds every rare outcome in the held-out suite, and gives the trigger away in neither the date nor the ledger", () => {
+    const tasks = generatePmiSuite("heldout", PMI_HELDOUT_SUITE.seed, PMI_HELDOUT_SUITE.n);
+    const runs = tasks.map((t) => ({ t, w: expectedPmi(t) }));
+    // The rare arms are taken in turn by index, so the suite every score is measured on has each.
+    expect(runs.filter(({ w }) => w.request?.result === "refused").length).toBeGreaterThan(0);
+    expect(
+      runs.filter(({ w }) => w.request?.reasons.includes("VALUATION_REQUIRED")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      runs.filter(
+        ({ w }) => w.automatic && !w.automatic.current_on_trigger && w.automatic.cure_on === null,
+      ).length,
+    ).toBeGreaterThan(0);
+
+    const firstOf = (x: string) => `${x.slice(0, 7)}-01`;
+    const months = (x: string) => Number(x.slice(0, 4)) * 12 + Number(x.slice(5, 7));
+    const sweeps = runs.filter(({ t }) => !t.request);
+    const ran = sweeps.filter(({ t, w }) => t.as_of >= w.position.trigger_date);
+    // The evaluation date falls up to thirteen months from the trigger, so its month is the trigger's
+    // about as often as chance has it; and no count of months back from the trigger to the ledger's
+    // first installment holds more than one sweep in eight.
+    expect(
+      ran.filter(({ t, w }) => w.position.trigger_date === firstOf(t.as_of)).length / ran.length,
+    ).toBeLessThan(0.15);
+    const gaps = new Map<number, number>();
+    for (const { t, w } of sweeps) {
+      const g = months(w.position.trigger_date) - months(t.ledger.from);
+      gaps.set(g, (gaps.get(g) ?? 0) + 1);
+    }
+    expect(Math.max(...gaps.values()) / sweeps.length).toBeLessThan(0.125);
+
+    // A policy that takes the trigger for the 1st of the evaluation date's month and works every clock
+    // from it, searching no schedule, scores no better than the same policy taking the midpoint for the
+    // trigger: the date tells it nothing.
+    const tool = (name: string, input: unknown, key: string) =>
+      String((JSON.parse(executePmiTool(name, input)) as Record<string, unknown>)[key]);
+    const scheduleFree = (t: PmiTask, fromDate: boolean): PmiAnswer => {
+      const l = t.loan;
+      const m = t.modification;
+      const ov = l.is_refinance
+        ? l.appraised_value_cents
+        : l.sales_price_cents! < l.appraised_value_cents
+          ? l.sales_price_cents!
+          : l.appraised_value_cents;
+      const rule78 =
+        l.consummation >= "1999-07-29" &&
+        l.units === 1 &&
+        l.occupancy_at_origination !== "investment";
+      const firstDue = m ? m.first_modified_due : l.first_payment_due;
+      const term = m ? m.term_months : l.io_months + l.amortizing_term_months;
+      const mid = tool("date_add", { date: firstDue, months: term / 2, days: 0 }, "date");
+      const pi = tool(
+        "level_payment",
+        m
+          ? {
+              principal_cents: String(m.ib_upb_cents),
+              annual_rate_pct: m.rate_pct,
+              term_months: term,
+            }
+          : {
+              principal_cents: String(l.original_principal_cents),
+              annual_rate_pct: l.note_rate_pct,
+              term_months: l.amortizing_term_months,
+            },
+        "payment_cents",
+      );
+      const T = fromDate ? firstOf(t.as_of) : mid;
+      const via78 = rule78 && T < mid;
+      const position = {
+        original_value_cents: String(ov),
+        rule_78_applies: rule78,
+        pi_cents: pi,
+        scheduled_78_payment_number: via78 ? months(T) - months(firstDue) + 1 : null,
+        scheduled_78_date: via78 ? T : null,
+        midpoint_termination_date: mid,
+        trigger_date: T,
+      };
+      const none = {
+        request: null,
+        automatic: null,
+        termination: null,
+        lpmi_options_notice_due: null,
+      };
+      if (t.mi.plan === "lender_paid")
+        return {
+          position,
+          ...none,
+          lpmi_options_notice_due: t.as_of >= T ? addDays(d(T), 30) : null,
+        };
+      if (t.as_of < T) return { position, ...none };
+      const E = d(T);
+      const plan = refundPlanAt(t, E)!;
+      return {
+        position,
+        request: null,
+        automatic: {
+          current_on_trigger: true,
+          not_current_installments: [],
+          not_current_notice_due: null,
+          cure_on: null,
+        },
+        termination: {
+          effective_on: E,
+          lar89_action_code: "53",
+          lar89_action_date: `${E.slice(5, 7)}${E.slice(8, 10)}${E.slice(2, 4)}`,
+          notice_due: addDays(E, 30),
+          premium_stop_by: addDays(E, 30),
+          refund_due: addDays(E, 45),
+          insurer_notice_due: addBusinessDays(E, 2, servicer),
+          escrow_interim_analysis_due: addBusinessDays(E, 10, servicer),
+          unearned_premium_cents: String(unearnedEstimate(plan, E)),
+        },
+        lpmi_options_notice_due: null,
+      };
+    };
+    const mean = (fromDate: boolean) =>
+      sweeps.reduce((a, { t, w }) => a + gradePmiAgainst(w, scheduleFree(t, fromDate)).score, 0) /
+      sweeps.length;
+    expect(mean(true)).toBeLessThan(mean(false) + 0.02);
+    expect(
+      sweeps.filter(({ t, w }) => gradePmiAgainst(w, scheduleFree(t, true)).pass).length /
+        sweeps.length,
+    ).toBeLessThan(0.05);
+  });
+
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump PMI_ENVIRONMENT_VERSION, then the pin.
     expect(
       sha256(generatePmiSuite("heldout", 1, 200).map(toJsonLine).join("")),
-    ).toMatchInlineSnapshot(`"353c04740eb6a843a739a293a52a6a5f9ca7dc5430515dd7e952bc49f81cce28"`);
+    ).toMatchInlineSnapshot(`"cdc54ff3d77dd2b13a77ebd9cf0fb1f15b3db3aa9aad80fec07195b99091447d"`);
   });
 
   it("rebuilds a task from its coordinates, and never draws a held-out task into training", () => {
@@ -926,7 +1225,7 @@ describe("pmi-termination", () => {
       expect(new Set(runs.map((x) => x.edge))).toEqual(new Set(PMI_EDGES));
     });
 
-    it("draws the 78% threshold on a row to the cent, a cent either side, and on half a cent", () => {
+    it("draws the 78% threshold on a row to the cent, a cent either side, and half a cent over a row", () => {
       const at78 = (x: Run, n: number) =>
         x.an.scheduled_78 && rowAt(x, n)
           ? rowAt(x, n)!.upb_after_cents + forborne(x) - t78(x)
@@ -940,7 +1239,17 @@ describe("pmi-termination", () => {
       expect(
         count((x) => x.an.scheduled_78 !== null && at78(x, x.an.scheduled_78.n) === -1n),
       ).toBeGreaterThan(8);
-      expect(count((x) => (x.an.original_value_cents * 78n) % 100n === 50n)).toBeGreaterThan(30);
+      // Half a cent: the row's balance is the threshold rounded half up, and (odd) one more than it rounded
+      // half to even or down, so only rounding half up finds that row.
+      expect(
+        count(
+          (x) =>
+            x.an.scheduled_78 !== null &&
+            (x.an.original_value_cents * 78n) % 100n === 50n &&
+            at78(x, x.an.scheduled_78.n) === 0n &&
+            t78(x) % 2n === 1n,
+        ),
+      ).toBeGreaterThan(30);
     });
 
     it("draws the 78% date a payment either side of the midpoint, and the sweep the day before", () => {
@@ -997,7 +1306,7 @@ describe("pmi-termination", () => {
       expect(count((x) => x.t.loan.units > 1 && !x.a.position.rule_78_applies)).toBeGreaterThan(40);
     });
 
-    it("draws the original value each way: a refinance, the price lower, equal or higher, New York", () => {
+    it("draws the original value each way: a refinance, the price lower, equal or higher; never New York", () => {
       const l = (x: Run) => x.t.loan;
       expect(count((x) => l(x).is_refinance)).toBeGreaterThan(150);
       expect(
@@ -1009,7 +1318,7 @@ describe("pmi-termination", () => {
       expect(
         count((x) => !l(x).is_refinance && l(x).sales_price_cents! > l(x).appraised_value_cents),
       ).toBeGreaterThan(150);
-      expect(count((x) => l(x).state === "NY" && !l(x).is_refinance)).toBeGreaterThan(15);
+      expect(count((x) => l(x).state === "NY")).toBe(0);
     });
 
     it("draws rate changes up and down that move the 78% date, and modifications either side of their midpoint", () => {
@@ -1093,6 +1402,34 @@ describe("pmi-termination", () => {
       expect(
         count((x) => (x.a.automatic?.not_current_installments.length ?? 0) >= 2),
       ).toBeGreaterThan(25);
+      // Two steps: an arrear caught up on or after the trigger, before the receipt that cures.
+      expect(
+        count(
+          (x) =>
+            cure(x) !== null &&
+            x.an.installments.some(
+              (i) =>
+                x.a.automatic!.not_current_installments.includes(i.due_date) &&
+                i.satisfied_on !== null &&
+                i.satisfied_on >= x.a.position.trigger_date &&
+                i.satisfied_on < cure(x)!,
+            ),
+        ),
+      ).toBeGreaterThan(45);
+      // An older arrear caught up on the test month's last day itself: on time for the test, and not
+      // listed, while the installment after it is.
+      expect(
+        count((x) => {
+          const s = x.a.automatic;
+          if (!s || s.current_on_trigger) return false;
+          const testEnd = addDays(d(x.a.position.trigger_date), -1);
+          return x.an.installments.some(
+            (i) =>
+              i.due_date < addMonths(d(x.a.position.trigger_date), -1) &&
+              i.satisfied_on === testEnd,
+          );
+        }),
+      ).toBeGreaterThan(10);
       const A = (x: Run) => x.t.ledger.installments[0]!.amount_cents;
       expect(count((x) => x.t.ledger.receipts.some((r) => r.amount_cents < A(x)))).toBeGreaterThan(
         60,
@@ -1149,7 +1486,40 @@ describe("pmi-termination", () => {
               t.escrow_interim_analysis_due !== addBusinessDays(d(t.effective_on), 10, weekdays))
           );
         }),
-      ).toBeGreaterThan(150);
+      ).toBeGreaterThan(300);
+    });
+
+    it("draws only loans that could exist: within what the property may borrow, certified at closing, forbearance within the Flex Modification's cap", () => {
+      const ltv = (x: Run) =>
+        Number((x.t.loan.original_principal_cents * 10_000n) / x.an.original_value_cents);
+      const occupancy = (x: Run) => x.t.loan.occupancy_at_origination;
+      expect(count((x) => ltv(x) <= 8000 || ltv(x) > 9650)).toBe(0);
+      expect(
+        count(
+          (x) =>
+            occupancy(x) === "investment" &&
+            (ltv(x) > 8500 || x.t.loan.units > 1 || x.t.loan.is_refinance),
+        ),
+      ).toBe(0);
+      expect(count((x) => occupancy(x) === "second_home" && ltv(x) > 9000)).toBe(0);
+      expect(count((x) => occupancy(x) === "investment")).toBeGreaterThan(35);
+      expect(count((x) => occupancy(x) === "second_home")).toBeGreaterThan(60);
+      expect(
+        count(
+          (x) =>
+            x.t.mi.coverage_start < x.t.loan.consummation ||
+            x.t.mi.coverage_start >= x.t.loan.first_payment_due,
+        ),
+      ).toBe(0);
+      expect(
+        count((x) => {
+          const m = x.t.modification;
+          return (
+            m !== null &&
+            m.forborne_principal_cents * 10n > (m.ib_upb_cents + m.forborne_principal_cents) * 3n
+          );
+        }),
+      ).toBe(0);
     });
 
     it("draws every request result and reason", () => {
@@ -1276,6 +1646,8 @@ describe("pmi-termination", () => {
       };
       expect(countRequests(decides)).toBeGreaterThan(4);
       expect(countRequests((x) => r(x).reasons.includes("NOT_CURRENT"))).toBeGreaterThan(10);
+      // A 60-day late on a loan under 24 months old. (The windows shortened to the loan's age reach back
+      // before its first installment, so the age clause is restated for fidelity and decides nothing.)
       expect(
         countRequests(
           (x) =>
@@ -1283,6 +1655,38 @@ describe("pmi-termination", () => {
             r(x).late60_24m! > 0,
         ),
       ).toBeGreaterThan(4);
+      const D = (x: Run) => {
+        const reached = x.an.request!.threshold_reached_on;
+        return reached && reached > x.t.request!.received_on ? reached : x.t.request!.received_on;
+      };
+      const daysLate = (i: { due_date: PlainDate; satisfied_on: PlainDate | null }) =>
+        i.satisfied_on === null ? null : daysBetween(i.due_date, i.satisfied_on);
+      // The month before the request paid on its own last day: current to the day.
+      expect(
+        countRequests((x) => {
+          const precedingEnd = addDays(d(`${x.t.request!.received_on.slice(0, 7)}-01`), -1);
+          return satisfied(x, d(`${precedingEnd.slice(0, 7)}-01`)) === precedingEnd;
+        }),
+      ).toBeGreaterThan(5);
+      // An installment due on D itself, 30 days late: outside both windows, which end before D.
+      expect(
+        countRequests((x) =>
+          x.an.installments.some((i) => i.due_date === D(x) && (daysLate(i) ?? 0) >= 30),
+        ),
+      ).toBeGreaterThan(4);
+      // One due under 30 days before D and satisfied after it, 30 days late: counted to its satisfaction.
+      expect(
+        countRequests((x) =>
+          x.an.installments.some(
+            (i) =>
+              i.due_date < D(x) &&
+              i.satisfied_on !== null &&
+              i.satisfied_on > D(x) &&
+              daysBetween(i.due_date, D(x)) < 30 &&
+              (daysLate(i) ?? 0) >= 30,
+          ),
+        ),
+      ).toBeGreaterThan(6);
     });
 
     it("draws the value checks: an AVM at the original value, none, a borrower's BPO, the 120th day and the 121st", () => {

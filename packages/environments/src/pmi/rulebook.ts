@@ -71,6 +71,7 @@ trigger_date is midpoint_termination_date when rule_78_applies is false or sched
 
 Apply the receipts to the installments, oldest first:
 - Take the receipts in order of received_on (in the order listed when two share a date), starting with nothing held. Add each receipt's amount to what is held; then, while what is held is at least the amount of the oldest installment not yet satisfied, that installment is satisfied on the receipt's received_on and its amount comes out of what is held.
+- Two cases are reading and need no tool: a receipt added to nothing held leaves its own amount held, and an installment taken out of an equal amount leaves nothing held. Any other sum or difference is worked out with calculate.
 - An installment no receipt satisfies is unsatisfied. Every installment due before ledger.from was satisfied on its due date; none of them fails any test below.
 
 ## Step 7. A request (only when the task has one)
@@ -130,5 +131,6 @@ Call submit_mi_review once with:
 - automatic: null unless Step 8 ran its test; otherwise current_on_trigger, not_current_installments, not_current_notice_due, cure_on;
 - termination: null without an effective date; otherwise effective_on, lar89_action_code, lar89_action_date, notice_due, premium_stop_by, refund_due, insurer_notice_due, escrow_interim_analysis_due, unearned_premium_cents;
 - lpmi_options_notice_due.
-A submission that does not fit the tool's schema comes back as an error to be corrected; a valid one ends the task.
+The sections must agree with one another, as these rules tie them: a request or a sweep, never both; an eligible request with no reasons, an ineligible one with reasons from 7.9 only, a value check needed or a refusal with its one reason (and a refusal's other evaluated fields null); a sweep that found the loan current with no installments, notice or cure, and one that did not with both; a termination exactly when the request is eligible or the sweep found the loan current or cured, coded 51 or 52 for a request and 53 for a sweep; and lpmi_options_notice_due only with the other three sections null.
+A submission that does not fit the tool's schema, or whose sections do not agree, comes back as an error to be corrected; a valid one ends the task.
 `;

@@ -502,139 +502,140 @@ export function expectedPmi(task: PmiTask): PmiAnswer {
 /* ── grading ───────────────────────────────────────────────────────────────
  * The position is six fields (the 78% payment and its date are one). A
  * section the evaluation date does not call for (no request, no sweep, no
- * termination) is one field, null, so a hedged section costs as much as a
- * wrong one and an empty answer earns little. Inside a section, a run of
- * fields that are all null or empty on this task is one field too: a request
- * refused before it is evaluated, a sweep that found the loan current; and
- * the two late-payment counts are one.
+ * termination) is one field when it is answered null. Answered anyway, it
+ * costs every field it holds, exactly as leaving out a section the date does
+ * call for does: a grant, a cure or a sweep claimed that is not there costs
+ * what one missed costs, so neither direction pays under doubt. Inside a
+ * section, a run of fields that are all null or empty on this task is one
+ * field: a request refused before it is evaluated, a sweep that found the
+ * loan current; and the two late-payment counts are one.
  */
 
 const canon = (v: unknown): string =>
   v === null || v === undefined ? "null" : typeof v === "object" ? JSON.stringify(v) : String(v);
 const sorted = (xs: readonly string[]) => [...xs].sort();
 
+type Fields = (readonly [string, unknown])[];
+
+/** A request's graded fields, grouped as `shape` groups them: a refused request's evaluation is one field. */
+function requestFields(x: PmiRequestAnswer, shape: PmiRequestAnswer): Fields {
+  const evaluation: Fields =
+    shape.result === "refused"
+      ? [
+          [
+            "request.evaluation",
+            {
+              evaluation_upb_cents: x.evaluation_upb_cents,
+              threshold_bps: x.threshold_bps,
+              ltv_bps: x.ltv_bps,
+              fnma_current: x.fnma_current,
+              late30_12m: x.late30_12m,
+              late60_24m: x.late60_24m,
+            },
+          ],
+        ]
+      : [
+          ["request.evaluation_upb_cents", x.evaluation_upb_cents],
+          ["request.threshold_bps", x.threshold_bps],
+          ["request.ltv_bps", x.ltv_bps],
+          ["request.fnma_current", x.fnma_current],
+          ["request.history", { late30_12m: x.late30_12m, late60_24m: x.late60_24m }],
+        ];
+  return [
+    ...evaluation,
+    ["request.result", x.result],
+    ["request.reasons", sorted(x.reasons)],
+    ["request.decision_due", x.decision_due],
+  ];
+}
+
+/** A sweep's graded fields, grouped as `shape` groups them: a current sweep's empty findings are one field. */
+function automaticFields(x: PmiAutomaticAnswer, shape: PmiAutomaticAnswer): Fields {
+  const findings: Fields = shape.current_on_trigger
+    ? [
+        [
+          "automatic.not_current",
+          {
+            not_current_installments: sorted(x.not_current_installments),
+            not_current_notice_due: x.not_current_notice_due,
+            cure_on: x.cure_on,
+          },
+        ],
+      ]
+    : [
+        ["automatic.not_current_installments", sorted(x.not_current_installments)],
+        ["automatic.not_current_notice_due", x.not_current_notice_due],
+        ["automatic.cure_on", x.cure_on],
+      ];
+  return [["automatic.current_on_trigger", x.current_on_trigger], ...findings];
+}
+
+function terminationFields(x: PmiTerminationAnswer): Fields {
+  return [
+    ["termination.effective_on", x.effective_on],
+    ["termination.lar89", { code: x.lar89_action_code, action_date: x.lar89_action_date }],
+    ["termination.notice_due", x.notice_due],
+    ["termination.premium_stop_by", x.premium_stop_by],
+    ["termination.refund_due", x.refund_due],
+    ["termination.insurer_notice_due", x.insurer_notice_due],
+    ["termination.escrow_interim_analysis_due", x.escrow_interim_analysis_due],
+    ["termination.unearned_premium_cents", x.unearned_premium_cents],
+  ];
+}
+
 export function gradePmiAgainst(want: PmiAnswer, answer: PmiAnswer | null): Grade {
   const fields: FieldGrade[] = [];
-  /** `got` is read only when the section it lives in was answered; otherwise the field is missed. */
-  const check = (field: string, expected: unknown, present: boolean, got: () => unknown) => {
-    const e = canon(expected);
-    const g = answer === null ? null : present ? canon(got()) : "(section not answered)";
-    fields.push({ field, expected: e, got: g, ok: g === e });
+  const push = (field: string, expected: string, got: string | null) =>
+    fields.push({ field, expected, got, ok: got === expected });
+  /**
+   * One section: null where the date does not call for it is one field; anything else is graded field
+   * by field as the expected section groups them, and a section answered where none is called for is
+   * charged every field it holds, as one left out is.
+   */
+  const section = <T>(
+    name: string,
+    expected: T | null,
+    got: T | null | undefined,
+    fieldsOf: (x: T, shape: T) => Fields,
+  ) => {
+    if (answer === null) got = null;
+    if (expected === null) {
+      if (got === null || got === undefined)
+        return push(name, "null", answer === null ? null : "null");
+      for (const [field, value] of fieldsOf(got, got))
+        push(field, "null (not called for)", canon(value));
+      return;
+    }
+    const answered = got === null || got === undefined ? null : fieldsOf(got, expected);
+    fieldsOf(expected, expected).forEach(([field, value], k) =>
+      push(
+        field,
+        canon(value),
+        answer === null ? null : answered ? canon(answered[k]![1]) : "(section not answered)",
+      ),
+    );
   };
 
-  const p = want.position;
-  const ap = answer?.position;
-  check(
-    "position.original_value_cents",
-    p.original_value_cents,
-    !!ap,
-    () => ap!.original_value_cents,
+  const positionFields = (x: PmiPositionAnswer): Fields => [
+    ["position.original_value_cents", x.original_value_cents],
+    ["position.rule_78_applies", x.rule_78_applies],
+    ["position.pi_cents", x.pi_cents],
+    ["position.scheduled_78", { n: x.scheduled_78_payment_number, date: x.scheduled_78_date }],
+    ["position.midpoint_termination_date", x.midpoint_termination_date],
+    ["position.trigger_date", x.trigger_date],
+  ];
+  const answeredPosition = answer ? positionFields(answer.position) : null;
+  positionFields(want.position).forEach(([field, value], k) =>
+    push(field, canon(value), answeredPosition ? canon(answeredPosition[k]![1]) : null),
   );
-  check("position.rule_78_applies", p.rule_78_applies, !!ap, () => ap!.rule_78_applies);
-  check("position.pi_cents", p.pi_cents, !!ap, () => ap!.pi_cents);
-  check(
-    "position.scheduled_78",
-    { n: p.scheduled_78_payment_number, date: p.scheduled_78_date },
-    !!ap,
-    () => ({ n: ap!.scheduled_78_payment_number, date: ap!.scheduled_78_date }),
-  );
-  check(
-    "position.midpoint_termination_date",
-    p.midpoint_termination_date,
-    !!ap,
-    () => ap!.midpoint_termination_date,
-  );
-  check("position.trigger_date", p.trigger_date, !!ap, () => ap!.trigger_date);
 
-  const r = want.request;
-  const ar = answer?.request ?? null;
-  if (r === null) check("request", null, true, () => ar);
-  else {
-    const evaluation = (x: PmiRequestAnswer) => ({
-      evaluation_upb_cents: x.evaluation_upb_cents,
-      threshold_bps: x.threshold_bps,
-      ltv_bps: x.ltv_bps,
-      fnma_current: x.fnma_current,
-      late30_12m: x.late30_12m,
-      late60_24m: x.late60_24m,
-    });
-    if (r.result === "refused")
-      check("request.evaluation", evaluation(r), !!ar, () => evaluation(ar!));
-    else {
-      check(
-        "request.evaluation_upb_cents",
-        r.evaluation_upb_cents,
-        !!ar,
-        () => ar!.evaluation_upb_cents,
-      );
-      check("request.threshold_bps", r.threshold_bps, !!ar, () => ar!.threshold_bps);
-      check("request.ltv_bps", r.ltv_bps, !!ar, () => ar!.ltv_bps);
-      check("request.fnma_current", r.fnma_current, !!ar, () => ar!.fnma_current);
-      check(
-        "request.history",
-        { late30_12m: r.late30_12m, late60_24m: r.late60_24m },
-        !!ar,
-        () => ({ late30_12m: ar!.late30_12m, late60_24m: ar!.late60_24m }),
-      );
-    }
-    check("request.result", r.result, !!ar, () => ar!.result);
-    check("request.reasons", sorted(r.reasons), !!ar, () => sorted(ar!.reasons));
-    check("request.decision_due", r.decision_due, !!ar, () => ar!.decision_due);
-  }
-
-  const s = want.automatic;
-  const as = answer?.automatic ?? null;
-  if (s === null) check("automatic", null, true, () => as);
-  else {
-    check("automatic.current_on_trigger", s.current_on_trigger, !!as, () => as!.current_on_trigger);
-    const notCurrent = (x: PmiAutomaticAnswer) => ({
-      not_current_installments: sorted(x.not_current_installments),
-      not_current_notice_due: x.not_current_notice_due,
-      cure_on: x.cure_on,
-    });
-    if (s.current_on_trigger)
-      check("automatic.not_current", notCurrent(s), !!as, () => notCurrent(as!));
-    else {
-      check("automatic.not_current_installments", sorted(s.not_current_installments), !!as, () =>
-        sorted(as!.not_current_installments),
-      );
-      check(
-        "automatic.not_current_notice_due",
-        s.not_current_notice_due,
-        !!as,
-        () => as!.not_current_notice_due,
-      );
-      check("automatic.cure_on", s.cure_on, !!as, () => as!.cure_on);
-    }
-  }
-
-  const t = want.termination;
-  const at = answer?.termination ?? null;
-  if (t === null) check("termination", null, true, () => at);
-  else {
-    check("termination.effective_on", t.effective_on, !!at, () => at!.effective_on);
-    check(
-      "termination.lar89",
-      { code: t.lar89_action_code, action_date: t.lar89_action_date },
-      !!at,
-      () => ({ code: at!.lar89_action_code, action_date: at!.lar89_action_date }),
-    );
-    for (const k of [
-      "notice_due",
-      "premium_stop_by",
-      "refund_due",
-      "insurer_notice_due",
-      "escrow_interim_analysis_due",
-      "unearned_premium_cents",
-    ] as const)
-      check(`termination.${k}`, t[k], !!at, () => at![k]);
-  }
-
-  check(
+  section("request", want.request, answer?.request, requestFields);
+  section("automatic", want.automatic, answer?.automatic, automaticFields);
+  section("termination", want.termination, answer?.termination, (x) => terminationFields(x));
+  push(
     "lpmi_options_notice_due",
-    want.lpmi_options_notice_due,
-    true,
-    () => answer?.lpmi_options_notice_due ?? null,
+    canon(want.lpmi_options_notice_due),
+    answer === null ? null : canon(answer.lpmi_options_notice_due),
   );
   const right = fields.filter((f) => f.ok).length;
   return { pass: right === fields.length, score: right / fields.length, fields };
@@ -821,13 +822,106 @@ function readAnswer(raw: unknown): PmiAnswer {
       ),
     };
   }
-  return {
+  const answer: PmiAnswer = {
     position,
     request,
     automatic,
     termination,
     lpmi_options_notice_due: dateOrNull(s["lpmi_options_notice_due"], "lpmi_options_notice_due"),
   };
+  agree(answer);
+  return answer;
+}
+
+const VALUE_REASONS = ["VALUE_DECLINED_OR_UNKNOWN", "VALUATION_REQUIRED", "VALUATION_EXPIRED"];
+
+/**
+ * The sections must agree with one another as the rulebook ties them, so an answer cannot say two
+ * things at once: a request or a sweep, never both; a result and its reasons; a sweep's findings and
+ * whether it found the loan current; a termination exactly when the request is eligible or the sweep
+ * found the loan current or cured, with the code its kind takes; and the lender-paid notice alone.
+ */
+function agree(a: PmiAnswer): void {
+  const r = a.request;
+  const s = a.automatic;
+  if (r && s)
+    bounce("request and automatic cannot both be answered: a task has a request or a sweep");
+  if (r) {
+    const reasons = r.reasons;
+    if (r.result === "eligible" && reasons.length > 0)
+      bounce("an eligible request has no reasons: request.reasons must be []");
+    if (
+      r.result === "ineligible" &&
+      (reasons.length === 0 || reasons.some((x) => VALUE_REASONS.includes(x)))
+    )
+      bounce(
+        "an ineligible request gives its reasons from Step 7.9 (SEASONING_INSUFFICIENT, the LTV reasons, NOT_CURRENT, the history reasons) and no others",
+      );
+    if (
+      r.result === "value_check_needed" &&
+      !(
+        reasons.length === 1 &&
+        ["VALUE_DECLINED_OR_UNKNOWN", "VALUATION_REQUIRED"].includes(reasons[0]!)
+      )
+    )
+      bounce(
+        "a value check needed gives one reason: VALUE_DECLINED_OR_UNKNOWN or VALUATION_REQUIRED",
+      );
+    if (r.result === "refused") {
+      if (!(reasons.length === 1 && reasons[0] === "VALUATION_EXPIRED"))
+        bounce('a refused request gives one reason: ["VALUATION_EXPIRED"]');
+      const evaluated = [
+        r.evaluation_upb_cents,
+        r.threshold_bps,
+        r.ltv_bps,
+        r.fnma_current,
+        r.late30_12m,
+        r.late60_24m,
+      ];
+      if (evaluated.some((x) => x !== null))
+        bounce(
+          "a refused request evaluates nothing: every request field but result, reasons and decision_due is null",
+        );
+    }
+    if (reasons.includes("VALUATION_REQUIRED") && r.ltv_bps !== null)
+      bounce("with no valuation there is no LTV: request.ltv_bps is null");
+  }
+  if (s) {
+    if (
+      s.current_on_trigger &&
+      (s.not_current_installments.length > 0 ||
+        s.not_current_notice_due !== null ||
+        s.cure_on !== null)
+    )
+      bounce(
+        "a sweep that finds the loan current lists no installments and has no notice and no cure",
+      );
+    if (
+      !s.current_on_trigger &&
+      (s.not_current_installments.length === 0 || s.not_current_notice_due === null)
+    )
+      bounce(
+        "a sweep that finds the loan not current lists the installments that failed and the notice's due date",
+      );
+  }
+  const ends =
+    r?.result === "eligible" || (s !== null && (s.current_on_trigger || s.cure_on !== null));
+  if (ends && a.termination === null)
+    bounce(
+      "the MI ends here (an eligible request, or a sweep that found the loan current or cured): termination is required",
+    );
+  if (!ends && a.termination !== null)
+    bounce(
+      "termination is null unless the request is eligible or the sweep found the loan current or cured",
+    );
+  const t = a.termination;
+  if (t && r && t.lar89_action_code === "53")
+    bounce("a request's termination is coded 51 or 52; 53 is the automatic termination's");
+  if (t && s && t.lar89_action_code !== "53") bounce("an automatic termination is coded 53");
+  if (a.lpmi_options_notice_due !== null && (r || s || t))
+    bounce(
+      "lpmi_options_notice_due is lender-paid MI's alone: request, automatic and termination are then null",
+    );
 }
 
 export function parsePmiSubmission(raw: unknown): Parsed<PmiAnswer> {

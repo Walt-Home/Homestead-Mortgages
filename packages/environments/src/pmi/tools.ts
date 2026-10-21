@@ -48,7 +48,7 @@ export const PMI_TOOLS: readonly ToolSpec[] = [
   {
     name: PMI_SUBMIT_TOOL,
     description:
-      "Submit the review. Call it once, when every field is decided; a section the evaluation date does not call for is null, and so is a field the rulebook says is null. A valid submission ends the task.",
+      "Submit the review. Call it once, when every field is decided; a section the evaluation date does not call for is null, and so is a field the rulebook says is null. The sections must agree with one another as the rulebook's Submitting section ties them. A valid submission ends the task.",
     input_schema: object({
       position: object({
         original_value_cents: CENTS,

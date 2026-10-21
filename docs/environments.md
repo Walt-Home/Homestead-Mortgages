@@ -481,11 +481,33 @@ premium.
 
 **The grade.** A pass is every field right. The position is six fields; the
 78% payment and its date are one. A section the date does not call for (no
-request, no sweep, no termination) is one field, null, so hedging costs as
-much as being wrong. Inside a section, fields that are all null on that task
-are one field: a refused request, a sweep that found the loan current, the
-two late counts. An answer that answers nothing scores about 0.17 on the
-held-out suite, the floor to read the mean field score against.
+request, no sweep, no termination) is one field when it is answered null.
+Answered anyway, it costs every field it holds, as leaving out a section the
+date does call for does. So claiming a grant, a cure or a sweep that is not
+there costs exactly what missing one costs: ten fields either way for a
+request or a sweep, nine for a cure. Inside a section, fields that are all
+null on that task are one field: a refused request, a sweep that found the
+loan current, the two late counts.
+
+The sections must also agree, or the submission comes back as an error to
+correct, the way a schema error does:
+
+- a request or a sweep, never both;
+- a result with its own reasons;
+- a sweep's findings with whether it found the loan current;
+- a termination exactly when the request is eligible or the sweep found the
+  loan current or cured, coded 51 or 52 for a request and 53 for a sweep;
+- the lender-paid notice alone.
+
+An answer cannot say "ineligible" and hand in the termination as well.
+
+An answer that answers nothing scores about 0.16 on the held-out suite. The
+floor to read the mean field score against is higher, about 0.47. That is
+what a policy scores that reads the original value and the rule, works the
+note's P&I and the midpoint with a call each, takes the midpoint for the
+trigger and searches no schedule. Taking the trigger from the evaluation date
+instead scores less, about 0.44, because the date says nothing about where
+the trigger fell. A test holds that.
 
 **The grader is the servicing app's own engine.** `src/pmi/ported/` holds
 four files from `apps/servicing/src/domain/pmi/` and two from
@@ -517,10 +539,24 @@ are counted on. No tool finds a threshold's date, a midpoint, a cure or a
 refund.
 
 **The tasks** cycle by index through twelve edges, a hundred tasks each in a
-suite of 1,200:
+suite of 1,200. Every loan is one that could exist:
+
+- no more borrowed than the spec's extract of Fannie Mae's Eligibility Matrix
+  allows: a second home 90%, an investment property 85%, and that only on a
+  one-unit purchase;
+- a certificate effective between closing and the first payment;
+- no more than 30% of a modification forborne, the Flex Modification's cap.
+
+The evaluation date is drawn apart from the trigger, up to thirteen months
+after it (or before it, when nothing has happened yet). The ledger runs back
+from the evaluation date by a span of its own. Neither says where the
+trigger fell; only the schedule does.
+
+The edges:
 
 - the 78% threshold on a row's balance to the cent, a cent either side, and
-  on half a cent;
+  half a cent under a row's balance (an odd one), which only rounding half up
+  puts on that row;
 - the 78% date a payment either side of the midpoint, on interest-only loans
   and modifications, and the sweep the day before the trigger;
 - the rule's reach: consummated 1999-07-28 or 29, a second home against an
@@ -530,7 +566,9 @@ suite of 1,200:
 - the month before the trigger paid on its last day or on the trigger, with
   February of a leap year as that month;
 - cures on the trigger, on a month's last day and on a 1st, by partial and
-  double receipts, and none by the evaluation date;
+  double receipts, in two steps, and none by the evaluation date (each in
+  turn by index); an older arrear caught up on the test month's last day,
+  which the not-current list leaves out;
 - an annual premium on its anniversary, a day after it, and 365 days into a
   year with a 29 February; a single premium on a row of its refund schedule
   and a month short of one;
@@ -540,11 +578,17 @@ suite of 1,200:
   forborne principal; a curtailment posted after the request;
 - a 30-day late in the last twelve months and a 60-day late in the twelve
   before, each alone, at 29 and 30 days, 59 and 60, February included; a
-  disaster exclusion that decides; a loan younger than 24 months; not
-  current at the request;
+  disaster exclusion that decides; a 60-day late on a loan younger than 24
+  months; not current at the request, or current to the day (the month
+  before paid on its last day); an installment 30 days late that is due on
+  the request date (outside the windows, which end before it) or due earlier
+  that month and satisfied after it (inside them, counted to its
+  satisfaction);
 - an AVM below, at or above the original value, or none; a borrower's paid
   valuation; the 120th day after delivery and the 121st; the current-value
-  path at 23, 24, 59 and 60 months, by class and with improvements;
+  path with a valuation and without one (each in turn by index, so the
+  held-out 200 has every one), at 23, 24, 59 and 60 months, by class and
+  with improvements;
 - lender-paid MI.
 
 Effective dates on 1sts whose business-day clocks step over a federal
@@ -559,13 +603,19 @@ none. It keeps out:
 - odd terms, whose midpoint the engine places a month late;
 - due days other than the 1st, where the current test misses an
   installment;
-- a New York purchase priced below its appraisal, where the engine reads the
-  appraisal alone. A New York refinance, or a purchase whose appraisal is
-  the lesser figure, reads the same either way and is drawn;
+- New York. The engine reads a New York purchase's appraisal alone as the
+  original value. New York's own 75% stop (§6503(d), 10.2's overlay) ends
+  the borrower's premium with no request, and nothing ported computes it;
 - a rate change after the 78% row or the midpoint of the schedule then in
   effect, or inside an interest-only period;
-- a request after the scheduled 80% date on the scheduled path's class,
-  where the engine never tests the scheduled balance;
+- a request after the scheduled 80% date on a one-unit principal residence
+  or second home, on either path, where the engine never tests the scheduled
+  balance;
+- a current-value request whose balance already meets the original-value
+  threshold. 10.1 R1 evaluates the original-value paths first and grants on
+  any of them; the engine evaluates only the path asked for. So on every
+  current-value task the original-value paths fail on the balance, and the
+  request section is the current-value path's own evaluation;
 - a current-value request with no threshold and no valuation, where the
   engine asks for a paid valuation that cannot help;
 - a borrower's paid valuation below the original value, where the engine
@@ -576,6 +626,14 @@ none. It keeps out:
   clock is ambiguous;
 - a threshold reached after the request that would change the late counts
   sent to Fannie Mae's servicing system.
+
+The payment-history windows shorten to the loan's age, as 10.1 R5 says,
+and the rulebook restates that. It never changes an answer in v1. A request
+comes after the loan's first installment, and the windows shortened back
+from it reach before that installment. The guard keeps the counts at a later
+threshold date equal to the counts at receipt, so the age clause decides
+nothing there either. The young-loan edge is a 60-day late on a loan under
+24 months, not a window the age cuts short.
 
 Where engine and spec disagree inside that scope, the rulebook says what
 the engine does. One example: LTV is floored to the basis point, as 10.1 R3
@@ -588,8 +646,13 @@ graded. docs/decisions.md has each departure, reproduced.
 cent. The examples include 10.2's three scenarios, its ARM, Flex
 Modification and lender-paid cases, 10.3's four loans, 10.1's requests and
 10.5's two estimates. It redraws none of 600 first draws, and it agrees with
-the engine on 2,000 candidates nothing filtered. Its longest task is 34 tool
-calls across 5,000 training draws, well inside the episode's 80 turns.
+the engine on 2,000 candidates nothing filtered (5,000 when last measured,
+none out of scope). Its longest task is 35 tool calls across 5,000 training
+draws, well inside the episode's 80 turns. Step 6 says which ledger steps
+are reading: a receipt added to nothing held, and an installment taken from
+an equal amount. A model that also counts every window installment's days
+with a tool, ignoring Step 7.5's note, needs at most 57 turns at one call a
+turn.
 
 ## escrow-history
 

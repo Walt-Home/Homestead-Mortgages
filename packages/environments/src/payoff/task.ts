@@ -63,7 +63,13 @@ export interface PayoffTask {
     readonly good_through: PlainDate;
   };
   readonly loan: PayoffLoan;
-  /** The loan's next scheduled installment, or null when the statement has none to consider. */
+  /**
+   * The loan's next scheduled installment, or null. A generated task always
+   * carries it when it falls due after the statement date and by the
+   * good-through, where 16.1 rule 7 prints the figure if it posts beside the
+   * one if it does not; the spec's worked examples print one figure and carry
+   * none.
+   */
   readonly next_installment: {
     readonly due_on: PlainDate;
     readonly principal_cents: Cents;

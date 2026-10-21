@@ -5,8 +5,9 @@
  * spec's worked examples (§16.1 A and B, §16.2's remittance types, §7.6's
  * Texas statement and the clocks) to the cent; every generated payoff can be
  * worked from the rulebook and the tools, on unfiltered draws too; the guard
- * keeps out each place the engine departs from its spec; and each edge turns
- * up.
+ * keeps out each place the engine departs from its spec; each edge turns up
+ * in its own payoffs; and the held-out suite itself holds every case a rule
+ * turns on.
  */
 
 import { readFileSync } from "node:fs";
@@ -21,6 +22,8 @@ import {
   type PlainDate,
 } from "@hm/kernel/calendar";
 import { describe, expect, it } from "vitest";
+import { auditEpisode, type AuditRecord } from "../audit.js";
+import { scoreSide, type EpisodeLine } from "../compare.js";
 import { runEpisode } from "../episode.js";
 import { sha256, toJsonLine } from "../record.js";
 import { solveNow } from "../refi/reference.js";
@@ -48,6 +51,7 @@ import {
   payoffSteps,
   payoffTaskId,
   type PayoffAnswer,
+  type PayoffEdge,
   type PayoffTask,
 } from "../payoff/index.js";
 import { interest, quote } from "../payoff/ported/quote.js";
@@ -406,8 +410,16 @@ describe("payoff-statement", () => {
     expect(ok({ ...want, state_due: null })).toBe(true);
     expect(ok({ ...want, note: "checked twice" })).toBe(false);
     expect(ok({ ...want, nib_line_cents: "0", nib_line: "0" })).toBe(false);
-    // Cents are strings of digits, not numbers or dollars.
-    expect(ok({ ...want, total_cents: 20105147 })).toBe(false);
+    // Cents are integer cents: a string of digits, or a whole number as the task prints them and
+    // every other environment takes them; never dollars, a sign, a fraction or past 2^53.
+    const read = (x: unknown) => {
+      const p = parsePayoffSubmission(x);
+      return p.ok ? p.answer : p.error;
+    };
+    expect(read({ ...want, total_cents: 20105147 })).toEqual(want);
+    expect(read({ ...want, total_cents: " 20105147 ", payoff_date: "2026-10-16 " })).toEqual(want);
+    expect(ok({ ...want, total_cents: 20105147.5 })).toBe(false);
+    expect(ok({ ...want, total_cents: 2 ** 60 })).toBe(false);
     expect(ok({ ...want, total_cents: "201051.47" })).toBe(false);
     expect(ok({ ...want, variance_cents: "+0" })).toBe(false);
     // Dates are real dates.
@@ -423,51 +435,109 @@ describe("payoff-statement", () => {
     expect(ok(null)).toBe(false);
   });
 
-  it("gives an answer that copies the request and the funds back little credit", () => {
+  describe("scores an answer that computes no money for what it did", () => {
     // Every date the request's or the funds' own, every figure the balance or zero, nothing
-    // computed: 0.105 on the held-out suite. It is right on the alternative figure when there is
-    // none to print, and on the reconciliation and disposition when the funds were exact; only a
-    // payoff on the loan's own due date, owing nothing else, gets as much as half.
-    const tasks = generatePayoffSuite("heldout", 1, 200);
-    const scores = tasks.map((t) => {
-      const nothing: PayoffAnswer = {
-        federal_due: t.request.received_on,
-        state_due: null,
-        governing: "federal",
-        governing_due: t.request.received_on,
-        valid_until: t.request.good_through,
-        months_full: 0,
-        days_partial: 0,
-        interest_full_cents: "0",
-        interest_partial_cents: "0",
-        per_diem_cents: "0",
-        nib_line_cents: "0",
-        total_cents: String(t.loan.upb_cents),
-        alt_applies: false,
-        alt_if_posts_total_cents: null,
-        payoff_date: t.funds.received_on,
-        exact_total_cents: String(t.funds.amount_cents),
-        variance_cents: "0",
-        disposition: "paid_in_full",
-        escrow_refund_by: t.funds.received_on,
-        fnma_principal_cents: String(t.loan.upb_cents),
-        fnma_interest_cents: "0",
-        servicing_fee_cents: null,
-        ss_interest_gap_cents: null,
-        fnma_total_cents: String(t.loan.upb_cents),
-      };
-      return gradePayoffAgainst(expectedPayoff(t), nothing).score;
+    // computed. It is right on the alternative figure when there is none to print, and on the
+    // reconciliation and disposition when the funds were exact; only a payoff on the loan's own
+    // due date, owing nothing else, gets as much as half.
+    const copied = (t: PayoffTask): PayoffAnswer => ({
+      federal_due: t.request.received_on,
+      state_due: null,
+      governing: "federal",
+      governing_due: t.request.received_on,
+      valid_until: t.request.good_through,
+      months_full: 0,
+      days_partial: 0,
+      interest_full_cents: "0",
+      interest_partial_cents: "0",
+      per_diem_cents: "0",
+      nib_line_cents: "0",
+      total_cents: String(t.loan.upb_cents),
+      alt_applies: false,
+      alt_if_posts_total_cents: null,
+      payoff_date: t.funds.received_on,
+      exact_total_cents: String(t.funds.amount_cents),
+      variance_cents: "0",
+      disposition: "paid_in_full",
+      escrow_refund_by: t.funds.received_on,
+      fnma_principal_cents: String(t.loan.upb_cents),
+      fnma_interest_cents: "0",
+      servicing_fee_cents: null,
+      ss_interest_gap_cents: null,
+      fnma_total_cents: String(t.loan.upb_cents),
     });
-    const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
-    expect(mean).toBeLessThan(0.15);
-    expect(scores.filter((s) => s > 3 / 12).length).toBeLessThan(10);
+    // The same with the commonest disposition and day count, and the nulls each type takes.
+    const constant = (t: PayoffTask): PayoffAnswer => ({
+      ...copied(t),
+      months_full: 1,
+      days_partial: 0,
+      disposition: "paid_in_full_overage_refund_10bd",
+      servicing_fee_cents: t.investor.remittance_type === "AA" ? "0" : null,
+      ss_interest_gap_cents: t.investor.remittance_type === "SS" ? "0" : null,
+    });
+    // Every date and count right (each a call or two to the date tools), the per diem from its
+    // own tool, whether the alternative applies read off the dates, and the disposition guessed
+    // from the funds' day against the good-through: no interest, no total, no share.
+    const datesOnly = (t: PayoffTask): PayoffAnswer => {
+      const w = expectedPayoff(t);
+      const [funds, gt] = [t.funds.received_on, t.request.good_through];
+      return {
+        ...constant(t),
+        federal_due: w.federal_due,
+        state_due: w.state_due,
+        governing: w.governing,
+        governing_due: w.governing_due,
+        valid_until: w.valid_until,
+        months_full: w.months_full,
+        days_partial: w.days_partial,
+        per_diem_cents: w.per_diem_cents,
+        alt_applies: w.alt_applies,
+        payoff_date: w.payoff_date,
+        escrow_refund_by: w.escrow_refund_by,
+        disposition:
+          funds < gt
+            ? "paid_in_full_overage_refund_10bd"
+            : funds === gt
+              ? "paid_in_full"
+              : "short_payoff_demand_1bd",
+      };
+    };
+    const held = generatePayoffSuite("heldout", 1, 200);
+    const scored = (f: (t: PayoffTask) => PayoffAnswer) => {
+      const grades = held.map((t) => gradePayoffAgainst(expectedPayoff(t), f(t)));
+      return {
+        mean: grades.reduce((a, g) => a + g.score, 0) / grades.length,
+        passed: grades.filter((g) => g.pass).length,
+      };
+    };
+
+    it("copied back, or the best constant: about a tenth", () => {
+      // 0.086 and 0.118 on the held-out suite.
+      expect(scored(copied)).toMatchObject({ passed: 0 });
+      expect(scored(copied).mean).toBeLessThan(0.12);
+      expect(scored(constant).mean).toBeLessThan(0.14);
+    });
+
+    it("every date right and no money: about half the fields, and never a pass", () => {
+      // 0.549 on the held-out suite: the deadlines, the day count, the per diem and the escrow
+      // refund's day are five fields of twelve, and none of them is money. The mean field score is
+      // read against this, never in place of the pass.
+      const s = scored(datesOnly);
+      expect(s.passed).toBe(0);
+      expect(s.mean).toBeGreaterThan(0.5);
+      expect(s.mean).toBeLessThan(0.6);
+    });
   });
 
   it("can be solved from the rulebook and the tools: the reference passes the held-out suite and the spec", async () => {
-    const r = await solveAll([
-      ...SPEC,
-      ...generatePayoffSuite("heldout", PAYOFF_HELDOUT_SUITE.seed, PAYOFF_HELDOUT_SUITE.n),
-    ]);
+    // The generator keeps a draw only once the reference solves it, so a pass on a suite it built
+    // would prove nothing by itself if anything had been redrawn. Every held-out payoff is its
+    // index's first draw: nothing there was put back for disagreeing.
+    const drawn = Array.from({ length: PAYOFF_HELDOUT_SUITE.n }, (_, i) =>
+      drawPayoffTask(PAYOFF_HELDOUT_SUITE.split, PAYOFF_HELDOUT_SUITE.seed, i),
+    );
+    expect(drawn.filter((x) => x.attempts > 1).map((x) => x.task.id)).toEqual([]);
+    const r = await solveAll([...SPEC, ...drawn.map((x) => x.task)]);
     expect(r.misses).toEqual([]);
     // Inside the episode's 80 turns even for a model that makes one tool call a turn: the
     // reference's call count, submission included, is that model's turn count.
@@ -655,6 +725,48 @@ describe("payoff-statement", () => {
         investor: { ...base.investor, reported_on: D("2026-10-08") },
       };
       expect(out(reportedEarly)).toBe(false);
+      // A statement before the request it answers, one good through a day before it was issued,
+      // and one issued on a Saturday.
+      const answeredEarly = { ...base, request: { ...base.request, received_on: D("2026-09-16") } };
+      expect(out(answeredEarly)).toBe(false);
+      const goodBeforeIssue = {
+        ...base,
+        request: { ...base.request, issued_on: D("2026-10-16"), good_through: D("2026-10-15") },
+        funds: { ...base.funds, received_on: D("2026-10-16") },
+        investor: { ...base.investor, reported_on: D("2026-10-16") },
+      };
+      expect(out(goodBeforeIssue)).toBe(false);
+      const saturdayStatement = {
+        ...base,
+        request: { ...base.request, issued_on: D("2026-09-19") },
+      };
+      expect(out(saturdayStatement)).toBe(false);
+      // Nothing wired, or less than nothing.
+      for (const amount_cents of [0n, -100n])
+        expect(out({ ...base, funds: { ...base.funds, amount_cents } })).toBe(false);
+    });
+
+    it("a statement good through a day the loan is not yet paid to, and a due date other than the next", () => {
+      // Paid through October and good through October 30: the statement accrues back from
+      // November 1.
+      const pastGoodThrough = {
+        ...base,
+        request: { ...base.request, good_through: D("2026-10-30") },
+        loan: { ...base.loan, lpi_due: D("2026-11-01") },
+        funds: { ...base.funds, received_on: D("2026-11-02"), installment_due_on: D("2026-12-01") },
+        investor: { ...base.investor, reported_on: D("2026-11-02") },
+      };
+      expect(analyzePayoff(pastGoodThrough).statement.interest.days_partial).toBeLessThan(0);
+      expect(out(pastGoodThrough)).toBe(false);
+      // The non-business-day rule tests the next unpaid installment. Tested on the one already paid
+      // (Sunday 11/01), it deems Monday's funds received on that Sunday and drops a day's $44.22.
+      const paid = { ...spec(13), loan: { ...spec(13).loan, lpi_due: D("2026-11-01") } };
+      expect(analyzePayoff(paid).payoff_on).toBe("2026-11-01");
+      expect(analyzePayoff(paid).exact.interest.total_cents).toBe(0n);
+      expect(out(paid)).toBe(false);
+      const next = { ...paid, funds: { ...paid.funds, installment_due_on: D("2026-12-01") } };
+      expect(analyzePayoff(next).exact.interest.partial_cents).toBe(4_422n);
+      expect(out(next)).toBe(true);
     });
   });
 
@@ -662,7 +774,7 @@ describe("payoff-statement", () => {
     // A change here moves every score: bump PAYOFF_ENVIRONMENT_VERSION, then the pin.
     expect(
       sha256(generatePayoffSuite("heldout", 1, 200).map(toJsonLine).join("")),
-    ).toMatchInlineSnapshot(`"ad05821be0f03b8c5d217cb99fb1465148c82c3a1eb8545e58e522b9f61e76d4"`);
+    ).toMatchInlineSnapshot(`"21742e9a1a02c896b415b42a0b7074a9a06137c2819a947e7d54a0f032007f96"`);
   });
 
   it("rebuilds a task from its coordinates, and never draws a held-out payoff into training", () => {
@@ -674,7 +786,7 @@ describe("payoff-statement", () => {
     expect(generatePayoffSuite("train", 1, 1000).filter((t) => held.has(fp(t)))).toEqual([]);
   });
 
-  describe("each edge turns up", () => {
+  describe("each edge turns up, in its own hundred", () => {
     const runs = generatePayoffSuite("train", 1, 1300).map((t, i) => ({
       t,
       a: expectedPayoff(t),
@@ -682,12 +794,21 @@ describe("payoff-statement", () => {
       edge: payoffEdgeOf(i),
     }));
     type Run = (typeof runs)[number];
-    const count = (f: (r: Run) => boolean) => runs.filter(f).length;
+    // An edge's aim is counted in its own payoffs, so taking the aim away takes its count to
+    // nothing however many the other edges draw by chance. A property no edge owns is counted in
+    // the whole suite.
+    const count = (f: (r: Run) => boolean, edge?: PayoffEdge) =>
+      runs.filter((r) => (edge === undefined || r.edge === edge) && f(r)).length;
     const dsi = (r: Run) => r.t.loan.accrual_method === "daily_simple_365";
     const early = (r: Run) => daysBetween(r.x.payoff_on, r.t.request.good_through);
+    const short = (r: Run) => r.x.reconciled.variance_cents < -5000n;
+    const relies = (r: Run) => ["FL", "TX", "CA"].includes(r.t.request.state);
+    const firstOfPayoffMonth = (r: Run) => D(`${r.x.payoff_on.slice(0, 8)}01`);
+    const onBd1 = (r: Run) => r.x.payoff_on === fannieBusinessDay(r.x.payoff_on, 1);
 
     it("cycles through every edge, a hundred payoffs each", () => {
-      expect(new Set(runs.map((r) => r.edge))).toEqual(new Set(PAYOFF_EDGES));
+      for (const edge of PAYOFF_EDGES)
+        expect(runs.filter((r) => r.edge === edge)).toHaveLength(100);
     });
 
     it("draws every disposition, governing deadline and remittance type", () => {
@@ -706,7 +827,8 @@ describe("payoff-statement", () => {
       expect(tally((r) => r.t.request.state)).toEqual(
         new Set(["CA", "FL", "NY", "NC", "MA", "TX", "CT", "OH", "PA", "GA", "AZ"]),
       );
-      expect(count((r) => r.a.disposition === "reliance_absorbed")).toBeGreaterThan(15);
+      expect(count((r) => r.t.investor.remittance_type === "SA")).toBeGreaterThan(200);
+      expect(count((r) => r.a.servicing_fee_cents !== null)).toBeGreaterThan(300);
     });
 
     it("draws a good-through on the 1st and on the last day of a month, and late funds across the month end", () => {
@@ -716,13 +838,17 @@ describe("payoff-statement", () => {
             r.t.request.good_through.endsWith("-01") &&
             r.a.months_full === 1 &&
             r.a.days_partial === 0,
+          "first_of_month",
         ),
-      ).toBeGreaterThan(60);
+      ).toBeGreaterThan(50);
       // A good-through on the last paid installment's own due date: no interest at all.
-      expect(count((r) => r.t.request.good_through === r.t.loan.lpi_due)).toBeGreaterThan(20);
+      expect(
+        count((r) => r.t.request.good_through === r.t.loan.lpi_due, "first_of_month"),
+      ).toBeGreaterThan(12);
       expect(
         count(
           (r) => addDays(r.t.request.good_through, 1).endsWith("-01") && r.a.days_partial >= 27,
+          "end_of_month",
         ),
       ).toBeGreaterThan(80);
       expect(
@@ -730,27 +856,31 @@ describe("payoff-statement", () => {
           (r) =>
             r.x.payoff_on > r.t.request.good_through &&
             r.x.payoff_on.slice(0, 7) !== r.t.request.good_through.slice(0, 7),
+          "end_of_month",
         ),
-      ).toBeGreaterThan(50);
+      ).toBeGreaterThan(20);
     });
 
     it("draws daily simple interest across a month end and across February 29, and a monthly partial in a leap February", () => {
       expect(
         count(
           (r) => dsi(r) && r.t.request.good_through.slice(0, 7) !== r.t.loan.lpi_due.slice(0, 7),
+          "daily_simple",
         ),
-      ).toBeGreaterThan(60);
+      ).toBeGreaterThan(50);
       expect(
         count(
           (r) =>
             dsi(r) && r.t.loan.lpi_due <= "2028-02-29" && r.t.request.good_through > "2028-02-29",
+          "leap_day",
         ),
       ).toBeGreaterThan(15);
       expect(
         count(
           (r) => !dsi(r) && r.t.request.good_through.startsWith("2028-02") && r.a.days_partial > 0,
+          "leap_day",
         ),
-      ).toBeGreaterThan(20);
+      ).toBeGreaterThan(12);
       // The trap: the per diem times the days is not the partial interest, which is rounded once.
       expect(
         count(
@@ -776,9 +906,9 @@ describe("payoff-statement", () => {
         "suspense_credit_cents",
       ] as const) {
         expect(
-          count((r) => l(r)[k] > 0n),
+          count((r) => l(r)[k] > 0n, "nib_and_fees"),
           k,
-        ).toBeGreaterThan(50);
+        ).toBeGreaterThan(30);
         expect(
           count((r) => l(r)[k] === 0n),
           k,
@@ -789,64 +919,102 @@ describe("payoff-statement", () => {
         count(
           (r) =>
             r.a.nib_line_cents !== "0" && r.a.fnma_principal_cents !== String(r.t.loan.upb_cents),
+          "nib_and_fees",
         ),
-      ).toBeGreaterThan(100);
+      ).toBeGreaterThan(60);
     });
 
     it("draws funds a day early and a day late, a day's interest either side of the $50.00 tolerance, and more", () => {
       expect(
-        count((r) => early(r) === 1 && r.a.disposition === "paid_in_full_overage_refund_10bd"),
-      ).toBeGreaterThan(50);
-      expect(count((r) => early(r) > 1)).toBeGreaterThan(200);
+        count(
+          (r) => early(r) === 1 && r.a.disposition === "paid_in_full_overage_refund_10bd",
+          "early_funds",
+        ),
+      ).toBeGreaterThan(35);
+      expect(count((r) => early(r) > 1, "early_funds")).toBeGreaterThan(25);
       expect(
-        count((r) => early(r) === -1 && r.a.disposition === "paid_in_full_tolerance_expense"),
-      ).toBeGreaterThan(20);
+        count(
+          (r) => early(r) === -1 && r.a.disposition === "paid_in_full_tolerance_expense",
+          "late_funds",
+        ),
+      ).toBeGreaterThan(8);
       expect(
-        count((r) => early(r) === -1 && r.a.disposition === "short_payoff_demand_1bd"),
+        count(
+          (r) => early(r) === -1 && r.a.disposition === "short_payoff_demand_1bd",
+          "late_funds",
+        ),
       ).toBeGreaterThan(20);
-      expect(count((r) => early(r) < -1)).toBeGreaterThan(150);
+      expect(count((r) => early(r) < -1, "late_funds")).toBeGreaterThan(25);
     });
 
-    it("draws the variance on each threshold: exact, a cent and $50.00 short kept, $50.01 short demanded, $1.01 over refunded", () => {
-      for (const [v, d, n] of [
-        ["0", "paid_in_full", 100],
-        ["-1", "paid_in_full_tolerance_expense", 3],
-        ["-5000", "paid_in_full_tolerance_expense", 3],
-        ["101", "paid_in_full_overage_refund_10bd", 3],
-      ] as const)
+    it("draws the variance on each threshold in turn: exact, a cent and $50.00 short kept, $50.01 short demanded, $1.01 over refunded", () => {
+      for (const [v, ds] of [
+        ["0", ["paid_in_full"]],
+        ["-1", ["paid_in_full_tolerance_expense"]],
+        ["-5000", ["paid_in_full_tolerance_expense"]],
+        // Demanded, unless Florida, Texas or California relies on it.
+        ["-5001", ["short_payoff_demand_1bd", "reliance_absorbed"]],
+        ["101", ["paid_in_full_overage_refund_10bd"]],
+      ] as const) {
+        const on = (r: Run) => r.a.variance_cents === v;
+        expect(count(on, "tolerance"), v).toBe(20);
         expect(
-          count((r) => r.a.variance_cents === v && r.a.disposition === d),
+          count((r) => on(r) && !(ds as readonly string[]).includes(r.a.disposition)),
           v,
-        ).toBeGreaterThan(n);
-      expect(count((r) => r.a.variance_cents === "-5001")).toBeGreaterThan(8);
-      // Reliance needs both: a reliance state and a payoff within the good-through.
+        ).toBe(0);
+      }
       expect(
         count(
-          (r) =>
-            ["FL", "TX", "CA"].includes(r.t.request.state) &&
-            r.x.payoff_on > r.t.request.good_through &&
-            r.a.disposition === "short_payoff_demand_1bd",
-        ),
-      ).toBeGreaterThan(40);
-      expect(
-        count(
-          (r) =>
-            !["FL", "TX", "CA"].includes(r.t.request.state) &&
-            r.x.payoff_on <= r.t.request.good_through &&
-            r.a.disposition === "short_payoff_demand_1bd",
+          (r) => r.a.variance_cents === "-5001" && r.a.disposition === "short_payoff_demand_1bd",
         ),
       ).toBeGreaterThan(10);
+      // And the figures between, from every other edge.
+      const v = (r: Run) => r.x.reconciled.variance_cents;
+      expect(count((r) => v(r) < -1n && v(r) > -5000n)).toBeGreaterThan(30);
+      expect(count((r) => v(r) > 101n)).toBeGreaterThan(200);
     });
 
-    it("draws funds deemed received on a non-business due date, and funds a business day too late for it", () => {
-      expect(count((r) => r.x.payoff_on !== r.t.funds.received_on)).toBeGreaterThan(40);
+    it("draws each side of reliance in turn: the state, the good-through day, and after it", () => {
+      const reliance = (f: (r: Run) => boolean) => count((r) => short(r) && f(r), "reliance");
+      const within = (r: Run) => r.x.payoff_on <= r.t.request.good_through;
+      const absorbed = (r: Run) => r.a.disposition === "reliance_absorbed";
+      const demanded = (r: Run) => r.a.disposition === "short_payoff_demand_1bd";
+      expect(
+        reliance(
+          (r) =>
+            ["FL", "TX"].includes(r.t.request.state) &&
+            r.x.payoff_on < r.t.request.good_through &&
+            absorbed(r),
+        ),
+      ).toBeGreaterThanOrEqual(20);
+      expect(
+        reliance((r) => r.t.request.state === "CA" && within(r) && absorbed(r)),
+      ).toBeGreaterThanOrEqual(20);
+      expect(
+        reliance((r) => relies(r) && r.x.payoff_on === r.t.request.good_through && absorbed(r)),
+      ).toBeGreaterThanOrEqual(20);
+      expect(reliance((r) => !relies(r) && within(r) && demanded(r))).toBeGreaterThanOrEqual(20);
+      expect(reliance((r) => relies(r) && !within(r) && demanded(r))).toBeGreaterThanOrEqual(20);
+    });
+
+    it("draws funds deemed received on a non-business due date, funds a business day too late for it, and a due date the rule does not reach", () => {
+      const due = (r: Run) => r.t.funds.installment_due_on;
+      const fundsOn = (r: Run) => r.t.funds.received_on;
+      expect(count((r) => r.x.payoff_on !== fundsOn(r), "deemed_date")).toBeGreaterThanOrEqual(50);
       expect(
         count(
           (r) =>
-            !servicer.isBusinessDay(r.t.funds.installment_due_on) &&
-            r.t.funds.received_on === addBusinessDays(r.t.funds.installment_due_on, 2, servicer),
+            !servicer.isBusinessDay(due(r)) && fundsOn(r) === addBusinessDays(due(r), 2, servicer),
+          "deemed_date",
         ),
-      ).toBeGreaterThan(30);
+      ).toBeGreaterThanOrEqual(25);
+      expect(
+        count(
+          (r) =>
+            servicer.isBusinessDay(due(r)) && fundsOn(r) === addBusinessDays(due(r), 1, servicer),
+          "deemed_date",
+        ),
+      ).toBeGreaterThanOrEqual(25);
     });
 
     it("draws the seven-business-day clock across a holiday, ties, a state that governs, and Saturday deadlines", () => {
@@ -855,8 +1023,19 @@ describe("payoff-statement", () => {
           if (isFederalHoliday(d) && dayOfWeek(d) % 6 !== 0) return true;
         return false;
       };
-      expect(count(holidayIn)).toBeGreaterThan(200);
-      expect(count((r) => !servicer.isBusinessDay(r.t.request.received_on))).toBeGreaterThan(200);
+      expect(count(holidayIn, "deadline_holiday")).toBeGreaterThan(70);
+      expect(
+        count((r) => !servicer.isBusinessDay(r.t.request.received_on), "deadline_holiday"),
+      ).toBeGreaterThan(25);
+      // A request that arrives on the weekend before a Monday holiday, the clock's longest start.
+      const weekendBeforeHoliday = (r: Run) => {
+        const d = r.t.request.received_on;
+        return (
+          dayOfWeek(d) % 6 === 0 &&
+          [1, 2].some((k) => isFederalHoliday(addDays(d, k)) && dayOfWeek(addDays(d, k)) === 1)
+        );
+      };
+      expect(count(weekendBeforeHoliday, "deadline_holiday")).toBeGreaterThan(12);
       // Ten calendar days against seven business days: Florida and North Carolina both ways.
       for (const st of ["FL", "NC"]) {
         expect(count((r) => r.t.request.state === st && r.a.governing === "state")).toBeGreaterThan(
@@ -890,61 +1069,188 @@ describe("payoff-statement", () => {
             r.t.request.state === "CT" &&
             r.a.state_due === r.a.federal_due &&
             r.t.request.good_through < r.a.federal_due,
+          "deadline_holiday",
         ),
-      ).toBeGreaterThan(8);
-      // Massachusetts: good for at least thirty days from the statement.
+      ).toBeGreaterThanOrEqual(20);
+      // Massachusetts: good for at least thirty days from the statement, and the good-through
+      // when that is later.
       expect(
         count((r) => r.t.request.state === "MA" && r.a.valid_until !== r.t.request.good_through),
       ).toBeGreaterThan(50);
+      expect(
+        count(
+          (r) =>
+            r.t.request.state === "MA" &&
+            r.a.valid_until === r.t.request.good_through &&
+            r.t.request.good_through > addDays(r.t.request.issued_on, 30),
+          "deadline_holiday",
+        ),
+      ).toBe(20);
     });
 
     it("draws the next installment inside the window, on the statement date, on the good-through, and after it", () => {
       const n = (r: Run) => r.t.next_installment;
-      expect(count((r) => r.a.alt_applies)).toBeGreaterThan(200);
+      const alternative = (f: (r: Run) => boolean) => count(f, "alternative");
       expect(
-        count((r) => !r.a.alt_applies && n(r)?.due_on === r.t.request.issued_on),
-      ).toBeGreaterThan(10);
+        alternative((r) => r.a.alt_applies && n(r)!.due_on < r.t.request.good_through),
+      ).toBeGreaterThan(30);
       expect(
-        count((r) => r.a.alt_applies && n(r)?.due_on === r.t.request.good_through),
-      ).toBeGreaterThan(50);
+        alternative((r) => !r.a.alt_applies && n(r)?.due_on === r.t.request.issued_on),
+      ).toBeGreaterThan(12);
       expect(
-        count((r) => n(r) !== null && !r.a.alt_applies && n(r)!.due_on > r.t.request.good_through),
-      ).toBeGreaterThan(100);
+        alternative((r) => r.a.alt_applies && n(r)?.due_on === r.t.request.good_through),
+      ).toBeGreaterThan(4);
+      expect(
+        alternative(
+          (r) => n(r) !== null && !r.a.alt_applies && n(r)!.due_on > r.t.request.good_through,
+        ),
+      ).toBeGreaterThan(6);
       expect(count((r) => r.a.alt_applies && n(r)!.autodraft)).toBeGreaterThan(50);
-      expect(count((r) => n(r) === null)).toBeGreaterThan(200);
     });
 
-    it("draws the S/S exception, and an MBS payoff on BD1 reported on BD3, and a portfolio one", () => {
+    it("carries the next installment whenever it falls due after the statement date and by the good-through (16.1 rule 7)", () => {
+      const inWindow = (t: PayoffTask) =>
+        t.funds.installment_due_on > t.request.issued_on &&
+        t.funds.installment_due_on <= t.request.good_through;
+      expect(runs.filter((r) => inWindow(r.t) && !r.t.next_installment).map((r) => r.t.id)).toEqual(
+        [],
+      );
+      expect(count((r) => inWindow(r.t))).toBeGreaterThan(400);
+      // Outside it the statement may carry it or not, and prints one figure either way.
+      expect(count((r) => !inWindow(r.t) && r.t.next_installment === null)).toBeGreaterThan(100);
+      // The spec's worked examples print one figure and carry no installment, where the spec's
+      // own figures do: example A's October installment is inside its window.
+      expect(SPEC.filter((t) => inWindow(t) && !t.next_installment).map((t) => t.index)).toEqual([
+        0, 1, 9, 12, 13, 14,
+      ]);
+    });
+
+    it("draws each S/S payoff on the month's first business day in turn: the MBS exception both kinds of 1st, a report on the third, and a portfolio loan", () => {
       const ss = (r: Run) => r.t.investor.remittance_type === "SS";
-      expect(count((r) => ss(r) && r.a.fnma_interest_cents === "0")).toBeGreaterThan(12);
+      const mbs = (r: Run) => ss(r) && r.t.investor.mbs_pool;
+      const owes = (r: Run) => r.a.fnma_interest_cents !== "0";
+      const firstIsBd = (r: Run) => servicer.isBusinessDay(firstOfPayoffMonth(r));
+      expect(
+        count((r) => mbs(r) && onBd1(r) && !owes(r) && firstIsBd(r), "remittance"),
+      ).toBeGreaterThanOrEqual(20);
+      expect(
+        count((r) => mbs(r) && onBd1(r) && !owes(r) && !firstIsBd(r), "remittance"),
+      ).toBeGreaterThanOrEqual(40);
       expect(
         count(
           (r) =>
-            ss(r) &&
-            r.t.investor.mbs_pool &&
-            r.x.payoff_on === fannieBusinessDay(r.x.payoff_on, 1) &&
-            r.a.fnma_interest_cents !== "0",
+            mbs(r) &&
+            onBd1(r) &&
+            owes(r) &&
+            r.t.investor.reported_on > fannieBusinessDay(r.x.payoff_on, 2),
+          "remittance",
         ),
-      ).toBeGreaterThan(6);
+      ).toBeGreaterThanOrEqual(20);
       expect(
         count(
           (r) =>
             ss(r) &&
             !r.t.investor.mbs_pool &&
-            r.x.payoff_on === fannieBusinessDay(r.x.payoff_on, 1),
+            onBd1(r) &&
+            owes(r) &&
+            r.t.investor.reported_on <= fannieBusinessDay(r.x.payoff_on, 2),
+          "remittance",
         ),
-      ).toBeGreaterThan(5);
+      ).toBeGreaterThanOrEqual(20);
       // Paid off on the 1st: the gap is the whole month.
       expect(
         count(
-          (r) =>
-            ss(r) &&
-            r.a.fnma_interest_cents !== "0" &&
-            r.a.ss_interest_gap_cents === r.a.fnma_interest_cents,
+          (r) => ss(r) && owes(r) && r.a.ss_interest_gap_cents === r.a.fnma_interest_cents,
+          "remittance",
         ),
-      ).toBeGreaterThan(20);
-      expect(count((r) => r.t.investor.remittance_type === "SA")).toBeGreaterThan(200);
-      expect(count((r) => r.a.servicing_fee_cents !== null)).toBeGreaterThan(300);
+      ).toBeGreaterThan(8);
+      // And MBS loans beyond the edge, each paid off on whatever day its funds arrived.
+      expect(count((r) => r.edge !== "remittance" && mbs(r))).toBeGreaterThan(100);
     });
+
+    it("draws Fannie Mae's rate stack: a servicing fee from 0.25 % to 0.50 %, and on an MBS loan a guaranty fee besides", () => {
+      // Note rate less pass-through rate, in thousandths of a percent.
+      const strip = (r: Run) =>
+        Math.round(Number(r.t.loan.rate_pct) * 1000) -
+        Math.round(Number(r.t.investor.ptr_pct) * 1000);
+      const outside = runs.filter((r) => {
+        const s = strip(r);
+        return r.t.investor.mbs_pool ? s < 500 || s > 1000 : s < 250 || s > 500;
+      });
+      expect(outside.map((r) => r.t.id)).toEqual([]);
+      expect(count((r) => !r.t.investor.mbs_pool && strip(r) === 250)).toBeGreaterThan(500);
+      expect(new Set(runs.map(strip)).size).toBeGreaterThan(8);
+    });
+  });
+
+  it("puts every rule that turns on one case into the held-out suite itself, a handful of each", () => {
+    // Each line is the held-out payoffs on which a wrong reading of one rule answers differently
+    // from the engine. A suite without them scores the wrong reading as it scores the right one.
+    const held = generatePayoffSuite("heldout", 1, 200).map((t) => ({
+      t,
+      x: analyzePayoff(t),
+      a: expectedPayoff(t),
+    }));
+    type H = (typeof held)[number];
+    const v = (h: H) => h.x.reconciled.variance_cents;
+    const within = (h: H) => h.x.payoff_on <= h.t.request.good_through;
+    const relies = (h: H) => ["FL", "TX", "CA"].includes(h.t.request.state);
+    const mbsBd1 = (h: H, pool: boolean) =>
+      h.t.investor.remittance_type === "SS" &&
+      h.t.investor.mbs_pool === pool &&
+      h.x.payoff_on === fannieBusinessDay(h.x.payoff_on, 1);
+    const firstIsBd = (h: H) => servicer.isBusinessDay(D(`${h.x.payoff_on.slice(0, 8)}01`));
+    const bd2 = (h: H) => fannieBusinessDay(h.x.payoff_on, 2);
+    const due = (h: H) => h.t.funds.installment_due_on;
+    const cases: Record<string, (h: H) => boolean> = {
+      "reliance in every state": (h) => v(h) < -5000n && within(h) && !relies(h),
+      "reliance without California": (h) =>
+        v(h) < -5000n && within(h) && h.t.request.state === "CA",
+      "reliance only before the good-through": (h) =>
+        v(h) < -5000n && relies(h) && h.x.payoff_on === h.t.request.good_through,
+      "a cent short as paid in full": (h) => v(h) === -1n,
+      "$50.00 short demanded": (h) => v(h) === -5000n,
+      "$50.01 short kept": (h) => v(h) === -5001n,
+      "$1.01 over kept": (h) => v(h) === 101n,
+      "BD1 as the 1st when the 1st is not a business day": (h) =>
+        mbsBd1(h, true) && !firstIsBd(h) && h.t.investor.reported_on <= bd2(h),
+      "BD2 as the business day after the 1st": (h) =>
+        mbsBd1(h, true) && !firstIsBd(h) && h.t.investor.reported_on === bd2(h),
+      "the MBS exception for a portfolio loan": (h) =>
+        mbsBd1(h, false) && h.t.investor.reported_on <= bd2(h),
+      "the non-business-day rule on a business day": (h) =>
+        servicer.isBusinessDay(due(h)) &&
+        h.t.funds.received_on === addBusinessDays(due(h), 1, servicer),
+      "Connecticut's requested date below its floor": (h) =>
+        h.t.request.state === "CT" && h.t.request.good_through < h.a.federal_due,
+      "Massachusetts' thirty days over a later good-through": (h) =>
+        h.t.request.state === "MA" && h.t.request.good_through > addDays(h.t.request.issued_on, 30),
+    };
+    const thin = Object.entries(cases)
+      .map(([name, f]) => [name, held.filter(f).length] as const)
+      .filter(([, n]) => n < 3);
+    expect(thin).toEqual([]);
+  });
+
+  it("names a payoff's disposition as its verdict, to the audit and to the comparison", async () => {
+    const task = spec(1);
+    const result = await runEpisode(payoffStatement, task, new PayoffReferencePolicy());
+    const record: AuditRecord = {
+      task: {
+        id: task.id,
+        split: task.split,
+        index: task.index,
+        rendered: payoffStatement.render(task),
+      },
+      policy: { id: "reference" },
+      result: result as unknown as AuditRecord["result"],
+    };
+    expect(auditEpisode(record).verdict).toBe("short_payoff_demand_1bd");
+    const line = {
+      task: { id: task.id },
+      policy: { id: "reference" },
+      result,
+    } as unknown as EpisodeLine;
+    expect(scoreSide([line]).byTask.get(task.id)?.verdict).toBe("short_payoff_demand_1bd");
   });
 });

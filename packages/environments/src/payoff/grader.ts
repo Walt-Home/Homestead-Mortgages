@@ -266,8 +266,10 @@ export const gradePayoff = (task: PayoffTask, answer: PayoffAnswer | null): Grad
 
 /* ── the submission, read strictly ────────────────────────────────────────
  * Every key the schema requires, none it does not name, and each in the
- * form the schema states: cents as strings of digits, dates as real
- * YYYY-MM-DD dates, whole numbers as numbers, the enums spelled as listed.
+ * form the schema states: cents as strings of digits (or, as every other
+ * environment takes them and as the task prints them, a whole number), dates
+ * as real YYYY-MM-DD dates, whole numbers as numbers, the enums spelled as
+ * listed. Surrounding spaces are not a figure, and are dropped.
  */
 
 const ANSWER_KEYS: readonly (keyof PayoffAnswer)[] = Object.values(PAYOFF_FIELDS).flat();
@@ -312,12 +314,13 @@ export function parsePayoffSubmission(raw: unknown): Parsed<PayoffAnswer> {
       if (!NULLABLE.has(k)) return fail(`${k} may not be null`);
       out[k] = null;
     } else if (CENTS_KEYS.has(k)) {
-      if (typeof v !== "string" || !/^-?\d+$/.test(v))
-        return fail(`${k} must be integer cents as a string of digits, e.g. "25039082"`);
-      out[k] = BigInt(v).toString();
+      if (typeof v === "string" && /^-?\d+$/.test(v.trim())) out[k] = BigInt(v.trim()).toString();
+      else if (typeof v === "number" && Number.isSafeInteger(v)) out[k] = String(v);
+      else return fail(`${k} must be integer cents as a string of digits, e.g. "25039082"`);
     } else if (DATE_KEYS.has(k)) {
-      if (typeof v !== "string" || !isRealDate(v)) return fail(`${k} must be a date, YYYY-MM-DD`);
-      out[k] = v;
+      if (typeof v !== "string" || !isRealDate(v.trim()))
+        return fail(`${k} must be a date, YYYY-MM-DD`);
+      out[k] = v.trim();
     } else if (k === "months_full" || k === "days_partial") {
       if (typeof v !== "number" || !Number.isInteger(v)) return fail(`${k} must be a whole number`);
       out[k] = v;

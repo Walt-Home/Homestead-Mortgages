@@ -68,11 +68,13 @@ export function auditEpisode(r: AuditRecord): AuditRow {
     e.kind === "observations" ? e.observations : [],
   );
   const returned = new Set(observations.flatMap(valuesOf));
-  // A posting has no verdict; its first outcome (a receipt's, or a run's) stands in for one.
+  // A posting has no verdict; its first outcome (a receipt's, or a run's) stands in for one. A
+  // payoff's is how its funds were disposed of.
   const run = res.grade.fields.find((f) => f.field.startsWith("late_charge["))?.expected;
   const verdict =
-    res.grade.fields.find((f) => ["verdict", "decision", "qm_status"].includes(f.field))
-      ?.expected ??
+    res.grade.fields.find((f) =>
+      ["verdict", "decision", "qm_status", "disposition"].includes(f.field),
+    )?.expected ??
     res.grade.fields.find((f) => f.field.endsWith(".outcome"))?.expected ??
     (run ? String((JSON.parse(run) as { outcome?: unknown }).outcome ?? "?") : "?");
   const answer = res.answer ?? null;

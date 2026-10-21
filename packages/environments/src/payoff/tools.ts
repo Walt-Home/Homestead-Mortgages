@@ -2,8 +2,11 @@
  * The tools: refi's date steps, whole months, per diem and exact calculator,
  * and the business-day calendars the engine counts its clocks on (the
  * servicer's, Regulation X's federal one, and Fannie Mae's; by default the
- * same days). None of them computes a deadline, a payoff figure, a
- * disposition or a share: putting those together is the task.
+ * same days). One answer is a single call: refi's per diem, given the
+ * balance and the note rate (not the pass-through rate, and not the balance
+ * with the deferred principal), returns the statement's per diem. None of
+ * them computes a deadline, an interest block, a total, a disposition or a
+ * share: putting those together is the task.
  */
 
 import {

@@ -90,7 +90,7 @@ export function scoreSide(lines: readonly EpisodeLine[]): {
     byTask.set(id, {
       pass: l.result.grade.pass,
       verdict:
-        l.result.grade.fields.find((f) => f.field === "verdict" || f.field === "decision")
+        l.result.grade.fields.find((f) => ["verdict", "decision", "disposition"].includes(f.field))
           ?.expected ??
         l.result.grade.fields.find((f) => f.field.endsWith(".outcome"))?.expected ??
         "?",

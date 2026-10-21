@@ -459,10 +459,15 @@ interest by remittance type).
   method (30/360 months with a 365-day partial, or daily simple), its last
   paid installment, deferred and forborne principal, late charges, fees,
   advances, the recording fee, MI, and the buydown and suspense credits;
-- its next scheduled installment, or none;
+- its next scheduled installment, always when it falls due after the
+  statement date and by the good-through, because the statement then prints
+  the figure if it posts (16.1 rule 7), and sometimes when it does not;
 - the borrower's wire: the day it arrived and the amount;
 - the loan's Fannie Mae terms: remittance type (A/A, S/A, S/S), pass-through
-  rate, whether it is in an MBS pool, and the day the payoff is reported.
+  rate, whether it is in an MBS pool, and the day the payoff is reported. The
+  pass-through rate is the note rate less a servicing fee from 0.25 % to
+  0.50 % (Fannie Mae's band for a fixed-rate loan, quoted in spec 29.1), and
+  on an MBS loan less a guaranty fee besides (spec 5.2's rate stack).
 
 The model issues the statement (the federal and state deadlines and the one
 that governs, how long the figure is good, the day count, the two interest
@@ -483,9 +488,19 @@ seldom move are graded with the one that decides them:
 - the NIB line with the total;
 - the servicing fee and the S/S gap with Fannie Mae's interest.
 
-An answer that copies the request and the funds back scores 0.105 on the
-held-out suite. That is the floor to read the mean field score against,
-which never replaces the pass.
+Five of the twelve fields need no money worked out: the federal deadline,
+the state's rules, the day count, the escrow refund's day, and the per
+diem, which is one tool call. So on the held-out suite:
+
+- an answer that copies the request and the funds back scores 0.086, and
+  the best constant answer 0.118;
+- an answer with every date and count right, the per diem from its tool,
+  the disposition guessed from the funds' day against the good-through, and
+  no money at all scores 0.549, and passes nothing.
+
+The mean field score is read against the last of these, and it never
+replaces the pass. A test holds all three. Cents may be submitted as
+strings of digits or as whole numbers, as in every other environment.
 
 **The grader is the servicing app's own engine.** `src/payoff/ported/`
 holds `quote.ts` and `remit.ts` from `apps/servicing/src/domain/payoff/`,
@@ -509,8 +524,9 @@ from, and a test holds those lines:
 **The tools.** refi's date steps, whole months, per diem and calculator,
 and the business-day calendars (`add_business_days`, `is_business_day`) on
 the servicer's, Regulation X's and Fannie Mae's days, which are the same
-days. No tool computes a deadline, a payoff figure, a disposition or a
-share.
+days. One call answers one field: refi's per diem, given the balance and
+the note rate, is the statement's per diem. No tool computes a deadline, an
+interest block, a total, a disposition or a share.
 
 **The tasks** cycle by index through thirteen edges, a hundred payoffs each
 in a suite of 1,300:
@@ -526,18 +542,38 @@ in a suite of 1,300:
   $50.00 tolerance), and more;
 - a variance of exactly $0, $0.01 short, $50.00 short, $50.01 short and
   $1.01 over;
-- a shortage in Florida, Texas or California within the good-through
-  (absorbed) and after it (demanded), and elsewhere;
+- more than $50.00 short in Florida or Texas within the good-through, in
+  California within it, and in any of the three on the good-through day
+  itself (absorbed); and after it, or in a state that relies on nothing
+  (demanded);
 - an installment due on a weekend or New Year's Day, with the funds the next
-  business day (deemed received on the due date) or the one after;
+  business day (deemed received on the due date) or the one after, and one
+  due on a business day with the funds the next, which the rule does not
+  reach;
 - requests received before a federal holiday, on one, or on a weekend,
   against each state's clock: Florida and North Carolina's ten calendar
   days winning, tying and landing on a Saturday, Massachusetts' five
-  business days, Texas's tie, Connecticut's requested date and its floor;
+  business days, Texas's tie, Connecticut's requested date and its floor
+  (a requested date before the floor among them), and a Massachusetts
+  statement good through a date past thirty days from issue;
 - the next installment due inside the window, on the statement date, on the
   good-through and after it;
-- A/A, S/A and S/S shares, and an MBS payoff on the month's first Fannie
-  Mae business day reported on the first, second or third.
+- an S/S payoff on the month's first Fannie Mae business day: in an MBS
+  pool, reported on the first or second business day (where the 1st is
+  one, and where it is not) or on the third; and a portfolio loan's, which
+  owes the month whenever it is reported. A/A and S/A shares come from
+  every other edge.
+
+**Every case a rule turns on is in the held-out suite.** Where a wrong
+reading of a rule answers differently from the engine only on one case,
+the edge takes its cases in turn by its own count rather than by chance:
+each tolerance threshold, reliance's state and its day, the S/S
+exception's business days and its MBS test, the non-business-day rule's
+due date, Connecticut's floor and Massachusetts' thirty days. So the 200
+held-out payoffs, fifteen or sixteen of each edge, carry at least three of
+each, and a test holds that. In a training suite each edge's hundred is
+counted on its own, so a test fails when an edge stops drawing its case,
+whatever the other edges happen to draw.
 
 **What v1 leaves out, and why.** Mapping the engine against its spec found
 places where it departs from its own text; docs/decisions.md lists them. v1
@@ -570,8 +606,11 @@ Lien release (16.3), the remittance and finality clocks in Eastern time,
 rate segments and ARM changes, the 7.6 notice's own payoff calculator, the
 70 % warning date, CT interest forfeiture and bankruptcy or foreclosure
 components are not in v1. `payoffInScope` runs on the engine's own figures
-and rejects a payoff in any of the regions above. It rejects none of 5,000
-training candidates, because the generator aims around them. Where the
+and rejects a payoff in any of the regions above, or with the request, the
+statement (issued on a business day) and the funds out of order. A test
+builds a payoff that each clause alone rejects, for every clause no other
+one covers. It rejects none of 20,000 training
+candidates, because the generator aims around them. Where the
 spec and the engine disagree inside scope, the rulebook states the
 engine: a shortage is the exact recomputation, so 16.1-T2's $221.10 (five
 per diems) is graded at the exact $221.09. The good-through is the
@@ -579,10 +618,13 @@ statement's own; the generator keeps it within 31 days of the request, the
 cap the ops layer applies, and the spec's own §7.6 example runs to 38.
 
 The reference passes the held-out suite, a 300-task training suite and
-fifteen of the spec's worked examples to the cent, with no task redrawn in
-600, and agrees with the engine on 2,000 candidates nothing filtered. Its
-longest payoff is 37 tool calls, the submission included, in 8 turns: the
-calls that do not wait on each other go side by side.
+fifteen of the spec's worked examples to the cent. Every held-out payoff
+is its index's first draw, no training task is redrawn in 600, and the
+reference agrees with the engine on 2,000 candidates nothing filtered, so
+the generator's filter is not what makes those passes. Its longest payoff
+is 37 tool calls, the submission included, in 8 turns: the calls that do
+not wait on each other go side by side. `env:audit` and `env:compare` read
+a payoff's disposition as its verdict.
 
 ## escrow-history
 

@@ -21,18 +21,27 @@
  *   - late_funds: funds a day after it, and more, a day's interest either
  *     side of the $50.00 tolerance;
  *   - tolerance: funds at the exact figure, $0.01 and $50.00 short (kept),
- *     $50.01 short (demanded) and $1.01 over (refunded), and between;
- *   - reliance: a shortage in Florida, Texas or California within the
- *     good-through (absorbed) and after it (demanded), and elsewhere;
+ *     $50.01 short (demanded) and $1.01 over (refunded);
+ *   - reliance: more than $50.00 short in Florida or Texas within the
+ *     good-through, in California within it, in any of the three on the
+ *     good-through itself (absorbed), and after it or in a state that relies
+ *     on nothing (demanded);
  *   - deemed_date: an installment due on a weekend or holiday, the funds the
  *     next business day (deemed received on the due date) or the one after;
+ *     or due on a business day, the funds the next;
  *   - deadline_holiday: a request received in the days before a federal
- *     holiday, or on one, or on a weekend, against each state's clock;
+ *     holiday, or on one, or on a weekend, against each state's clock, with
+ *     Connecticut's payoff date before its floor and Massachusetts' statement
+ *     good past thirty days;
  *   - alternative: the next installment due inside the window, on the
  *     statement date, on the good-through date, and after it;
- *   - remittance: S/A, S/S and A/A shares, and an MBS loan paid off on the
- *     month's first Fannie Mae business day, reported on the first, second
- *     or third.
+ *   - remittance: an S/S payoff on the month's first Fannie Mae business day,
+ *     where the 1st is one and where it is not, in an MBS pool reported on
+ *     the first, second or third business day, and a portfolio loan's.
+ * Where an edge has cases every suite must hold, it takes them in turn by
+ * the edge's own count, so the held-out suite carries each: tolerance's five
+ * thresholds, reliance's five, remittance's five, the state clocks' two and
+ * deemed_date's four.
  *
  * What v1 leaves out is in docs/environments.md. `payoffInScope` runs on the
  * engine's own figures and keeps a payoff only when the engine does nothing
@@ -153,32 +162,48 @@ const HOLIDAYS: readonly PlainDate[] = [2026, 2027, 2028]
 interface Money {
   upb_cents: Cents;
   rate_pct: string;
-  ptr_pct: string;
+  /**
+   * The pass-through rate: the note rate less the servicing fee, and on an
+   * MBS loan less the guaranty fee too.
+   */
+  ptr: (mbs: boolean) => string;
   type: RemittanceType;
   term: number;
 }
+
+/**
+ * The rate stack, in thousandths of a percent. The servicing fee is inside
+ * Fannie Mae's band for a fixed-rate loan, 0.25 % to 0.50 % (Servicing Guide
+ * F-2-09, quoted in spec 29.1); an MBS loan also pays the guaranty fee out of
+ * the note rate (spec 5.2's rate stack, `ptr = note_rate − servicing_fee −
+ * gfee`), and its worked S/S loan's is 0.25 %.
+ */
+const SERVICING_FEES: readonly (readonly [number, number])[] = [
+  [250, 70],
+  [375, 12],
+  [500, 10],
+  [300, 8],
+];
+const GUARANTY_FEES: readonly number[] = [250, 300, 375, 450, 500];
 
 function moneyOf(r: Rng, type: RemittanceType): Money {
   const rate_pct = r.chance(0.85)
     ? (r.int(2.5 * 8, 8 * 8) / 8).toFixed(3)
     : (r.int(2_500, 8_000) / 1000).toFixed(3);
-  const spread = r.weighted<number>([
-    [250, 70],
-    [375, 12],
-    [500, 10],
-    [200, 8],
-  ]);
-  const ptr_pct = ((Math.round(Number(rate_pct) * 1000) - spread) / 1000).toFixed(3);
+  const fee = r.weighted<number>(SERVICING_FEES);
+  const gfee = r.pick(GUARANTY_FEES);
+  const ptr = (mbs: boolean) =>
+    ((Math.round(Number(rate_pct) * 1000) - fee - (mbs ? gfee : 0)) / 1000).toFixed(3);
   let upb_cents = cents(r, 50_000, 850_000);
   if (type === "SA") {
     // S/A is half a month at PTR. The engine rounds the month and then the half; the spec rounds
     // once (÷24). v1 draws only balances where the two agree.
     const once = (u: Cents) =>
-      divRound(u * Decimal.parse(ptr_pct).unscaled, 2400n * Decimal.ONE.unscaled);
-    while (divRound(monthlyInterest(upb_cents, ratePercent(ptr_pct)), 2n) !== once(upb_cents))
+      divRound(u * Decimal.parse(ptr(false)).unscaled, 2400n * Decimal.ONE.unscaled);
+    while (divRound(monthlyInterest(upb_cents, ratePercent(ptr(false))), 2n) !== once(upb_cents))
       upb_cents += 1n;
   }
-  return { upb_cents, rate_pct, ptr_pct, type, term: r.int(120, 350) };
+  return { upb_cents, rate_pct, ptr, type, term: r.int(120, 350) };
 }
 
 /**
@@ -248,13 +273,16 @@ export function drawPayoffCandidate(
   index: number,
 ): PayoffTask {
   const edge = payoffEdgeOf(index);
+  // How many times this edge has come round before. An edge with cases every suite must hold takes
+  // them in turn by it, so even the held-out suite's fifteen or sixteen of an edge carry each.
+  const turn = Math.floor(index / PAYOFF_EDGES.length);
   let state = r.weighted(STATES);
   let type: RemittanceType = r.weighted<RemittanceType>([
     ["AA", 40],
     ["SA", 25],
     ["SS", 35],
   ]);
-  if (edge === "remittance") type = r.pick(["AA", "SA", "SS", "SS"] as const);
+  if (edge === "remittance") type = "SS";
   const method: Accrual =
     edge === "daily_simple"
       ? "daily_simple_365"
@@ -262,7 +290,10 @@ export function drawPayoffCandidate(
         ? r.chance(0.45)
           ? "daily_simple_365"
           : "monthly_30_360_partial_365"
-        : edge === "deemed_date" || edge === "alternative" || edge === "remittance"
+        : edge === "deemed_date" ||
+            edge === "alternative" ||
+            edge === "remittance" ||
+            edge === "reliance"
           ? "monthly_30_360_partial_365"
           : r.chance(0.12)
             ? "daily_simple_365"
@@ -276,7 +307,9 @@ export function drawPayoffCandidate(
   let issued: PlainDate = FIRST_REQUEST;
   let back = r.chance(0.55) ? 1 : 0;
   let fundsTarget: PlainDate | null = null;
-  let mbsFirst = false;
+  // An S/S payoff on the month's first Fannie Mae business day: in a pool or not, and reported
+  // 0, 1 or 2 business days after it.
+  let onBd1: { mbs: boolean; lag: number } | null = null;
 
   const anyGoodThrough = () => addDays(FIRST_REQUEST, r.int(20, REQUEST_SPAN + 20));
   const lead = () =>
@@ -341,10 +374,13 @@ export function drawPayoffCandidate(
       break;
     }
     case "deemed_date": {
-      // The installment after the last paid one falls due on a weekend or New Year's Day; the funds
-      // arrive the next business day (deemed received on the due date) or the one after.
-      const due = r.pick(NON_BUSINESS_FIRSTS);
-      fundsTarget = addBusinessDays(due, r.chance(0.6) ? 1 : 2, servicer);
+      // The installment after the last paid one falls due on a weekend or New Year's Day; by turn,
+      // the funds arrive the next business day (deemed received on the due date, two turns in
+      // four) or the one after; or the due date is a business day and the funds arrive the next,
+      // which the rule does not reach.
+      const sub = turn % 4;
+      const due = r.pick(sub === 3 ? BUSINESS_FIRSTS : NON_BUSINESS_FIRSTS);
+      fundsTarget = addBusinessDays(due, sub === 2 ? 2 : 1, servicer);
       // Never deemed back across the good-through: it is before the due date or on or after the funds.
       const before = r.chance(0.5);
       const g = before ? addDays(due, -r.int(1, 10)) : addDays(fundsTarget, r.int(0, 12));
@@ -374,11 +410,28 @@ export function drawPayoffCandidate(
         ["NY", 5],
         ["OH", 10],
       ]);
-      let k = r.int(0, 3);
+      // One turn in five, Connecticut with a payoff date before its seven-business-day floor;
+      // and one, Massachusetts issued the day the request arrives and good through the
+      // thirty-first day after it, the one way a good-through outlasts thirty days from issue.
+      const sub = turn % 5;
+      if (sub === 3) state = "CT";
+      if (sub === 4) {
+        state = "MA";
+        received = bdOnOrBefore(received);
+      }
+      let k = sub === 4 ? 0 : r.int(0, 3);
       if (k === 0 && !isBd(received)) k = 1;
       issued = k === 0 ? received : addBusinessDays(received, k, servicer);
       const room = 31 - daysBetween(received, issued);
-      gt = addDays(issued, state === "CT" && r.chance(0.5) ? r.int(1, 10) : r.int(1, room));
+      if (sub === 3) {
+        const floor = addDays(addBusinessDays(received, 7, servicer), -1);
+        const g = addDays(issued, r.int(1, 6));
+        gt = g < floor ? g : floor;
+      } else if (sub === 4) {
+        gt = addDays(received, 31);
+      } else {
+        gt = addDays(issued, state === "CT" && r.chance(0.5) ? r.int(1, 10) : r.int(1, room));
+      }
       break;
     }
     case "alternative": {
@@ -394,8 +447,10 @@ export function drawPayoffCandidate(
       if (where === "inside") {
         requestedFrom(addDays(due, -r.int(8, 12)), addDays(due, r.int(1, 18)));
       } else if (where === "on_issue") {
-        // Issued on the due date itself: a 1st that is a business day.
-        const first = isBd(due) ? due : addMonths(due, 1);
+        // Issued on the due date itself: a 1st that is a business day. February and March 2026
+        // both begin on a Sunday, so one month on is not always enough.
+        let first = due;
+        while (!isBd(first)) first = addMonths(first, 1);
         gt = addDays(first, r.int(3, 20));
         received = addDays(first, -r.int(0, 3));
         issued = first;
@@ -408,16 +463,26 @@ export function drawPayoffCandidate(
       break;
     }
     case "remittance": {
-      if (type === "SS" && r.chance(0.7)) {
-        // Paid off on the month's first Fannie Mae business day: a 1st that is itself one.
-        const first = r.pick(BUSINESS_FIRSTS);
-        fundsTarget = first;
-        mbsFirst = true;
-        requestedFrom(addDays(first, -r.int(9, 20)), addDays(first, r.int(0, 6)));
-        back = r.chance(0.6) ? 1 : 0;
-      } else {
-        fromGoodThrough(anyGoodThrough());
-      }
+      // An S/S payoff on the month's first Fannie Mae business day. By turn: in an MBS pool where
+      // the 1st is not a business day, reported on the second business day; a portfolio loan,
+      // which owes the month whenever it is reported; in a pool where the 1st is not a business
+      // day, reported on the first; in a pool where the 1st is one, reported on it or the next;
+      // and in a pool, reported on the third. (A/A and S/A shares come from every other edge.)
+      const sub = turn % 5;
+      const onFirst = sub === 3 || ((sub === 1 || sub === 4) && r.chance(0.5));
+      const bd1 = onFirst
+        ? r.pick(BUSINESS_FIRSTS)
+        : addBusinessDays(r.pick(NON_BUSINESS_FIRSTS), 1, servicer);
+      fundsTarget = bd1;
+      onBd1 = {
+        mbs: sub !== 1,
+        lag: sub === 0 ? 1 : sub === 2 ? 0 : sub === 4 ? 2 : r.int(0, 1),
+      };
+      requestedFrom(addDays(bd1, -r.int(9, 20)), addDays(bd1, r.int(0, 6)));
+      // An installment due on a 1st that is not a business day would deem these funds received on
+      // it, which takes the payoff off the first business day: that loan is paid through the
+      // payoff's own month instead.
+      back = onFirst && r.chance(0.6) ? 1 : 0;
       break;
     }
     case "early_funds": {
@@ -438,18 +503,26 @@ export function drawPayoffCandidate(
       break;
     }
     case "reliance": {
-      state = r.weighted<string>([
-        ["FL", 25],
-        ["TX", 25],
-        ["CA", 25],
-        ["OH", 10],
-        ["NY", 8],
-        ["MA", 7],
-      ]);
-      const within = r.chance(0.65);
-      fromGoodThrough(anyGoodThrough(), within ? r.int(12, 30) : lead());
+      // By turn, more than $50.00 short: in Florida or Texas before the good-through, in
+      // California before it, in any of the three on the good-through itself, in a state that
+      // relies on nothing before it, and in any of the three after it.
+      const sub = turn % 5;
+      state =
+        sub === 0
+          ? r.pick(["FL", "TX"])
+          : sub === 1
+            ? "CA"
+            : sub === 3
+              ? r.pick(["OH", "NY", "MA", "NC", "CT", "PA", "GA", "AZ"])
+              : r.pick(["FL", "TX", "CA"]);
+      let g = anyGoodThrough();
+      // On the good-through: a business day past the 4th, which no due date's deeming reaches.
+      if (sub === 2) while (!isBd(g) || parts(g).d < 5) g = addDays(g, 1);
+      const within = sub !== 4;
+      fromGoodThrough(g, within ? r.int(12, 30) : lead());
       back = within ? 1 : 0;
-      fundsTarget = within ? addDays(gt, -r.int(0, 8)) : addDays(gt, r.int(1, 10));
+      fundsTarget =
+        sub === 2 ? g : within ? bdOnOrBefore(addDays(g, -r.int(1, 8))) : addDays(g, r.int(1, 10));
       break;
     }
     default:
@@ -505,10 +578,15 @@ export function drawPayoffCandidate(
   const nextPrincipal =
     levelPayment(money.upb_cents, ratePercent(money.rate_pct), money.term) -
     monthlyInterest(money.upb_cents, ratePercent(money.rate_pct));
+  // 16.1 rule 7: an installment falling due after the statement date and by the good-through is
+  // printed beside the statement, so the statement carries it. One outside that window changes
+  // no figure, and the statement may carry it or not.
+  const inWindow = installmentDue > issued && installmentDue <= gt;
   const next_installment =
-    edge === "alternative" || r.chance(0.7)
+    edge === "alternative" || inWindow || r.chance(0.7)
       ? { due_on: installmentDue, principal_cents: nextPrincipal, autodraft: r.chance(0.35) }
       : null;
+  const mbsDrawn = type === "SS" && (onBd1 ? onBd1.mbs : r.chance(0.6));
 
   const base: PayoffTask = {
     id,
@@ -521,8 +599,8 @@ export function drawPayoffCandidate(
     funds: { received_on: fundsOn, amount_cents: 0n, installment_due_on: installmentDue },
     investor: {
       remittance_type: type,
-      ptr_pct: money.ptr_pct,
-      mbs_pool: type === "SS" && (mbsFirst || r.chance(0.6)),
+      ptr_pct: money.ptr(mbsDrawn),
+      mbs_pool: mbsDrawn,
       reported_on: fundsOn,
     },
   };
@@ -534,20 +612,12 @@ export function drawPayoffCandidate(
   let amount: Cents;
   switch (edge) {
     case "tolerance":
-      amount =
-        exact +
-        r.weighted<Cents>([
-          [0n, 20],
-          [-1n, 8],
-          [-5_000n, 18],
-          [-5_001n, 18],
-          [101n, 14],
-          [-BigInt(r.int(2, 4_999)), 10],
-          [BigInt(r.int(102, 60_000)), 12],
-        ]);
+      // By turn, on each threshold: exact, a cent short and $50.00 short (kept), $50.01 short
+      // (demanded) and $1.01 over (refunded). The figures between come from every other edge.
+      amount = exact + ([0n, -1n, -5_000n, -5_001n, 101n] as const)[turn % 5]!;
       break;
     case "reliance":
-      amount = r.chance(0.7) ? exact - BigInt(r.int(5_001, 60_000)) : statement;
+      amount = exact - BigInt(r.int(5_001, 60_000));
       break;
     case "early_funds":
     case "late_funds":
@@ -564,7 +634,7 @@ export function drawPayoffCandidate(
   if (amount - exact >= 1n && amount - exact <= 100n) amount += 100n;
 
   // ── Fannie Mae's terms: reported the day the payoff is processed or a business day or two after ──
-  const reportLag = mbsFirst ? r.int(0, 2) : r.int(isBd(payoffOn) ? 0 : 1, 2);
+  const reportLag = onBd1 ? onBd1.lag : r.int(isBd(payoffOn) ? 0 : 1, 2);
   let mbs = base.investor.mbs_pool;
   // An S/S MBS payoff deemed received on its due date: which day it was processed is in doubt.
   if (type === "SS" && mbs && payoffOn !== fundsOn) mbs = false;
@@ -573,6 +643,7 @@ export function drawPayoffCandidate(
     funds: { ...base.funds, amount_cents: amount },
     investor: {
       ...base.investor,
+      ptr_pct: money.ptr(mbs),
       mbs_pool: mbs,
       reported_on: addBusinessDays(payoffOn, reportLag, servicer),
     },
@@ -617,11 +688,12 @@ const sOnce = (upb: Cents, ptr: string) =>
  *     processing day is in doubt; and no payoff deemed back across the
  *     good-through, where "within good-through" is in doubt;
  *   - the request, the statement and the funds in order: the statement on
- *     or after the request and good through a date on or after it, the funds
- *     on a business day on or after the statement, the report on or after
- *     the payoff. (How far ahead a good-through may be is the ops layer's
- *     policy, not the engine's: the generator keeps it within thirty-one
- *     days of the request, and the spec's own examples run to 38.)
+ *     a business day on or after the request and good through a date on or
+ *     after it, the funds on a business day on or after the statement, the
+ *     report on or after the payoff. (How far ahead a good-through may be
+ *     is the ops layer's policy, not the engine's: the generator keeps it
+ *     within thirty-one days of the request, and the spec's own examples
+ *     run to 38.)
  */
 export function payoffInScope(task: PayoffTask): boolean {
   const a = analyzePayoff(task);
@@ -640,6 +712,7 @@ export function payoffInScope(task: PayoffTask): boolean {
   if (inv.remittance_type === "SS" && inv.mbs_pool && a.payoff_on !== f.received_on) return false;
   if (a.payoff_on <= rq.good_through && rq.good_through < f.received_on) return false;
   if (rq.issued_on < rq.received_on || rq.good_through < rq.issued_on) return false;
+  if (!isBd(rq.issued_on)) return false;
   if (!isBd(f.received_on) || f.received_on < rq.issued_on) return false;
   if (inv.reported_on < a.payoff_on || f.amount_cents <= 0n) return false;
   return true;

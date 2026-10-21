@@ -5366,7 +5366,7 @@ count reaches two months. It also:
   never applies.
 
 `payoffInScope` then runs on the engine's own figures and rejects a payoff
-that reaches any of those places. It rejects none of 5,000 training draws,
+that reaches any of those places. It rejects none of 20,000 training draws,
 because the generator aims around them. Inside that scope the rulebook says
 what the engine does: a shortage is the exact recomputation, not five per
 diems. Lien release, the Eastern-time clocks, rate segments and the §7.6
@@ -5381,7 +5381,55 @@ fee out of a payoff: spec 16.1 rule 6 leaves that to the late-charge and
 workout sections, and `release.ts`'s fee pass-through is 16.3's. The task
 gives the amounts, and the payoff carries what it is given.
 
+Three more conventions are the generator's:
+
+- A statement carries the next installment whenever it falls due after
+  the statement date and by the good-through, because 16.1 rule 7 prints
+  the figure if it posts beside the one if it does not. The spec's own
+  worked examples print one figure and carry none, as its figures do.
+- The pass-through rate is the note rate less a servicing fee inside
+  F-2-09's band for a fixed-rate loan (0.25 % to 0.50 %, quoted in spec
+  29.1), and on an MBS loan less a guaranty fee besides (spec 5.2's rate
+  stack).
+- The statement is issued on a business day.
+
 **The proof of fairness.** The reference solves the held-out 200, a
 300-task training suite and fifteen of the spec's worked examples through
-the tools alone, with no task redrawn in 600. It agrees with the engine on
-2,000 draws nothing filtered, in at most 37 tool calls and 8 turns.
+the tools alone. Every held-out payoff is its index's first draw, and no
+training task is redrawn in 600. It agrees with the engine on 2,000 draws
+nothing filtered, in at most 37 tool calls and 8 turns.
+
+**An adversarial review, before anything was scored, upheld eleven
+findings, two of them the same and none a grading error.** All were fixed
+at 1.0.0 with a new held-out pin, because nothing had been measured on the
+first. Four were about what the tests and the held-out suite can tell
+apart, and they mattered most:
+
+- Reliance was tested only in Florida and Texas, never on the
+  good-through day itself, and never short in a state that relies on
+  nothing. The S/S exception was tested only where the 1st is a business
+  day. Massachusetts' "later of" never took the good-through. A model that
+  read any of those rules wrongly scored what the engine does on the
+  held-out suite. Those cases are now taken in turn by index, together
+  with each tolerance threshold, the deemed-date rule's business due date,
+  Connecticut's floor and the portfolio S/S loan. Each now has at least
+  three held-out payoffs. Twenty-two wrong readings of the rulebook, run
+  as mutated references, each miss at least three held-out payoffs.
+- Each edge's checks counted the whole suite, so other edges' incidental
+  draws met them. They now count the edge's own hundred, and taking any
+  edge's aim away fails a test other than the pin.
+- The held-out pass was the generator's filter at work as much as the
+  reference's, since a draw is kept only once the reference solves it. The
+  test now requires every held-out payoff to be its index's first draw.
+- Four guard clauses had no test of their own. Each now has one.
+
+The rest:
+
+- the statement-on-the-due-date case could fall on a Sunday;
+- a statement could omit an installment due inside its window;
+- 8 % of loans had a 20 bp servicing fee;
+- the documented floor of 0.105 understated what an answer with no money
+  in it scores (0.549);
+- `env:audit` and `env:compare` read no verdict from a payoff;
+- whole-number cents were refused where every other environment takes
+  them.

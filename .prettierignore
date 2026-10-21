@@ -40,3 +40,4 @@ apps/servicing/.cache/
 # The servicing app's escrow engine, ported for the escrow-analysis
 # environment byte for byte but for its imports (see PORTED_FROM there).
 packages/environments/src/escrow/ported/
+packages/environments/src/flexmod/ported/

@@ -235,6 +235,64 @@ hash.
 on. Hand-worked quotes at each edge are held to figures worked by hand,
 apart from the engine.
 
+## flexmod-terms
+
+flexmod-terms 1.0.0 is the second servicing environment: one delinquent
+Fannie Mae loan evaluated for a Flex Modification (Servicing Guide F-1-27
+and D2-3.2-06), the servicing app's spec §12.8.
+
+**The task.** It gives what the loss-mitigation analyst has on the
+evaluation date:
+
+- the loan's balances, arrears and advances, and any earlier forbearance or
+  buydown;
+- its rate, whether it is an ARM not on its final rate, and its remaining
+  term;
+- the property's value and the pre-modification payment;
+- the Modification Interest Rate table;
+- the loan's prior modifications and failed trials;
+- what the trial notice will carry.
+
+The model decides whether the loan is denied before the waterfall. It then
+runs the waterfall's five steps (gross up, rate, rate reduction to the MIR,
+term extension to 480, principal forbearance with its three caps) and
+decides eligibility. For an offer it sets the trial plan and the
+modification's dates. 22 fields are graded.
+
+**The grader is the servicing app's own waterfall.**
+`src/flexmod/ported/flexmod.ts` is `apps/servicing/src/domain/lossmit/flexmod.ts`
+byte for byte but for its four imports, held by a test as escrow's is. The
+service conventions around it live in the servicing app's stateful
+FlexModService, which does not port, so they are restated in the grader with
+the lines they come from:
+
+- the prechecks: a failed trial within 365 days, or three prior modifications;
+- the rate-table lookup;
+- exhaustion;
+- the 60-month shortage spread;
+- the capitalization and maturity dates.
+
+**The tools.** refi's level payment, date steps and calculator, plus one
+new tool: the principal a payment supports, floored to the cent. That is the
+closed form step 5 starts from, computed as the engine computes it.
+
+**The tasks** are aimed at the waterfall's edges:
+
+- MTMLTV printing 50.00 or 50.01, where step 3 starts and step 5 needs
+  more;
+- rates on, above or off the eighth-point grid;
+- an ARM below the MIR;
+- targets reached by the rate, the term, forbearance, or nothing at all;
+- a pre-modification payment whose 80% is an exact cent;
+- a rate-table row effective on the evaluation date;
+- a failed trial 364 or 365 days back;
+- notices on the 15th, the 16th, and in December.
+
+The engine and tools are exact decimal arithmetic, so no draw needs
+redrawing to be fair. The reference passes all 501 tasks it was checked on,
+with the spec's worked example ($251,405.31 gross, $35,483.32 forborne,
+$1,264.13 P&I) to the cent.
+
 ## escrow-history
 
 escrow-history 1.0.0 is escrow-analysis started from the account's ledger.
@@ -316,6 +374,7 @@ npm run env:refi -w @hm/environments -- --env escrow-policy --policy reference
 npm run env:refi -w @hm/environments -- --env regz-policy --policy reference
 npm run env:refi -w @hm/environments -- --env escrow-history --policy reference
 npm run env:refi -w @hm/environments -- --env regz-apr --policy reference
+npm run env:refi -w @hm/environments -- --env flexmod-terms --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

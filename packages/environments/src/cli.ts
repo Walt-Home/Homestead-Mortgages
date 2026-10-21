@@ -15,6 +15,7 @@
  *   npm run env:refi -w @hm/environments -- --env regz-policy --policy reference
  *   npm run env:refi -w @hm/environments -- --env escrow-history --policy reference
  *   npm run env:refi -w @hm/environments -- --env regz-apr --policy reference
+ *   npm run env:refi -w @hm/environments -- --env flexmod-terms --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -106,6 +107,18 @@ import {
   generateRegzAprTask,
   regzApr,
 } from "./regz-apr/index.js";
+import {
+  FLEX_FINGERPRINT,
+  FLEX_HELDOUT_SUITE,
+  FlexReferencePolicy,
+  expectedFlex,
+  flexSpecTasks,
+  flexmodTerms,
+  generateFlexSuite,
+  generateFlexTask,
+  type FlexAnswer,
+  type FlexTask,
+} from "./flexmod/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -128,7 +141,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof ESCROW_POLICY_FINGERPRINT
     | typeof REGZ_POLICY_FINGERPRINT
     | typeof HISTORY_FINGERPRINT
-    | typeof REGZ_APR_FINGERPRINT;
+    | typeof REGZ_APR_FINGERPRINT
+    | typeof FLEX_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   readonly suite: (split: Exclude<Split, "spec">, seed: number, n: number) => T[];
   readonly one: (split: Exclude<Split, "spec">, seed: number, index: number) => T;
@@ -258,6 +272,17 @@ const BENCHES = {
     verdictOf: (t) => `qm ${expectedRegz(t).qm_status ?? "undecided"}`,
     reference: () => new RegzAprReferencePolicy(),
   } satisfies Bench<RegzTask, RegzAnswer>,
+  // Fannie Mae's Flex Modification waterfall, graded by the servicing app's own engine.
+  "flexmod-terms": {
+    env: flexmodTerms,
+    fingerprint: FLEX_FINGERPRINT,
+    heldout: FLEX_HELDOUT_SUITE,
+    suite: generateFlexSuite,
+    one: generateFlexTask,
+    spec: flexSpecTasks,
+    verdictOf: (t) => expectedFlex(t).denial_reason ?? "offer",
+    reference: () => new FlexReferencePolicy(),
+  } satisfies Bench<FlexTask, FlexAnswer>,
 };
 
 const { values } = parseArgs({
@@ -398,6 +423,7 @@ async function main(): Promise<void> {
   if (values.env === "regz-policy") return run(BENCHES["regz-policy"]);
   if (values.env === "escrow-history") return run(BENCHES["escrow-history"]);
   if (values.env === "regz-apr") return run(BENCHES["regz-apr"]);
+  if (values.env === "flexmod-terms") return run(BENCHES["flexmod-terms"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

@@ -39,8 +39,8 @@ answer to any screen.
 engine itself, on synthetic loans only. Read it before changing
 `packages/refi-review`, because the refi-review environment's rulebook says
 what that engine does and a test holds the two equal; and before re-vendoring
-`apps/servicing`, because escrow-analysis grades with a port of its escrow
-engine that a test holds byte-equal to it.
+`apps/servicing`, because escrow-analysis and flexmod-terms grade with ports
+of its escrow and Flex Modification engines that tests hold byte-equal to it.
 
 ## The shape
 
@@ -56,7 +56,7 @@ packages/shared            domain types; LoanFile is the object everything reads
 packages/kernel            Doug's kernel, vendored: money, calendar, ledger, fsm, timers, events
 packages/partner-book      the tape reader: a servicer's book onto the partner-feed contract
 packages/refi-review       the daily refinance review: Doug's §33.2 over his §20.1, pure, over the kernel
-packages/environments      RL environments: the refi review, the escrow analysis and Reg Z's price tests as tasks, the engine as grader
+packages/environments      RL environments: refi review, escrow analysis, Flex Mod, Reg Z price tests; the engine as grader
 packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5

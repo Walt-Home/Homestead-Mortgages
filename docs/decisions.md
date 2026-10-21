@@ -5122,10 +5122,11 @@ months:
 
 **So v1 stays out of those places.** The generator never draws a payoff, a
 designation other than unspecified and curtailment, fees other than late
-charges, non-interest-bearing principal, or a trial. (The servicing app
-posts a trial loan's receipts through its trial path, which applies an
-installment once the amount held reaches a payment; allocation alone never
-does.) It pairs every bankruptcy or foreclosure hold with its suppression,
+charges, non-interest-bearing principal, or a trial. (The servicing app's
+spec applies an installment once the amount a trial has held reaches a
+payment; allocation alone never does, and the operation that would,
+`trialReceipt`, has no caller outside its tests: servicing-engine-defects,
+cashiering-14.) It pairs every bankruptcy or foreclosure hold with its suppression,
 and refers a foreclosure only past 120 days. `paymentsInScope` then runs on
 the engine's own postings and rejects a month that reaches any of the
 places above. It rejects none of 5,000 training draws, because the

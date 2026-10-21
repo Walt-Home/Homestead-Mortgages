@@ -5,7 +5,8 @@ never sees. `packages/environments` holds them. The first, `refi-review`
 1.0.0, grades a model on the daily refinance review, using synthetic loans
 only and with the engine itself as the grader. `escrow-analysis` is the
 first on the servicing side, and `regz-price-tests` the first on the
-origination side.
+origination side. The defects found in the servicing app's own engines
+are in `docs/servicing-engine-defects.md`.
 
 ## refi-review
 
@@ -424,9 +425,10 @@ generator never draws:
 
 - a payoff, fees other than late charges, or non-interest-bearing principal;
 - a receipt credited on a different day from the one it arrived;
-- a trial. The servicing app posts a trial loan's receipts through its trial
-  path, which applies an installment once the amount held reaches a payment.
-  The allocation alone never does.
+- a trial. The spec applies an installment once the amount a trial has held
+  reaches a payment. The allocation alone never does, and the servicing app's
+  trial operation has no caller outside its tests (cashiering-14 in
+  `docs/servicing-engine-defects.md`).
 
 `paymentsInScope` runs on the engine's own postings, and keeps a month only
 when the engine does nothing in it that its spec calls wrong:

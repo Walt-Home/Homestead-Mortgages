@@ -36,8 +36,10 @@
  *
  * What v1 leaves out is in docs/environments.md: a payoff, fees other than
  * late charges, non-interest-bearing principal, items credited on another
- * day than they arrive, and trials, whose receipts the servicing app posts
- * through its trial path rather than the allocation alone. `paymentsInScope`
+ * day than they arrive, and trials, whose receipts the spec applies once the
+ * amount held reaches a payment, which allocation alone never does (and the
+ * servicing app's trial operation has no caller outside its tests: see
+ * docs/servicing-engine-defects.md, cashiering-14). `paymentsInScope`
  * runs on the engine's own postings and keeps a month only when the engine
  * does nothing in it that its spec calls wrong. A month is then kept only
  * once the reference, working through the tools, lands exactly where the

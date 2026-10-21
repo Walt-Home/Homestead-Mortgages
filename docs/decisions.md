@@ -5812,3 +5812,187 @@ from a request reach before the loan's first installment, and the guard
 keeps the late counts at a later threshold date equal to those at receipt.
 The young-loan edge is now described as what it is: a 60-day late on a loan
 under 24 months.
+
+## A complete application is graded by the retention engines, outside the places they depart from their spec
+
+**Built 21 October 2026,** as `lossmit-retention` 1.0.0 in
+`packages/environments`. A task is one delinquent Fannie Mae loan's complete
+loss-mitigation application on the day it became complete. The model works
+out the arrears, walks Fannie Mae's workout hierarchy to the retention
+option offered, sets that option's terms, and gives Regulation X's decision
+and acceptance windows.
+
+**Why this one.** A complete application is where a servicer's loss
+mitigation is judged.
+
+- Regulation X's §1024.41 gives the borrower a private right of action. A
+  borrower offered the wrong option, or none, or given the wrong window to
+  accept, is the dual-tracking and evaluation error examiners and
+  plaintiffs look for.
+- Fannie Mae's hierarchy (F-2-10) is strict and ordered. Offering a
+  deferral where the borrower could afford a repayment plan, or deferring
+  past the 12-month cap, departs from the Guide the servicer is bound to.
+- The engines are pure, and the spec has worked examples to the cent.
+- The work is rule-following more than arithmetic: an ordered waterfall
+  that stops at the first rung that holds; a repayment term searched against
+  150% of PITI on the rounded-up installment; six screen criteria in a fixed
+  order where the first failure names the reason; three bases for money (the
+  arrears on PITI, the deferral's balance on P&I, the shortage on neither);
+  caps that tie; and a business-day step back from a month end.
+
+Flex Modification's eligibility is an input, because flexmod-terms grades
+it. Imminent default (11.5) is left for an environment of its own.
+
+**The grader is the engines, ported as the others are.** `evaluation.ts`,
+`plans.ts` and `deferral.ts` from `apps/servicing/src/domain/lossmit/` sit
+in `src/lossmit/ported/`, each byte for byte but for its kernel import
+paths. None imports a sibling. A test compares the bodies, the import lines
+after the rewrite, and the names each imports. `ops.ts` is not ported: it
+imports the Flex Modification and liquidation engines and the kernel's
+ledger and events.
+
+**What the grader restates.** The servicing app has no orchestrator that
+turns a loan into the walk's facts: `hierarchy.walk` (section12.ts:165)
+takes five booleans and passes them straight through. So the grader writes
+out what it needs with the lines it comes from, and a test holds the lines:
+
+- months delinquent as the unpaid installments, both ends included (12.6
+  rule 1), so June to September on 2026-09-20 is 4, as 12.6's example has
+  it. It is not the MBA count;
+- the arrears (`arrears`, ops.ts:360-363) and the late charges a deferral
+  waives (`deferralLedger`, ops.ts:406);
+- the walk's facts as 12.2 rule 2 composes them: reinstatement when the
+  funds cover the arrears with late charges, forbearance on a temporary
+  unresolved hardship, a repayment plan or a deferral only on a resolved
+  one;
+- the forbearance term from the 1st of the month after the evaluation
+  (12.4-T1), through `termComputation` (ops-12-4.ts:66-70) with no MBS cap
+  and no repayment component, and its short-term test
+  (`forbearanceBasisGate`, ops.ts:216-217);
+- the deferral's installments to pay (`capStructure`, ops.ts:368-372, as
+  `offerDeferral` takes it at ops-12-6.ts:103), its cumulative months after
+  (:109) and its timeline with the partner's election (:106);
+- the tier and windows from the complete date, the sale and the notice's
+  date (section12.ts:158-159).
+
+**What reading the engines found.** A survey mapped the engines against
+their spec and a second pass checked the map. Each finding below was
+reproduced against the vendored engines on 21 October, and each within this
+environment's reach is held by a test. None is fixed here, because
+`apps/servicing` is vendored and never edited in this repo.
+
+- **D1. A deferral of nothing is eligible.** Past the 12-month cumulative
+  cap the screen calls 0 or 1 month deferred eligible: 12 months already
+  deferred and 2 now gives `months_deferred: 0`, 11 and 3 gives 1. 12.6's
+  terms say at least 2 months, and its open question 3 sends a loan with no
+  compliant deferral to Flex Modification.
+- **D2 to D4, in imminent default** (11.5, not in this environment): a
+  borrower with no documented hardship passes on the credit path; a PCS
+  transfer of exactly 50 miles takes the exception, where the Guide says
+  more than 50 and 11.5 rule 4 contradicts itself; and the PCS waivers
+  leak onto the modification path.
+- **D5. A short sale with no test.** When every retention option fails, the
+  walk offers a short sale it never evaluates, and its result vocabulary is
+  not 12.2's data model.
+- **D6. A processing month is an election.** 12.6-T5 says an evaluation
+  after the 15th has one. The engine takes the partner's election and
+  refuses one on or before the 15th, as 12.6 open question 2 frames it.
+- **D7. The decision date is never moved.** The 12.2 timer row moves a day
+  30 on a weekend to the business day before, as policy; the engine returns
+  2026-10-31, a Saturday, for a 2026-10-01 completion.
+- **D8. The walk has no disaster order** (D1-3-01), though the option
+  exists in its type.
+- **D9. Two names for one tier:** `lt_90` in `evaluation.ts`, `gt_37` in
+  `application.ts`.
+- **D10. Disaster reason codes carry the standard deferral's prefix.** No
+  catalog entry contradicts them.
+- **D11. 12.6's worked example gives 348 months to maturity.** Its own loan,
+  first payment 2021-11-01 over 360, has 300 from 2026-09-20. Either passes.
+
+The second pass found four more, and one was found building:
+
+- **A forbearance of no months.** The walk offers forbearance on the
+  hardship alone, so a borrower 12 months delinquent, or 12 months forborne,
+  is offered a 0-month term ending the day before it starts. The servicing
+  app's own `createForbearanceTerm` refuses that.
+- **Criterion 2 is never tested.** A deferral requires the borrower to make
+  the full payment, the escrow shortage's sixtieth included. The screen has
+  no input for it.
+- **36 months to maturity.** Criterion 9 says "not within 36 months"; the
+  gate rows in 12.6 and 12.7 say "maturity >36". The engine passes 36.
+- **Two of the forbearance caps never bind here.** The MBS cap needs a last
+  scheduled payment date, and the 36-month combined cap a repayment
+  component, and v1 carries neither. capped_by is drawn from the other
+  three.
+- **Three of the screen's failures go to liquidation.** The Flex
+  Modification's own criteria (12.8) bar a loan under a year old, one with a
+  conflicting arrangement, one with a failed trial in the last year, and one
+  whose modification in the last year went 60 days delinquent. Those match
+  three of the deferral screen's criteria. A file that fails the screen on
+  any of them is refused the Flex Modification too, and the walk then offers
+  D5's untested short sale.
+
+**So v1 stays out of those places.** The generator never draws liquidation,
+a disaster, imminent default, a sale 37 days away or less, a decision date
+off a business day, a file the Flex Modification would refuse, or a
+conflicting arrangement. It keeps a temporary hardship to 11 months
+delinquent and 11 forborne; the cumulative deferred months to what leaves at
+least 2 to defer and at most one installment to pay (the one contractual
+payment 12.6-T4 and rule 4 name); maturity off 36; and capacity at the
+screen at or above the deferral's new payment. A processing month is
+elected only after the 15th. `lossmitInScope` then runs on the engine's own
+outputs and rejects any file that reaches those places. It rejects none of
+40,000 training draws, because the generator aims around them.
+
+The facts cohere as a servicer's would. A sale is scheduled only past 120
+days delinquent, with no forbearance plan running, in a state that
+forecloses outside the courts, and never in New York. An extension is
+decided in the active term's last month, so its start is the day after the
+term ends. A deferral or modification is dated after the loan's first
+installment and no later than its oldest unpaid one.
+
+**So the screen's reasons graded are three:** the delinquency window, a
+prior deferral within the year, and maturity, each on about a tenth of the
+files that reach the screen, alone and ahead of a later failure. The other
+three are in the rulebook as the engine has them, and never decide a v1
+answer. Each 12-month test is drawn exactly a year on, where it passes.
+
+**The rulebook says what the engine does** where engine and spec disagree
+inside that scope. A processing month is the partner's election (D6); 12.6's
+own worked example is evaluated on the 20th and entered by the 30th. The
+walk offers reinstatement whenever the funds cover the arrears, on a
+temporary hardship too, as 12.2 rule 2 says, where 12.4's pre-expiry screen
+would offer it only on a resolved one.
+
+**The grade is six groups.** The arrears, the offer and Reg X's windows are
+one field each on every file. The terms, the deferral screen and the
+deferral's clock are one field each where the engine has them, and wherever
+an answer gives one it does not, so answering a section not called for
+costs what leaving one out does. A null right by default earns nothing. The
+second pass estimated a constant answer at about 0.17 or 0.33, depending on
+whether null sections were counted, and carried by the null sections rather
+than the dates. With them not counted unless answered, offering reinstatement
+or Flex Modification every time scores 0.053 and 0.056 on the held-out
+suite. An answer with every date and count right and no money scores 0.522
+and passes nothing.
+
+**What 1.0.0 leaves out:**
+
+- liquidation (12.9) and a borrower's request for it, behind D5;
+- the disaster deferral and the D1-3-01 order (D8). The screen's disaster
+  branch is sound, and a disaster version can grade it once the walk carries
+  the order;
+- imminent default (11.5), an environment of its own: it ports
+  `imminent-default.ts` and keeps out D2 to D4;
+- the Flex Modification's terms, which flexmod-terms grades;
+- 12.1's acknowledgment and reasonable date, and 12.3's appeal clocks;
+- the deferral's ledger split, which the spec marks partially verified;
+- the filter on escrow advances (third-party, paid before the effective
+  date), which no engine line performs: the task gives them filtered;
+- notices, the reviewer, SMDU, holds and the California overlays.
+
+**The proof of fairness.** The reference solves the held-out 200, a
+300-task training suite and 15 spec cases through the tools alone, with no
+task redrawn in 600. It agrees with the engine on 2,000 candidates nothing
+filtered, and on 40,000 when last measured. Its longest task is 34 tool
+calls in 10 turns across 5,000 training draws.

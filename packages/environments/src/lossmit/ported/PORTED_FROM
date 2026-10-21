@@ -1,0 +1,30 @@
+The servicing app's loss-mitigation retention engines, ported for the
+lossmit-retention environment's grader.
+
+Source       apps/servicing/src/domain/lossmit/{evaluation,plans,deferral}.ts
+Vendored at  293261b371fe97d2b6b39e1f29ca60dd808ac8fb (apps/servicing/VENDORED_FROM)
+Ported       2026-10-21
+
+Each file here is its source byte for byte except its import lines: the
+kernel's paths become @hm/kernel/{calendar,money} (the same bytes;
+packages/kernel/VENDORED_FROM). None of the three imports a sibling. Nothing
+else may be edited: src/__tests__/lossmit.test.ts compares each pair with
+their import lines removed, compares the import lines after that one
+rewrite, and fails on any difference. Lint and Prettier skip this directory
+for the reason they skip the vendored trees.
+
+evaluation.ts is the F-2-10 hierarchy walk (§12.2) and Regulation X's tier
+and decision windows; plans.ts is the forbearance term and its caps (§12.4)
+and the repayment plan's term search (§12.5); deferral.ts is the payment
+deferral's screen, its non-interest-bearing balance, its new payment and its
+completion timeline (§12.6). Each is pure: no clock, no randomness, no I/O.
+
+ops.ts is not ported: it imports the Flex Modification and liquidation
+engines, the application module and the kernel's ledger and events. The few
+of its lines v1 needs (the arrears, the cap structure's installments to pay,
+the term computation, the Reg X short-term test of a forbearance, the late
+charges a deferral waives) are restated in src/lossmit/grader.ts with the
+lines they come from, and a test holds those lines to the service's source.
+
+To take a change from the servicing app, copy the three files again and
+rewrite the same eight imports.

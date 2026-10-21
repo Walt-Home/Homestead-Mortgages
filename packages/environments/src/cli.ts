@@ -20,6 +20,7 @@
  *   npm run env:refi -w @hm/environments -- --env arm-adjustment --policy reference
  *   npm run env:refi -w @hm/environments -- --env payoff-statement --policy reference
  *   npm run env:refi -w @hm/environments -- --env pmi-termination --policy reference
+ *   npm run env:refi -w @hm/environments -- --env lossmit-retention --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -185,6 +186,19 @@ import {
   type PmiAnswer,
   type PmiTask,
 } from "./pmi/index.js";
+import {
+  LOSSMIT_FINGERPRINT,
+  LOSSMIT_HELDOUT_SUITE,
+  LossmitReferencePolicy,
+  expectedLossmit,
+  generateLossmitSuite,
+  generateLossmitTask,
+  lossmitRetention,
+  lossmitSpecTasks,
+  lossmitTaskId,
+  type LossmitAnswer,
+  type LossmitTask,
+} from "./lossmit/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -212,7 +226,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof PAYMENTS_FINGERPRINT
     | typeof ARM_FINGERPRINT
     | typeof PAYOFF_FINGERPRINT
-    | typeof PMI_FINGERPRINT;
+    | typeof PMI_FINGERPRINT
+    | typeof LOSSMIT_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -428,6 +443,18 @@ const BENCHES = {
     },
     reference: () => new PmiReferencePolicy(),
   } satisfies Bench<PmiTask, PmiAnswer>,
+  // A delinquent borrower's complete application through Fannie Mae's workout hierarchy, graded by the servicing app's own engines.
+  "lossmit-retention": {
+    env: lossmitRetention,
+    fingerprint: LOSSMIT_FINGERPRINT,
+    heldout: LOSSMIT_HELDOUT_SUITE,
+    suite: generateLossmitSuite,
+    one: generateLossmitTask,
+    taskId: lossmitTaskId,
+    spec: lossmitSpecTasks,
+    verdictOf: (t) => expectedLossmit(t).offered,
+    reference: () => new LossmitReferencePolicy(),
+  } satisfies Bench<LossmitTask, LossmitAnswer>,
 };
 
 const { values } = parseArgs({
@@ -614,6 +641,7 @@ async function main(): Promise<void> {
   if (values.env === "arm-adjustment") return run(BENCHES["arm-adjustment"]);
   if (values.env === "payoff-statement") return run(BENCHES["payoff-statement"]);
   if (values.env === "pmi-termination") return run(BENCHES["pmi-termination"]);
+  if (values.env === "lossmit-retention") return run(BENCHES["lossmit-retention"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

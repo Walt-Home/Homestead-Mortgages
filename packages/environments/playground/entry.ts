@@ -134,6 +134,16 @@ import {
   pmiTaskId,
   pmiTermination,
 } from "../src/pmi/index.js";
+import {
+  LOSSMIT_SPEC_CASES,
+  LossmitReferencePolicy,
+  expectedLossmit,
+  generateLossmitTask,
+  lossmitPayload,
+  lossmitRetention,
+  lossmitSpecTasks,
+  lossmitTaskId,
+} from "../src/lossmit/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
 
@@ -701,6 +711,21 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
           : "not current";
     },
     reference: () => new PmiReferencePolicy(),
+  }),
+  playground({
+    env: lossmitRetention,
+    title: "Loss mitigation retention",
+    side: "servicing",
+    summary:
+      "One delinquent borrower's complete loss-mitigation application, through Fannie Mae's workout hierarchy: the arrears, the option offered (reinstatement, forbearance, a repayment plan, a payment deferral or Flex Modification), that option's terms, the deferral's screen and completion clock, and Regulation X's decision and acceptance windows. Graded by the servicing app's own hierarchy walk, plans and deferral engines.",
+    id: lossmitTaskId,
+    one: generateLossmitTask,
+    spec: lossmitSpecTasks,
+    specNames: LOSSMIT_SPEC_CASES.map((c) => c.name),
+    payload: lossmitPayload,
+    expected: expectedLossmit,
+    verdictOf: (t) => expectedLossmit(t).offered,
+    reference: () => new LossmitReferencePolicy(),
   }),
 ]);
 

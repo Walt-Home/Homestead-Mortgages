@@ -89,7 +89,9 @@ export function scoreSide(lines: readonly EpisodeLine[]): {
   for (const [id, l] of newest) {
     byTask.set(id, {
       pass: l.result.grade.pass,
-      verdict: l.result.grade.fields.find((f) => f.field === "verdict")?.expected ?? "?",
+      verdict:
+        l.result.grade.fields.find((f) => f.field === "verdict" || f.field === "decision")
+          ?.expected ?? "?",
       cost: costOf(l.policy.id, l.result.usage),
       missed: l.result.grade.fields.filter((f) => f.ok === false).map((f) => f.field),
     });

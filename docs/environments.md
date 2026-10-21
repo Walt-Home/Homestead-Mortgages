@@ -3,7 +3,8 @@
 An environment is a task, the tools a model may use, and a grader the model
 never sees. `packages/environments` holds them. The first, `refi-review`
 1.0.0, grades a model on the daily refinance review, using synthetic loans
-only and with the engine itself as the grader.
+only and with the engine itself as the grader. `escrow-analysis` is the
+first on the servicing side.
 
 ## refi-review
 
@@ -133,6 +134,50 @@ is seed 1, 200 tasks, pinned by hash.
 checked on. A test re-reads every one of 1,200 tasks off its tape, apart
 from the generator, and confirms it sits where its edge says.
 
+## escrow-analysis
+
+escrow-analysis 1.0.0 is the servicing side's first environment: one
+escrowed loan's annual escrow analysis under RESPA (Regulation X §1024.17),
+the servicing app's spec §3.2.
+
+**The task.** It gives the account as the analyst has it on the run date:
+
+- the escrow lines (county taxes in two installments, a school or city tax,
+  hazard, sometimes flood, sometimes borrower-paid MI), each with the bills
+  the payee has issued or last year's figures;
+- the ledger balance and the postings still scheduled before the new year;
+- the cushion the policy, the instrument and the state allow;
+- the delinquency, any workout, and today's escrow payment.
+
+The model projects the year, finds the low point, sets the cushion,
+compares the target with the balance the account will start with, decides
+(balanced, refund, credit, retain or shortage), and sets the new payment and
+its effective date. 24 fields are graded, to the cent and the day.
+
+**The grader is the servicing app's own engine.**
+`src/escrow/ported/analysis.ts` is `apps/servicing/src/domain/escrow/analysis.ts`
+byte for byte but for its three imports, and a test fails on any other
+difference. A re-vendor of the servicing app that changes the engine fails
+that test until the port is copied again (see `PORTED_FROM` there).
+
+**The tasks.** Each account is aimed at an edge of the decision: a surplus of
+exactly $50 or a cent under, a shortage of exactly one month's payment or a
+cent under, 30 or 31 days late, a deficiency, a workout. The rules' own traps
+come with it:
+
+- a discount date that moves a disbursement;
+- CPI that applies to taxes and not insurance;
+- an MI line that ends mid-year, or has no termination date;
+- a stale prior-year estimate;
+- ledger postings outside the window;
+- a statement sent too late for the first month.
+
+The held-out suite is seed 1, 200 tasks, pinned by hash.
+
+**The proof of fairness.** The reference passes all 504 tasks it was checked
+on, the spec's worked example and its three variants among them, to the
+cent.
+
 ## Commands
 
 ```bash
@@ -143,6 +188,7 @@ npm run env:refi -w @hm/environments -- --policy vertex --split train --n 5
 npm run env:refi -w @hm/environments -- --policy anthropic-vertex --split train --n 5
 npm run env:refi -w @hm/environments -- --env refi-tape --policy reference
 npm run env:refi -w @hm/environments -- --env refi-hard --policy reference
+npm run env:refi -w @hm/environments -- --env escrow-analysis --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

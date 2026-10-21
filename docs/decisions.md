@@ -4955,3 +4955,43 @@ and refi-hard 1.1.0 say a PMI rate may have three digits, the reference
 reads it so and passes every task, and the held-out suites are new and
 re-pinned. Scores recorded under the earlier versions stand as what they
 measured.
+
+## The servicing side's first environment is the annual escrow analysis
+
+**Built 21 October 2026,** as `escrow-analysis` 1.0.0 in `packages/environments`.
+
+**Why this one.** Surveying the servicing app for a pure engine that could
+grade a model, the annual escrow analysis ranked first on all three counts:
+
+- every escrowed loan has one every year, and it is a common source of
+  complaints and errors under RESPA §1024.17;
+- the engine is pure, imports only the kernel, and the spec has a worked
+  example to the cent;
+- the work is real reasoning: a twelve-month running balance, a low point, a
+  capped cushion, a ten-row decision matrix, residual installments and an
+  effective date.
+
+Payment application and the Flex Modification waterfall ranked next.
+
+**The grader is the servicing app's engine, not a reimplementation.** It
+cannot be imported (the app has no build, and nothing outside it imports
+from it), so it is ported the way refi-review was, with one difference: the
+file is copied byte for byte but for its three imports, and a test fails on
+any other difference. A re-vendor that changes it fails that test until the
+port is copied again.
+
+**What the rulebook adds.** The engine takes the projected actual balance as
+an input; spec R6 defines it, so the grader computes it: the ledger balance
+plus postings after the run date and before the new year. Everything else
+is the engine's arithmetic in the engine's order.
+
+**The proof of fairness.** The reference policy solves all 504 tasks it was
+checked on through the tools alone: the spec's example and three variants,
+the held-out 200 and 300 training tasks.
+
+**Not in 1.0.0.**
+
+- Multi-year premiums: the engine maps a prior payment's anniversary into
+  every year, so a three-year flood premium lands in each.
+- Biweekly loans: the engine counts their periods by `Date.parse`.
+- A cushion stated in dollars by the instrument.

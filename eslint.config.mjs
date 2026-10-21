@@ -47,6 +47,9 @@ export default tseslint.config(
       // His xlsx reader, vendored the same way for the tape reader; the
       // commit is in packages/partner-book/src/vendored/VENDORED_FROM.
       "packages/partner-book/src/vendored/**",
+      // The servicing app's escrow engine, ported byte for byte but for its
+      // imports for the escrow-analysis environment (see PORTED_FROM there).
+      "packages/environments/src/escrow/ported/**",
       // His servicing runtime, vendored whole as apps/servicing; the commit is
       // in apps/servicing/VENDORED_FROM. Its scripts/ beside the tree is ours.
       "apps/servicing/src/**",

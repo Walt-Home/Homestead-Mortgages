@@ -9,6 +9,7 @@
  *   npm run env:refi -w @hm/environments -- --env refi-policy --policy reference
  *   npm run env:refi -w @hm/environments -- --env refi-hard --policy reference
  *   npm run env:refi -w @hm/environments -- --env refi-hard-policy --policy reference
+ *   npm run env:refi -w @hm/environments -- --env escrow-analysis --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -57,6 +58,18 @@ import {
   refiHard,
   refiHardPolicy,
 } from "./refi-hard/index.js";
+import {
+  ESCROW_FINGERPRINT,
+  ESCROW_HELDOUT_SUITE,
+  EscrowReferencePolicy,
+  escrowAnalysis,
+  escrowSpecTasks,
+  expectedEscrow,
+  generateEscrowSuite,
+  generateEscrowTask,
+  type EscrowAnswer,
+  type EscrowTask,
+} from "./escrow/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -66,14 +79,15 @@ interface TaskCoordinates {
 }
 
 /** What the runner needs of an environment: its tasks, its reference, and what a task should conclude. */
-interface Bench<T extends TaskCoordinates> {
-  readonly env: Environment<T, RefiAnswer>;
+interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
+  readonly env: Environment<T, A>;
   readonly fingerprint:
     | typeof REFI_FINGERPRINT
     | typeof TAPE_FINGERPRINT
     | typeof POLICY_FINGERPRINT
     | typeof HARD_FINGERPRINT
-    | typeof HARD_POLICY_FINGERPRINT;
+    | typeof HARD_POLICY_FINGERPRINT
+    | typeof ESCROW_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   readonly suite: (split: Exclude<Split, "spec">, seed: number, n: number) => T[];
   readonly one: (split: Exclude<Split, "spec">, seed: number, index: number) => T;
@@ -135,6 +149,17 @@ const BENCHES = {
     verdictOf: (t) => expectedTapeAnswer(t).verdict,
     reference: () => new TapeReferencePolicy(),
   } satisfies Bench<RefiTapeTask>,
+  // The servicing app's annual escrow analysis, graded by its own engine.
+  "escrow-analysis": {
+    env: escrowAnalysis,
+    fingerprint: ESCROW_FINGERPRINT,
+    heldout: ESCROW_HELDOUT_SUITE,
+    suite: generateEscrowSuite,
+    one: generateEscrowTask,
+    spec: escrowSpecTasks,
+    verdictOf: (t) => expectedEscrow(t).decision,
+    reference: () => new EscrowReferencePolicy(),
+  } satisfies Bench<EscrowTask, EscrowAnswer>,
 };
 
 const { values } = parseArgs({
@@ -154,7 +179,7 @@ const { values } = parseArgs({
   },
 });
 
-function suite<T extends TaskCoordinates>(bench: Bench<T>): T[] {
+function suite<T extends TaskCoordinates, A>(bench: Bench<T, A>): T[] {
   const split = values.split;
   if (split === "spec") return bench.spec();
   if (split !== "train" && split !== "heldout")
@@ -196,7 +221,7 @@ function policyOf(reference: () => Policy): Policy {
   throw new Error(`--policy must be reference, anthropic, anthropic-vertex or vertex`);
 }
 
-async function run<T extends TaskCoordinates>(bench: Bench<T>): Promise<void> {
+async function run<T extends TaskCoordinates, A>(bench: Bench<T, A>): Promise<void> {
   const env = bench.env;
   const tasks = suite(bench);
   const policy = policyOf(bench.reference);
@@ -269,9 +294,8 @@ async function main(): Promise<void> {
   if (values.env === "refi-policy") return run(BENCHES["refi-policy"]);
   if (values.env === "refi-hard") return run(BENCHES["refi-hard"]);
   if (values.env === "refi-hard-policy") return run(BENCHES["refi-hard-policy"]);
-  throw new Error(
-    `--env must be refi-review, refi-tape, refi-policy, refi-hard or refi-hard-policy`,
-  );
+  if (values.env === "escrow-analysis") return run(BENCHES["escrow-analysis"]);
+  throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 
 main().catch((e: unknown) => {

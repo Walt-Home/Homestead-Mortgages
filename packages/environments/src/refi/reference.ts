@@ -255,6 +255,7 @@ export class ScriptedPolicy implements Policy {
   constructor(
     readonly id: string,
     private readonly solve: (payload: Json, call: Call) => Step<Json>,
+    private readonly submitTool: string = SUBMIT_TOOL,
   ) {}
 
   start(episode: { readonly user: string }): PolicySession {
@@ -277,7 +278,7 @@ export class ScriptedPolicy implements Policy {
         if (!next.done) return { calls: next.value, text: "", stop: "tool_calls" };
         submitted = true;
         return {
-          calls: [{ id: `ref-${++n}`, name: SUBMIT_TOOL, input: next.value }],
+          calls: [{ id: `ref-${++n}`, name: this.submitTool, input: next.value }],
           text: "",
           stop: "tool_calls",
         };

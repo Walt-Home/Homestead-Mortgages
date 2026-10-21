@@ -28,9 +28,8 @@ export interface AuditRecord {
     readonly rendered: string;
   };
   readonly policy: { readonly id: string };
-  readonly result: EpisodeResult<{
-    readonly offer?: Readonly<Record<string, unknown>> | null;
-  } | null>;
+  /** A refi answer carries its figures in `offer`; another environment's answer is its figures. */
+  readonly result: EpisodeResult<Readonly<Record<string, unknown>> | null>;
 }
 
 export interface AuditRow {
@@ -44,7 +43,7 @@ export interface AuditRow {
   readonly calls: number;
   readonly cost: number | null;
   readonly slowestTurnS: number;
-  /** Offer figures the answer submitted that no tool returned: done in the model's head. */
+  /** Figures the answer submitted that no tool returned: done in the model's head. */
   readonly mental: readonly string[];
   /** For a pass on a quoted, non-excluded loan: the tools a full review needs that it never called. */
   readonly passWithout: readonly string[];
@@ -69,11 +68,16 @@ export function auditEpisode(r: AuditRecord): AuditRow {
     e.kind === "observations" ? e.observations : [],
   );
   const returned = new Set(observations.flatMap(valuesOf));
-  const verdict = res.grade.fields.find((f) => f.field === "verdict")?.expected ?? "?";
-  const offer = res.answer?.offer ?? null;
-  const mental = offer
-    ? Object.entries(offer)
-        .filter(([k, v]) => k.endsWith("_cents") && !returned.has(String(v)))
+  const verdict =
+    res.grade.fields.find((f) => f.field === "verdict" || f.field === "decision")?.expected ?? "?";
+  const answer = res.answer ?? null;
+  const figures =
+    answer && "offer" in answer
+      ? ((answer["offer"] ?? null) as Readonly<Record<string, unknown>> | null)
+      : answer;
+  const mental = figures
+    ? Object.entries(figures)
+        .filter(([k, v]) => k.endsWith("_cents") && v !== null && !returned.has(String(v)))
         .map(([k]) => k)
         .sort()
     : [];

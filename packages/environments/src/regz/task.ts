@@ -16,8 +16,13 @@
 import { PAYLOAD_START, plain, type Split } from "../refi/task.js";
 
 export const REGZ_ENVIRONMENT_NAME = "regz-price-tests";
-/** Bump on any change to the rulebook, the tools, the rendering or the generator. */
-export const REGZ_ENVIRONMENT_VERSION = "1.0.0";
+/**
+ * Bump on any change to the rulebook, the tools, the rendering or the generator.
+ *
+ * 1.1.0 (21 Oct 2026): the engine prices a percentage fee in exact cents, half
+ * up, so the quotes 1.0.0 redrew for landing on a half cent are fair and kept.
+ */
+export const REGZ_ENVIRONMENT_VERSION = "1.1.0";
 
 export type Payee = "lender" | "affiliate" | "third_party" | "government";
 

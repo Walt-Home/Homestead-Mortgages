@@ -5024,15 +5024,17 @@ each quote through the tools with the reference policy and keeps it only if
 the result matches the engine on every field. About 1.5% of first draws
 fail and are redrawn.
 
-**Found, not yet fixed: a percentage fee on an exact half cent rounds down.**
+**Found, and fixed the same day: a percentage fee on an exact half cent rounded down.**
 `closingCosts` prices a percentage line as `round(loan × percent ÷ 100, 2)`
 in doubles. $82,774 × 0.75% is $620.805, which binary holds as 620.80499…,
 so the engine charges $620.80 where half-up gives $620.81. Points and fees
 come out a cent low. That flips a test only when they sit within a cent of a
 limit, but it is the wrong arithmetic for a figure a legal test reads. It
-was every one of the 21 disagreements in 3,000 draws. The fix is to price a
-percentage line in exact cents, the way the limits already are; it was left
-for its own change.
+was every one of the 21 disagreements in 3,000 draws. `closingCosts` now
+prices every line in whole cents, exactly, half up, the way the limits
+already were. With it, regz-price-tests 1.1.0 redraws none of 1,000 first
+draws. regz-price-tests, regz-policy and regz-apr went to 1.1.0 with it,
+since the quotes kept changed.
 
 **First reads, 21 October 2026.** DeepSeek-V4.1-Flash on Vertex, 20 training tasks each:
 
@@ -5050,3 +5052,43 @@ versions are the same moves that separated the models on refi:
 - the escrow ledger given as a transaction history rather than a balance;
 - the APR solve taken out of the tools, so Appendix J has to be iterated
   with the calculator.
+
+## The hard versions separate a model from the ceiling
+
+**Read 21 October 2026,** DeepSeek-V4.1-Flash on Vertex, 20 training tasks
+each. Claude was not run: its evaluation key is at its spending limit until
+1 November.
+
+| Environment                          | Passed  | Misses                                      |
+| ------------------------------------ | ------- | ------------------------------------------- |
+| escrow-analysis (the steps)          | 20 / 20 |                                             |
+| escrow-policy (the same 20 tasks)    | 19 / 20 | the low point                               |
+| escrow-history (from the ledger)     | 18 / 20 | the low point, twice                        |
+| regz-price-tests (the steps)         | 20 / 20 |                                             |
+| regz-policy (the same 20 tasks)      | 20 / 20 |                                             |
+| regz-apr (no APR solve in the tools) | 18 / 20 | the APR's third decimal, by 0.007 and 0.009 |
+
+**Every escrow miss is the twelve-month running balance.** It is the one
+long computation in the analysis, and the misses take three forms:
+
+- **Policy.** On an account whose balance never goes below zero, DeepSeek
+  took the lowest balance, 5 cents, as the low point and did not reverse its
+  sign. The policy says "or 0 when none is lower than 0"; the step rulebook
+  says it as "0 when no balance goes below 0". It passed the same task
+  under the steps.
+- **History, once.** The prior-year figures were read off the ledger
+  correctly, but one of twelve monthly MI payments was put in the wrong month.
+- **History, once more.** It ran all twelve periods in its head, with no
+  tool call, and came out $1,012.27 off.
+
+The last is the failure training should remove. The audit flags it ("head
+arithmetic"), and it is the one the step rulebook's "use the tools for every
+figure" was preventing.
+
+**The Reg Z policy did not move DeepSeek.** Its decisions are few and stated
+as conditions, so a policy reads much as the steps do. Taking the APR solve
+away did: DeepSeek stopped its search before the third decimal settled,
+twice. Neither miss flipped a test downstream; both were graded wrong.
+
+These are reads on training tasks with transcripts read, not scores. The
+held-out runs, Claude's included, are what the comparisons will be made on.

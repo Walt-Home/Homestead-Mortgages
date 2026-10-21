@@ -206,7 +206,7 @@ describe("regz-price-tests", () => {
     // A change here moves every score: bump REGZ_ENVIRONMENT_VERSION, then the pin.
     expect(
       sha256(generateRegzSuite("heldout", 1, 200).map(toJsonLine).join("")),
-    ).toMatchInlineSnapshot(`"d6e66daa42547e46da5a0729650689e162b50c0368da095ddb31fb63739fee7f"`);
+    ).toMatchInlineSnapshot(`"4e114126c7bcc01050edc650ca01eb544f38d32409ce9ca9229c0170a56929c7"`);
   });
 
   it("rebuilds a task from its coordinates, and never draws a held-out quote into training", () => {

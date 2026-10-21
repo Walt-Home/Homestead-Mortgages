@@ -225,10 +225,11 @@ solve, the APOR lookup, and the New York calendar date.
 **Fair to grade by construction.** The engine computes in binary floating
 point; the rulebook and tools compute in exact decimals. The generator keeps
 a quote only once the reference, solving through the tools, matches the
-engine on every field. About 1.5% of first draws fail that and are redrawn.
-Every one of them was a percentage fee on an exact half cent, which the
-engine rounds down (see docs/decisions.md). The held-out suite is seed 1,
-200 tasks, pinned by hash.
+engine on every field. Under 1.0.0 about 1.5% of first draws failed that,
+every one a percentage fee on an exact half cent that the engine rounded
+down. The engine has priced fees in exact cents since 21 October, and 1.1.0
+redraws none in 1,000. The held-out suite is seed 1, 200 tasks, pinned by
+hash.
 
 **The proof of fairness.** The reference passes all 501 tasks it was checked
 on. Hand-worked quotes at each edge are held to figures worked by hand,
@@ -276,10 +277,9 @@ changes.
 
 Fairness is by construction, as in regz-price-tests: a quote is kept only
 once the reference, searching through these tools, lands on the engine's APR
-and every answer after it. About 4% of first draws are redrawn. Most are
-the half-cent fees; the rest are quotes where the search's payment, rounded
-to the cent as a disclosed payment is, moves the third decimal against the
-engine's unrounded one. The reference passes all 400 tasks it was checked
+and every answer after it. About 4.5% of first draws are redrawn. These are
+quotes where the search's payment, rounded to the cent as a disclosed
+payment is, moves the third decimal against the engine's unrounded one. The reference passes all 400 tasks it was checked
 on.
 
 ## escrow-policy and regz-policy

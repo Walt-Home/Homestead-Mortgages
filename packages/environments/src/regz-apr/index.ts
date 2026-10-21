@@ -37,8 +37,12 @@ import {
 } from "../regz/index.js";
 
 export const REGZ_APR_ENVIRONMENT_NAME = "regz-apr";
-/** Bump on any change to Step 3, the tools or the search, or to anything regz-price-tests's version covers. */
-export const REGZ_APR_ENVIRONMENT_VERSION = "1.0.0";
+/**
+ * Bump on any change to Step 3, the tools or the search, or to anything regz-price-tests's version covers.
+ *
+ * 1.1.0 (21 Oct 2026): with regz-price-tests 1.1.0.
+ */
+export const REGZ_APR_ENVIRONMENT_VERSION = "1.1.0";
 
 const STEP_THREE_TOOL =
   "Otherwise the APR is annual_percentage_rate(loan amount, note rate, term_months, prepaid_finance_charges).";

@@ -238,6 +238,39 @@ describe("one schedule, three totals", () => {
   it("has no priced schedule for a loan of nothing", () => {
     expect(closingCosts(FEE_SCHEDULE, 0)).toBeNull();
   });
+
+  it("prices a percentage fee on an exact half cent half up, in whole cents", () => {
+    // $82,774 at 0.75% is $620.805: binary floating point holds it as 620.80499…,
+    // and the schedule charged $620.80 until 21 October 2026.
+    const schedule = {
+      version: "test",
+      effectiveFrom: "2026-01-01",
+      lines: [
+        {
+          name: "Origination fee",
+          payee: "lender" as const,
+          basis: "percent_of_loan_amount" as const,
+          amount: 0.75,
+          financeCharge: true,
+          pointsAndFees: true,
+          basisNote: "",
+        },
+        {
+          name: "Appraisal fee",
+          payee: "third_party" as const,
+          basis: "fixed" as const,
+          amount: 650,
+          financeCharge: false,
+          pointsAndFees: false,
+          basisNote: "",
+        },
+      ],
+    };
+    const priced = closingCosts(schedule, 82_774)!;
+    expect(priced.pointsAndFees).toBe(620.81);
+    expect(priced.prepaidFinanceCharges).toBe(620.81);
+    expect(priced.total).toBe(1_270.81);
+  });
 });
 
 describe("the APR is not the note rate", () => {

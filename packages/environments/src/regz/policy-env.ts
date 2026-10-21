@@ -14,8 +14,12 @@ import { REGZ_POLICY } from "./policy.js";
 import { renderRegzTask, type RegzTask } from "./task.js";
 
 export const REGZ_POLICY_ENVIRONMENT_NAME = "regz-policy";
-/** Bump on any change to the policy, or to anything regz-price-tests's version covers. */
-export const REGZ_POLICY_ENVIRONMENT_VERSION = "1.0.0";
+/**
+ * Bump on any change to the policy, or to anything regz-price-tests's version covers.
+ *
+ * 1.1.0 (21 Oct 2026): with regz-price-tests 1.1.0.
+ */
+export const REGZ_POLICY_ENVIRONMENT_VERSION = "1.1.0";
 
 /** regz-price-tests's task, with "the rulebook" read as "the policy". */
 export const renderRegzPolicyTask = (task: RegzTask): string =>

@@ -40,8 +40,6 @@
  * than a Loan Estimate, and the derivations say so in their formula.
  */
 
-import { round } from "./derive.js";
-
 /** Who ends up holding the money, which is most of what decides the flags. */
 export type FeePayee = "lender" | "affiliate" | "third_party" | "government";
 
@@ -219,20 +217,41 @@ export interface ClosingCosts {
 export function closingCosts(schedule: FeeSchedule, loanAmount: number): ClosingCosts | null {
   if (!Number.isFinite(loanAmount) || loanAmount <= 0) return null;
 
-  let total = 0;
-  let pointsAndFees = 0;
-  let prepaidFinanceCharges = 0;
+  // In whole cents, exactly. A percentage line used to be round(loan × % / 100, 2)
+  // in binary floating point, which lands an exact half cent on the wrong side:
+  // $82,774 at 0.75% is $620.805, held as 620.80499…, and was charged as $620.80
+  // where half up is $620.81 — points and fees a cent low on the figure the QM
+  // cap and the HOEPA fee trigger read. Found by the regz-price-tests
+  // environment, whose exact-decimal tools disagreed with it on 0.7% of quotes.
+  const loanCents = BigInt(Math.round(loanAmount * 100));
+  let total = 0n;
+  let pointsAndFees = 0n;
+  let prepaidFinanceCharges = 0n;
   for (const line of schedule.lines) {
     const amount =
-      line.basis === "fixed" ? line.amount : round((loanAmount * line.amount) / 100, 2);
+      line.basis === "fixed"
+        ? BigInt(Math.round(line.amount * 100))
+        : percentOfCents(loanCents, line.amount);
     total += amount;
     if (line.pointsAndFees) pointsAndFees += amount;
     if (line.financeCharge) prepaidFinanceCharges += amount;
   }
   return {
-    total: round(total, 2),
-    pointsAndFees: round(pointsAndFees, 2),
-    prepaidFinanceCharges: round(prepaidFinanceCharges, 2),
+    total: Number(total) / 100,
+    pointsAndFees: Number(pointsAndFees) / 100,
+    prepaidFinanceCharges: Number(prepaidFinanceCharges) / 100,
     version: schedule.version,
   };
+}
+
+/** `percent`% of an amount in cents, rounded half up to a whole cent, with the percent read as the decimal it is written as. */
+function percentOfCents(cents: bigint, percent: number): bigint {
+  const [whole, frac = ""] = String(percent).split(".");
+  if (!/^\d+$/.test(whole ?? "") || !/^\d*$/.test(frac)) {
+    throw new RangeError(`a fee percentage must be a plain decimal, not ${percent}`);
+  }
+  const scale = 10n ** BigInt(frac.length);
+  const numerator = BigInt(`${whole}${frac}`);
+  const denominator = scale * 100n;
+  return (2n * cents * numerator + denominator) / (2n * denominator);
 }

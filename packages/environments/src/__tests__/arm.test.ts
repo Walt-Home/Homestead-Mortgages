@@ -22,8 +22,13 @@ import { solveNow } from "../refi/reference.js";
 import { rngFor } from "../rng.js";
 import {
   ARM_EDGES,
+  ARM_FINGERPRINT,
   ARM_HELDOUT_SUITE,
+  ARM_RULEBOOK,
   ArmReferencePolicy,
+  BOUNDS,
+  NOTICE_KINDS,
+  TEMPLATES,
   analyzeArm,
   armAdjustment,
   armEdgeOf,
@@ -41,6 +46,7 @@ import {
   generateArmTask,
   gradeArmAgainst,
   parseArmSubmission,
+  type ArmAnalysis,
   type ArmAnswer,
   type ArmTask,
 } from "../arm/index.js";
@@ -379,7 +385,7 @@ describe("arm-adjustment", () => {
 
     it("and the rulebook, followed through the tools, lands on every one of them", () => {
       expect(SPEC.flatMap(byRulesMisses)).toEqual([]);
-      expect(SPEC.every(armInScope)).toBe(true);
+      expect(SPEC.every((t) => armInScope(t))).toBe(true);
     });
   });
 
@@ -542,6 +548,122 @@ describe("arm-adjustment", () => {
     ]);
   });
 
+  it("grades every answer: each of the twenty-two, changed alone, fails its own field and no other", () => {
+    const owner: Record<keyof ArmAnswer, string> = {
+      index_date: "index",
+      index_effective_date: "index",
+      index_value: "index",
+      unrounded_pct: "rounding",
+      rounded_pct: "rounding",
+      midpoint_flag: "rounding",
+      new_rate_pct: "rate",
+      bound: "rate",
+      expected_upb_cents: "expected_upb_cents",
+      first_new_payment_due: "schedule",
+      remaining_term_months: "schedule",
+      next_change_date: "schedule",
+      new_pi_cents: "new_pi_cents",
+      notice_kind: "notice_timing",
+      notice_window_open: "notice_timing",
+      notice_due_by: "notice_timing",
+      notice_template: "notice",
+      send_outcome: "notice",
+      days_late: "notice",
+      initial_notice_status: "initial_notice",
+      initial_notice_window_open: "initial_notice",
+      initial_notice_due_by: "initial_notice",
+    };
+    const choices: Partial<Record<keyof ArmAnswer, readonly (string | null)[]>> = {
+      bound: BOUNDS,
+      notice_kind: NOTICE_KINDS,
+      notice_template: [...Object.values(TEMPLATES), null],
+      send_outcome: ["blocked", "on_time", "late", null],
+      initial_notice_status: ["servicer", "originator_duty", "exempt_short_term"],
+    };
+    /** Another value of the same shape: the next choice, a day on, a cent on, one in the last place. */
+    const other = (key: keyof ArmAnswer, v: unknown): unknown => {
+      const among = choices[key];
+      if (among) return among.find((c) => c !== v);
+      if (typeof v === "boolean") return !v;
+      if (typeof v === "number") return v + 1;
+      if (v === null) return key === "days_late" ? 1 : "2026-01-01";
+      const text = String(v);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return addDays(d(text), 1);
+      if (/^\d+$/.test(text)) return String(BigInt(text) + 1n);
+      const places = text.split(".")[1]!.length;
+      return (Number(text) + 10 ** -places).toFixed(places);
+    };
+    // On the first change and on a later one, where an initial notice reported is its own field.
+    for (const task of [WORKED, SPEC[7]!]) {
+      const want = expectedArm(task);
+      expect(Object.keys(want).sort()).toEqual(Object.keys(owner).sort());
+      for (const key of Object.keys(owner) as (keyof ArmAnswer)[]) {
+        const answer = { ...want, [key]: other(key, want[key]) };
+        expect(parseArmSubmission(answer).ok, key).toBe(true);
+        const failed = gradeArmAgainst(want, answer as ArmAnswer)
+          .fields.filter((f) => !f.ok)
+          .map((f) => f.field);
+        expect(failed, `${task.id} ${key}`).toEqual([owner[key]]);
+      }
+    }
+  });
+
+  it("pins what a model is told, and states each rule the way the grader applies it", () => {
+    // Any edit to the rulebook or the tools changes what every model is told: bump
+    // ARM_ENVIRONMENT_VERSION with this pin.
+    expect(ARM_FINGERPRINT.environment).toMatchInlineSnapshot(`
+      {
+        "name": "arm-adjustment",
+        "rulebook_sha256": "99a2eae7e09cde6390e64476960f22a8b10efe9b0d7b35cc5ad39a7fb860b435",
+        "tools_sha256": "5749ce65dbea1bcccedfe8f33a8dd1687a7eebb0d20065b34611faa3587afa1d",
+        "version": "1.0.0",
+      }
+    `);
+    const stated = [
+      // Step 1 and the grader's schedule row (indexDate, nextDueAfter, maturityOf, remainingTermAt).
+      "index_date = change_date − lookback_days days.",
+      "so it is change_date + 1 month.",
+      "maturity = first_payment_due + (term_months − 1) months.",
+      "remaining_term_months = whole months from first_new_payment_due to maturity, + 1 (both ends count).",
+      "next_change_date = change_date + adjustment_period_months months.",
+      // Step 2: selectIndex.
+      "An entry dated on the index date counts; an entry dated after it never does.",
+      // Steps 3 to 5: newRate, in the engine's order.
+      "unrounded = index_value + margin_pct, exactly.",
+      "A remainder above 0.5 rounds up: rounded = (f + 1) ÷ 8.",
+      "A remainder below 0.5 rounds down: rounded = f ÷ 8.",
+      "It rounds down under rounding_rule nearest_eighth_half_down and up under nearest_eighth_half_up.",
+      "midpoint_flag is true exactly when the remainder is 0.5.",
+      "The cap is initial_cap_pct on the first change and periodic_cap_pct on a later change.",
+      "1. If rate is above prior + cap, it becomes prior + cap; if it is below prior − cap, it becomes prior − cap.",
+      '2. The lifetime ceiling is initial_note_rate_pct + lifetime_cap_pct. If rate is above it, it becomes the ceiling and bound = "lifetime".',
+      '3. The floor is margin_pct. If rate is below it, it becomes margin_pct and bound = "floor".',
+      "A rate equal to a limit is neither above nor below it: the rate stays, and bound is left as it was.",
+      // Steps 6 and 7: expectedUpbAt and newPayment.
+      "When interest_only_until is not null and change_date is on or before it, the expected balance is schedule_basis.upb_cents.",
+      "n = whole months from schedule_basis.from_due_date to change_date, + 1 (the payment due on the change date counts)",
+      "When interest_only_until is not null and first_new_payment_due is on or before it, the payment is interest only: new_pi = round(expected balance × new_rate_pct ÷ 1200).",
+      "Otherwise new_pi = level_payment(expected balance, new_rate_pct, remaining_term_months).",
+      // Step 8: noticeKindFor and the row's window.
+      "1. term_months is 12 or less: fnma_only.",
+      "2. The first change, first_new_payment_due no more than 210 days after consummation_date (days_between), and initial_disclosure_estimate false: fnma_only.",
+      "3. The first change, change_date no more than 60 days after consummation_date, and initial_disclosure_estimate true: c_first_25.",
+      "4. adjustment_period_months is 2 or less, or consummation_date is before 2015-01-10 and lookback_days is under 45: c_25_120.",
+      "5. Otherwise: c_60_120.",
+      "notice_window_open is first_new_payment_due − 120 days for c_60_120 and c_25_120, and null for c_first_25 and fnma_only.",
+      "notice_due_by is first_new_payment_due − 60 days for c_60_120, first_new_payment_due − 25 days for c_25_120 and c_first_25, and change_date − 25 days for fnma_only.",
+      // Steps 9 and 10: which notice, and the send check.
+      "NTC_REGZ_20C_ARM_ADJ (the §1026.20(c) notice) goes when both changed, notice_kind is not fnma_only, and the loan does not have fdcpa_cease_on_file and fdcpa_debt_collector both true.",
+      "Otherwise NTC_FNMA_C2_1_02_RATE_CHANGE (Fannie Mae's rate-change notice) goes when either changed.",
+      'a send before it is "blocked" (c_first_25 has no opening). The deadline is notice_due_by: a send after it is "late", and days_late = days_between(the deadline, proposed_send_on).',
+      'NTC_FNMA_C2_1_02_RATE_CHANGE: "late" when proposed_send_on is after change_date − 25 days, and "on_time" otherwise.',
+      // Step 11: initialNoticeWindow.
+      "initial_notice_status is exempt_short_term when term_months is 12 or less; otherwise originator_duty when first_new_payment_due is no more than 210 days after consummation_date; otherwise servicer.",
+      "initial_notice_window_open = first_new_payment_due − 240 days, and initial_notice_due_by = first_new_payment_due − 210 days.",
+    ];
+    expect(stated.filter((rule) => !ARM_RULEBOOK.includes(rule))).toEqual([]);
+  });
+
   it("reads a submission strictly, as the schema says, and bounces what does not fit", () => {
     const want = expectedArm(WORKED);
     const ok = (x: unknown) => parseArmSubmission(x).ok;
@@ -602,7 +724,7 @@ describe("arm-adjustment", () => {
     });
     const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
     expect(mean).toBeLessThan(0.12);
-    expect(mean.toFixed(3)).toMatchInlineSnapshot(`"0.100"`);
+    expect(mean.toFixed(3)).toMatchInlineSnapshot(`"0.106"`);
   });
 
   it("can be solved from the rulebook and the tools: the reference passes the held-out suite and the spec", async () => {
@@ -686,14 +808,63 @@ describe("arm-adjustment", () => {
     expect(expectedArm(afterBy).send_outcome).toBe("on_time");
     expect(out(afterBy)).toBe(false);
     expect(out({ ...cease, proposed_send_on: d("2026-10-07") })).toBe(true);
-    // And the exempt first change's, the same way.
-    const exempt = workedWith({ consummation_date: d("2026-05-05") });
+    // And the exempt first change's, the same way: a loan closed after its first index date, so the
+    // rate disclosed at closing was known.
+    const exempt = workedWith({
+      consummation_date: d("2026-09-20"),
+      first_payment_due: d("2026-11-01"),
+      schedule_basis: { ...WORKED.loan.schedule_basis, from_due_date: d("2026-11-01") },
+    });
     expect(analyzeArm(exempt).regz_suppressed).toBe(true);
     expect(out({ ...exempt, proposed_send_on: d("2026-10-08") })).toBe(false);
+    expect(out({ ...exempt, proposed_send_on: d("2026-10-07") })).toBe(true);
+    // A disclosure at closing the dates contradict: no estimate though the index date came after the
+    // closing, or an estimate though it came before. The engine takes the flag as given.
+    const unknowable = workedWith({ consummation_date: d("2026-05-05") });
+    expect(expectedArm(unknowable).notice_kind).toBe("fnma_only");
+    expect(out(unknowable)).toBe(false);
+    expect(out(workedWith({ ...unknowable.loan, initial_disclosure_estimate: true }))).toBe(true);
+    expect(out(workedWith({ ...exempt.loan, initial_disclosure_estimate: true }))).toBe(false);
+    // A current rate the caps could not have carried the note to: anything but the note on the first
+    // change, and on the second anything past the 2.000 % initial cap either way.
+    expect(out(workedWith({ current_rate_pct: "6.000" }))).toBe(false);
+    const second = SPEC[7]!;
+    const startingAt = (rate: string) =>
+      out({ ...second, loan: { ...second.loan, current_rate_pct: rate } });
+    expect(["7.750", "7.875", "3.750", "3.625"].map(startingAt)).toEqual([
+      true,
+      false,
+      true,
+      false,
+    ]);
     // No print on or before the index date: the engine cannot calculate.
     expect(
       out({ ...WORKED, index_series: [{ effective_date: d("2026-09-18"), value: "3.65000" }] }),
     ).toBe(false);
+    // The two engines apart, which the spec's dual-calculation gate holds a notice for. No drawn
+    // change parts them, so engine B's figures are altered here.
+    const apart =
+      (b: Partial<ArmAnalysis["b"]>) =>
+      (t: ArmTask): ArmAnalysis => {
+        const x = analyzeArm(t);
+        return { ...x, b: { ...x.b, ...b } };
+      };
+    expect(armInScope(WORKED, apart({}))).toBe(true);
+    expect(armInScope(WORKED, apart({ agrees: false }))).toBe(false);
+    expect(armInScope(WORKED, apart({ bound: "initial" }))).toBe(false);
+    expect(armInScope(WORKED, apart({ unrounded_pct: "6.39884" }))).toBe(false);
+    // A basis that amortizes the balance away, and a note with no term left: the engines agree on
+    // both, and neither is a change to work.
+    const paidOff = workedWith({
+      schedule_basis: { ...WORKED.loan.schedule_basis, pi_cents: 5_000_000n },
+    });
+    expect(analyzeArm(paidOff).b.agrees).toBe(true);
+    expect(analyzeArm(paidOff).input.expected_upb_cents < 0n).toBe(true);
+    expect(out(paidOff)).toBe(false);
+    const matured = workedWith({ term_months: 60, interest_only_until: d("2027-11-01") });
+    expect(analyzeArm(matured).b.agrees).toBe(true);
+    expect(analyzeArm(matured).input.remaining_term_months).toBe(0);
+    expect(out(matured)).toBe(false);
   });
 
   it("names the notice as an episode's verdict for the audit", async () => {
@@ -716,7 +887,7 @@ describe("arm-adjustment", () => {
     // A change here moves every score: bump ARM_ENVIRONMENT_VERSION, then the pin.
     expect(
       sha256(generateArmSuite("heldout", 1, 200).map(toJsonLine).join("")),
-    ).toMatchInlineSnapshot(`"7a5cbcc93f16751c49ccf46f1cf44137ce85940fcd76719dae1b1740fa28e65d"`);
+    ).toMatchInlineSnapshot(`"73fa1e3e328047ca1a4d4ad7c1c434a5e54c015298c1a69b28f3d418bef6c8da"`);
   });
 
   it("rebuilds a task from its coordinates, and never draws a held-out change into training", () => {
@@ -741,6 +912,50 @@ describe("arm-adjustment", () => {
 
     it("cycles through every edge, two hundred changes each", () => {
       expect(new Set(runs.map((r) => r.edge))).toEqual(new Set(ARM_EDGES));
+    });
+
+    it("boards only loans that could have been made, on indexes as they move", () => {
+      const loans = runs.map(({ t }) => t.loan);
+      const none = (f: (l: (typeof loans)[number]) => boolean) =>
+        loans.filter(f).map((l) => `${l.loan_id} ${l.index_type} ${l.consummation_date}`);
+      // A Fannie Mae plan: closed since the averages were published, on the uniform note (no tie
+      // rule, so a midpoint rounds down), with a margin of at most 3.000.
+      expect(new Set(loans.map((l) => l.fnma_arm_plan))).toEqual(
+        new Set(["4926", "4927", "4928", null]),
+      );
+      expect(
+        none(
+          (l) =>
+            l.fnma_arm_plan !== null &&
+            (l.rounding_rule !== "nearest_eighth_half_down" || num(l.margin_pct) > 300_000),
+        ),
+      ).toEqual([]);
+      // Each index while it is published: the 30-day average since 2020, Term SOFR on a note that
+      // was LIBOR's, and no Cost of Funds Index.
+      expect(
+        none((l) => l.index_type === "SOFR_30D_AVG" && l.consummation_date < "2020-07-01"),
+      ).toEqual([]);
+      expect(
+        none(
+          (l) => l.index_type === "TERM_SOFR_12M_PLUS_SPREAD" && l.consummation_date > "2021-12-31",
+        ),
+      ).toEqual([]);
+      expect(none((l) => l.index_type === "COFI")).toEqual([]);
+      // A balance never back above the original.
+      expect(none((l) => l.schedule_basis.upb_cents > l.original_upb_cents)).toEqual([]);
+      // Prints of at least 0.01 %, and a 30-day average that moves under 2 basis points a day.
+      const moves = (t: ArmTask) =>
+        t.index_series
+          .slice(1)
+          .map((p, i) => Math.abs(num(p.value) - num(t.index_series[i]!.value)));
+      expect(runs.filter(({ t }) => t.index_series.some((p) => num(p.value) < 1_000))).toEqual([]);
+      expect(
+        runs
+          .filter(({ t }) => t.loan.index_type === "SOFR_30D_AVG")
+          .filter(({ t }) => Math.max(...moves(t)) > 2_000)
+          .map(({ t }) => t.id),
+      ).toEqual([]);
+      expect(Math.max(...runs.flatMap(({ t }) => moves(t)))).toBeLessThanOrEqual(9_000);
     });
 
     it("draws every bound, kind, notice, send outcome and initial-notice status", () => {
@@ -809,6 +1024,10 @@ describe("arm-adjustment", () => {
         r.a.midpoint_flag && num(r.a.unrounded_pct) === prior(r) + cap(r) + 6_250;
       expect(count((r) => onto(r) && r.a.bound === "none")).toBeGreaterThan(5);
       expect(count((r) => onto(r) && r.a.bound !== "none")).toBeGreaterThan(5);
+      // One hundred-thousandth past that midpoint: the cap binds under either rule.
+      expect(
+        count((r) => num(r.a.unrounded_pct) === prior(r) + cap(r) + 6_251 && r.a.bound !== "none"),
+      ).toBeGreaterThan(5);
       // The floor off the grid, and below a cap's reach.
       expect(
         count(({ a }) => a.bound === "floor" && num(a.new_rate_pct) % 12_500 !== 0),
@@ -875,12 +1094,20 @@ describe("arm-adjustment", () => {
       ).toBeGreaterThan(8);
     });
 
-    it("draws the first change's duties at 209, 210 and 211 days, and the 25-day first change at 60 and 61", () => {
+    it("draws the first change's duties at 209, 210 and 211 days, the exempt first change, and the 25-day first change at 60 and 61", () => {
       const toFnpd = (r: Run) => daysBetween(r.t.loan.consummation_date, r.x.first_new_payment_due);
       expect(
         count((r) => toFnpd(r) === 210 && r.a.initial_notice_status === "originator_duty"),
       ).toBeGreaterThan(10);
-      expect(count((r) => toFnpd(r) === 209 && r.a.notice_kind === "fnma_only")).toBeGreaterThan(5);
+      // Exempt from the (c) notice because the rate disclosed at closing was no estimate: only a loan
+      // that closed on or after its first index date could have known it.
+      const exempt = runs.filter(
+        (r) => r.x.initial && r.t.loan.term_months > 12 && r.a.notice_kind === "fnma_only",
+      );
+      expect(exempt.length).toBeGreaterThan(10);
+      expect(
+        exempt.filter((r) => r.x.index_date > r.t.loan.consummation_date).map((r) => r.t.id),
+      ).toEqual([]);
       expect(
         count((r) => toFnpd(r) === 211 && r.a.initial_notice_status === "servicer"),
       ).toBeGreaterThan(8);

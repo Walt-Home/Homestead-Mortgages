@@ -3,16 +3,21 @@
  * borrower's data, ever.
  *
  * Each task is a function of (split, suite seed, index). A loan is made the
- * way a servicer boards one: a product (a Fannie Mae SOFR plan, 4926 to 4929;
- * a legacy one-year Treasury, Term SOFR or monthly Cost of Funds note; an
- * interest-only ARM; a short-teaser or one-year ARM), a closing, its first
- * payment two months on, its change dates on the schedule, and the change
- * being worked, the first or a later one. On a later change the current rate,
- * payment and schedule basis are what the servicing app's makeEffective
- * leaves (ops-7-2.ts:484): the scheduled balance at the last change, at the
- * rate it set, with the payment the engine's own newPayment gives. The index
- * is a run of business-day prints around the index date, with prints after
- * it. Then the change is aimed, in turn by index, at one edge:
+ * way a servicer boards one: a product (a Fannie Mae SOFR plan, 4926 to 4928;
+ * a lender's own 30-day Average SOFR ARM; a legacy one-year Treasury note,
+ * yearly or monthly, or a Term SOFR note that was LIBOR's; an interest-only
+ * ARM; a short-teaser or one-year ARM), a closing in the months that product
+ * was made, its first payment two months on, its change dates on the
+ * schedule, and the change being worked, the first or a later one. On a later
+ * change the current rate is one the caps could have carried the note to by
+ * then, and the payment and schedule basis are what the servicing app's
+ * makeEffective leaves (ops-7-2.ts:484): the scheduled balance at the last
+ * change, at the rate it set, with the payment the engine's own newPayment
+ * gives. The (d) disclosure at closing, where there was one, is an estimate
+ * exactly when the first change's index date came after the closing. The
+ * index is a run of business-day prints around the index date, with prints
+ * after it, moving by what that index moves in a day. Then the change is
+ * aimed, in turn by index, at one edge:
  *   - standard: a Fannie Mae plan or a legacy note, nothing aimed;
  *   - midpoint: index + margin exactly halfway between two eighths, or one
  *     hundred-thousandth either side, under either rounding rule;
@@ -20,12 +25,14 @@
  *     and a midpoint that lands on the cap rounding down and passes it up;
  *   - periodic_cap: the same on a later change;
  *   - lifetime_cap: a later change near the ceiling, exactly on it, and the
- *     tie where prior + cap is the ceiling (the cap is named, not lifetime);
- *     and a 7/6 or 10/6 plan whose 5 % initial cap is its lifetime cap;
+ *     tie where prior + cap is the ceiling (the cap is named, not lifetime),
+ *     each late enough in the loan for the caps to have reached it; and a
+ *     7/6 plan whose 5 % initial cap is its lifetime cap;
  *   - floor: an off-grid margin (2.800) whose eighth falls below it, and an
- *     on-grid one an index of 0 lands on exactly;
+ *     on-grid one a small index rounds onto exactly;
  *   - index_lookup: no print on the index date (a weekend, a holiday, or a
- *     missing print), with a print after it that would round otherwise;
+ *     missing print), with a print after it, a day's move away, that would
+ *     round otherwise;
  *   - interest_only: interest only through the change, ending with it, and
  *     ended at an earlier change;
  *   - legacy: closed before 2015-01-10 with a look-back under 45 days, the
@@ -33,9 +40,10 @@
  *     note with a 45-day look-back;
  *   - initial_notice: the first change's (d) duty: the servicer's, the
  *     originator's (210 days or fewer from closing, at 209, 210 and 211),
- *     exempt on a one-year term; and the (c) exemptions with them: the
- *     non-estimate first change, and the first change within 60 days of
- *     closing after an estimate (at 60 and 61);
+ *     exempt on a one-year term; and the (c) exemptions with them: the first
+ *     change whose rate was known at closing (closed within the look-back,
+ *     so its disclosure was no estimate), and the first change within 60
+ *     days of closing after an estimate (at 60 and 61);
  *   - send_window: a send the day before the window opens, on the index
  *     date, on the deadline, the day after, and a month late;
  *   - no_change: an index that rounds back to the current rate, where the
@@ -69,10 +77,11 @@ import {
   expectedArm,
   gradeArmAgainst,
   monthsBetween,
+  nextDueAfter,
   parseArmSubmission,
   type ArmAnalysis,
 } from "./grader.js";
-import { newPayment, scheduledUpbAfter } from "./ported/arm.js";
+import { indexDate as indexDateOf, newPayment, scheduledUpbAfter } from "./ported/arm.js";
 import { armSteps } from "./reference.js";
 import {
   ARM_ENVIRONMENT_NAME,
@@ -148,22 +157,35 @@ interface Product {
 
 const PCT = (x: number) => Math.round(x * UNIT);
 const SOFR_ERA = [plainDate("2020-07-01"), plainDate("2023-12-01")] as const;
+/** A lender's own 30-day Average SOFR ARM: any month since the averages were first published. */
+const OWN_SOFR = [plainDate("2020-07-01"), plainDate("2028-10-01")] as const;
 const PRE_2015 = [plainDate("2003-01-01"), plainDate("2014-12-01")] as const;
 
+/**
+ * A Fannie Mae SOFR plan. Not 4929: a 10/6 loan closed since the averages
+ * were published first changes in 2030, after every change drawn here.
+ */
 const fannie = (r: Rng): Product => {
-  const plan = r.pick(["4926", "4927", "4927", "4928", "4929"]);
-  const fixed = { "4926": 36, "4927": 60, "4928": 84, "4929": 120 }[plan]!;
+  const plan = r.pick(["4926", "4927", "4927", "4928"]);
+  const fixed = { "4926": 36, "4927": 60, "4928": 84 }[plan]!;
   return {
     plan,
     index_type: "SOFR_30D_AVG",
     period: 6,
     fixed,
     lookback: 45,
-    caps: plan === "4928" || plan === "4929" ? [PCT(5), PCT(1), PCT(5)] : [PCT(2), PCT(1), PCT(5)],
+    caps: plan === "4928" ? [PCT(5), PCT(1), PCT(5)] : [PCT(2), PCT(1), PCT(5)],
     term: r.chance(0.9) ? 360 : r.pick([240, 300]),
     closed: SOFR_ERA,
   };
 };
+/** The lender's own note on the plan's terms: no plan number, made any month since 2020. */
+const ownSofr = (r: Rng, terms: Partial<Product> = {}): Product => ({
+  ...fannie(r),
+  plan: null,
+  closed: OWN_SOFR,
+  ...terms,
+});
 const cmt = (r: Rng, lookback = 45): Product => ({
   plan: null,
   index_type: "CMT_1Y",
@@ -178,6 +200,7 @@ const cmt = (r: Rng, lookback = 45): Product => ({
   term: 360,
   closed: PRE_2015,
 });
+/** A one-year LIBOR note, moved to Term SOFR and the Regulation ZZ spread: it closed while LIBOR was offered. */
 const termSofr = (r: Rng): Product => ({
   plan: null,
   index_type: "TERM_SOFR_12M_PLUS_SPREAD",
@@ -191,9 +214,15 @@ const termSofr = (r: Rng): Product => ({
   term: 360,
   closed: [plainDate("2010-01-01"), plainDate("2021-06-01")],
 });
+/**
+ * A legacy monthly adjuster, on the one-year Treasury as the T6 case below
+ * boards one. Not the 11th District Cost of Funds Index these notes once
+ * used: it was discontinued in 2022 (spec §3.9), so it has no prints in the
+ * years the changes fall in.
+ */
 const monthly = (r: Rng): Product => ({
   plan: null,
-  index_type: "COFI",
+  index_type: "CMT_1Y",
   period: 1,
   fixed: r.pick([1, 3, 12]),
   lookback: r.pick([15, 30, 45]),
@@ -231,8 +260,17 @@ const firstPaymentAfter = (consummation: PlainDate): PlainDate => {
   return addMonths(ymd(y, m, 1), 2);
 };
 
-function placeFirst(r: Rng, p: Product): Placement {
-  const change_date = addMonths(WINDOW_FROM, r.int(0, monthsBetween(WINDOW_FROM, WINDOW_TO)));
+const later = (a: PlainDate, b: PlainDate): PlainDate => (a > b ? a : b);
+const earlier = (a: PlainDate, b: PlainDate): PlainDate => (a < b ? a : b);
+
+/** A first change in the window by a loan that closed when the product says; null when there is none. */
+function placeFirst(r: Rng, p: Product): Placement | null {
+  // Closed in month M, first due in M + 2, first changed fixed − 1 months after that.
+  const lead = p.fixed + 1;
+  const from = later(WINDOW_FROM, addMonths(p.closed[0], lead));
+  const to = earlier(WINDOW_TO, addMonths(p.closed[1], lead));
+  if (from > to) return null;
+  const change_date = addMonths(from, r.int(0, monthsBetween(from, to)));
   const first_payment_due = addMonths(change_date, -(p.fixed - 1));
   return {
     consummation: closingIn(r, addMonths(first_payment_due, -2)),
@@ -242,8 +280,11 @@ function placeFirst(r: Rng, p: Product): Placement {
   };
 }
 
-/** A later change: one at least a period after the first, by a loan that closed when the product says. */
-function placeLater(r: Rng, p: Product, consummation?: PlainDate): Placement | null {
+/**
+ * A later change: one at least `minK` periods after the first (the changes
+ * before it its rate needs), by a loan that closed when the product says.
+ */
+function placeLater(r: Rng, p: Product, consummation?: PlainDate, minK = 1): Placement | null {
   for (let attempt = 0; attempt < 30; attempt++) {
     const closed =
       consummation ??
@@ -255,7 +296,7 @@ function placeLater(r: Rng, p: Product, consummation?: PlainDate): Placement | n
     for (let k = 1; ; k++) {
       const c = addMonths(first_change_date, k * p.period);
       if (c > WINDOW_TO || monthsBetween(addMonths(c, 1), maturity) + 1 < 12) break;
-      if (c >= WINDOW_FROM) changes.push(c);
+      if (c >= WINDOW_FROM && k >= minK) changes.push(c);
     }
     if (changes.length) {
       return {
@@ -268,6 +309,37 @@ function placeLater(r: Rng, p: Product, consummation?: PlainDate): Placement | n
   }
   return null;
 }
+
+/** The change asked for (the first, or a later one `minK` changes on), else the other kind. */
+function place(r: Rng, p: Product, first: boolean, consummation?: PlainDate, minK = 1): Placement {
+  const placed = first
+    ? (placeFirst(r, p) ?? placeLater(r, p, consummation))
+    : (placeLater(r, p, consummation, minK) ?? placeFirst(r, p) ?? placeLater(r, p, consummation));
+  if (!placed)
+    throw new Error(
+      `no ${p.index_type} change in the window, fixed ${p.fixed}, closed ${p.closed}`,
+    );
+  return placed;
+}
+
+/**
+ * The rates the caps could have carried the note to by the end of its kth
+ * change: the initial cap on the first, the periodic cap on each after it,
+ * never above the lifetime ceiling (it limits increases only) or below the
+ * margin. In hundred-thousandths.
+ */
+function reachableRates(
+  note: number,
+  margin: number,
+  caps: readonly [number, number, number],
+  k: number,
+): readonly [number, number] {
+  const swing = caps[0] + (k - 1) * caps[1];
+  return [Math.max(margin, note - swing), Math.max(margin, Math.min(note + swing, note + caps[2]))];
+}
+/** The fewest changes that could carry the note to `rate`. */
+const changesToReach = (rate: number, note: number, caps: readonly [number, number, number]) =>
+  Math.max(1, 1 + Math.ceil((Math.abs(rate - note) - caps[0]) / caps[1]));
 
 /* ── the loan on the change date ──────────────────────────────────────── */
 
@@ -314,9 +386,10 @@ function loanOf(r: Rng, d: Draft): ArmLoan {
       const from = d.io_until === null ? first_payment_due : addMonths(d.io_until, 1);
       const left = monthsBetween(from, maturity) + 1;
       const pi = levelPayment(d.original, ratePercent(note), left);
-      upb = scheduledUpbAfter(d.original, note, pi, monthsBetween(from, last) + 1);
-      // Earlier changes moved the rate about; the balance moved with it.
-      upb = (upb * BigInt(r.int(9_850, 10_150))) / 10_000n;
+      const scheduled = scheduledUpbAfter(d.original, note, pi, monthsBetween(from, last) + 1);
+      // Earlier changes moved the rate about, and the principal paid moved with it: a balance that
+      // has amortized is never back up to the original.
+      upb = d.original - ((d.original - scheduled) * BigInt(r.int(9_000, 11_000))) / 10_000n;
     }
     const rate = pct3(d.prior ?? d.note);
     current_rate_pct = rate;
@@ -357,13 +430,47 @@ function loanOf(r: Rng, d: Draft): ArmLoan {
 
 /* ── the index as published ───────────────────────────────────────────── */
 
+/** Every print is at least 0.01 %. */
+const MIN_PRINT = 1_000;
+
+/**
+ * How far a print moves in a business day, in hundred-thousandths: a 30-day
+ * average by about a thirtieth of the day's change in the overnight rate, so
+ * rarely more than a basis point or two; a one-year yield or term rate by
+ * several.
+ */
+interface Move {
+  readonly step: number;
+  readonly most: number;
+}
+const moveOf = (index: IndexType): Move =>
+  index === "SOFR_30D_AVG" ? { step: 800, most: 2_000 } : { step: 3_000, most: 9_000 };
+
 interface SeriesAim {
   /** The value of the print the note looks back to, in hundred-thousandths. */
   readonly value: number;
   /** Leave the index date itself without a print (it may have none anyway). */
   readonly missing: boolean;
-  /** The first print after the index date jumps, so reading past it changes the rate. */
+  /** The first print after the index date crosses into another eighth, where a day's move can. */
   readonly trap: boolean;
+  /** What makes a print a rate: the margin and the rounding rule; and how far the index moves in a day. */
+  readonly margin: number;
+  readonly halfUp: boolean;
+  readonly move: Move;
+}
+
+/** The first print after the index date: just across where the eighth changes, when a day's move reaches it. */
+function trapJump(r: Rng, value: number, aim: SeriesAim): number {
+  const u = value + aim.margin;
+  const e = aim.halfUp
+    ? Math.floor((u + EIGHTH / 2) / EIGHTH)
+    : Math.ceil((u - EIGHTH / 2) / EIGHTH);
+  const up = e * EIGHTH + EIGHTH / 2 + (aim.halfUp ? 0 : 1) - u;
+  const down = u - (e * EIGHTH - EIGHTH / 2) + (aim.halfUp ? 1 : 0);
+  const across = [up, -down].filter((d) => Math.abs(d) <= aim.move.most && value + d >= MIN_PRINT);
+  if (across.length === 0) return r.pick([-1, 1]) * r.int(aim.move.step, aim.move.most);
+  const d = r.pick(across);
+  return d + Math.sign(d) * r.int(0, Math.min(aim.move.step, aim.move.most - Math.abs(d)));
 }
 
 function seriesAround(r: Rng, indexDate: PlainDate, aim: SeriesAim): IndexPrint[] {
@@ -380,12 +487,13 @@ function seriesAround(r: Rng, indexDate: PlainDate, aim: SeriesAim): IndexPrint[
   }
   const chosen = days.filter((d) => d <= indexDate).length - 1;
   const values = new Map<number, number>([[chosen, aim.value]]);
-  const step = () => r.int(-250, 250);
-  for (let i = chosen - 1; i >= 0; i--) values.set(i, Math.max(0, values.get(i + 1)! + step()));
+  const step = () => r.int(-aim.move.step, aim.move.step);
+  for (let i = chosen - 1; i >= 0; i--)
+    values.set(i, Math.max(MIN_PRINT, values.get(i + 1)! + step()));
   for (let i = chosen + 1; i < days.length; i++) {
-    const jump =
-      aim.trap && i === chosen + 1 ? r.pick([-1, 1]) * r.int(EIGHTH / 2, 3 * EIGHTH) : step();
-    values.set(i, Math.max(0, values.get(i - 1)! + jump));
+    const prev = values.get(i - 1)!;
+    const jump = aim.trap && i === chosen + 1 ? trapJump(r, prev, aim) : step();
+    values.set(i, Math.max(MIN_PRINT, prev + jump));
   }
   return days.map((effective_date, i) => ({ effective_date, value: pct5(values.get(i)!) }));
 }
@@ -461,6 +569,7 @@ export function drawArmCandidate(
   let prior: number | undefined;
   let io_until: PlainDate | null = null;
   let half_up = r.chance(0.15);
+  // Read only where the (d) disclosure was made at closing, and there the dates decide it (below).
   let estimate = r.chance(0.3);
   let fdcpa: readonly [boolean, boolean] = r.chance(0.03) ? [true, r.chance(0.7)] : [false, false];
   let consummation: PlainDate | undefined;
@@ -542,13 +651,8 @@ export function drawArmCandidate(
     case "lifetime_cap": {
       const tieAtFirst = r.chance(0.2);
       if (tieAtFirst) {
-        // A 7/6 or 10/6 plan: the 5 % initial cap is the 5 % lifetime cap.
-        product = { ...fannie(r), plan: r.pick(["4928", "4929"]) };
-        product = {
-          ...product,
-          fixed: product.plan === "4928" ? 84 : 120,
-          caps: [PCT(5), PCT(1), PCT(5)],
-        };
+        // A 7/6 plan: the 5 % initial cap is the 5 % lifetime cap.
+        product = { ...fannie(r), plan: "4928", fixed: 84, caps: [PCT(5), PCT(1), PCT(5)] };
         first = true;
       } else {
         product = r.chance(0.7) ? fannie(r) : cmt(r);
@@ -585,41 +689,46 @@ export function drawArmCandidate(
       if (!first)
         prior =
           r.chance(0.3) && !onGrid ? margin : eighthsBetween(r, margin, margin + cap - EIGHTH);
-      // The eighth below the margin, reached by a small index; 0 on the grid lands on it exactly.
+      // A small index: off the grid it rounds to the eighth below the margin, on it onto the margin exactly.
       aim = () => {
         const below = Math.floor(margin / EIGHTH) * EIGHTH;
         const room = below + EIGHTH / 2 - margin - 1;
-        return onGrid ? margin : margin + r.int(0, Math.max(0, room));
+        return margin + r.int(MIN_PRINT, Math.max(MIN_PRINT, onGrid ? EIGHTH / 2 - 1 : room));
       };
       break;
     }
     case "index_lookup":
       missing = true;
       trap = r.chance(0.7);
+      // An index a day's move from where its eighth changes, so the print after the index date can
+      // round otherwise.
+      if (trap)
+        aim = () => {
+          const e = eighthsBetween(r, margin + PCT(0.3), margin + PCT(5.5));
+          const x = r.int(1, 1_500);
+          return r.chance(0.5) ? e + EIGHTH / 2 - x : e - EIGHTH / 2 + x;
+        };
       break;
     case "interest_only": {
-      product = {
-        ...(r.chance(0.5) ? termSofr(r) : fannie(r)),
-        plan: null,
-        fixed: r.pick([60, 84, 120]),
-      };
+      // A 30-day Average SOFR loan closed in 2020 or after: no ten-year fixed period has ended by 2028.
+      product = r.chance(0.5)
+        ? { ...termSofr(r), fixed: r.pick([60, 84, 120]) }
+        : ownSofr(r, { fixed: r.pick([60, 84]) });
       const how = r.weighted<string>([
         ["through", 40],
         ["ends", 40],
         ["past", 20],
       ]);
       first = how === "past" ? false : r.chance(0.5);
-      placed = first ? placeFirst(r, product) : placeLater(r, product);
-      if (placed) {
-        const { change_date, first_change_date } = placed;
-        const periods = monthsBetween(first_change_date, change_date) / product.period;
-        io_until =
-          how === "through"
-            ? addMonths(change_date, product.period * r.int(1, 4))
-            : how === "ends"
-              ? change_date
-              : addMonths(first_change_date, product.period * r.int(0, Math.max(0, periods - 1)));
-      }
+      placed = place(r, product, first);
+      const { change_date, first_change_date } = placed;
+      const periods = monthsBetween(first_change_date, change_date) / product.period;
+      io_until =
+        how === "through"
+          ? addMonths(change_date, product.period * r.int(1, 4))
+          : how === "ends"
+            ? change_date
+            : addMonths(first_change_date, product.period * r.int(0, Math.max(0, periods - 1)));
       break;
     }
     case "legacy": {
@@ -644,22 +753,17 @@ export function drawArmCandidate(
     case "initial_notice": {
       first = true;
       const how = r.weighted<string>([
-        ["servicer", 20],
-        ["originator", 40],
-        ["first25", 25],
-        ["short_term", 15],
+        ["servicer", 15],
+        ["originator", 35],
+        ["first25", 30],
+        ["short_term", 20],
       ]);
       if (how === "short_term") {
-        product = {
-          ...fannie(r),
-          plan: null,
-          period: r.pick([1, 6]),
-          fixed: 6,
-          term: 12,
-        };
+        product = ownSofr(r, { period: r.pick([1, 6]), fixed: 6, term: 12 });
       } else if (how === "originator") {
         // The first payment at the new rate D days after closing: the closing, the first payment
-        // and the first change all follow from D.
+        // and the first change all follow from D. The index date is months after the closing, so
+        // the disclosure made there was an estimate.
         const days = r.weighted<number>([
           [209, 25],
           [210, 30],
@@ -671,7 +775,7 @@ export function drawArmCandidate(
         const first_payment_due = firstPaymentAfter(closed);
         const fixed = monthsBetween(first_payment_due, fnpd);
         if (fixed >= 1) {
-          product = { ...fannie(r), plan: null, period: r.pick([1, 6, 6]), fixed };
+          product = ownSofr(r, { period: r.pick([1, 6, 6]), fixed });
           const change_date = addMonths(fnpd, -1);
           placed = {
             consummation: closed,
@@ -680,21 +784,25 @@ export function drawArmCandidate(
             change_date,
           };
         }
-        estimate = r.chance(0.5);
       } else {
-        // The first change X days after closing, after an estimate: within 60 days is c_first_25.
+        // The first change X days after closing. Within the 45-day look-back the index date was on or
+        // before the closing, so the rate disclosed there was known and the change is exempt from the
+        // (c) notice; after it, the disclosure was an estimate, and within 60 days that is c_first_25.
+        // 32 days or more puts the closing two months before the change, so the first payment is due
+        // on or before it.
         const days = r.weighted<number>([
-          [59, 20],
+          [r.int(32, 45), 25],
+          [59, 15],
           [60, 25],
           [61, 25],
-          [r.int(35, 90), 30],
+          [r.int(46, 90), 10],
         ]);
         const change_date = addMonths(WINDOW_FROM, r.int(0, monthsBetween(WINDOW_FROM, WINDOW_TO)));
         const closed = addDays(change_date, -days);
         const first_payment_due = firstPaymentAfter(closed);
         const fixed = monthsBetween(first_payment_due, change_date) + 1;
         if (fixed >= 1) {
-          product = { ...fannie(r), plan: null, period: r.pick([1, 6, 6]), fixed };
+          product = ownSofr(r, { period: r.pick([1, 6, 6]), fixed });
           placed = {
             consummation: closed,
             first_payment_due,
@@ -702,7 +810,6 @@ export function drawArmCandidate(
             change_date,
           };
         }
-        estimate = r.chance(0.85);
       }
       break;
     }
@@ -721,9 +828,9 @@ export function drawArmCandidate(
       ]);
       break;
     case "no_change":
-      if (r.chance(0.65)) {
+      if (r.chance(0.8)) {
         // A payment that moves a cent alone is Fannie Mae's notice, late after change − 25.
-        send = r.pick<SendAim>(["deadline", "day_after", "late", "inside", "inside"]);
+        send = r.pick<SendAim>(["deadline", "deadline", "day_after", "late", "inside"]);
         // An index that rounds back to the current rate.
         aim = (loan) => insideBand(r, units(loan.current_rate_pct));
         note = eighthsBetween(r, margin + EIGHTH, PCT(7.5));
@@ -736,26 +843,44 @@ export function drawArmCandidate(
       break;
   }
 
-  placed ??= first
-    ? placeFirst(r, product)
-    : (placeLater(r, product, consummation) ?? placeFirst(r, product));
-  // A later change's rate is where the changes before it left it.
-  if (placed.change_date !== placed.first_change_date && prior === undefined)
-    prior = eighthsBetween(
-      r,
-      Math.max(margin, note - PCT(1.5)),
-      Math.min(note + product.caps[2], note + PCT(2.5)),
-    );
+  // A Fannie Mae plan's note is the uniform instrument: it states no tie rule, so a midpoint rounds
+  // down (the spec's decision 2), and its margin is at most 3.000 (Selling Guide B2-1.4-02). A loan
+  // that rounds a midpoint up, or has a higher margin, is the lender's own SOFR ARM on its terms.
+  if (product.plan !== null && (half_up || margin > PCT(3)))
+    product = { ...product, plan: null, closed: OWN_SOFR };
+
+  // A rate aimed at above needs changes enough before this one for the caps to have reached it.
+  placed ??= place(
+    r,
+    product,
+    first,
+    consummation,
+    prior === undefined ? 1 : changesToReach(prior, note, product.caps),
+  );
+  const initial = placed.change_date === placed.first_change_date;
+  if (!initial) {
+    // A later change's rate is where the changes before it left it: as far from the note as the caps
+    // allowed by then, and no further.
+    const k = monthsBetween(placed.first_change_date, placed.change_date) / product.period;
+    const [lo, hi] = reachableRates(note, margin, product.caps, k);
+    prior ??= eighthsBetween(r, Math.max(lo, note - PCT(1.5)), Math.min(hi, note + PCT(2.5)));
+    prior = Math.min(Math.max(prior, lo), hi);
+  }
   // A Fannie Mae notice in place of the Reg Z one is due at change − 25, which a look-back under 25
   // days could never meet: no cease on such a note, and a first change soon enough after closing to
   // be exempt looks back the standard 45 days.
   if (product.lookback < 25) fdcpa = [false, false];
   if (
     product.lookback < 25 &&
-    placed.change_date === placed.first_change_date &&
+    initial &&
     daysBetween(placed.consummation, addMonths(placed.change_date, 1)) <= 210
   )
     product = { ...product, lookback: 45 };
+  // The (d) disclosure is made at closing when the first new payment is due within 210 days of it,
+  // and it is an estimate exactly when the first change's index date came after the closing, as the
+  // rate is not known before then (§1026.20(d)(2); ops-7-3.ts:203 decides the servicer's own so).
+  if (daysBetween(placed.consummation, addMonths(placed.first_change_date, 1)) <= 210)
+    estimate = addDays(placed.first_change_date, -product.lookback) > placed.consummation;
   const draft: Draft = {
     product,
     place: placed,
@@ -767,16 +892,24 @@ export function drawArmCandidate(
     fdcpa,
     original: BigInt(r.int(80_000, 900_000)) * 100n,
   };
-  if (prior !== undefined) draft.prior = Math.min(Math.max(prior, margin), note + product.caps[2]);
+  if (!initial && prior !== undefined) draft.prior = prior;
   const loan = loanOf(r, draft);
-  const initial = placed.change_date === placed.first_change_date;
   const indexDate = addDays(placed.change_date, -product.lookback);
 
   // The print the note looks back to: aimed at an edge, or a level of the index.
   const unrounded = aim ? aim(loan, initial) : null;
   const value =
-    unrounded !== null && unrounded - margin >= 0 ? unrounded - margin : r.int(PCT(0.3), PCT(5.5));
-  const series = seriesAround(r, indexDate, { value, missing, trap });
+    unrounded !== null && unrounded - margin >= MIN_PRINT
+      ? unrounded - margin
+      : r.int(PCT(0.3), PCT(5.5));
+  const series = seriesAround(r, indexDate, {
+    value,
+    missing,
+    trap,
+    margin,
+    halfUp: half_up,
+    move: moveOf(product.index_type),
+  });
 
   const task: ArmTask = {
     id,
@@ -831,6 +964,14 @@ const FIVE = /^\d{1,2}\.\d{5}$/;
  *     62 days;
  *   - the change is on the schedule, and an interest-only period ends with a
  *     change: the engine never recasts a payment between changes;
+ *   - the current rate is one the note's caps could have carried it to by
+ *     this change (the note itself on the first): any other is an earlier
+ *     change misapplied, the error correction v1 leaves out;
+ *   - where the (d) disclosure was made at closing, it was an estimate
+ *     exactly when the first change's index date came after the closing
+ *     (§1026.20(d)(2), the rule ops-7-3.ts:203 applies to the servicer's
+ *     own): a flag that says otherwise grants or withholds the (c) exemption
+ *     on a disclosure Regulation Z would not have allowed;
  *   - both engines agree (the spec's dual-calculation gate) and the balance
  *     and term left are positive;
  *   - no notice is proposed before the index date, unless it is a Reg Z
@@ -843,7 +984,10 @@ const FIVE = /^\d{1,2}\.\d{5}$/;
  *     after change − 25: the engine never marks that one late (ops.ts:140,
  *     ops-7-2.ts:451), and its spec's 25 days apply to it.
  */
-export function armInScope(task: ArmTask): boolean {
+export function armInScope(
+  task: ArmTask,
+  analyze: (task: ArmTask) => ArmAnalysis = analyzeArm,
+): boolean {
   const t = task.loan;
   const rates = [
     t.margin_pct,
@@ -870,9 +1014,29 @@ export function armInScope(task: ArmTask): boolean {
     parts(d).d === parts(t.first_change_date).d;
   if (!onSchedule(task.change_date)) return false;
   if (t.interest_only_until !== null && !onSchedule(t.interest_only_until)) return false;
+  const k = monthsBetween(t.first_change_date, task.change_date) / t.adjustment_period_months;
+  const current = units(t.current_rate_pct);
+  const note = units(t.initial_note_rate_pct);
+  if (k === 0 && current !== note) return false;
+  if (k > 0) {
+    const caps = [
+      units(t.initial_cap_pct),
+      units(t.periodic_cap_pct),
+      units(t.lifetime_cap_pct),
+    ] as const;
+    const [lo, hi] = reachableRates(note, units(t.margin_pct), caps, k);
+    if (current < lo || current > hi) return false;
+  }
+  const firstDue = nextDueAfter(t.first_change_date, parts(t.first_payment_due).d);
+  if (
+    daysBetween(t.consummation_date, firstDue) <= 210 &&
+    t.initial_disclosure_estimate !==
+      indexDateOf(t.first_change_date, t.lookback_days) > t.consummation_date
+  )
+    return false;
   let x: ArmAnalysis;
   try {
-    x = analyzeArm(task);
+    x = analyze(task);
   } catch {
     return false;
   }

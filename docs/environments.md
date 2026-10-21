@@ -482,7 +482,7 @@ the payment, the notice's timing (its kind, opening and due date), the notice
 (which one goes, and the send check), and the initial notice. A label that is
 nearly always the same (no limit binds, no midpoint, the Reg Z notice on
 time) is graded with the figure or the decision beside it, so an answer that
-works nothing and guesses the commonest label everywhere scores about 0.10 on
+works nothing and guesses the commonest label everywhere scores about 0.11 on
 the held-out suite. An initial notice reported on a later change is a field
 of its own, so hedging is never cheaper than committing.
 
@@ -513,26 +513,28 @@ series), no eighth, no cap test and no window. Those are the task.
 **The tasks** cycle by index through twelve edges, two hundred changes each in
 a suite of 2,400:
 
-- a Fannie Mae SOFR plan (4926 to 4929) or a legacy note, nothing aimed;
+- a Fannie Mae SOFR plan (4926 to 4928) or a legacy note, nothing aimed;
 - index + margin exactly halfway between two eighths, and one
   hundred-thousandth either side, under both rounding rules;
 - the first change above and below its cap, exactly on it, and a midpoint that
   lands on the cap rounding down and passes it rounding up;
 - the same on a later change, with the periodic cap;
 - a later change near the lifetime ceiling, exactly on it, and the tie where
-  prior + cap is the ceiling (the cap is named, not lifetime), which a 7/6 or
-  10/6 plan's 5 % initial cap also makes on the first change;
+  prior + cap is the ceiling (the cap is named, not lifetime), each far
+  enough into the loan for the caps to have got there, and the same tie on
+  the first change, which a 7/6 plan's 5 % initial cap makes;
 - an off-grid margin (2.800) whose eighth falls below it, so the floor binds
-  off the grid, and an on-grid margin an index of 0 lands on exactly;
+  off the grid, and an on-grid margin a small index rounds onto exactly;
 - no print on the index date (a weekend, a holiday or a missing print), with
-  a print after it that would round otherwise;
+  a print after it, a day's move away, that would round otherwise;
 - interest only through the change, ending with it, and ended at an earlier
   change;
 - the 25-day loans: closed before 2015-01-10 with a look-back under 45 days,
   closed on 2015-01-09 and on 2015-01-10, and monthly adjusters;
 - the first change's (d) duty: the servicer's, the originator's at 209, 210
   and 211 days from closing, and exempt on a one-year term; and the (c)
-  exemptions beside it, the first change without an estimate within 210 days
+  exemptions beside it: the first change whose rate was known at closing (the
+  loan closed within the look-back, so the disclosure there was no estimate),
   and the 25-day first change within 60 days of closing after an estimate;
 - a send the day before the window opens, on the index date, on the deadline,
   the day after it, and a month late;
@@ -540,6 +542,22 @@ a suite of 2,400:
   re-amortized moves the payment a cent (Fannie Mae's notice, late after
   change − 25) or does not (no notice); and an FDCPA cease on file with a debt
   collector and without one.
+
+**The loans are ones a servicer could hold.** Each product closes in the
+months it was made: a Fannie Mae plan or a lender's own 30-day Average SOFR
+ARM since the averages were published, a Term SOFR note while LIBOR was
+still offered, a legacy one-year Treasury note before 2015. No loan is on the
+11th District Cost of Funds Index, which was discontinued in 2022, and no
+10/6 plan appears, because one closed since 2020 has no change before 2030.
+A plan loan is on the uniform note, which states no tie rule (so a midpoint
+rounds down), with a margin of at most 3.000; a loan that rounds a midpoint
+up, or has a higher margin, is the lender's own. A later change starts from a rate the caps could have carried
+the note to by then, and from a balance never back above the original. Where
+the (d) disclosure was made at closing, it was an estimate exactly when the
+first change's index date came after the closing, the rule the servicing app
+applies to its own (d) notice. Prints are never below 0.01 %, and they move
+by what the index moves in a business day: at most 2 basis points for a 30-day
+average, more for a one-year yield or term rate.
 
 **What v1 leaves out, and why.** The engine has places where it departs from
 its spec or books a figure no servicer would (docs/decisions.md lists them).
@@ -568,6 +586,14 @@ the engine does nothing its spec calls wrong:
   or more often;
 - an interest-only period ends with a change, as the engine never recasts a
   payment between changes;
+- the current rate is one the caps could have carried the note to by this
+  change (the note itself on the first). Any other is an earlier change
+  misapplied, which is the error correction v1 leaves out;
+- the (d) disclosure at closing, where there was one, is an estimate exactly
+  when the first change's index date came after the closing (Regulation Z
+  §1026.20(d)(2)). The engine takes the flag as given, so a flag the dates
+  contradict would grant or withhold the (c) exemption on a disclosure
+  Regulation Z would not have allowed;
 - both engines agree, and the balance and term left are positive;
 - no notice is proposed before the index date unless it is a Reg Z notice
   before its window opens. The engine's send check passes a Reg Z notice sent

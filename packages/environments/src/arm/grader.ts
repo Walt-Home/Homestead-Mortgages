@@ -347,7 +347,7 @@ export const expectedArm = (task: ArmTask): ArmAnswer => answerOf(analyzeArm(tas
  * against it), and on the first change the (d) notice. Most changes bind no
  * cap, round no midpoint and send the Reg Z notice on time; grading those
  * labels with the figure or the decision beside them keeps an answer that
- * guesses the commonest label from scoring well (about 0.10 on the held-out
+ * guesses the commonest label from scoring well (about 0.11 on the held-out
  * suite). An initial notice reported on a later change is a field of its
  * own, so hedging is never cheaper than committing.
  */

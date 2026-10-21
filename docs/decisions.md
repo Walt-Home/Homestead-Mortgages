@@ -5354,6 +5354,24 @@ A model is graded on what the servicing app computes, inside the region where
 that is what its spec says, and the list above is for the servicing app's own
 source.
 
+**And only on loans that could exist.** The engine takes what was boarded as
+given, so a loan no servicer could hold is graded on an answer no servicer
+would give. A review of 1.0.0 before anything was scored on it found two such
+inputs that changed the answer. The (d) disclosure flag was drawn at random,
+so 199 of the 206 first changes it exempted from the (c) notice in 12,000
+training tasks were ones whose rate could not have been known at closing.
+Regulation Z §1026.20(d)(2) requires an estimate whenever the rate is not yet
+known, and an estimate takes the exemption away, so those answers withheld a
+notice the regulation requires. And a later change's current rate ignored how
+many changes came before it: 28 % of the later changes the lifetime ceiling
+bound started from a rate the caps could never have reached, which is an
+earlier change misapplied and the error correction v1 leaves out. The
+generator now derives the flag from the dates and draws a rate the caps allow
+by then, and `armInScope` rejects either when the note contradicts it. The
+same review moved each product into the months it was made, retired the
+discontinued Cost of Funds Index, and slowed the index to what it moves in a
+day; docs/environments.md lists what the loans now are.
+
 **What v1 leaves out besides.** Payment-cap plans, temporary buydowns,
 conversions, Chapter 13 payment-change filings, and index revisions or
 fallback captures. They are stateful or a matter of policy, not arithmetic.
@@ -5362,4 +5380,4 @@ fallback captures. They are stateful or a matter of policy, not arithmetic.
 training suite and ten of the spec's cases through the tools alone, in at most
 26 tool calls and 7 turns. No task is redrawn in 600 draws, and it agrees with
 the engine on 2,000 candidates nothing filtered. An answer that works nothing
-and guesses the commonest label everywhere scores about 0.10.
+and guesses the commonest label everywhere scores about 0.11.

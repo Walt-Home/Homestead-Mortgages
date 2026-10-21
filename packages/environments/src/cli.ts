@@ -16,6 +16,7 @@
  *   npm run env:refi -w @hm/environments -- --env escrow-history --policy reference
  *   npm run env:refi -w @hm/environments -- --env regz-apr --policy reference
  *   npm run env:refi -w @hm/environments -- --env flexmod-terms --policy reference
+ *   npm run env:refi -w @hm/environments -- --env payments-posting --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -119,6 +120,18 @@ import {
   type FlexAnswer,
   type FlexTask,
 } from "./flexmod/index.js";
+import {
+  PAYMENTS_FINGERPRINT,
+  PAYMENTS_HELDOUT_SUITE,
+  PaymentsReferencePolicy,
+  expectedPayments,
+  generatePaymentsSuite,
+  generatePaymentsTask,
+  paymentsPosting,
+  paymentsSpecTasks,
+  type PaymentsAnswer,
+  type PaymentsTask,
+} from "./payments/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -142,7 +155,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof REGZ_POLICY_FINGERPRINT
     | typeof HISTORY_FINGERPRINT
     | typeof REGZ_APR_FINGERPRINT
-    | typeof FLEX_FINGERPRINT;
+    | typeof FLEX_FINGERPRINT
+    | typeof PAYMENTS_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   readonly suite: (split: Exclude<Split, "spec">, seed: number, n: number) => T[];
   readonly one: (split: Exclude<Split, "spec">, seed: number, index: number) => T;
@@ -283,6 +297,20 @@ const BENCHES = {
     verdictOf: (t) => expectedFlex(t).denial_reason ?? "offer",
     reference: () => new FlexReferencePolicy(),
   } satisfies Bench<FlexTask, FlexAnswer>,
+  // A month of receipts and late-charge runs, graded by the servicing app's own cashiering.
+  "payments-posting": {
+    env: paymentsPosting,
+    fingerprint: PAYMENTS_FINGERPRINT,
+    heldout: PAYMENTS_HELDOUT_SUITE,
+    suite: generatePaymentsSuite,
+    one: generatePaymentsTask,
+    spec: paymentsSpecTasks,
+    verdictOf: (t) => {
+      const a = expectedPayments(t);
+      return a.receipts[0]?.outcome ?? a.late_charge_runs[0]?.outcome ?? "nothing";
+    },
+    reference: () => new PaymentsReferencePolicy(),
+  } satisfies Bench<PaymentsTask, PaymentsAnswer>,
 };
 
 const { values } = parseArgs({
@@ -424,6 +452,7 @@ async function main(): Promise<void> {
   if (values.env === "escrow-history") return run(BENCHES["escrow-history"]);
   if (values.env === "regz-apr") return run(BENCHES["regz-apr"]);
   if (values.env === "flexmod-terms") return run(BENCHES["flexmod-terms"]);
+  if (values.env === "payments-posting") return run(BENCHES["payments-posting"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

@@ -68,14 +68,19 @@ export function auditEpisode(r: AuditRecord): AuditRow {
     e.kind === "observations" ? e.observations : [],
   );
   const returned = new Set(observations.flatMap(valuesOf));
+  // A posting has no verdict; its first outcome (a receipt's, or a run's) stands in for one.
   const verdict =
     res.grade.fields.find((f) => ["verdict", "decision", "qm_status"].includes(f.field))
-      ?.expected ?? "?";
+      ?.expected ??
+    res.grade.fields.find((f) => f.field.endsWith(".outcome"))?.expected ??
+    "?";
   const answer = res.answer ?? null;
   const figures =
     answer && "offer" in answer
       ? ((answer["offer"] ?? null) as Readonly<Record<string, unknown>> | null)
-      : answer;
+      : answer && "final" in answer
+        ? ((answer["final"] ?? null) as Readonly<Record<string, unknown>> | null)
+        : answer;
   const mental = figures
     ? Object.entries(figures)
         // Zero, and a returned figure with its sign flipped (a low point read as a

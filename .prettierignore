@@ -41,3 +41,4 @@ apps/servicing/.cache/
 # environment byte for byte but for its imports (see PORTED_FROM there).
 packages/environments/src/escrow/ported/
 packages/environments/src/flexmod/ported/
+packages/environments/src/payments/ported/

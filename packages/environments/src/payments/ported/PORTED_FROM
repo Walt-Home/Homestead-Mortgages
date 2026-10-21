@@ -1,0 +1,21 @@
+The servicing app's payment-application engine, ported for the
+payments-posting environment's grader.
+
+Source       apps/servicing/src/domain/cashiering/{types,biweekly,allocation,latecharges}.ts
+Vendored at  293261b371fe97d2b6b39e1f29ca60dd808ac8fb (apps/servicing/VENDORED_FROM)
+Ported       2026-10-21
+
+Each file here is its source byte for byte except its import lines: the
+kernel's paths become @hm/kernel/{calendar,money,fsm,events} (the same bytes;
+packages/kernel/VENDORED_FROM) and the siblings' .ts become .js. Nothing
+else may be edited: src/__tests__/payments.test.ts compares each pair with
+their import lines removed and fails on any difference. Lint and Prettier
+skip this directory for the reason they skip the vendored trees.
+
+biweekly.ts comes only because allocation.ts imports its interest function;
+the environment's loans are monthly. Fee ids come from node:crypto's
+randomUUID and are never graded.
+
+The harness the environment adds — the order in which the day's late-charge
+run and the day's receipts are taken — is the servicing app's daily-run
+convention (ops-2-7.ts:110), restated in src/payments/grader.ts.

@@ -5053,6 +5053,92 @@ versions are the same moves that separated the models on refi:
 - the APR solve taken out of the tools, so Appendix J has to be iterated
   with the calculator.
 
+## Payment application is graded by the cashiering engine, outside the places it is in doubt
+
+**Built 21 October 2026,** as `payments-posting` 1.0.0 in
+`packages/environments`: a loan's receipts over four to six weeks, each
+day's late-charge run and then that day's receipts through the waterfall.
+
+**Why this one.** It ranked second after the escrow analysis when the
+servicing app was surveyed. Every loan gets payments every month, and
+misapplied payments and wrongful late charges are what Regulation X's error
+resolution exists for. The engine (`allocate`, `assessLateCharge`) is pure,
+and the spec has worked examples to the cent.
+
+**The grader is the engine, ported as the others are.** `types.ts`,
+`allocation.ts`, `latecharges.ts` and `biweekly.ts` from
+`apps/servicing/src/domain/cashiering/` are copied byte for byte but for
+their imports, and a test fails on any other difference. The daily order
+around them (the run, then the receipts) is the servicing app's daily-run
+convention, restated in the grader with its line.
+
+**What reading the engine found.** Mapping it against its spec turned up
+places where it books a figure no servicer would, or departs from its own
+text. Each was reproduced against the vendored engine on 21 October. None
+is fixed here, because `apps/servicing` is vendored and is never edited in
+this repo:
+
+- **A curtailment can take the balance below zero.** Additional principal
+  sent with a payment is applied whatever the balance. A payment with $5,000
+  of designated principal on a $1,000 balance leaves −$5,574.75. Only a
+  curtailment sent separately on a current loan is checked against the
+  payoff.
+- **The $50 rule can book negative escrow.** The shortfall comes out of the
+  escrow share with no floor. A $40 shortfall on an installment carrying $10
+  of escrow books −$30.
+- **Suspense shields more than one installment.** Each unpaid installment's
+  late-charge test counts the whole suspense balance. $1,580.17 in suspense
+  stops the charge on September and on October alike, though it could pay
+  only one. This is also why spec Example C, which assesses its charge, does
+  not reproduce.
+- **A payoff designation drops the funds.** The receipt is routed to payoff
+  and reported as $3,000 to suspense, but the loan's suspense does not
+  rise. The money is in neither place.
+- **Most designations are not read.** `fees_only`, `escrow_only`,
+  `contractual`, `trial` and `reinstatement` post as `unspecified`. A
+  $79.01 receipt marked for the late charge on a delinquent loan becomes a
+  partial payment held in suspense.
+
+A review of the environment found six more, each reproduced on generated
+months:
+
+- **Late charges come before the arrears.** A remainder short of a payment
+  pays late charges while an installment due is still open, against spec
+  2.1 rule 5. Suspense accumulated from partials does the same with no
+  instruction, against 2.2 rule 4.
+- **Designated principal prepays.** A receipt marked principal on a
+  delinquent loan, with no amount named, cures the arrears and then prepays
+  future installments. Spec 2.4 rule 3 and Example I say it curtails.
+- **The $50 rule ahead of the due date is reported as prepaid.** The counter
+  still rises, and spec 2.2 rule 2 records it as applied_with_50_rule.
+- **The transfer shield spares any installment due inside its window,**
+  paid or not. Spec Example L ties it to a payment the old servicer
+  received.
+- **A payment under a forbearance plan is held as a partial,** with the
+  partial-hold notice the spec says plan payments do not get.
+- **Holds and suppressions are separate records.** A bankruptcy or
+  foreclosure hold does not itself stop a late charge; the matching
+  overlay does, so a loan carrying one without the other is charged.
+
+**So v1 stays out of those places.** The generator never draws a payoff, a
+designation other than unspecified and curtailment, fees other than late
+charges, non-interest-bearing principal, or a trial. (The servicing app
+posts a trial loan's receipts through its trial path, which applies an
+installment once the amount held reaches a payment; allocation alone never
+does.) It pairs every bankruptcy or foreclosure hold with its suppression,
+and refers a foreclosure only past 120 days. `paymentsInScope` then runs on
+the engine's own postings and rejects a month that reaches any of the
+places above. It rejects none of 5,000 training draws, because the
+generator aims around them. Where engine and spec disagree inside that
+scope, the rulebook says what the engine does: the suspense reading, and
+designated principal on a current loan curtailing the whole receipt. A model is
+graded on what the servicing app computes, and the defects above are a list
+for the servicing app's own source.
+
+**The proof of fairness.** The reference solves the held-out 200, a
+300-task training suite and seven of the spec's worked examples through
+the tools alone, with no task redrawn.
+
 ## Seasoning is counted in UTC, and the record that decides is the one tested
 
 **Fixed 21 October 2026,** in `packages/underwriting/src/aus.ts`, found

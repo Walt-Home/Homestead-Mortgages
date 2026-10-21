@@ -293,6 +293,131 @@ redrawing to be fair. The reference passes all 501 tasks it was checked on,
 with the spec's worked example ($251,405.31 gross, $35,483.32 forborne,
 $1,264.13 P&I) to the cent.
 
+## payments-posting
+
+payments-posting 1.0.0 is the third servicing environment: one loan's
+receipts posted over a window of four to six weeks, the way the servicing
+app's cashiering posts them (its spec §2.1 receipt and allocation, §2.2
+partials and the $50 rule, §2.4 curtailments, §2.7 late charges).
+
+**The task.** It gives the loan's cash state when the window opens and the
+receipts in the order they arrived:
+
+- the balance, rate, last paid installment and the installments projected
+  four months back and three ahead, each due, satisfied or prepaid;
+- suspense, late charges due, and the late charges already recorded;
+- the note's late-charge terms: percentage, grace days, cap, basis;
+- any hold or trial, and any forbearance, bankruptcy, foreclosure referral
+  or transfer shield in force;
+- each receipt's amount, day, designation, amount of additional principal
+  and written instruction.
+
+The model runs each day's late-charge run, then that day's receipts through
+the waterfall, and reports where every receipt went (installments with
+their interest, principal and escrow, late charges, curtailment, suspense),
+every late-charge decision, and where the loan stands at the end.
+
+**The grade.** A pass is every field right. A receipt is three fields: its
+outcome, the installments it applied, and where the rest went. A run is one
+field, its outcome and amount together. The lists of receipts and of runs
+are a field each, and a run reported that did not happen is a field of its
+own, so hedging is never cheaper than committing. The final state is six
+fields. An answer that posts nothing scores about 0.38 on the held-out
+suite. That is the floor to read the mean field score against, which never
+replaces the pass.
+
+**The grader is the servicing app's own engine.** `src/payments/ported/`
+holds `types.ts`, `allocation.ts` and `latecharges.ts` from
+`apps/servicing/src/domain/cashiering/`, and `biweekly.ts` because
+allocation imports its interest function. Each is byte for byte but for its
+import lines, held by a test that rewrites the original's imports and
+compares. The harness around them is the servicing app's daily convention,
+restated in the grader with the line it comes from:
+
+- each day's late-charge run comes before that day's receipts;
+- it takes every installment whose grace end was the day before, in the
+  loan's order and whatever its status;
+- a charge it assesses is recorded at once;
+- each receipt is allocated against the loan the one before it left.
+
+**The tools.** refi's date steps and calculator, plus the servicer's
+business-day calendar (`next_business_day`), which is what a grace end on a
+weekend or holiday rolls forward on.
+
+**The tasks** cycle by index through eleven edges, a hundred months each in
+a suite of 1,100:
+
+- a payment on the grace end, and on the day after it, when the run comes
+  first;
+- a payment short by $50.00 or less, by $50.01, and on each loan the $50
+  rule does not reach (unescrowed, before March 1999, a second lien, three
+  partials already, opted out);
+- a partial completed by the next receipt, and suspense the late-charge test
+  counts;
+- arrears caught up at once, and once every installment due is paid, the
+  rest to late charges;
+- designated principal on a current loan (applied apart, the whole receipt
+  curtailed) and on a delinquent one (redirected to the arrears);
+- an amount of additional principal that never prepays a future
+  installment;
+- two or three installments prepaid in one receipt;
+- an instruction to principal in words, a refused instruction to pay a
+  second lien, and both at once;
+- a bankruptcy hold with its charges suspended, a foreclosure referred past
+  120 days delinquent, a dispute and a fraud hold;
+- forbearance with and without a default (a full payment or none, never a
+  partial), an active bankruptcy, a foreclosure referral, and the transfer
+  shield over a payment sent to the old servicer and forwarded late (spec
+  Example L);
+- a PITI basis, a cap, a rate other than 5 % and a grace other than 15 days.
+
+**What v1 leaves out, and why.** The engine has regions where it departs
+from its spec or produces a figure no servicer would book. v1 does not grade
+a model on those, because the grader would be teaching the defect. The
+generator never draws:
+
+- a payoff, fees other than late charges, or non-interest-bearing principal;
+- a receipt credited on a different day from the one it arrived;
+- a trial. The servicing app posts a trial loan's receipts through its trial
+  path, which applies an installment once the amount held reaches a payment.
+  The allocation alone never does.
+
+`paymentsInScope` runs on the engine's own postings, and keeps a month only
+when the engine does nothing in it that its spec calls wrong:
+
+- the balance stays above zero, and the $50 rule never books negative escrow;
+- late charges are paid only once every installment due is paid, and never
+  out of suspense accumulated without an instruction;
+- the $50 rule is never applied ahead of a due date, where the engine says
+  prepaid and the spec says applied_with_50_rule;
+- a payment during a forbearance plan is never held as a partial;
+- no charge is assessed under a bankruptcy or foreclosure hold;
+- the transfer shield spares only an installment the forwarded payment then
+  satisfies;
+- every receipt meets an open installment, and one is still open at the end,
+  so no answer depends on where the projection stopped.
+
+On 5,000 unfiltered training draws it rejects none, because the generator
+aims around all of them. It is a guard, not a filter. Where the engine and
+its spec disagree inside v1's scope, the rulebook states what the engine
+does:
+
+- the whole suspense balance counts toward each unpaid installment's
+  late-charge test;
+- designated principal on a current loan curtails the whole receipt.
+
+Spec Example C (a $2,000.00 partial held, then the run) is the visible
+case. The spec assesses $79.01. The engine does not, because $2,000.00 in
+suspense is more than the P&I. A test holds the engine's answer, and
+docs/decisions.md has the engine defects found on the way.
+
+The reference passes the held-out suite, a 300-task training suite and
+seven of the spec's worked examples (A, D, F, G, K with M, L, N) to the cent,
+with no task redrawn, and agrees with the engine on 2,000 candidates nothing
+filtered. Its longest month is 59 tool calls across 5,000 training draws.
+That fits inside the episode's 80 turns even for a model that makes one call
+a turn, once it computes each grace end once, as Step 1 now says to.
+
 ## escrow-history
 
 escrow-history 1.0.0 is escrow-analysis started from the account's ledger.
@@ -375,6 +500,7 @@ npm run env:refi -w @hm/environments -- --env regz-policy --policy reference
 npm run env:refi -w @hm/environments -- --env escrow-history --policy reference
 npm run env:refi -w @hm/environments -- --env regz-apr --policy reference
 npm run env:refi -w @hm/environments -- --env flexmod-terms --policy reference
+npm run env:refi -w @hm/environments -- --env payments-posting --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

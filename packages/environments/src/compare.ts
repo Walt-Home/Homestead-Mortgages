@@ -91,7 +91,9 @@ export function scoreSide(lines: readonly EpisodeLine[]): {
       pass: l.result.grade.pass,
       verdict:
         l.result.grade.fields.find((f) => f.field === "verdict" || f.field === "decision")
-          ?.expected ?? "?",
+          ?.expected ??
+        l.result.grade.fields.find((f) => f.field.endsWith(".outcome"))?.expected ??
+        "?",
       cost: costOf(l.policy.id, l.result.usage),
       missed: l.result.grade.fields.filter((f) => f.ok === false).map((f) => f.field),
     });

@@ -10,6 +10,7 @@
  *   npm run env:refi -w @hm/environments -- --env refi-hard --policy reference
  *   npm run env:refi -w @hm/environments -- --env refi-hard-policy --policy reference
  *   npm run env:refi -w @hm/environments -- --env escrow-analysis --policy reference
+ *   npm run env:refi -w @hm/environments -- --env regz-price-tests --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -70,6 +71,17 @@ import {
   type EscrowAnswer,
   type EscrowTask,
 } from "./escrow/index.js";
+import {
+  REGZ_FINGERPRINT,
+  REGZ_HELDOUT_SUITE,
+  RegzReferencePolicy,
+  expectedRegz,
+  generateRegzSuite,
+  generateRegzTask,
+  regzPriceTests,
+  type RegzAnswer,
+  type RegzTask,
+} from "./regz/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -87,7 +99,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof POLICY_FINGERPRINT
     | typeof HARD_FINGERPRINT
     | typeof HARD_POLICY_FINGERPRINT
-    | typeof ESCROW_FINGERPRINT;
+    | typeof ESCROW_FINGERPRINT
+    | typeof REGZ_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   readonly suite: (split: Exclude<Split, "spec">, seed: number, n: number) => T[];
   readonly one: (split: Exclude<Split, "spec">, seed: number, index: number) => T;
@@ -160,6 +173,20 @@ const BENCHES = {
     verdictOf: (t) => expectedEscrow(t).decision,
     reference: () => new EscrowReferencePolicy(),
   } satisfies Bench<EscrowTask, EscrowAnswer>,
+  // Regulation Z's price tests as the shadow AUS runs them, graded by it.
+  "regz-price-tests": {
+    env: regzPriceTests,
+    fingerprint: REGZ_FINGERPRINT,
+    heldout: REGZ_HELDOUT_SUITE,
+    suite: generateRegzSuite,
+    one: generateRegzTask,
+    spec: () => [],
+    verdictOf: (t) => {
+      const a = expectedRegz(t);
+      return `qm ${a.qm_status ?? "undecided"}`;
+    },
+    reference: () => new RegzReferencePolicy(),
+  } satisfies Bench<RegzTask, RegzAnswer>,
 };
 
 const { values } = parseArgs({
@@ -295,6 +322,7 @@ async function main(): Promise<void> {
   if (values.env === "refi-hard") return run(BENCHES["refi-hard"]);
   if (values.env === "refi-hard-policy") return run(BENCHES["refi-hard-policy"]);
   if (values.env === "escrow-analysis") return run(BENCHES["escrow-analysis"]);
+  if (values.env === "regz-price-tests") return run(BENCHES["regz-price-tests"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

@@ -4995,3 +4995,41 @@ the held-out 200 and 300 training tasks.
   every year, so a three-year flood premium lands in each.
 - Biweekly loans: the engine counts their periods by `Date.parse`.
 - A cushion stated in dollars by the instrument.
+
+## The origination side's first environment is Regulation Z's price tests
+
+**Built 21 October 2026,** as `regz-price-tests` 1.0.0 in `packages/environments`.
+
+**Why this one, and not the whole shadow AUS.** Surveying origination for a
+pure engine that could grade a model, the full `underwrite` decision ranked
+first for importance. It is not clean enough to grade yet:
+
+- its escrow, MI, LLPA and title figures are placeholders;
+- it reads local time for seasoning;
+- until 21 October it referred every second home and investment property.
+
+The price tests inside it are the cleanest grader in the repo:
+
+- the 2026 thresholds are each cited and cross-checked against one another;
+- the Appendix J solve is there;
+- the fee classification is line by line;
+- every test is three-valued.
+
+Four of the rows behind them are rated "Regulatory violation" or "Financial
+loss" in the flow sheet.
+
+**Fair to grade by construction.** The engine computes in binary floating
+point; the rulebook and the tools in exact decimals. The generator solves
+each quote through the tools with the reference policy and keeps it only if
+the result matches the engine on every field. About 1.5% of first draws
+fail and are redrawn.
+
+**Found, not yet fixed: a percentage fee on an exact half cent rounds down.**
+`closingCosts` prices a percentage line as `round(loan × percent ÷ 100, 2)`
+in doubles. $82,774 × 0.75% is $620.805, which binary holds as 620.80499…,
+so the engine charges $620.80 where half-up gives $620.81. Points and fees
+come out a cent low. That flips a test only when they sit within a cent of a
+limit, but it is the wrong arithmetic for a figure a legal test reads. It
+was every one of the 21 disagreements in 3,000 draws. The fix is to price a
+percentage line in exact cents, the way the limits already are; it was left
+for its own change.

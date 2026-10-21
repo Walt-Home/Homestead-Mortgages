@@ -6,5 +6,10 @@
     "types": ["node"]
   },
   "include": ["src"],
-  "references": [{ "path": "../kernel" }, { "path": "../refi-review" }]
+  "references": [
+    { "path": "../kernel" },
+    { "path": "../refi-review" },
+    { "path": "../shared" },
+    { "path": "../underwriting" }
+  ]
 }

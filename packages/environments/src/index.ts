@@ -19,3 +19,4 @@ export * as refiTape from "./refi-tape/index.js";
 export * as refiPolicy from "./refi-policy/index.js";
 export * as refiHard from "./refi-hard/index.js";
 export * as escrow from "./escrow/index.js";
+export * as regz from "./regz/index.js";

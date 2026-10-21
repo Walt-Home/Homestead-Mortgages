@@ -56,7 +56,7 @@ packages/shared            domain types; LoanFile is the object everything reads
 packages/kernel            Doug's kernel, vendored: money, calendar, ledger, fsm, timers, events
 packages/partner-book      the tape reader: a servicer's book onto the partner-feed contract
 packages/refi-review       the daily refinance review: Doug's §33.2 over his §20.1, pure, over the kernel
-packages/environments      RL environments: the refi review and the escrow analysis as tasks, primitive tools, the engine as grader
+packages/environments      RL environments: the refi review, the escrow analysis and Reg Z's price tests as tasks, the engine as grader
 packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5

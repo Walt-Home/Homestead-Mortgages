@@ -4,7 +4,8 @@ An environment is a task, the tools a model may use, and a grader the model
 never sees. `packages/environments` holds them. The first, `refi-review`
 1.0.0, grades a model on the daily refinance review, using synthetic loans
 only and with the engine itself as the grader. `escrow-analysis` is the
-first on the servicing side.
+first on the servicing side, and `regz-price-tests` the first on the
+origination side.
 
 ## refi-review
 
@@ -178,6 +179,61 @@ The held-out suite is seed 1, 200 tasks, pinned by hash.
 on, the spec's worked example and its three variants among them, to the
 cent.
 
+## regz-price-tests
+
+regz-price-tests 1.0.0 is the origination side's first environment:
+Regulation Z's price tests on one quoted loan, as the shadow AUS runs them
+before a decision. These are the General QM price and points-and-fees tests
+(§1026.43), the higher-priced mortgage test (§1026.35), the HOEPA triggers
+(§1026.32), and a refinance's net tangible benefit.
+
+**The task.** It gives the quote as the file holds it:
+
+- the loan and product;
+- the property and its occupancy;
+- the lender's itemized fees, each with who is paid;
+- the instant the rate was set, in UTC;
+- whether ability to repay was documented;
+- on a refinance, the loan being paid off.
+
+The model prices the fees and derives the total loan amount, the APR and the
+APOR. It then decides each test, and says null where the engine cannot
+decide. 16 fields are graded.
+
+**The grader is `@hm/underwriting`.** It is `runComplianceTests` itself, fed
+the way `resolveMarketInputs` feeds it. The one difference from production
+is the fee schedule: each task carries its own lender's fees, and a line's
+two flags follow from who is paid, the way the production schedule classifies
+its own lines. The tools are the engine's own functions: the Appendix J
+solve, the APOR lookup, and the New York calendar date.
+
+**The three answers.** Each test is yes, no, or cannot decide:
+
+- an APR is refused above 80% of value and for an adjustable rate;
+- HPML and HOEPA do not reach a second home or an investment property;
+- a prepayment penalty whose terms are not on file leaves HOEPA undecided.
+
+**The tasks.** Each quote is aimed at an edge:
+
+- a loan amount a dollar either side of a tier bound or the jumbo line;
+- a loan at exactly 80% of value;
+- a note rate searched so the spread lands within a tenth of a point of the
+  HPML line, the QM threshold or the HOEPA trigger;
+- a rate set late on a Sunday in New York, which is the week before;
+- small loans whose flat fees trip the points-and-fees tests.
+
+**Fair to grade by construction.** The engine computes in binary floating
+point; the rulebook and tools compute in exact decimals. The generator keeps
+a quote only once the reference, solving through the tools, matches the
+engine on every field. About 1.5% of first draws fail that and are redrawn.
+Every one of them was a percentage fee on an exact half cent, which the
+engine rounds down (see docs/decisions.md). The held-out suite is seed 1,
+200 tasks, pinned by hash.
+
+**The proof of fairness.** The reference passes all 501 tasks it was checked
+on. Hand-worked quotes at each edge are held to figures worked by hand,
+apart from the engine.
+
 ## Commands
 
 ```bash
@@ -189,6 +245,7 @@ npm run env:refi -w @hm/environments -- --policy anthropic-vertex --split train 
 npm run env:refi -w @hm/environments -- --env refi-tape --policy reference
 npm run env:refi -w @hm/environments -- --env refi-hard --policy reference
 npm run env:refi -w @hm/environments -- --env escrow-analysis --policy reference
+npm run env:refi -w @hm/environments -- --env regz-price-tests --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

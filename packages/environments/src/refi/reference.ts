@@ -250,6 +250,46 @@ export function* reviewSteps(p: Json, call: Call): Step<Json> {
   };
 }
 
+/** The `call` a solver is handed: one tool call yielded, its observation read back by key. */
+export function callerFor(counter: { n: number }): Call {
+  return function* <R>(name: string, input: Json, key: string): Step<R> {
+    const id = `ref-${++counter.n}`;
+    const [obs] = yield [{ id, name, input }];
+    if (!obs || obs.call_id !== id) throw new Error(`no observation for ${id}`);
+    if (obs.is_error) throw new Error(`${name} failed: ${obs.content}`);
+    return (JSON.parse(obs.content) as Record<string, R>)[key] as R;
+  };
+}
+
+/**
+ * A solver run to its submission outside any episode, each call executed at
+ * once: what a generator uses to check, before keeping a task, that the
+ * rulebook followed through the tools lands where the engine does.
+ */
+export function solveNow(
+  solve: (payload: Json, call: Call) => Step<Json>,
+  payload: Json,
+  execute: (name: string, input: unknown) => string,
+): Json {
+  const steps = solve(payload, callerFor({ n: 0 }));
+  let next = steps.next();
+  while (!next.done) {
+    const observations: Observation[] = next.value.map((c) => {
+      try {
+        return { call_id: c.id, content: execute(c.name, c.input), is_error: false };
+      } catch (e) {
+        return {
+          call_id: c.id,
+          content: e instanceof Error ? e.message : String(e),
+          is_error: true,
+        };
+      }
+    });
+    next = steps.next(observations);
+  }
+  return next.value;
+}
+
 /** A policy that plays a solver: the solver yields tool calls and returns the submission. */
 export class ScriptedPolicy implements Policy {
   constructor(
@@ -259,14 +299,8 @@ export class ScriptedPolicy implements Policy {
   ) {}
 
   start(episode: { readonly user: string }): PolicySession {
-    let n = 0;
-    const call = function* <R>(name: string, input: Json, key: string): Step<R> {
-      const id = `ref-${++n}`;
-      const [obs] = yield [{ id, name, input }];
-      if (!obs || obs.call_id !== id) throw new Error(`no observation for ${id}`);
-      if (obs.is_error) throw new Error(`${name} failed: ${obs.content}`);
-      return (JSON.parse(obs.content) as Record<string, R>)[key] as R;
-    };
+    const counter = { n: 0 };
+    const call = callerFor(counter);
     const steps = this.solve(payloadOf(episode.user), call);
     let started = false;
     let submitted = false;
@@ -278,7 +312,7 @@ export class ScriptedPolicy implements Policy {
         if (!next.done) return { calls: next.value, text: "", stop: "tool_calls" };
         submitted = true;
         return {
-          calls: [{ id: `ref-${++n}`, name: this.submitTool, input: next.value }],
+          calls: [{ id: `ref-${++counter.n}`, name: this.submitTool, input: next.value }],
           text: "",
           stop: "tool_calls",
         };

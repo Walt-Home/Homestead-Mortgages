@@ -26,6 +26,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import Anthropic from "@anthropic-ai/sdk";
 import { AnthropicPolicy, DEFAULT_MODEL, type Effort } from "./anthropic.js";
@@ -405,6 +406,7 @@ const { values } = parseArgs({
     project: { type: "string", default: DEFAULT_VERTEX_PROJECT },
     thinking: { type: "string", default: "on" },
     concurrency: { type: "string", default: "4" },
+    resume: { type: "boolean", default: false },
     out: { type: "string" },
   },
 });
@@ -463,12 +465,40 @@ function policyOf(reference: () => Policy): Policy {
   throw new Error(`--policy must be reference, anthropic, anthropic-vertex or vertex`);
 }
 
+/**
+ * `--resume --out FILE`: the suite less the tasks FILE already records with
+ * an episode that ran (on this version), so a stopped run picks up where it
+ * left off and an episode that ended in a transport error is run again. Each
+ * episode is still a line of its own; a reader takes the newest per task.
+ */
+function unrecorded<T extends TaskCoordinates>(
+  tasks: readonly T[],
+  out: string,
+  version: string,
+): T[] {
+  if (values.out === undefined) throw new Error("--resume needs --out, the file to resume");
+  if (!existsSync(out)) return [...tasks];
+  const done = new Set<string>();
+  for (const line of readFileSync(out, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    const r = JSON.parse(line) as {
+      environment?: { version?: string };
+      task: { id: string };
+      result: { outcome: string };
+    };
+    if (r.environment?.version === version && r.result.outcome !== "error") done.add(r.task.id);
+  }
+  const left = tasks.filter((t) => !done.has(t.id));
+  console.log(`resuming ${out}: ${tasks.length - left.length} of ${tasks.length} already recorded`);
+  return left;
+}
+
 async function run<T extends TaskCoordinates, A>(bench: Bench<T, A>): Promise<void> {
   const env = bench.env;
-  const tasks = suite(bench);
   const policy = policyOf(bench.reference);
   const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
   const out = values.out ?? `runs/${env.name}/${runId}.jsonl`;
+  const tasks = values.resume ? unrecorded(suite(bench), out, env.version) : suite(bench);
   const recorder = new RunRecorder(out);
   const concurrency = Math.max(1, Number(values.concurrency));
   console.log(

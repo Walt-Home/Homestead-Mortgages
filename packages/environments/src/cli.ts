@@ -13,6 +13,7 @@
  *   npm run env:refi -w @hm/environments -- --env regz-price-tests --policy reference
  *   npm run env:refi -w @hm/environments -- --env escrow-policy --policy reference
  *   npm run env:refi -w @hm/environments -- --env regz-policy --policy reference
+ *   npm run env:refi -w @hm/environments -- --env escrow-history --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -86,6 +87,16 @@ import {
 } from "./regz/index.js";
 import { ESCROW_POLICY_FINGERPRINT, escrowPolicy } from "./escrow/policy-env.js";
 import { REGZ_POLICY_FINGERPRINT, regzPolicy } from "./regz/policy-env.js";
+import {
+  HISTORY_FINGERPRINT,
+  HISTORY_HELDOUT_SUITE,
+  HistoryReferencePolicy,
+  escrowHistory,
+  expectedHistory,
+  generateHistorySuite,
+  generateHistoryTask,
+  type EscrowHistoryTask,
+} from "./escrow-history/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -106,7 +117,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof ESCROW_FINGERPRINT
     | typeof REGZ_FINGERPRINT
     | typeof ESCROW_POLICY_FINGERPRINT
-    | typeof REGZ_POLICY_FINGERPRINT;
+    | typeof REGZ_POLICY_FINGERPRINT
+    | typeof HISTORY_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   readonly suite: (split: Exclude<Split, "spec">, seed: number, n: number) => T[];
   readonly one: (split: Exclude<Split, "spec">, seed: number, index: number) => T;
@@ -214,6 +226,17 @@ const BENCHES = {
     verdictOf: (t) => `qm ${expectedRegz(t).qm_status ?? "undecided"}`,
     reference: () => new RegzReferencePolicy(),
   } satisfies Bench<RegzTask, RegzAnswer>,
+  // escrow-analysis from the account's ledger: last year and the balance read off it.
+  "escrow-history": {
+    env: escrowHistory,
+    fingerprint: HISTORY_FINGERPRINT,
+    heldout: HISTORY_HELDOUT_SUITE,
+    suite: generateHistorySuite,
+    one: generateHistoryTask,
+    spec: () => [],
+    verdictOf: (t) => expectedHistory(t).decision,
+    reference: () => new HistoryReferencePolicy(),
+  } satisfies Bench<EscrowHistoryTask, EscrowAnswer>,
 };
 
 const { values } = parseArgs({
@@ -352,6 +375,7 @@ async function main(): Promise<void> {
   if (values.env === "regz-price-tests") return run(BENCHES["regz-price-tests"]);
   if (values.env === "escrow-policy") return run(BENCHES["escrow-policy"]);
   if (values.env === "regz-policy") return run(BENCHES["regz-policy"]);
+  if (values.env === "escrow-history") return run(BENCHES["escrow-history"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

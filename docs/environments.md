@@ -234,6 +234,36 @@ engine rounds down (see docs/decisions.md). The held-out suite is seed 1,
 on. Hand-worked quotes at each edge are held to figures worked by hand,
 apart from the engine.
 
+## escrow-history
+
+escrow-history 1.0.0 is escrow-analysis started from the account's ledger.
+An analyst does not get each line's prior-year total and dates, or the
+balance on the run date: they get the ledger. Here the task gives:
+
+- the balance the account was opened at, thirteen months before the new year;
+- every deposit and disbursement posted since, each disbursement tagged with
+  the line it paid;
+- what is still scheduled after the run date.
+
+The rulebook is escrow-analysis's with a Step 0 in front, which reads last
+year's figures and the run-date balance off the ledger. A test holds the
+rest unchanged.
+
+**The traps.**
+
+- A line's payment from the year before last, which falls outside the
+  twelve-month window.
+- Last year's payments still to come, scheduled after the run date.
+- One-off disbursements tagged with no line.
+- Postings that belong to the new year.
+
+**The grader cannot drift from escrow-analysis.** Every history is written
+from an escrow-analysis account, with the opening balance set last so the
+projected starting balance is kept. The account read back out of it
+(`readHistory`, which is Step 0 in code) concludes exactly what the original
+did; a test holds that over 1,500 accounts. The reference passes all 500
+tasks it was checked on.
+
 ## escrow-policy and regz-policy
 
 Each is its environment's tasks, tools and grader, with only the system prompt
@@ -266,6 +296,7 @@ npm run env:refi -w @hm/environments -- --env escrow-analysis --policy reference
 npm run env:refi -w @hm/environments -- --env regz-price-tests --policy reference
 npm run env:refi -w @hm/environments -- --env escrow-policy --policy reference
 npm run env:refi -w @hm/environments -- --env regz-policy --policy reference
+npm run env:refi -w @hm/environments -- --env escrow-history --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

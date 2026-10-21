@@ -5053,6 +5053,53 @@ versions are the same moves that separated the models on refi:
 - the APR solve taken out of the tools, so Appendix J has to be iterated
   with the calculator.
 
+## Seasoning is counted in UTC, and the record that decides is the one tested
+
+**Fixed 21 October 2026,** in `packages/underwriting/src/aus.ts`, found
+while mapping `underwrite` as a grader for an origination environment. Three
+defects in the bankruptcy and foreclosure seasoning tests (CRD-006, CRD-007),
+each reproduced and now held by `seasoning.test.ts`:
+
+- **The months depended on the machine's time zone.** They were counted
+  with local-time getters, while a record's date-only string parses as UTC
+  midnight. A chapter 7 discharged 15 July 2022, decided at 02:00 UTC on 1
+  July 2026, was 48 months on a server and 47 on a laptop in New York, which
+  is a finding and a different outcome. Both are read in UTC now. Cloud Run
+  runs in UTC, so no deployed decision changes.
+- **A decision instant with no zone was read in the machine's.** `underwrite`
+  now refuses one. Every caller already passes `toISOString()`.
+- **Which record decided depended on the order of the list, and on being the
+  most recent.** Records on the same date were sorted by a comparator that
+  was not consistent, so a chapter 7 and a chapter 13 discharged the same
+  day gave either answer depending on their order. Only the most recent
+  record was tested, so an older chapter 7 short of its 48 months passed
+  behind a later chapter 13 past its 24. Each record is now measured against
+  its own minimum. The one furthest short (or, if all pass, the closest)
+  decides; ties go to the more recent, then the stricter minimum. No sample
+  borrower carries a public record, so no persona's decision moves.
+
+**What the same mapping found and did not change,** because each is a
+decision about policy rather than a defect in arithmetic. Each was reproduced
+against the engine:
+
+- a back-end DTI over the 50 % maximum is a finding but not an eligibility
+  one, so the file is approved with conditions;
+- a score under 620 is referred only because the illustrative LLPA grid has
+  no row below it, and is never ineligible;
+- funds to close are computed but never compared with assets, so a borrower
+  who cannot close can be clear to close;
+- a non-QM or higher-priced result raises no finding;
+- a rate-and-term refinance's maximum LTV ignores occupancy;
+- every file without a base-wage source is referred, though the sheet scopes
+  INC-004 to wage earners;
+- the net tangible benefit is tested on every refinance, though the sheet
+  scopes it to states and investors that require one;
+- ATR reads Borrower 1's reports rather than the household's;
+- the bright lines (DTI 45 and 50, LTV against the maximum, the IPC cap, the
+  transcript variance, reserve months) compare rounded figures, and the
+  rounding is binary. A figure of exactly x.xx5 can round down, which the
+  compliance tests were fixed against on 21 October and these were not.
+
 ## The hard versions separate a model from the ceiling
 
 **Read 21 October 2026,** DeepSeek-V4.1-Flash on Vertex, 20 training tasks

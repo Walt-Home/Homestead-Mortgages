@@ -82,10 +82,40 @@ export interface UnderwriteOptions {
   readonly now: string;
 }
 
+/**
+ * Calendar months from a record's date to the decision, both read in UTC.
+ * A record's date-only string parses as UTC midnight, so the local getters
+ * put it in the month before anywhere west of Greenwich: the same file was
+ * seasoned 48 months on a server and 47 on a laptop in New York.
+ */
 function monthsBetween(iso: string, now: Date): number {
   const then = new Date(iso);
-  return (now.getFullYear() - then.getFullYear()) * 12 + (now.getMonth() - then.getMonth());
+  return (
+    (now.getUTCFullYear() - then.getUTCFullYear()) * 12 + (now.getUTCMonth() - then.getUTCMonth())
+  );
 }
+
+/**
+ * The record that decides a seasoning test: the one furthest short of, or
+ * least past, its own minimum. Every record has to meet its own waiting
+ * period, so the most recent is not always the binding one (an older
+ * chapter 7 can be short of 48 months while a later chapter 13 is past 24).
+ * Ties go to the more recent, then to the stricter minimum, so the answer
+ * never depends on the order the bureaus listed them in.
+ */
+function deciding<T extends { months: number; minimum: number; reference: string }>(
+  records: readonly T[],
+): T | undefined {
+  return [...records].sort(
+    (a, b) =>
+      a.months - a.minimum - (b.months - b.minimum) ||
+      b.reference.localeCompare(a.reference) ||
+      b.minimum - a.minimum,
+  )[0];
+}
+
+/** An instant the decision is made at; one without a zone would be read in the machine's. */
+const ZONED_INSTANT = /(?:Z|[+-]\d{2}:\d{2})$/;
 
 /** Whether anybody on the loan will not live in the home. */
 export function hasNonOccupantCoBorrower(file: LoanFile): boolean {
@@ -117,6 +147,10 @@ export function maxLtvFor(file: LoanFile): number | null {
 
 export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision {
   const log = new DerivationLog();
+  if (!ZONED_INSTANT.test(options.now) || Number.isNaN(Date.parse(options.now)))
+    throw new RangeError(
+      `now must be an instant with a zone, such as an ISO string ending in Z; got ${options.now}`,
+    );
   const now = new Date(options.now);
   const findings: AusFinding[] = [];
 
@@ -126,7 +160,8 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
   revolvingUtilization(file, log);
 
   if (scores !== null && scores.forEligibility < GUIDELINES.credit.minimumRepresentativeFico) {
-    const tested = scores.averageMedian === null ? "Representative FICO" : "Average median credit score";
+    const tested =
+      scores.averageMedian === null ? "Representative FICO" : "Average median credit score";
     findings.push({
       requirementId: "CRD-002",
       code: "FICO_BELOW_MINIMUM",
@@ -138,20 +173,23 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
   // Seasoning, across every borrower's report. Both are recorded only when
   // the derogatory actually exists, so a clean file does not carry a
   // derivation claiming it passed a test that was never relevant — and when
-  // two people carry one, the derivation is about the more recent, which is
-  // the one that decides.
+  // there are several, across one person or two, the derivation is about the
+  // one that decides.
   const records = householdPublicRecords(file);
-  const bankruptcies = records
-    .filter((r) => r.record.type === "bankruptcy")
-    .map((r) => ({ ...r, reference: r.record.dischargeDate ?? r.record.date }))
-    .sort((a, b) => (a.reference < b.reference ? 1 : -1));
-  const bankruptcy = bankruptcies[0];
+  const bankruptcy = deciding(
+    records
+      .filter((r) => r.record.type === "bankruptcy")
+      .map((r) => {
+        const reference = r.record.dischargeDate ?? r.record.date;
+        const minimum =
+          r.record.chapter === "13"
+            ? GUIDELINES.credit.bankruptcyChapter13SeasoningMonths
+            : GUIDELINES.credit.bankruptcyChapter7SeasoningMonths;
+        return { ...r, reference, minimum, months: monthsBetween(reference, now) };
+      }),
+  );
   if (bankruptcy) {
-    const months = monthsBetween(bankruptcy.reference, now);
-    const minimum =
-      bankruptcy.record.chapter === "13"
-        ? GUIDELINES.credit.bankruptcyChapter13SeasoningMonths
-        : GUIDELINES.credit.bankruptcyChapter7SeasoningMonths;
+    const { months, minimum } = bankruptcy;
     log.record(
       "CRD-006",
       "Bankruptcy seasoning",
@@ -174,20 +212,29 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
     }
   }
 
-  const significant = records
-    .filter(
-      (r) =>
-        r.record.type === "foreclosure" ||
-        r.record.type === "short_sale" ||
-        r.record.type === "deed_in_lieu",
-    )
-    .sort((a, b) => (a.record.date < b.record.date ? 1 : -1))[0];
+  const significant = deciding(
+    records
+      .filter(
+        (r) =>
+          r.record.type === "foreclosure" ||
+          r.record.type === "short_sale" ||
+          r.record.type === "deed_in_lieu",
+      )
+      .map((r) => {
+        const minimum =
+          r.record.type === "foreclosure"
+            ? GUIDELINES.credit.foreclosureSeasoningMonths
+            : GUIDELINES.credit.shortSaleOrDilSeasoningMonths;
+        return {
+          ...r,
+          reference: r.record.date,
+          minimum,
+          months: monthsBetween(r.record.date, now),
+        };
+      }),
+  );
   if (significant) {
-    const months = monthsBetween(significant.record.date, now);
-    const minimum =
-      significant.record.type === "foreclosure"
-        ? GUIDELINES.credit.foreclosureSeasoningMonths
-        : GUIDELINES.credit.shortSaleOrDilSeasoningMonths;
+    const { months, minimum } = significant;
     log.record(
       "CRD-007",
       "Derogatory seasoning",
@@ -225,7 +272,11 @@ export function underwrite(file: LoanFile, options: UnderwriteOptions): Decision
   const latestByMember = members.map(
     (m) => [...m.transcripts].sort((a, b) => b.taxYear - a.taxYear)[0] ?? null,
   );
-  if (members.length > 0 && latestByMember.every((t) => t !== null) && file.incomeSources.length > 0) {
+  if (
+    members.length > 0 &&
+    latestByMember.every((t) => t !== null) &&
+    file.incomeSources.length > 0
+  ) {
     const latestTranscripts = latestByMember as NonNullable<(typeof latestByMember)[number]>[];
     const annualDocumented = file.incomeSources.reduce((s, i) => s + i.monthlyAmount, 0) * 12;
     const wages = latestTranscripts.reduce((s, t) => s + t.wages, 0);

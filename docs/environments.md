@@ -534,6 +534,22 @@ The policies keep refi-policy's lesson: no sentence ends on an "otherwise"
 that could attach to more than one condition. Run on the same tasks as the
 procedure, a score measures what the procedure was doing for the model.
 
+## The Supermortgage Gym
+
+Every environment also runs in a browser, for people without a checkout:
+https://claude.ai/artifact/LKEDiyPJyoQ4UwijqwpNw6 (private; shared by its
+owner). `playground/entry.ts` puts each environment the CLI registers behind
+one plain-JSON interface and hands every call to that environment's own
+generator, tools, parser, grader and reference, so the page cannot drift from
+the runner. `scripts/build-playground.mjs` bundles it and gathers
+`runs.json`: model episodes on the train split only, each held to the
+held-out guard. The page offers training tasks and spec cases and never a
+held-out task. Republish both files after an environment changes:
+
+```bash
+npm run env:gym -w @hm/environments     # build, and serve at http://localhost:8765
+```
+
 ## Commands
 
 ```bash

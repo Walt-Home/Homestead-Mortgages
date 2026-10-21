@@ -539,6 +539,10 @@ describe("what the tests downstream do with those figures", () => {
     const hoepa = log.all().find((d) => d.label === "HOEPA high-cost test")!;
     expect(hoepa.blockedBy).toBeUndefined();
     expect(hoepa.value).toBe("out_of_scope");
+    // And nothing else for UW-009 is blocked: the first find above passed while
+    // a second, blocked UW-009 sat behind it and referred the file.
+    const uw009 = log.all().filter((d) => d.requirementId === "UW-009");
+    expect(uw009.filter((d) => d.blockedBy !== undefined)).toEqual([]);
   });
 
   it("compares bright lines in thousandths, so 8.28 against 6.78 is 1.5 and not 1.4999999999999991", () => {

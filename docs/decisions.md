@@ -1033,6 +1033,15 @@ does not reach their property. Out-of-scope is now **recorded rather than
 blocked**: blocking means "we could not compute this" and forces `refer`, and
 this is the opposite — we know the rule does not apply.
 
+_21 October 2026:_ that held for HPML but not for HOEPA. The out-of-scope
+record was written, and then the same function fell through to "high-cost
+unknown" and logged UW-009 blocked as well, so every second home and investment
+property was still referred — the denial became a referral, not the decision
+the record described. The test passed because it read only the first UW-009
+it found. Found while surveying the shadow AUS as a grader for an origination
+environment; the out-of-scope branch now ends there, and the test reads every
+UW-009.
+
 **Two bright lines were tested on the wrong side, and on a rounded input.**
 §1026.35(a)(1)(i) makes a loan higher-priced at "1.5 **or more** percentage
 points" over APOR, and §1026.43(e)(2)(vi) disqualifies General QM at "2.25 **or

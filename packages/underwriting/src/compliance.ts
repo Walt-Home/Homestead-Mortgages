@@ -439,7 +439,11 @@ export function runComplianceTests(
   } else if (aprTrigger === false && feeTrigger === false && penaltyTrigger === false) {
     isHighCost = false;
   }
-  if (isHighCost === null) {
+  if (principalDwelling === false) {
+    // Recorded as out of scope above. Falling through to the blocked branch
+    // (as it did until 21 October 2026) logged UW-009 blocked as well, which
+    // referred every second home and investment property the record meant to spare.
+  } else if (isHighCost === null) {
     log.blocked(
       "UW-009",
       "HOEPA high-cost test",

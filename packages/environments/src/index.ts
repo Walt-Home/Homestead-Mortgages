@@ -23,3 +23,4 @@ export * as regz from "./regz/index.js";
 export * as escrowPolicy from "./escrow/policy-env.js";
 export * as regzPolicy from "./regz/policy-env.js";
 export * as escrowHistory from "./escrow-history/index.js";
+export * as regzApr from "./regz-apr/index.js";

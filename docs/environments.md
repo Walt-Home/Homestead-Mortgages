@@ -264,6 +264,24 @@ projected starting balance is kept. The account read back out of it
 did; a test holds that over 1,500 accounts. The reference passes all 500
 tasks it was checked on.
 
+## regz-apr
+
+regz-apr 1.0.0 is regz-price-tests with the Appendix J solve taken out of
+the tools. In its place is refi's present-value tool, and Step 3 says what
+the APR is: the rate at which the payments' present value equals the amount
+financed, to three decimals, rounded half up. Finding it is a search, the
+one a compliance analyst runs when checking a disclosed APR. Every price
+test stands on its result. A test holds Step 3 and the tools as the only
+changes.
+
+Fairness is by construction, as in regz-price-tests: a quote is kept only
+once the reference, searching through these tools, lands on the engine's APR
+and every answer after it. About 4% of first draws are redrawn. Most are
+the half-cent fees; the rest are quotes where the search's payment, rounded
+to the cent as a disclosed payment is, moves the third decimal against the
+engine's unrounded one. The reference passes all 400 tasks it was checked
+on.
+
 ## escrow-policy and regz-policy
 
 Each is its environment's tasks, tools and grader, with only the system prompt
@@ -297,6 +315,7 @@ npm run env:refi -w @hm/environments -- --env regz-price-tests --policy referenc
 npm run env:refi -w @hm/environments -- --env escrow-policy --policy reference
 npm run env:refi -w @hm/environments -- --env regz-policy --policy reference
 npm run env:refi -w @hm/environments -- --env escrow-history --policy reference
+npm run env:refi -w @hm/environments -- --env regz-apr --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

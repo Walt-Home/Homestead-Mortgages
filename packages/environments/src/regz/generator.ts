@@ -29,7 +29,7 @@
 import { addDays, plainDate, type PlainDate } from "@hm/kernel/calendar";
 import { APOR_TABLE, annualPercentageRate, lookupApor, round } from "@hm/underwriting";
 import { rngFor, type Rng } from "../rng.js";
-import { solveNow } from "../refi/reference.js";
+import { solveNow, type Call, type Step } from "../refi/reference.js";
 import type { Split } from "../refi/task.js";
 import { expectedRegz, gradeRegzAgainst, parseRegzSubmission } from "./grader.js";
 import { regzSteps } from "./reference.js";
@@ -238,11 +238,19 @@ export function drawQuote(
 }
 
 /** Whether the rulebook followed through the tools lands exactly where the engine does. */
-export function fairToGrade(task: RegzTask): boolean {
+/** Which solver and tools decide fairness, and under which name tasks are drawn: a variant supplies its own. */
+export interface RegzDraw {
+  readonly taskId: (split: Split, suiteSeed: number, index: number) => string;
+  readonly steps: (payload: Record<string, unknown>, call: Call) => Step<Record<string, unknown>>;
+  readonly execute: (name: string, input: unknown) => string;
+}
+const REGZ_DRAW: RegzDraw = { taskId: regzTaskId, steps: regzSteps, execute: executeRegzTool };
+
+export function fairToGrade(task: RegzTask, draw: RegzDraw = REGZ_DRAW): boolean {
   const payload = JSON.parse(JSON.stringify(regzPayload(task))) as Record<string, unknown>;
   let byRules: unknown;
   try {
-    byRules = solveNow(regzSteps, payload, executeRegzTool);
+    byRules = solveNow(draw.steps, payload, draw.execute);
   } catch {
     return false;
   }
@@ -257,8 +265,9 @@ export function drawRegzTask(
   split: Exclude<Split, "spec">,
   suiteSeed: number,
   index: number,
+  draw: RegzDraw = REGZ_DRAW,
 ): { task: RegzTask; attempts: number } {
-  const id = regzTaskId(split, suiteSeed, index);
+  const id = draw.taskId(split, suiteSeed, index);
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     const task = drawQuote(
       rngFor(attempt === 0 ? id : `${id}#${attempt}`),
@@ -267,7 +276,7 @@ export function drawRegzTask(
       suiteSeed,
       index,
     );
-    if (fairToGrade(task)) return { task, attempts: attempt + 1 };
+    if (fairToGrade(task, draw)) return { task, attempts: attempt + 1 };
   }
   throw new Error(`${id}: no quote fair to grade in ${ATTEMPTS} draws`);
 }

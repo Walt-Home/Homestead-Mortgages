@@ -1,0 +1,34 @@
+The servicing app's payoff engine, ported for the payoff-statement
+environment's grader.
+
+Source       apps/servicing/src/domain/payoff/{quote,remit}.ts
+             apps/servicing/src/domain/investor/{remittance,types}.ts
+Vendored at  293261b371fe97d2b6b39e1f29ca60dd808ac8fb (apps/servicing/VENDORED_FROM)
+Ported       2026-10-21
+
+Each file here is its source byte for byte except its import lines: the
+kernel's paths become @hm/kernel/{money,calendar} (the same bytes;
+packages/kernel/VENDORED_FROM), a sibling's .ts becomes .js, and remit.ts's
+"../investor/remittance.ts" becomes "./remittance.js", because the two
+investor files sit beside the payoff ones here. Nothing else may be edited:
+src/__tests__/payoff.test.ts compares each pair with their import lines
+removed, holds each import line to that rewrite, and fails on any
+difference. Lint and Prettier skip this directory for the reason they skip
+the vendored trees.
+
+remittance.ts comes because remit.ts takes Fannie Mae's payoff interest from
+it (5.2 rule 6, payoffInterest); types.ts because remittance.ts imports its
+RemittanceType (a type only; the file's runtime constants are never used
+here). remit.ts's aaRemittanceClock reads time zones through the kernel's
+zoned.ts; v1 never calls it. release.ts (16.3, lien release) is not ported:
+v1 does not grade lien release.
+
+What the engine takes from its caller (the payoff date under F-1-09, the
+exact figure as of it, the reliance flags, the S/S BD1/BD2 exception and the
+day it is processed) lives in the servicing app's stateful ops layer
+(ops-16-2.ts) and its runtime tools, which do not port; it is restated in
+src/payoff/grader.ts with the lines it comes from, and the test holds those
+lines to the source.
+
+To take a change from the servicing app, copy the four files again and
+rewrite the same imports.

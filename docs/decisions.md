@@ -5253,3 +5253,135 @@ states as reading, and the earlier runs' counts fall with it.
 
 flexmod-terms changed after its read: 1.1.0 draws differently, and its
 rulebook does not. These are reads on training tasks, not scores.
+
+## A payoff is graded by the payoff engine, from the request to Fannie Mae's share
+
+**Built 21 October 2026,** as `payoff-statement` 1.0.0 in
+`packages/environments`: one Fannie Mae loan's written payoff request, the
+statement, the borrower's wire reconciled against the exact figure, and
+Fannie Mae's share of the proceeds by remittance type.
+
+**Why this one.** Every refinance and every sale runs through a payoff, and
+each part of it is a place a servicer is exposed:
+
+- an overstated figure overcharges the borrower at closing;
+- an understated one leaves a shortage the servicer absorbs or chases;
+- a late statement breaches Regulation Z 1026.36(c)(3) and the state
+  statutes (California's $300 forfeiture, Connecticut's interest, Florida's
+  fees);
+- a wrong share is an investor remittance error.
+
+The engine (`quote.ts`, `remit.ts`) is pure, and the spec has worked
+examples to the cent. It was among the survey's highest-scoring
+candidates, and the survey's map of it was checked by a verifier before it
+was built; the verifier's corrections are followed here where the two
+differ.
+
+**The grader is the engine, ported as the others are.** `quote.ts` and
+`remit.ts` from `apps/servicing/src/domain/payoff/`, and `remittance.ts` and
+`types.ts` from `investor/`, are copied byte for byte but for their imports,
+and a test fails on any other difference. The import rewrite gains one
+case, `../investor/remittance.ts` to `./remittance.js`. What the engine
+takes from its caller lives in the ops layer, which does not port, so the
+grader restates it with its lines and a test holds them: the payoff date
+under the non-business-day rule, the exact figure as of it, the reliance
+flags, and the S/S exception with the day the payoff is processed.
+
+**What reading the engine found.** Mapping it against its spec turned up
+places where it books a figure its own spec calls wrong, or where its two
+layers disagree. Each was reproduced against the vendored engine on 21
+October. None is fixed here, because `apps/servicing` is vendored and is
+never edited in this repo.
+
+The day count:
+
+- **Full months are rounded one by one.** Two months are 2 × round(one
+  month), where spec 16.1 rule 3 rounds the block once. Example A paid
+  through July is $2,690.04 against $2,690.03. The ops layer's
+  `interestF109` rounds once, but 16.2's exact figure and Fannie Mae's share
+  still call `quote.ts`, so the two layers disagree on one receipt. 3,108 of
+  4,860 quotes with two to four months differ.
+- **The month walk drifts for due days 29 to 31.** From January 31 to March
+  31 is two months and three days ($2,098.63 on $200,000 at 6 %), where it
+  is two months.
+- **Rate segments re-run the 30/360 walk inside each segment.** The same
+  6 % split on September 15 turns $1,295.89 into $1,282.19.
+- **There are two payoff calculators.** The §7.6 notice's accrues actual/365
+  on every day: example A is $250,372.39 there and $250,390.82 in §16.1.
+
+The statement and the funds:
+
+- **The alternative figure skips arrears.** On a loan behind, the figure if
+  the next installment posts starts interest from that installment's due
+  date: $3,199.55 lower on the survey's case.
+- **16.1-T2's shortage is five per diems.** $221.10 is the statement's
+  per-diem instruction; the exact recomputation, which 16.2 rule 2 defines
+  and the engine computes, is $221.09.
+- **After the good-through the ops layer calls an exact payment short,** by
+  a cent, and refunds an overage of $0.01 to $1.00 that `remit.ts` keeps as
+  tolerance.
+- **The shortage demand is due in one business day or five,** by layer.
+- **`reconcile()` does not apply the non-business-day rule;** its caller
+  must.
+
+Fannie Mae's share:
+
+- **Participation is never read.** At 50 % the share is still the whole
+  balance.
+- **The S/A half month is rounded twice,** where spec 5.2 rule 2 divides by
+  24 once: 37,017 of 148,077 draws differ by a cent.
+- **There is no S/A deficit,** where the spec's worked example has the
+  servicer fund $6.83.
+- **The servicing fee is 0 for S/A and S/S.** The runtime's own share, which
+  its 16.2 spec test holds, books $62.05 on the worked loan for both.
+- **A daily-simple loan's share collects 30/360 interest.** On the 16.2 loan
+  taken as daily simple the statement's interest is $1,537.24, the share's
+  $1,551.47, and the fee $62.05 where it is $47.82: on 23,070 of 46,140 grid
+  points.
+- **The S/S exception never checks the payoff month,** so an October
+  payoff processed November 2 owes nothing.
+
+The clocks and the lien release, which v1 does not reach:
+
+- the A/A removal's due time ignores the 17:00 rule on the second business
+  day;
+- `release.ts`'s release deadlines disagree with the spec's 16.3 matrix in
+  eight states, and its penalties are wrong for New York, California and
+  Ohio.
+
+**So v1 stays out of those places.** The generator draws loans due on the
+1st, paid through the good-through's month or the one before, so no day
+count reaches two months. It also:
+
+- prints an alternative figure only for the installment after the last
+  paid one;
+- keeps participation at 100 % and the S/A balance where the two roundings
+  agree;
+- grades the fee for A/A only and the gap for S/S only;
+- never draws an overage of $0.01 to $1.00;
+- pays a daily-simple loan off in its last paid installment's month;
+- processes the payoff on the payoff date, and never deems an S/S MBS
+  payoff received on a non-business due date;
+- has the borrower pay directly, so the closing agent's settlement date
+  never applies.
+
+`payoffInScope` then runs on the engine's own figures and rejects a payoff
+that reaches any of those places. It rejects none of 5,000 training draws,
+because the generator aims around them. Inside that scope the rulebook says
+what the engine does: a shortage is the exact recomputation, not five per
+diems. Lien release, the Eastern-time clocks, rate segments and the §7.6
+calculator are not in v1. A model is graded on what the servicing app
+computes, and the list above is for the servicing app's own source.
+
+**What v1 settles that the spec does not.** The good-through is the
+statement's own. The ops layer caps it 31 days after the request, but the
+spec's own §7.6 example runs 38, so the cap is not graded and the generator
+stays within it. The engine has no state rule that takes a late charge or a
+fee out of a payoff: spec 16.1 rule 6 leaves that to the late-charge and
+workout sections, and `release.ts`'s fee pass-through is 16.3's. The task
+gives the amounts, and the payoff carries what it is given.
+
+**The proof of fairness.** The reference solves the held-out 200, a
+300-task training suite and fifteen of the spec's worked examples through
+the tools alone, with no task redrawn in 600. It agrees with the engine on
+2,000 draws nothing filtered, in at most 37 tool calls and 8 turns.

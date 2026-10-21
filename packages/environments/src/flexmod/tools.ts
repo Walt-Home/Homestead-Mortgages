@@ -1,8 +1,9 @@
 /**
  * The tools: refi's level payment, date steps and exact calculator, and one
  * more, the principal a level payment supports, rounded down to the cent —
- * the closed form Step 9 begins from, computed exactly as the engine
- * computes it. None of them runs a waterfall step or decides anything.
+ * the closed form the rulebook's Step 7 (a) begins from (waterfall step 5),
+ * computed exactly as the engine computes it. None of them runs a waterfall
+ * step or decides anything.
  */
 
 import { Decimal, ratePercent } from "@hm/kernel/money";

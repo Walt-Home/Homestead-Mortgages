@@ -19,7 +19,7 @@ import { PAYLOAD_START, plain, type Split } from "../refi/task.js";
 
 export const FLEX_ENVIRONMENT_NAME = "flexmod-terms";
 /** Bump on any change to the rulebook, the tools, the rendering or the generator. */
-export const FLEX_ENVIRONMENT_VERSION = "1.0.0";
+export const FLEX_ENVIRONMENT_VERSION = "1.1.0";
 
 export interface FlexTask {
   readonly id: string;

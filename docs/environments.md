@@ -237,7 +237,7 @@ apart from the engine.
 
 ## flexmod-terms
 
-flexmod-terms 1.0.0 is the second servicing environment: one delinquent
+flexmod-terms 1.1.0 is the second servicing environment: one delinquent
 Fannie Mae loan evaluated for a Flex Modification (Servicing Guide F-1-27
 and D2-3.2-06), the servicing app's spec §12.8.
 
@@ -261,16 +261,23 @@ modification's dates. 22 fields are graded.
 
 **The grader is the servicing app's own waterfall.**
 `src/flexmod/ported/flexmod.ts` is `apps/servicing/src/domain/lossmit/flexmod.ts`
-byte for byte but for its four imports, held by a test as escrow's is. The
-service conventions around it live in the servicing app's stateful
-FlexModService, which does not port, so they are restated in the grader with
-the lines they come from:
+byte for byte but for the paths of its four imports, held by a test as
+escrow's is. The service conventions around it live in the servicing app's
+stateful FlexModService, which does not port, so they are restated in the
+grader with the lines they come from:
 
-- the prechecks: a failed trial within 365 days, or three prior modifications;
+- the prechecks, in order: a failed trial within 365 days, then three prior
+  modifications;
 - the rate-table lookup;
-- exhaustion;
-- the 60-month shortage spread;
+- exhaustion, which is null on a denial. That null is the environment's own
+  convention: the service's record keeps the false it starts with;
+- the 60-month shortage spread, half up, which is the borrower's default
+  election;
 - the capitalization and maturity dates.
+
+A test holds the prechecks, the lookup and the spread to the service's own
+lines, so a re-vendor that changes one fails until the grader and the
+rulebook are looked at again.
 
 **The tools.** refi's level payment, date steps and calculator, plus one
 new tool: the principal a payment supports, floored to the cent. That is the
@@ -282,16 +289,34 @@ closed form step 5 starts from, computed as the engine computes it.
   more;
 - rates on, above or off the eighth-point grid;
 - an ARM below the MIR;
-- targets reached by the rate, the term, forbearance, or nothing at all;
+- targets reached by the rate, the term, forbearance, or nothing at all,
+  including a rate that stops above the MIR;
+- a P&I equal to the pre-modification payment after the waterfall is
+  exhausted, where being 31 or more days delinquent decides eligibility;
 - a pre-modification payment whose 80% is an exact cent;
 - a rate-table row effective on the evaluation date;
 - a failed trial 364 or 365 days back;
-- notices on the 15th, the 16th, and in December.
+- a shortage whose 60-month spread ends in exactly half a cent;
+- notices on the 15th, the 16th, and in December, never before the
+  evaluation.
 
-The engine and tools are exact decimal arithmetic, so no draw needs
-redrawing to be fair. The reference passes all 501 tasks it was checked on,
-with the spec's worked example ($251,405.31 gross, $35,483.32 forborne,
-$1,264.13 P&I) to the cent.
+The engine and tools are exact decimal arithmetic. The generator keeps a draw
+only when the reference lands where the engine does, so a suite it built
+cannot by itself show the rulebook is fair. A test runs the reference over
+2,000 unfiltered draws as well and allows no disagreement, and no draw in 600
+needs redrawing. The spec's worked example ($251,405.31 gross, $35,483.32
+forborne, $1,264.13 P&I) comes out to the cent, and unit cases settle the
+rounding ties the rulebook specifies (an MTMLTV of exactly 50.005, a
+forbearance cap and a payment reduction at exactly half) as the engine does.
+
+**1.1.0** changed the generator, so the held-out suite moved. A notice is
+never drawn before the evaluation. In 1.0.0 a December notice could fall
+before a December evaluation or a year after an evaluation. Two aims are new:
+a target the rate alone reaches above the MIR, and a P&I equal to the
+pre-modification payment, drawn about half delinquent. Some escrow shortages
+now spread into exactly half a cent. The grader spreads a shortage with the
+service's own division, which gives the same cent on every shortage drawn.
+The rulebook and the tools did not change.
 
 ## payments-posting
 

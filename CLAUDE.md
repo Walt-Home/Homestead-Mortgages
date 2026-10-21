@@ -39,8 +39,9 @@ answer to any screen.
 engine itself, on synthetic loans only. Read it before changing
 `packages/refi-review`, because the refi-review environment's rulebook says
 what that engine does and a test holds the two equal; and before re-vendoring
-`apps/servicing`, because escrow-analysis and flexmod-terms grade with ports
-of its escrow and Flex Modification engines that tests hold byte-equal to it.
+`apps/servicing`, because escrow-analysis, flexmod-terms and payments-posting
+grade with ports of its escrow, Flex Modification and cashiering engines that
+tests hold byte-equal to it.
 
 ## The shape
 

@@ -3,21 +3,28 @@
  *
  * The waterfall is the ported `flexmod.ts` itself. The conventions around
  * it live in the servicing app's stateful FlexModService, which does not
- * port, so they are restated here exactly, each with the line it comes from:
+ * port, so they are restated here exactly, each with the line it comes from
+ * (a test holds those lines to the service's source):
  *   - the prechecks, in order: a failed trial fewer than 365 days before the
  *     evaluation (ops-12-8.ts:153), then three or more prior modifications
  *     (ops-12-8.ts:154-155, ops.ts:633);
  *   - the Modification Interest Rate: the row with the latest effective
- *     date on or before the evaluation date (ops.ts:640-645);
+ *     date on or before the evaluation date (ops.ts:640-644);
  *   - the denial when the waterfall is not eligible (ops-12-8.ts:162);
- *   - exhaustion_offer = P&I above the target (ops-12-8.ts:163);
- *   - the trial schedule (flexmod.ts trialSchedule) with the shortage spread
- *     over 60 months half up (ops.ts:535-545 default), no processing month;
+ *   - exhaustion_offer = P&I above the target on an offer (ops-12-8.ts:163),
+ *     and null on a denial. The null is this environment's own convention:
+ *     the service's record keeps the false it is built with (ops-12-8.ts:143)
+ *     on every denial, because only the eligible path sets the field;
+ *   - the trial schedule (flexmod.ts trialSchedule), no processing month.
+ *     offerTpp takes the monthly shortage from its caller (ops-12-8.ts:190,
+ *     198); the environment fixes the borrower's election at the default,
+ *     escrowShortageSpread's 60 months, divRound half up (ops.ts:535-540, the
+ *     60 at :537 and the division at :539);
  *   - capitalization = effective − 1 month and maturity = effective +
  *     (term − 1) months (ops-12-8.ts:197-200).
  */
 
-import type { Cents } from "@hm/kernel/money";
+import { divRound, type Cents } from "@hm/kernel/money";
 import { addMonths, daysBetween } from "@hm/kernel/calendar";
 import type { FieldGrade, Grade, Parsed } from "../episode.js";
 import { trialCount, trialSchedule, waterfall, type WaterfallResult } from "./ported/flexmod.js";
@@ -30,7 +37,7 @@ export const DENIALS = [
 ] as const;
 export type Denial = (typeof DENIALS)[number];
 
-/** The rate-table row in force: the latest effective on or before the evaluation date. */
+/** The rate-table row in force: the latest effective on or before the evaluation date (mirLookup, ops.ts:640-644). */
 export function mirFor(task: FlexTask): string | null {
   const rows = task.mir_table
     .filter((r) => r.effective <= task.evaluation_on)
@@ -38,8 +45,8 @@ export function mirFor(task: FlexTask): string | null {
   return rows[0]?.rate_pct ?? null;
 }
 
-/** The shortage spread over 60 months, half up. */
-export const shortageMonthly = (shortage: Cents): Cents => (shortage * 2n + 60n) / 120n;
+/** The shortage spread over 60 months, half up: escrowShortageSpread's default (ops.ts:539). */
+export const shortageMonthly = (shortage: Cents): Cents => divRound(shortage, 60n, "HALF_UP");
 
 export interface FlexAnalysis {
   readonly denial: Denial | null;
@@ -111,6 +118,7 @@ export function expectedFlex(task: FlexTask): FlexAnswer {
     pi_cents: w ? String(w.pi_cents) : null,
     reduction_pct: w ? w.reduction_pct : null,
     post_mod_ib_mtmltv_pct: w ? w.post_mod_ib_mtmltv : null,
+    // Null on a denial: the environment's convention, where the service's record keeps its default false.
     exhaustion_offer: offer ? w.pi_cents > w.target_pi_cents : null,
     trial_months: s ? s.due_dates.length : null,
     first_trial_due_on: s ? s.due_dates[0]! : null,

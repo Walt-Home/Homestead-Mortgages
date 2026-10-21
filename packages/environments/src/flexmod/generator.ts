@@ -9,21 +9,29 @@
  * and the pre-modification payment. Then it is aimed at an edge of the
  * waterfall:
  *   - MTMLTV around 50.00, where step 3 starts (at 50.00) and step 5 needs
- *     more than 50.00 — including 49.995 and 50.004, which print as 50.00;
+ *     more than 50.00 — including just above 49.995 and 50.004, which print
+ *     as 50.00;
  *   - a rate already on the MIR, a whole number of eighths above it, or off
  *     the grid (one partial step to the floor), and an ARM below the MIR;
- *   - a target the rate or the term alone reaches, one only forbearance
- *     reaches, and one nothing reaches (exhaustion), where 31 days
- *     delinquent or fewer decides eligibility at P&I equal to the pre-mod;
+ *   - a target the rate alone reaches at an eighth-point step above the MIR
+ *     (the pre-mod set from that step's payment), one the term alone
+ *     reaches, one only forbearance reaches, and one nothing reaches
+ *     (exhaustion);
+ *   - an exhausted waterfall whose P&I equals the pre-mod exactly (the
+ *     pre-mod set from the final P&I), where 31 days delinquent or fewer
+ *     decides eligibility, drawn about half and half;
  *   - a pre-modification P&I that is a multiple of 5 cents, whose 80% is an
  *     exact cent and so is not the target;
  *   - a rate-table row effective on the evaluation date, and a later one;
  *   - a failed trial 364 or 365 days back, and three prior modifications;
- *   - a notice on the 15th or the 16th, and one in December.
+ *   - an escrow shortage whose 60-month spread ends in exactly half a cent;
+ *   - a notice on the 15th or the 16th, and one in December; never before
+ *     the evaluation, as the service sends it only once the loan is eligible.
  *
  * A task is kept only once the reference, working through the tools, lands
  * exactly where the engine does; the engine is exact decimal arithmetic, so
- * this is a guard rather than a filter, and a test says how rarely it bites.
+ * this is a guard rather than a filter, and a test holds it at no redraws
+ * and runs the reference over unfiltered draws too.
  */
 
 import { levelPayment, ratePercent } from "@hm/kernel/money";
@@ -31,8 +39,8 @@ import { addDays, addMonths, plainDate, ymd, parts } from "@hm/kernel/calendar";
 import { rngFor, type Rng } from "../rng.js";
 import { solveNow } from "../refi/reference.js";
 import type { Split } from "../refi/task.js";
-import { gradeFlexAgainst, expectedFlex, parseFlexSubmission } from "./grader.js";
-import { accruedInterest, balanceAfter } from "./ported/flexmod.js";
+import { gradeFlexAgainst, expectedFlex, mirFor, parseFlexSubmission } from "./grader.js";
+import { accruedInterest, balanceAfter, targetPi, waterfall } from "./ported/flexmod.js";
 import { flexSteps } from "./reference.js";
 import {
   FLEX_ENVIRONMENT_NAME,
@@ -48,8 +56,9 @@ export const flexTaskId = (split: Split, suiteSeed: number, index: number): stri
 const FIRST_EVALUATION = plainDate("2026-01-05");
 const thousandths = (r: Rng, lo: number, hi: number) => (r.int(lo, hi) / 1000).toFixed(3);
 const eighths = (r: Rng, lo: number, hi: number) => (r.int(lo * 8, hi * 8) / 8).toFixed(3);
+const milli = (pct: string) => Math.round(Number(pct) * 1000);
 
-type Aim = "mtmltv_edge" | "under_50" | "moderate" | "deep" | "exhaust";
+type Aim = "mtmltv_edge" | "under_50" | "moderate" | "deep" | "exhaust" | "rate_only" | "pi_tie";
 
 /** One candidate; the caller keeps it only if it is fair to grade. */
 export function drawFlexCandidate(
@@ -60,10 +69,25 @@ export function drawFlexCandidate(
   index: number,
 ): FlexTask {
   const evaluation_on = addDays(FIRST_EVALUATION, r.int(0, 700));
+  // The edge the loan is aimed at, first: a target the rate alone reaches needs a contract rate well above the MIR.
+  const aim = r.weighted<Aim>([
+    ["mtmltv_edge", 17],
+    ["under_50", 11],
+    ["moderate", 26],
+    ["deep", 26],
+    ["exhaust", 9],
+    ["rate_only", 6],
+    ["pi_tie", 5],
+  ]);
 
   // The loan as originated, and where it stands.
   const original = BigInt(r.int(800, 7_000)) * 10_000n;
-  const contract = r.chance(0.8) ? eighths(r, 3, 8.5) : thousandths(r, 3_000, 8_500);
+  const contract =
+    aim === "rate_only"
+      ? eighths(r, 7, 9.5)
+      : r.chance(0.8)
+        ? eighths(r, 3, 8.5)
+        : thousandths(r, 3_000, 8_500);
   const made = r.int(12, 150);
   const behind = r.int(2, 14);
   const ib_upb_cents = balanceAfter(original, contract, 360, made);
@@ -75,6 +99,9 @@ export function drawFlexCandidate(
   let pre_mod_pi_cents = levelPayment(original, ratePercent(contract), 360);
   // A pre-mod P&I that is a multiple of 5 cents: its 80% is an exact cent, which is not the target.
   if (r.chance(0.15)) pre_mod_pi_cents = (pre_mod_pi_cents / 5n) * 5n;
+  // Exhaustion: a pre-mod well below what the loan now needs. The tie starts lower still, so nearly every one exhausts.
+  if (aim === "exhaust") pre_mod_pi_cents = (pre_mod_pi_cents * BigInt(r.int(55, 90))) / 100n;
+  if (aim === "pi_tie") pre_mod_pi_cents = (pre_mod_pi_cents * BigInt(r.int(40, 75))) / 100n;
   const gross =
     ib_upb_cents +
     accrued_interest_cents +
@@ -84,13 +111,6 @@ export function drawFlexCandidate(
     buydown_funds_cents;
 
   // The value, aimed at a band of MTMLTV — 50.00 itself included.
-  const aim = r.weighted<Aim>([
-    ["mtmltv_edge", 18],
-    ["under_50", 12],
-    ["moderate", 30],
-    ["deep", 30],
-    ["exhaust", 10],
-  ]);
   const percentTimes10k =
     aim === "mtmltv_edge"
       ? r.pick([499_950, 500_040, 500_050, 500_000, 499_949])
@@ -100,7 +120,11 @@ export function drawFlexCandidate(
           ? r.int(505_000, 800_000)
           : aim === "deep"
             ? r.int(800_000, 1_150_000)
-            : r.int(1_000_000, 1_400_000);
+            : aim === "rate_only"
+              ? r.int(505_000, 1_150_000)
+              : aim === "pi_tie"
+                ? r.int(300_000, 1_400_000)
+                : r.int(1_000_000, 1_400_000);
   // percentTimes10k is the MTMLTV in ten-thousandths of a percent: value = gross × 100 × 10,000 ÷ it.
   const value_cents = (gross * 1_000_000n) / BigInt(percentTimes10k);
 
@@ -132,50 +156,77 @@ export function drawFlexCandidate(
     ? addDays(evaluation_on, -r.pick([364, 365, 200, 500]))
     : null;
 
-  // The notice: a few days after the evaluation, on the 15th or 16th sometimes, in December sometimes.
+  // The notice: a few days after the evaluation, on the 15th or 16th sometimes; never before the evaluation.
   let notice_sent_on = addDays(evaluation_on, r.int(1, 20));
   if (r.chance(0.25)) {
     const { y, m } = parts(notice_sent_on);
     notice_sent_on = ymd(y, m, r.pick([15, 16]));
     if (notice_sent_on < evaluation_on) notice_sent_on = addMonths(notice_sent_on, 1);
   }
-  if (r.chance(0.1)) {
-    const { y } = parts(notice_sent_on);
-    notice_sent_on = ymd(y, 12, r.int(1, 28));
-  }
+  // A December evaluation's notice stays in December sometimes: any day from the evaluation's to the 31st.
+  const evaluated = parts(evaluation_on);
+  if (evaluated.m === 12 && r.chance(0.5))
+    notice_sent_on = ymd(evaluated.y, 12, r.int(evaluated.d, 31));
 
-  return {
+  const delinquent_31_plus = r.chance(aim === "pi_tie" ? 0.5 : 0.85);
+  const ti_monthly_cents = BigInt(r.int(150, 950)) * 100n;
+  // The shortage: none, any amount, or one 60 months spreads into exactly half a cent over.
+  const escrow_shortage_cents = !r.chance(0.6)
+    ? 0n
+    : r.chance(0.15)
+      ? BigInt(r.int(0, 6_600)) * 60n + 30n
+      : BigInt(r.int(0, 4_000)) * 100n + BigInt(r.int(0, 99));
+
+  const loan = {
+    ib_upb_cents,
+    accrued_interest_cents,
+    escrow_advances_cents,
+    servicing_advances_cents,
+    prior_nib_cents,
+    buydown_funds_cents,
+    value_cents,
+    contract_rate_pct,
+    is_arm_not_final,
+    remaining_term_months,
+    pre_mod_pi_cents,
+    delinquent_31_plus,
+  };
+  const task: FlexTask = {
     id,
     split,
     suite_seed: suiteSeed,
     index,
     evaluation_on,
-    loan: {
-      ib_upb_cents,
-      accrued_interest_cents,
-      escrow_advances_cents,
-      servicing_advances_cents,
-      prior_nib_cents,
-      buydown_funds_cents,
-      value_cents,
-      contract_rate_pct,
-      is_arm_not_final,
-      remaining_term_months,
-      pre_mod_pi_cents:
-        aim === "exhaust" ? (pre_mod_pi_cents * BigInt(r.int(55, 90))) / 100n : pre_mod_pi_cents,
-      delinquent_31_plus: r.chance(0.85),
-    },
+    loan,
     mir_table,
     prior_modifications,
     last_trial_failed_on,
-    trial: {
-      notice_sent_on,
-      ti_monthly_cents: BigInt(r.int(150, 950)) * 100n,
-      escrow_shortage_cents: r.chance(0.6)
-        ? BigInt(r.int(0, 4_000)) * 100n + BigInt(r.int(0, 99))
-        : 0n,
-    },
+    trial: { notice_sent_on, ti_monthly_cents, escrow_shortage_cents },
   };
+  const mir = mirFor(task);
+  if (mir === null) return task;
+
+  if (aim === "rate_only") {
+    // A target the rate alone reaches: the smallest pre-mod whose target is at or above the payment at
+    // an eighth-point step k, at least one step short of the MIR, so step 3 stops there.
+    const start =
+      is_arm_not_final && milli(mir) > milli(contract_rate_pct) ? mir : contract_rate_pct;
+    const steps = Math.floor((milli(start) - milli(mir)) / 125);
+    if (steps < 2) return task;
+    const rate = ((milli(start) - 125 * r.int(1, steps - 1)) / 1000).toFixed(3);
+    const atStep = levelPayment(gross, ratePercent(rate), remaining_term_months);
+    let pre = (atStep * 100n) / 80n;
+    while (targetPi(pre) < atStep) pre += 1n;
+    return { ...task, loan: { ...loan, pre_mod_pi_cents: pre } };
+  }
+  if (aim === "pi_tie") {
+    // An exhausted waterfall ran every step to its end, so a pre-mod at its final P&I (whose target is
+    // still below that P&I) leaves it where it was, with P&I equal to the pre-mod exactly.
+    const w = waterfall({ ...loan, mir_pct: mir });
+    if (w.pi_cents > w.target_pi_cents)
+      return { ...task, loan: { ...loan, pre_mod_pi_cents: w.pi_cents } };
+  }
+  return task;
 }
 
 /** Whether the rulebook followed through the tools lands exactly where the engine does. */

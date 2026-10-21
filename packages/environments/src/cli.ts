@@ -20,6 +20,7 @@
  *   npm run env:refi -w @hm/environments -- --env arm-adjustment --policy reference
  *   npm run env:refi -w @hm/environments -- --env payoff-statement --policy reference
  *   npm run env:refi -w @hm/environments -- --env pmi-termination --policy reference
+ *   npm run env:refi -w @hm/environments -- --env qualifying-income --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -185,6 +186,19 @@ import {
   type PmiAnswer,
   type PmiTask,
 } from "./pmi/index.js";
+import {
+  INCOME_FINGERPRINT,
+  INCOME_HELDOUT_SUITE,
+  IncomeReferencePolicy,
+  generateIncomeSuite,
+  generateIncomeTask,
+  incomeSpecTasks,
+  incomeTaskId,
+  incomeVerdict,
+  qualifyingIncome,
+  type IncomeAnswer,
+  type IncomeTask,
+} from "./income/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -212,7 +226,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof PAYMENTS_FINGERPRINT
     | typeof ARM_FINGERPRINT
     | typeof PAYOFF_FINGERPRINT
-    | typeof PMI_FINGERPRINT;
+    | typeof PMI_FINGERPRINT
+    | typeof INCOME_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -428,6 +443,18 @@ const BENCHES = {
     },
     reference: () => new PmiReferencePolicy(),
   } satisfies Bench<PmiTask, PmiAnswer>,
+  // B3-3 qualifying income on a purchase application, graded by the servicing app's own income engine.
+  "qualifying-income": {
+    env: qualifyingIncome,
+    fingerprint: INCOME_FINGERPRINT,
+    heldout: INCOME_HELDOUT_SUITE,
+    suite: generateIncomeSuite,
+    one: generateIncomeTask,
+    taskId: incomeTaskId,
+    spec: incomeSpecTasks,
+    verdictOf: incomeVerdict,
+    reference: () => new IncomeReferencePolicy(),
+  } satisfies Bench<IncomeTask, IncomeAnswer>,
 };
 
 const { values } = parseArgs({
@@ -614,6 +641,7 @@ async function main(): Promise<void> {
   if (values.env === "arm-adjustment") return run(BENCHES["arm-adjustment"]);
   if (values.env === "payoff-statement") return run(BENCHES["payoff-statement"]);
   if (values.env === "pmi-termination") return run(BENCHES["pmi-termination"]);
+  if (values.env === "qualifying-income") return run(BENCHES["qualifying-income"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

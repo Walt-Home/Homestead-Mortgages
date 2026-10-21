@@ -134,6 +134,17 @@ import {
   pmiTaskId,
   pmiTermination,
 } from "../src/pmi/index.js";
+import {
+  INCOME_SPEC_NAMES,
+  IncomeReferencePolicy,
+  expectedIncome,
+  generateIncomeTask,
+  incomePayload,
+  incomeSpecTasks,
+  incomeTaskId,
+  incomeVerdict,
+  qualifyingIncome,
+} from "../src/income/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
 
@@ -701,6 +712,21 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
           : "not current";
     },
     reference: () => new PmiReferencePolicy(),
+  }),
+  playground({
+    env: qualifyingIncome,
+    title: "Qualifying income",
+    side: "origination",
+    summary:
+      "One purchase application on its scheduled note date, with one or two borrowers and three to six income sources: classify each source, compute its monthly qualifying figure under Fannie Mae B3-3, decide continuance and what is excluded and why, and total the household. Regulation B facts ride along and change nothing. Graded by the servicing app's own income engine.",
+    id: incomeTaskId,
+    one: generateIncomeTask,
+    spec: incomeSpecTasks,
+    specNames: INCOME_SPEC_NAMES,
+    payload: incomePayload,
+    expected: expectedIncome,
+    verdictOf: incomeVerdict,
+    reference: () => new IncomeReferencePolicy(),
   }),
 ]);
 

@@ -40,9 +40,10 @@ engine itself, on synthetic loans only. Read it before changing
 `packages/refi-review`, because the refi-review environment's rulebook says
 what that engine does and a test holds the two equal; and before re-vendoring
 `apps/servicing`, because escrow-analysis, flexmod-terms, payments-posting,
-arm-adjustment, payoff-statement and pmi-termination grade with ports of its
-escrow, Flex Modification, cashiering, ARM, payoff and mortgage-insurance
-engines that tests hold byte-equal to it.
+arm-adjustment, payoff-statement, pmi-termination and metro2-furnishing grade
+with ports of its escrow, Flex Modification, cashiering, ARM, payoff,
+mortgage-insurance and Metro 2 furnishing engines that tests hold byte-equal
+to it.
 
 ## The shape
 
@@ -58,7 +59,7 @@ packages/shared            domain types; LoanFile is the object everything reads
 packages/kernel            Doug's kernel, vendored: money, calendar, ledger, fsm, timers, events
 packages/partner-book      the tape reader: a servicer's book onto the partner-feed contract
 packages/refi-review       the daily refinance review: Doug's §33.2 over his §20.1, pure, over the kernel
-packages/environments      RL environments: refi review, escrow analysis, payment posting, Flex Mod, ARM adjustment, payoff statements, MI termination, Reg Z price tests; the engine as grader
+packages/environments      RL environments: refi review, escrow analysis, payment posting, Flex Mod, ARM adjustment, payoff statements, MI termination, Metro 2 furnishing, Reg Z price tests; the engine as grader
 packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5

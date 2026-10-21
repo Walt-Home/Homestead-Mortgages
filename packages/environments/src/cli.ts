@@ -20,6 +20,7 @@
  *   npm run env:refi -w @hm/environments -- --env arm-adjustment --policy reference
  *   npm run env:refi -w @hm/environments -- --env payoff-statement --policy reference
  *   npm run env:refi -w @hm/environments -- --env pmi-termination --policy reference
+ *   npm run env:refi -w @hm/environments -- --env metro2-furnishing --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -185,6 +186,19 @@ import {
   type PmiAnswer,
   type PmiTask,
 } from "./pmi/index.js";
+import {
+  METRO2_FINGERPRINT,
+  METRO2_HELDOUT_SUITE,
+  Metro2ReferencePolicy,
+  generateMetro2Suite,
+  generateMetro2Task,
+  metro2Furnishing,
+  metro2SpecTasks,
+  metro2TaskId,
+  metro2Verdict,
+  type Metro2Answer,
+  type Metro2Task,
+} from "./metro2/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -212,7 +226,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof PAYMENTS_FINGERPRINT
     | typeof ARM_FINGERPRINT
     | typeof PAYOFF_FINGERPRINT
-    | typeof PMI_FINGERPRINT;
+    | typeof PMI_FINGERPRINT
+    | typeof METRO2_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -428,6 +443,18 @@ const BENCHES = {
     },
     reference: () => new PmiReferencePolicy(),
   } satisfies Bench<PmiTask, PmiAnswer>,
+  // A loan's monthly Metro 2 Base records, graded by the servicing app's own furnishing engine.
+  "metro2-furnishing": {
+    env: metro2Furnishing,
+    fingerprint: METRO2_FINGERPRINT,
+    heldout: METRO2_HELDOUT_SUITE,
+    suite: generateMetro2Suite,
+    one: generateMetro2Task,
+    taskId: metro2TaskId,
+    spec: metro2SpecTasks,
+    verdictOf: metro2Verdict,
+    reference: () => new Metro2ReferencePolicy(),
+  } satisfies Bench<Metro2Task, Metro2Answer>,
 };
 
 const { values } = parseArgs({
@@ -614,6 +641,7 @@ async function main(): Promise<void> {
   if (values.env === "arm-adjustment") return run(BENCHES["arm-adjustment"]);
   if (values.env === "payoff-statement") return run(BENCHES["payoff-statement"]);
   if (values.env === "pmi-termination") return run(BENCHES["pmi-termination"]);
+  if (values.env === "metro2-furnishing") return run(BENCHES["metro2-furnishing"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

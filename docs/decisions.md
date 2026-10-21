@@ -5813,3 +5813,54 @@ from a request reach before the loan's first installment, and the guard
 keeps the late counts at a later threshold date equal to those at receipt.
 The young-loan edge is now described as what it is: a 60-day late on a loan
 under 24 months.
+
+## DeepSeek's held-out baseline on all thirteen environments
+
+**Measured 21 October 2026,** DeepSeek-V4.1-Flash on Vertex (thinking), on
+each environment's held-out suite (seed 1, 200 tasks), 2,600 episodes in
+all at about $38. The newest scored episode of each task counts. Eight
+episodes ended in a transport error (the model server cutting a stream
+short) and were run again with `env:refi --resume`, so every task is scored.
+Claude was not run: its evaluation key is at its spending limit until 1
+November.
+
+| Environment            | Passed  | Rate   | 95% interval | Cost each |
+| ---------------------- | ------- | ------ | ------------ | --------- |
+| refi-review 1.0.0      | 193/200 | 96.5 % | 93.0–98.3    | 1.5¢      |
+| refi-tape 1.1.0        | 198/200 | 99.0 % | 96.4–99.7    | 1.5¢      |
+| refi-policy 1.3.0      | 190/200 | 95.0 % | 91.0–97.3    | 1.9¢      |
+| refi-hard 1.1.0        | 184/200 | 92.0 % | 87.4–95.0    | 1.9¢      |
+| refi-hard-policy       | 185/200 | 92.5 % | 88.0–95.4    | 2.4¢      |
+| escrow-analysis 1.0.0  | 191/200 | 95.5 % | 91.7–97.6    | 1.6¢      |
+| escrow-policy 1.0.0    | 190/200 | 95.0 % | 91.0–97.3    | 1.2¢      |
+| escrow-history 1.0.0   | 188/200 | 94.0 % | 89.8–96.5    | 2.0¢      |
+| regz-price-tests 1.1.0 | 196/200 | 98.0 % | 95.0–99.2    | 0.6¢      |
+| regz-policy 1.1.0      | 197/200 | 98.5 % | 95.7–99.5    | 0.5¢      |
+| regz-apr 1.1.0         | 171/200 | 85.5 % | 80.0–89.7    | 1.1¢      |
+| flexmod-terms 1.1.0    | 192/200 | 96.0 % | 92.3–98.0    | 1.4¢      |
+| payments-posting 1.0.0 | 197/200 | 98.5 % | 95.7–99.5    | 1.4¢      |
+
+**What the hard versions cost.** Taking the APR solve out of the tools
+costs 12.5 points (regz-price-tests 98.0 %, regz-apr 85.5 %), and every
+regz-apr miss is the APR itself. Placing loans on the review's rule edges
+costs 7 (refi-tape 99.0 %, refi-hard 92.0 %); the intervals do not overlap.
+Starting the escrow analysis from the ledger costs 1.5, inside the noise.
+
+**What the policy wording costs.** Each policy environment draws its
+procedure twin's tasks, so the two pair task by task. Only the tape review
+moved: 10 tasks passed under the procedure alone and 2 under the policy
+alone (McNemar exact p = 0.04). On the edges, the escrow analysis and the
+price tests the wording made no difference (p = 1.0 each). No task in any
+pair was missed under both wordings, so no one sentence is tripping the
+model.
+
+**How much a run moves.** refi-review's suite was run on 20 October as
+well, with the same tasks, prompts and expected answers to the field. It
+passed 198 then and 193 now: 7 tasks one way and 2 the other (p = 0.18).
+A single run's rate moves a few points either way, and differences of that
+size between environments are not findings.
+
+The misses are where the work is longest: the escrow analysis's running
+balance (required start, target, shortage, installment), the review's
+cash-back and NPV figures, the APR's third decimal. These are the held-out
+scores; their transcripts are not read.

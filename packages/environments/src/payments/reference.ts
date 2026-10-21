@@ -122,12 +122,19 @@ export function* paymentsSteps(p: Json, call: Call): Step<Json> {
         continue;
       }
       const basis = piti ? yield* calc(`${i.pi} + ${i.escrow}`) : i.pi;
-      const received =
-        i.status === "satisfied" || i.status === "prepaid"
-          ? basis
-          : big(suspense) > big(basis)
-            ? basis
-            : suspense;
+      let received = basis;
+      if (i.status !== "satisfied" && i.status !== "prepaid") {
+        // The suspense held for it: what is left once each earlier installment still due has taken
+        // its basis, oldest first. Nothing held, or nothing left, needs no tool.
+        let left = suspense;
+        for (const j of insts) {
+          if (big(left) === 0n) break;
+          if (j.status !== "due" || j.due_date >= i.due_date) continue;
+          const b = piti ? yield* calc(`${j.pi} + ${j.escrow}`) : j.pi;
+          left = big(left) > big(b) ? yield* calc(`${left} - ${b}`) : "0";
+        }
+        received = big(left) > big(basis) ? basis : left;
+      }
       if (big(received) >= big(basis)) {
         run("not_assessed", null);
         continue;

@@ -4,9 +4,12 @@ These are defects in the servicing app's own engines, found while building the
 environments in `packages/environments` that grade with them, and each was
 reproduced again on 21 October 2026 against the commit
 `apps/servicing/VENDORED_FROM` names (`293261b`, committed 17 September 2026).
-The environments keep all but five out of grading, and those five
-(cashiering-4, cashiering-9, flexmod-1, flexmod-2, pmi-9) are graded at the
-engine's own reading.
+The environments keep all but one out of grading. pmi-9 is graded, because
+the spec states the engine's reading as its own rule. Four more
+(cashiering-4, cashiering-9, flexmod-1, flexmod-2) were graded at the
+engine's reading until payments-posting 1.1.0 and flexmod-terms 1.2.0 kept
+them out; docs/decisions.md, "Five departures the environments graded,
+decided", says why each went the way it did.
 
 ## The list
 
@@ -254,8 +257,15 @@ $400,000, change 2026-11-01, index date 2026-09-17).
 - **Smallest fix.** In `receivedTowardBasis` (latecharges.ts:65-66), attribute
   suspense oldest first: credit an installment with what remains after the
   bases of earlier unpaid installments, capped at its own basis.
-- **Kept out by.** Not kept out. payments-posting's rulebook states the
-  engine's reading, and a test holds example C at the engine's answer.
+- **Kept out by.** payments-posting, since 1.1.0. `paymentsInScope` runs
+  the engine's own `assessLateCharge` a second time, handed the suspense
+  attributed oldest first, and rejects a run whose decision changes. The
+  generator brings any receipt the engine parks in suspense after the
+  window's last run for an installment with another unpaid before it.
+  1.0.0 graded the engine's reading. What stays graded is 2.7-Q1's default,
+  which the engine documents as its decision: suspense covering the basis
+  counts toward one installment's test. So example C, with one installment
+  open, is not assessed, and a test holds that.
 
 ### cashiering-5. A payoff designation, or the curtailment gate, drops the funds from the cash state 🟡
 
@@ -354,9 +364,12 @@ $400,000, change 2026-11-01, index date 2026-09-17).
   the receipt holds no full payment beyond the named amount; otherwise run the
   loop first and curtail the rest. Leave prior suspense out of a separate
   curtailment.
-- **Kept out by.** Not kept out. payments-posting's rulebook states the
-  engine's reading, docs/environments.md lists it as an in-scope disagreement,
-  and a test pins it.
+- **Kept out by.** payments-posting, since 1.1.0. `paymentsInScope` rejects
+  a separate curtailment (designated principal on a current loan) that
+  reaches the next installment's payment or pools earlier suspense. The
+  generator draws one below a payment, which no reading of 2.4 rule 2 takes
+  for an installment, so it is curtailed at once and still graded. 1.0.0
+  graded the engine's reading.
 
 ### cashiering-11. The transfer shield spares any installment due in its window, paid or not 🟡
 
@@ -700,9 +713,11 @@ $400,000, change 2026-11-01, index date 2026-09-17).
 - **Smallest fix.** Add an optional rate cap to `WaterfallInputs`
   (flexmod.ts:7), and at line 27 take the lesser of max(contract, MIR) and the
   cap.
-- **Kept out by.** Not kept out. flexmod-terms draws ARMs not on their final
-  rate (15% of loans) with no cap in the task, so the uncapped rate is graded.
-  That is right only where a cap would not bind.
+- **Kept out by.** flexmod-terms, since 1.2.0. The task carries the loan's
+  lifetime cap or final step (`rate_cap_pct`), and the rulebook caps step 2's
+  rate at it. `flexInScope` rejects an ARM whose step-2 rate is above its cap.
+  The generator draws the cap at or above that rate, a quarter of the time on
+  it. 1.1.0 carried no cap and graded the uncapped rate.
 
 ### flexmod-3. Most eligibility criteria are unchecked, and a disaster Flex Mod is denied for prior modifications 🟡
 
@@ -987,9 +1002,11 @@ $400,000, change 2026-11-01, index date 2026-09-17).
   §12.8's worked example at 500 months keeps 500 and runs past F-1-27's 480.
   An amortizing Fannie Mae loan never has more than 480 months left, so only
   bad input reaches it. Fix: cap the term at 480 before step 4 and recompute
-  the P&I. Not kept out: flexmod-terms draws 470 to 500 months on about 5% of
-  loans (10 of the 200 held-out tasks are graded above 480), a term its own
-  loan could not have, so its generator wants fixing too.
+  the P&I. Kept out since flexmod-terms 1.2.0: `flexInScope` rejects a
+  remaining term above 480. 1.1.0 drew 470 to 500 months on about 5% of
+  loans, a term its own loan could not have, and graded 10 held-out tasks
+  above 480. 1.2.0 draws more than 360 months only on a loan modified to 480
+  months 12 to 40 payments back, with the modification's balance and P&I.
 - **flexmod-4.** The failed-trial bar counts 365 days, not 12 months
   (ops-12-8.ts:153, :122), so across 29 February a failure 365 days back is
   eligible though inside 12 months; the service's own `onTrialFailed` uses 12
@@ -1031,9 +1048,12 @@ $400,000, change 2026-11-01, index date 2026-09-17).
 - **pmi-9.** The LTV is floored to the basis point (cancellation.ts:21), as
   §10.1 R3 says, so a balance up to $39.99 over 80% is granted while the
   scheduled path and the denial copy test 80% to the cent. Fix: test the
-  actual path in cents and keep basis points for display. Not kept out:
-  pmi-termination grades the band at the engine's reading, which is also the
-  spec's.
+  actual path in cents and keep basis points for display. Not kept out, on
+  purpose: R3 states the floor, the test ("the threshold test is ltv_bps ≤
+  8000") and why ("so a borrower is never denied by a rounding artifact"),
+  so the figure is the spec's, not one it calls wrong. pmi-termination grades
+  the band, and its rulebook's Step 7 states the same floor and test. The
+  fix is the spec's to make first.
 - **pmi-12.** `originalValue` returns the appraisal alone for every New York
   loan (cancellation.ts:15), which moves the federal 78% and 80% dates up to
   eleven months early; §10.1 R2 keeps the appraisal for New York's own 75%

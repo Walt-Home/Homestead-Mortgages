@@ -27,6 +27,7 @@ import {
   executeFlexTool,
   expectedFlex,
   flexPayload,
+  flexInScope,
   flexSpecTasks,
   flexSteps,
   flexTaskId,
@@ -290,6 +291,50 @@ describe("flexmod-terms", () => {
     expect([delinquent, current].flatMap(byRulesMisses)).toEqual([]);
   });
 
+  it("keeps out a remaining term over 480 (flexmod-1), and only that", () => {
+    // §12.8's worked example at 500 months left: the engine keeps 500, where F-1-27 step 4 ends
+    // the term at 480 months from the effective date.
+    const long = specWith({ remaining_term_months: 500 });
+    expect(expectedFlex(long).term_months).toBe(500);
+    expect(flexInScope(long)).toBe(false);
+    expect(flexInScope(specWith({ remaining_term_months: 481 }))).toBe(false);
+    // At 480 the engine and F-1-27 agree: nothing to extend.
+    const full = specWith({ remaining_term_months: 480 });
+    expect(expectedFlex(full).term_months).toBe(480);
+    expect(flexInScope(full)).toBe(true);
+    expect(byRulesMisses(full)).toEqual([]);
+  });
+
+  it("keeps out an ARM's rate above its cap (flexmod-2), and only that", () => {
+    // A step-rate loan at 3.000% whose final step is 4.250%, with the MIR at 6.625%: the engine
+    // takes the MIR; F-1-27 step 2 caps the rate at the final step.
+    const stepRate = (rate_cap_pct: string | null) =>
+      specWith({
+        ib_upb_cents: 18_000_000n,
+        accrued_interest_cents: 0n,
+        escrow_advances_cents: 0n,
+        servicing_advances_cents: 0n,
+        contract_rate_pct: "3.000",
+        is_arm_not_final: true,
+        rate_cap_pct,
+        remaining_term_months: 300,
+        pre_mod_pi_cents: 85_358n,
+      });
+    expect(analyzeFlex(stepRate("4.250")).waterfall?.trace[1]).toBe("step2 rate=6.625");
+    expect(flexInScope(stepRate("4.250"))).toBe(false);
+    expect(flexInScope(stepRate("6.624"))).toBe(false);
+    // An ARM must carry its cap to be evaluated at all.
+    expect(flexInScope(stepRate(null))).toBe(false);
+    // A cap on the MIR, or above it, does not bind: the engine and F-1-27 agree, and so does the
+    // rulebook, followed through the tools.
+    for (const cap of ["6.625", "9.000"]) {
+      expect(flexInScope(stepRate(cap))).toBe(true);
+      expect(byRulesMisses(stepRate(cap))).toEqual([]);
+    }
+    // A fixed rate carries no cap.
+    expect(flexInScope(SPEC)).toBe(true);
+  });
+
   it("fails an answer one cent off on exactly that field, and reads a submission strictly", () => {
     const want = expectedFlex(flexSpecTasks()[0]!);
     const g = gradeFlexAgainst(want, { ...want, forborne_cents: "3548333" });
@@ -312,25 +357,27 @@ describe("flexmod-terms", () => {
     expect(await solveAll(generateFlexSuite("train", 11, 300))).toEqual([]);
   }, 120_000);
 
-  it("is fair to grade on every first draw", () => {
+  it("is fair to grade on every first draw, and stays out of the waterfall's departures from F-1-27", () => {
     const draws = Array.from({ length: 600 }, (_, i) => drawFlexTask("train", 3, i));
     expect(draws.filter((d) => d.attempts > 1).map((d) => d.task.id)).toEqual([]);
+    expect(draws.filter((d) => !flexInScope(d.task)).map((d) => d.task.id)).toEqual([]);
   });
 
   it("agrees with the engine on unfiltered draws: the rulebook, not the guard, makes the suites fair", () => {
     // Candidates exactly as the generator draws them, before its guard has kept or redrawn any.
-    const misses = Array.from({ length: 2000 }, (_, i) => {
+    const candidates = Array.from({ length: 2000 }, (_, i) => {
       const id = flexTaskId("train", 5, i);
       return drawFlexCandidate(rngFor(id), id, "train", 5, i);
-    }).flatMap(byRulesMisses);
-    expect(misses).toEqual([]);
+    });
+    expect(candidates.filter((t) => !flexInScope(t)).map((t) => t.id)).toEqual([]);
+    expect(candidates.flatMap(byRulesMisses)).toEqual([]);
   }, 120_000);
 
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump FLEX_ENVIRONMENT_VERSION, then the pin.
     expect(
       sha256(generateFlexSuite("heldout", 1, 200).map(toJsonLine).join("")),
-    ).toMatchInlineSnapshot(`"d83db1a3b5c3fec34f4fc97cfcabf9586eb7d379e44bf530a6ad807b9dcf6cd1"`);
+    ).toMatchInlineSnapshot(`"59518c8bea391723e13802c163ba2f578c5cb9d441ae85df74d0fd5db5df0807"`);
   });
 
   it("rebuilds a task from its coordinates, and never draws a held-out loan into training", () => {
@@ -396,6 +443,14 @@ describe("flexmod-terms", () => {
         ),
       ).toBeGreaterThan(10);
       expect(count(({ t }) => (t.loan.pre_mod_pi_cents * 80n) % 100n === 0n)).toBeGreaterThan(50);
+      // An ARM whose rate step 2 sets is exactly its cap, lifted to the MIR or its own rate.
+      const onCap = ({ t, w }: (typeof runs)[number]) =>
+        t.loan.is_arm_not_final && w?.trace[1] === `step2 rate=${t.loan.rate_cap_pct}`;
+      const lifted = ({ t, a }: (typeof runs)[number]) =>
+        Number(t.loan.contract_rate_pct) < Number(a.mir_pct);
+      expect(count((x) => onCap(x) && lifted(x))).toBeGreaterThan(10);
+      expect(count((x) => onCap(x) && !lifted(x))).toBeGreaterThan(5);
+      expect(count(({ t }) => t.loan.is_arm_not_final !== (t.loan.rate_cap_pct !== null))).toBe(0);
     });
 
     it("draws a rate-table row effective on the evaluation date, notices on the 15th and 16th, and December notices", () => {
@@ -472,10 +527,13 @@ describe("flexmod-terms", () => {
       expect(count((x) => daysBack(x) === 365 && x.a.mir_pct !== null)).toBeGreaterThan(10);
       // Fewer than 31 days delinquent: four trial months.
       expect(count(({ a }) => a.decision === "offer" && a.trial_months === 4)).toBeGreaterThan(80);
-      // A remaining term already over 480, which step 4 never extends.
-      expect(
-        count(({ t, a }) => t.loan.remaining_term_months > 480 && a.mir_pct !== null),
-      ).toBeGreaterThan(10);
+      // A loan modified to 480 months before, more than 360 left, which step 4 extends to 480 at
+      // most; never more than 480 left, and never without the earlier modification.
+      const modified = ({ t }: Run) => t.loan.remaining_term_months > 360;
+      expect(count((x) => modified(x) && x.a.mir_pct !== null)).toBeGreaterThan(10);
+      expect(count((x) => modified(x) && x.a.term_months === 480)).toBeGreaterThan(5);
+      expect(count(({ t }) => t.loan.remaining_term_months > 480)).toBe(0);
+      expect(count((x) => modified(x) && x.t.prior_modifications === 0)).toBe(0);
       // Each forbearance cap binding alone.
       expect(count(binds("a"))).toBeGreaterThan(100);
       expect(count(binds("b"))).toBeGreaterThan(30);

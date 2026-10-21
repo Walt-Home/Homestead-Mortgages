@@ -12,7 +12,11 @@
  *     more than 50.00 — including just above 49.995 and 50.004, which print
  *     as 50.00;
  *   - a rate already on the MIR, a whole number of eighths above it, or off
- *     the grid (one partial step to the floor), and an ARM below the MIR;
+ *     the grid (one partial step to the floor), and an ARM below the MIR,
+ *     its cap at or above the rate step 2 sets, sometimes exactly on it;
+ *   - a loan modified before to 480 months, a year or more of payments
+ *     since, so more than 360 months are left and step 4 has at most 40 to
+ *     add;
  *   - a target the rate alone reaches at an eighth-point step above the MIR
  *     (the pre-mod set from that step's payment), one the term alone
  *     reaches, one only forbearance reaches, and one nothing reaches
@@ -28,10 +32,12 @@
  *   - a notice on the 15th or the 16th, and one in December; never before
  *     the evaluation, as the service sends it only once the loan is eligible.
  *
- * A task is kept only once the reference, working through the tools, lands
- * exactly where the engine does; the engine is exact decimal arithmetic, so
- * this is a guard rather than a filter, and a test holds it at no redraws
- * and runs the reference over unfiltered draws too.
+ * `flexInScope` keeps out the two places the waterfall departs from F-1-27
+ * (a remaining term over 480, an ARM's rate above its cap), which the
+ * generator never draws. A task is kept only once the reference, working
+ * through the tools, lands exactly where the engine does; the engine is
+ * exact decimal arithmetic, so both are guards rather than filters, and a
+ * test holds them at no redraws and runs both over unfiltered draws too.
  */
 
 import { levelPayment, ratePercent } from "@hm/kernel/money";
@@ -90,13 +96,25 @@ export function drawFlexCandidate(
         : thousandths(r, 3_000, 8_500);
   const made = r.int(12, 150);
   const behind = r.int(2, 14);
-  const ib_upb_cents = balanceAfter(original, contract, 360, made);
+  // Sometimes the loan was modified before, to 480 months, and has paid a year or more since: more
+  // than 360 months left, never more than 480 (an amortizing Fannie Mae loan cannot have more), and
+  // its first twelve modified payments made, so no earlier modification's first year is in doubt.
+  // Its balance and payment are the modification's own.
+  const sinceModification = r.chance(0.05) ? r.int(12, 40) : null;
+  const atModification = balanceAfter(original, contract, 360, made);
+  const ib_upb_cents =
+    sinceModification === null
+      ? atModification
+      : balanceAfter(atModification, contract, 480, sinceModification);
   const accrued_interest_cents = accruedInterest(ib_upb_cents, contract, behind);
   const escrow_advances_cents = r.chance(0.8) ? BigInt(r.int(0, 900)) * 1_000n : 0n;
   const servicing_advances_cents = r.chance(0.7) ? BigInt(r.int(0, 300)) * 100n : 0n;
   const prior_nib_cents = r.chance(0.2) ? BigInt(r.int(50, 900)) * 10_000n : 0n;
   const buydown_funds_cents = r.chance(0.08) ? BigInt(r.int(5, 60)) * 10_000n : 0n;
-  let pre_mod_pi_cents = levelPayment(original, ratePercent(contract), 360);
+  let pre_mod_pi_cents =
+    sinceModification === null
+      ? levelPayment(original, ratePercent(contract), 360)
+      : levelPayment(atModification, ratePercent(contract), 480);
   // A pre-mod P&I that is a multiple of 5 cents: its 80% is an exact cent, which is not the target.
   if (r.chance(0.15)) pre_mod_pi_cents = (pre_mod_pi_cents / 5n) * 5n;
   // Exhaustion: a pre-mod well below what the loan now needs. The tie starts lower still, so nearly every one exhausts.
@@ -138,20 +156,29 @@ export function drawFlexCandidate(
     { effective: addDays(evaluation_on, r.int(1, 20)), rate_pct: thousandths(r, 5_000, 7_500) },
   ];
 
-  // An ARM not on its final rate: sometimes below the MIR, which lifts it.
+  // An ARM not on its final rate: sometimes below the MIR, which lifts it. Its lifetime cap (or final
+  // step) is at or above the rate step 2 sets, a quarter of the time exactly on it: F-1-27 caps the
+  // rate there and the engine does not (flexmod-2), so a cap below it is never drawn.
   const is_arm_not_final = r.chance(0.15);
   const contract_rate_pct =
     is_arm_not_final && r.chance(0.5) ? (Number(mirNow) - r.int(1, 8) / 8).toFixed(3) : contract;
+  const lifted = Math.max(milli(contract_rate_pct), milli(mirNow));
+  const rate_cap_pct = is_arm_not_final
+    ? ((lifted + 125 * (r.chance(0.25) ? 0 : r.int(1, 40))) / 1000).toFixed(3)
+    : null;
 
-  // The remaining term: what the loan has left, sometimes already near 480 or over it.
-  const remaining_term_months = r.chance(0.05) ? r.int(470, 500) : 360 - made;
+  // The remaining term: what the loan has left, the modification's when it has one.
+  const remaining_term_months = sinceModification === null ? 360 - made : 480 - sinceModification;
 
-  const prior_modifications = r.weighted<number>([
-    [0, 80],
-    [1, 8],
-    [2, 6],
-    [3, 6],
-  ]);
+  const prior_modifications = Math.max(
+    sinceModification === null ? 0 : 1,
+    r.weighted<number>([
+      [0, 80],
+      [1, 8],
+      [2, 6],
+      [3, 6],
+    ]),
+  );
   const last_trial_failed_on = r.chance(0.1)
     ? addDays(evaluation_on, -r.pick([364, 365, 200, 500]))
     : null;
@@ -187,6 +214,7 @@ export function drawFlexCandidate(
     value_cents,
     contract_rate_pct,
     is_arm_not_final,
+    rate_cap_pct,
     remaining_term_months,
     pre_mod_pi_cents,
     delinquent_31_plus,
@@ -229,6 +257,26 @@ export function drawFlexCandidate(
   return task;
 }
 
+/**
+ * The guard, run on the task and the engine's own rate table lookup: a loan
+ * is kept only when the waterfall does nothing its spec calls wrong on it.
+ *   - no more than 480 months left. F-1-27 step 4 extends the term to 480
+ *     months and no further, and an amortizing Fannie Mae loan never has
+ *     more; the engine keeps a longer term as it finds it (flexmod-1);
+ *   - an ARM or step-rate loan not on its final rate carries its cap, and
+ *     the rate step 2 sets is at or below it. F-1-27 step 2 caps the rate at
+ *     the lifetime cap or final step; the engine takes the greater of the
+ *     contract rate and the MIR with no cap (flexmod-2).
+ */
+export function flexInScope(task: FlexTask): boolean {
+  if (task.loan.remaining_term_months > 480) return false;
+  if (!task.loan.is_arm_not_final) return true;
+  const cap = task.loan.rate_cap_pct;
+  const mir = mirFor(task);
+  if (cap === null) return false;
+  return mir === null || Math.max(milli(task.loan.contract_rate_pct), milli(mir)) <= milli(cap);
+}
+
 /** Whether the rulebook followed through the tools lands exactly where the engine does. */
 export function flexFairToGrade(task: FlexTask): boolean {
   const payload = JSON.parse(JSON.stringify(flexPayload(task))) as Record<string, unknown>;
@@ -258,7 +306,7 @@ export function drawFlexTask(
       suiteSeed,
       index,
     );
-    if (flexFairToGrade(task)) return { task, attempts: attempt + 1 };
+    if (flexInScope(task) && flexFairToGrade(task)) return { task, attempts: attempt + 1 };
   }
   throw new Error(`${id}: no loan fair to grade in ${ATTEMPTS} draws`);
 }
@@ -294,6 +342,7 @@ export const flexSpecTasks = (): FlexTask[] => [
       value_cents: 29_000_000n,
       contract_rate_pct: "6.500",
       is_arm_not_final: false,
+      rate_cap_pct: null,
       remaining_term_months: 309,
       pre_mod_pi_cents: 158_017n,
       delinquent_31_plus: true,

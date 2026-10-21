@@ -5864,3 +5864,32 @@ The misses are where the work is longest: the escrow analysis's running
 balance (required start, target, shortage, installment), the review's
 cash-back and NPV figures, the APR's third decimal. These are the held-out
 scores; their transcripts are not read.
+
+## Five departures the environments graded, decided
+
+**Decided 21 October 2026.** docs/servicing-engine-defects.md listed five
+places where an environment graded the servicing app's engine at its own
+reading, against its spec. The rule is the payments-posting entry's: an
+environment never grades a model on a figure the spec calls wrong. It keeps the region out, with a generator that aims
+around it and a guard run on the engine's own outputs. A reading the spec
+leaves open (a numbered Q item), and the engine documents as its decision,
+may stay graded when the rulebook states it plainly.
+
+| Defect       | Decision | Why                                                                                                                                                                                                  |
+| ------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| cashiering-4 | closed   | 2.7 rule 1 counts suspense "attributable to the installment", and one balance is not two installments'. 2.7-Q1 leaves open only whether suspense counts at all, so that part stays graded.           |
+| cashiering-9 | closed   | 2.4 rule 2 applies funds received with a scheduled payment to it first. No Q item says how to tell such a receipt, so one that could carry the next payment, or pools earlier suspense, is kept out. |
+| flexmod-1    | closed   | F-1-27 step 4 stops at "480 months from the modification effective date". No Q item. The generator's 470 to 500 months were our own defect, fixed with it.                                           |
+| flexmod-2    | closed   | F-1-27 step 2 caps the rate "at the lifetime cap/final step rate". No Q item. The task now carries the cap.                                                                                          |
+| pmi-9        | kept     | 10.1 R3 floors the LTV, tests it at or below 8000, and says why. The figure is the spec's own, and the rulebook's Step 7 states it.                                                                  |
+
+**What changed.** payments-posting 1.1.0 and flexmod-terms 1.2.0. Each has
+a guard clause for each closed region, a test case that only that clause
+rejects, and a generator that draws none of it: 15,000 and 5,000
+unfiltered draws, none rejected. Both rulebooks state the spec's rule where
+it now agrees with the engine on every task. Payments counts suspense once,
+oldest first. Flex Mod caps step 2's rate. pmi-termination is unchanged at
+1.0.0. Both held-out suites moved, and the old namespaces stay on the
+held-out guard's list. DeepSeek's baselines on flexmod-terms 1.1.0 and
+payments-posting 1.0.0 are scores on suites no longer drawn; the new ones
+want a run of their own.

@@ -258,7 +258,7 @@ apart from the engine.
 
 ## flexmod-terms
 
-flexmod-terms 1.1.0 is the second servicing environment: one delinquent
+flexmod-terms 1.2.0 is the second servicing environment: one delinquent
 Fannie Mae loan evaluated for a Flex Modification (Servicing Guide F-1-27
 and D2-3.2-06), the servicing app's spec §12.8.
 
@@ -267,8 +267,8 @@ evaluation date:
 
 - the loan's balances, arrears and advances, and any earlier forbearance or
   buydown;
-- its rate, whether it is an ARM not on its final rate, and its remaining
-  term;
+- its rate, whether it is an ARM not on its final rate and, for one, its
+  lifetime cap or final step, and its remaining term;
 - the property's value and the pre-modification payment;
 - the Modification Interest Rate table;
 - the loan's prior modifications and failed trials;
@@ -309,7 +309,9 @@ closed form step 5 starts from, computed as the engine computes it.
 - MTMLTV printing 50.00 or 50.01, where step 3 starts and step 5 needs
   more;
 - rates on, above or off the eighth-point grid;
-- an ARM below the MIR;
+- an ARM below the MIR, and an ARM whose step-2 rate is exactly its cap;
+- a loan modified before to 480 months, 12 to 40 payments back, so more than
+  360 months are left;
 - targets reached by the rate, the term, forbearance, or nothing at all,
   including a rate that stops above the MIR;
 - a P&I equal to the pre-modification payment after the waterfall is
@@ -321,14 +323,28 @@ closed form step 5 starts from, computed as the engine computes it.
 - notices on the 15th, the 16th, and in December, never before the
   evaluation.
 
+**What it keeps out.** The waterfall departs from F-1-27 in two places a
+task could reach. `flexInScope` rejects a loan in either, and the generator
+never draws one:
+
+- a remaining term over 480 months, which the engine keeps as it finds it.
+  F-1-27 step 4 extends to 480 and no further, and an amortizing Fannie Mae
+  loan never has more left (flexmod-1 in `docs/servicing-engine-defects.md`);
+- an ARM or step-rate loan whose step-2 rate, the greater of its contract
+  rate and the MIR, is above its cap. F-1-27 step 2 caps the rate at the
+  lifetime cap or final step; the engine does not (flexmod-2). The task
+  carries the cap and the rulebook applies it, which inside that scope
+  changes nothing the engine computes.
+
 The engine and tools are exact decimal arithmetic. The generator keeps a draw
 only when the reference lands where the engine does, so a suite it built
-cannot by itself show the rulebook is fair. A test runs the reference over
-2,000 unfiltered draws as well and allows no disagreement, and no draw in 600
-needs redrawing. The spec's worked example ($251,405.31 gross, $35,483.32
-forborne, $1,264.13 P&I) comes out to the cent, and unit cases settle the
-rounding ties the rulebook specifies (an MTMLTV of exactly 50.005, a
-forbearance cap and a payment reduction at exactly half) as the engine does.
+cannot by itself show the rulebook is fair. A test runs the guard and the
+reference over 2,000 unfiltered draws as well and allows no rejection and no
+disagreement, and no draw in 600 needs redrawing. The spec's worked example
+($251,405.31 gross, $35,483.32 forborne, $1,264.13 P&I) comes out to the
+cent, and unit cases settle the rounding ties the rulebook specifies (an
+MTMLTV of exactly 50.005, a forbearance cap and a payment reduction at
+exactly half) as the engine does.
 
 **1.1.0** changed the generator, so the held-out suite moved. A notice is
 never drawn before the evaluation. In 1.0.0 a December notice could fall
@@ -339,10 +355,21 @@ now spread into exactly half a cent. The grader spreads a shortage with the
 service's own division, which gives the same cent on every shortage drawn.
 The rulebook and the tools did not change.
 
+**1.2.0** stopped grading the two departures above, so the task, the
+rulebook, the generator and the held-out suite all changed. 1.1.0 drew 470 to
+500 months left on about 5% of loans, a term its own loan could not have, and
+graded 10 held-out tasks above 480; it carried no cap, so an ARM's uncapped
+rate was graded. Now a term over 360 is drawn only on a loan with an earlier
+modification, its balance and P&I the modification's, and every ARM not on
+its final rate carries `rate_cap_pct`, a quarter of the time exactly at its
+step-2 rate. The held-out suite has 4 modified loans, 32 ARMs and 8 on their
+cap. The grader did not change. See docs/decisions.md, "Five departures the
+environments graded, decided".
+
 ## payments-posting
 
-payments-posting 1.0.0 is the third servicing environment: one loan's
-receipts posted over a window of four weeks to about two months (28 to 63
+payments-posting 1.1.0 is the third servicing environment: one loan's
+receipts posted over a window of four weeks to about two months (27 to 63
 days over 1,200 training draws; the spec's cases run one to three months),
 the way the servicing app's cashiering posts them (its spec §2.1 receipt and allocation, §2.2
 partials and the $50 rule, §2.4 curtailments, §2.7 late charges).
@@ -403,11 +430,13 @@ a suite of 1,100:
   counts;
 - arrears caught up at once, and once every installment due is paid, the
   rest to late charges;
-- designated principal on a current loan (applied apart, the whole receipt
-  curtailed) and on a delinquent one (redirected to the arrears);
+- designated principal on a current loan, less than a payment (applied
+  apart, the whole receipt curtailed), and on a delinquent one (redirected
+  to the arrears);
 - an amount of additional principal that never prepays a future
   installment;
-- two or three installments prepaid in one receipt;
+- two or three installments prepaid in one receipt, sometimes in a window
+  between two runs, so a month with no late-charge run turns up;
 - an instruction to principal in words, a refused instruction to pay a
   second lien, and both at once;
 - a bankruptcy hold with its charges suspended, a foreclosure referred past
@@ -442,29 +471,57 @@ when the engine does nothing in it that its spec calls wrong:
 - no charge is assessed under a bankruptcy or foreclosure hold;
 - the transfer shield spares only an installment the forwarded payment then
   satisfies;
+- one suspense balance never excuses two installments' late charges. The
+  engine counts the whole balance toward every unpaid installment's test,
+  where 2.7 rule 1 counts what is attributable to the installment
+  (cashiering-4). The guard runs the engine's own `assessLateCharge` again,
+  handed the balance attributed oldest first, and rejects a run whose
+  decision changes; the generator brings any receipt the engine parks in
+  suspense after the window's last run for an installment with another
+  unpaid before it;
+- designated principal on a current loan, which the engine curtails whole,
+  is less than the next payment and pools no earlier suspense. 2.4 rule 2
+  applies funds sent with a scheduled payment to the payment first, and 2.2
+  rule 4 keeps earlier suspense unapplied (cashiering-9);
 - every receipt meets an open installment, and one is still open at the end,
   so no answer depends on where the projection stopped.
 
-On 5,000 unfiltered training draws it rejects none, because the generator
-aims around all of them. It is a guard, not a filter. Where the engine and
-its spec disagree inside v1's scope, the rulebook states what the engine
-does:
+On 15,000 unfiltered training draws it rejects none, because the generator
+aims around all of them. It is a guard, not a filter. Inside v1's scope the
+rulebook states what the engine computes, and none of it is a figure the
+spec calls wrong. Two readings are close to the line:
 
-- the whole suspense balance counts toward each unpaid installment's
-  late-charge test;
-- designated principal on a current loan curtails the whole receipt.
+- funds held in suspense count toward an installment's late-charge test.
+  2.7-Q1 leaves that open, its default counts them (the borrower-favorable
+  reading of the note), and the engine documents the default as its
+  decision, so it stays graded. The rulebook says so, and counts a balance
+  once, oldest installment first, as rule 1 does;
+- designated principal on a current loan, less than a payment, is curtailed
+  at once, as 2.4 rule 2 says of a curtailment received separately.
 
 Spec Example C (a $2,000.00 partial held, then the run) is the visible
-case. The spec assesses $79.01. The engine does not, because $2,000.00 in
-suspense is more than the P&I. A test holds the engine's answer, and
+case of the first. The example assesses $79.01; 2.7-Q1's default does not,
+because $2,000.00 in suspense is more than the P&I and the one open
+installment is the only claim on it. A test holds the engine's answer, and
 docs/decisions.md has the engine defects found on the way.
 
 The reference passes the held-out suite, a 300-task training suite and
 seven of the spec's worked examples (A, D, F, G, K with M, L, N) to the cent,
 with no task redrawn, and agrees with the engine on 2,000 candidates nothing
-filtered. Its longest month is 59 tool calls across 5,000 training draws.
+filtered. Its longest month is 61 tool calls across 5,000 training draws.
 That fits inside the episode's 80 turns even for a model that makes one call
 a turn, once it computes each grace end once, as Step 1 now says to.
+
+**1.1.0** stopped grading two departures 1.0.0 graded at the engine's
+reading, the suspense counted twice and the separate curtailment that could
+carry a payment. The guard has the two clauses above, the generator aims
+around them, and Step 2 counts a suspense balance once, oldest first. Two
+smaller changes came with it: the history before the window is run with the
+balance attributed the same way, and a prepayment month sometimes falls
+between two runs, so a month with no run at all turns up reliably rather
+than about five times in 1,100. The held-out suite moved. The grader did
+not change. See docs/decisions.md, "Five departures the environments
+graded, decided".
 
 ## arm-adjustment
 
@@ -1015,10 +1072,18 @@ nothing there either. The young-loan edge is a 60-day late on a loan under
 24 months, not a window the age cuts short.
 
 Where engine and spec disagree inside that scope, the rulebook says what
-the engine does. One example: LTV is floored to the basis point, as 10.1 R3
-says, so $370,522.40 on a $490,000 BPO is 75.61%, where the spec prints
-75.62%. The value-check fee options and the denial notice's content are not
-graded. docs/decisions.md has each departure, reproduced.
+the engine does. One reading is graded on purpose, though it departs from
+the statute's "80 percent". The LTV is floored to the basis point and
+tested at or below the threshold, as 10.1 R3 says, so $370,522.40 on a
+$490,000 BPO is 75.61%, where the spec's example prints 75.62%. A balance
+up to $39.99 over 80% of a $400,000 value is 8000 and granted. R3 states
+the floor, the test and why ("so a borrower is never denied by a rounding
+artifact"), so the figure is the spec's own and not one it calls wrong.
+Step 7 of the rulebook states the floor and the test, and the generator
+aims at the top of the basis point (pmi-9 in
+`docs/servicing-engine-defects.md`). The value-check fee options and the
+denial notice's content are not graded. docs/decisions.md has each
+departure, reproduced.
 
 **The proof of fairness.** The reference passes the held-out suite, a
 300-task training suite and all 25 of the spec's worked examples to the

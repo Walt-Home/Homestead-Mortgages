@@ -81,7 +81,11 @@ export function* flexSteps(p: Json, call: Call): Step<Json> {
 
   // Step 4
   let rate = Number(s("contract_rate_pct")).toFixed(3);
-  if (loan["is_arm_not_final"] === true && cmp(mir, rate) > 0) rate = mir;
+  if (loan["is_arm_not_final"] === true) {
+    if (cmp(mir, rate) > 0) rate = mir;
+    const cap = Number(s("rate_cap_pct")).toFixed(3);
+    if (cmp(rate, cap) > 0) rate = cap;
+  }
   let term = Number(loan["remaining_term_months"]);
   let payment = yield* pi(gross, rate, term);
 

@@ -69,11 +69,12 @@ export function auditEpisode(r: AuditRecord): AuditRow {
   );
   const returned = new Set(observations.flatMap(valuesOf));
   // A posting has no verdict; its first outcome (a receipt's, or a run's) stands in for one. An
-  // ARM change's is the notice it sends.
+  // ARM change's is the notice it sends, and a payoff's is how its funds were disposed of.
   const run = res.grade.fields.find((f) => f.field.startsWith("late_charge["))?.expected;
   const verdict =
-    res.grade.fields.find((f) => ["verdict", "decision", "qm_status"].includes(f.field))
-      ?.expected ??
+    res.grade.fields.find((f) =>
+      ["verdict", "decision", "qm_status", "disposition"].includes(f.field),
+    )?.expected ??
     res.grade.fields.find((f) => f.field.endsWith(".outcome"))?.expected ??
     (run ? String((JSON.parse(run) as { outcome?: unknown }).outcome ?? "?") : null) ??
     noticeOf(res.grade.fields) ??

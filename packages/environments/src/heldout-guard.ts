@@ -37,6 +37,7 @@ import { REGZ_APR_HELDOUT_SUITE, regzAprTaskId } from "./regz-apr/index.js";
 import { FLEX_HELDOUT_SUITE, flexTaskId } from "./flexmod/index.js";
 import { PAYMENTS_HELDOUT_SUITE, paymentsTaskId } from "./payments/index.js";
 import { ARM_HELDOUT_SUITE, armTaskId } from "./arm/index.js";
+import { PAYOFF_HELDOUT_SUITE, payoffTaskId } from "./payoff/index.js";
 
 /** A held-out suite: the `name/version` its ids are drawn under, and its seed and size. */
 export interface HeldoutSuite {
@@ -76,6 +77,7 @@ export const HELDOUT_SUITES: readonly HeldoutSuite[] = Object.freeze([
   today(flexTaskId, FLEX_HELDOUT_SUITE),
   today(paymentsTaskId, PAYMENTS_HELDOUT_SUITE),
   today(armTaskId, ARM_HELDOUT_SUITE),
+  today(payoffTaskId, PAYOFF_HELDOUT_SUITE),
   { namespace: "refi-tape/1.0.0", ...TAPE_HELDOUT_SUITE },
   { namespace: "refi-hard/1.0.0", ...HARD_HELDOUT_SUITE },
   { namespace: "regz-price-tests/1.0.0", ...REGZ_HELDOUT_SUITE },

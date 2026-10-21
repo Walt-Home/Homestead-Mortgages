@@ -18,6 +18,7 @@
  *   npm run env:refi -w @hm/environments -- --env flexmod-terms --policy reference
  *   npm run env:refi -w @hm/environments -- --env payments-posting --policy reference
  *   npm run env:refi -w @hm/environments -- --env arm-adjustment --policy reference
+ *   npm run env:refi -w @hm/environments -- --env payoff-statement --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -156,6 +157,19 @@ import {
   type ArmAnswer,
   type ArmTask,
 } from "./arm/index.js";
+import {
+  PAYOFF_FINGERPRINT,
+  PAYOFF_HELDOUT_SUITE,
+  PayoffReferencePolicy,
+  payoffTaskId,
+  expectedPayoff,
+  generatePayoffSuite,
+  generatePayoffTask,
+  payoffSpecTasks,
+  payoffStatement,
+  type PayoffAnswer,
+  type PayoffTask,
+} from "./payoff/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -181,7 +195,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof REGZ_APR_FINGERPRINT
     | typeof FLEX_FINGERPRINT
     | typeof PAYMENTS_FINGERPRINT
-    | typeof ARM_FINGERPRINT;
+    | typeof ARM_FINGERPRINT
+    | typeof PAYOFF_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -363,6 +378,18 @@ const BENCHES = {
     verdictOf: (t) => expectedArm(t).notice_template ?? "no notice",
     reference: () => new ArmReferencePolicy(),
   } satisfies Bench<ArmTask, ArmAnswer>,
+  // A payoff from the written request to Fannie Mae's share, graded by the servicing app's own engine.
+  "payoff-statement": {
+    env: payoffStatement,
+    fingerprint: PAYOFF_FINGERPRINT,
+    heldout: PAYOFF_HELDOUT_SUITE,
+    suite: generatePayoffSuite,
+    one: generatePayoffTask,
+    taskId: payoffTaskId,
+    spec: payoffSpecTasks,
+    verdictOf: (t) => expectedPayoff(t).disposition,
+    reference: () => new PayoffReferencePolicy(),
+  } satisfies Bench<PayoffTask, PayoffAnswer>,
 };
 
 const { values } = parseArgs({
@@ -518,6 +545,7 @@ async function main(): Promise<void> {
   if (values.env === "flexmod-terms") return run(BENCHES["flexmod-terms"]);
   if (values.env === "payments-posting") return run(BENCHES["payments-posting"]);
   if (values.env === "arm-adjustment") return run(BENCHES["arm-adjustment"]);
+  if (values.env === "payoff-statement") return run(BENCHES["payoff-statement"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

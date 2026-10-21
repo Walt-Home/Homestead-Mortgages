@@ -116,6 +116,15 @@ import {
   expectedArm,
   generateArmTask,
 } from "../src/arm/index.js";
+import {
+  PayoffReferencePolicy,
+  expectedPayoff,
+  generatePayoffTask,
+  payoffPayload,
+  payoffSpecTasks,
+  payoffStatement,
+  payoffTaskId,
+} from "../src/payoff/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
 
@@ -371,6 +380,25 @@ const ARM_SPEC = [
   "T11: an FDCPA cease on file",
 ];
 
+/** The spec's payoff examples, in the order `payoffSpecTasks` builds them. */
+const PAYOFF_SPEC = [
+  "16.1 example A: Ohio, the funds a week early",
+  "16.1 example A: the statement's amount, late (16.1-T2)",
+  "16.1 example B: deferred principal, paid on the good-through",
+  "16.2 worked example: A/A",
+  "16.2: the same loan, S/A",
+  "16.2: the same loan, S/S in an MBS pool",
+  "16.2: an S/S MBS payoff processed on the first business day",
+  "7.6: the Texas statement",
+  "7.6: the same statement in Florida",
+  "16.1-T7: Massachusetts",
+  "16.1-T11: Connecticut, five business days",
+  "16.2-T4: $30.00 short",
+  "16.2-T5: Florida, short within the good-through",
+  "16.1-T3: a Sunday due date and Monday's funds",
+  "16.1-T4: example A on daily simple interest",
+];
+
 /** The spec's §2 examples, in the order `paymentsSpecTasks` builds them. */
 const PAYMENTS_SPEC = [
   "Example A: a full payment",
@@ -595,6 +623,21 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     expected: expectedArm,
     verdictOf: (t) => expectedArm(t).notice_template ?? "no notice",
     reference: () => new ArmReferencePolicy(),
+  }),
+  playground({
+    env: payoffStatement,
+    title: "Payoff statement",
+    side: "servicing",
+    summary:
+      "One loan's written payoff request: the statement's deadline and how long it is good, the payoff interest, per diem and total, the figure if the next installment posts, what happens to funds that arrive early or late, and the share owed to Fannie Mae by remittance type. Graded by the servicing app's own payoff engine.",
+    id: payoffTaskId,
+    one: generatePayoffTask,
+    spec: payoffSpecTasks,
+    specNames: PAYOFF_SPEC,
+    payload: payoffPayload,
+    expected: expectedPayoff,
+    verdictOf: (t) => expectedPayoff(t).disposition,
+    reference: () => new PayoffReferencePolicy(),
   }),
 ]);
 

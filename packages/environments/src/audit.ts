@@ -15,7 +15,7 @@
  */
 
 import type { EpisodeResult, Observation } from "./episode.js";
-import { costOf } from "./compare.js";
+import { costOf, noticeOf } from "./compare.js";
 
 /** What a full review cannot do without, once a loan is past its exclusions and has a quote. */
 const NEEDED_WITH_QUOTE = ["level_payment", "present_value", "balance_after"] as const;
@@ -68,13 +68,16 @@ export function auditEpisode(r: AuditRecord): AuditRow {
     e.kind === "observations" ? e.observations : [],
   );
   const returned = new Set(observations.flatMap(valuesOf));
-  // A posting has no verdict; its first outcome (a receipt's, or a run's) stands in for one.
+  // A posting has no verdict; its first outcome (a receipt's, or a run's) stands in for one. An
+  // ARM change's is the notice it sends.
   const run = res.grade.fields.find((f) => f.field.startsWith("late_charge["))?.expected;
   const verdict =
     res.grade.fields.find((f) => ["verdict", "decision", "qm_status"].includes(f.field))
       ?.expected ??
     res.grade.fields.find((f) => f.field.endsWith(".outcome"))?.expected ??
-    (run ? String((JSON.parse(run) as { outcome?: unknown }).outcome ?? "?") : "?");
+    (run ? String((JSON.parse(run) as { outcome?: unknown }).outcome ?? "?") : null) ??
+    noticeOf(res.grade.fields) ??
+    "?";
   const answer = res.answer ?? null;
   const figures =
     answer && "offer" in answer

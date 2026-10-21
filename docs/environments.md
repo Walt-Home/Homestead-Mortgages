@@ -443,6 +443,153 @@ filtered. Its longest month is 59 tool calls across 5,000 training draws.
 That fits inside the episode's 80 turns even for a model that makes one call
 a turn, once it computes each grace end once, as Step 1 now says to.
 
+## arm-adjustment
+
+arm-adjustment 1.0.0 is the fourth servicing environment: one adjustable-rate
+loan on one change date, adjusted the way the servicing app's ARM engine
+adjusts it (its spec §7.2, Regulation Z §1026.20(c)), with the §1026.20(d)
+initial notice of its spec §7.3 on the loan's first change.
+
+**The task.** It gives what the servicer has boarded and recorded on the day
+the change is worked:
+
+- the note's ARM terms: the index, margin and look-back, the first change
+  date and the adjustment period, the initial, periodic and lifetime caps,
+  the rounding rule, any interest-only period, the term, the first payment
+  and the closing, and whether the (d) disclosure at closing was an estimate;
+- the current rate and payment, and the schedule basis the last change left
+  (the note itself on the first change);
+- any FDCPA cease on file, and whether the servicer is a debt collector;
+- the index as published: business-day prints from three or four weeks
+  before the index date to two weeks after it;
+- the date the notice would be sent.
+
+It does not give the index date, the first new payment's due date, the
+remaining term, the expected balance or any window. The model finds the
+index, rounds to the eighth under the note's midpoint rule, applies the caps
+and the floor in the engine's order and names the limit that bound, works the
+scheduled balance at the old rate and the new payment, classes the (c)
+notice's timing, says which notice goes and whether the proposed send date is
+blocked, on time or late, and on the first change gives the (d) notice's duty
+and window.
+
+**The grade.** A pass is every field right. Twenty-two answers are graded as
+eight fields, and a ninth on the first change: the index (its date, the print
+and its value), the rounding (the unrounded rate, the eighth, the midpoint),
+the rate (the new rate and the limit that bound it), the expected balance,
+the schedule (the first new payment, the remaining term, the next change),
+the payment, the notice's timing (its kind, opening and due date), the notice
+(which one goes, and the send check), and the initial notice. A label that is
+nearly always the same (no limit binds, no midpoint, the Reg Z notice on
+time) is graded with the figure or the decision beside it, so an answer that
+works nothing and guesses the commonest label everywhere scores about 0.10 on
+the held-out suite. An initial notice reported on a later change is a field
+of its own, so hedging is never cheaper than committing.
+
+**The grader is the servicing app's own two engines.** `src/arm/ported/`
+holds `arm.ts` (engine A, fixed-scale decimal) and `arm-verify.ts` (engine B,
+BigInt fixed point) from `apps/servicing/src/domain/notices/`, each byte for
+byte but for its import lines, held by a test that rewrites the original's
+imports and compares. The grader runs both, and a test holds them equal on
+every generated change: the spec's own dual-calculation gate. The conventions
+around them live in the servicing app's stateful ARM service (`ops-7-2.ts`,
+`ops.ts`), which does not port, so they are restated in the grader with the
+lines they come from, and a test holds those lines to the service's source:
+
+- the schedule row: the first new payment's due date, the notice kind, the
+  index date, the window's opening and the notice's due date;
+- the expected balance, counted from the schedule basis through the payment
+  due on the change date, or the basis itself while interest only; and the
+  remaining term with both ends counted;
+- the interest-only payment while the first new payment falls inside the
+  interest-only period;
+- which notice goes, and how its send date is checked;
+- the next change date.
+
+**The tools.** refi's level payment, scheduled balance, date steps, month
+count and calculator, and nothing new: no index lookup (the model reads the
+series), no eighth, no cap test and no window. Those are the task.
+
+**The tasks** cycle by index through twelve edges, two hundred changes each in
+a suite of 2,400:
+
+- a Fannie Mae SOFR plan (4926 to 4929) or a legacy note, nothing aimed;
+- index + margin exactly halfway between two eighths, and one
+  hundred-thousandth either side, under both rounding rules;
+- the first change above and below its cap, exactly on it, and a midpoint that
+  lands on the cap rounding down and passes it rounding up;
+- the same on a later change, with the periodic cap;
+- a later change near the lifetime ceiling, exactly on it, and the tie where
+  prior + cap is the ceiling (the cap is named, not lifetime), which a 7/6 or
+  10/6 plan's 5 % initial cap also makes on the first change;
+- an off-grid margin (2.800) whose eighth falls below it, so the floor binds
+  off the grid, and an on-grid margin an index of 0 lands on exactly;
+- no print on the index date (a weekend, a holiday or a missing print), with
+  a print after it that would round otherwise;
+- interest only through the change, ending with it, and ended at an earlier
+  change;
+- the 25-day loans: closed before 2015-01-10 with a look-back under 45 days,
+  closed on 2015-01-09 and on 2015-01-10, and monthly adjusters;
+- the first change's (d) duty: the servicer's, the originator's at 209, 210
+  and 211 days from closing, and exempt on a one-year term; and the (c)
+  exemptions beside it, the first change without an estimate within 210 days
+  and the 25-day first change within 60 days of closing after an estimate;
+- a send the day before the window opens, on the index date, on the deadline,
+  the day after it, and a month late;
+- an index that rounds back to the current rate, where the scheduled balance
+  re-amortized moves the payment a cent (Fannie Mae's notice, late after
+  change − 25) or does not (no notice); and an FDCPA cease on file with a debt
+  collector and without one.
+
+**What v1 leaves out, and why.** The engine has places where it departs from
+its spec or books a figure no servicer would (docs/decisions.md lists them).
+v1 does not grade a model on those, because the grader would be teaching the
+defect. The generator never draws:
+
+- error correction, the LAR 83 report and its pass-through rate, or the
+  late-notice deferral of the payment change;
+- the (d) notice's estimate and its index-freshness hold; its status and
+  window are graded, its figures are not;
+- a two-month adjuster, a due day other than the 1st, or a rate written with
+  other than three decimals;
+- payment-cap plans, buydowns, conversions, Chapter 13 filings, and index
+  revisions or fallback captures, which are stateful or policy rather than
+  arithmetic.
+
+`armInScope` runs on the engine's own results, and keeps a change only where
+the engine does nothing its spec calls wrong:
+
+- every rate has three decimals, as the service compares the new rate with
+  the current one as text;
+- every index print has five decimals and none is negative, where the two
+  engines round differently;
+- every schedule date falls on the 1st, and the change is on the schedule;
+- no two-month adjuster, which the service classes as adjusting every 60 days
+  or more often;
+- an interest-only period ends with a change, as the engine never recasts a
+  payment between changes;
+- both engines agree, and the balance and term left are positive;
+- no notice is proposed before the index date unless it is a Reg Z notice
+  before its window opens. The engine's send check passes a Reg Z notice sent
+  after the window opens and before the index date, and the spec's sendable
+  window starts at the index date;
+- Fannie Mae's notice in place of a suppressed Reg Z notice (an FDCPA cease,
+  or an exempt first change) is never proposed after change − 25. The engine
+  never marks that one late, and the spec's 25 days apply to it.
+
+On 8,000 unfiltered training draws it rejects none, because the generator aims
+around all of them. It is a guard, not a filter.
+
+The reference passes the held-out suite, a 300-task training suite and ten of
+the spec's cases to the cent: §7.2's worked example and its cap variant, a
+missing print (T1), the midpoint both ways (T2), a send a day late and one
+before the window opens (T5), the second change, the monthly legacy loan's
+25-day deadline (T6) and an FDCPA cease (T11), with §7.3's window on the same
+loan. No task is redrawn, and it agrees with the engine on 2,000 candidates
+nothing filtered. Its longest change is 26 tool calls in 7 turns. §7.3's
+estimate (6.375 % and $2,476.44 on the April print) is held by a test through
+the ported engine, as v1 does not grade it.
+
 ## escrow-history
 
 escrow-history 1.0.0 is escrow-analysis started from the account's ledger.
@@ -526,6 +673,7 @@ npm run env:refi -w @hm/environments -- --env escrow-history --policy reference
 npm run env:refi -w @hm/environments -- --env regz-apr --policy reference
 npm run env:refi -w @hm/environments -- --env flexmod-terms --policy reference
 npm run env:refi -w @hm/environments -- --env payments-posting --policy reference
+npm run env:refi -w @hm/environments -- --env arm-adjustment --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

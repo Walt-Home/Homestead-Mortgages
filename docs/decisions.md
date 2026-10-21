@@ -5253,3 +5253,113 @@ states as reading, and the earlier runs' counts fall with it.
 
 flexmod-terms changed after its read: 1.1.0 draws differently, and its
 rulebook does not. These are reads on training tasks, not scores.
+
+## The ARM change is graded by its two engines, outside the places they are in doubt
+
+**Built 21 October 2026,** as `arm-adjustment` 1.0.0 in
+`packages/environments`: one adjustable-rate loan on one change date. The
+model finds the index, sets the new rate and payment, says which notice goes
+under Regulation Z §1026.20(c) and whether the proposed send date is inside
+its window, and on the first change gives the §1026.20(d) initial notice's
+duty and window.
+
+**Why this one.** It ranked second of ten, after PMI termination, when the
+servicing app was surveyed for the next environments. ARM adjustment errors are a classic source of systematic
+overcharges, and refund programs follow them: a wrong cap, rounding or
+look-back overcharges every month until someone finds it. The (c) and (d)
+notices are Regulation Z timing duties with TILA liability behind them. The
+work is a dozen short steps, each with its own trap: a print dated after the
+index date, half-down at an exact eighth, the cap order and which limit is
+named on a tie, 60 payments counted and not 59, a 300-month term and not 299,
+the interest-only boundary, the notice thresholds. The engines are pure, and
+the spec has worked examples to the cent.
+
+**The grader is both engines, ported as the others are.** `arm.ts` (engine A,
+fixed-scale decimal) and `arm-verify.ts` (engine B, BigInt fixed point) from
+`apps/servicing/src/domain/notices/` are copied byte for byte but for their
+imports, and a test fails on any other difference. The servicing app runs the
+two side by side and renders no notice until they agree to the cent; the
+grader runs both, and a test holds them equal on every generated change. The
+conventions around them (the schedule row, the expected balance and remaining
+term, the interest-only test, which notice goes, the send check) live in the
+stateful ARM service, which does not port. They are restated in the grader
+with the lines they come from, and a test holds those lines to the source.
+
+**What reading the engine found.** Mapping it against the servicing app's spec
+§7.2 and §7.3 turned up places where it departs from its own text or books a
+figure no servicer would. Each was reproduced against the vendored engine on
+21 October, the last four by this environment's tests. None is fixed here, because
+`apps/servicing` is vendored and is never edited in this repo:
+
+- **An adjustment can be calculated before its index date, and is then locked
+  on the stale print.** Nothing stops a calculation before the index date, and
+  once verified the adjustment refuses to be recalculated. Calculated on
+  2026-08-01 on the 2026-07-31 print, the worked example's loan adjusts to
+  4.875 % and $2,142.18 instead of 6.375 % and $2,476.44, and its notice goes
+  out so: $334.26 a month the Servicing Guide says cannot be collected.
+- **The LAR 83 deadline runs from the day the calculation ran,** not from the
+  index date the spec names. Calculated on 2026-09-21, it is due 2026-09-28;
+  the spec says Thursday 2026-09-24.
+- **A late (c) notice can still leave the borrower under 60 days' notice.**
+  The payment change is deferred exactly one cycle. A notice 34 days late
+  gives 57 days before the first adjusted payment; 49 days late gives 42.
+- **A late notice on a rate decrease defers the lower payment** and books the
+  difference as a negative servicer shortage: on a fall to 4.250 % the
+  borrower overpays $324.18, and no line takes it.
+- **A two-month adjuster is classed as adjusting every 60 days or more
+  often.** Ten of twelve successive two-month gaps are 61 or 62 days.
+- **The correction books a zero error as a credit,** and has no way to say an
+  error touched only the rate or only the payment, so such an error on a
+  current loan becomes a cash refund.
+- **A due day other than the change day counts a payment twice.** The months
+  are counted by year and month alone, so a loan due on the 15th with a change
+  on the 1st gets 60 payments to the change and a 301-month remaining term: 361
+  payments on a 360-month note.
+- **Rates are compared as text.** A loan boarded at "5.75" whose rate stays at
+  5.750 is sent Fannie Mae's rate-change notice.
+- **Fannie Mae's notice in place of a suppressed Reg Z notice is never late.**
+  With an FDCPA cease on file, or on an exempt first change, both figures
+  change and the Reg Z notice is suppressed, and the Fannie Mae notice that
+  goes instead is called on time even after the change date. The spec gives it
+  the 25 days the other Fannie Mae notices get.
+- **The send check passes a Reg Z notice proposed before the index date,** once
+  the window has opened. The spec's sendable window starts at the index date,
+  because the rate is not known before it; the first item above is how such a
+  notice comes to exist.
+
+The spec has its own slips, which the engine gets right or does not reach. Its
+worked example prints the monthly rate as 0.053125 %, which as written gives
+$1,338.33; the engine's 6.375 ÷ 1200 gives the stated $2,476.44. Its
+correction rule has the sign inverted, which the engine documents. §7.3's
+worked example sends on April 20 where its own rule 2 sets April 10. Its data
+model lists rounding rules, a floor and a payment cap the engine does not
+carry. Two smaller things are the engine's: its two engines round a negative
+rate differently, and the service's freshness hold on the (d) estimate counts
+one business day more than the engine's own test when the disclosure date is
+not a business day.
+
+**So v1 stays out of those places.** It grades none of the error correction,
+LAR 83 with its pass-through rate, the late-notice deferral, or the (d)
+estimate and its freshness. The (d) notice's status and window are graded,
+and its figures are not. The generator never draws a two-month adjuster, a due
+day other than the 1st, or a rate with other than three decimals, and it ends
+every interest-only period with a change. `armInScope` then runs on the
+engine's own results and rejects a change that reaches any of the places
+above: a notice proposed before the index date (other than a Reg Z notice
+before its window opens, which engine and spec both block), Fannie Mae's
+notice in place of a suppressed one proposed after change − 25, a negative or
+mis-written index, and anything the two engines disagree on. It rejects none
+of 8,000 unfiltered training draws, because the generator aims around them.
+A model is graded on what the servicing app computes, inside the region where
+that is what its spec says, and the list above is for the servicing app's own
+source.
+
+**What v1 leaves out besides.** Payment-cap plans, temporary buydowns,
+conversions, Chapter 13 payment-change filings, and index revisions or
+fallback captures. They are stateful or a matter of policy, not arithmetic.
+
+**The proof of fairness.** The reference solves the held-out 200, a 300-task
+training suite and ten of the spec's cases through the tools alone, in at most
+26 tool calls and 7 turns. No task is redrawn in 600 draws, and it agrees with
+the engine on 2,000 candidates nothing filtered. An answer that works nothing
+and guesses the commonest label everywhere scores about 0.10.

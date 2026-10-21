@@ -1,0 +1,29 @@
+The servicing app's ARM adjustment engines, ported for the arm-adjustment
+environment's grader.
+
+Source       apps/servicing/src/domain/notices/{arm,arm-verify}.ts
+Vendored at  293261b371fe97d2b6b39e1f29ca60dd808ac8fb (apps/servicing/VENDORED_FROM)
+Ported       2026-10-21
+
+Each file here is its source byte for byte except its import lines: the
+kernel's paths become @hm/kernel/{money,calendar} (the same bytes;
+packages/kernel/VENDORED_FROM) and the sibling's .ts becomes .js. Nothing
+else may be edited: src/__tests__/arm.test.ts compares each pair with their
+import lines removed and fails on any difference. Lint and Prettier skip
+this directory for the reason they skip the vendored trees.
+
+arm.ts is engine A (computeArmAdjustment, fixed-scale Decimal) and the pure
+helpers around it: the index date and selection, the eighth rounding, the
+caps, the payment, the scheduled balance, the (c) and (d) windows and the
+send check. arm-verify.ts is engine B (verifyArmAdjustment, BigInt fixed
+point), which shares nothing with engine A but the types. The grader runs
+both, and a test holds them equal on every generated task.
+
+The service conventions the environment also follows (the schedule row's
+dates and notice kind, the expected balance and remaining term, the
+interest-only test, which notice goes and how its send date is checked)
+live in the servicing app's stateful ops-7-2.ts and ops.ts, which do not
+port; they are restated in src/arm/grader.ts with the lines they come from.
+
+To take a change from the servicing app, copy both files again and rewrite
+the same six imports.

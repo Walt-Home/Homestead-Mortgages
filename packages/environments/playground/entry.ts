@@ -107,6 +107,15 @@ import {
   paymentsSpecTasks,
   paymentsTaskId,
 } from "../src/payments/index.js";
+import {
+  ArmReferencePolicy,
+  armAdjustment,
+  armPayload,
+  armSpecTasks,
+  armTaskId,
+  expectedArm,
+  generateArmTask,
+} from "../src/arm/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
 
@@ -348,6 +357,20 @@ const TAPE_SPEC = ["worked example 1, as our loan record and a clean tape"];
 const TAPE_SPEC_ELSEWHERE = ["refi-tape's worked example 1"];
 const TAPE_SPEC_ON_THE_EDGES = ["refi-tape's worked example 1, not on an edge"];
 
+/** §7.2's Plan 4927 loan and its test cases, in the order `armSpecTasks` builds them. */
+const ARM_SPEC = [
+  "7.2 worked example: 3.64883 + 2.750 rounds to 6.375%, sent in its window (with 7.3's initial notice)",
+  "T1: no print on the index date",
+  "T3: the cap variant, 7.85 rounds to 7.875 and is capped at 7.750",
+  "T2: an index on an eighth's midpoint, rounded half down",
+  "T2: the same midpoint, rounded half up",
+  "T5: sent a day late",
+  "T5: proposed before the window opens",
+  "The second change, on 2027-05-01",
+  "T6: a monthly legacy loan's 25-day deadline",
+  "T11: an FDCPA cease on file",
+];
+
 /** The spec's §2 examples, in the order `paymentsSpecTasks` builds them. */
 const PAYMENTS_SPEC = [
   "Example A: a full payment",
@@ -557,6 +580,21 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
       return a.receipts[0]?.outcome ?? a.late_charge_runs[0]?.outcome ?? "nothing";
     },
     reference: () => new PaymentsReferencePolicy(),
+  }),
+  playground({
+    env: armAdjustment,
+    title: "ARM rate change",
+    side: "servicing",
+    summary:
+      "One adjustable-rate loan on one change date: find the index print, round and cap the new rate, amortize the scheduled balance, set the new payment, and decide which Reg Z notice goes, when its window opens and whether the proposed send is on time. Graded by the servicing app's two ARM engines, which must agree.",
+    id: armTaskId,
+    one: generateArmTask,
+    spec: armSpecTasks,
+    specNames: ARM_SPEC,
+    payload: armPayload,
+    expected: expectedArm,
+    verdictOf: (t) => expectedArm(t).notice_template ?? "no notice",
+    reference: () => new ArmReferencePolicy(),
   }),
 ]);
 

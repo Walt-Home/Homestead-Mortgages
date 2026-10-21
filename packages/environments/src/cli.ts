@@ -17,6 +17,7 @@
  *   npm run env:refi -w @hm/environments -- --env regz-apr --policy reference
  *   npm run env:refi -w @hm/environments -- --env flexmod-terms --policy reference
  *   npm run env:refi -w @hm/environments -- --env payments-posting --policy reference
+ *   npm run env:refi -w @hm/environments -- --env arm-adjustment --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -142,6 +143,19 @@ import {
   type PaymentsAnswer,
   type PaymentsTask,
 } from "./payments/index.js";
+import {
+  ARM_FINGERPRINT,
+  ARM_HELDOUT_SUITE,
+  ArmReferencePolicy,
+  armTaskId,
+  armAdjustment,
+  armSpecTasks,
+  expectedArm,
+  generateArmSuite,
+  generateArmTask,
+  type ArmAnswer,
+  type ArmTask,
+} from "./arm/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -166,7 +180,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof HISTORY_FINGERPRINT
     | typeof REGZ_APR_FINGERPRINT
     | typeof FLEX_FINGERPRINT
-    | typeof PAYMENTS_FINGERPRINT;
+    | typeof PAYMENTS_FINGERPRINT
+    | typeof ARM_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -336,6 +351,18 @@ const BENCHES = {
     },
     reference: () => new PaymentsReferencePolicy(),
   } satisfies Bench<PaymentsTask, PaymentsAnswer>,
+  // An ARM's rate and payment change and its Reg Z notice, graded by the servicing app's own two engines.
+  "arm-adjustment": {
+    env: armAdjustment,
+    fingerprint: ARM_FINGERPRINT,
+    heldout: ARM_HELDOUT_SUITE,
+    suite: generateArmSuite,
+    one: generateArmTask,
+    taskId: armTaskId,
+    spec: armSpecTasks,
+    verdictOf: (t) => expectedArm(t).notice_template ?? "no notice",
+    reference: () => new ArmReferencePolicy(),
+  } satisfies Bench<ArmTask, ArmAnswer>,
 };
 
 const { values } = parseArgs({
@@ -490,6 +517,7 @@ async function main(): Promise<void> {
   if (values.env === "regz-apr") return run(BENCHES["regz-apr"]);
   if (values.env === "flexmod-terms") return run(BENCHES["flexmod-terms"]);
   if (values.env === "payments-posting") return run(BENCHES["payments-posting"]);
+  if (values.env === "arm-adjustment") return run(BENCHES["arm-adjustment"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

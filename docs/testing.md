@@ -116,13 +116,13 @@ page and see the portal, never the console.
 ## The environments
 
 The Supermortgage Gym, https://claude.ai/artifact/LKEDiyPJyoQ4UwijqwpNw6
-(ask Joe to share it), is the thirteen training environments in a browser
-page. Pick one, draw a training task, work it with the tools a model gets,
-and grade your answer field by field against the engine. Then watch the
-reference solve the same task, or read a model's recorded attempts. Every
-loan is synthetic, held-out tasks are never shown, and nothing you type
-leaves the page. Locally, `npm run env:gym -w @hm/environments` builds it
-and serves it at http://localhost:8765.
+(ask Joe to share it), is the training environments in a browser page. Pick
+one, draw a training task, work it with the tools a model gets, and grade
+your answer field by field against the engine. Then watch the reference
+solve the same task, or read a model's recorded attempts. Every loan is
+synthetic, held-out tasks are never shown, and nothing you type leaves the
+page. Locally, `npm run env:gym -w @hm/environments` builds it and serves it
+at http://localhost:8765.
 
 If you and the engine disagree on a task, check the rulebook's wording
 first. Then say which environment, the seed and index, and the field.

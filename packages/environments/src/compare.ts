@@ -16,6 +16,18 @@
 
 import { readFileSync } from "node:fs";
 
+/** An ARM change has no verdict; the notice its grade says goes stands in for one. */
+export function noticeOf(fields: readonly { readonly field: string; readonly expected: string }[]) {
+  const notice = fields.find((f) => f.field === "notice")?.expected;
+  if (notice === undefined) return null;
+  try {
+    const parsed = JSON.parse(notice) as { notice_template?: unknown };
+    return String(parsed.notice_template ?? "no notice");
+  } catch {
+    return null;
+  }
+}
+
 export interface EpisodeLine {
   readonly task: { readonly id: string };
   readonly policy: { readonly id: string };
@@ -93,6 +105,7 @@ export function scoreSide(lines: readonly EpisodeLine[]): {
         l.result.grade.fields.find((f) => f.field === "verdict" || f.field === "decision")
           ?.expected ??
         l.result.grade.fields.find((f) => f.field.endsWith(".outcome"))?.expected ??
+        noticeOf(l.result.grade.fields) ??
         "?",
       cost: costOf(l.policy.id, l.result.usage),
       missed: l.result.grade.fields.filter((f) => f.ok === false).map((f) => f.field),

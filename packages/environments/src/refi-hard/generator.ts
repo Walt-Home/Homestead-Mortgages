@@ -74,8 +74,13 @@ import { tapeOf } from "../refi-tape/generator.js";
 import type { RefiTapeTask } from "../refi-tape/task.js";
 
 export const HARD_ENVIRONMENT_NAME = "refi-hard";
-/** Bump on any change to the generator; the rules, tools and grader are refi-tape's. */
-export const HARD_ENVIRONMENT_VERSION = "1.0.0";
+/**
+ * Bump on any change to the generator, or to anything refi-tape's version
+ * covers: the rules, tools and grader are refi-tape's.
+ *
+ * 1.1.0 (20 Oct 2026): with refi-tape 1.1.0, a PMI rate may have three digits.
+ */
+export const HARD_ENVIRONMENT_VERSION = "1.1.0";
 
 export const EDGES = [
   "rate_floor",

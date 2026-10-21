@@ -15,8 +15,14 @@ import type { PlainDate } from "@hm/kernel/calendar";
 import { PAYLOAD_START, plain, type Split } from "../refi/task.js";
 
 export const TAPE_ENVIRONMENT_NAME = "refi-tape";
-/** Bump on any change to the rulebook, the tools, the rendering or the generator. */
-export const TAPE_ENVIRONMENT_VERSION = "1.0.0";
+/**
+ * Bump on any change to the rulebook, the tools, the rendering or the generator.
+ *
+ * 1.1.0 (20 Oct 2026): a PMI rate may have three digits before the point, as
+ * the engine now reads it (port v3). Under 1.0.0 a PMI rate of "100" was
+ * absent and the premium 0; both models read it as 100 basis points.
+ */
+export const TAPE_ENVIRONMENT_VERSION = "1.1.0";
 
 export interface RefiTapeTask {
   readonly id: string;

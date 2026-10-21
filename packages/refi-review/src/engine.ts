@@ -40,8 +40,12 @@ import {
 
 /** His rule set's name, and this port's. The row carries both. */
 export const RULE_SET_VERSION = "sm.refi_trigger.v1+partner_book.review.v1";
-/** v2 (5 October 2026): delinquency is counted to the tape's own date, not the review day. */
-export const PORT_VERSION = "hm.refi-review.v2";
+/**
+ * v2 (5 October 2026): delinquency is counted to the tape's own date, not the review day.
+ * v3 (20 October 2026): a PMI rate of three digits before the point (100 basis
+ * points and up, or a 1 % cell the tape loader wrote as "100.000") is read, not dropped.
+ */
+export const PORT_VERSION = "hm.refi-review.v3";
 
 export const REFI_PRODUCT_CODE = "FRM30";
 export const LCOR_CASH_BACK_FLOOR_CENTS: Cents = 200_000n;

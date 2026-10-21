@@ -4881,8 +4881,8 @@ the models, enough to show the edges cost DeepSeek something.
   a real tape it is a defect. `parseRatePct` writes a 1 % cell (`1`,
   `1.00`) and any rate of 100 basis points or more as `"100.000"` and up,
   which the review then reads as no premium, understating the NPV on the
-  offer. Filed as its own fix, because it changes production reviews and
-  every environment's grader with them.
+  offer. Fixed the same day as a change of its own (the next entry), since
+  it moves production reviews and every environment's grader with them.
 - **DeepSeek, task 11, cash at the cap.** It priced the raw amount, then
   switched to the rounded one and carried the raw amount's payment into the
   seven-year balance. That is the edge working.
@@ -4898,3 +4898,44 @@ cannot stand in: its quota request was refused.
 the cap feeding everything after it). The held-out run is 200 tasks, about
 $25 for Claude and $2.50 for DeepSeek, once the key can spend again and
 the PMI fix has landed, since that fix changes the grader.
+
+## A PMI rate of 1 % or 100 basis points was read as no premium
+
+**Fixed 20 October 2026,** as `PORT_VERSION` `hm.refi-review.v3`.
+
+**The defect.** The tape loader (`parseRatePct`) reads a rate cell of 1 or
+less as a fraction and writes every rate with three decimals, so a PMI cell
+of `1` or `1.00` (1 %) and any of `100` basis points or more both arrive as
+`"100.000"` and up. The review's reader (`universeLoanOf`) took a rate
+string to two digits before the point, so it dropped them, and a loan with
+mortgage insurance on was reviewed as paying no premium. The premium is part
+of the monthly saving a refinance offers, so the NPV came out low — on a
+$280,000 balance at 1 %, $233 a month left out — and some loans that should
+have been candidates were not.
+
+**The fix.** A PMI rate may have three digits before the point; above 5 it
+is still basis points. Every form a tape gives now reaches the review as the
+percent it meant:
+
+| Cell                                             | Read before | Read now                  |
+| ------------------------------------------------ | ----------- | ------------------------- |
+| `0.55`, `0.0055`, `55`, `0.75%`, `1.10`, `1.00%` | right       | unchanged                 |
+| `1`, `1.00`                                      | no premium  | 1.000 %                   |
+| `100`, `110`, `150`                              | no premium  | 1.000 %, 1.100 %, 1.500 % |
+
+A note rate keeps the two-digit limit, so a three-digit one is still absent
+rather than read as a 650 % loan. The tape loader is unchanged; its reading
+of `1` as 100 % is ported behavior with a test of its own, and the review's
+rule that a PMI rate above 5 is basis points is what turns it back.
+
+**What it moves.** On each deployment the next morning's review runs under
+v3 and writes its rows beside v2's, as any changed rule does; every reader
+takes the newest. The sample book's one insured loan is at 0.55 % and keeps
+the verdict the servicing app's engine gave it. How many loans on a real
+book carry a 1 % or 100+ basis-point rate has not been counted.
+
+**The environments follow the engine.** refi-tape 1.1.0, refi-policy 1.3.0
+and refi-hard 1.1.0 say a PMI rate may have three digits, the reference
+reads it so and passes every task, and the held-out suites are new and
+re-pinned. Scores recorded under the earlier versions stand as what they
+measured.

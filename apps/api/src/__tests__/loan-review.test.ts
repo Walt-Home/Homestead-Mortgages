@@ -76,7 +76,7 @@ describe("a tape read months after its date", () => {
     const row = await prisma.loanReview.findFirstOrThrow({
       where: { loan: { servicerLoanNumber: "NL-100001" } },
     });
-    expect(row.ruleSetVersion).toContain("hm.refi-review.v2");
+    expect(row.ruleSetVersion).toContain("hm.refi-review.v3");
     expect((row.facts as { days_delinquent: number }).days_delinquent).toBe(0);
   });
 });

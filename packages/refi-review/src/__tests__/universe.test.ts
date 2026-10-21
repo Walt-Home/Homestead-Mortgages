@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { NORTHLIGHT, profileById, readBook, sampleBook } from "@hm/partner-book";
+import { NORTHLIGHT, parseRatePct, profileById, readBook, sampleBook } from "@hm/partner-book";
 import { plainDate } from "@hm/kernel/calendar";
 import { reviewLoan, type Review } from "../engine.js";
 import { universeLoanOf, type ObservedLoan, type Observation } from "../universe.js";
@@ -242,5 +242,44 @@ describe("the sample book, reviewed here", () => {
       facts: {},
     };
     expect(universeLoanOf(loan, obs, AS_OF)).toEqual({ skipped: "no first_payment_date" });
+  });
+});
+
+describe("a PMI rate, however the tape gives it", () => {
+  /** Loan 1 read with mortgage insurance on and the PMI cell as the tape loader writes it. */
+  const read = (facts: Record<string, string | number | null>) => {
+    const { loan, obs } = sample().get("NL-100001")!;
+    const u = universeLoanOf(loan, { ...obs, facts: { ...obs.facts, ...facts } }, AS_OF);
+    if ("skipped" in u) throw new Error(u.skipped);
+    return u.row;
+  };
+
+  it("reaches the review as the percent the cell meant, a 1 % rate and 100 basis points included", () => {
+    // Until 20 October 2026 "1", "1.00", "100", "110" and "150" all read as no premium.
+    const meant: [string, bigint][] = [
+      ["0.55", 550n],
+      ["0.0055", 550n],
+      ["55", 550n],
+      ["0.75%", 750n],
+      ["1", 1000n],
+      ["1.00", 1000n],
+      ["1.10", 1100n],
+      ["1.00%", 1000n],
+      ["100", 1000n],
+      ["110", 1100n],
+      ["150", 1500n],
+    ];
+    for (const [cell, thousandths] of meant) {
+      const row = read({ pmi_flag: "Y", pmi_rate_pct: parseRatePct(cell) });
+      // round(upb × rate % ÷ 12), half up, with the rate in thousandths of a percent.
+      const want = (row.upb_cents * thousandths + 600_000n) / 1_200_000n;
+      expect(row.mi_monthly_cents, `cell ${cell}`).toBe(want);
+      expect(want > 0n).toBe(true);
+    }
+  });
+
+  it("still reads a note rate to two digits, so a three-digit one is absent", () => {
+    const plain = read({});
+    expect(read({ note_rate_pct: "650.000" }).note_rate_pct).toBe(plain.note_rate_pct);
   });
 });

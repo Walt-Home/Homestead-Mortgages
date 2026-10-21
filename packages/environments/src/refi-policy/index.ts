@@ -25,8 +25,10 @@ export const POLICY_ENVIRONMENT_NAME = "refi-policy";
  * rate of 5: on a loan with PMI at 0.25 % both took the premium as 0 and
  * missed the same NPV. 1.1.0 had renamed the premium apart from the quote's
  * field, which was a guess at the cause and did not fix it.
+ *
+ * 1.3.0 (20 Oct 2026): a PMI rate may have three digits, with refi-tape 1.1.0.
  */
-export const POLICY_ENVIRONMENT_VERSION = "1.2.0";
+export const POLICY_ENVIRONMENT_VERSION = "1.3.0";
 
 /** refi-tape's task, with "the rulebook" read as "the policy". */
 export const renderPolicyTask = (task: RefiTapeTask): string =>

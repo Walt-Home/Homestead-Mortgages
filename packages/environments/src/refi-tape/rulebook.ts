@@ -17,7 +17,7 @@ Before the review, build the loan's row from two inputs: \`loan_record\` (our re
 What counts as readable:
 - A date is YYYY-MM-DD; only its first 10 characters are read.
 - Money is integer cents, as a number or a string of digits.
-- A rate is a number, or a string of one or two digits with up to three decimals ("6.125", "55"); it is written with three decimals ("6.125", "55.000").
+- A rate is a number, or a string of one or two digits with up to three decimals ("6.125", "55"); a PMI rate may have three digits ("100"). It is written with three decimals ("6.125", "55.000", "100.000").
 - A yes/no is true or false, or one of y, yes, true, 1 (yes) or n, no, false, 0 (no), in any case.
 Anything else counts as absent.
 

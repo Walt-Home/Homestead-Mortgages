@@ -26,10 +26,12 @@ const cents = (v: Fact): string | null =>
     : typeof v === "string" && /^-?\d+$/.test(v.trim())
       ? String(BigInt(v.trim()))
       : null;
-const rate = (v: Fact): string | null =>
+/** A rate as text: two digits before the point, or three for a PMI rate. */
+const rate = (v: Fact, digits: 2 | 3 = 2): string | null =>
   typeof v === "number" && Number.isFinite(v)
     ? v.toFixed(3)
-    : typeof v === "string" && /^\d{1,2}(\.\d{1,3})?$/.test(v.trim())
+    : typeof v === "string" &&
+        (digits === 3 ? /^\d{1,3}(\.\d{1,3})?$/ : /^\d{1,2}(\.\d{1,3})?$/).test(v.trim())
       ? Number(v.trim()).toFixed(3)
       : null;
 const yesNo = (v: Fact): boolean | null => {
@@ -135,7 +137,7 @@ export function* tapeSteps(p: Json, call: Call): Step<Json> {
   const mediumLine = yield* addMonths(review, -12);
 
   const pmi = yesNo(F["pmi_flag"]) === true;
-  const rawPmi = rate(F["pmi_rate_pct"]);
+  const rawPmi = rate(F["pmi_rate_pct"], 3);
   const pmiRate =
     rawPmi && Number(rawPmi) > 5
       ? Number(yield* calc(`round(${rawPmi} / 100, 3)`)).toFixed(3)

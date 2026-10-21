@@ -70,10 +70,11 @@ const fMoney = (v: Fact): Cents | null => {
   if (typeof v === "string" && /^-?\d+$/.test(v.trim())) return BigInt(v.trim());
   return null;
 };
-const fRate = (v: Fact): string | null => {
+/** A rate as text has at most `digits` before the point: two for a note rate, three for PMI. */
+const fRate = (v: Fact, digits: 2 | 3 = 2): string | null => {
   if (typeof v === "number" && Number.isFinite(v)) return v.toFixed(3);
-  if (typeof v === "string" && /^\d{1,2}(\.\d{1,3})?$/.test(v.trim()))
-    return Number(v.trim()).toFixed(3);
+  const shape = digits === 3 ? /^\d{1,3}(\.\d{1,3})?$/ : /^\d{1,2}(\.\d{1,3})?$/;
+  if (typeof v === "string" && shape.test(v.trim())) return Number(v.trim()).toFixed(3);
   return null;
 };
 const fBool = (v: Fact): boolean | null => {
@@ -208,8 +209,12 @@ export function universeLoanOf(loan: ObservedLoan, obs: Observation, asOf: Plain
     };
 
     // MI: the PMI flag; the monthly premium from the PMI rate on the UPB when given.
+    // A rate above 5 is in basis points. It may have three digits before the
+    // point: the tape loader writes 100 basis points, and a 1 % cell it reads
+    // as a fraction, as "100.000". Read to two digits like a note rate until
+    // 20 October 2026, both reached the review as no premium at all.
     const pmi = fBool(F["pmi_flag"]) === true;
-    const pmiRateRaw = fRate(F["pmi_rate_pct"]);
+    const pmiRateRaw = fRate(F["pmi_rate_pct"], 3);
     const pmiRate =
       pmiRateRaw && Number(pmiRateRaw) > 5
         ? Decimal.parse(pmiRateRaw).div(Decimal.fromInt(100)).toFixed(3)

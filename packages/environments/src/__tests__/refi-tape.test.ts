@@ -64,7 +64,7 @@ describe("refi-tape", () => {
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump TAPE_ENVIRONMENT_VERSION, then the pin.
     expect(sha256(generateTapeSuite("heldout", 1, 200).map(toJsonLine).join(""))).toBe(
-      "0fe0cf8307732da6e8b0f717f44ce32306b1f15c74db97fefb06e2a4ea2c3151",
+      "170e7ecc3c4553457940d88077108e78eb370a07dc009e3aba51cae60e97972e",
     );
   });
 
@@ -124,6 +124,12 @@ describe("refi-tape", () => {
       expect(
         count(({ t, row }) => row.mi_monthly_cents > 0n && Number(F(t)["pmi_rate_pct"]) > 5),
       ).toBeGreaterThan(10);
+      // 100 basis points and up, as text: absent under 1.0.0, a premium since 1.1.0.
+      expect(
+        count(
+          ({ t, row }) => row.mi_monthly_cents > 0n && /^\d{3}$/.test(String(F(t)["pmi_rate_pct"])),
+        ),
+      ).toBeGreaterThan(3);
       expect(
         count(({ t }) => F(t)["note_rate_pct"] === undefined && t.tape.current_rate_pct === null),
       ).toBeGreaterThan(50);

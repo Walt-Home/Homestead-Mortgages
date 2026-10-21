@@ -66,7 +66,8 @@ has finished, `npm run env:archive -w @hm/environments` copies it to
 
 ## refi-tape
 
-refi-tape 1.0.0 is option A of the plan's harder versions: the same review,
+refi-tape is option A of the plan's harder versions (1.1.0 since 20 October,
+when a PMI rate of three digits became readable): the same review,
 starting from what the daily review is actually handed.
 
 **The task.** It is our loan record and the servicer's newest tape
@@ -95,7 +96,7 @@ on.
 
 ## refi-hard
 
-refi-hard 1.0.0 is option D: refi-tape's rulebook, tools and grader, over
+refi-hard (1.1.0, with refi-tape's) is option D: refi-tape's rulebook, tools and grader, over
 tasks placed on the rules' edges. Only the generator differs, so a score
 beside refi-tape's measures what the edges cost. `refi-hard-policy` puts
 refi-policy's wording over the same tasks.
@@ -233,8 +234,9 @@ There are three model policies, and none falls back to another model:
     0.25 %.
   - The second was refi-hard: both read a PMI rate of `"100"` as 100 basis
     points. The rule is stated plainly, and it is what the engine does, so
-    the defect is the engine's tape reader, not the wording (see
-    docs/decisions.md, "refi-hard's first read").
+    the defect is the engine's tape reader, not the wording. It was fixed
+    the same day (port v3, refi-tape 1.1.0); see docs/decisions.md, "A PMI
+    rate of 1 % or 100 basis points was read as no premium".
 
 ## Not in 1.0.0
 

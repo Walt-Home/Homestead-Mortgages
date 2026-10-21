@@ -215,7 +215,7 @@ describe("refi-hard", () => {
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump HARD_ENVIRONMENT_VERSION, then the pin.
     expect(sha256(heldout.map(toJsonLine).join(""))).toBe(
-      "dd443c878f31f8218636a5a372aa3669d08ec95f076ca4d098117af63246ed36",
+      "182d9ccdd651625f13bc8e7d94318f1448f70348b35098c463616268e1faae02",
     );
   });
 

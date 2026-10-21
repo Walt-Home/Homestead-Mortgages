@@ -7,6 +7,7 @@
 export * from "./episode.js";
 export * from "./record.js";
 export * from "./rng.js";
+export * from "./heldout-guard.js";
 export * from "./calculate.js";
 export * from "./anthropic.js";
 export * from "./vertex.js";

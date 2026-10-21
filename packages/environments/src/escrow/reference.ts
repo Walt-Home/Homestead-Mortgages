@@ -7,8 +7,15 @@
  * every sum, rounding and date step is a tool call. Held to the grader on
  * every generated task, it is the proof that each task can be solved from
  * the rulebook and the tools alone.
+ *
+ * Calls that do not wait on one another are made together in one turn, as
+ * a model may make them and as payments-posting's reference does: each
+ * line's sum, each disbursement's anniversary, each disbursement's period.
+ * One call a turn, the longest escrow-history ledger ran past the episode's
+ * 80 turns; the running balance of Step 4 is still one period a turn.
  */
 
+import type { ToolCall } from "../episode.js";
 import { ScriptedPolicy, type Call, type Json, type Step } from "../refi/reference.js";
 import { ESCROW_SUBMIT_TOOL } from "./tools.js";
 
@@ -51,6 +58,42 @@ interface Posting {
   amount_cents: number;
 }
 
+/** One call of a turn's batch: the tool, its input, and the key its answer is read from. */
+interface Ask {
+  readonly name: string;
+  readonly input: Json;
+  readonly key: string;
+}
+
+/** Calls that do not wait on one another, made together in one turn; read back by id, in order. */
+let batches = 0;
+export function* together(asks: readonly Ask[]): Step<unknown[]> {
+  if (asks.length === 0) return [];
+  const batch = ++batches;
+  const calls: ToolCall[] = asks.map((a, k) => ({
+    id: `together-${batch}-${k}`,
+    name: a.name,
+    input: a.input,
+  }));
+  const observations = yield calls;
+  return calls.map((c, k) => {
+    const o = observations.find((x) => x.call_id === c.id);
+    if (!o || o.is_error) throw new Error(`${c.name} failed: ${o?.content ?? "no observation"}`);
+    return (JSON.parse(o.content) as Record<string, unknown>)[asks[k]!.key];
+  });
+}
+
+export const calcAsk = (expression: string): Ask => ({
+  name: "calculate",
+  input: { expression },
+  key: "value",
+});
+const dateAddAsk = (date: string, months: number, days = 0): Ask => ({
+  name: "date_add",
+  input: { date, months, days },
+  key: "date",
+});
+
 export function* escrowSteps(p: Json, call: Call): Step<Json> {
   const calc = (expression: string) => call<string>("calculate", { expression }, "value");
   const dateAdd = (date: string, months: number, days = 0) =>
@@ -62,27 +105,69 @@ export function* escrowSteps(p: Json, call: Call): Step<Json> {
   const anomalies: string[] = [];
 
   // Steps 1 and 2: each line's amount and its disbursements in the year.
-  const yearEnd = yield* dateAdd(yearStart, 12);
-  const staleLine = yield* dateAdd(asOf, -24);
-  const disbursements: { on: string; amount: string }[] = [];
-  for (const l of lines) {
-    let annual: string;
+  const [yearEnd, staleLine] = (yield* together([
+    dateAddAsk(yearStart, 12),
+    dateAddAsk(asOf, -24),
+  ])) as string[];
+  // How each line's annual amount is found: a sum to make, a figure to read, or last year's
+  // (null). The sums and each unbilled line's first anniversaries wait on nothing, so they go
+  // together.
+  const basisOf = (l: Line): Ask | string | null => {
     const bills = l.known_bills ?? [];
-    if (bills.length > 0)
-      annual = yield* calc(bills.map((b) => String(b.amount_cents)).join(" + "));
-    else if (l.estimate_basis === "contract" && l.contract_annual_cents != null)
-      annual = String(l.contract_annual_cents);
-    else if (l.estimate_basis === "comparable" && l.comparable_annual_cents != null)
-      annual = String(l.comparable_annual_cents);
-    else if (l.estimate_basis === "prior_year_cpi" && TAX_LINES.includes(l.line_type))
-      annual = yield* calc(
+    if (bills.length > 0) return calcAsk(bills.map((b) => String(b.amount_cents)).join(" + "));
+    if (l.estimate_basis === "contract" && l.contract_annual_cents != null)
+      return String(l.contract_annual_cents);
+    if (l.estimate_basis === "comparable" && l.comparable_annual_cents != null)
+      return String(l.comparable_annual_cents);
+    if (l.estimate_basis === "prior_year_cpi" && TAX_LINES.includes(l.line_type))
+      return calcAsk(
         `round(${l.prior_year_annual_cents} * (100 + ${String(p["cpi_change_pct"])}) / 100)`,
       );
-    else {
-      annual = String(l.prior_year_annual_cents);
-      if (l.prior_year_confirmed_on && l.prior_year_confirmed_on < staleLine)
-        anomalies.push(`${l.line_type}:estimate_basis_prior_year_gt_2y`);
-    }
+    return null;
+  };
+  const bases = lines.map(basisOf);
+  const unbilled = lines.map((l) => (l.known_bills ?? []).length === 0);
+  const first = yield* together([
+    ...bases.filter((b): b is Ask => b !== null && typeof b === "object"),
+    ...lines.flatMap((l, i) =>
+      unbilled[i] ? l.prior_disbursed_on.map((d) => dateAddAsk(d, 12)) : [],
+    ),
+  ]);
+  let read = 0;
+  const annuals = lines.map((l, i) => {
+    const basis = bases[i];
+    if (basis === null || basis === undefined) return String(l.prior_year_annual_cents);
+    return typeof basis === "string" ? basis : (first[read++] as string);
+  });
+  // A disbursement's anniversary still before the new year moves on a year at a time.
+  let anniversaries = first.slice(read) as string[];
+  for (;;) {
+    const early = anniversaries.flatMap((x, k) => (x < yearStart ? [k] : []));
+    if (early.length === 0) break;
+    const later = (yield* together(
+      early.map((k) => dateAddAsk(anniversaries[k]!, 12)),
+    )) as string[];
+    anniversaries = anniversaries.map((x, k) => {
+      const at = early.indexOf(k);
+      return at < 0 ? x : later[at]!;
+    });
+  }
+  // Each unbilled line's installment, then its last.
+  const counts = lines.map((l) => INSTALLMENTS[l.frequency] ?? 1);
+  const unbilledAt = lines.flatMap((_, i) => (unbilled[i] ? [i] : []));
+  const pers = (yield* together(
+    unbilledAt.map((i) => calcAsk(`round(${annuals[i]!} / ${counts[i]!})`)),
+  )) as string[];
+  const lasts = (yield* together(
+    unbilledAt.map((i, k) => calcAsk(`${annuals[i]!} - ${pers[k]!} * ${counts[i]! - 1}`)),
+  )) as string[];
+
+  const disbursements: { on: string; amount: string }[] = [];
+  let taken = 0;
+  lines.forEach((l, i) => {
+    const bills = l.known_bills ?? [];
+    if (bases[i] === null && l.prior_year_confirmed_on && l.prior_year_confirmed_on < staleLine!)
+      anomalies.push(`${l.line_type}:estimate_basis_prior_year_gt_2y`);
     if (l.line_type === "mi_borrower_paid" && !l.terminates_on)
       anomalies.push("mi_borrower_paid:pmi_without_termination");
 
@@ -95,23 +180,19 @@ export function* escrowSteps(p: Json, call: Call): Step<Json> {
         dated.push({ on, amount: String(b.amount_cents) });
       }
     } else {
-      const n = INSTALLMENTS[l.frequency] ?? 1;
-      const per = yield* calc(`round(${annual} / ${n})`);
-      const last = yield* calc(`${annual} - ${per} * ${n - 1}`);
-      const dates: string[] = [];
-      for (const d of l.prior_disbursed_on) {
-        let x = yield* dateAdd(d, 12);
-        while (x < yearStart) x = yield* dateAdd(x, 12);
-        dates.push(x);
-      }
-      dates.sort();
-      dates.slice(0, n).forEach((on, k) => dated.push({ on, amount: k === n - 1 ? last : per }));
+      const n = counts[i]!;
+      const k = unbilledAt.indexOf(i);
+      const per = pers[k]!;
+      const last = lasts[k]!;
+      const dates = anniversaries.slice(taken, taken + l.prior_disbursed_on.length).sort();
+      taken += l.prior_disbursed_on.length;
+      dates.slice(0, n).forEach((on, j) => dated.push({ on, amount: j === n - 1 ? last : per }));
     }
     for (const x of dated) {
       if (l.terminates_on && x.on >= l.terminates_on) continue;
-      if (x.on >= yearStart && x.on < yearEnd) disbursements.push(x);
+      if (x.on >= yearStart && x.on < yearEnd!) disbursements.push(x);
     }
-  }
+  });
 
   // Step 3
   const annual = disbursements.length
@@ -119,12 +200,16 @@ export function* escrowSteps(p: Json, call: Call): Step<Json> {
     : "0";
   const base = yield* calc(`round(${annual} / 12)`);
 
-  // Step 4
+  // Step 4: each disbursement's period, together; then the running balance, a period a turn.
   const byPeriod: string[][] = Array.from({ length: 12 }, () => []);
-  for (const x of disbursements) {
-    const k = yield* call<number>("whole_months_between", { from: yearStart, to: x.on }, "months");
-    byPeriod[k]!.push(x.amount);
-  }
+  const periods = (yield* together(
+    disbursements.map((x) => ({
+      name: "whole_months_between",
+      input: { from: yearStart, to: x.on },
+      key: "months",
+    })),
+  )) as number[];
+  disbursements.forEach((x, k) => byPeriod[periods[k]!]!.push(x.amount));
   let balance = "0";
   let low = 0n;
   for (const out of byPeriod) {

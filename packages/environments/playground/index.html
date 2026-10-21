@@ -1,0 +1,2214 @@
+<title>Supermortgage Gym</title>
+<style>
+/* Layout: one paper sheet ruled in hairlines. The masthead says what an
+   environment is; the overview sets the thirteen in three columns by side of
+   the business; the workspace below holds the task, the tools and the answer,
+   with the rulebook pinned at the right on wide screens and folded above the
+   task on narrow ones. Colors are the Supermortgage paper-and-ink set: links
+   are the accent, because red means "you can act on this", and the error
+   color is a darker shade of it in light and a paler one in dark, never the
+   same value. The focus ring is ink, as the brand's is. */
+:root {
+  --paper: #FCFCFC;
+  --surface: #FFFFFF;
+  --raised: #F4F4F4;
+  --selected: #EBEBEB;
+  --ink: #080808;
+  --muted: #68686A;
+  --rule: #DEDEDE;
+  --rule-soft: #E5E5E5;
+  --rule-strong: #747479;
+  --accent: #BF242B;
+  --accent-pressed: #AA1D24;
+  --link: #BF242B;
+  --accent-wash: #F9E1E2;
+  --on-accent: #FFFFFF;
+  --ok: #1F7A45;
+  --warn: #A35A00;
+  --danger: #842128;
+  --focus: var(--ink);
+
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-text: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  --font-mono: Menlo, Consolas, "Liberation Mono", monospace;
+
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.8125rem;
+  --fs-base: 0.9375rem;
+  --fs-md: 1.0625rem;
+  --fs-lg: 1.375rem;
+  --fs-xl: 1.875rem;
+  --fs-2xl: clamp(2.75rem, 7vw, 4rem);
+
+  --radius-field: 6px;
+  --radius-pill: 999px;
+  --gutter: clamp(16px, 3vw, 40px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #151516;
+    --surface: #222224;
+    --raised: #1B1B1D;
+    --selected: #2C2C2F;
+    --ink: #F5F5F5;
+    --muted: #ADADB2;
+    --rule: #38383B;
+    --rule-soft: #2C2C2F;
+    --rule-strong: #8A8A90;
+    --accent: #BF242B;
+    --accent-pressed: #D2353C;
+    --link: #EF858B;
+    --accent-wash: #3B1D20;
+    --on-accent: #FFFFFF;
+    --ok: #6CC690;
+    --warn: #E9A64A;
+    --danger: #FFC9CC;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #151516;
+  --surface: #222224;
+  --raised: #1B1B1D;
+  --selected: #2C2C2F;
+  --ink: #F5F5F5;
+  --muted: #ADADB2;
+  --rule: #38383B;
+  --rule-soft: #2C2C2F;
+  --rule-strong: #8A8A90;
+  --accent: #BF242B;
+  --accent-pressed: #D2353C;
+  --link: #EF858B;
+  --accent-wash: #3B1D20;
+  --on-accent: #FFFFFF;
+  --ok: #6CC690;
+  --warn: #E9A64A;
+  --danger: #FFC9CC;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+.page {
+  max-width: 1400px;
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+  padding-block: 28px 72px;
+}
+h1, h2, h3, h4, h5 { margin: 0; text-wrap: balance; font-weight: 400; }
+p { margin: 0; }
+a { color: var(--link); }
+code, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+code { font-size: 0.92em; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* ── Masthead ───────────────────────────────────────────────────────────── */
+.masthead {
+  display: grid;
+  gap: 18px 48px;
+  padding-block: 4px 32px;
+  border-bottom: 2px solid var(--ink);
+}
+@media (min-width: 900px) {
+  .masthead { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); align-items: end; }
+}
+.brand { display: grid; gap: 6px; }
+.wordmark {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: var(--fs-sm);
+}
+.wordmark b { font-weight: 800; }
+.wordmark span { font-weight: 300; }
+.masthead h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.intro { display: grid; gap: 10px; max-width: 70ch; }
+.intro .lede { font-size: var(--fs-md); }
+.intro .aside { color: var(--muted); font-size: var(--fs-sm); }
+
+/* ── Buttons and fields ─────────────────────────────────────────────────── */
+.btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 150ms;
+}
+.btn:hover { background: var(--raised); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn-primary:hover { background: var(--accent-pressed); border-color: var(--accent-pressed); }
+.btn:disabled { opacity: 0.55; cursor: default; }
+.link-btn {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field > label, .label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.field .req { font-weight: 400; color: var(--muted); font-size: var(--fs-xs); margin-left: 6px; }
+.field .desc { font-size: var(--fs-xs); color: var(--muted); }
+input[type="text"], select, textarea {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-field);
+  padding: 7px 10px;
+  min-width: 0;
+  width: 100%;
+}
+select { font-family: var(--font-text); }
+/* 16px, never smaller, on a phone: iOS Safari zooms the page on focus for any field under 16px. */
+@media (max-width: 640px), (pointer: coarse) {
+  input[type="text"], select, textarea { font-size: max(16px, 1rem); }
+}
+textarea { resize: vertical; line-height: 1.45; tab-size: 2; }
+input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+
+/* ── Overview ───────────────────────────────────────────────────────────── */
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 32px;
+  padding-block: 30px 18px;
+}
+.section-head h2 { font-family: var(--font-display); font-size: var(--fs-xl); }
+.section-head p { color: var(--muted); font-size: var(--fs-sm); max-width: 64ch; }
+.sides { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px 36px; }
+@media (min-width: 960px) { .sides { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.side { min-width: 0; display: grid; align-content: start; }
+.side-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  border-top: 2px solid var(--ink);
+  padding-block: 10px 4px;
+}
+.side-head h3 {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+.side-count { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
+.side-blurb { color: var(--muted); font-size: var(--fs-sm); padding-bottom: 10px; }
+.env-list { list-style: none; margin: 0; padding: 0; }
+.env-card {
+  appearance: none;
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 10px 13px;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 150ms;
+}
+.env-card:hover { background: var(--raised); }
+.env-card[aria-current="true"] { background: var(--selected); }
+.env-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.env-title { font-family: var(--font-display); font-size: var(--fs-md); line-height: 1.25; }
+.env-version { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
+.env-summary { color: var(--muted); font-size: var(--fs-sm); }
+.env-reads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.env-reads .reads-label { font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.env-open { font-size: var(--fs-xs); font-weight: 700; color: var(--ink); white-space: nowrap; }
+
+/* ── Workspace ──────────────────────────────────────────────────────────── */
+.workspace { margin-top: 44px; border-top: 2px solid var(--ink); }
+.ws-head { display: grid; gap: 8px; padding-block: 20px 22px; }
+.ws-head-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px 24px; }
+.ws-head-top > div { min-width: 0; display: grid; gap: 6px; }
+.eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.ws-title { font-family: var(--font-display); font-size: var(--fs-xl); line-height: 1.15; }
+.ws-summary { max-width: 78ch; }
+.ws-meta { color: var(--muted); font-size: var(--fs-sm); }
+.env-switch { display: grid; gap: 4px; width: min(100%, 20rem); }
+.env-switch label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+
+.ws-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "rules" "main";
+  gap: 22px;
+}
+@media (min-width: 1100px) {
+  .ws-grid { grid-template-columns: minmax(0, 1fr) minmax(320px, 410px); grid-template-areas: "main rules"; gap: 36px; }
+  .ws-grid.rules-closed { grid-template-columns: minmax(0, 1fr); grid-template-areas: "rules" "main"; }
+  .ws-grid:not(.rules-closed) .ws-rules {
+    position: sticky;
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
+    align-self: start;
+    max-height: calc(100vh - 24px);
+    display: flex;
+    flex-direction: column;
+  }
+}
+.ws-rules { grid-area: rules; min-width: 0; border: 1px solid var(--rule); background: var(--surface); }
+.rules-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+}
+.rules-head h3 { font-family: var(--font-display); font-size: var(--fs-md); }
+.rules-head .hint { font-size: var(--fs-xs); }
+.rules-body {
+  padding: 2px 18px 22px;
+  overflow: auto;
+  min-height: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  border-top: 1px solid var(--rule);
+}
+.rules-tools { display: flex; justify-content: flex-end; padding-top: 10px; }
+.rules-body h3 { font-family: var(--font-display); font-size: var(--fs-lg); margin: 10px 0 8px; }
+.rules-body h4 {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  margin: 18px 0 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule-soft);
+}
+.rules-body h5 { font-size: var(--fs-sm); font-weight: 700; margin: 12px 0 4px; }
+.rules-body p { margin: 6px 0; }
+.rules-body ul, .rules-body ol { margin: 6px 0; padding-left: 1.5em; }
+.rules-body li { margin: 4px 0; }
+.rules-body li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
+.rules-body code { background: var(--raised); padding: 0 3px; }
+
+.ws-main { grid-area: main; min-width: 0; container-type: inline-size; }
+.tabs { display: flex; flex-wrap: wrap; gap: 0 22px; border-bottom: 1px solid var(--rule); }
+.tab {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 10px 2px 9px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.tab .count { font-family: var(--font-mono); font-weight: 400; font-size: var(--fs-xs); margin-left: 6px; }
+
+.block { display: grid; gap: 14px; padding-block: 22px 26px; border-bottom: 1px solid var(--rule); min-width: 0; }
+.block > * { min-width: 0; }
+.block-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
+.block-head h3 { font-family: var(--font-display); font-size: var(--fs-lg); }
+.hint { color: var(--muted); font-size: var(--fs-sm); max-width: 74ch; }
+.task-tag { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: var(--fs-sm); }
+.task-tag .kind { font-weight: 700; }
+.task-tag code { color: var(--muted); font-size: var(--fs-xs); }
+
+.task-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; }
+.coords { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.coords .field { width: 6.5rem; }
+.coords .field > label { font-size: var(--fs-xs); }
+.field-error { color: var(--danger); font-size: var(--fs-sm); }
+.spec-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.spec-row .label { margin-right: 4px; }
+.spec-btn {
+  appearance: none;
+  min-width: 2.25rem;
+  min-height: 30px;
+  padding: 3px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.spec-btn:hover { background: var(--raised); }
+.spec-btn[aria-current="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+.seg { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: var(--radius-pill); overflow: hidden; }
+.seg button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 5px 14px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+.seg button + button { border-left: 1px solid var(--rule-strong); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.seg button:focus-visible { outline-offset: -3px; }
+.seg button[aria-pressed="true"]:focus-visible { outline-color: var(--paper); }
+
+.task-text { max-width: 78ch; }
+.task-readable { display: grid; gap: 12px; min-width: 0; }
+.kbd-hint { color: var(--muted); font-size: var(--fs-xs); }
+.tried { font-size: var(--fs-sm); color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+
+/* The task's data, read as key and value. */
+.data { background: var(--surface); border: 1px solid var(--rule); max-height: 36rem; overflow: auto; }
+dl.kv { display: grid; grid-template-columns: minmax(8.5rem, max-content) minmax(0, 1fr); margin: 0; }
+dl.kv > dt, dl.kv > dd { margin: 0; padding: 5px 12px; border-top: 1px solid var(--rule-soft); min-width: 0; }
+.data > dl.kv > dt:first-child, .data > dl.kv > dt:first-child + dd { border-top: 0; }
+dl.kv > dt { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); padding-top: 7px; overflow-wrap: anywhere; }
+dl.kv > dd { font-family: var(--font-mono); font-size: var(--fs-sm); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+dl.kv > dt.group { grid-column: 1 / -1; color: var(--ink); font-weight: 700; background: var(--raised); padding-block: 5px; }
+dl.kv > dd.group { grid-column: 1 / -1; padding: 0 0 0 14px; border-top: 0; }
+dl.kv > dd.group > dl.kv, dl.kv > dd.group > .table-wrap { border-left: 1px solid var(--rule); }
+.v-note { color: var(--muted); font-size: var(--fs-xs); margin-left: 8px; white-space: nowrap; }
+.v-null { color: var(--muted); }
+.count { color: var(--muted); font-weight: 400; }
+@container (max-width: 520px) {
+  dl.kv { grid-template-columns: minmax(0, 1fr); }
+  dl.kv > dt:not(.group) { padding-bottom: 0; }
+  dl.kv > dd:not(.group) { border-top: 0; padding-top: 1px; }
+}
+
+/* Tables */
+.table-wrap { overflow-x: auto; max-width: 100%; }
+table { border-collapse: collapse; width: 100%; font-size: var(--fs-sm); }
+th {
+  text-align: left;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+td { padding: 6px 10px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+td.mono, td .mono { font-variant-numeric: tabular-nums; }
+td.num, th.num { text-align: right; }
+.dtable th { font-family: var(--font-mono); text-transform: none; letter-spacing: 0; font-weight: 400; }
+.dtable td { font-family: var(--font-mono); white-space: nowrap; }
+.dtable td.wide { white-space: normal; min-width: 14rem; overflow-wrap: anywhere; }
+tr.row-bad td:first-child { box-shadow: inset 2px 0 0 var(--danger); }
+
+.mark { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-text); font-weight: 700; font-size: var(--fs-sm); white-space: nowrap; }
+.mark svg { width: 14px; height: 14px; flex: none; }
+.mark-ok { color: var(--ok); }
+.mark-bad { color: var(--danger); }
+.mark-warn { color: var(--warn); }
+
+pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  background: var(--raised);
+  border: 1px solid var(--rule);
+  padding: 12px 14px;
+  overflow-x: auto;
+  white-space: pre;
+  tab-size: 2;
+  max-width: 100%;
+}
+pre.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+pre.tall { max-height: 36rem; overflow: auto; }
+
+.msg { border: 1px solid var(--rule); padding: 10px 14px; background: var(--surface); font-size: var(--fs-sm); display: grid; gap: 4px; }
+.msg-error { border-color: var(--danger); }
+.msg-error > strong { color: var(--danger); }
+.msg-note { background: var(--raised); }
+
+/* Tools */
+.bench { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px 28px; }
+@container (min-width: 760px) { .bench { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); } }
+.bench > * { min-width: 0; }
+.tool-form { display: grid; gap: 12px; align-content: start; }
+.tool-desc { font-size: var(--fs-sm); color: var(--muted); }
+.log-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-bottom: 6px; }
+.log-head h4 { font-size: var(--fs-sm); font-weight: 700; }
+.log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 30rem;
+  min-height: 8rem;
+  overflow: auto;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+}
+.log-entry { display: grid; gap: 4px; padding: 8px 12px; border-top: 1px solid var(--rule-soft); font-size: var(--fs-sm); }
+.log > li:first-child { border-top: 0; }
+.log-call, .log-out { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; min-width: 0; }
+.log-n { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
+.log-name { font-weight: 700; }
+.log-args { color: var(--muted); }
+.log-entry.is-error .log-out code { color: var(--danger); }
+.log-divider { padding: 6px 12px; font-size: var(--fs-xs); color: var(--muted); background: var(--raised); border-top: 1px solid var(--rule-soft); overflow-wrap: anywhere; }
+.log-empty { padding: 14px 12px; color: var(--muted); font-size: var(--fs-sm); }
+.chip { display: inline-flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; padding: 1px 8px; border: 1px solid var(--rule); border-radius: var(--radius-field); background: var(--raised); }
+.chip-k { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
+.chip-v { font-weight: 700; }
+
+/* Answer */
+.answer-input { min-height: 14rem; }
+.verdict { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+.verdict .big { font-family: var(--font-display); font-size: var(--fs-lg); }
+.verdict .big .mark { font-family: var(--font-display); font-size: var(--fs-lg); font-weight: 400; }
+.verdict .big .mark svg { width: 18px; height: 18px; }
+.verdict .figures { font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+.grade-out { display: grid; gap: 12px; }
+
+/* Steps: the reference's playback and a model's transcript */
+.steps { list-style: none; margin: 0; padding: 0; border: 1px solid var(--rule); background: var(--surface); }
+.steps.play { max-height: 36rem; overflow: auto; }
+.step { display: grid; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--rule-soft); min-width: 0; }
+.steps > .step:first-child { border-top: 0; }
+.step-head { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--fs-xs); color: var(--muted); }
+.step-head strong { color: var(--ink); text-transform: uppercase; letter-spacing: 0.08em; }
+.say { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-sm); max-width: 78ch; }
+.call { display: grid; gap: 3px; padding-left: 12px; border-left: 1px solid var(--rule-strong); font-size: var(--fs-sm); min-width: 0; }
+.call > * { min-width: 0; }
+.call-in, .call-out { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; min-width: 0; }
+.call-in .name { font-weight: 700; }
+.call-in code:not(.name) { color: var(--muted); }
+.call-out code { overflow-wrap: anywhere; }
+.call-out.err code { color: var(--danger); }
+.call details summary { cursor: pointer; font-size: var(--fs-xs); font-weight: 600; color: var(--link); }
+.call details pre { margin-top: 6px; }
+.status-line { font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Attempts */
+.att-summary { display: grid; gap: 4px; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.att-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+.att-filters .field { width: min(100%, 16rem); }
+.att-table td { white-space: nowrap; }
+.att-table tr[aria-current="true"] td { background: var(--raised); }
+.att-table tr[aria-current="true"] td:first-child { box-shadow: inset 3px 0 0 var(--ink); }
+.att-detail { display: grid; gap: 14px; padding-top: 6px; }
+.att-detail > * { min-width: 0; }
+.att-detail-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: baseline; }
+.att-detail-head h4 { font-family: var(--font-display); font-size: var(--fs-lg); }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+.facts b { color: var(--ink); font-weight: 600; }
+details.plain > summary { cursor: pointer; font-size: var(--fs-sm); font-weight: 600; color: var(--link); }
+details.plain > summary + * { margin-top: 8px; }
+
+.foot { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--rule); color: var(--muted); font-size: var(--fs-xs); display: grid; gap: 4px; max-width: 90ch; }
+.fatal { margin-top: 24px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+</style>
+
+<div class="page">
+  <header class="masthead">
+    <div class="brand">
+      <div class="wordmark" aria-label="Supermortgage"><b>Super</b><span>mortgage</span></div>
+      <h1>Gym</h1>
+    </div>
+    <div class="intro">
+      <p class="lede">An environment is one job from our mortgage operations, set up so a model can be trained and measured on it: the task, the rules written out, the tools a model may use, and a grader that is our own engine. Every loan in it is synthetic. Pick one, draw a task, work it with the same tools a model gets, and submit an answer to see it graded field by field.</p>
+      <p class="aside">Held-out tasks are never shown here, because every reported score is measured on them. This page offers training tasks, at any seed and index, and the spec's own cases. Everything runs in this page, and nothing you type is sent anywhere.</p>
+    </div>
+  </header>
+
+  <div id="fatal" class="fatal" hidden></div>
+
+  <section id="overview" aria-labelledby="overview-title">
+    <div class="section-head">
+      <h2 id="overview-title">Environments</h2>
+      <p id="overview-note">Training reads are how a model did on training tasks, in the newest recorded run of each. They are not scores.</p>
+    </div>
+    <div class="sides" id="sides"></div>
+  </section>
+
+  <section id="workspace" class="workspace" aria-labelledby="ws-title">
+    <header class="ws-head">
+      <div class="ws-head-top">
+        <div>
+          <p class="eyebrow" id="ws-eyebrow"></p>
+          <h2 class="ws-title" id="ws-title"></h2>
+        </div>
+        <div class="env-switch">
+          <label for="env-select">Environment</label>
+          <select id="env-select"></select>
+        </div>
+      </div>
+      <p class="ws-summary" id="ws-summary"></p>
+      <p class="ws-meta" id="ws-meta"></p>
+    </header>
+
+    <div class="ws-grid" id="ws-grid">
+      <aside class="ws-rules" id="rules" aria-labelledby="rules-title">
+        <div class="rules-head">
+          <div>
+            <h3 id="rules-title">Rulebook</h3>
+            <p class="hint">The system prompt, word for word.</p>
+          </div>
+          <button type="button" class="btn" id="rules-toggle" aria-controls="rules-body" aria-expanded="true">Hide</button>
+        </div>
+        <div class="rules-body" id="rules-body">
+          <div class="rules-tools"><button type="button" class="link-btn" id="rules-copy">Copy the rulebook</button></div>
+          <div id="rules-text"></div>
+        </div>
+      </aside>
+
+      <div class="ws-main">
+        <div class="tabs" role="tablist" aria-label="Workspace">
+          <button type="button" class="tab" role="tab" id="tab-work" aria-controls="panel-work" aria-selected="true">Work the task</button>
+          <button type="button" class="tab" role="tab" id="tab-reference" aria-controls="panel-reference" aria-selected="false" tabindex="-1">The reference</button>
+          <button type="button" class="tab" role="tab" id="tab-attempts" aria-controls="panel-attempts" aria-selected="false" tabindex="-1">Model attempts<span class="count" id="tab-attempts-count"></span></button>
+        </div>
+
+        <div role="tabpanel" id="panel-work" aria-labelledby="tab-work">
+          <section class="block" id="task-block" aria-labelledby="task-title">
+            <div class="block-head">
+              <h3 id="task-title">The task</h3>
+              <div class="task-tag" id="task-tag"></div>
+            </div>
+            <div class="task-controls">
+              <button type="button" class="btn" id="new-task">New task</button>
+              <form class="coords" id="coords-form" novalidate>
+                <div class="field">
+                  <label for="seed-input">Training seed</label>
+                  <input type="text" id="seed-input" inputmode="numeric" autocomplete="off">
+                </div>
+                <div class="field">
+                  <label for="index-input">Index</label>
+                  <input type="text" id="index-input" inputmode="numeric" autocomplete="off">
+                </div>
+                <button type="submit" class="btn" id="coords-open">Open</button>
+              </form>
+            </div>
+            <p class="field-error" id="coords-error" role="alert" hidden></p>
+            <div class="spec-row" id="spec-row"></div>
+            <div class="row">
+              <div class="seg" role="group" aria-label="How to show the task">
+                <button type="button" id="view-readable" aria-pressed="true">Readable</button>
+                <button type="button" id="view-raw" aria-pressed="false">As the model sees it</button>
+              </div>
+              <button type="button" class="link-btn" id="prompt-copy">Copy the prompt</button>
+            </div>
+            <div id="task-readable" class="task-readable">
+              <p class="task-text" id="task-before"></p>
+              <div class="data" id="task-data" tabindex="0" aria-label="The task's data"></div>
+              <p class="task-text muted" id="task-after"></p>
+            </div>
+            <pre class="wrap tall" id="task-raw" tabindex="0" hidden></pre>
+            <p class="tried" id="task-tried" hidden></p>
+          </section>
+
+          <section class="block" id="tools-block" aria-labelledby="tools-title">
+            <div class="block-head">
+              <h3 id="tools-title">Tools</h3>
+            </div>
+            <p class="hint">The same tools the model is given, run by the same code. Each run goes into the log, where you can copy any value.</p>
+            <div class="bench">
+              <form class="tool-form" id="tool-form" novalidate>
+                <div class="field">
+                  <label for="tool-select">Tool</label>
+                  <select id="tool-select"></select>
+                </div>
+                <p class="tool-desc" id="tool-desc"></p>
+                <div id="tool-fields" class="tool-form"></div>
+                <div class="row">
+                  <button type="submit" class="btn" id="tool-run">Run</button>
+                  <button type="button" class="link-btn" id="tool-clear-fields">Clear the fields</button>
+                </div>
+              </form>
+              <div>
+                <div class="log-head">
+                  <h4 id="log-title">Log</h4>
+                  <button type="button" class="link-btn" id="log-clear">Clear the log</button>
+                </div>
+                <ol class="log" id="tool-log" aria-labelledby="log-title"></ol>
+                <p class="visually-hidden" id="tool-status" role="status" aria-live="polite"></p>
+              </div>
+            </div>
+          </section>
+
+          <section class="block" id="answer-block" aria-labelledby="answer-title">
+            <div class="block-head">
+              <h3 id="answer-title">Your answer</h3>
+            </div>
+            <p class="hint" id="answer-hint"></p>
+            <div class="msg msg-note" id="answer-stale" hidden>
+              <span>This answer was started on an earlier task.</span>
+              <span><button type="button" class="link-btn" id="answer-stale-reset">Start from the blank form</button></span>
+            </div>
+            <label class="visually-hidden" for="answer-input">Your answer, as JSON</label>
+            <textarea id="answer-input" class="answer-input" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+            <div class="row">
+              <button type="button" class="btn btn-primary" id="grade-btn">Grade</button>
+              <button type="button" class="btn" id="answer-tidy">Tidy the JSON</button>
+              <button type="button" class="link-btn" id="answer-reset">Reset to the blank form</button>
+              <span class="kbd-hint">Ctrl+Enter or Cmd+Enter grades.</span>
+            </div>
+            <div class="grade-out" id="grade-out" aria-live="polite"></div>
+          </section>
+        </div>
+
+        <div role="tabpanel" id="panel-reference" aria-labelledby="tab-reference" hidden>
+          <section class="block" aria-labelledby="ref-title">
+            <div class="block-head">
+              <h3 id="ref-title">The reference, on this task</h3>
+              <div class="task-tag" id="ref-task-tag"></div>
+            </div>
+            <p class="hint">The reference is a scripted solver. It works the task through the tools, step by step as the procedure rulebook sets out, in the same episode loop a model runs in and with the same limits. On a policy environment it follows the procedure that the policy restates.</p>
+            <div class="row">
+              <button type="button" class="btn btn-primary" id="ref-run">Watch the reference</button>
+              <button type="button" class="btn" id="ref-pause" hidden>Pause</button>
+              <button type="button" class="btn" id="ref-all" hidden>Show every step</button>
+              <span class="status-line" id="ref-status" aria-live="polite"></span>
+            </div>
+            <ol class="steps play" id="ref-steps" hidden></ol>
+            <div class="grade-out" id="ref-final"></div>
+          </section>
+        </div>
+
+        <div role="tabpanel" id="panel-attempts" aria-labelledby="tab-attempts" hidden>
+          <section class="block" aria-labelledby="att-title">
+            <div class="block-head">
+              <h3 id="att-title">Model attempts on training tasks</h3>
+            </div>
+            <p class="hint">Recorded runs of a model on training tasks. They are training reads, not scores: every reported score is measured on the held-out suite, which this page never shows.</p>
+            <div id="att-body"></div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot" id="foot">
+    <p>The environments, their generators, tools, parsers, graders and the reference all run in this page, built from the same source as the command-line runner.</p>
+    <p id="foot-runs">Loading the recorded runs.</p>
+  </footer>
+</div>
+
+<script src="environments.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /* ── Small helpers ────────────────────────────────────────────────────── */
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    if (attrs) {
+      for (var k in attrs) {
+        if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+        var v = attrs[k];
+        if (v === null || v === undefined || v === false) continue;
+        if (k === "class") el.className = v;
+        else if (k === "text") el.textContent = v;
+        else if (k === "hidden") el.hidden = true;
+        else if (k.slice(0, 2) === "on" && typeof v === "function") el.addEventListener(k.slice(2), v);
+        else if (v === true) el.setAttribute(k, "");
+        else el.setAttribute(k, String(v));
+      }
+    }
+    for (var i = 2; i < arguments.length; i++) add(el, arguments[i]);
+    return el;
+  }
+  function add(el, kid) {
+    if (kid === null || kid === undefined || kid === false) return;
+    if (Array.isArray(kid)) { kid.forEach(function (k) { add(el, k); }); return; }
+    el.append(kid instanceof Node ? kid : String(kid));
+  }
+  function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
+
+  var memory = {};
+  var store = {
+    get: function (k) {
+      try { var v = window.localStorage.getItem("hm-gym:" + k); if (v !== null) return v; } catch (e) { /* storage unavailable */ }
+      return Object.prototype.hasOwnProperty.call(memory, k) ? memory[k] : null;
+    },
+    set: function (k, v) {
+      memory[k] = v;
+      try { window.localStorage.setItem("hm-gym:" + k, v); } catch (e) { /* storage unavailable */ }
+    }
+  };
+
+  var reducedMotion = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+  var wideMq = window.matchMedia ? window.matchMedia("(min-width: 1100px)") : { matches: true, addEventListener: function () {} };
+
+  function scrollIntoViewSoft(el) {
+    if (!el || !el.scrollIntoView) return;
+    try { el.scrollIntoView({ behavior: reducedMotion.matches ? "auto" : "smooth", block: "start" }); }
+    catch (e) { el.scrollIntoView(); }
+  }
+
+  function selectText(el) {
+    if (!el) return;
+    if (el.select && (el.tagName === "TEXTAREA" || el.tagName === "INPUT")) { el.focus(); el.select(); return; }
+    try {
+      var range = document.createRange();
+      range.selectNodeContents(el);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (e) { /* nothing to select */ }
+  }
+
+  function flash(btn, text) {
+    if (!btn) return;
+    var before = btn.getAttribute("data-label") || btn.textContent;
+    btn.setAttribute("data-label", before);
+    btn.textContent = text;
+    clearTimeout(btn._flash);
+    btn._flash = setTimeout(function () { btn.textContent = before; }, 1800);
+  }
+
+  /** Called inside a click handler, so the browser counts it as the user's own act. */
+  function copy(btn, text, fallbackEl) {
+    var p;
+    try { p = navigator.clipboard.writeText(text); } catch (e) { p = Promise.reject(e); }
+    Promise.resolve(p).then(function () { flash(btn, "Copied"); }, function () {
+      selectText(fallbackEl);
+      flash(btn, "Selected. Press Ctrl+C or Cmd+C");
+    });
+  }
+
+  function icon(kind) {
+    var NS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    var path = document.createElementNS(NS, "path");
+    path.setAttribute("d", kind === "ok" ? "M3 8.5l3.2 3.1L13 4.6" : kind === "bad" ? "M4 4l8 8M12 4l-8 8" : "M8 3v6.5M8 12.5v.5");
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", "2");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(path);
+    return svg;
+  }
+  function mark(kind, text) { return h("span", { class: "mark mark-" + kind }, icon(kind), text); }
+
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : many || one + "s"); }
+
+  function dollars(cents) {
+    var s = String(cents);
+    var neg = s.charAt(0) === "-";
+    var d = (neg ? s.slice(1) : s);
+    while (d.length < 3) d = "0" + d;
+    var whole = d.slice(0, -2).replace(/^0+(?=\d)/, "");
+    return (neg ? "−" : "") + "$" + whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + d.slice(-2);
+  }
+
+  function isObj(x) { return x !== null && typeof x === "object" && !Array.isArray(x); }
+
+  function singular(k) {
+    if (/ies$/.test(k)) return k.slice(0, -3) + "y";
+    if (/ses$/.test(k)) return k.slice(0, -2);
+    if (/s$/.test(k)) return k.slice(0, -1);
+    return k;
+  }
+
+  function utc(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso);
+    var M = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    var p = function (n) { return (n < 10 ? "0" : "") + n; };
+    return d.getUTCDate() + " " + M[d.getUTCMonth()] + " " + d.getUTCFullYear() + ", " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + " UTC";
+  }
+
+  function pretty(text) {
+    try { return JSON.stringify(JSON.parse(text), null, 2); } catch (e) { return String(text); }
+  }
+
+  /* ── The bundle ───────────────────────────────────────────────────────── */
+
+  var H = window.HMEnvironments;
+  if (!H || !H.environments) {
+    var f = $("fatal");
+    f.hidden = false;
+    f.append(h("div", { class: "msg msg-error" }, h("strong", null, "The environments did not load."), h("span", null, "This page needs environments.js beside it. Rebuild it with npm run env:playground -w @hm/environments and publish both files together.")));
+    $("workspace").hidden = true;
+    $("overview").hidden = true;
+    $("foot-runs").textContent = "The recorded runs were not read, because the environments did not load.";
+    return;
+  }
+  var ENVS = H.environments;
+  var LIMITS = H.limits || { maxTurns: 80, maxToolCalls: 160 };
+
+  var SIDES = [
+    { key: "refinance", label: "Refinance", blurb: "The daily review of a servicer's book, loan by loan, for a refinance worth offering." },
+    { key: "servicing", label: "Servicing", blurb: "Escrow, loss mitigation and cashiering, graded by the servicing app's own engines." },
+    { key: "origination", label: "Origination", blurb: "Regulation Z's price tests on a quoted loan, as the shadow AUS runs them." }
+  ];
+
+  /* Model names and list prices, as the run tools price an episode. */
+  var POLICIES = [
+    { prefix: "vertex:deepseek-ai/deepseek-v4.1-flash-maas", name: "DeepSeek V4.1 Flash", short: "DeepSeek",
+      price: { in: 0.3e-6, cacheRead: 0.03e-6, cacheWrite: 0.3e-6, out: 1.2e-6 } },
+    { prefix: "anthropic:claude-opus-5-5", name: "Claude Opus 5.5", short: "Claude",
+      price: { in: 4e-6, cacheRead: 0.2e-6, cacheWrite: 5e-6, out: 20e-6 } }
+  ];
+  function policyOf(id) {
+    for (var i = 0; i < POLICIES.length; i++) if (String(id).indexOf(POLICIES[i].prefix) === 0) return POLICIES[i];
+    return null;
+  }
+  function policyName(id, short) {
+    var p = policyOf(id);
+    if (!p) return String(id);
+    if (short) return p.short;
+    var mode = String(id).slice(p.prefix.length).replace(/^:/, "");
+    var label = mode === "thinking" ? "thinking" : mode === "high" ? "high effort" : mode;
+    return p.name + (label ? " (" + label + ")" : "");
+  }
+  function costOf(id, u) {
+    var p = policyOf(id);
+    if (!p || !u) return null;
+    return (u.input_tokens || 0) * p.price.in + (u.cache_read_input_tokens || 0) * p.price.cacheRead +
+      (u.cache_creation_input_tokens || 0) * p.price.cacheWrite + (u.output_tokens || 0) * p.price.out;
+  }
+  function usd(x) {
+    if (x === null || x === undefined) return "unpriced";
+    return "$" + (x < 0.1 ? x.toFixed(4) : x.toFixed(3));
+  }
+
+  function firstSentence(s) {
+    var m = String(s).match(/^.*?[.](?=\s+[A-Z0-9]|$)/);
+    return m ? m[0] : s;
+  }
+  function isPolicyEnv(env) { return /policy/.test(env.key); }
+
+  /* ── The answer's blank form, from the submit tool's schema ──────────── */
+
+  function fromPattern(p) {
+    var s = String(p).replace(/^\^/, "").replace(/\$$/, "");
+    if (/^\\d\{4\}-\\d\{2\}-\\d\{2\}$/.test(s)) return "2026-01-01";
+    var out = "", i = 0;
+    while (i < s.length) {
+      var c = s.charAt(i);
+      if (c === "(") {
+        var depth = 1, j = i + 1;
+        while (j < s.length && depth) {
+          if (s.charAt(j) === "\\") { j += 2; continue; }
+          if (s.charAt(j) === "(") depth++;
+          else if (s.charAt(j) === ")") depth--;
+          j++;
+        }
+        var inner = s.slice(i + 1, j - 1);
+        i = j;
+        if (s.charAt(i) === "?" || s.charAt(i) === "*") { i++; continue; }
+        if (s.charAt(i) === "+") i++;
+        out += fromPattern(inner);
+        continue;
+      }
+      var atom;
+      if (c === "\\") { atom = s.charAt(i + 1) === "d" ? "0" : s.charAt(i + 1); i += 2; }
+      else { atom = c; i++; }
+      var q = s.charAt(i);
+      if (q === "?" || q === "*") { i++; continue; }
+      if (q === "+") { i++; out += atom; continue; }
+      if (q === "{") {
+        var close = s.indexOf("}", i);
+        var n = parseInt(s.slice(i + 1, close).split(",")[0], 10);
+        i = close + 1;
+        out += new Array(Math.max(1, n || 1) + 1).join(atom);
+        continue;
+      }
+      out += atom;
+    }
+    return out;
+  }
+
+  function skeleton(schema, name) {
+    if (!schema || typeof schema !== "object") return null;
+    if (schema.anyOf) {
+      var real = schema.anyOf.filter(function (x) { return x.type !== "null"; });
+      return real.length ? skeleton(real[0], name) : null;
+    }
+    if (schema.enum) return schema.enum[0];
+    switch (schema.type) {
+      case "object": {
+        var o = {};
+        var props = schema.properties || {};
+        Object.keys(props).forEach(function (k) { o[k] = skeleton(props[k], k); });
+        return o;
+      }
+      case "array": return [skeleton(schema.items || {}, name ? singular(name) : "item")];
+      case "string": return schema.pattern ? fromPattern(schema.pattern) : "<" + (name || "text") + ">";
+      case "integer":
+      case "number": return typeof schema.minimum === "number" && schema.minimum > 0 ? schema.minimum : 0;
+      case "boolean": return false;
+      default: return null;
+    }
+  }
+
+  var blankCache = {};
+  function blankAnswer(env) {
+    if (!blankCache[env.key]) {
+      var sub = env.tools.filter(function (t) { return t.name === env.submitTool; })[0];
+      blankCache[env.key] = JSON.stringify(skeleton(sub ? sub.input_schema : {}, null), null, 2);
+    }
+    return blankCache[env.key];
+  }
+
+  /* ── State: one per environment, kept while the page is open ─────────── */
+
+  var states = {};
+  var current = null;
+  var RUNS = { status: "loading", records: [], builtAt: null, error: null };
+  var playback = { timer: null, key: null };
+
+  function cur() { return H.get(current); }
+  function st(key) {
+    key = key || current;
+    var s = states[key];
+    if (!s) {
+      var env = H.get(key);
+      var tools = env.tools.filter(function (t) { return t.name !== env.submitTool; });
+      s = {
+        seed: 1, task: null, view: "readable", tab: "work", coordError: null,
+        answer: blankAnswer(env), answerFor: null,
+        grade: null, gradeFor: null, gradeError: null, showExpected: false,
+        tool: tools.length ? tools[0].name : null, values: {}, log: [], logN: 0,
+        ref: null, refShown: 0,
+        attPolicy: "all", attResult: "all", attOpen: null
+      };
+      states[key] = s;
+      s.task = env.draw("train", 1, 0);
+      s.answerFor = s.task.id;
+    }
+    return s;
+  }
+
+  /* ── Recorded runs ────────────────────────────────────────────────────── */
+
+  function recordsFor(key) {
+    return RUNS.records.filter(function (r) { return r.env && r.env.name === key; });
+  }
+  function stopped(r) { return !!(r.result && (r.result.error || r.result.outcome === "error")); }
+  function readsOf(recs) {
+    var by = {}, order = [];
+    recs.forEach(function (r) {
+      var g = by[r.policy];
+      if (!g) { g = by[r.policy] = { policy: r.policy, versions: {}, n: 0, passed: 0, stopped: 0, cost: 0, priced: 0 }; order.push(r.policy); }
+      g.n++;
+      g.versions[r.env.version] = true;
+      if (stopped(r)) { g.stopped++; return; }
+      if (r.result.pass) g.passed++;
+      // The cost of an episode is read over the finished ones: a run the API refused stops at no cost.
+      var c = costOf(r.policy, r.result.usage);
+      if (c !== null) { g.cost += c; g.priced++; }
+    });
+    return order.map(function (k) { var g = by[k]; g.versions = Object.keys(g.versions); return g; });
+  }
+
+  /** A record the page can show: a training task with its environment and its result. */
+  function readable(r) {
+    return !!(r && isObj(r.env) && typeof r.env.name === "string" && isObj(r.task) && r.task.split === "train" &&
+      typeof r.task.id === "string" && isObj(r.result) && typeof r.policy === "string");
+  }
+  function failRuns(err) {
+    RUNS = { status: "failed", records: [], builtAt: null, error: err && err.message ? err.message : String(err) };
+  }
+  function renderRuns() {
+    renderOverview();
+    renderTabs();
+    renderTried();
+    renderAttempts();
+    var foot = $("foot-runs");
+    if (RUNS.status === "ready") {
+      foot.textContent = "Recorded runs: " + plural(RUNS.records.length, "episode") + " on training tasks" +
+        (RUNS.builtAt ? ", gathered " + utc(RUNS.builtAt) : "") +
+        ": for each environment and model, the newest version it was run on and the newest run of each task. Held-out, spec and reference episodes are never in that file.";
+    } else {
+      foot.textContent = "The recorded runs could not be loaded (" + RUNS.error + "). Everything else on this page works without them.";
+    }
+  }
+  function loadRuns() {
+    fetch("runs.json").then(function (res) {
+      if (!res.ok) throw new Error("runs.json answered " + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (!isObj(data) || !Array.isArray(data.records)) throw new Error("runs.json holds no list of records");
+      RUNS = {
+        status: "ready",
+        records: data.records.filter(readable),
+        builtAt: typeof data.built_at === "string" ? data.built_at : null,
+        error: null
+      };
+    }).catch(failRuns).then(function () {
+      try { renderRuns(); }
+      catch (e) {
+        failRuns(new Error("runs.json could not be read: " + (e && e.message ? e.message : String(e))));
+        renderRuns();
+      }
+    });
+  }
+
+  /* ── Overview ─────────────────────────────────────────────────────────── */
+
+  function readsEl(env) {
+    var wrap = h("div", { class: "env-reads" });
+    if (RUNS.status === "loading") { wrap.append(h("span", { class: "muted" }, "Loading training reads")); return wrap; }
+    if (RUNS.status === "failed") return null;
+    var reads = readsOf(recordsFor(env.key));
+    if (!reads.length) { wrap.append(h("span", { class: "muted" }, "No model runs on training tasks yet")); return wrap; }
+    wrap.append(h("span", { class: "reads-label" }, "Training reads"));
+    var older = {};
+    reads.forEach(function (g) {
+      var finished = g.n - g.stopped;
+      wrap.append(h("span", null, policyName(g.policy, true) + " ", h("b", null, String(g.passed)), " of " + finished + " passed" +
+        (g.stopped ? ", " + g.stopped + " stopped" : "")));
+      g.versions.forEach(function (v) { if (v !== env.version) older[v] = true; });
+    });
+    var olderV = Object.keys(older);
+    if (olderV.length) wrap.append(h("span", { class: "muted" }, "recorded on " + olderV.join(", ")));
+    return wrap;
+  }
+
+  function renderOverview() {
+    var root = clear($("sides"));
+    SIDES.forEach(function (side) {
+      var envs = ENVS.filter(function (e) { return e.side === side.key; });
+      var list = h("ul", { class: "env-list" });
+      envs.forEach(function (env) {
+        var on = env.key === current;
+        list.append(h("li", null, h("button", {
+          type: "button", class: "env-card", id: "env-card-" + env.key,
+          "aria-current": on ? "true" : "false",
+          onclick: function () { selectEnv(env.key, true); }
+        },
+          h("span", { class: "env-top" },
+            h("span", { class: "env-title" }, env.title),
+            h("span", { class: "env-version" }, on ? h("span", { class: "env-open" }, "Open below  ") : null, "v" + env.version)),
+          h("span", { class: "env-summary" }, firstSentence(env.summary)),
+          readsEl(env)
+        )));
+      });
+      root.append(h("div", { class: "side" },
+        h("div", { class: "side-head" }, h("h3", null, side.label), h("span", { class: "side-count" }, plural(envs.length, "environment"))),
+        h("p", { class: "side-blurb" }, side.blurb),
+        list));
+    });
+  }
+
+  /* ── Workspace frame ──────────────────────────────────────────────────── */
+
+  function buildEnvSelect() {
+    var sel = clear($("env-select"));
+    SIDES.forEach(function (side) {
+      var g = h("optgroup", { label: side.label });
+      ENVS.filter(function (e) { return e.side === side.key; }).forEach(function (e) {
+        g.append(h("option", { value: e.key }, e.title));
+      });
+      sel.append(g);
+    });
+    sel.addEventListener("change", function () { selectEnv(sel.value, false); });
+  }
+
+  function renderHead() {
+    var env = cur();
+    var side = SIDES.filter(function (x) { return x.key === env.side; })[0];
+    $("ws-eyebrow").textContent = (side ? side.label : env.side) + "  ·  " + env.key + "  ·  version " + env.version;
+    $("ws-title").textContent = env.title;
+    $("ws-summary").textContent = env.summary;
+    var tools = env.tools.filter(function (t) { return t.name !== env.submitTool; }).length;
+    var specs = env.spec();
+    var borrowed = specs.length && !isOwn(env, specs[0]) ? specs[0].name : null;
+    $("ws-meta").textContent = plural(tools, "tool") + ", and the answer goes in through " + env.submitTool + ". " +
+      (borrowed ? plural(specs.length, "case") + " from the spec, " + borrowed + ". " :
+        specs.length ? plural(specs.length, "case") + " from the spec. " : "No spec cases. ") +
+      "A model gets at most " + LIMITS.maxTurns + " turns and " + LIMITS.maxToolCalls + " tool calls.";
+    $("env-select").value = env.key;
+  }
+
+  /* The rulebook, a little Markdown: headings, lists, numbered steps, `code`. */
+  function inline(text) {
+    var out = [];
+    String(text).split(/(`[^`]+`|\*\*[^*]+\*\*)/).forEach(function (part) {
+      if (!part) return;
+      if (part.length > 1 && part.charAt(0) === "`" && part.charAt(part.length - 1) === "`") out.push(h("code", null, part.slice(1, -1)));
+      else if (part.slice(0, 2) === "**" && part.slice(-2) === "**" && part.length > 4) out.push(h("strong", null, part.slice(2, -2)));
+      else out.push(part);
+    });
+    return out;
+  }
+  function renderRulebookText(text, into) {
+    clear(into);
+    var list = null, lastLi = null;
+    var close = function () { list = null; lastLi = null; };
+    String(text).split("\n").forEach(function (raw) {
+      var line = raw.replace(/\s+$/, "");
+      if (!line.trim()) { close(); return; }
+      var m;
+      if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
+        close();
+        var lvl = m[1].length;
+        into.append(h(lvl === 1 ? "h3" : lvl === 2 ? "h4" : "h5", null, inline(m[2])));
+        return;
+      }
+      if ((m = line.match(/^\s*[-*]\s+(.*)$/))) {
+        if (!list || list.tagName !== "UL") { list = h("ul"); into.append(list); }
+        lastLi = h("li", null, inline(m[1]));
+        list.append(lastLi);
+        return;
+      }
+      if ((m = line.match(/^\s*(\d+)[.)]\s+(.*)$/))) {
+        if (!list || list.tagName !== "OL") { list = h("ol"); into.append(list); }
+        lastLi = h("li", { value: m[1] }, inline(m[2]));
+        list.append(lastLi);
+        return;
+      }
+      if (/^\s{2,}\S/.test(raw) && lastLi) { lastLi.append(h("br")); add(lastLi, inline(line.trim())); return; }
+      close();
+      into.append(h("p", null, inline(line)));
+    });
+  }
+
+  function rulesPrefKey() { return wideMq.matches ? "rules-wide" : "rules-narrow"; }
+  function rulesOpen() {
+    var v = store.get(rulesPrefKey());
+    return v === null ? !!wideMq.matches : v === "open";
+  }
+  function applyRules() {
+    var open = rulesOpen();
+    $("rules-body").hidden = !open;
+    var t = $("rules-toggle");
+    t.setAttribute("aria-expanded", String(open));
+    t.textContent = open ? "Hide" : "Show";
+    $("ws-grid").classList.toggle("rules-closed", !open);
+  }
+  function renderRules() {
+    var env = cur();
+    $("rules-title").textContent = isPolicyEnv(env) ? "Policy" : "Rulebook";
+    $("rules-copy").textContent = isPolicyEnv(env) ? "Copy the policy" : "Copy the rulebook";
+    renderRulebookText(env.rulebook, $("rules-text"));
+    $("rules-body").scrollTop = 0;
+    applyRules();
+  }
+
+  var TABS = ["work", "reference", "attempts"];
+  function renderTabs() {
+    var s = st();
+    TABS.forEach(function (t) {
+      var on = s.tab === t;
+      var tab = $("tab-" + t);
+      tab.setAttribute("aria-selected", String(on));
+      tab.tabIndex = on ? 0 : -1;
+      $("panel-" + t).hidden = !on;
+    });
+    var n = RUNS.status === "ready" ? recordsFor(current).length : null;
+    $("tab-attempts-count").textContent = n === null ? "" : String(n);
+  }
+  function setTab(t, focus) {
+    st().tab = t;
+    renderTabs();
+    if (focus) $("tab-" + t).focus();
+  }
+
+  /* ── The task ─────────────────────────────────────────────────────────── */
+
+  function splitPrompt(text) {
+    var m = String(text).match(/^([\s\S]*?)```json\n([\s\S]*?)\n```([\s\S]*)$/);
+    if (!m) return { before: String(text), after: "" };
+    return { before: m[1].trim(), after: m[3].trim() };
+  }
+
+  function scalarEl(key, v) {
+    if (v === null || v === undefined) return h("span", { class: "v-null" }, "null");
+    var s = typeof v === "string" ? v : String(v);
+    var note = /_cents$/.test(key || "") && /^-?\d+$/.test(s) ? h("span", { class: "v-note" }, dollars(s)) : null;
+    return h("span", null, h("span", { class: "v" }, s), note);
+  }
+  function valueEl(key, v) {
+    if (v === null || v === undefined) return h("span", { class: "v-null" }, "null");
+    if (Array.isArray(v)) {
+      if (!v.length) return h("span", { class: "v-null" }, "[ ] none");
+      if (v.every(function (x) { return x === null || typeof x !== "object"; })) {
+        var k = singular(key || "");
+        var out = h("span");
+        v.forEach(function (x, i) { if (i) out.append(", "); out.append(scalarEl(k, x)); });
+        return out;
+      }
+      return h("code", null, JSON.stringify(v));
+    }
+    if (typeof v === "object") return h("code", null, JSON.stringify(v));
+    return scalarEl(key, v);
+  }
+  function dataTable(rows) {
+    var cols = [];
+    rows.forEach(function (r) { Object.keys(r).forEach(function (k) { if (cols.indexOf(k) < 0) cols.push(k); }); });
+    var wide = {};
+    cols.forEach(function (c) {
+      wide[c] = rows.some(function (r) { var v = r[c]; return (v && typeof v === "object") || (typeof v === "string" && v.length > 28); });
+    });
+    var thead = h("thead", null, h("tr", null, cols.map(function (c) { return h("th", { scope: "col" }, c); })));
+    var tbody = h("tbody");
+    rows.forEach(function (r) {
+      tbody.append(h("tr", null, cols.map(function (c) {
+        return h("td", { class: wide[c] ? "wide" : null }, Object.prototype.hasOwnProperty.call(r, c) ? valueEl(c, r[c]) : h("span", { class: "v-null" }, "—"));
+      })));
+    });
+    return h("div", { class: "table-wrap" }, h("table", { class: "dtable" }, thead, tbody));
+  }
+  function kvView(obj) {
+    var dl = h("dl", { class: "kv" });
+    Object.keys(obj).forEach(function (k) {
+      var v = obj[k];
+      if (isObj(v)) {
+        dl.append(h("dt", { class: "group" }, k),
+          h("dd", { class: "group" }, Object.keys(v).length ? kvView(v) : h("span", { class: "v-null" }, "{ } empty")));
+      } else if (Array.isArray(v) && v.length && v.every(isObj)) {
+        dl.append(h("dt", { class: "group" }, k, h("span", { class: "count" }, "  " + plural(v.length, "row"))),
+          h("dd", { class: "group" }, dataTable(v)));
+      } else {
+        dl.append(h("dt", null, k), h("dd", null, valueEl(k, v)));
+      }
+    });
+    return dl;
+  }
+
+  /** Whether a task's id is under this environment's own name: a policy or edge environment draws refi-tape's. */
+  function isOwn(env, task) { return String(task.id).indexOf(env.key + "/") === 0; }
+
+  function taskTag(env, task) {
+    if (task.split === "spec") {
+      var n = env.spec().length;
+      return [h("span", { class: "kind" }, "Spec case " + (task.index + 1) + " of " + n), task.name ? h("span", { class: "muted" }, task.name) : null, h("code", null, task.id)];
+    }
+    return [h("span", { class: "kind" }, "Training task"), h("span", { class: "mono" }, "seed " + task.suite_seed + ", index " + task.index), h("code", null, task.id)];
+  }
+
+  function renderTask() {
+    var env = cur(), s = st(), task = s.task;
+    add(clear($("task-tag")), taskTag(env, task));
+    if (document.activeElement !== $("seed-input")) $("seed-input").value = String(s.seed);
+    if (document.activeElement !== $("index-input")) $("index-input").value = task.split === "train" ? String(task.index) : "";
+    var err = $("coords-error");
+    err.hidden = !s.coordError;
+    err.textContent = s.coordError || "";
+
+    var row = clear($("spec-row"));
+    var specs = env.spec();
+    if (specs.length) {
+      row.append(h("span", { class: "label" }, "Spec cases"));
+      specs.forEach(function (t, i) {
+        var on = task.split === "spec" && task.index === t.index;
+        row.append(h("button", {
+          type: "button", class: "spec-btn", id: "spec-" + i,
+          "aria-current": on ? "true" : "false",
+          "aria-label": "Spec case " + (i + 1) + " of " + specs.length + (t.name ? ": " + t.name : ""),
+          title: t.name || null,
+          onclick: function () { setTask(t); }
+        }, String(i + 1)));
+      });
+    } else {
+      row.append(h("span", { class: "hint" }, "This environment has no spec cases, so every task here is a training task."));
+    }
+
+    var text = env.render(task);
+    var parts = splitPrompt(text);
+    $("task-before").textContent = parts.before;
+    $("task-after").textContent = parts.after;
+    $("task-after").hidden = !parts.after;
+    var data = clear($("task-data"));
+    try { data.append(kvView(env.payload(task))); }
+    catch (e) { data.append(h("p", { class: "msg msg-error" }, "The task's data could not be read: " + e.message)); }
+    data.scrollTop = 0;
+    $("task-raw").textContent = text;
+    var raw = s.view === "raw";
+    $("task-readable").hidden = raw;
+    $("task-raw").hidden = !raw;
+    $("view-readable").setAttribute("aria-pressed", String(!raw));
+    $("view-raw").setAttribute("aria-pressed", String(raw));
+    renderTried();
+  }
+
+  function renderTried() {
+    if (!current) return;
+    var p = $("task-tried");
+    clear(p);
+    var s = st();
+    var recs = RUNS.status === "ready" ? recordsFor(current).filter(function (r) { return r.task.id === s.task.id; }) : [];
+    if (!recs.length) { p.hidden = true; return; }
+    p.hidden = false;
+    p.append(h("span", null, "Models have tried this exact task:"));
+    recs.forEach(function (r) {
+      p.append(h("span", null, policyName(r.policy, true) + " ", resultMark(r)));
+    });
+    p.append(h("button", { type: "button", class: "link-btn", id: "tried-open", onclick: function () {
+      s.attOpen = RUNS.records.indexOf(recs[0]);
+      s.attPolicy = "all"; s.attResult = "all";
+      setTab("attempts");
+      renderAttempts();
+      scrollIntoViewSoft($("att-detail"));
+    } }, "Read the transcript"));
+  }
+
+  function setTask(task) {
+    var env = cur(), s = st();
+    stopPlayback();
+    s.task = task;
+    s.coordError = null;
+    if (task.split === "train") s.seed = task.suite_seed;
+    s.grade = null; s.gradeError = null; s.gradeFor = null;
+    s.ref = null; s.refShown = 0;
+    if (s.answer === blankAnswer(env)) s.answerFor = task.id;
+    s.log.push({ kind: "divider", text: "Task changed to " + task.id });
+    renderTask();
+    renderLog();
+    renderAnswer();
+    renderReference();
+  }
+
+  function readWhole(text, what) {
+    var t = String(text).trim();
+    if (!/^\d+$/.test(t)) throw new RangeError(what + " must be a whole number, 0 or more.");
+    var n = Number(t);
+    if (!Number.isSafeInteger(n)) throw new RangeError(what + " is too large.");
+    return n;
+  }
+
+  /* ── Tools ────────────────────────────────────────────────────────────── */
+
+  function toolsOf(env) { return env.tools.filter(function (t) { return t.name !== env.submitTool; }); }
+
+  function kindOf(schema) {
+    if (!schema || typeof schema !== "object") return "json";
+    if (schema.enum && (!schema.type || schema.type === "string")) return "enum";
+    if (schema.type === "string") return "string";
+    if (schema.type === "integer") return "integer";
+    if (schema.type === "number") return "number";
+    if (schema.type === "boolean") return "boolean";
+    return "json";
+  }
+  function fieldHint(schema, kind) {
+    if (schema && schema.description) return schema.description;
+    if (kind === "integer" || kind === "number") {
+      var lo = schema.minimum, hi = schema.maximum;
+      var what = kind === "integer" ? "A whole number" : "A number";
+      if (typeof lo === "number" && typeof hi === "number") return what + " from " + lo + " to " + hi + ".";
+      if (typeof lo === "number") return what + ", " + lo + " or more.";
+      return what + ".";
+    }
+    if (kind === "json") return "JSON, as the model would write it.";
+    if (schema && typeof schema.maxLength === "number") return "Up to " + schema.maxLength + " characters.";
+    return "";
+  }
+  function placeholderOf(schema, kind) {
+    if (kind === "string" && schema.pattern) {
+      if (/\\d\{4\}-\\d\{2\}-\\d\{2\}/.test(schema.pattern)) return "YYYY-MM-DD";
+      var m = String(schema.description || "").match(/e\.g\. "([^"]+)"/);
+      if (m) return m[1];
+    }
+    if (kind === "string" && schema.description) {
+      var m2 = String(schema.description).match(/e\.g\. "([^"]+)"/);
+      if (m2) return m2[1];
+    }
+    return "";
+  }
+
+  function renderTools() {
+    var env = cur(), s = st();
+    var tools = toolsOf(env);
+    var sel = clear($("tool-select"));
+    tools.forEach(function (t) { sel.append(h("option", { value: t.name }, t.name)); });
+    if (!tools.some(function (t) { return t.name === s.tool; })) s.tool = tools.length ? tools[0].name : null;
+    sel.value = s.tool || "";
+    renderToolFields();
+    renderLog();
+  }
+
+  function renderToolFields() {
+    var env = cur(), s = st();
+    var tool = toolsOf(env).filter(function (t) { return t.name === s.tool; })[0];
+    var box = clear($("tool-fields"));
+    $("tool-desc").textContent = tool ? tool.description || "" : "This environment has no tools besides the submission.";
+    if (!tool) return;
+    var schema = tool.input_schema || {};
+    var props = schema.properties || {};
+    var required = schema.required || [];
+    var values = s.values[tool.name] || (s.values[tool.name] = {});
+    Object.keys(props).forEach(function (prop) {
+      var ps = props[prop];
+      var kind = kindOf(ps);
+      var id = "tool-" + tool.name + "-" + prop;
+      var control;
+      if (kind === "enum" || kind === "boolean") {
+        var opts = kind === "enum" ? ps.enum : ["true", "false"];
+        control = h("select", { id: id, "data-prop": prop },
+          h("option", { value: "" }, required.indexOf(prop) >= 0 ? "Choose" : "Leave out"),
+          opts.map(function (o) { return h("option", { value: String(o) }, String(o)); }));
+        control.value = values[prop] || "";
+        control.addEventListener("change", function () { values[prop] = control.value; });
+      } else if (kind === "json") {
+        control = h("textarea", { id: id, "data-prop": prop, rows: "3", spellcheck: "false" });
+        control.value = values[prop] || "";
+        control.addEventListener("input", function () { values[prop] = control.value; });
+      } else {
+        control = h("input", {
+          type: "text", id: id, "data-prop": prop, autocomplete: "off", spellcheck: "false",
+          inputmode: kind === "integer" ? "numeric" : kind === "number" ? "decimal" : null,
+          placeholder: placeholderOf(ps, kind) || null
+        });
+        control.value = values[prop] || "";
+        control.addEventListener("input", function () { values[prop] = control.value; });
+      }
+      var hint = fieldHint(ps, kind);
+      box.append(h("div", { class: "field" },
+        h("label", { for: id }, prop, h("span", { class: "req" }, required.indexOf(prop) >= 0 ? "required" : "optional")),
+        control,
+        hint ? h("span", { class: "desc", id: id + "-hint" }, hint) : null));
+      if (hint) control.setAttribute("aria-describedby", id + "-hint");
+    });
+  }
+
+  function collectInput(tool, values) {
+    var schema = tool.input_schema || {};
+    var props = schema.properties || {};
+    var input = {};
+    var problems = [];
+    Object.keys(props).forEach(function (prop) {
+      var raw = values[prop];
+      if (raw === undefined || raw === "") return;
+      var kind = kindOf(props[prop]);
+      if (kind === "integer" || kind === "number") {
+        var t = String(raw).trim();
+        input[prop] = /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : raw;
+      } else if (kind === "boolean") {
+        input[prop] = raw === "true";
+      } else if (kind === "json") {
+        try { input[prop] = JSON.parse(raw); }
+        catch (e) { problems.push(prop + " is not valid JSON: " + e.message); }
+      } else {
+        input[prop] = raw;
+      }
+    });
+    return { input: input, problems: problems };
+  }
+
+  function runTool() {
+    var env = cur(), s = st();
+    var tool = toolsOf(env).filter(function (t) { return t.name === s.tool; })[0];
+    if (!tool) return;
+    var got = collectInput(tool, s.values[tool.name] || {});
+    var entry = { kind: "call", n: ++s.logN, name: tool.name, input: got.input, output: null, error: null };
+    if (got.problems.length) entry.error = got.problems.join(" ");
+    else {
+      try { entry.output = String(env.execute(tool.name, got.input)); }
+      catch (e) { entry.error = e && e.message ? e.message : String(e); }
+    }
+    s.log.push(entry);
+    appendLogEntry(entry);
+    // The log itself is silent; this one line is what a screen reader hears of a run.
+    $("tool-status").textContent = "Call " + entry.n + ", " + entry.name + ": " + (entry.error ? "error, " + entry.error : entry.output);
+  }
+
+  function logEntryEl(entry) {
+    if (entry.kind === "divider") return h("li", { class: "log-divider" }, entry.text);
+    var s = st();
+    var li = h("li", { class: "log-entry" + (entry.error ? " is-error" : "") });
+    li.append(h("div", { class: "log-call" },
+      h("span", { class: "log-n" }, "#" + entry.n),
+      h("code", { class: "log-name" }, entry.name),
+      h("code", { class: "log-args" }, JSON.stringify(entry.input)),
+      h("button", { type: "button", class: "link-btn", onclick: function () {
+        s.tool = entry.name;
+        var vals = s.values[entry.name] = {};
+        Object.keys(entry.input).forEach(function (k) {
+          var v = entry.input[k];
+          vals[k] = typeof v === "string" ? v : typeof v === "boolean" ? String(v) : (v !== null && typeof v === "object") ? JSON.stringify(v) : String(v);
+        });
+        $("tool-select").value = entry.name;
+        renderToolFields();
+        var first = $("tool-fields").querySelector("input, select, textarea");
+        if (first) first.focus();
+      } }, "Use again")));
+    var out = h("div", { class: "log-out" });
+    if (entry.error) {
+      out.append(mark("bad", "Error"), h("code", null, entry.error));
+    } else {
+      var code = h("code", null, entry.output);
+      out.append(h("span", { class: "muted" }, "→"), code);
+      var parsed = null;
+      try { parsed = JSON.parse(entry.output); } catch (e) { parsed = null; }
+      if (isObj(parsed)) {
+        Object.keys(parsed).forEach(function (k) {
+          var v = parsed[k];
+          if (v !== null && typeof v === "object") return;
+          var vEl = h("code", { class: "chip-v" }, String(v));
+          out.append(h("span", { class: "chip" }, h("span", { class: "chip-k" }, k), vEl,
+            h("button", { type: "button", class: "link-btn", "aria-label": "Copy " + k + " " + String(v),
+              onclick: function (ev) { copy(ev.currentTarget, String(v), vEl); } }, "Copy")));
+        });
+      } else {
+        out.append(h("button", { type: "button", class: "link-btn", onclick: function (ev) { copy(ev.currentTarget, entry.output, code); } }, "Copy"));
+      }
+    }
+    li.append(out);
+    return li;
+  }
+
+  /** One run added to the log as it happens; the rest of the log is left as it is. */
+  function appendLogEntry(entry) {
+    var log = $("tool-log");
+    var empty = log.querySelector(".log-empty");
+    if (empty) log.removeChild(empty);
+    log.append(logEntryEl(entry));
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function renderLog() {
+    var s = st();
+    var log = clear($("tool-log"));
+    if (!s.log.some(function (e) { return e.kind === "call"; })) {
+      log.append(h("li", { class: "log-empty" }, "Nothing run yet. Pick a tool, fill its fields and press Run. The model sees exactly what appears here."));
+    }
+    s.log.forEach(function (e) { log.append(logEntryEl(e)); });
+    log.scrollTop = log.scrollHeight;
+  }
+
+  /* ── The answer and its grade ─────────────────────────────────────────── */
+
+  function showVal(v) {
+    return v === null || v === undefined ? h("span", { class: "muted" }, "(none)") : String(v);
+  }
+
+  function gradeTable(fields, opts) {
+    var head = h("tr", null,
+      h("th", { scope: "col" }, "Field"),
+      h("th", { scope: "col" }, opts.gotLabel),
+      h("th", { scope: "col" }, "Result"));
+    if (opts.expected) head.append(h("th", { scope: "col", class: "col-expected", hidden: !opts.showExpected }, "Engine's answer"));
+    if (opts.yours) head.append(h("th", { scope: "col" }, "Yours"));
+    var body = h("tbody");
+    fields.forEach(function (f) {
+      var tr = h("tr", { class: f.ok ? null : "row-bad" },
+        h("td", { class: "mono" }, f.field),
+        h("td", { class: "mono" }, showVal(f.got)),
+        h("td", null, f.ok ? mark("ok", "Right") : mark("bad", "Wrong")));
+      if (opts.expected) tr.append(h("td", { class: "mono col-expected", hidden: !opts.showExpected }, showVal(f.expected)));
+      if (opts.yours) {
+        var y = opts.yours[f.field];
+        tr.append(h("td", { class: "mono" }, y ? [showVal(y.got), " ", y.ok ? mark("ok", "Right") : mark("bad", "Wrong")] : h("span", { class: "muted" }, "—")));
+      }
+      body.append(tr);
+    });
+    return h("div", { class: "table-wrap" }, h("table", { class: "grade" }, h("thead", null, head), body));
+  }
+
+  function verdictEl(grade) {
+    var right = grade.fields.filter(function (f) { return f.ok; }).length;
+    return h("div", { class: "verdict" },
+      h("span", { class: "big" }, grade.pass ? mark("ok", "Pass") : mark("bad", "Not a pass")),
+      h("span", { class: "figures" }, right + " of " + grade.fields.length + " fields right, score " + (Math.round(grade.score * 1000) / 1000)));
+  }
+
+  function renderAnswer() {
+    var env = cur(), s = st();
+    var area = $("answer-input");
+    if (area.value !== s.answer) area.value = s.answer;
+    area.rows = Math.min(28, Math.max(12, s.answer.split("\n").length + 1));
+    var hint = $("answer-hint");
+    clear(hint);
+    hint.append("What the model would pass to ", h("code", null, env.submitTool),
+      ". Each field starts with a value of the right type (a choice's first option, a zero, a sample date), and some of those may grade as right by chance; replace each with your answer. The grader reads it with the same parser a model's submission goes through, so a malformed answer is refused the way a model's is.");
+    $("answer-stale").hidden = !(s.answerFor && s.answerFor !== s.task.id && s.answer !== blankAnswer(env));
+    renderGrade();
+  }
+
+  function renderGrade() {
+    var s = st();
+    var out = clear($("grade-out"));
+    if (s.gradeError) {
+      out.append(h("div", { class: "msg msg-error", role: "alert" }, h("strong", null, "Not graded"), h("span", null, s.gradeError)));
+      return;
+    }
+    if (!s.grade || s.gradeFor !== s.task.id) return;
+    var g = s.grade;
+    var toggle = h("input", { type: "checkbox", id: "show-expected" });
+    toggle.checked = s.showExpected;
+    toggle.addEventListener("change", function () {
+      s.showExpected = toggle.checked;
+      var cells = out.querySelectorAll(".col-expected");
+      for (var i = 0; i < cells.length; i++) cells[i].hidden = !s.showExpected;
+    });
+    out.append(verdictEl(g),
+      h("label", { class: "check", for: "show-expected" }, toggle, "Show the engine's answers"),
+      gradeTable(g.fields, { gotLabel: "Your answer", expected: true, showExpected: s.showExpected }));
+  }
+
+  function grade() {
+    var env = cur(), s = st();
+    s.answer = $("answer-input").value;
+    s.grade = null; s.gradeError = null;
+    var raw;
+    try { raw = JSON.parse(s.answer); }
+    catch (e) { s.gradeError = "That is not valid JSON, so nothing was graded. " + e.message; renderGrade(); return; }
+    var parsed = env.parse(raw);
+    if (!parsed.ok) { s.gradeError = "The parser refused it, as it would refuse a model: " + parsed.error; renderGrade(); return; }
+    try {
+      s.grade = env.grade(s.task, parsed.answer);
+      s.gradeFor = s.task.id;
+      s.answerFor = s.task.id;
+    } catch (e) { s.gradeError = e && e.message ? e.message : String(e); }
+    $("answer-stale").hidden = true;
+    renderGrade();
+    if (st().ref && st().ref.taskId === s.task.id) renderReferenceFinal();
+  }
+
+  /* ── The reference ────────────────────────────────────────────────────── */
+
+  function callEl(env, name, input, output, isError, submitted) {
+    var wrap = h("div", { class: "call" });
+    var isSubmit = name === env.submitTool;
+    if (isSubmit) {
+      wrap.append(h("div", { class: "call-in" }, h("code", { class: "name" }, name)));
+      wrap.append(h("details", null, h("summary", null, "The answer it sent"), h("pre", null, JSON.stringify(input, null, 2))));
+    } else {
+      wrap.append(h("div", { class: "call-in" }, h("code", { class: "name" }, name), h("code", null, JSON.stringify(input))));
+    }
+    if (output === null || output === undefined) {
+      if (isSubmit && submitted) wrap.append(h("div", { class: "call-out" }, mark("ok", "Submitted"), h("span", { class: "muted" }, "and the episode ended")));
+      else if (isSubmit) wrap.append(h("div", { class: "call-out" }, h("span", { class: "muted" }, "No reply recorded")));
+      else wrap.append(h("div", { class: "call-out" }, h("span", { class: "muted" }, "No reply recorded")));
+    } else {
+      wrap.append(h("div", { class: "call-out" + (isError ? " err" : "") },
+        isError ? mark("bad", "Error") : h("span", { class: "muted" }, "→"),
+        h("code", null, output)));
+    }
+    return wrap;
+  }
+
+  function refStepEl(env, step) {
+    var li = h("li", { class: "step" }, h("div", { class: "step-head" }, h("strong", null, "Turn " + step.turn), plural(step.calls.length, "call")));
+    step.calls.forEach(function (c) { li.append(callEl(env, c.name, c.input, c.output, c.is_error, true)); });
+    return li;
+  }
+
+  function stopPlayback() {
+    if (playback.timer) { clearInterval(playback.timer); playback.timer = null; }
+    playback.key = null;
+  }
+
+  function startPlayback() {
+    var key = current;
+    if (playback.timer) clearInterval(playback.timer);
+    playback.key = key;
+    playback.timer = setInterval(function () {
+      var ss = states[key];
+      if (current !== key || !ss || !ss.ref || !ss.ref.sol) { stopPlayback(); return; }
+      var steps = ss.ref.sol.steps;
+      if (ss.refShown >= steps.length) {
+        clearInterval(playback.timer); playback.timer = null; playback.key = null;
+        renderReferenceControls();
+        renderReferenceFinal();
+        return;
+      }
+      var list = $("ref-steps");
+      list.append(refStepEl(cur(), steps[ss.refShown]));
+      ss.refShown++;
+      list.scrollTop = list.scrollHeight;
+      renderReferenceControls();
+    }, 320);
+    renderReferenceControls();
+  }
+
+  function watchReference() {
+    var env = cur(), s = st(), key = current, task = s.task;
+    stopPlayback();
+    var go = function () {
+      if (current !== key || st(key).task.id !== task.id) return;
+      s.refShown = 0;
+      renderReference();
+      if (!s.ref.sol) return;
+      if (reducedMotion.matches) { s.refShown = s.ref.sol.steps.length; renderReference(); return; }
+      startPlayback();
+    };
+    if (s.ref && s.ref.taskId === task.id && s.ref.sol) { go(); return; }
+    $("ref-status").textContent = "Running the reference.";
+    $("ref-run").disabled = true;
+    Promise.resolve().then(function () { return env.solve(task); }).then(function (sol) {
+      s.ref = { taskId: task.id, sol: sol, error: null };
+    }, function (e) {
+      s.ref = { taskId: task.id, sol: null, error: e && e.message ? e.message : String(e) };
+    }).then(function () {
+      $("ref-run").disabled = false;
+      go();
+    });
+  }
+
+  function renderReferenceControls() {
+    var s = st();
+    var ref = s.ref && s.ref.taskId === s.task.id ? s.ref : null;
+    var total = ref && ref.sol ? ref.sol.steps.length : 0;
+    var playing = !!playback.timer && playback.key === current;
+    var done = ref && ref.sol && s.refShown >= total;
+    $("ref-run").textContent = ref && ref.sol ? "Watch it again" : "Watch the reference";
+    $("ref-pause").hidden = !(ref && ref.sol && !done);
+    $("ref-pause").textContent = playing ? "Pause" : "Resume";
+    $("ref-all").hidden = !(ref && ref.sol && !done);
+    var status = $("ref-status");
+    if (!ref) status.textContent = "";
+    else if (ref.error) status.textContent = "";
+    else if (done) {
+      var env = cur();
+      var calls = ref.sol.steps.reduce(function (n, x) {
+        return n + x.calls.filter(function (c) { return c.name !== env.submitTool; }).length;
+      }, 0);
+      status.textContent = plural(total, "turn") + ": " + plural(calls, "tool call") + ", " + endingOf(ref.sol.outcome) + ".";
+    }
+    else status.textContent = "Turn " + s.refShown + " of " + total + (playing ? "" : ", paused");
+  }
+
+  /** How an episode that submitted nothing stopped, said plainly. */
+  function stopOf(outcome) {
+    if (outcome === "max_turns") return "stopped at the " + LIMITS.maxTurns + "-turn limit before submitting";
+    if (outcome === "max_tool_calls") return "stopped at the " + LIMITS.maxToolCalls + "-tool-call limit before submitting";
+    return "stopped without submitting (" + String(outcome).replace(/_/g, " ") + ")";
+  }
+  /** How an episode ended: only "submitted" means an answer went in. */
+  function endingOf(outcome) { return outcome === "submitted" ? "then the submission" : "then it " + stopOf(outcome); }
+
+  function renderReferenceFinal() {
+    var s = st();
+    var out = clear($("ref-final"));
+    var ref = s.ref && s.ref.taskId === s.task.id ? s.ref : null;
+    if (!ref || !ref.sol || s.refShown < ref.sol.steps.length) return;
+    var sol = ref.sol;
+    var yours = null;
+    if (s.grade && s.gradeFor === s.task.id) {
+      yours = {};
+      s.grade.fields.forEach(function (f) { yours[f.field] = f; });
+    }
+    var anyWrong = sol.grade.fields.some(function (f) { return !f.ok; });
+    if (sol.outcome === "submitted" && sol.answer !== null) {
+      var ansPre = h("pre", { class: "tall" }, JSON.stringify(sol.answer, null, 2));
+      out.append(
+        h("div", { class: "block-head" }, h("h4", { class: "label" }, "What it submitted"),
+          h("button", { type: "button", class: "link-btn", onclick: function (ev) { copy(ev.currentTarget, JSON.stringify(sol.answer, null, 2), ansPre); } }, "Copy the answer")),
+        ansPre);
+    } else {
+      out.append(h("div", { class: "msg msg-error", role: "alert" },
+        h("strong", null, "The reference submitted nothing"),
+        h("span", null, "It " + stopOf(sol.outcome) + ", so every field below is graded as empty. A task the reference cannot finish is a defect in the environment.")));
+    }
+    out.append(
+      verdictEl(sol.grade),
+      h("p", { class: "hint" }, yours ? "Your graded answer sits beside it, field by field." : "Grade your own answer on the first tab to see it beside this one, field by field."),
+      gradeTable(sol.grade.fields, { gotLabel: sol.outcome === "submitted" ? "Reference" : "Reference (nothing submitted)", expected: anyWrong, showExpected: anyWrong, yours: yours }));
+  }
+
+  function renderReference() {
+    var env = cur(), s = st();
+    add(clear($("ref-task-tag")), taskTag(env, s.task));
+    var list = clear($("ref-steps"));
+    var ref = s.ref && s.ref.taskId === s.task.id ? s.ref : null;
+    var finalOut = clear($("ref-final"));
+    if (ref && ref.error) {
+      list.hidden = true;
+      finalOut.append(h("div", { class: "msg msg-error" }, h("strong", null, "The reference could not finish"), h("span", null, ref.error)));
+    } else if (ref && ref.sol) {
+      list.hidden = false;
+      for (var i = 0; i < s.refShown && i < ref.sol.steps.length; i++) list.append(refStepEl(env, ref.sol.steps[i]));
+      renderReferenceFinal();
+    } else {
+      list.hidden = true;
+      finalOut.append(h("p", { class: "hint" }, "Press Watch the reference to see it work the task you have open, turn by turn: each tool call with its input and the reply, then the answer it submits and how that grades."));
+    }
+    renderReferenceControls();
+  }
+
+  /* ── Model attempts ───────────────────────────────────────────────────── */
+
+  function resultMark(r) {
+    if (stopped(r)) return mark("warn", "Stopped");
+    if (r.result.pass) return mark("ok", "Pass");
+    var missed = (r.result.fields || []).filter(function (f) { return !f.ok; }).length;
+    return mark("bad", "Missed " + missed);
+  }
+
+  function renderAttempts() {
+    if (!current) return;
+    var env = cur(), s = st();
+    var body = clear($("att-body"));
+    if (RUNS.status === "loading") { body.append(h("p", { class: "hint" }, "Loading the recorded runs.")); return; }
+    if (RUNS.status === "failed") {
+      body.append(h("div", { class: "msg msg-error" }, h("strong", null, "The recorded runs did not load"), h("span", null, RUNS.error + ". The page expects runs.json beside it.")));
+      return;
+    }
+    var all = recordsFor(env.key);
+    if (!all.length) {
+      body.append(h("p", { class: "hint" }, "No model has a recorded run on this environment's training tasks yet."));
+      return;
+    }
+    var reads = readsOf(all);
+    var summary = h("div", { class: "att-summary" });
+    reads.forEach(function (g) {
+      var finished = g.n - g.stopped;
+      var line = [h("b", null, policyName(g.policy)), ": ", h("b", null, String(g.passed)), " of " + finished + " training tasks passed"];
+      if (g.stopped) line.push(", and " + g.stopped + " stopped on an error before submitting");
+      if (g.priced) line.push(". About " + usd(g.cost / g.priced) + " a finished episode at list price");
+      line.push(".");
+      summary.append(h("p", null, line));
+    });
+    body.append(summary);
+    var versions = {};
+    all.forEach(function (r) { versions[r.env.version] = true; });
+    var older = Object.keys(versions).filter(function (v) { return v !== env.version; });
+    if (older.length) {
+      body.append(h("div", { class: "msg msg-note" },
+        h("span", null, "These runs were recorded on version " + older.join(", ") + ". Today's environment is version " + env.version +
+          ". Each is shown as it was graded then, with the task as it was rendered then, and is not graded again.")));
+    }
+
+    var polSel = h("select", { id: "att-policy" }, h("option", { value: "all" }, "Every model"),
+      reads.map(function (g) { return h("option", { value: g.policy }, policyName(g.policy)); }));
+    polSel.value = s.attPolicy;
+    polSel.addEventListener("change", function () { s.attPolicy = polSel.value; renderAttempts(); });
+    var resSel = h("select", { id: "att-result" },
+      h("option", { value: "all" }, "Every result"),
+      h("option", { value: "pass" }, "Passed"),
+      h("option", { value: "missed" }, "Missed a field"),
+      h("option", { value: "stopped" }, "Stopped on an error"));
+    resSel.value = s.attResult;
+    resSel.addEventListener("change", function () { s.attResult = resSel.value; renderAttempts(); });
+    body.append(h("div", { class: "att-filters" },
+      h("div", { class: "field" }, h("label", { for: "att-policy" }, "Model"), polSel),
+      h("div", { class: "field" }, h("label", { for: "att-result" }, "Result"), resSel)));
+
+    var rows = all.filter(function (r) {
+      if (s.attPolicy !== "all" && r.policy !== s.attPolicy) return false;
+      if (s.attResult === "pass") return !stopped(r) && r.result.pass;
+      if (s.attResult === "missed") return !stopped(r) && !r.result.pass;
+      if (s.attResult === "stopped") return stopped(r);
+      return true;
+    }).sort(function (a, b) {
+      return a.task.suite_seed - b.task.suite_seed || a.task.index - b.task.index || String(a.policy).localeCompare(String(b.policy));
+    });
+    var tbody = h("tbody");
+    rows.forEach(function (r) {
+      var gi = RUNS.records.indexOf(r);
+      var c = costOf(r.policy, r.result.usage);
+      tbody.append(h("tr", { "aria-current": s.attOpen === gi ? "true" : null },
+        h("td", null, h("button", { type: "button", class: "link-btn", id: "att-open-" + gi,
+          "aria-label": "Read " + policyName(r.policy, true) + " on seed " + r.task.suite_seed + ", index " + r.task.index,
+          onclick: function () { s.attOpen = gi; renderAttempts(); scrollIntoViewSoft($("att-detail")); } },
+          "Seed " + r.task.suite_seed + ", index " + r.task.index)),
+        h("td", null, policyName(r.policy, true)),
+        h("td", null, resultMark(r)),
+        h("td", { class: "mono num" }, stopped(r) ? "—" : (Math.round(r.result.score * 1000) / 1000).toString()),
+        h("td", { class: "mono num" }, String(r.result.turns)),
+        h("td", { class: "mono num" }, String(r.result.tool_calls)),
+        h("td", { class: "mono num" }, c === null ? "—" : usd(c))));
+    });
+    body.append(h("p", { class: "status-line" }, "Showing " + rows.length + " of " + plural(all.length, "recorded episode") + "."));
+    body.append(h("div", { class: "table-wrap" }, h("table", { class: "att-table" },
+      h("thead", null, h("tr", null,
+        h("th", { scope: "col" }, "Training task"),
+        h("th", { scope: "col" }, "Model"),
+        h("th", { scope: "col" }, "Result"),
+        h("th", { scope: "col", class: "num" }, "Score"),
+        h("th", { scope: "col", class: "num" }, "Turns"),
+        h("th", { scope: "col", class: "num" }, "Tool calls"),
+        h("th", { scope: "col", class: "num" }, "Cost"))),
+      tbody)));
+
+    var detail = h("div", { class: "att-detail", id: "att-detail" });
+    body.append(detail);
+    var rec = s.attOpen !== null ? RUNS.records[s.attOpen] : null;
+    if (rec && rec.env.name === env.key) renderAttemptDetail(detail, env, rec);
+  }
+
+  function renderAttemptDetail(box, env, r) {
+    var s = st();
+    var c = costOf(r.policy, r.result.usage);
+    box.append(h("div", { class: "att-detail-head" },
+      h("h4", null, policyName(r.policy) + " on seed " + r.task.suite_seed + ", index " + r.task.index),
+      h("button", { type: "button", class: "link-btn", id: "att-close", onclick: function () { s.attOpen = null; renderAttempts(); } }, "Close")));
+    var u = r.result.usage || {};
+    box.append(h("div", { class: "facts" },
+      h("span", null, resultMark(r)),
+      stopped(r) ? null : h("span", null, "score ", h("b", null, String(Math.round(r.result.score * 1000) / 1000))),
+      h("span", null, h("b", null, String(r.result.turns)), " turns"),
+      h("span", null, h("b", null, String(r.result.tool_calls)), " tool calls"),
+      h("span", null, h("b", null, c === null ? "unpriced" : usd(c)), " at list price"),
+      h("span", null, "version " + r.env.version),
+      r.result.finished_at ? h("span", null, "finished " + utc(r.result.finished_at)) : null,
+      h("span", null, ((u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0)).toLocaleString("en-US") + " tokens in, " + (u.output_tokens || 0).toLocaleString("en-US") + " out")));
+
+    if (r.result.error) {
+      box.append(h("div", { class: "msg msg-error" }, h("strong", null, "The run stopped before the model submitted"), h("code", null, r.result.error)));
+    }
+
+    var missed = (r.result.fields || []).filter(function (f) { return !f.ok; });
+    if (!stopped(r)) {
+      if (missed.length) {
+        box.append(h("h5", { class: "label" }, "The fields it missed"));
+        box.append(h("div", { class: "table-wrap" }, h("table", null,
+          h("thead", null, h("tr", null, h("th", { scope: "col" }, "Field"), h("th", { scope: "col" }, "The model's answer"), h("th", { scope: "col" }, "Engine's answer"))),
+          h("tbody", null, missed.map(function (f) {
+            return h("tr", { class: "row-bad" }, h("td", { class: "mono" }, f.field), h("td", { class: "mono" }, showVal(f.got)), h("td", { class: "mono" }, showVal(f.expected)));
+          })))));
+      } else {
+        box.append(h("p", null, mark("ok", "Every field right")));
+      }
+    }
+
+    var actions = h("div", { class: "row" });
+    if (r.env.version === env.version && r.task.split === "train") {
+      var same = null;
+      try { same = env.draw("train", r.task.suite_seed, r.task.index); } catch (e) { same = null; }
+      if (same && same.id === r.task.id) {
+        actions.append(h("button", { type: "button", class: "btn", id: "att-work", onclick: function () {
+          setTask(same);
+          setTab("work");
+          scrollIntoViewSoft($("task-block"));
+        } }, "Work this task yourself"));
+      }
+    } else {
+      actions.append(h("span", { class: "hint" }, "Recorded on version " + r.env.version + ". The task at these coordinates may differ today, so it is not offered under Work the task."));
+    }
+    if (actions.childNodes.length) box.append(actions);
+
+    var taskPre = h("pre", { class: "wrap tall" }, r.task.rendered || "");
+    box.append(h("details", { class: "plain" }, h("summary", null, "The task as the model saw it"), taskPre));
+
+    var obs = {};
+    (r.transcript || []).forEach(function (t) {
+      if (t.kind === "observations") (t.observations || []).forEach(function (o) { obs[o.call_id] = o; });
+    });
+    var list = h("ol", { class: "steps" });
+    var turns = (r.transcript || []).filter(function (t) { return t.kind === "turn"; });
+    turns.forEach(function (t, ti) {
+      var li = h("li", { class: "step" }, h("div", { class: "step-head" },
+        h("strong", null, "Turn " + t.turn),
+        typeof t.ms === "number" ? (t.ms / 1000).toFixed(1) + " s" : null,
+        t.calls ? plural(t.calls.length, "call") : null));
+      if (t.text && t.text.trim()) li.append(h("p", { class: "say" }, t.text.trim()));
+      (t.calls || []).forEach(function (c) {
+        var o = obs[c.id];
+        var last = ti === turns.length - 1;
+        li.append(callEl(env, c.name, c.input, o ? o.content : null, o ? o.is_error : false, last && !r.result.error && c.name === env.submitTool));
+      });
+      list.append(li);
+    });
+    box.append(h("h5", { class: "label" }, "The transcript"));
+    box.append(turns.length ? list : h("p", { class: "hint" }, "No turns were recorded."));
+  }
+
+  /* ── Choosing an environment ──────────────────────────────────────────── */
+
+  function selectEnv(key, scroll) {
+    var env;
+    try { env = H.get(key); } catch (e) { env = ENVS[0]; }
+    stopPlayback();
+    current = env.key;
+    store.set("env", current);
+    try {
+      if (window.location.hash !== "#" + current) window.history.replaceState(null, "", "#" + current);
+    } catch (e) { /* a sandboxed frame may refuse to touch its URL */ }
+    st();
+    renderOverview();
+    renderHead();
+    renderRules();
+    renderTabs();
+    renderTask();
+    renderTools();
+    renderAnswer();
+    renderReference();
+    renderAttempts();
+    if (scroll) scrollIntoViewSoft($("workspace"));
+  }
+
+  /* ── Wiring ───────────────────────────────────────────────────────────── */
+
+  buildEnvSelect();
+
+  $("rules-toggle").addEventListener("click", function () {
+    store.set(rulesPrefKey(), rulesOpen() ? "closed" : "open");
+    applyRules();
+  });
+  if (wideMq.addEventListener) wideMq.addEventListener("change", applyRules);
+  $("rules-copy").addEventListener("click", function (ev) { copy(ev.currentTarget, cur().rulebook, $("rules-text")); });
+
+  TABS.forEach(function (t, i) {
+    var tab = $("tab-" + t);
+    tab.addEventListener("click", function () { setTab(t); });
+    tab.addEventListener("keydown", function (ev) {
+      var next = null;
+      if (ev.key === "ArrowRight") next = TABS[(i + 1) % TABS.length];
+      else if (ev.key === "ArrowLeft") next = TABS[(i + TABS.length - 1) % TABS.length];
+      else if (ev.key === "Home") next = TABS[0];
+      else if (ev.key === "End") next = TABS[TABS.length - 1];
+      if (next) { ev.preventDefault(); setTab(next, true); }
+    });
+  });
+
+  $("new-task").addEventListener("click", function () {
+    var s = st();
+    var seed;
+    try { seed = readWhole($("seed-input").value, "The seed"); }
+    catch (e) { s.coordError = e.message; $("seed-input").focus(); renderTask(); return; }
+    // A random index; one whose stream a held-out task draws from is refused, so another is drawn.
+    var last = null;
+    for (var tries = 0; tries < 20; tries++) {
+      var index = Math.floor(Math.random() * 10000);
+      try { var task = cur().draw("train", seed, index); s.seed = seed; setTask(task); return; }
+      catch (e) { last = e; }
+    }
+    s.coordError = last && last.message ? last.message : String(last);
+    renderTask();
+  });
+  $("coords-form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var s = st();
+    try {
+      var seed = readWhole($("seed-input").value, "The seed");
+      var index = readWhole($("index-input").value, "The index");
+      s.seed = seed;
+      setTask(cur().draw("train", seed, index));
+    } catch (e) {
+      s.coordError = e.message;
+      renderTask();
+    }
+  });
+  $("view-readable").addEventListener("click", function () { st().view = "readable"; renderTask(); });
+  $("view-raw").addEventListener("click", function () { st().view = "raw"; renderTask(); });
+  $("prompt-copy").addEventListener("click", function (ev) {
+    var s = st();
+    if (s.view !== "raw") { s.view = "raw"; renderTask(); }
+    copy(ev.currentTarget, cur().render(s.task), $("task-raw"));
+  });
+
+  $("tool-select").addEventListener("change", function () { st().tool = $("tool-select").value; renderToolFields(); });
+  $("tool-form").addEventListener("submit", function (ev) { ev.preventDefault(); runTool(); });
+  $("tool-clear-fields").addEventListener("click", function () {
+    var s = st();
+    if (s.tool) s.values[s.tool] = {};
+    renderToolFields();
+  });
+  $("log-clear").addEventListener("click", function () { var s = st(); s.log = []; renderLog(); });
+
+  $("answer-input").addEventListener("input", function () { st().answer = $("answer-input").value; });
+  $("answer-input").addEventListener("keydown", function (ev) {
+    if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); grade(); }
+  });
+  $("grade-btn").addEventListener("click", grade);
+  $("answer-tidy").addEventListener("click", function () {
+    var s = st();
+    try {
+      s.answer = JSON.stringify(JSON.parse($("answer-input").value), null, 2);
+      s.gradeError = null;
+      renderAnswer();
+    } catch (e) {
+      s.answer = $("answer-input").value;
+      s.gradeError = "That is not valid JSON yet, so it was left as it is. " + e.message;
+      renderGrade();
+    }
+  });
+  var resetAnswer = function () {
+    var env = cur(), s = st();
+    s.answer = blankAnswer(env);
+    s.answerFor = s.task.id;
+    s.grade = null; s.gradeError = null;
+    renderAnswer();
+  };
+  $("answer-reset").addEventListener("click", resetAnswer);
+  $("answer-stale-reset").addEventListener("click", resetAnswer);
+
+  $("ref-run").addEventListener("click", watchReference);
+  $("ref-pause").addEventListener("click", function () {
+    if (playback.timer && playback.key === current) { stopPlayback(); renderReferenceControls(); }
+    else startPlayback();
+  });
+  $("ref-all").addEventListener("click", function () {
+    var s = st();
+    stopPlayback();
+    if (s.ref && s.ref.sol) s.refShown = s.ref.sol.steps.length;
+    renderReference();
+  });
+
+  /* Start in a working state: the overview, and an environment with a task drawn. */
+  var start = null;
+  try {
+    var hash = String(window.location.hash || "").replace(/^#/, "");
+    if (hash && ENVS.some(function (e) { return e.key === hash; })) start = hash;
+  } catch (e) { start = null; }
+  if (!start) {
+    var last = store.get("env");
+    if (last && ENVS.some(function (e) { return e.key === last; })) start = last;
+  }
+  selectEnv(start || ENVS[0].key, false);
+  window.addEventListener("hashchange", function () {
+    var key = String(window.location.hash || "").replace(/^#/, "");
+    if (key !== current && ENVS.some(function (e) { return e.key === key; })) selectEnv(key, true);
+  });
+  loadRuns();
+
+  window.HMGym = { selectEnv: selectEnv, state: function () { return { current: current, states: states, runs: RUNS }; } };
+})();
+</script>

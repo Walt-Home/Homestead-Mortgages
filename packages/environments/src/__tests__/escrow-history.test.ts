@@ -77,6 +77,20 @@ describe("escrow-history", () => {
     expect(await solveAll(generateHistorySuite("train", 11, 300))).toEqual([]);
   }, 120_000);
 
+  it("leaves the reference room inside the episode's turns on 10,000 training ledgers", async () => {
+    // One call a turn, it ran out of the 80 turns on five of these (train 1/1726 the first).
+    // The longest ledger is still 82 tool calls: a model that makes one call a turn would
+    // run out on about one ledger in 2,000.
+    const tight: string[] = [];
+    for (let i = 0; i < 10_000; i++) {
+      const task = generateHistoryTask("train", 1, i);
+      const r = await runEpisode(escrowHistory, task, new HistoryReferencePolicy());
+      if (r.outcome !== "submitted" || r.turns > 50 || !r.grade.pass)
+        tight.push(`${task.id} ${r.outcome} in ${r.turns} turns, ${r.tool_calls} calls`);
+    }
+    expect(tight).toEqual([]);
+  }, 120_000);
+
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump HISTORY_ENVIRONMENT_VERSION, then the pin.
     expect(

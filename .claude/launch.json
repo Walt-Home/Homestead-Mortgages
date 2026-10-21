@@ -105,6 +105,12 @@
       "runtimeArgs": ["run", "dev", "--workspace=@hm/console"],
       "port": 5174,
       "url": "http://localhost:5174"
+    },
+    {
+      "name": "gym",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "env:gym", "--workspace=@hm/environments"],
+      "port": 8765
     }
   ]
 }

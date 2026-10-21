@@ -20,7 +20,9 @@
     "env:refi": "tsx src/cli.ts",
     "env:compare": "tsx src/compare-cli.ts",
     "env:audit": "tsx src/audit-cli.ts",
-    "env:archive": "tsx src/archive-cli.ts"
+    "env:archive": "tsx src/archive-cli.ts",
+    "env:playground": "node scripts/build-playground.mjs",
+    "env:gym": "node scripts/build-playground.mjs && python3 -m http.server 8765 --directory playground/dist"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

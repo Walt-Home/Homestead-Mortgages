@@ -32,6 +32,7 @@ import { vertexClaudeClient } from "./anthropic-vertex.js";
 import { DEFAULT_LIMITS, runEpisode, type Policy } from "./episode.js";
 import { RECORD_VERSION, RunRecorder, sha256 } from "./record.js";
 import type { Environment } from "./episode.js";
+import { trainIndexes } from "./heldout-guard.js";
 import {
   HELDOUT_SUITE,
   REFI_FINGERPRINT,
@@ -41,6 +42,7 @@ import {
   generateTask,
   refiReview,
   specTasks,
+  taskId,
   type RefiAnswer,
   type Split,
 } from "./refi/index.js";
@@ -53,6 +55,7 @@ import {
   generateTapeTask,
   refiTape,
   tapeSpecTasks,
+  tapeTaskId,
   type RefiTapeTask,
 } from "./refi-tape/index.js";
 import { POLICY_FINGERPRINT, refiPolicy } from "./refi-policy/index.js";
@@ -62,6 +65,7 @@ import {
   HARD_POLICY_FINGERPRINT,
   generateHardSuite,
   generateHardTask,
+  hardTaskId,
   refiHard,
   refiHardPolicy,
 } from "./refi-hard/index.js";
@@ -71,6 +75,7 @@ import {
   EscrowReferencePolicy,
   escrowAnalysis,
   escrowSpecTasks,
+  escrowTaskId,
   expectedEscrow,
   generateEscrowSuite,
   generateEscrowTask,
@@ -85,6 +90,7 @@ import {
   generateRegzSuite,
   generateRegzTask,
   regzPriceTests,
+  regzTaskId,
   type RegzAnswer,
   type RegzTask,
 } from "./regz/index.js";
@@ -98,6 +104,7 @@ import {
   expectedHistory,
   generateHistorySuite,
   generateHistoryTask,
+  historyTaskId,
   type EscrowHistoryTask,
 } from "./escrow-history/index.js";
 import {
@@ -107,6 +114,7 @@ import {
   generateRegzAprSuite,
   generateRegzAprTask,
   regzApr,
+  regzAprTaskId,
 } from "./regz-apr/index.js";
 import {
   FLEX_FINGERPRINT,
@@ -114,6 +122,7 @@ import {
   FlexReferencePolicy,
   expectedFlex,
   flexSpecTasks,
+  flexTaskId,
   flexmodTerms,
   generateFlexSuite,
   generateFlexTask,
@@ -129,6 +138,7 @@ import {
   generatePaymentsTask,
   paymentsPosting,
   paymentsSpecTasks,
+  paymentsTaskId,
   type PaymentsAnswer,
   type PaymentsTask,
 } from "./payments/index.js";
@@ -158,6 +168,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof FLEX_FINGERPRINT
     | typeof PAYMENTS_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
+  /** The generator's task id, so a train index is checked before it is drawn. */
+  readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
   readonly suite: (split: Exclude<Split, "spec">, seed: number, n: number) => T[];
   readonly one: (split: Exclude<Split, "spec">, seed: number, index: number) => T;
   readonly spec: () => T[];
@@ -170,6 +182,7 @@ const BENCHES = {
     env: refiReview,
     fingerprint: REFI_FINGERPRINT,
     heldout: HELDOUT_SUITE,
+    taskId: taskId,
     suite: generateSuite,
     one: generateTask,
     spec: specTasks,
@@ -180,6 +193,7 @@ const BENCHES = {
     env: refiTape,
     fingerprint: TAPE_FINGERPRINT,
     heldout: TAPE_HELDOUT_SUITE,
+    taskId: tapeTaskId,
     suite: generateTapeSuite,
     one: generateTapeTask,
     spec: tapeSpecTasks,
@@ -191,6 +205,7 @@ const BENCHES = {
     env: refiPolicy,
     fingerprint: POLICY_FINGERPRINT,
     heldout: TAPE_HELDOUT_SUITE,
+    taskId: tapeTaskId,
     suite: generateTapeSuite,
     one: generateTapeTask,
     spec: tapeSpecTasks,
@@ -202,6 +217,7 @@ const BENCHES = {
     env: refiHard,
     fingerprint: HARD_FINGERPRINT,
     heldout: HARD_HELDOUT_SUITE,
+    taskId: hardTaskId,
     suite: generateHardSuite,
     one: generateHardTask,
     spec: tapeSpecTasks,
@@ -212,6 +228,7 @@ const BENCHES = {
     env: refiHardPolicy,
     fingerprint: HARD_POLICY_FINGERPRINT,
     heldout: HARD_HELDOUT_SUITE,
+    taskId: hardTaskId,
     suite: generateHardSuite,
     one: generateHardTask,
     spec: tapeSpecTasks,
@@ -223,6 +240,7 @@ const BENCHES = {
     env: escrowAnalysis,
     fingerprint: ESCROW_FINGERPRINT,
     heldout: ESCROW_HELDOUT_SUITE,
+    taskId: escrowTaskId,
     suite: generateEscrowSuite,
     one: generateEscrowTask,
     spec: escrowSpecTasks,
@@ -234,6 +252,7 @@ const BENCHES = {
     env: regzPriceTests,
     fingerprint: REGZ_FINGERPRINT,
     heldout: REGZ_HELDOUT_SUITE,
+    taskId: regzTaskId,
     suite: generateRegzSuite,
     one: generateRegzTask,
     spec: () => [],
@@ -248,6 +267,7 @@ const BENCHES = {
     env: escrowPolicy,
     fingerprint: ESCROW_POLICY_FINGERPRINT,
     heldout: ESCROW_HELDOUT_SUITE,
+    taskId: escrowTaskId,
     suite: generateEscrowSuite,
     one: generateEscrowTask,
     spec: escrowSpecTasks,
@@ -258,6 +278,7 @@ const BENCHES = {
     env: regzPolicy,
     fingerprint: REGZ_POLICY_FINGERPRINT,
     heldout: REGZ_HELDOUT_SUITE,
+    taskId: regzTaskId,
     suite: generateRegzSuite,
     one: generateRegzTask,
     spec: () => [],
@@ -269,6 +290,7 @@ const BENCHES = {
     env: escrowHistory,
     fingerprint: HISTORY_FINGERPRINT,
     heldout: HISTORY_HELDOUT_SUITE,
+    taskId: historyTaskId,
     suite: generateHistorySuite,
     one: generateHistoryTask,
     spec: () => [],
@@ -280,6 +302,7 @@ const BENCHES = {
     env: regzApr,
     fingerprint: REGZ_APR_FINGERPRINT,
     heldout: REGZ_APR_HELDOUT_SUITE,
+    taskId: regzAprTaskId,
     suite: generateRegzAprSuite,
     one: generateRegzAprTask,
     spec: () => [],
@@ -291,6 +314,7 @@ const BENCHES = {
     env: flexmodTerms,
     fingerprint: FLEX_FINGERPRINT,
     heldout: FLEX_HELDOUT_SUITE,
+    taskId: flexTaskId,
     suite: generateFlexSuite,
     one: generateFlexTask,
     spec: flexSpecTasks,
@@ -302,6 +326,7 @@ const BENCHES = {
     env: paymentsPosting,
     fingerprint: PAYMENTS_FINGERPRINT,
     heldout: PAYMENTS_HELDOUT_SUITE,
+    taskId: paymentsTaskId,
     suite: generatePaymentsSuite,
     one: generatePaymentsTask,
     spec: paymentsSpecTasks,
@@ -336,8 +361,20 @@ function suite<T extends TaskCoordinates, A>(bench: Bench<T, A>): T[] {
   if (split !== "train" && split !== "heldout")
     throw new Error(`--split must be train, heldout or spec`);
   const seed = Number(values.seed ?? (split === "heldout" ? bench.heldout.seed : 1));
+  if (split === "train") {
+    // A train index whose stream a held-out task draws from is that task: never drawn (heldout-guard.ts).
+    const indexes = values.index !== undefined ? [Number(values.index)] : null;
+    const n = indexes ? 1 : Number(values.n ?? 50);
+    const at = (i: number) => (indexes ? indexes[0]! : i);
+    const { kept, left_out } = trainIndexes((i) => bench.taskId("train", seed, at(i)), n);
+    if (left_out.length > 0)
+      console.log(
+        `left out ${left_out.length} train ${left_out.length === 1 ? "index" : "indexes"} whose stream a held-out task draws from: ${left_out.map(at).join(", ")}`,
+      );
+    return kept.map((i) => bench.one("train", seed, at(i)));
+  }
   if (values.index !== undefined) return [bench.one(split, seed, Number(values.index))];
-  const n = Number(values.n ?? (split === "heldout" ? bench.heldout.n : 50));
+  const n = Number(values.n ?? bench.heldout.n);
   return bench.suite(split, seed, n);
 }
 

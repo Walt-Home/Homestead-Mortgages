@@ -47,6 +47,26 @@ it is recorded next to the pass and never replaces it.
 Each task is drawn from its own seeded stream keyed by its id, so any task
 can be rebuilt from its split, seed and index alone.
 
+**No train task draws a held-out stream.** The stream is seeded with a
+32-bit hash of the id, and 32 bits collide. Train coordinates whose id
+hashes to a held-out id's seed are that held-out task, and environments that
+draw the same loans share it across their names: refi-review, refi-tape and
+refi-hard; escrow-analysis and escrow-history; the two Reg Z suites. A
+search finds such coordinates for any held-out task in under a second, and
+four ordinary ones exist: escrow-analysis 1.0.0, train seed 5920, indexes
+9554, 9555, 9558 and 9559 are held-out tasks 29, 28, 25 and 24. Treat train
+seed 5920 of escrow-analysis 1.0.0, and of escrow-policy, which draws the
+same tasks, as contaminated.
+
+`src/heldout-guard.ts` names every train id whose stream, at its first draw
+or any redraw, some held-out task draws from, in any environment, current or
+retired. The runner leaves those indexes out of a train suite and prints
+them, the browser playground refuses them, and its build drops any recorded
+run on one. A trainer that draws train tasks itself calls
+`drawsHeldoutStream` first. The guard also turns away about one honest train
+coordinate in 3,000. The lasting fix is a wider stream key, which moves
+every suite and so bumps every environment's version.
+
 **Runs.** Each episode is one line appended to a JSONL file and never
 rewritten. A line records:
 
@@ -321,8 +341,9 @@ The rulebook and the tools did not change.
 ## payments-posting
 
 payments-posting 1.0.0 is the third servicing environment: one loan's
-receipts posted over a window of four to six weeks, the way the servicing
-app's cashiering posts them (its spec §2.1 receipt and allocation, §2.2
+receipts posted over a window of four weeks to about two months (28 to 63
+days over 1,200 training draws; the spec's cases run one to three months),
+the way the servicing app's cashiering posts them (its spec §2.1 receipt and allocation, §2.2
 partials and the $50 rule, §2.4 curtailments, §2.7 late charges).
 
 **The task.** It gives the loan's cash state when the window opens and the
@@ -470,8 +491,13 @@ rest unchanged.
 from an escrow-analysis account, with the opening balance set last so the
 projected starting balance is kept. The account read back out of it
 (`readHistory`, which is Step 0 in code) concludes exactly what the original
-did; a test holds that over 1,500 accounts. The reference passes all 500
-tasks it was checked on.
+did; a test holds that over 1,500 accounts. The reference passes the
+held-out suite, 300 training tasks and 10,000 more training ledgers, each
+of those within 35 turns. It makes the calls that wait on nothing else
+together in one turn, as escrow-analysis's reference now does too. Made one
+a turn, it ran out of the 80 turns on 5 of those 10,000: the longest ledger
+is 82 tool calls, so a model that makes one call a turn would run out on
+about one ledger in 2,000.
 
 ## regz-apr
 

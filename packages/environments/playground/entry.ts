@@ -125,6 +125,15 @@ import {
   payoffStatement,
   payoffTaskId,
 } from "../src/payoff/index.js";
+import {
+  PmiReferencePolicy,
+  expectedPmi,
+  generatePmiTask,
+  pmiPayload,
+  pmiSpecTasks,
+  pmiTaskId,
+  pmiTermination,
+} from "../src/pmi/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
 
@@ -378,6 +387,35 @@ const ARM_SPEC = [
   "The second change, on 2027-05-01",
   "T6: a monthly legacy loan's 25-day deadline",
   "T11: an FDCPA cease on file",
+];
+
+/** §10's worked examples, in the order `pmiSpecTasks` builds them. */
+const PMI_SPEC = [
+  "10.2 scenario A: current on the 78% date",
+  "10.2 scenario B: June paid late, then July (with 10.5's annual estimate)",
+  "10.2 scenario C: June paid late, July later still",
+  "10.2: the ARM, reset at payment 61 to 7.50%",
+  "10.2: the Flex Modification, $50,000 forborne",
+  "10.2: lender-paid, the same terms",
+  "10.3: interest-only 10/20",
+  "10.3-T2: a two-unit loan, current at its midpoint",
+  "10.3-T3: February and March paid late",
+  "10.3-T3: March paid later instead",
+  "10.3: a pre-1999 loan",
+  "10.3-T6: a 15-year loan",
+  "10.1-T2: a request after a $30,000 curtailment",
+  "10.1-T1: a request with a $455,000 AVM",
+  "10.1-T4: a payment 35 days late",
+  "10.1-T4: the same late payment, in a disaster",
+  "10.1-T5: an AVM at $395,000",
+  "10.1-T5: the borrower's BPO at $412,000",
+  "10.1-T6: a two-unit principal residence at 72%",
+  "10.1-T9: a curtailment after the request",
+  "10.1: current value, a BPO at $500,000",
+  "10.1: current value, a BPO at $490,000",
+  "10.1-T12: decided the day the valuation expires",
+  "10.1-T12: decided the day after",
+  "10.5: a monthly premium, effective the 13th",
 ];
 
 /** The spec's payoff examples, in the order `payoffSpecTasks` builds them. */
@@ -638,6 +676,31 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     expected: expectedPayoff,
     verdictOf: (t) => expectedPayoff(t).disposition,
     reference: () => new PayoffReferencePolicy(),
+  }),
+  playground({
+    env: pmiTermination,
+    title: "Mortgage insurance termination",
+    side: "servicing",
+    summary:
+      "One loan's borrower-paid mortgage insurance on an evaluation date, under the Homeowners Protection Act: the 78% date and the midpoint from the amortization schedule, whether the loan is current at the trigger and when it cures, the termination's dates, notices and refund, and a borrower's written request to cancel at 80%. Graded by the servicing app's own mortgage-insurance engine.",
+    id: pmiTaskId,
+    one: generatePmiTask,
+    spec: pmiSpecTasks,
+    specNames: PMI_SPEC,
+    payload: pmiPayload,
+    expected: expectedPmi,
+    verdictOf: (t) => {
+      const a = expectedPmi(t);
+      if (a.request) return `request ${a.request.result}`;
+      if (a.lpmi_options_notice_due) return "lender-paid notice";
+      if (!a.automatic) return "before the trigger";
+      return a.automatic.current_on_trigger
+        ? "terminated"
+        : a.automatic.cure_on
+          ? "terminated on cure"
+          : "not current";
+    },
+    reference: () => new PmiReferencePolicy(),
   }),
 ]);
 

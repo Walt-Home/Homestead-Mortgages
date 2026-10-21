@@ -820,6 +820,217 @@ is 37 tool calls, the submission included, in 8 turns: the calls that do
 not wait on each other go side by side. `env:audit` and `env:compare` read
 a payoff's disposition as its verdict.
 
+## pmi-termination
+
+pmi-termination 1.0.0 is the fourth servicing environment: one loan's
+borrower-paid mortgage insurance under the Homeowners Protection Act, as the
+servicing app administers it (its spec §10.1 borrower-requested
+cancellation, §10.2 automatic termination at 78%, §10.3 final termination at
+the midpoint, §10.5 the unearned-premium refund).
+
+**The task.** It gives one loan's MI on an evaluation date:
+
+- the note as originated: price and appraisal, units and occupancy, the
+  balance, rate and term, any ten years of interest only;
+- the ARM rate changes since, or a modification with forborne principal;
+- the MI plan: a monthly, annual or single premium, or lender-paid;
+- a ledger of installments and receipts;
+- on a request, the borrower's written request: its date, the path asked
+  for, the AVM or the borrower's paid valuation, the balance on receipt and
+  every posting since, deferred and forborne principal, and any
+  installments a disaster excuses.
+
+The model builds what it needs of the MI schedule with the tools: the P&I,
+the balance row by row, a re-amortization at each rate change. It finds the
+78% date, the midpoint and the trigger. Then it decides what the date calls
+for:
+
+- a request: eligible, ineligible, a value check needed, or refused, with
+  its LTV in floored basis points, its threshold, the two late-payment
+  counts, its reasons and its 30-day clock;
+- otherwise, the sweep at the trigger: current or not, the installments
+  that failed, the not-current notice and the cure;
+- for lender-paid MI, the options notice.
+
+Where the MI ends it sets the effective date, LAR 89's code and date, the
+notice, premium-stop, refund, insurer and escrow clocks, and the unearned
+premium.
+
+**The grade.** A pass is every field right. The position is six fields; the
+78% payment and its date are one. A section the date does not call for (no
+request, no sweep, no termination) is one field when it is answered null.
+Answered anyway, it costs every field it holds, as leaving out a section the
+date does call for does. So claiming a grant, a cure or a sweep that is not
+there costs exactly what missing one costs: ten fields either way for a
+request or a sweep, nine for a cure. Inside a section, fields that are all
+null on that task are one field: a refused request, a sweep that found the
+loan current, the two late counts.
+
+The sections must also agree, or the submission comes back as an error to
+correct, the way a schema error does:
+
+- a request or a sweep, never both;
+- a result with its own reasons;
+- a sweep's findings with whether it found the loan current;
+- a termination exactly when the request is eligible or the sweep found the
+  loan current or cured, coded 51 or 52 for a request and 53 for a sweep;
+- the lender-paid notice alone.
+
+An answer cannot say "ineligible" and hand in the termination as well.
+
+An answer that answers nothing scores about 0.16 on the held-out suite. The
+floor to read the mean field score against is higher, about 0.47. That is
+what a policy scores that reads the original value and the rule, works the
+note's P&I and the midpoint with a call each, takes the midpoint for the
+trigger and searches no schedule. Taking the trigger from the evaluation date
+instead scores less, about 0.44, because the date says nothing about where
+the trigger fell. A test holds that.
+
+**The grader is the servicing app's own engine.** `src/pmi/ported/` holds
+four files from `apps/servicing/src/domain/pmi/` and two from
+`apps/servicing/src/domain/boarding/`:
+
+- `schedule.ts`, `termination.ts`, `cancellation.ts` and `refund.ts`;
+- `delinquency.ts`, the ledger's FIFO, and `types.ts`, which it imports.
+
+They sit flat, each byte for byte but for its import lines, held by a test
+that rewrites the original's imports and compares. One file is ours:
+`src/pmi/lossmit-stub.ts` stands in for a type `types.ts` imports from a
+stateful transfers module. The conventions around the engine are restated
+in the grader, with the line each comes from:
+
+- the trigger is the earlier of the 78% date and the midpoint for a loan the
+  rule reaches (`pendingTriggerDate`, 10.3 R4);
+- the sweep runs at every trigger, whatever the 78% rule: it decides only
+  which date triggers;
+- the midpoint runs from the governing first due and full term, the
+  modification's after one. It is never measured from a rate change;
+- a rate change re-amortizes over the rows the note has left;
+- the premium-stop anchor, the refund's coverage period, and the date the
+  threshold was reached, which the engine takes as an input.
+
+**The tools.** refi's level payment, balance after payments, date steps and
+calculator, plus the servicer's business-day calendar
+(`add_business_days`), which the insurer's notice and the escrow analysis
+are counted on. No tool finds a threshold's date, a midpoint, a cure or a
+refund.
+
+**The tasks** cycle by index through twelve edges, a hundred tasks each in a
+suite of 1,200. Every loan is one that could exist:
+
+- no more borrowed than the spec's extract of Fannie Mae's Eligibility Matrix
+  allows: a second home 90%, an investment property 85%, and that only on a
+  one-unit purchase;
+- a certificate effective between closing and the first payment;
+- no more than 30% of a modification forborne, the Flex Modification's cap.
+
+The evaluation date is drawn apart from the trigger, up to thirteen months
+after it (or before it, when nothing has happened yet). The ledger runs back
+from the evaluation date by a span of its own. Neither says where the
+trigger fell; only the schedule does.
+
+The edges:
+
+- the 78% threshold on a row's balance to the cent, a cent either side, and
+  half a cent under a row's balance (an odd one), which only rounding half up
+  puts on that row;
+- the 78% date a payment either side of the midpoint, on interest-only loans
+  and modifications, and the sweep the day before the trigger;
+- the rule's reach: consummated 1999-07-28 or 29, a second home against an
+  investment property, one unit against two to four, before 1999;
+- one or two rate changes, up and down;
+- a modification whose own 78% date or midpoint triggers;
+- the month before the trigger paid on its last day or on the trigger, with
+  February of a leap year as that month;
+- cures on the trigger, on a month's last day and on a 1st, by partial and
+  double receipts, in two steps, and none by the evaluation date (each in
+  turn by index); an older arrear caught up on the test month's last day,
+  which the not-current list leaves out;
+- an annual premium on its anniversary, a day after it, and 365 days into a
+  year with a 29 February; a single premium on a row of its refund schedule
+  and a month short of one;
+- a request's LTV at 80.00% (70.00% for two to four units or an investment
+  property, 75.00% on the current-value path) in floored basis points, a
+  point either side, at the top and bottom of the point; deferred and
+  forborne principal; a curtailment posted after the request;
+- a 30-day late in the last twelve months and a 60-day late in the twelve
+  before, each alone, at 29 and 30 days, 59 and 60, February included; a
+  disaster exclusion that decides; a 60-day late on a loan younger than 24
+  months; not current at the request, or current to the day (the month
+  before paid on its last day); an installment 30 days late that is due on
+  the request date (outside the windows, which end before it) or due earlier
+  that month and satisfied after it (inside them, counted to its
+  satisfaction);
+- an AVM below, at or above the original value, or none; a borrower's paid
+  valuation; the 120th day after delivery and the 121st; the current-value
+  path with a valuation and without one (each in turn by index, so the
+  held-out 200 has every one), at 23, 24, 59 and 60 months, by class and
+  with improvements;
+- lender-paid MI.
+
+Effective dates on 1sts whose business-day clocks step over a federal
+holiday are drawn throughout.
+
+**What v1 leaves out, and why.** Mapping the engine against its spec turned
+up places where it departs from its own text. v1 does not grade a model on
+any of them. `pmiInScope` runs on the engine's own outputs, and the
+generator aims around every one, so on 5,000 unfiltered draws it rejects
+none. It keeps out:
+
+- odd terms, whose midpoint the engine places a month late;
+- due days other than the 1st, where the current test misses an
+  installment;
+- New York. The engine reads a New York purchase's appraisal alone as the
+  original value. New York's own 75% stop (§6503(d), 10.2's overlay) ends
+  the borrower's premium with no request, and nothing ported computes it;
+- a rate change after the 78% row or the midpoint of the schedule then in
+  effect, or inside an interest-only period;
+- a request after the scheduled 80% date on a one-unit principal residence
+  or second home, on either path, where the engine never tests the scheduled
+  balance;
+- a current-value request whose balance already meets the original-value
+  threshold. 10.1 R1 evaluates the original-value paths first and grants on
+  any of them; the engine evaluates only the path asked for. So on every
+  current-value task the original-value paths fail on the balance, and the
+  request section is the current-value path's own evaluation;
+- a current-value request with no threshold and no valuation, where the
+  engine asks for a paid valuation that cannot help;
+- a borrower's paid valuation below the original value, where the engine
+  loops back to a value check;
+- a request whose borrower is current a month before it and not at the
+  decision, where the engine discards the HPA's own test;
+- an evidence date other than the valuation's delivery, where the 30-day
+  clock is ambiguous;
+- a threshold reached after the request that would change the late counts
+  sent to Fannie Mae's servicing system.
+
+The payment-history windows shorten to the loan's age, as 10.1 R5 says,
+and the rulebook restates that. It never changes an answer in v1. A request
+comes after the loan's first installment, and the windows shortened back
+from it reach before that installment. The guard keeps the counts at a later
+threshold date equal to the counts at receipt, so the age clause decides
+nothing there either. The young-loan edge is a 60-day late on a loan under
+24 months, not a window the age cuts short.
+
+Where engine and spec disagree inside that scope, the rulebook says what
+the engine does. One example: LTV is floored to the basis point, as 10.1 R3
+says, so $370,522.40 on a $490,000 BPO is 75.61%, where the spec prints
+75.62%. The value-check fee options and the denial notice's content are not
+graded. docs/decisions.md has each departure, reproduced.
+
+**The proof of fairness.** The reference passes the held-out suite, a
+300-task training suite and all 25 of the spec's worked examples to the
+cent. The examples include 10.2's three scenarios, its ARM, Flex
+Modification and lender-paid cases, 10.3's four loans, 10.1's requests and
+10.5's two estimates. It redraws none of 600 first draws, and it agrees with
+the engine on 2,000 candidates nothing filtered (5,000 when last measured,
+none out of scope). Its longest task is 35 tool calls across 5,000 training
+draws, well inside the episode's 80 turns. Step 6 says which ledger steps
+are reading: a receipt added to nothing held, and an installment taken from
+an equal amount. A model that also counts every window installment's days
+with a tool, ignoring Step 7.5's note, needs at most 57 turns at one call a
+turn.
+
 ## escrow-history
 
 escrow-history 1.0.0 is escrow-analysis started from the account's ledger.
@@ -926,6 +1137,7 @@ npm run env:refi -w @hm/environments -- --env flexmod-terms --policy reference
 npm run env:refi -w @hm/environments -- --env payments-posting --policy reference
 npm run env:refi -w @hm/environments -- --env arm-adjustment --policy reference
 npm run env:refi -w @hm/environments -- --env payoff-statement --policy reference
+npm run env:refi -w @hm/environments -- --env pmi-termination --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

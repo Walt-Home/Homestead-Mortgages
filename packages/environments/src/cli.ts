@@ -19,6 +19,7 @@
  *   npm run env:refi -w @hm/environments -- --env payments-posting --policy reference
  *   npm run env:refi -w @hm/environments -- --env arm-adjustment --policy reference
  *   npm run env:refi -w @hm/environments -- --env payoff-statement --policy reference
+ *   npm run env:refi -w @hm/environments -- --env pmi-termination --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -171,6 +172,19 @@ import {
   type PayoffAnswer,
   type PayoffTask,
 } from "./payoff/index.js";
+import {
+  PMI_FINGERPRINT,
+  PMI_HELDOUT_SUITE,
+  PmiReferencePolicy,
+  pmiTaskId,
+  expectedPmi,
+  generatePmiSuite,
+  generatePmiTask,
+  pmiSpecTasks,
+  pmiTermination,
+  type PmiAnswer,
+  type PmiTask,
+} from "./pmi/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -197,7 +211,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof FLEX_FINGERPRINT
     | typeof PAYMENTS_FINGERPRINT
     | typeof ARM_FINGERPRINT
-    | typeof PAYOFF_FINGERPRINT;
+    | typeof PAYOFF_FINGERPRINT
+    | typeof PMI_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -391,6 +406,28 @@ const BENCHES = {
     verdictOf: (t) => expectedPayoff(t).disposition,
     reference: () => new PayoffReferencePolicy(),
   } satisfies Bench<PayoffTask, PayoffAnswer>,
+  // Mortgage insurance under the Homeowners Protection Act, graded by the servicing app's own engine.
+  "pmi-termination": {
+    env: pmiTermination,
+    fingerprint: PMI_FINGERPRINT,
+    heldout: PMI_HELDOUT_SUITE,
+    suite: generatePmiSuite,
+    one: generatePmiTask,
+    taskId: pmiTaskId,
+    spec: pmiSpecTasks,
+    verdictOf: (t) => {
+      const a = expectedPmi(t);
+      if (a.request) return `request ${a.request.result}`;
+      if (a.lpmi_options_notice_due) return "lender-paid notice";
+      if (!a.automatic) return "before the trigger";
+      return a.automatic.current_on_trigger
+        ? "terminated"
+        : a.automatic.cure_on
+          ? "terminated on cure"
+          : "not current";
+    },
+    reference: () => new PmiReferencePolicy(),
+  } satisfies Bench<PmiTask, PmiAnswer>,
 };
 
 const { values } = parseArgs({
@@ -576,6 +613,7 @@ async function main(): Promise<void> {
   if (values.env === "payments-posting") return run(BENCHES["payments-posting"]);
   if (values.env === "arm-adjustment") return run(BENCHES["arm-adjustment"]);
   if (values.env === "payoff-statement") return run(BENCHES["payoff-statement"]);
+  if (values.env === "pmi-termination") return run(BENCHES["pmi-termination"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

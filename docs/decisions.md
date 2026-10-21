@@ -5253,3 +5253,166 @@ states as reading, and the earlier runs' counts fall with it.
 
 flexmod-terms changed after its read: 1.1.0 draws differently, and its
 rulebook does not. These are reads on training tasks, not scores.
+
+## Mortgage insurance is graded by the HPA engine, outside the places it departs from its spec
+
+**Built 21 October 2026,** as `pmi-termination` 1.0.0 in
+`packages/environments`. A task is one loan's borrower-paid MI on an
+evaluation date: a borrower's written request to cancel, or the sweep at the
+78% date or the midpoint. Where the MI ends, the task adds its effective
+date, the clocks that run from it and the unearned premium.
+
+**Why this one.** It ranked first when the servicing app was surveyed again
+for engines that could grade a model.
+
+- The Homeowners Protection Act is strict liability, with actual and
+  statutory damages and class exposure. Servicers keep billing MI past the
+  78% date or the midpoint, most often on modified and ARM loans whose
+  schedule has to be re-versioned, and examiners cite late termination
+  again and again. A wrong denial costs a borrower $100 to $200 a month.
+- The engine is pure, and the spec has worked examples to the cent.
+- The work is real reasoning. The model builds and searches a 360-row
+  schedule with primitives, and re-versions it at a rate change or a
+  modification. It applies a ledger oldest first, tests currency and finds
+  the cure, and anchors two payment-history windows on the later of two
+  dates.
+
+The survey staged the borrower's request as a second version. It is in
+1.0.0, behind the guards below.
+
+**The grader is the engine, ported as the others are.** Six files sit flat
+in `src/pmi/ported/`:
+
+- `schedule.ts`, `termination.ts`, `cancellation.ts` and `refund.ts` from
+  `apps/servicing/src/domain/pmi/`;
+- `delinquency.ts` and `types.ts` from its boarding domain.
+
+Each is byte for byte but for its import lines, under four rewrites:
+
+- the kernel's paths become `@hm/kernel`;
+- a sibling's `.ts` becomes `.js`;
+- `../boarding/` becomes `./`;
+- the transfers module becomes a one-line stub of our own,
+  `src/pmi/lossmit-stub.ts`, for the one type `types.ts` takes from it.
+
+A test applies the same rewrites to the originals and compares.
+
+`index.ts`, `ops.ts` and `denial.ts` are not ported. `ops.ts` reads zoned
+Eastern time for LAR 89's period close. `denial.ts` is notice content,
+which v1 does not grade.
+
+**What the grader restates.** The service is stateful and does not port, so
+the conventions it runs the engine under are written out in the grader with
+their lines, and a test holds the lines:
+
+- The trigger is `pendingTriggerDate`, as 10.3 R4 has it. No service line
+  calls it.
+- The sweep runs at every trigger with the rule taken as applying, which is
+  `sweepTermination`'s default and what the spec's 10.3-T2 and T3 run
+  through. The 78% rule decides only which date triggers. `section10.ts:251`
+  passes the rule itself when it is handed a loan's applicability. That
+  would leave a two-unit loan's MI in force past its own midpoint.
+- The midpoint runs from the governing first due and full term, the
+  modification's after one, as 10.3 R1 and R3 say. It is not
+  `section10.ts:236`'s reading, which measures from the schedule version and
+  so from a rate change.
+- A rate change re-amortizes over the rows the note has left. The service
+  takes that remaining term as an input; the spec's ARM example is 300 rows
+  at payment 61.
+- The premium stops 30 days after the effective date for an automatic
+  termination, and after the later of receipt and evidence for a request.
+- The refund's coverage period is the effective date's month, the latest
+  anniversary, or the single premium's schedule row.
+- The date the threshold was reached is an input the engine takes and
+  nothing computes. The grader sets it from the postings.
+
+**What reading the engine found.** Each was reproduced against the vendored
+engine on 21 October and is held by a test. None is fixed here, because
+`apps/servicing` is vendored and never edited in this repo.
+
+- **The scheduled 80% path is never evaluated.** A request is tested on the
+  actual balance alone. On the worked loan, a request on 2034-09-10, after
+  the 80% date, with $15,000 of deferred principal is denied at 83.45%; its
+  schedule stands at 79.70%. The statute grants it "irrespective of the
+  outstanding balance".
+- **An odd term's midpoint is a month late.** The engine rounds to a 1st
+  twice: 181 months from 2024-04-01 terminates 2031-12-01, not 2031-11-01.
+  The servicing app's own test pins the late date.
+- **The current test misses an installment due after the 1st.** With
+  installments due on the 15th, June unpaid at its month's end passes the
+  test at a 15 July trigger.
+- **A current-value request under 24 months asks for a paid valuation.** The
+  check for no valuation comes before the seasoning check. After the
+  borrower pays, the answer is seasoning.
+- **A paid valuation below the original value loops.** The borrower is sent
+  back to a value check rather than denied.
+- **A two- to four-unit investment property is never offered the $750
+  appraisal,** because its class is read as one unit.
+- **The HPA's current test at the decision is computed and discarded.** A
+  borrower 45 days behind at the decision is granted.
+- **The evidence date is ambiguous.** With the fee's date as the evidence,
+  the decision clock on the spec's current-value example runs to
+  2026-09-23. The spec's own text gives 2026-10-03, from the valuation's
+  delivery.
+- **The service's midpoint after a rate change is thirty months late:**
+  2041-11-01 on the spec's ARM, where the note's is 2039-05-01. A two-unit
+  ARM would be billed MI 30 months too long.
+- **A New York purchase takes the appraisal as the original value.** A
+  $400,000 sale appraised at $410,000 reaches 78% eleven months early, at
+  payment 124 rather than 135. The spec keeps the lesser figure, and the
+  appraisal only for New York's own 75% stop.
+- **The history denial's renewal date is 35 days late,** a year and a day
+  after the late payment rather than when it leaves the window. The
+  servicing app's tests pin it. It is notice content, and not ported.
+- **A rate change inside an interest-only period amortizes at once,** and one
+  after the 78% row reads the change's own row as the 78% row.
+- **The late counts sent to Fannie Mae's servicing system are counted from
+  the request in the spec** (10.1 R5), and from the later threshold date in
+  the engine.
+
+The spec has three figures the engine is right against. 10.1 R3 floors LTV
+to the basis point, so $370,522.40 on a $490,000 BPO is 75.61%, where the
+example prints 75.62%. A balance of $320,039.99 is 80.00% and granted, by
+the same rule. And 10.3's two-unit example says the February installment
+must be paid by 29 February, where its own R3 and T3 test March.
+
+**So v1 stays out of those places.** The generator never draws:
+
+- an odd term, or a due day other than the 1st;
+- a New York purchase priced below its appraisal;
+- a rate change on an interest-only note or past the 78% row or midpoint of
+  the schedule then in effect;
+- a request past the scheduled 80% date on the scheduled path's class;
+- a current-value request with neither a threshold nor a valuation;
+- a paid valuation below the original value;
+- an evidence date other than the delivered valuation's.
+
+It also keeps every installment due by the decision paid by then.
+`pmiInScope` runs on the engine's own outputs and rejects a task that
+reaches any of those places. It also rejects one whose late counts differ
+between the two anchors. On 5,000 unfiltered draws it rejects none,
+because the generator aims around them.
+
+**The rulebook says what the engine does.** Where the engine and its spec
+disagree inside that scope, the rulebook follows the engine: LTV floored,
+and an effective date running from the delivered valuation (10.1-T5 is
+granted from 07-30, the delivery, where the servicing app's own test passes
+the fee date, 07-16). The spec's worked examples are tasks of their own, 25
+of them, each to the cent.
+
+**What 1.0.0 leaves out:**
+
+- LAR 89's period-close deadlines, which are Eastern wall-clock times;
+- the 10.4 annual disclosure, and 10.5's reconciliation, dispute, advance
+  and look-back;
+- the denial notice's content, Minnesota's response clock and New York's
+  75% stop;
+- a pre-1999 loan boarded past its midpoint, which is a restitution
+  escalation, not a computation;
+- a modification whose forborne principal alone exceeds 78% of the original
+  value, which no Flex Modification cap allows.
+
+**The proof of fairness.** The reference solves the held-out 200, a
+300-task training suite and the 25 worked examples through the tools alone,
+with no task redrawn in 600. It agrees with the engine on 2,000 candidates
+nothing filtered. Its longest task is 34 tool calls in 5,000 draws.

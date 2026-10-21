@@ -17,6 +17,7 @@
  *   npm run env:refi -w @hm/environments -- --env regz-apr --policy reference
  *   npm run env:refi -w @hm/environments -- --env flexmod-terms --policy reference
  *   npm run env:refi -w @hm/environments -- --env payments-posting --policy reference
+ *   npm run env:refi -w @hm/environments -- --env pmi-termination --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -132,6 +133,18 @@ import {
   type PaymentsAnswer,
   type PaymentsTask,
 } from "./payments/index.js";
+import {
+  PMI_FINGERPRINT,
+  PMI_HELDOUT_SUITE,
+  PmiReferencePolicy,
+  expectedPmi,
+  generatePmiSuite,
+  generatePmiTask,
+  pmiSpecTasks,
+  pmiTermination,
+  type PmiAnswer,
+  type PmiTask,
+} from "./pmi/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -156,7 +169,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof HISTORY_FINGERPRINT
     | typeof REGZ_APR_FINGERPRINT
     | typeof FLEX_FINGERPRINT
-    | typeof PAYMENTS_FINGERPRINT;
+    | typeof PAYMENTS_FINGERPRINT
+    | typeof PMI_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   readonly suite: (split: Exclude<Split, "spec">, seed: number, n: number) => T[];
   readonly one: (split: Exclude<Split, "spec">, seed: number, index: number) => T;
@@ -311,6 +325,27 @@ const BENCHES = {
     },
     reference: () => new PaymentsReferencePolicy(),
   } satisfies Bench<PaymentsTask, PaymentsAnswer>,
+  // Mortgage insurance under the Homeowners Protection Act, graded by the servicing app's own engine.
+  "pmi-termination": {
+    env: pmiTermination,
+    fingerprint: PMI_FINGERPRINT,
+    heldout: PMI_HELDOUT_SUITE,
+    suite: generatePmiSuite,
+    one: generatePmiTask,
+    spec: pmiSpecTasks,
+    verdictOf: (t) => {
+      const a = expectedPmi(t);
+      if (a.request) return `request ${a.request.result}`;
+      if (a.lpmi_options_notice_due) return "lender-paid notice";
+      if (!a.automatic) return "before the trigger";
+      return a.automatic.current_on_trigger
+        ? "terminated"
+        : a.automatic.cure_on
+          ? "terminated on cure"
+          : "not current";
+    },
+    reference: () => new PmiReferencePolicy(),
+  } satisfies Bench<PmiTask, PmiAnswer>,
 };
 
 const { values } = parseArgs({
@@ -453,6 +488,7 @@ async function main(): Promise<void> {
   if (values.env === "regz-apr") return run(BENCHES["regz-apr"]);
   if (values.env === "flexmod-terms") return run(BENCHES["flexmod-terms"]);
   if (values.env === "payments-posting") return run(BENCHES["payments-posting"]);
+  if (values.env === "pmi-termination") return run(BENCHES["pmi-termination"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

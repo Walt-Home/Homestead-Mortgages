@@ -1,0 +1,39 @@
+The servicing app's mortgage-insurance engine (spec §10.1, §10.2, §10.3,
+§10.5), ported for the pmi-termination environment's grader.
+
+Source       apps/servicing/src/domain/pmi/{schedule,termination,cancellation,refund}.ts
+             apps/servicing/src/domain/boarding/{delinquency,types}.ts
+Vendored at  293261b371fe97d2b6b39e1f29ca60dd808ac8fb (apps/servicing/VENDORED_FROM)
+Ported       2026-10-21
+
+The six files sit side by side here, flat. Each is its source byte for
+byte except its import lines, and the rewrite is four rules and no more:
+  - the kernel's paths (../../kernel/{calendar,money}/<file>.ts) become
+    @hm/kernel/{calendar,money} (the same bytes; packages/kernel/VENDORED_FROM);
+  - a sibling's ./<file>.ts becomes ./<file>.js;
+  - ../boarding/<file>.ts becomes ./<file>.js, because the boarding files
+    sit beside the PMI ones here;
+  - ../transfers/ops-1-7.ts becomes ../lossmit-stub.js.
+Nothing else may be edited: src/__tests__/pmi.test.ts rewrites each
+original's imports by those rules, compares the result and the rest of the
+file, and fails on any difference. Lint and Prettier skip this directory for
+the reason they skip the vendored trees.
+
+One file the port needs is ours: ../lossmit-stub.ts, outside this
+directory. types.ts imports the inherited loss-mitigation file's type from
+transfers/ops-1-7.ts, which is stateful and does not port; nothing graded
+reads that field, so the stub stands in for its type.
+
+Not ported: pmi/index.ts and pmi/ops.ts (ops.ts reads zoned Eastern
+wall-clock time for the LAR 89 deadlines and investor/period.ts's Fannie Mae
+business days), and pmi/denial.ts (the denial notice's content and renewal
+date, which v1 does not grade).
+
+The conventions the environment also follows (the trigger, the midpoint's
+basis, the remaining term at an ARM reset, the premium-stop anchor, the
+refund's coverage period, the date the threshold was reached) live in the
+servicing app's stateful service (app/tools/section10.ts) or nowhere; they
+are restated in src/pmi/grader.ts with the lines they come from.
+
+To take a change from the servicing app, copy the six files again and apply
+the same four rewrites.

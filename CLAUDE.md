@@ -34,6 +34,12 @@ may suggest, what it may only check, what it may never touch, and the defects
 found on the way. Read it before adding a prefill, a default or a derived
 answer to any screen.
 
+`docs/subservicer-data.md` is what a subservicer holds, domain by domain:
+where each piece comes from, the rule behind it, and how much of it the
+servicing app models, the environments generate and a partner's tape
+carries. Read it before building synthetic servicing data or anything that
+claims to look like a subservicer's.
+
 `docs/environments.md` is the training and evaluation environments in
 `packages/environments`: a task, primitive tools, and a grader that is the
 engine itself, on synthetic loans only. Read it before changing

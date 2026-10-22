@@ -5893,3 +5893,222 @@ oldest first. Flex Mod caps step 2's rate. pmi-termination is unchanged at
 held-out guard's list. DeepSeek's baselines on flexmod-terms 1.1.0 and
 payments-posting 1.0.0 are scores on suites no longer drawn; the new ones
 want a run of their own.
+
+## Qualifying income is graded by the income engine, outside the places it departs from its spec
+
+**Built 21 October 2026,** as `qualifying-income` 1.0.0 in
+`packages/environments`. A task is one purchase application on its
+scheduled note date: one or two borrowers, three to six income sources on
+the file, the figures each source's documents show, and the facts Regulation
+B protects. The model classifies each source, computes its monthly
+qualifying figure under Fannie Mae B3-3, decides continuance and what is
+excluded and why, and totals the household.
+
+**Why this one.** The origination side had one environment family, Reg Z's
+price tests. Qualifying income is the next:
+
+- It is what every debt-to-income ratio divides by, so a wrong figure moves
+  every decision after it.
+- It is where fair lending meets the arithmetic. Regulation B §1002.6(b)
+  bars discounting income because it is part-time, a pension, public
+  assistance or support, and lets only its amount and probable continuance
+  count.
+- The servicing app's engine (its spec §22.3) is a set of pure calculators,
+  and the spec has worked examples to the cent.
+
+A survey of the servicing app mapped the engine against its spec, and a
+review of the map confirmed 134 of its claims and corrected nine. The
+corrections are followed here. Our own shadow AUS computes qualifying income
+separately (`packages/underwriting`, where INC-027 is never decided). This
+environment neither grades nor fixes it.
+
+**The grader is the engine, ported as the others are.** `ops-22-3.ts` and
+`ops-22-1.ts` from `apps/servicing/src/domain/verification/` sit in
+`src/income/ported/`, each byte for byte but for its import lines, under two
+rewrites: the kernel's paths become `@hm/kernel`, and a sibling's `.ts` its
+`.js`. A test applies the same rewrites to the originals and compares.
+`ops-22-1.ts` is 807 lines of document intake that come only because the
+first file imports three constants from it.
+
+The grader calls the calculators and nothing that appends an event.
+`calculateIncome`, `evaluateContinuance` and `finalizeIncome` need an event
+store, and several entry points mint ids from a module counter. So the
+service's conventions are restated with their lines, and a test holds the
+lines:
+
+- the dispatch by type and its defaults (ops-22-3.ts:764-790);
+- an hourly source whose hours fluctuate is trended as variable base income
+  (:767-768);
+- the Reg B check on every calculation (:791);
+- a source is used when its figure or gross-up is above zero
+  (section22-3.ts:74);
+- the continuance gate (evaluators-22-3.ts:17-22). A failure keeps the
+  figure and drops it from the total (section22-3.ts:84);
+- the total (section22-3.ts:88).
+
+**What reading the engine found.** Each was reproduced against the port on
+21 October and is held by a test. None is fixed here, because
+`apps/servicing` is vendored and never edited in this repo.
+
+- **An annuity or pension is sent to the retirement-account test.**
+  `calculateIncome` routes `annuity_pension` to the 36-month balance test,
+  which B3-3.4-03 applies only to distributions from retirement accounts. A
+  pension with no account balances is excluded as
+  `continuance_assets_insufficient`, and the Reg B check passes it. This is
+  a misrouted continuance rule, not a per-se violation: §1002.6(b)(5) lets a
+  creditor weigh probable continuance. But it excludes most pensions and
+  annuities, which is a fair-lending risk under (b)(5).
+- **A bonus is trended without being annualized.** An unchanged $12,000
+  annual bonus, with nine months of year-to-date, reads increasing at
+  $1,142.86 a month. `bonusMonthly` computes $1,000.00, and nothing calls it.
+  Cut to $10,000, the bonus still reads increasing, at $1,047.62.
+- **A fixed range with no average is paid on the high week.** At $25.00 an
+  hour and 36 to 40 hours, that is $4,333.33 a month. On the average of 38
+  hours, which R2 names, it is $4,116.67.
+- **Guaranteed hours win over a higher average:** $3,466.67 against
+  $4,116.67. This one is a judgment call.
+- **Hours are rounded to tenths before multiplying.** $20.00 × 37.25 hours
+  is $3,232.67, where the spec's single rounding gives $3,228.33.
+- **The Average Hours method and the pay-raise refusal are unreachable.**
+  The dispatch forwards neither, nor offsetting factors. Called directly,
+  the method gives $5,200.00 where the dispatch gives nothing, as not
+  stabilized. The Reg B check would refuse the method's formula id too, so a
+  fix upstream needs both.
+- **No history, or 12 to 23 months without offsetting factors, pays in
+  full.** R3 accepts 12 to 23 months only with documented offsetting
+  factors.
+- **No end date passes continuance** where the spec requires three years:
+  Social Security on a dependent's record, child support with no birth date.
+- **A child's birth date overrides the decree's own shorter term.** A child
+  born 1 January 2015 under an order ending 30 June 2028 continues to 2033.
+- **A refinance's rent takes the purchase formula,** 75% of Form 1007's rent
+  rather than Schedule E cash flow. Non-subject, departing-residence and
+  short-term rentals go to the same function.
+- **The ADU cap is 30% of whatever total it is handed.** The spec says both
+  "of the total qualifying income" and "applied before summation". With
+  other income of $6,300.00 and ADU income of $3,000.00, the cap is
+  $1,890.00 on the other income and $2,790.00 on a total including the ADU.
+  The self-consistent figure, $2,700.00, comes from neither.
+- **Leave past the first payment takes the lesser figure** with no reserves
+  supplement, which R8 names and no input carries.
+- **An employment offer starting before the note date is refused** even
+  with the bridge documented: the bridge counts 0 months, and counts 30-day
+  blocks rather than months.
+- **The Reg B word list refuses legitimate exclusion reasons.** "retirement
+  account balances cover fewer than 36 months of distributions" is refused,
+  and so is "documents exceed the allowable age", because the word "age"
+  matches.
+- **The 10% hourly test is floating point.** At exactly 10% of the high
+  week, 30 of the 80 whole high weeks from 1 to 80 read variable where exact
+  arithmetic reads fixed: 33.3 to 37 hours, 32.4 to 36, 46.8 to 52.
+- **Weekly and biweekly year-to-date months are rounded to four places.**
+  The review measured about a third of such cases a cent or two off the
+  exact figure. Near the trend's boundaries the label flips: one weekly
+  period against a $10,000 prior year reads stable where exact arithmetic
+  reads increasing.
+- **The engine trusts its inputs.** A prior year of nothing reads
+  increasing, and the history and months since stabilization are taken as
+  given. So is a W-2 that covers only part of the prior year: R3 divides it
+  by 12 and averages over the year-to-date's months plus 12 whatever the
+  history says. Overtime with 15 months of history to a September paystub,
+  $8,550.00 year to date and a $10,800.00 W-2 covering six months, reads
+  increasing at $921.43; over the months the paystub and the W-2 include it
+  is $1,800.00 a month before and $950.00 now, a decline.
+
+The spec also disagrees with itself in four places. Its preamble rounds
+once per source, and R6's Social Security formula rounds twice; on 1 in 8
+benefit amounts the two differ by a cent ($1,000.10 grosses up $37.51 one
+way, $37.50 the other). T8's "born after 6 November 2011" is strict, and
+its own gate row's `≥` is not. R3 lists a prior-prior-year input that no
+step reads. And R3's formula divides the prior year by 12, where the
+B3-3.3-02 text the same section quotes divides by "the number of months
+included in the year-to-date paystub and W-2s": the two agree only on a
+whole year's W-2.
+
+**So v1 stays out of those places.** The task cannot carry most of them, so
+the generator never draws:
+
+- a bonus, an annuity or pension, or Average Hours or a pay raise;
+- an ADU, temporary leave, an employment offer or self-employment;
+- a refinance, or any rental but the subject property on a purchase.
+
+`incomeOutOfScope` runs on the engine's own results and rejects a file that
+reaches any of the rest:
+
+- hours not in tenths, a range without its average, or guaranteed hours
+  beside a range;
+- an hourly source where the engine's 10% test and exact arithmetic
+  disagree. The edge at exactly 10% draws only the high weeks where they
+  agree, and a test holds the engine's class to the exact one on every
+  hourly source drawn;
+- fixed hours with under a year of history;
+- year-to-date months that are not whole or half on a paystub's own date;
+- a borrower's earnings read from two paystubs, or from one dated after the
+  application or more than 30 days before it (B3-3.2-01);
+- a prior year with no earnings;
+- a W-2 covering part of the prior year where R3's twelve months and the
+  months included give different trends, or, from 12 months of history,
+  anything but a decline, whose figure never reads the prior year;
+- 12 to 23 months of history without offsetting factors;
+- a stabilized run that does not fit the year;
+- a trend the engine's decimals decide otherwise than exact arithmetic;
+- Social Security on another's record without an end, or on the borrower's
+  own with one;
+- child support without a birth date, or with a decree term beside it.
+
+On 5,000 unfiltered training draws it rejects none, because the generator
+aims around them.
+
+**Where the spec says two things, the rulebook says what the engine does:**
+
+- two roundings for Social Security;
+- the engine's 10% band for "minor variances", 10% included;
+- an end on the note date plus 36 months passing, as the gate row states;
+- an alimony award with no term having no defined end, so it passes, which
+  is B3-3.1-01's reading of income with no expiration and a documented
+  history.
+
+**Regulation B, cited exactly.** The files carry age, retirement, part-time
+work and the intake's flags, and a test holds that none changes a figure.
+They never carry pregnancy, childbearing or family plans. §1002.5(d)(3)
+bars asking about them, §1002.6(b)(3) bars assumptions about them, and spec
+R8 records none. Temporary leave is left out because of the missing reserves
+supplement, not because Regulation B bars it: B3-3.3-09 uses it.
+
+**The proof of fairness.** The reference solves the held-out 200, a 300-task
+training suite and the spec's worked examples through the tools alone, to
+the cent, in eleven files: R13's total of $9,246.43, examples A and B, T6 to
+T9, and T13. It redraws none of 5,000 first draws. It agrees with the
+engine on 5,000 candidates nothing filtered. Its longest file is 21 tool
+calls in five turns. Answering nothing scores about 0.002 on the held-out
+suite. Copying each stated amount scores 0.15, and every label right with no
+money 0.14. Applying no rule at all (each stated amount and stated end
+copied, everything counted) scores 0.19, and that is the floor a score is
+read against.
+
+**Reviewed before anything was scored.** An adversarial review of 1.0.0
+upheld eleven findings, and the environment stays 1.0.0 with a new held-out
+pin:
+
+- the part-year W-2 above, on 13% of training files, and the history edge's
+  12 months, which always carries one. The 11/12 line is kept, with a
+  stabilized decline at 12;
+- the history edge read an older paystub, up to 288 days before the
+  application, beside a current one on the same borrower. Each borrower now
+  has one paystub, no more than 30 days old;
+- files no household could be: overtime and tips with no job, four overtime
+  streams on one job, two own-record Social Security benefits, a disability
+  benefit beside a full-time salary, a parent of 6 at a child's birth,
+  histories from age 10, a retired borrower in a full-time job, and public
+  assistance beside a six-figure salary. Support received for longer than
+  the child had lived was found in the same pass;
+- no state extension ever fell before the 18th birthday, so "the extension
+  whenever there is one" graded as well as "the later of the two";
+- the tests: no field of a row but three was checked to fail alone, no
+  wrong answer was checked to fail, and the rulebook's figures were tied to
+  nothing. All three are held now, and the rulebook and tools are pinned;
+- `env:audit` read only the two totals of an answer that lists its sources.
+
+The departures above are a list for the servicing app's own source. Until
+they are fixed there, a model here is graded only where the engine and its
+spec agree.

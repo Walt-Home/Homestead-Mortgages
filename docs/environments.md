@@ -1099,6 +1099,241 @@ an equal amount. A model that also counts every window installment's days
 with a tool, ignoring Step 7.5's note, needs at most 57 turns at one call a
 turn.
 
+## qualifying-income
+
+qualifying-income 1.0.0 is the origination side's second environment
+family, beside Reg Z's price tests: Fannie Mae B3-3 qualifying income on one
+purchase application, the way the servicing app's origination engine
+computes it (its spec §22.3, rules R2, R3, R5, R6, R11 and R13).
+
+**The task.** One purchase application on its scheduled note date, with one
+or two borrowers and three to six income sources on the file (across both
+borrowers, not each). Each source carries what its documents show:
+
+- a salary, per year, month, half month, two weeks or week;
+- hourly pay: the rate and either guaranteed weekly hours or the weekly
+  range with its average, and the paystub's year-to-date, the prior year's
+  W-2 and the months of history;
+- overtime, commission or tips: the same earnings figures, offsetting
+  factors for a history of 12 to 23 months, and the paystub series' flat run
+  after a decline, when there is one;
+- Social Security: the award, whose record it is on, any nontaxable share
+  the tax return documents, and when a benefit on another's record ends;
+- child support, alimony or separate maintenance: the decree, the months of
+  receipts and whether they were full, regular and timely, and the child's
+  birth date and any state extension, or the award's term;
+- a retirement distribution, its account balances and whether access is
+  unrestricted and penalty-free;
+- public assistance, whether the agency letter is on file, and its stated end;
+- rent on the subject property: Form 1007's rent, the PITIA, and the
+  Schedule E's Fair Rental Days or the months of management experience.
+
+Each borrower also carries facts Regulation B protects: age, retirement,
+part-time work, and the intake's flags. None of them may change a figure.
+
+The model classifies each source, computes its monthly qualifying figure,
+decides continuance against the note date plus 36 months and what is
+excluded and why, and totals the household.
+
+**The grade.** A source is one field: its whole row, which is
+
+- the method, the trend, and the monthly figure;
+- the nontaxable share and the gross-up;
+- the continuance end, whether it counts, and why not;
+- a rental loss carried to obligations.
+
+Most labels are nearly fixed by the type or usually empty, so each travels
+with the figure that decides it, and a label guessed alone earns nothing.
+The file is one field: the total and the rental obligations together. A
+source answered that the file does not have is a failed field of its own.
+The submission is read strictly: anything the schema forbids, a source
+listed twice included, comes back as an error to correct.
+
+On the held-out suite:
+
+- an answer that answers nothing scores about 0.002;
+- copying each stated amount as the monthly figure scores about 0.15;
+- every label right with no money scores about 0.14;
+- applying no rule at all scores about 0.19: copy each stated amount and
+  each stated end (a benefit's, a term's, a letter's), count every source,
+  exclude none. That is the floor to read a score against. It checks no
+  balance, letter, receipt or end against the line, and it is still right
+  on most retirement distributions, alimony, separate maintenance and public
+  assistance, because most of those count at their stated amount.
+
+**The grader is the servicing app's own engine.** `src/income/ported/`
+holds `ops-22-3.ts` and `ops-22-1.ts` from
+`apps/servicing/src/domain/verification/`. The second comes only for the
+three constants the first imports. Each is byte for byte but for its import
+lines, held by a test that rewrites the original's imports and compares. The
+grader calls only the pure calculators. `calculateIncome` and the other
+service entry points append events, so the conventions around the
+calculators are restated in the grader with the line each comes from, and a
+test holds the lines:
+
+- the dispatch by type and its defaults (`calculateIncome`,
+  ops-22-3.ts:764-790);
+- an hourly source whose hours fluctuate is trended as variable base income
+  (:767-768);
+- the Reg B check on every calculation (:791);
+- a source is used when its figure or gross-up is above zero
+  (section22-3.ts:74);
+- the three-year continuance gate (evaluators-22-3.ts:17-22). A failure keeps
+  the figure but drops it from the total (section22-3.ts:84);
+- the total (section22-3.ts:88).
+
+**The tools.** refi's date step, day count and exact calculator, and nothing
+else. No tool classifies hours, assesses a trend, grosses up income or
+decides continuance.
+
+**The tasks** cycle by index through thirteen edges, a hundred files each in
+a suite of 1,300. Each edge's aims take turns by index, so the held-out 200
+has every one:
+
+- a salary whose twelfth ends in exactly half a cent, and pay per week, two
+  weeks, half month or month, annualized exactly;
+- hours spread exactly 10% of the high week, which is fixed, and a tenth of
+  an hour more, which is trended; also guaranteed hours, spreads well inside
+  the band and spreads well outside it;
+- a year-to-date exactly 5% under the prior year, which is stable, and a cent
+  under that, which is decreasing, with and without a stabilized run; also
+  exactly level, which is stable, and a cent over, which is increasing;
+- a decline under each formula: since stabilization for overtime,
+  commission and tips (B3-3.3-02), year-to-date over the months elapsed for
+  variable hours (B3-3.3-01), and no stabilization at all;
+- 11 months of history against 12, and 23 against 24, on an application
+  from April to August. At 12 the W-2 covers only part of the prior year,
+  so the source is a stabilized decline, whose figure never reads it (see
+  below);
+- Social Security's share at the 15% default and documented at 14%, 15%,
+  15.01% and above, with amounts where its two roundings differ from one;
+  benefits on another's record ending on the continuance date, a day before
+  it, or years after;
+- child support whose 18th birthday is on the continuance date or a day
+  before, a state extension that does or does not reach it, an extension
+  that falls before the birthday (support runs to the later of the two), a
+  29 February birth date against a 1 March line, five months of receipts, a
+  late payment, and no decree;
+- alimony and separate maintenance with no term, and with a term on the line
+  or a day short;
+- retirement balances of exactly 36 months of distributions, a cent short,
+  and restricted access;
+- public assistance ending on the line, a day short, never, and with no
+  letter;
+- rent with 365 Fair Rental Days or 364, 12 months' experience or 11,
+  netting to the payment exactly, at a loss, and 75% of a rent that ends in
+  half a cent, where rounding half up decides between nothing and a cent;
+- households of two, totaled together;
+- a retired borrower past 62 with Social Security, a retirement distribution
+  or public assistance, and part-time work.
+
+Year-to-date periods run through a month's end or its 15th, so the months
+are whole or half, on every trended source. Each borrower has one paystub,
+dated no more than 30 days before the application, as B3-3.2-01 requires of
+the qualifying paystub, and every source of theirs with earnings reads it.
+
+Every borrower is a household that could exist, and a test holds each rule
+over a suite:
+
+- work is drawn before the rest: one base job at most, part-time below 30
+  hours, overtime only on a full-time job and tips only on a job, one
+  stream of each kind of variable pay;
+- one Social Security benefit a borrower. On their own record it is a
+  retirement benefit from 62, or a disability benefit before 67 beside no
+  earnings. Anyone else draws one on another's record, which has an end;
+- a history of earnings begins no earlier than 16, a management record no
+  earlier than 18. A parent is 16 to 55 at a child's birth, and support is
+  received no longer than the child has lived;
+- a retired borrower is past 62 and holds no full-time job. Public
+  assistance sits beside no job paying over $50,000 a year. A borrower has
+  at most one alimony or separate maintenance award.
+
+**What v1 leaves out, and why.** Mapping the engine against its spec turned
+up places where it departs from its own text. v1 does not grade a model on
+any of them, because the grader would be teaching the defect. The task
+cannot carry most of them. These are never drawn:
+
+- a bonus, which the engine trends without annualizing;
+- an annuity or pension, which it sends to the retirement-account test;
+- the Average Hours method or a pay raise, which its dispatch drops;
+- an ADU, temporary leave or an employment offer;
+- a refinance, and non-subject, departing-residence or short-term rental;
+- self-employment.
+
+`incomeOutOfScope` runs on the engine's own results and keeps out the rest:
+
+- hours not in tenths, a range without its average, and guaranteed hours
+  beside a range;
+- an hourly source where the engine's floating-point 10% test disagrees with
+  exact arithmetic. At exactly 10% it reads 30 of the 80 whole high weeks
+  from 1 to 80 as variable (33.3 to 37 is one), so the edge draws only from
+  the high weeks where it is exact, and a test holds the engine's class to
+  the exact one on every hourly source drawn;
+- fixed hours with under a year of history, which the engine never reads;
+- year-to-date months that are not whole or half on a paystub's own date;
+- a borrower's earnings read from two paystubs, or from one dated after the
+  application or more than 30 days before it (B3-3.2-01);
+- a prior year with no earnings;
+- a W-2 that covers part of the prior year, where the two readings of it
+  disagree. R3 divides the prior year by 12 and averages over the
+  year-to-date's months plus 12, whatever the history. The B3-3.3-02 text
+  the spec quotes divides by the months the paystub and the W-2s include.
+  So a source whose income began during the prior year is kept only when
+  both readings give the same trend, and, from 12 months of history, only
+  as a decline, whose figure never reads the prior year;
+- 12 to 23 months of history without offsetting factors, which the engine
+  pays in full;
+- a stabilized run that does not fit the year;
+- a trend the engine's decimals decide otherwise than exact arithmetic;
+- Social Security on another's record with no end, or on the borrower's own
+  with one;
+- child support with no birth date, or with a decree term beside it;
+- rent on a home the borrower lives in.
+
+On 5,000 unfiltered training draws it rejects none, because the generator
+aims around all of them.
+
+Where the spec says two things, the rulebook says what the engine does, and
+says it in words:
+
+- Social Security's gross-up is two roundings: R6's formula, not the
+  preamble's single rounding. On $1,000.10 it is $37.51, not $37.50;
+- the 10% band for "minor variances" is the engine's constant, 10% exactly
+  included; the spec names no figure;
+- an end on the note date plus 36 months passes, as the spec's own gate row
+  states it (`continuance_end_date ≥ note_date + 3 years`). T8's "born
+  after" is read as on or after;
+- an alimony award with no term has no defined end and passes;
+- a 29 February birthday falls on 28 February.
+
+docs/decisions.md has each departure, reproduced against the port.
+
+**The proof of fairness.** The reference passes the held-out suite, a
+300-task training suite and the spec's worked examples, eleven files to the
+cent:
+
+- R13's total of $9,246.43;
+- examples A and B;
+- T6's hours both ways;
+- T7's Social Security;
+- T8's two children;
+- T9's three rentals;
+- T13's part-time salary.
+
+It redraws none of 600 first draws (none of 5,000 when last measured), and
+agrees with the engine on 2,000 candidates nothing filtered (5,000 when last
+measured). Its longest file is 21 tool calls in five turns across 5,000
+training draws, well inside the episode's 80 turns even at one call a turn.
+
+The rulebook and the tools a model is told are pinned by their hashes, and
+a test states each of the engine's figures in the rulebook's words, built
+from the engine's own constants: an edit to either fails until the version
+and the pin move together. `env:audit` reads each source's figures as well
+as the totals, so a source's monthly figure, nontaxable share, gross-up or
+rental loss that no tool returned and the file does not state is flagged by
+its source. Neither it nor `env:compare` has a verdict to group this
+environment's files by yet; both show "?".
+
 ## escrow-history
 
 escrow-history 1.0.0 is escrow-analysis started from the account's ledger.
@@ -1206,6 +1441,7 @@ npm run env:refi -w @hm/environments -- --env payments-posting --policy referenc
 npm run env:refi -w @hm/environments -- --env arm-adjustment --policy reference
 npm run env:refi -w @hm/environments -- --env payoff-statement --policy reference
 npm run env:refi -w @hm/environments -- --env pmi-termination --policy reference
+npm run env:refi -w @hm/environments -- --env qualifying-income --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

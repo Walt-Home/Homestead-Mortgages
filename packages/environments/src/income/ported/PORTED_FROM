@@ -1,0 +1,36 @@
+The servicing app's origination income engine (spec §22.3, Fannie Mae
+B3-3), ported for the qualifying-income environment's grader.
+
+Source       apps/servicing/src/domain/verification/{ops-22-3,ops-22-1}.ts
+Vendored at  293261b371fe97d2b6b39e1f29ca60dd808ac8fb (apps/servicing/VENDORED_FROM)
+Ported       2026-10-21
+
+Each file here is its source byte for byte except its import lines, and the
+rewrite is two rules and no more:
+  - the kernel's paths (../../kernel/{calendar,money,events}/<file>.ts)
+    become @hm/kernel/{calendar,money,events} (the same bytes;
+    packages/kernel/VENDORED_FROM);
+  - a sibling's ./<file>.ts becomes ./<file>.js.
+Nothing else may be edited: src/__tests__/income.test.ts rewrites each
+original's imports by those rules, compares the result and the rest of the
+file, and fails on any difference. Lint and Prettier skip this directory for
+the reason they skip the vendored trees.
+
+ops-22-1.ts is 807 lines of document-intake code (classification, freshness,
+the needs list) that comes only because ops-22-3.ts imports three constants
+from it: AGENT, CREDITOR_TZ and RULE_SET_VERSION. Nothing graded calls it.
+
+The grader calls only the pure calculators in ops-22-3.ts (baseSalary,
+hourlyBase, variableIncome, socialSecurity, supportIncome,
+retirementDistribution, publicAssistance, subjectRental, regbCheck,
+continuance3y, totalQualifying). It never calls calculateIncome,
+evaluateContinuance, finalizeIncome or any VVOE, 4506-C or DU function:
+they append events to an EventStore, and several mint ids from the
+module's `ids` counter. The conventions around the calculators (the
+dispatch by type and its defaults, the Reg B check, used_for_qualifying,
+the continuance gate, the total) live in the service's stateful
+app/tools/section22-3.ts and calculateIncome; they are restated in
+src/income/grader.ts with the lines they come from.
+
+To take a change from the servicing app, copy the two files again and apply
+the same two rewrites.

@@ -86,23 +86,32 @@ export function auditEpisode(r: AuditRecord): AuditRow {
       : answer && "final" in answer
         ? ((answer["final"] ?? null) as Readonly<Record<string, unknown>> | null)
         : answer;
-  const mental = figures
-    ? Object.entries(figures)
-        // Zero, a returned figure with its sign flipped (a low point read as a
-        // required balance), and a figure the task itself states (a balance a held
-        // receipt left alone) are reading rather than arithmetic.
-        .filter(
-          ([k, v]) =>
-            k.endsWith("_cents") &&
-            v !== null &&
-            String(v) !== "0" &&
-            !returned.has(String(v)) &&
-            !returned.has(String(-Number(v))) &&
-            !new RegExp(`(?<![\\d.])${String(v)}(?![\\d.])`).test(r.task.rendered),
-        )
-        .map(([k]) => k)
-        .sort()
-    : [];
+  // Zero, a returned figure with its sign flipped (a low point read as a
+  // required balance), and a figure the task itself states (a balance a held
+  // receipt left alone) are reading rather than arithmetic.
+  const unreturned = ([k, v]: readonly [string, unknown]) =>
+    k.endsWith("_cents") &&
+    v !== null &&
+    String(v) !== "0" &&
+    !returned.has(String(v)) &&
+    !returned.has(String(-Number(v))) &&
+    !new RegExp(`(?<![\\d.])${String(v)}(?![\\d.])`).test(r.task.rendered);
+  // An answer that lists its figures by source (qualifying-income's) has each row's read too.
+  const rows = (
+    answer && Array.isArray(answer["sources"]) ? answer["sources"] : []
+  ) as readonly Readonly<Record<string, unknown>>[];
+  const mental = [
+    ...(figures
+      ? Object.entries(figures)
+          .filter(unreturned)
+          .map(([k]) => k)
+      : []),
+    ...rows.flatMap((row) =>
+      Object.entries(row)
+        .filter(unreturned)
+        .map(([k]) => `sources[${String(row["income_id"])}].${k}`),
+    ),
+  ].sort();
   const called = new Set(turns.flatMap((t) => t.calls.map((c) => c.name)));
   const quoted = /"quote": \{/.test(r.task.rendered);
   const passWithout =

@@ -8,6 +8,9 @@
  * or the day's cap is reached. The model itself is a script.
  */
 
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
 import { plainDate } from "@hm/kernel/calendar";
@@ -305,4 +308,36 @@ describe("the analyst's turn", () => {
     expect(m.requests[2]?.tool_choice).toEqual({ type: "none" });
     expect(run.facts_results).toHaveLength(2);
   });
+});
+
+describe("where the analyst can be turned on", () => {
+  /**
+   * The model reads a servicer's book only when the stack's `refi_analyst`
+   * switch mounts the key on the scheduled review job. A deploy step that ran
+   * the review with a key of its own would be a second door the switch does
+   * not govern, so no workflow's review step may name one. Read out of the
+   * files, because nothing else here can run a workflow.
+   */
+  const reviewSteps = (file: string): string[] => {
+    const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+    const yaml = readFileSync(join(root, ".github", "workflows", file), "utf8");
+    const steps: string[] = [];
+    let at = yaml.indexOf("review-loans.js");
+    while (at !== -1) {
+      const start = yaml.lastIndexOf("\n      - name:", at);
+      const end = yaml.indexOf("\n      - name:", at);
+      steps.push(yaml.slice(start, end === -1 ? undefined : end));
+      at = yaml.indexOf("review-loans.js", end === -1 ? yaml.length : end);
+    }
+    return steps;
+  };
+
+  it.each(["deploy.yml", "deploy-production.yml"])(
+    "%s reviews the loans with no Anthropic key",
+    (file) => {
+      const steps = reviewSteps(file);
+      expect(steps.length, `${file} no longer runs the review`).toBeGreaterThan(0);
+      for (const step of steps) expect(step).not.toMatch(/ANTHROPIC/);
+    },
+  );
 });

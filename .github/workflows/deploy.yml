@@ -676,14 +676,15 @@ jobs:
       # and a second run today — the scheduled one — writes nothing. A loan
       # the tape cannot describe is reported and skipped, not a failure. A
       # candidate opens an offer, which is what the sample borrower's loan
-      # page then leads with. The analyst runs when the repository secret
-      # holds an Anthropic key and is recorded as off when it is empty.
+      # page then leads with. This run carries no Anthropic key, so the
+      # analyst is recorded as off: staging holds a servicer's real book, and
+      # the stack's `refi_analyst` switch, which mounts the key on the
+      # scheduled job, is the only way a model reads it.
       - name: Review the monitored loans
         run: |
           set +e
           OUT=$(docker run --rm --network host \
             -e DATABASE_URL="$DATABASE_URL" \
-            -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
             "$IMAGE" node apps/api/dist/scripts/review-loans.js 2>&1)
           code=$?
           set -e
@@ -692,7 +693,6 @@ jobs:
           grep -qE '^reviewed [0-9]+ of [0-9]+ monitored loans' <<< "$OUT"
         env:
           DATABASE_URL: ${{ secrets.HOMESTEAD_MORTGAGES_MIGRATION_URL }}
-          ANTHROPIC_API_KEY: ${{ secrets.HOMESTEAD_MORTGAGES_ANTHROPIC_API_KEY }}
 
       # Public, deliberately.
       #

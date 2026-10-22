@@ -2101,8 +2101,10 @@ no offer is open. The turn never fails a review. The model is off unless
 `ANTHROPIC_API_KEY` is set (`REFI_ANALYST_MODEL`, default `claude-opus-5`;
 `REFI_ANALYST_MAX_PER_DAY`, default 500); the review job mounts the key only
 when Terraform's `refi_analyst` is `on`, gated like CoreLogic because a job
-that names a secret with no version fails to start, and the deploy-time run
-reads the repository secret and records `model_off` when it is empty. The
+that names a secret with no version fails to start. The deploy-time run
+read a repository secret until 22 October 2026 and carries no key since:
+staging holds a servicer's real book, and that secret was a way to turn the
+model on that the stack's switch did not govern. The
 model driver is a manual loop over the SDK, not a runner: the turn owns its
 tool budget and its guard, and a spent budget makes the last request
 `tool_choice: none` so the model answers in text rather than being refused a

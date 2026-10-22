@@ -5616,10 +5616,10 @@ decides is the one tested" lists the questions of policy the engine raises:
 a ratio over 50 that is not ineligible, a score under 620 referred only
 through the grid's floor, funds to close never compared with assets, non-QM
 and higher-priced results with no finding, a refinance's maximum that
-ignores occupancy, INC-004 on households with no wage income, a net tangible
-benefit on every refinance, ability to repay read from Borrower 1's reports,
-and bright lines compared on rounded binary figures. v1 never draws a file
-whose graded answer depends on one of them, and its rulebook states only
+ignores occupancy, INC-004 on every household without a base wage, a net
+tangible benefit on every refinance, ability to repay read from Borrower 1's
+reports, and bright lines compared on rounded binary figures. v1 never draws
+a file whose graded answer depends on one of them, and its rulebook states only
 what the engine does where the files are drawn. `ausInScope` runs on the
 engine's own derivations and rejects each, and a test builds a file for
 each clause and shows what the engine does there:
@@ -5632,14 +5632,17 @@ each clause and shows what the engine does there:
   undocumented (a missing report, no established income) has its APR or
   APOR refused as well, so QM is undecided rather than non-QM;
 - every refinance is of a primary residence;
-- every household has wage income, so INC-004 reaches it under the sheet's
-  scope too;
+- every household has a base wage, so INC-004 is met, and no file turns on
+  whether the sheet's wage earners include a commission or bonus earner
+  with no base;
 - every refinance is one whose investor requires a net tangible benefit,
   and the rulebook says so;
 - asset reports come from every borrower or none, where the two readings of
   ability to repay agree;
 - no bright line falls between the rounded figure and the exact one, and no
-  rounded figure lands exactly on a half.
+  figure the engine rounds in binary lands exactly on a half. Two
+  borrowers' score average is drawn on a half on purpose: a whole number
+  over two is exact, and the engine and the rulebook both round it up.
 
 The same mapping found places the sheet scopes a rule and the engine does
 not, or the engine's maximum reads less than a guide does, and v1 stays out
@@ -5652,14 +5655,93 @@ month and never on the 1st, where calendar months and whole months agree.
 
 **What it showed.** The guard rejects none of 40,000 training candidates,
 because the generator aims around all of it, and the reference agrees with
-the engine on every one of 10,000 more. The reference passes the held-out
-200 through `env:refi`, a 300-task training suite and twelve worked cases,
-in at most 26 tool calls and 4 turns; no task is redrawn. The grade is 35
+the engine on every one of them. The reference passes the held-out 200
+through `env:refi`, a 300-task training suite and twelve worked cases, in
+at most 27 tool calls and 4 turns; no task is redrawn. The grade is 38
 answers in 11 fields (12 on a refinance). Grading the findings, the blocked
 requirements, the recommendation and the outcome as four fields let an
 answer that works nothing score 0.22, because nearly half the files clear to
-close; as the engine's result and the outcome, it scores 0.10. Run in New
-York and in Tokyo, the same sample hashes the same.
+close; graded as the engine's result and the outcome, the best answer that
+works nothing scores 0.134. Run in New York and in Tokyo, the same sample
+hashes the same.
+
+**An adversarial review, before anything was scored, upheld twelve
+findings, one of them twice.** All were fixed at 1.0.0 with a new held-out
+pin, because nothing had been measured on the first. Five mattered most,
+four of them about what the tests and the held-out suite can tell apart:
+
+- The proof that a file can be decided from the rulebook never read the
+  rulebook. The reference is a transcription of it, held to the engine;
+  the text itself was held by a hash pin that a version bump refreshes and
+  by 27 of its sentences. Eleven edits that change what it teaches (the
+  investment maximum, the reserve months, a General QM tier, the HOEPA rate
+  line, the recoup, which record decides, an APOR term, the flat fee limit,
+  ability to repay without assets, the UW-009 block, a joint debt counted
+  twice) passed every test once the pin was refreshed. Every number the
+  rulebook states is now in `AUS_RULES`, which the text is written from and
+  the reference reads, a test fails if a limit is typed into the reference
+  instead, and every rule the reference implements is pinned sentence by
+  sentence. Each of those edits now fails a test that is not a snapshot.
+- The held-out suite never told apart four stated rules, and a fifth on two
+  files: the prepayment penalty read either way, a 25-year term priced on
+  the 30-year column, documented income counting only established sources,
+  a chapter 11 or a bankruptcy with no chapter held to 24 months, and a
+  report with no scores blocking CRD-016. The rate-set cases now take a
+  25-year term and a penalty on a primary residence three times each in
+  fourteen, the 48-month chapters take turns, transcripts sit beside income
+  under review, and a report with no scores falls three times. With CLTV
+  read as the LTV, a base wage under review counted, and a manufactured
+  home's threshold read after the tiers, the held-out suite carries at
+  least three files for each of 30 wrong readings.
+- INC-004 was graded on the files the question of policy names. The guard
+  kept out a household with no wage income and counted overtime, a bonus
+  and commission as wage income, and the missing-reports edge aimed at
+  households with no base wage, every one referred on INC-004 alone; some
+  (overtime or a bonus with no base pay) cannot happen. The guard now keeps
+  out any household without a base wage, as the question is worded, the
+  rulebook no longer names INC-004, and the edge draws a base wage under
+  review beside one that counts.
+- The price tests only ever decided one way. No file is non-QM or
+  higher-priced, so qm_status and is_hpml followed from which figures were
+  missing, and the spread was never needed. The APR's field now carries the
+  spread and the two thresholds the tests were decided against, and the
+  rulebook says that no file reaches either.
+- The per-field test read each answer's field from the table it tested, so
+  moving an answer between fields failed nothing; and five things the
+  generator draws (a kept home-equity line, a deed in lieu, a chapter 11 or
+  a bankruptcy with no chapter, the 80% line off a primary residence,
+  transcripts beside income under review) had no count of their own. The
+  field of every answer is written out in the test, and each of those
+  draws, and each of the realism rules below, has a count or a check.
+
+The rest:
+
+- the General QM threshold listed the manufactured-home rule after the
+  tiers without saying it wins, and a reader taking the first tier gave
+  3.5 where the engine gives 6.5. It now comes first and says so, and the
+  generator draws manufactured homes in the middle tier three times in
+  fourteen;
+- the submitting paragraph described qualifying_income_cents as two
+  decimals or null, which the schema refuses; it now lists every field's
+  shape as the parser holds it;
+- a decimal with a leading zero was accepted and graded wrong though its
+  value was right; decimals are read as their value, as cents are;
+- refinances that cannot happen: the loan paid off was on no report, its
+  payment could be below its own interest or run past thirty years, a kept
+  home-equity line had no tradeline, and a chapter 7 could be filed inside
+  the same borrower's open chapter 13. The mortgage paid off is now on
+  Borrower 1's report, marked paid off at closing (the rule that leaves a
+  marked payment out of the ratio already covers it, so the engine needed
+  nothing); its rate is one at which its payment retires the balance within
+  thirty years; the line is a tradeline with a payment; and the two
+  bankruptcies are two borrowers';
+- about half the refinances needed exactly nothing to close, and the floor
+  of 0.101 was one hand-written answer rather than the best one. Nothing to
+  close is drawn one time in ten, and the floor is computed: each field its
+  commonest value on a training suite or the file's own figures copied,
+  whichever does better, for purchases and refinances apart. It is 0.134;
+- this entry said no rounded figure lands on a half, where two borrowers'
+  score average does, on purpose.
 
 **What a later version can lift.** Each hold above goes when its question
 is decided and the engine changes with it: a ratio over 50 drawn once it is

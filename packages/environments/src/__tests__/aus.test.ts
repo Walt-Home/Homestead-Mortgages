@@ -27,6 +27,7 @@ import {
   AUS_GROUPS,
   AUS_HELDOUT_SUITE,
   AUS_RULEBOOK,
+  AUS_RULES,
   AUS_SPEC_CASES,
   AusReferencePolicy,
   BLOCKABLE,
@@ -206,7 +207,10 @@ describe("aus-decision", () => {
         apor_week_of: "2026-06-15",
         apor_pct: "6.57",
         apr_pct: "6.587",
+        spread_pct: "0.017",
+        qm_threshold_pct: "2.25",
         qm_status: "qm",
+        hpml_threshold_pct: "1.50",
         is_hpml: false,
         ntb_recoup_months: null,
         ntb_satisfied: null,
@@ -221,7 +225,10 @@ describe("aus-decision", () => {
       expect(want(1)).toMatchObject({
         ltv_pct: "80.00",
         apr_pct: null,
+        spread_pct: null,
+        qm_threshold_pct: null,
         qm_status: null,
+        hpml_threshold_pct: null,
         is_hpml: null,
         is_high_cost: null,
         points_and_fees_cents: "359005",
@@ -257,7 +264,9 @@ describe("aus-decision", () => {
         total_loan_amount_cents: "3553046",
         points_and_fees_pass: false,
         is_high_cost: true,
+        qm_threshold_pct: "6.50",
         qm_status: "qm",
+        hpml_threshold_pct: "1.50",
         is_hpml: false,
         findings: ["HOEPA_HIGH_COST", "POINTS_AND_FEES_EXCEEDED"],
         outcome: "denied",
@@ -329,6 +338,9 @@ describe("aus-decision", () => {
     expect(wrong({ dti_back_pct: "20.89" })).toEqual(["dti"]);
     expect(wrong({ actual_reserve_months: "14.0" })).toEqual(["reserves"]);
     expect(wrong({ apr_pct: "6.588" })).toEqual(["apr"]);
+    expect(wrong({ spread_pct: "0.020" })).toEqual(["apr"]);
+    expect(wrong({ qm_threshold_pct: "3.50" })).toEqual(["apr"]);
+    expect(wrong({ hpml_threshold_pct: "2.50" })).toEqual(["apr"]);
     expect(wrong({ apor_pct: "6.58" })).toEqual(["apor"]);
     expect(wrong({ ipc_cap_pct: 9 })).toEqual(["collateral"]);
     expect(wrong({ outcome: "approved_with_conditions" })).toEqual(["decision"]);
@@ -346,11 +358,56 @@ describe("aus-decision", () => {
     ]);
   });
 
-  it("grades every answer: each of the thirty-five, changed alone, fails its own field and no other", () => {
-    const owner = Object.fromEntries([
-      ...Object.entries(AUS_GROUPS).flatMap(([group, keys]) => keys.map((k) => [k, group])),
-      ...NTB.map((k) => [k, "ntb"]),
-    ]) as Record<keyof AusAnswer, string>;
+  it("grades every answer: each of the thirty-eight, changed alone, fails its own field and no other", () => {
+    // Written out, not read off AUS_GROUPS: moving an answer between fields changes what is graded
+    // together, and with it the credit a model earns, so it has to be a visible change here.
+    const owner: Record<keyof AusAnswer, string> = {
+      representative_fico: "credit",
+      fico_for_minimum: "credit",
+      bankruptcy_seasoning_months: "credit",
+      derogatory_seasoning_months: "credit",
+      qualifying_income_cents: "income_and_debts",
+      transcript_variance_pct: "income_and_debts",
+      monthly_liabilities_cents: "income_and_debts",
+      dti_front_pct: "dti",
+      dti_back_pct: "dti",
+      atr_documented: "dti",
+      ltv_pct: "collateral",
+      cltv_pct: "collateral",
+      hcltv_pct: "collateral",
+      max_ltv_pct: "collateral",
+      ipc_ratio_pct: "collateral",
+      ipc_cap_pct: "collateral",
+      funds_to_close_cents: "funds_to_close_cents",
+      required_reserve_months: "reserves",
+      actual_reserve_months: "reserves",
+      reserves_satisfied: "reserves",
+      points_and_fees_cents: "fees",
+      total_loan_amount_cents: "fees",
+      points_and_fees_pass: "fees",
+      is_high_cost: "fees",
+      apor_week_of: "apor",
+      apor_pct: "apor",
+      apr_pct: "apr",
+      spread_pct: "apr",
+      qm_threshold_pct: "apr",
+      qm_status: "apr",
+      hpml_threshold_pct: "apr",
+      is_hpml: "apr",
+      ntb_recoup_months: "ntb",
+      ntb_satisfied: "ntb",
+      findings: "aus",
+      blocked: "aus",
+      recommendation: "aus",
+      outcome: "decision",
+    };
+    expect(Object.keys(owner)).toHaveLength(38);
+    expect(
+      Object.fromEntries(
+        Object.entries(AUS_GROUPS).flatMap(([group, keys]) => keys.map((k) => [k, group])),
+      ),
+    ).toEqual(Object.fromEntries(Object.entries(owner).filter(([, g]) => g !== "ntb")));
+    expect([...NTB]).toEqual(["ntb_recoup_months", "ntb_satisfied"]);
     const choices: Partial<Record<keyof AusAnswer, readonly unknown[]>> = {
       recommendation: RECOMMENDATIONS,
       outcome: OUTCOMES,
@@ -373,7 +430,7 @@ describe("aus-decision", () => {
             ? "1"
             : key === "apor_week_of"
               ? "2026-06-08"
-              : key === "apr_pct"
+              : key === "apr_pct" || key === "spread_pct"
                 ? "6.001"
                 : key === "representative_fico" || key === "fico_for_minimum"
                   ? 700
@@ -411,8 +468,8 @@ describe("aus-decision", () => {
     expect(AUS_FINGERPRINT.environment).toMatchInlineSnapshot(`
       {
         "name": "aus-decision",
-        "rulebook_sha256": "a0bb384057c3e0fb5da874cdb24e5ac83f3906abf4b5daf521ca4820bdbb9d8a",
-        "tools_sha256": "3238cfd76c0756ba7f42c0d6d385e1d509a62ee42f01d39c5f6fa0491b190b93",
+        "rulebook_sha256": "9870c4a9dda68b1dfac3dd8770e106b1d0d68cb4c1177cb1d0770ad48c19ca73",
+        "tools_sha256": "2e45756f52fbeec71b57322d66b157cdc5592c847c8b5a1d401faad6c01d2fb9",
         "version": "1.0.0",
       }
     `);
@@ -425,54 +482,126 @@ describe("aus-decision", () => {
       "calculate",
       "submit_decision",
     ]);
+    // Every rule the reference implements, sentence by sentence, numbers included. The reference
+    // reads its numbers from AUS_RULES, which the text is written from, and is held to the engine
+    // on every generated file; these hold the words. A rule changed in either place fails here
+    // until this list is changed with it, by hand: refreshing the pin above is not enough.
     const stated = [
+      // Conventions.
+      'Money is integer cents ("41234500" is $412,345.00). Rates and ratios are percentages.',
+      '"Round" means round half up, at the step that says so and nowhere else; "to two places" means to two decimal places. A rounded figure is compared with its limit as rounded.',
+      "The decision date is the first ten characters of decided_at, a date in UTC.",
+      "A tradeline on two borrowers' credit reports with the same creditor, type and opened_on is one joint debt, counted once.",
+      "An account on two borrowers' asset reports with the same institution, type and mask is one joint account, counted once.",
       // Step 1: representativeFico.
       "Each borrower's own score is the middle of their scores when their report has three, the lower when it has two, and the one when it has one.",
-      "When any borrower has no credit report (credit is null), or a report with no scores, CRD-002 and UW-010 are blocked",
+      "When any borrower has no credit report (credit is null), or a report with no scores, CRD-002 and UW-010 are blocked, and representative_fico and fico_for_minimum are null.",
+      "Otherwise representative_fico is the lowest own score in the household.",
       "fico_for_minimum is the representative score when there is one borrower, and the average of the own scores, rounded to a whole number, when there are two.",
+      "Every borrower's own score on these files is 620 or more, which meets the 620 minimum.",
       // Steps 2 and 5: householdTradelines.
       "When any borrower has no credit report, CRD-016 is blocked. A report with no scores does not block it.",
       // Step 3: deciding, monthsBetween.
+      "The months since a date are whole_months_between(that date, the decision date).",
+      "a bankruptcy's reference date is its discharged_on, or its date when it has no discharge.",
       'Its minimum is 24 months when its chapter is "13", and 48 months for any other chapter or none.',
-      "the minimum is 84 months for a foreclosure and 48 for a short sale or a deed in lieu",
-      "The bankruptcy with the smallest margin decides",
+      "Its margin is its months − its minimum. The bankruptcy with the smallest margin decides: bankruptcy_seasoning_months is its months, and when they are fewer than its minimum, add BANKRUPTCY_SEASONING (credit). With no bankruptcy, bankruptcy_seasoning_months is null.",
+      "the reference date is the record's date; the minimum is 84 months for a foreclosure and 48 for a short sale or a deed in lieu; the one with the smallest margin decides; derogatory_seasoning_months is its months, and when they are fewer than its minimum, add DEROGATORY_SEASONING (credit). With none, null.",
       // Step 4.
-      "When no income source is of type base_wage, INC-004 is blocked.",
+      "Every household here has at least one income source of type base_wage.",
+      "qualifying_income_cents is the sum of monthly_cents over the income sources whose continuance_established is true. A source whose continuance is false or null counts nothing, a base wage included.",
       "The transcript check (INC-009) runs only when every borrower has at least one transcript.",
-      "documented = 12 × the sum of monthly_cents over every income source, whatever its continuance",
-      "When it is more than 10.00 or less than −10.00, add TRANSCRIPT_VARIANCE (income).",
-      // Step 5: debtToIncome.
-      "When qualifying income is 0, UW-004 is blocked",
-      "When dti_back_pct is more than 45.00, add DTI_ELEVATED (income).",
-      // Step 6: maxLtvFor.
+      "documented = 12 × the sum of monthly_cents over every income source, whatever its continuance, and wages = the sum, over the borrowers, of each borrower's latest tax year's wages_cents.",
+      "transcript_variance_pct = (documented − wages) ÷ wages × 100, rounded to two places.",
+      "When it is more than 10.00 or less than −10.00, add TRANSCRIPT_VARIANCE (income). When the check does not run, transcript_variance_pct is null.",
+      // Step 5: debtToIncome, atrDetermination.
+      "When any borrower has no credit report, UW-004 is blocked and monthly_liabilities_cents is null. Otherwise monthly_liabilities_cents is the sum of monthly_payment_cents over the household's tradelines whose dti_exclusion is null, a joint debt once.",
+      "When qualifying income is 0, UW-004 is blocked, and dti_front_pct and dti_back_pct are null.",
+      "Otherwise dti_front_pct = the housing payment ÷ qualifying income × 100, rounded to two places. dti_back_pct = (the housing payment + monthly liabilities) ÷ qualifying income × 100, rounded to two places, when monthly liabilities are known, and null when they are not.",
+      "Every back-end ratio on these files is 50.00 or less. When dti_back_pct is more than 45.00, add DTI_ELEVATED (income).",
+      "atr_documented (ability to repay) is true when dti_back_pct was computed and the borrowers' asset reports are on file, and false otherwise.",
+      // Step 6: the ratios, maxLtvFor.
+      "ltv_pct = the loan amount ÷ the value × 100; cltv_pct = (the loan amount + loan.junior_lien_balance_cents) ÷ the value × 100; hcltv_pct = (the loan amount + loan.junior_lien_credit_limit_cents) ÷ the value × 100; each rounded to two places.",
+      "max_ltv_pct: for a purchase, 97 for a primary_residence, 90 for a second_home and 85 for an investment property; for a rate_term_refinance, 97",
       "When any borrower has occupies_property false, the maximum is the lower of that and 95.",
+      "When ltv_pct is more than max_ltv_pct, add LTV_EXCEEDS_MAXIMUM (eligibility).",
       // Step 7: closingCosts, lookupApor, the APR's refusal.
-      "points_and_fees_cents = round(the loan amount × 0.5 ÷ 100) + 109500 + 49500",
-      "when the loan amount × 100 is more than the value × 80, exactly (not the rounded LTV",
+      "points_and_fees_cents = round(the loan amount × 0.5 ÷ 100) + 109500 + 49500, and the prepaid finance charges are that same amount. total_loan_amount_cents = the loan amount − the prepaid finance charges.",
+      'The rate was set on new_york_date(product.rate_set_at). The APOR is null when product.amortization is not "Fixed", when term_months is not 120, 180, 240 or 360, or when apor(that date, the term in years) answers that the table does not hold the date.',
+      "When the APOR is null, apor_week_of and apor_pct are null and UW-008 is blocked.",
+      'The APR is null when the amortization is not "Fixed", or when the loan amount × 100 is more than the value × 80, exactly (not the rounded LTV',
+      "Otherwise apr_pct = annual_percentage_rate(the loan amount, the note rate, term_months, the prepaid finance charges). When the APR is null, UW-008 is blocked.",
+      "When both are known, the spread is the APR − the APOR, exactly, and spread_pct is it to three places",
       // Step 8: fundsToClose, reserves.
-      "a retirement account counts 60% of its vested_balance_cents",
-      "actual_reserve_months = (the eligible assets − funds to close) ÷ the housing payment, rounded to one place.",
+      "funds_to_close_cents = (the value on a purchase, or existing_loan.balance_cents on a refinance) + the closing costs − loan.interested_party_contributions_cents − the loan amount.",
+      "required_reserve_months: 0 for a primary_residence, 2 for a second_home, 6 for an investment property, plus 2 for each financed property beyond one (2 × (financed_properties − 1)).",
+      "When no borrower has an asset report, AST-004 is blocked, and actual_reserve_months and reserves_satisfied are null.",
+      "the eligible assets are the household's accounts whose used_to_qualify is true, a joint account once: a retirement account counts 60% of its vested_balance_cents, any other account its balance_cents.",
+      "actual_reserve_months = (the eligible assets − funds to close) ÷ the housing payment, rounded to one place. reserves_satisfied is true when actual_reserve_months is required_reserve_months or more; otherwise it is false, and add RESERVES_INSUFFICIENT (asset).",
       // Step 9: AST-016.
       "ipc_cap_pct is 2 for an investment property; otherwise 3 when ltv_pct is 90.01 or more, 6 when it is 75.01 or more, and 9 below that.",
-      // Steps 10 to 14: runComplianceTests.
-      "Regulation Z's thresholds are held for 2026 alone.",
+      "ipc_ratio_pct = loan.interested_party_contributions_cents ÷ the value × 100, rounded to two places. When it is more than ipc_cap_pct, add IPC_EXCEEDS_LIMIT (asset).",
+      // Step 10: thresholdsFor, pointsAndFeesLimit, generalQmSpreadCap, hoepaPointsAndFeesLimit.
+      "Regulation Z's thresholds are held for 2026 alone. They apply when the rate-set date (Step 7) is in 2026; when it is not, the year's thresholds are missing.",
+      "QM points-and-fees limit, by the first tier the loan amount reaches: $137,958 or more: 3% of the total loan amount. $82,775 or more: $4,139. $27,592 or more: 5% of the total loan amount. $17,245 or more: $1,380. Below $17,245: 8% of the total loan amount. A percentage limit in cents is round(total_loan_amount_cents × the percent ÷ 100).",
+      "General QM threshold, in points of spread: for a manufactured home with a loan amount below $137,958, 6.5, whatever tier its amount reaches. Any other loan takes the first tier its amount reaches: $137,958 or more: 2.25. $82,775 or more: 3.5. Below $82,775: 6.5.",
       "HPML threshold: 1.5 points of spread; 2.5 when the loan amount is more than $832,750.",
+      "HOEPA fee limit: 5% of the total loan amount when the loan amount is $27,592 or more; below that, the lesser of 8% of the total loan amount and $1,380.",
+      // Steps 11 to 14: runComplianceTests.
+      "When the APR or the APOR is null, or the year's thresholds are missing, qm_status and qm_threshold_pct are null and UW-006 is blocked.",
+      'Otherwise qm_threshold_pct is the loan\'s General QM threshold (Step 10), and qm_status is "qm" when atr_documented is true and the spread is less than that threshold.',
+      "When the year's thresholds are missing, points_and_fees_pass is null and UW-007 is blocked. Otherwise points_and_fees_pass is true when points_and_fees_cents is the QM points-and-fees limit or less; when it is more, points_and_fees_pass is false, and add POINTS_AND_FEES_EXCEEDED (eligibility).",
+      "When the APR or the APOR is null, is_hpml and hpml_threshold_pct are null.",
+      'When property.occupancy is not "primary_residence", both are null: the rule reaches only a consumer\'s principal dwelling.',
+      "When the year's thresholds are missing, both are null and UW-008 is blocked.",
+      "Otherwise hpml_threshold_pct is the loan's HPML threshold (Step 10), and is_hpml is true when the spread is that threshold or more, and false when it is less.",
       'When property.occupancy is not "primary_residence", is_high_cost is null and nothing is blocked',
+      "the rate trigger: null when the APR or the APOR is null; otherwise true when the spread is more than 6.5, else false;",
+      "the fee trigger: null when the year's thresholds are missing; otherwise true when points_and_fees_cents is more than the HOEPA fee limit, else false;",
       "the penalty trigger: false when product.prepayment_penalty is false, and null when it is true",
-      // Step 15.
+      "is_high_cost is true when any trigger is true, false when all three are false, and null otherwise; when it is null, UW-009 is blocked. When it is true, add HOEPA_HIGH_COST (eligibility).",
+      // Step 15: netTangibleBenefit.
+      "A purchase has none: ntb_recoup_months and ntb_satisfied are null.",
+      "with the closing costs recouped within 60 months.",
       'When existing_loan.payment_basis is not "principal_and_interest", both are null and APP-019 is blocked',
+      "Otherwise the new payment is level_payment(the loan amount, the note rate, term_months), and the monthly saving is existing_loan.monthly_payment_cents − the new payment.",
       "A saving of 0 or less: ntb_recoup_months is null and ntb_satisfied is false.",
+      "Otherwise ntb_recoup_months = the closing costs ÷ the saving, rounded to one place, and ntb_satisfied is true when that is 60.0 or less.",
+      "When ntb_satisfied is false, add NTB_NOT_SATISFIED (eligibility).",
       // Step 16: determineRecommendation, determineOutcome.
+      "UW-010 is blocked exactly when CRD-002 is.",
       'recommendation: "approve_ineligible" when any finding is in the eligibility category; otherwise "refer" when any requirement is blocked; otherwise "refer_with_caution" when there is any finding; otherwise "approve_eligible".',
       'outcome: "denied" when is_high_cost is true; otherwise "counteroffer" for approve_ineligible, "referred" for refer, "approved_with_conditions" for refer_with_caution, and "clear_to_close" for approve_eligible.',
+      // Submitting: the shapes the parser holds.
+      "qualifying_income_cents: cents. transcript_variance_pct: two decimals, or null.",
     ];
     expect(stated.filter((rule) => !AUS_RULEBOOK.includes(rule))).toEqual([]);
     // Every code and requirement the rulebook names is one the submission may carry, and no other.
     for (const c of FINDING_CODES) expect(AUS_RULEBOOK).toContain(c);
     for (const b of BLOCKABLE) expect(AUS_RULEBOOK).toContain(b);
     // The questioned behaviors are not taught: the rulebook never says what happens past them.
-    for (const unsaid of ["DTI_EXCEEDS_MAXIMUM", "FICO_BELOW_MINIMUM", "INC-026"])
+    for (const unsaid of ["DTI_EXCEEDS_MAXIMUM", "FICO_BELOW_MINIMUM", "INC-026", "INC-004"])
       expect(AUS_RULEBOOK).not.toContain(unsaid);
+    // The reference reads every limit from AUS_RULES, the numbers the rulebook is written from: none
+    // is typed into it, so the two cannot state different ones.
+    const code = readFileSync(here("../aus/reference.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    const limits = new Set<string>();
+    const walk = (x: unknown): void => {
+      if (typeof x === "number" || typeof x === "string") limits.add(String(x));
+      else if (x && typeof x === "object") Object.values(x).forEach(walk);
+    };
+    walk(AUS_RULES);
+    // Small counts and decimal places the code needs for other things.
+    for (const n of ["0", "1", "2", "3"]) limits.delete(n);
+    expect(limits.size).toBeGreaterThan(30);
+    /** A number as code may write it: 13795800 as 13_795_800 too. */
+    const spelled = (n: string) =>
+      new RegExp(
+        `(?<![\\w.])${n.replace(/\d(?=(\d{3})+$)/g, "$&_?").replace(".", "\\.")}(?![\\w.])`,
+      );
+    expect([...limits].filter((n) => spelled(n).test(code))).toEqual([]);
   });
 
   it("reads a submission strictly, as the schema says, and bounces what does not fit", () => {
@@ -500,6 +629,21 @@ describe("aus-decision", () => {
     expect(ok({ ...want, outcome: "approved" })).toBe(false);
     expect(ok({ ...want, apor_week_of: "06/15/2026" })).toBe(false);
     expect(ok([want])).toBe(false);
+    // Cents are a string of digits, as the rulebook says: not two decimals, and never null.
+    expect(ok({ ...want, qualifying_income_cents: "1500000.00" })).toBe(false);
+    expect(ok({ ...want, qualifying_income_cents: null })).toBe(false);
+    // A decimal is read as its value, as cents are: a leading zero or a minus on zero is the same
+    // answer, and grading it wrong would fail a right one with nothing the model could act on.
+    const spelled = parseAusSubmission({
+      ...want,
+      ltv_pct: "080.00",
+      apr_pct: "06.587",
+      actual_reserve_months: "013.9",
+      funds_to_close_cents: "010642500",
+    });
+    expect(spelled.ok && gradeAusAgainst(want, spelled.answer, false).pass).toBe(true);
+    const zero = parseAusSubmission({ ...want, transcript_variance_pct: "-0.00" });
+    expect(zero.ok && zero.answer.transcript_variance_pct).toBe("0.00");
     // A list is a set: its order is not the answer.
     const parsed = parseAusSubmission({
       ...want,
@@ -509,53 +653,80 @@ describe("aus-decision", () => {
   });
 
   it("gives an answer that works nothing little credit", () => {
-    // The commonest label everywhere, a given figure copied where one is near, and no figure worked:
-    // the floor the mean field score is read against.
+    // The floor the mean field score is read against: the best answer that works nothing. For
+    // purchases and for refinances apart, each field takes whichever got it right more often on a
+    // training suite: its commonest value there, or the file's own figures copied where one is
+    // near. The floor is that answer's score on the held-out suite.
+    const copied = (t: AusTask): AusAnswer => ({
+      representative_fico: t.borrowers[0]!.credit?.scores[0]?.score ?? null,
+      fico_for_minimum: t.borrowers[0]!.credit?.scores[0]?.score ?? null,
+      bankruptcy_seasoning_months: null,
+      derogatory_seasoning_months: null,
+      qualifying_income_cents: String(t.income_sources[0]!.monthly_cents),
+      transcript_variance_pct: null,
+      monthly_liabilities_cents: "0",
+      dti_front_pct: null,
+      dti_back_pct: null,
+      atr_documented: true,
+      ltv_pct: "80.00",
+      cltv_pct: "80.00",
+      hcltv_pct: "80.00",
+      max_ltv_pct: 97,
+      ipc_ratio_pct: "0.00",
+      ipc_cap_pct: 9,
+      funds_to_close_cents: String(t.lender_estimates.closing_costs_cents),
+      required_reserve_months: 0,
+      actual_reserve_months: null,
+      reserves_satisfied: true,
+      points_and_fees_cents: "0",
+      total_loan_amount_cents: String(t.loan.amount_cents),
+      points_and_fees_pass: true,
+      is_high_cost: false,
+      apor_week_of: null,
+      apor_pct: null,
+      apr_pct: t.product.note_rate_pct,
+      spread_pct: null,
+      qm_threshold_pct: null,
+      qm_status: "qm",
+      hpml_threshold_pct: null,
+      is_hpml: false,
+      ntb_recoup_months: null,
+      ntb_satisfied: refinance(t) ? true : null,
+      findings: [],
+      blocked: [],
+      recommendation: "approve_eligible",
+      outcome: "clear_to_close",
+    });
+    const fields = [...Object.values(AUS_GROUPS), NTB] as readonly (readonly (keyof AusAnswer)[])[];
+    const part = (a: AusAnswer, keys: readonly (keyof AusAnswer)[]) =>
+      JSON.stringify(keys.map((k) => a[k]));
+    const train = generateAusSuite("train", 5, 1_400).map((t) => ({ t, a: expectedAus(t) }));
+    const choose = (refi: boolean) =>
+      fields.map((keys) => {
+        const xs = train.filter((x) => refinance(x.t) === refi);
+        const tally = new Map<string, number>();
+        for (const x of xs) tally.set(part(x.a, keys), (tally.get(part(x.a, keys)) ?? 0) + 1);
+        const [commonest, often] = [...tally].sort((p, q) => q[1] - p[1])[0]!;
+        const values = JSON.parse(commonest) as unknown[];
+        const fixed = Object.fromEntries(keys.map((k, i) => [k, values[i]]));
+        const byCopy = xs.filter((x) => part(copied(x.t), keys) === part(x.a, keys)).length;
+        return (t: AusTask) =>
+          byCopy > often ? Object.fromEntries(keys.map((k) => [k, copied(t)[k]])) : fixed;
+      });
+    const floor = { purchase: choose(false), refinance: choose(true) };
     const tasks = generateAusSuite("heldout", AUS_HELDOUT_SUITE.seed, AUS_HELDOUT_SUITE.n);
     const scores = tasks.map((t) => {
-      const nothing: AusAnswer = {
-        representative_fico: t.borrowers[0]!.credit?.scores[0]?.score ?? null,
-        fico_for_minimum: t.borrowers[0]!.credit?.scores[0]?.score ?? null,
-        bankruptcy_seasoning_months: null,
-        derogatory_seasoning_months: null,
-        qualifying_income_cents: String(t.income_sources[0]!.monthly_cents),
-        transcript_variance_pct: null,
-        monthly_liabilities_cents: "0",
-        dti_front_pct: null,
-        dti_back_pct: null,
-        atr_documented: true,
-        ltv_pct: "80.00",
-        cltv_pct: "80.00",
-        hcltv_pct: "80.00",
-        max_ltv_pct: 97,
-        ipc_ratio_pct: "0.00",
-        ipc_cap_pct: 9,
-        funds_to_close_cents: String(t.lender_estimates.closing_costs_cents),
-        required_reserve_months: 0,
-        actual_reserve_months: null,
-        reserves_satisfied: true,
-        points_and_fees_cents: "0",
-        total_loan_amount_cents: String(t.loan.amount_cents),
-        points_and_fees_pass: true,
-        is_high_cost: false,
-        apor_week_of: null,
-        apor_pct: null,
-        apr_pct: t.product.note_rate_pct,
-        qm_status: "qm",
-        is_hpml: false,
-        ntb_recoup_months: null,
-        ntb_satisfied: refinance(t) ? true : null,
-        findings: [],
-        blocked: [],
-        recommendation: "approve_eligible",
-        outcome: "clear_to_close",
-      };
-      return gradeAusAgainst(expectedAus(t), nothing, refinance(t)).score;
+      const answer = Object.assign(
+        {},
+        ...floor[refinance(t) ? "refinance" : "purchase"].map((f) => f(t)),
+      ) as AusAnswer;
+      expect(parseAusSubmission(answer).ok, t.id).toBe(true);
+      return gradeAusAgainst(expectedAus(t), answer, refinance(t)).score;
     });
     const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
-    expect(mean).toBeLessThan(0.12);
-    expect(mean.toFixed(3)).toMatchInlineSnapshot(`"0.101"`);
-  });
+    expect(mean).toBeLessThan(0.15);
+    expect(mean.toFixed(3)).toMatchInlineSnapshot(`"0.134"`);
+  }, 60_000);
 
   it("can be solved from the rulebook and the tools: the reference passes the held-out suite and the spec", async () => {
     const r = await solveAll([
@@ -710,24 +881,24 @@ describe("aus-decision", () => {
     );
     expect(out(investmentRefi)).toBe("a refinance of a second home or investment property");
 
-    // INC-004 blocks a household with no base wage, though the sheet scopes it to wage earners.
-    const selfEmployed = withFile(WORKED, {
+    // INC-004 blocks every household with no base-wage source, though the sheet scopes it to wage
+    // earners: a self-employed borrower, and a commission earner, whom the sheet's pay rate, pay
+    // frequency and hours may or may not reach. Both are referred on it alone, and both are out.
+    for (const type of ["self_employment", "commission"] as const) {
+      const noBase = withFile(WORKED, {
+        income_sources: [{ type, monthly_cents: 1_500_000, continuance_established: true }],
+      });
+      expect([blockedOf(noBase), decide(noBase).outcome], type).toEqual([["INC-004"], "referred"]);
+      expect(out(noBase), type).toBe("a household with no base wage");
+    }
+    // A base wage still under review beside one that counts is in scope: INC-004 is met.
+    const reviewed = withFile(WORKED, {
       income_sources: [
-        { type: "self_employment", monthly_cents: 1_500_000, continuance_established: true },
+        ...WORKED.income_sources,
+        { type: "base_wage", monthly_cents: 300_000, continuance_established: null },
       ],
     });
-    expect([blockedOf(selfEmployed), decide(selfEmployed).outcome]).toEqual([
-      ["INC-004"],
-      "referred",
-    ]);
-    expect(out(selfEmployed)).toBe("a household with no wage income");
-    // A wage earner whose base wage is not on file is in scope: INC-004 reaches them either way.
-    const commissioned = withFile(WORKED, {
-      income_sources: [
-        { type: "commission", monthly_cents: 1_500_000, continuance_established: true },
-      ],
-    });
-    expect(out(commissioned)).toBeNull();
+    expect([blockedOf(reviewed), out(reviewed)]).toEqual([[], null]);
 
     // INC-009 runs on everyone with transcripts, though the sheet scopes it to variable income.
     const transcribed = withBorrower({
@@ -1005,6 +1176,19 @@ describe("aus-decision", () => {
       h.x.decision.derivations.find((d) => d.label === "Average prime offer rate")?.inputs[
         "rate_set_on"
       ] ?? null;
+    /** The months and the finding of the bankruptcy that decides, with a minimum for each chapter. */
+    const bankruptcyReading = (h: H, minimumOf: (chapter: string | null) => number) => {
+      const on = plainDate(h.t.decided_at.slice(0, 10));
+      const decides = h.t.borrowers
+        .flatMap((b) => b.credit?.public_records ?? [])
+        .filter((p) => p.type === "bankruptcy")
+        .map((p) => ({
+          months: monthsBetween(plainDate(p.discharged_on ?? p.date), on),
+          minimum: minimumOf(p.chapter),
+        }))
+        .sort((p, q) => p.months - p.minimum - (q.months - q.minimum))[0];
+      return decides ? `${decides.months} ${decides.months < decides.minimum}` : null;
+    };
     const weekOn = (date: string, term: number) => {
       try {
         return (
@@ -1058,6 +1242,45 @@ describe("aus-decision", () => {
       "a base wage under review taken for none": (h) =>
         h.t.income_sources.some((s) => s.type === "base_wage") &&
         h.t.income_sources.every((s) => s.continuance_established !== true),
+      "a base wage under review counted beside one that counts": (h) =>
+        h.t.income_sources.some(
+          (s) => s.type === "base_wage" && s.continuance_established !== true,
+        ) && h.t.income_sources.some((s) => s.continuance_established === true),
+      "documented income taken from established sources alone": (h) =>
+        h.a.transcript_variance_pct !== null &&
+        h.t.income_sources.some((s) => s.continuance_established !== true),
+      "a chapter 11 or a bankruptcy with no chapter given 24 months": (h) =>
+        bankruptcyReading(h, (c) => (c === "13" || c === null || c === "11" ? 24 : 48)) !==
+        bankruptcyReading(h, (c) => (c === "13" ? 24 : 48)),
+      "CRD-016 blocked by a report with no scores": (h) =>
+        h.t.borrowers.every((b) => b.credit !== null) &&
+        h.t.borrowers.some((b) => b.credit!.scores.length === 0),
+      "CLTV and HCLTV read as the LTV": (h) =>
+        h.a.cltv_pct !== h.a.ltv_pct || h.a.hcltv_pct !== h.a.ltv_pct,
+      "a 25-year fixed rate priced on the 30-year column": (h) =>
+        h.t.product.term_months === 300 &&
+        h.t.product.amortization === "Fixed" &&
+        weekOn(
+          (
+            JSON.parse(executeAusTool("new_york_date", { instant: h.t.product.rate_set_at })) as {
+              date: string;
+            }
+          ).date,
+          360,
+        ) !== null,
+      "the General QM tiers read before a manufactured home's own threshold": (h) =>
+        h.t.property.type === "manufactured" &&
+        h.t.loan.amount_cents >= 8_277_500 &&
+        h.a.qm_threshold_pct === "6.50",
+      "a prepayment penalty read as no trigger": (h) =>
+        h.t.product.prepayment_penalty &&
+        h.t.property.occupancy === "primary_residence" &&
+        expectedAus({ ...h.t, product: { ...h.t.product, prepayment_penalty: false } })
+          .is_high_cost !== h.a.is_high_cost,
+      "a prepayment penalty read as a trigger": (h) =>
+        h.t.product.prepayment_penalty &&
+        h.t.property.occupancy === "primary_residence" &&
+        h.a.is_high_cost !== true,
     };
     const thin = Object.entries(cases)
       .map(([name, f]) => [name, held.filter(f).length] as const)
@@ -1109,7 +1332,7 @@ describe("aus-decision", () => {
           .map(toJsonLine)
           .join(""),
       ),
-    ).toMatchInlineSnapshot(`"b6f3623d60c9a1a5e7a6b68a5e92e6236631e1d31b07a3a34cccb7893b3c29c1"`);
+    ).toMatchInlineSnapshot(`"96309065a25c3d0cecf11c2f16fc021c3d53a20349e1f5cf74e67f920d586754"`);
   });
 
   it("rebuilds a task from its coordinates, and never draws a held-out file into training", () => {
@@ -1524,7 +1747,7 @@ describe("aus-decision", () => {
       ).toBeGreaterThan(10);
     });
 
-    it("draws a missing credit report, no asset reports, no established income, and a wage earner with no base wage", () => {
+    it("draws a missing credit report, no asset reports, no established income, and a base wage under review beside one that counts", () => {
       expect(
         on(
           "missing",
@@ -1539,10 +1762,119 @@ describe("aus-decision", () => {
       expect(
         on("missing", (r) => r.a.qualifying_income_cents === "0" && r.a.dti_front_pct === null),
       ).toBeGreaterThan(20);
+      const wages = (r: Run, established: boolean) =>
+        r.t.income_sources.some(
+          (s) => s.type === "base_wage" && (s.continuance_established === true) === established,
+        );
       expect(
-        on("missing", (r) => r.a.blocked.includes("INC-004") && r.a.qm_status === "qm"),
+        on("missing", (r) => wages(r, false) && wages(r, true) && r.a.qm_status === "qm"),
       ).toBeGreaterThan(20);
       for (const r of runs.filter((x) => !x.a.atr_documented)) expect(r.a.qm_status).toBeNull();
+      // INC-004 is the question of policy on a household with no base wage, and every one has one.
+      for (const r of runs) {
+        expect(
+          r.t.income_sources.some((s) => s.type === "base_wage"),
+          r.t.id,
+        ).toBe(true);
+        expect(
+          r.x.decision.derivations.some(
+            (d) => d.requirementId === "INC-004" && d.blockedBy?.length,
+          ),
+        ).toBe(false);
+      }
+    });
+
+    it("draws home-equity lines, deeds in lieu, chapter 11 and chapterless bankruptcies, the 80% line off a primary residence, and transcripts beside income under review", () => {
+      expect(count((r) => r.a.cltv_pct !== r.a.ltv_pct)).toBeGreaterThan(20);
+      expect(count((r) => r.a.hcltv_pct !== r.a.cltv_pct)).toBeGreaterThan(20);
+      const records = (r: Run) => r.t.borrowers.flatMap((b) => b.credit?.public_records ?? []);
+      expect(count((r) => records(r).some((p) => p.type === "deed_in_lieu"))).toBeGreaterThan(5);
+      for (const chapter of ["11", null])
+        expect(
+          on(
+            "seasoning",
+            (r) =>
+              records(r).some((p) => p.type === "bankruptcy" && p.chapter === chapter) &&
+              r.x.decision.derivations.find((d) => d.requirementId === "CRD-006")?.inputs[
+                "minimum_months"
+              ] === 48,
+          ),
+          `chapter ${chapter}`,
+        ).toBeGreaterThan(5);
+      expect(
+        on(
+          "ltv_eighty",
+          (r) =>
+            r.t.property.occupancy !== "primary_residence" &&
+            r.a.ltv_pct === "80.00" &&
+            exactLtv(r) > 8000 &&
+            r.a.apr_pct === null,
+        ),
+      ).toBeGreaterThan(10);
+      expect(
+        on(
+          "transcripts",
+          (r) =>
+            r.a.transcript_variance_pct !== null &&
+            r.t.income_sources.some((s) => s.continuance_established !== true),
+        ),
+      ).toBeGreaterThan(50);
+    });
+
+    it("draws refinances someone could hold: the loan paid off on the report, an old payment that retires it, a kept line with a payment, and one bankruptcy at a time", () => {
+      let rated = 0;
+      for (const r of runs) {
+        const lines = r.t.borrowers.flatMap((b) => b.credit?.tradelines ?? []);
+        const old = r.t.loan.existing_loan;
+        const first = r.t.borrowers[0]!.credit;
+        if (old && first)
+          expect(
+            first.tradelines.some(
+              (t) =>
+                t.type === "mortgage" &&
+                t.dti_exclusion === "paid_off_at_closing" &&
+                t.balance_cents === old.balance_cents &&
+                t.monthly_payment_cents === old.monthly_payment_cents,
+            ),
+            r.t.id,
+          ).toBe(true);
+        if (!old) expect(lines.some((t) => t.dti_exclusion === "paid_off_at_closing")).toBe(false);
+        if (old?.rate_pct != null && old.payment_basis === "principal_and_interest") {
+          rated++;
+          const i = Number(old.rate_pct) / 1200;
+          const interest = old.balance_cents * i;
+          expect(old.monthly_payment_cents, r.t.id).toBeGreaterThan(interest);
+          const months = -Math.log(1 - interest / old.monthly_payment_cents) / Math.log(1 + i);
+          expect(months, r.t.id).toBeLessThanOrEqual(360);
+        }
+        if (r.t.loan.junior_lien_credit_limit_cents > 0 && first)
+          expect(
+            first.tradelines.some(
+              (t) =>
+                t.type === "heloc" &&
+                t.credit_limit_cents === r.t.loan.junior_lien_credit_limit_cents &&
+                t.balance_cents === r.t.loan.junior_lien_balance_cents &&
+                t.monthly_payment_cents > 0 &&
+                t.dti_exclusion === null,
+            ),
+            r.t.id,
+          ).toBe(true);
+        // No bankruptcy filed while another of the same person's was open.
+        for (const b of r.t.borrowers) {
+          const bk = (b.credit?.public_records ?? []).filter((p) => p.type === "bankruptcy");
+          for (const x of bk)
+            for (const y of bk)
+              if (x !== y)
+                expect(
+                  y.date >= x.date && y.date <= (x.discharged_on ?? r.t.decided_at),
+                  r.t.id,
+                ).toBe(false);
+        }
+        // Overtime, a bonus or commission only ever beside a base wage.
+        expect(r.t.income_sources.some((s) => s.type === "base_wage")).toBe(true);
+      }
+      expect(rated).toBeGreaterThan(300);
+      expect(count((r) => r.t.loan.junior_lien_credit_limit_cents > 0)).toBeGreaterThan(50);
     });
 
     it("keeps every record off the 1st and on or before the decision's day, so calendar and whole months agree", () => {

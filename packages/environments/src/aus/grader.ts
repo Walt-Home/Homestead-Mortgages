@@ -282,11 +282,13 @@ export const FINDING_CODES = [
 ] as const;
 export type FindingCode = (typeof FINDING_CODES)[number];
 
-/** Every requirement the rulebook says can block on these files. */
+/**
+ * Every requirement the rulebook says can block on these files. INC-004 is not one: it blocks
+ * every file without a base wage, which is a question of policy, and every file here has one.
+ */
 export const BLOCKABLE = [
   "CRD-002",
   "CRD-016",
-  "INC-004",
   "UW-004",
   "AST-004",
   "UW-006",
@@ -341,7 +343,13 @@ export interface AusAnswer {
   readonly apor_week_of: string | null;
   readonly apor_pct: string | null;
   readonly apr_pct: string | null;
+  /** The APR less the APOR, exactly: three places. */
+  readonly spread_pct: string | null;
+  /** The General QM spread threshold the loan was tested against. */
+  readonly qm_threshold_pct: string | null;
   readonly qm_status: "qm" | "non_qm" | null;
+  /** The HPML spread threshold the loan was tested against. */
+  readonly hpml_threshold_pct: string | null;
   readonly is_hpml: boolean | null;
   readonly ntb_recoup_months: string | null;
   readonly ntb_satisfied: boolean | null;
@@ -354,6 +362,17 @@ export interface AusAnswer {
 const centsText = (dollarsValue: number): string => String(cents(dollarsValue));
 const fixedOrNull = (x: number | null | undefined, places: number): string | null =>
   x === null || x === undefined ? null : x.toFixed(places);
+/** A rate in whole thousandths of a point, as the engine compares its price tests. */
+const milli = (x: number): number => Math.round(x * 1000);
+/** Thousandths of a point as a decimal with three places. */
+const milliText = (m: number): string =>
+  `${m < 0 ? "-" : ""}${Math.floor(Math.abs(m) / 1000)}.${String(Math.abs(m) % 1000).padStart(3, "0")}`;
+/** The threshold a computed price test was decided against, as two places. */
+const thresholdOf = (d: Decision, requirementId: string, label: string): string | null => {
+  const x = derivation(d, requirementId, label);
+  const t = x && !x.blockedBy?.length ? x.inputs["threshold"] : undefined;
+  return typeof t === "number" ? t.toFixed(2) : null;
+};
 
 export function answerOf(x: AusAnalysis): AusAnswer {
   const d = x.decision;
@@ -364,6 +383,8 @@ export function answerOf(x: AusAnalysis): AusAnswer {
   const closing = derivation(d, "UW-007", "Closing costs")!;
   const ipc = derivation(d, "AST-016", "Interested party contributions")!;
   const funds = valueOf(d, "AST-002", "Funds to close");
+  const apr = valueOf(d, "UW-008", "Annual percentage rate");
+  const apor = valueOf(d, "UW-008", "Average prime offer rate");
   const ntb = c.netTangibleBenefit;
   if (r.totalQualifyingIncome === null || r.ltv === null || r.cltv === null || r.hcltv === null)
     throw new RangeError("income and LTV are always computed on these files");
@@ -399,9 +420,14 @@ export function answerOf(x: AusAnalysis): AusAnswer {
     points_and_fees_pass: c.pointsAndFeesPass,
     is_high_cost: c.isHighCost,
     apor_week_of: d.pricedAgainst?.aporWeekOf ?? null,
-    apor_pct: fixedOrNull(valueOf(d, "UW-008", "Average prime offer rate"), 2),
-    apr_pct: fixedOrNull(valueOf(d, "UW-008", "Annual percentage rate"), 3),
+    apor_pct: fixedOrNull(apor, 2),
+    apr_pct: fixedOrNull(apr, 3),
+    // The engine decides both price tests on milli(apr) - milli(apor) and records the spread
+    // rounded for the screen; this is that same difference of the same two figures, exact here.
+    spread_pct: apr === null || apor === null ? null : milliText(milli(apr) - milli(apor)),
+    qm_threshold_pct: thresholdOf(d, "UW-006", "QM status"),
     qm_status: c.qmStatus,
+    hpml_threshold_pct: thresholdOf(d, "UW-008", "HPML spread"),
     is_hpml: c.isHpml,
     ntb_recoup_months: fixedOrNull(ntb?.recoupMonths, 1),
     ntb_satisfied: ntb ? ntb.satisfied : null,
@@ -427,14 +453,19 @@ export const expectedAus = (task: AusTask): AusAnswer => answerOf(analyzeAus(tas
  * loan-to-value figures with the maximum and the contributions with their
  * cap (nearly always none, under 9%); the reserve months with the
  * requirement and the verdict; the fee figures with their two tests; the
- * APR with the two spread tests it decides. The engine's own result (its
- * findings, what it could not compute and its recommendation) is one
- * field, and the outcome another: on a file that clears to close all four
- * are empty or the commonest label, and grading them as four fields made an
- * answer that works nothing score 0.22 on the held-out suite. Now it scores
- * about 0.10. A refinance has a net tangible benefit field; one reported on
- * a purchase is a field of its own, so hedging is never cheaper than
- * committing.
+ * APR with the spread and the two price tests it decides, each with the
+ * threshold it was decided against. No file here is non-QM or higher-
+ * priced (that is a question of policy the guard stays out of), so the
+ * verdicts are one-sided where they are known, and the spread and the two
+ * thresholds are what tell a worked answer from a guess. The engine's own
+ * result (its findings, what it could not compute and its recommendation)
+ * is one field, and the outcome another: on a file that clears to close all
+ * four are empty or the commonest label, and grading them as four fields
+ * made an answer that works nothing score 0.22 on the held-out suite. Now
+ * the best answer that works nothing (each field its commonest value in
+ * training, or the file's own figures copied) scores 0.134. A refinance has
+ * a net tangible benefit field; one reported on a purchase is a field of its
+ * own, so hedging is never cheaper than committing.
  */
 
 export const AUS_GROUPS = {
@@ -460,7 +491,7 @@ export const AUS_GROUPS = {
     "is_high_cost",
   ],
   apor: ["apor_week_of", "apor_pct"],
-  apr: ["apr_pct", "qm_status", "is_hpml"],
+  apr: ["apr_pct", "spread_pct", "qm_threshold_pct", "qm_status", "hpml_threshold_pct", "is_hpml"],
   aus: ["findings", "blocked", "recommendation"],
   decision: ["outcome"],
 } as const satisfies Record<string, readonly (keyof AusAnswer)[]>;
@@ -514,6 +545,18 @@ export const AUS_FIELDS: readonly (keyof AusAnswer)[] = [
 
 const CENTS = /^-?\d+$/;
 const PCT2 = /^\d{1,3}\.\d{2}$/;
+const DECIMAL = /^(-?)(\d+)\.(\d+)$/;
+/**
+ * A decimal answer in one spelling, as cents are read through BigInt: no leading zeros, and no
+ * minus sign on zero. "060.76" is the value 60.76, and grading it as wrong would fail a right
+ * answer with nothing the model could act on.
+ */
+const canonicalDecimal = (x: string): string => {
+  const m = DECIMAL.exec(x)!;
+  const whole = BigInt(m[2]!).toString();
+  const zero = whole === "0" && /^0+$/.test(m[3]!);
+  return `${m[1] && !zero ? "-" : ""}${whole}.${m[3]}`;
+};
 type Shape =
   | { kind: "int"; nullable: boolean; min: number; max: number }
   | { kind: "text"; nullable: boolean; shape: RegExp; example: string }
@@ -563,7 +606,10 @@ export const AUS_SHAPES: Readonly<Record<keyof AusAnswer, Shape>> = {
   apor_week_of: text(true, /^\d{4}-\d{2}-\d{2}$/, '"2026-06-15"'),
   apor_pct: text(true, /^\d{1,2}\.\d{2}$/, '"6.57"'),
   apr_pct: text(true, /^\d{1,2}\.\d{3}$/, '"6.587"'),
+  spread_pct: text(true, /^-?\d{1,2}\.\d{3}$/, '"0.017"'),
+  qm_threshold_pct: text(true, /^\d{1,2}\.\d{2}$/, '"2.25"'),
   qm_status: { kind: "enum", nullable: true, among: ["qm", "non_qm"] },
+  hpml_threshold_pct: text(true, /^\d{1,2}\.\d{2}$/, '"1.50"'),
   is_hpml: bool(true),
   ntb_recoup_months: text(true, /^\d{1,4}\.\d$/, '"23.4"'),
   ntb_satisfied: bool(true),
@@ -603,7 +649,12 @@ export function parseAusSubmission(raw: unknown): Parsed<AusAnswer> {
           return fail(
             `${f} must be a string like ${shape.example}${shape.nullable ? ", or null" : ""}`,
           );
-        out[f] = shape.shape === CENTS ? BigInt(v.trim()).toString() : v.trim();
+        out[f] =
+          shape.shape === CENTS
+            ? BigInt(v.trim()).toString()
+            : DECIMAL.test(v.trim())
+              ? canonicalDecimal(v.trim())
+              : v.trim();
         break;
       case "bool":
         if (typeof v !== "boolean")

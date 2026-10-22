@@ -267,8 +267,9 @@ grades the compliance block inside it; this grades the rest around it.
 - one or two borrowers, each with whether they will live in the home and
   their own reports: bureau scores, tradelines (creditor, type, opened date,
   balance, limit, payment, and why a payment is left out of the ratio, if it
-  is), bankruptcies, foreclosures, short sales and deeds in lieu, deposit and
-  retirement accounts, and tax transcripts, or a report missing;
+  is: the mortgage a refinance pays off is on the report, marked paid off at
+  closing), bankruptcies, foreclosures, short sales and deeds in lieu,
+  deposit and retirement accounts, and tax transcripts, or a report missing;
 - the household's income sources, each with whether its continuance is
   established;
 - the property, the loan (purchase or rate-and-term refinance, junior liens,
@@ -287,17 +288,22 @@ reserves, the contribution cap, the Regulation Z price tests and a
 refinance's net tangible benefit; then the findings, what could not be
 computed, the recommendation and the outcome.
 
-**The grade.** A pass is every field right. 35 answers are graded as 11
+**The grade.** A pass is every field right. 38 answers are graded as 11
 fields, and a twelfth on a refinance: the scores with the seasoning, income
 with the transcript variance and the debts, the two ratios with ability to
 repay, the collateral (the three ratios, the maximum, the contributions and
 their cap), funds to close, reserves, the fees with their two tests, the
-APOR, the APR with the QM and HPML tests, the engine's own result (findings,
-blocked requirements, recommendation), and the outcome. Findings are graded
-as a set of codes and blocked requirements as a set of ids, never as text.
-An answer that works nothing, copies a given figure where one is near and
-takes the commonest label everywhere scores 0.101 on the held-out suite. A
-net tangible benefit reported on a purchase is a field of its own.
+APOR, the APR with the spread and the QM and HPML tests, each with the
+threshold it was decided against, the engine's own result (findings,
+blocked requirements, recommendation), and the outcome. No file is non-QM
+or higher-priced, so the two verdicts are one-sided where they are known;
+the spread and the thresholds are what a model has to work for. Findings
+are graded as a set of codes and blocked requirements as a set of ids,
+never as text. The best answer that works nothing scores 0.134 on the
+held-out suite: for purchases and refinances apart, each field takes
+whichever got it right more often on a training suite, its commonest value
+there or the file's own figures copied where one is near. A net tangible
+benefit reported on a purchase is a field of its own.
 
 **The grader is the engine, imported, not ported.** The task is built into
 the `LoanFile` the engine reads, every borrower's reports under `reports`
@@ -330,34 +336,42 @@ in a suite of 2,800:
 - three, two and one bureau scores, a low bureau the middle score passes
   over, an own score of 620, two borrowers whose average lands on a half,
   and a report with no scores;
-- each seasoning minimum (24, 48, 84) met and missed by a month, a
-  bankruptcy with no discharge, an older record deciding behind a later
-  one, and records on the co-borrower's report;
+- each seasoning minimum (24, 48, 84) met and missed by a month, for
+  chapters 7, 11 and 13 and a bankruptcy with no chapter, a bankruptcy with
+  no discharge, an older record deciding behind a later one, and records on
+  the co-borrower's report;
 - a rate set late on a Sunday in New York, on New Year's Eve there (a 2025
   rate, whose thresholds the engine does not hold) and New Year's Day, on
   the last day the table reaches and the first it does not, an adjustable
   rate, a 25-year term, and a prepayment penalty;
 - spreads just under the HPML line, under the jumbo line's, and under each
   General QM threshold on its tier, on second homes, investment properties
-  and manufactured homes;
+  and manufactured homes in the middle tier, whose 6.5 is not the tier's;
 - the high-cost line between $37,307 and $37,308, loans on each small-loan
   tier, and a second home's points-and-fees counteroffer;
 - a refinance's scheduled payment, a saving of nothing, and the recoup at
-  60.0 and 60.1 months;
+  60.0 and 60.1 months, with a home-equity line kept behind it now and then;
 - reserves at the requirement and a tenth under it, for second homes,
   investment properties and extra financed properties, with retirement at
   60%, joint accounts and accounts not used to qualify;
 - contributions at each cap and a hundredth over, and LTV on each side of
   the 75% and 90% bands;
 - the transcript variance at 10.00 and 10.01 either way, two borrowers'
-  latest years, and a borrower without one;
+  latest years, income still under review beside them, and a borrower
+  without one;
 - a borrower without a credit report, no asset reports, no established
-  income, and a wage earner whose base wage is not on file.
+  income, and a base wage still under review beside one that counts.
 
 Amounts are whole dollars, but for the engine's own figures and what follows
 from them (a payoff with the costs rolled in, an old payment set from the
 new one) and, where a ratio's window is narrower than a dollar of income,
-the lead salary.
+the lead salary. A refinance is a loan someone could hold: the mortgage it
+pays off is on Borrower 1's report with its balance and payment, its
+principal and interest retires its balance at its stated rate within
+thirty years, a home-equity line kept behind it is a tradeline with a
+payment of its own, and no borrower files a bankruptcy while another of
+theirs is open. Overtime, a bonus or commission only ever comes beside a
+base wage.
 
 **What v1 leaves out, and why.** The engine raises questions of policy that
 its owners have not settled (docs/decisions.md, "Seasoning is counted in
@@ -378,8 +392,9 @@ engine's own derivations and rejects:
   too, so it is never decided non-QM;
 - a refinance of a second home or investment property, because a
   refinance's maximum ignores occupancy;
-- a household with no wage income, because INC-004 blocks every file
-  without a base wage where the sheet scopes it to wage earners; and
+- a household with no base wage, because INC-004 blocks every file
+  without a base-wage source where the sheet scopes it to wage earners, and
+  whether a commission or bonus earner with no base is one is open; and
   transcripts on a household with no variable, self-employed or rental
   income, which the sheet scopes INC-009 to;
 - asset reports from some borrowers and not others, because ability to
@@ -387,8 +402,10 @@ engine's own derivations and rejects:
 - a bright line where the rounded figure and the exact one fall on
   different sides (the ratio at 45 and 50, LTV against its maximum and the
   75 and 90 bands, the contribution cap, the variance at 10, the reserve
-  months, the 60-month recoup), and any rounded figure exactly on a half,
-  where binary rounding parts from decimal;
+  months, the 60-month recoup), and any figure the engine rounds in binary
+  exactly on a half, where binary rounding parts from decimal (two
+  borrowers' score average lands on one on purpose: it is exact, and both
+  round it up);
 - a seasoning record dated on the 1st or after the decision's day of the
   month, where the engine's calendar months part from whole months, and two
   records of one kind with one margin or date;
@@ -414,10 +431,23 @@ rejects and shows what the engine does there. The guard rejects none of
 **Every case a wrong reading turns on is in the held-out suite.** The edges
 whose cases a misread rule answers differently on (an LTV at its maximum, a
 non-occupant co-borrower's 95%, the 75% band at 75.00, a contribution at its
-cap, the older seasoning record, a late-Sunday or New Year's Eve rate) take
-them in a set order by their own count, so the 200 held-out files, about
-fourteen of each edge, carry at least three of each of 21 wrong readings,
-and a test holds that.
+cap, the older seasoning record, a chapter 11 or a bankruptcy with no
+chapter, a late-Sunday or New Year's Eve rate, a 25-year term, a prepayment
+penalty on a primary residence, a report with no scores, a manufactured
+home in the middle tier, income under review beside a transcript check)
+take them in a set order by their own count, so the 200 held-out files,
+about fourteen of each edge, carry at least three of each of 30 wrong
+readings, and a test holds that.
+
+**The rulebook's numbers are the reference's.** Every limit the rulebook
+states (the maximums, the reserve months, the seasoning minimums, the fee
+schedule, the Regulation Z tiers and lines, the recoup) is in `AUS_RULES`,
+which the text is written from and the reference reads; a test fails if a
+limit is typed into the reference instead. A number changed there moves
+the reference, and the tests that hold the reference to the engine fail.
+The rulebook's rules are also pinned sentence by sentence in the test, so
+a rule reworded or a number typed into the text fails until the test is
+changed with it by hand: refreshing the hash pin is not enough.
 
 The reference passes the held-out suite, a 300-task training suite and
 twelve worked cases: the verified minimal file ($400,000 on $500,000 at
@@ -426,8 +456,8 @@ twelve worked cases: the verified minimal file ($400,000 on $500,000 at
 of seasoning, the older record deciding, two borrowers' scores, a 60.0-month
 recoup, a late-Sunday rate and a co-borrower with no credit report. No task
 is redrawn, held-out or in 600 training draws, and the reference agrees with
-the engine on 2,000 candidates nothing filtered. Its longest file is 26
-tool calls in 4 turns. A test runs a sample under America/New_York and
+the engine on 2,000 candidates nothing filtered, and on 40,000 more in a
+probe. Its longest file is 27 tool calls in 4 turns. A test runs a sample under America/New_York and
 Asia/Tokyo in child processes and gets one hash. `env:audit` and
 `env:compare` read the outcome as the verdict.
 

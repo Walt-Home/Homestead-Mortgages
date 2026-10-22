@@ -19,9 +19,10 @@
  *   - scores: three, two and one bureau scores, a low bureau the middle
  *     score passes over, an own score at 620, two borrowers whose average
  *     lands on a half, and a report with no scores;
- *   - seasoning: each minimum (24, 48, 84) met and missed by a month,
- *     discharge falling back to filing, an older record that decides behind
- *     a later one, and records on the co-borrower's report;
+ *   - seasoning: each minimum (24, 48, 84) met and missed by a month, for
+ *     chapters 7, 11 and 13 and a bankruptcy with no chapter, discharge
+ *     falling back to filing, an older record that decides behind a later
+ *     one, and records on the co-borrower's report;
  *   - rate_set: late Sunday in New York, the year's first and the table's
  *     last days, an adjustable rate, a 25-year term, a prepayment penalty;
  *   - price_tests: spreads just under the HPML line and each General QM
@@ -30,16 +31,24 @@
  *   - small_loan: the $37,307.23 line where the flat fees make a primary
  *     loan high-cost, and the second home's points-and-fees counteroffer;
  *   - ntb: a refinance's scheduled payment, a saving of nothing, and the
- *     recoup at 60.0 and 60.1 months;
+ *     recoup at 60.0 and 60.1 months, with a home-equity line kept behind
+ *     it now and then;
  *   - reserves: second homes, investment properties and extra financed
  *     properties at their requirement and a tenth under it, retirement at
  *     60%, joint and unused accounts;
  *   - ipc: contributions exactly at each cap and a hundredth over it, and
  *     the 75% and 90% band lines;
  *   - transcripts: the variance at 10.00 and 10.01 either way, two
- *     borrowers' latest years, and a borrower without one;
+ *     borrowers' latest years, income still under review beside them, and
+ *     a borrower without one;
  *   - missing: a borrower without a credit report, no asset reports, no
- *     established income, and a wage earner with no base wage.
+ *     established income, and a base wage still under review beside one
+ *     that counts.
+ *
+ * A refinance is a loan someone could hold: the mortgage it pays off is on
+ * the report, marked paid off at closing; its payment retires its balance
+ * at its rate within thirty years; and a home-equity line kept behind it is
+ * a tradeline with a payment of its own.
  *
  * What v1 leaves out is in docs/environments.md; `ausInScope` runs on the
  * engine's own derivations and keeps a file only outside every region where
@@ -146,7 +155,6 @@ const scaledOf = (x: number, places: number): bigint => BigInt(Math.round(x * 10
 
 /* ── the guard ────────────────────────────────────────────────────────── */
 
-const WAGE: readonly IncomeType[] = ["base_wage", "overtime", "bonus", "commission"];
 const VARIABLE: readonly IncomeType[] = [
   "overtime",
   "bonus",
@@ -202,8 +210,9 @@ const inCents = (d: AusAnalysis["decision"], id: string, label: string, input: s
  *   - a non-QM or higher-priced result: neither raises a finding;
  *   - a refinance of a second home or investment property: the maximum LTV
  *     on a refinance ignores occupancy;
- *   - a household with no wage income: INC-004 blocks every file without a
- *     base wage, where the sheet scopes it to wage earners;
+ *   - a household with no base wage: INC-004 blocks every file without a
+ *     base-wage source, where the sheet scopes it to wage earners, and
+ *     whether a commission or bonus earner with no base is one is open;
  *   - transcripts on a household with no variable, self-employed or rental
  *     income: the sheet scopes INC-009 to those, the engine runs it on
  *     everyone;
@@ -217,7 +226,8 @@ const inCents = (d: AusAnalysis["decision"], id: string, label: string, input: s
  *     variance at 10, the reserve months, the 60-month recoup) where the
  *     rounded figure and the exact one fall on different sides, and any
  *     figure the engine rounds that lands exactly on a half, where binary
- *     rounding and decimal rounding part;
+ *     rounding and decimal rounding part (two borrowers' score average is
+ *     drawn on a half on purpose: it is exact, and both round it up);
  *   - a seasoning record dated on the 1st or after the decision's day of
  *     the month, where counting calendar months and counting whole months
  *     part, and two records of one kind with the same margin or date;
@@ -257,7 +267,7 @@ export function ausOutOfScope(
       return "an own score under 620";
   }
   const types = task.income_sources.map((s) => s.type);
-  if (!types.some((t) => WAGE.includes(t))) return "a household with no wage income";
+  if (!types.includes("base_wage")) return "a household with no base wage";
   if (borrowers.every((b) => b.transcripts.length > 0) && !types.some((t) => VARIABLE.includes(t)))
     return "transcripts on a household with no variable, self-employed or rental income";
   for (const b of borrowers)
@@ -718,17 +728,47 @@ const LTV_MAXIMUM_CASES = [
   ["non_occupant", 1],
   ["refinance", 0],
 ] as const;
+/**
+ * The rate-set dates, the terms the APOR does not price, and a prepayment
+ * penalty on a date the price tests decide: fourteen, so each of the cases
+ * a misread rule turns on (a UTC date, a 2025 rate, a 25-year term priced on
+ * the 30-year column, the penalty read either way) falls three times or more
+ * in the held-out suite's fourteen. The penalty is on a primary residence in
+ * the first fourteen and on a second home in the next.
+ */
 const RATE_SET_CASES = [
-  "late_sunday",
-  "new_years_eve",
-  "last_day_held",
-  "late_sunday",
-  "new_years_eve",
-  "past_the_table",
-  "new_years_day",
-  "adjustable_or_25_years",
-  "prepayment_penalty",
+  ["late_sunday", false],
+  ["new_years_eve", false],
+  ["last_day_held", true],
+  ["term_300", false],
+  ["late_sunday", true],
+  ["new_years_eve", false],
+  ["past_the_table", false],
+  ["term_300", false],
+  ["new_years_day", true],
+  ["adjustable", false],
+  ["late_sunday", false],
+  ["new_years_eve", false],
+  ["term_300", false],
+  ["last_day_held", true],
 ] as const;
+/**
+ * The scores edge's six kinds, fourteen to a round so the held-out suite has
+ * three of a report with no scores and three of an average on a half: 0 a
+ * low bureau the middle score passes over, 1 an own score of 620 from two
+ * scores, 2 one score, 3 two borrowers whose average lands on a half, 4 a
+ * report with no scores, 5 two borrowers, one at 620.
+ */
+const SCORES_CASES = [0, 4, 1, 3, 2, 4, 5, 0, 3, 4, 1, 5, 2, 3] as const;
+const scoresKind = (sub: number) => SCORES_CASES[sub % SCORES_CASES.length]!;
+/**
+ * The price tests' seven kinds, fourteen to a round: 0 under the HPML line, 1 the conforming
+ * limit and a dollar past it, 2 a jumbo loan under its line, 3 a second home or investment
+ * property under the top QM tier's line, 4 the top tier's bound and the middle tier, 5 the bottom
+ * tier, 6 a manufactured home in the middle tier, three times, so the held-out suite carries three
+ * on which reading the tiers before the manufactured-home rule gives 3.5 for its 6.5.
+ */
+const PRICE_TESTS_CASES = [0, 1, 2, 3, 4, 5, 6, 0, 6, 2, 3, 4, 5, 6] as const;
 const IPC_CASES = [
   ["band75", 0],
   ["cap9", 0],
@@ -993,15 +1033,17 @@ function incomeFor(debt: number, pitia: number, window: readonly [number, number
 
 /**
  * The household's income, sized so the back-end ratio lands in `window`.
- * The lead source (Borrower 1's base wage, or their variable pay when there
- * is none) takes what the others leave.
+ * The lead source, Borrower 1's base wage, takes what the others leave;
+ * overtime, a bonus or commission only ever comes beside a base wage. A
+ * source still under review is added after, so it moves nothing the ratio
+ * was sized on.
  */
 function giveIncome(
   r: Rng,
   d: Draft,
   pitia: number,
   window: readonly [number, number],
-  opts: { base?: boolean; variable?: boolean; pending?: boolean } = {},
+  opts: { variable?: boolean; pending?: boolean; pendingType?: IncomeType } = {},
 ) {
   const total = incomeFor(pitia + liabilitiesOf(d), pitia, window);
   const share = (lo: number, hi: number) =>
@@ -1011,7 +1053,7 @@ function giveIncome(
   for (const s of rents) s.monthly_cents = share(5, Math.floor(30 / rents.length));
   const already = rents.reduce((a, s) => a + s.monthly_cents, 0);
   const extra: Mutable<IncomeSource>[] = [];
-  if ((opts.base ?? true) && d.borrowers.length === 2 && r.chance(0.7))
+  if (d.borrowers.length === 2 && r.chance(0.7))
     extra.push({ type: "base_wage", monthly_cents: share(15, 30), continuance_established: true });
   if (opts.variable ?? r.chance(0.25))
     extra.push({
@@ -1028,17 +1070,12 @@ function giveIncome(
   const lead = total - already - extra.reduce((a, s) => a + s.monthly_cents, 0);
   if (lead < total / 5) throw new RangeError("no room left for the lead income");
   d.income.unshift(
-    {
-      type:
-        (opts.base ?? true) ? "base_wage" : r.pick(["commission", "overtime", "bonus"] as const),
-      monthly_cents: lead,
-      continuance_established: true,
-    },
+    { type: "base_wage", monthly_cents: lead, continuance_established: true },
     ...extra,
   );
   if (opts.pending ?? r.chance(0.12))
     d.income.push({
-      type: r.pick(["bonus", "commission", "self_employment"] as const),
+      type: opts.pendingType ?? r.pick(["bonus", "commission", "self_employment"] as const),
       monthly_cents: dollars(r, 300, 2_000),
       continuance_established: r.chance(0.5) ? null : false,
     });
@@ -1138,6 +1175,37 @@ function valueAbove(loan: number, value: number, step: number): number {
   return value;
 }
 
+/** The months a payment takes to retire a balance at an annual rate, or null when it never does. */
+function monthsToRetire(balance: number, payment: number, ratePct: number): number | null {
+  const i = ratePct / 1200;
+  const x = 1 - (balance * i) / payment;
+  return x <= 0 ? null : -Math.log(x) / Math.log(1 + i);
+}
+
+/**
+ * The loan a refinance pays off: the rate on the eighth grid nearest `target`
+ * at which its principal and interest retires its balance in 6 to 359 months,
+ * and how long ago it was opened, on the shortest standard term that leaves
+ * those months after at least one payment.
+ */
+function oldLoanTerms(
+  balance: number,
+  payment: number,
+  target: number,
+): { rate: string; seasoning: number } {
+  let best: { rate: number; months: number } | null = null;
+  for (let e = 16; e <= 96; e++) {
+    const rate = e / 8;
+    const months = monthsToRetire(balance, payment, rate);
+    if (months === null || months < 6 || months > 359) continue;
+    if (!best || Math.abs(rate - target) < Math.abs(best.rate - target)) best = { rate, months };
+  }
+  if (!best) throw new RangeError("no note rate retires the payoff within thirty years");
+  const remaining = Math.ceil(best.months);
+  const term = [120, 180, 240, 360].find((t) => t > remaining)!;
+  return { rate: best.rate.toFixed(3), seasoning: term - remaining };
+}
+
 /** The shape an edge's case asks for, before anything is drawn. */
 function shapeFor(r: Rng, edge: AusEdge, sub: number): Shape {
   switch (edge) {
@@ -1191,11 +1259,18 @@ function shapeFor(r: Rng, edge: AusEdge, sub: number): Shape {
       };
     }
     case "scores":
-      return { ltvBp: r.int(5000, 8000), borrowers: sub % 6 === 3 || sub % 6 === 5 ? 2 : 1 };
+      return {
+        ltvBp: r.int(5000, 8000),
+        borrowers: scoresKind(sub) === 3 || scoresKind(sub) === 5 ? 2 : 1,
+      };
     case "seasoning":
-      return { ltvBp: r.int(5000, 8000), ...(sub % 4 === 3 ? { borrowers: 2 as const } : {}) };
+      // The two bankruptcies of kind 5 are two people's: one person's would overlap.
+      return {
+        ltvBp: r.int(5000, 8000),
+        ...(sub % 4 === 3 || sub % 7 === 5 ? { borrowers: 2 as const } : {}),
+      };
     case "rate_set": {
-      const kind = RATE_SET_CASES[sub % RATE_SET_CASES.length]!;
+      const [kind, penalty] = RATE_SET_CASES[sub % RATE_SET_CASES.length]!;
       const shape: Shape = {
         ltvBp: r.int(5000, 8000),
         occupancy: "primary_residence",
@@ -1221,18 +1296,19 @@ function shapeFor(r: Rng, edge: AusEdge, sub: number): Shape {
           r.int(4, 20),
           r.int(0, 59),
         );
-      } else if (kind === "adjustable_or_25_years") {
-        if (Math.floor(sub / RATE_SET_CASES.length) % 2 === 0)
-          shape.amortization = "AdjustableRate";
-        else shape.term = 300;
-      } else {
+      } else if (kind === "adjustable") {
+        shape.amortization = "AdjustableRate";
+      } else if (kind === "term_300") {
+        shape.term = 300;
+      }
+      if (penalty) {
         shape.penalty = true;
-        shape.occupancy = r.chance(0.5) ? "primary_residence" : "second_home";
+        if (Math.floor(sub / RATE_SET_CASES.length) % 2 === 1) shape.occupancy = "second_home";
       }
       return shape;
     }
     case "price_tests": {
-      const kind = sub % 7;
+      const kind = PRICE_TESTS_CASES[sub % PRICE_TESTS_CASES.length]!;
       const valueFor = (loan: number) =>
         valueAbove(loan, Math.ceil((loan * 100) / 75 / 100_000) * 100_000, 100_000);
       if (kind === 0)
@@ -1289,7 +1365,8 @@ function shapeFor(r: Rng, edge: AusEdge, sub: number): Shape {
           spread: { aim: r.int(3500, 6499), under: 6500 },
         };
       }
-      const loan = dollars(r, 40_000, 137_900);
+      // Between the middle tier and the top one, where a manufactured home's 6.5 is not its tier's.
+      const loan = dollars(r, 82_800, 137_900);
       return {
         loan,
         value: valueFor(loan),
@@ -1319,9 +1396,10 @@ function shapeFor(r: Rng, edge: AusEdge, sub: number): Shape {
       };
     }
     case "ntb":
+      // Every third keeps a home-equity line behind the new loan, so it needs the room.
       return {
         purpose: "rate_term_refinance",
-        ltvBp: r.chance(0.7) ? r.int(5000, 8000) : r.int(8001, 9700),
+        ltvBp: sub % 3 === 2 || r.chance(0.7) ? r.int(5000, 8000) : r.int(8001, 9700),
       };
     case "reserves": {
       const kind = sub % 4;
@@ -1383,11 +1461,15 @@ function shapeFor(r: Rng, edge: AusEdge, sub: number): Shape {
 /**
  * Bankruptcies and derogatories, each a month either side of its minimum,
  * or an older record deciding behind a later one. Seven kinds, met and
- * missed in turn: every pair once in fourteen.
+ * missed in turn: every pair once in fourteen. The chapters a 48-month
+ * minimum covers (7, 11 and none given) take turns by round, so a chapter
+ * 11 or a bankruptcy with no chapter is short of its 48 months, or decides
+ * behind a chapter 13, in the held-out suite's fourteen.
  */
 function seasoningRecords(r: Rng, d: Draft, sub: number) {
   const on = plainDate(d.decided_at.slice(0, 10));
   const kind = sub % 7;
+  const round = Math.floor(sub / 7);
   const miss = sub % 2 === 1;
   const owner = d.borrowers.length === 2 && r.chance(0.5) ? 1 : 0;
   const push = (rec: PublicRecord, who = owner) =>
@@ -1429,7 +1511,7 @@ function seasoningRecords(r: Rng, d: Draft, sub: number) {
   switch (kind) {
     case 0:
       // Chapter 7, 11, or none given: all 48 months.
-      push(bankruptcy(r.pick(["7", "7", "11", null] as const), atMinimum(48)));
+      push(bankruptcy((["7", "11", null] as const)[round % 3]!, atMinimum(48)));
       break;
     case 1:
       push(bankruptcy("13", atMinimum(24)));
@@ -1442,16 +1524,17 @@ function seasoningRecords(r: Rng, d: Draft, sub: number) {
       break;
     case 4: {
       // No discharge: the filing date is the reference.
-      const chapter = r.pick(["7", "13"] as const);
+      const chapter = (["13", null, "7", "11"] as const)[round % 4]!;
       push(bankruptcy(chapter, atMinimum(chapter === "13" ? 24 : 48), false));
       break;
     }
     case 5: {
-      // A later chapter 13 past its 24 months, and an older chapter 7 short of its 48, or past
-      // them by less than the chapter 13 is past its own: the older one decides either way.
-      const [m13, m7] = miss ? apart(25, 35, 24, 38, 47, 48) : apart(30, 40, 24, 49, 53, 48);
-      push(bankruptcy("13", m13));
-      push(bankruptcy("7", m7), d.borrowers.length - 1);
+      // A later chapter 13 past its 24 months, and an older 48-month bankruptcy short of its 48,
+      // or past them by less than the chapter 13 is past its own: the older one decides either
+      // way. Each is a different borrower's, since one person's would overlap.
+      const [m13, m48] = miss ? apart(25, 35, 24, 38, 47, 48) : apart(30, 40, 24, 49, 53, 48);
+      push(bankruptcy("13", m13), owner);
+      push(bankruptcy((["11", null, "7"] as const)[round % 3]!, m48), 1 - owner);
       break;
     }
     default: {
@@ -1518,6 +1601,8 @@ export function drawAusCandidate(
   const pitia = taskOf(d, id, split, suiteSeed, index).lender_estimates.housing_payment_cents;
   const closing = closingOf(d.loan.amount_cents);
   const missing = edge === "missing" ? sub % 5 : -1;
+  /** On a refinance, how long ago the loan it pays off was opened, in months. */
+  let subjectOpenedMonthsAgo = 0;
 
   if (d.loan.purpose === "purchase") {
     // Interested-party contributions: under the cap, or aimed at it on the ipc edge.
@@ -1554,18 +1639,27 @@ export function drawAusCandidate(
             ? Math.floor((closing * 1_000) / 60_120)
             : Math.ceil(closing / r.int(8, 45));
     while (saving > 0 && roundedExactly(BigInt(closing), BigInt(saving), 1).tie) saving += 1;
+    // The payoff: now and then exactly the loan less its costs, so the borrower brings nothing;
+    // otherwise they bring part of the costs, or more than them and pay the balance down.
+    const brings = r.chance(0.1) ? 0 : dollars(r, 1, Math.floor(closing / 100) + 5_000);
+    const balance = d.loan.amount_cents - closing + brings;
+    // The old loan's principal and interest is the new one's and the saving; its rate retires
+    // the balance in thirty years or less, and a scheduled payment carries escrow besides.
+    const oldPi = pi + saving;
+    const old = oldLoanTerms(
+      balance,
+      oldPi,
+      Number(d.product.note_rate_pct) + (kind === 1 ? r.int(-8, 2) : r.int(2, 16)) / 8,
+    );
     d.loan.existing_loan = {
-      balance_cents: r.chance(0.5)
-        ? d.loan.amount_cents - closing
-        : d.loan.amount_cents - dollars(r, 0, 3_000),
-      rate_pct: r.chance(0.8)
-        ? (Number(d.product.note_rate_pct) + r.int(2, 16) / 8).toFixed(3)
-        : null,
-      monthly_payment_cents: pi + saving,
+      balance_cents: balance,
+      rate_pct: r.chance(0.8) ? old.rate : null,
+      monthly_payment_cents: kind === 0 ? oldPi + dollars(r, 250, 900) : oldPi,
       payment_basis: kind === 0 ? "scheduled_payment" : "principal_and_interest",
     };
+    subjectOpenedMonthsAgo = old.seasoning;
     const room = Math.floor((d.property.value_cents * 95) / 100 / 100) * 100 - d.loan.amount_cents;
-    if (room > 2_000_000 && r.chance(0.15)) {
+    if (room > 2_000_000 && ((edge === "ntb" && sub % 3 === 2) || r.chance(0.15))) {
       // Neither combined ratio on a half.
       const value = BigInt(d.property.value_cents);
       const loan = BigInt(d.loan.amount_cents);
@@ -1580,7 +1674,7 @@ export function drawAusCandidate(
   }
 
   // Credit.
-  const kindOfScores = sub % 6;
+  const kindOfScores = scoresKind(sub);
   const ownScores =
     edge !== "scores"
       ? undefined
@@ -1612,12 +1706,54 @@ export function drawAusCandidate(
     if (kindOfScores === 4) d.borrowers[d.borrowers.length - 1]!.credit!.scores = [];
   }
   otherProperties(r, d, keys);
+  const existing = d.loan.existing_loan;
+  if (existing) {
+    // The mortgage this loan pays off is on the report, and leaves the ratio at closing.
+    const on = plainDate(d.decided_at.slice(0, 10));
+    const subject = unique(
+      r,
+      {
+        creditor: r.pick(CREDITORS.mortgage),
+        type: "mortgage",
+        opened_on: monthsBefore(r, on, subjectOpenedMonthsAgo),
+        balance_cents: existing.balance_cents,
+        credit_limit_cents: null,
+        monthly_payment_cents: existing.monthly_payment_cents,
+        dti_exclusion: "paid_off_at_closing",
+      },
+      keys,
+    );
+    d.borrowers[0]!.credit!.tradelines.push(subject);
+    if (d.borrowers.length === 2 && r.chance(0.5))
+      d.borrowers[1]!.credit!.tradelines.push({ ...subject });
+  }
+  if (d.loan.junior_lien_credit_limit_cents > 0) {
+    // A home-equity line kept behind the new loan is a debt like any other: interest on what is drawn.
+    d.borrowers[0]!.credit!.tradelines.push(
+      unique(
+        r,
+        {
+          creditor: r.pick(CREDITORS.heloc),
+          type: "heloc",
+          opened_on: openedOn(r),
+          balance_cents: d.loan.junior_lien_balance_cents,
+          credit_limit_cents: d.loan.junior_lien_credit_limit_cents,
+          monthly_payment_cents:
+            Math.round((d.loan.junior_lien_balance_cents * 0.0075) / 100) * 100,
+          dti_exclusion: null,
+        },
+        keys,
+      ),
+    );
+  }
   if (edge === "dti" && d.borrowers.length === 2) {
     const joint = unique(r, tradeline(r, "auto", dollars(r, 300, 650)), keys);
     d.borrowers[0]!.credit!.tradelines.push(joint);
     d.borrowers[1]!.credit!.tradelines.push({ ...joint });
   }
-  const own = d.borrowers[0]!.credit!.tradelines.filter((t) => t.type !== "mortgage");
+  const own = d.borrowers[0]!.credit!.tradelines.filter(
+    (t) => t.type !== "mortgage" && t.type !== "heloc",
+  );
   if ((edge === "dti" || r.chance(0.12)) && own.length > 0) {
     const t = r.pick(own);
     const shared =
@@ -1634,9 +1770,11 @@ export function drawAusCandidate(
   // Income.
   const from = r.int(1800, 4200);
   giveIncome(r, d, pitia, shape.dti ?? [from, from + 60], {
-    base: missing !== 3,
-    ...(edge === "transcripts" || missing === 3 ? { variable: true } : {}),
-    ...(edge === "dti" ? { pending: true } : {}),
+    ...(edge === "transcripts" ? { variable: true } : {}),
+    // Income under review: beside the debts aimed at a line, beside a transcript check that
+    // counts it, and a base wage of its own (a second job, or the co-borrower's) beside one that counts.
+    ...(edge === "dti" || (edge === "transcripts" && sub % 3 === 1) ? { pending: true } : {}),
+    ...(missing === 3 ? { pending: true, pendingType: "base_wage" as const } : {}),
   });
   if (missing === 2)
     for (const s of d.income) s.continuance_established = r.chance(0.5) ? null : false;
@@ -1895,13 +2033,30 @@ export const AUS_SPEC_CASES: readonly { readonly name: string; readonly file: Ca
     name: "A refinance of $300,000 at 6% saving $98.75 a month: $5,925 recouped in 60.0 months",
     file: {
       ...MINIMAL,
+      // The loan it pays off is on the report, left out of the ratio: it is paid at closing.
+      borrowers: [
+        withCredit({
+          tradelines: [
+            {
+              creditor: "Granite Home Loans",
+              type: "mortgage",
+              opened_on: "2024-09-12",
+              balance_cents: 29_407_500,
+              credit_limit_cents: null,
+              monthly_payment_cents: 189_740,
+              dti_exclusion: "paid_off_at_closing",
+            },
+          ],
+        }),
+      ],
       loan: {
         ...MINIMAL.loan,
         purpose: "rate_term_refinance",
         amount_cents: 30_000_000,
+        // $1,897.40 retires $294,075 at 6.5% in about 339 months: a loan opened 21 months ago.
         existing_loan: {
           balance_cents: 29_407_500,
-          rate_pct: "7.250",
+          rate_pct: "6.500",
           monthly_payment_cents: 189_740,
           payment_basis: "principal_and_interest",
         },

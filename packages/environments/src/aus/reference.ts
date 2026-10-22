@@ -6,11 +6,13 @@
  * tool call. Calls that do not depend on each other go together in one turn,
  * as a model may make them. Held to the grader on every generated task, it is
  * the proof that each file can be decided from the rulebook and the tools
- * alone.
+ * alone. Every number it uses is read from `AUS_RULES`, the numbers the
+ * rulebook is written from, so the two cannot state different limits.
  */
 
 import type { ToolCall } from "../episode.js";
 import { ScriptedPolicy, type Call, type Json, type Step } from "../refi/reference.js";
+import { AUS_RULES as RULES } from "./rulebook.js";
 import { AUS_SUBMIT_TOOL } from "./tools.js";
 
 interface Pending {
@@ -93,19 +95,16 @@ interface Borrower {
   transcripts: { tax_year: number; wages_cents: number }[];
 }
 
-/** The QM points-and-fees limit for 2026: a percent of the total loan amount, or flat cents. */
+/** The QM points-and-fees limit: the first tier the loan amount reaches, a percent of the total loan amount or flat cents. */
 function qmFeeLimit(loanCents: number): { percent: number } | { cents: number } {
-  if (loanCents >= 13_795_800) return { percent: 3 };
-  if (loanCents >= 8_277_500) return { cents: 413_900 };
-  if (loanCents >= 2_759_200) return { percent: 5 };
-  if (loanCents >= 1_724_500) return { cents: 138_000 };
-  return { percent: 8 };
+  return RULES.qmPointsAndFees.find((t) => loanCents >= t.fromCents)!;
 }
+/** The General QM threshold: a manufactured home's below the top tier, whatever its tier; otherwise the first tier reached. */
 function qmSpreadCap(loanCents: number, propertyType: string): string {
-  if (propertyType === "manufactured" && loanCents < 13_795_800) return "6.5";
-  if (loanCents >= 13_795_800) return "2.25";
-  if (loanCents >= 8_277_500) return "3.5";
-  return "6.5";
+  const qm = RULES.generalQm;
+  if (propertyType === "manufactured" && loanCents < qm.manufacturedBelowCents)
+    return qm.manufacturedPct;
+  return qm.tiers.find((t) => loanCents >= t.fromCents)!.pct;
 }
 
 export function* ausSteps(p: Json, _call: Call): Step<Json> {
@@ -149,15 +148,21 @@ export function* ausSteps(p: Json, _call: Call): Step<Json> {
 
   // Step 3: the records, each with its reference date and minimum.
   const records = borrowers.flatMap((b) => b.credit?.public_records ?? []);
+  const minimums = RULES.seasoningMonths;
   const seasoning = records.map((r) => ({
     kind: r.type === "bankruptcy" ? "bankruptcy" : "derogatory",
     reference: r.type === "bankruptcy" ? (r.discharged_on ?? r.date) : r.date,
     minimum:
-      r.type === "bankruptcy" ? (r.chapter === "13" ? 24 : 48) : r.type === "foreclosure" ? 84 : 48,
+      r.type === "bankruptcy"
+        ? r.chapter === "13"
+          ? minimums.chapter13
+          : minimums.otherBankruptcy
+        : r.type === "foreclosure"
+          ? minimums.foreclosure
+          : minimums.shortSaleOrDeedInLieu,
   }));
 
-  // Step 4.
-  if (!income.some((s) => s.type === "base_wage")) blocked.add("INC-004");
+  // Step 4: every household here has a base wage.
   const established = income.filter((s) => s.continuance_established === true);
   const transcriptsRun = borrowers.length > 0 && borrowers.every((b) => b.transcripts.length > 0);
   const latestWages = borrowers.map((b) =>
@@ -192,12 +197,14 @@ export function* ausSteps(p: Json, _call: Call): Step<Json> {
         if (!a.used_to_qualify) continue;
         eligible.push(
           a.type === "retirement"
-            ? `${a.vested_balance_cents ?? 0} * 60 / 100`
+            ? `${a.vested_balance_cents ?? 0} * ${RULES.retirementCountsPct} / 100`
             : String(a.balance_cents),
         );
       }
   }
-  const occupancyMonths = primary ? 0 : occupancy === "second_home" ? 2 : 6;
+  const reserveRule = RULES.reserveMonths;
+  const occupancyMonths =
+    reserveRule[occupancy as "primary_residence" | "second_home" | "investment"];
 
   // Everything that depends on nothing but the file, together.
   const first: Pending[] = [
@@ -214,12 +221,16 @@ export function* ausSteps(p: Json, _call: Call): Step<Json> {
     calc(
       `round((${loanCents} + ${Number(loan["junior_lien_credit_limit_cents"])}) * 100 / ${value}, 2)`,
     ),
-    calc(`round(${loanCents} * 0.5 / 100) + 109500 + 49500`),
+    calc(
+      `round(${loanCents} * ${RULES.fees.pointsPct} / 100) + ${RULES.fees.flatCents.join(" + ")}`,
+    ),
     calc(`round(${ipc} * 100 / ${value}, 2)`),
     calc(
       `${purchase ? value : Number(existing!["balance_cents"])} + ${closing} - ${ipc} - ${loanCents}`,
     ),
-    calc(`${occupancyMonths} + 2 * (${Number(property["financed_properties"])} - 1)`),
+    calc(
+      `${occupancyMonths} + ${reserveRule.perExtraFinanced} * (${Number(property["financed_properties"])} - 1)`,
+    ),
   ];
   const twoScores = scored && own.length === 2;
   if (twoScores) first.push(calc(`round((${own[0]} + ${own[1]}) / 2)`));
@@ -276,12 +287,13 @@ export function* ausSteps(p: Json, _call: Call): Step<Json> {
   const derogatoryMonths = decide("derogatory");
 
   // Step 4, finished.
-  if (variance !== null && (above(variance, "10") || above("-10", variance)))
+  const tolerance = RULES.transcriptTolerancePct;
+  if (variance !== null && (above(variance, tolerance) || above(`-${tolerance}`, variance)))
     findings.push("TRANSCRIPT_VARIANCE");
 
   // Step 7: what the rate-set date, the fees and the ratios need next.
-  const aporTerm = fixedRate && [120, 180, 240, 360].includes(term);
-  const overEighty = BigInt(loanCents) * 100n > BigInt(value) * 80n;
+  const aporTerm = fixedRate && (RULES.aporTermsMonths as readonly number[]).includes(term);
+  const overEighty = BigInt(loanCents) * 100n > BigInt(value) * BigInt(RULES.aprRefusedOverLtvPct);
   const incomeKnown = BigInt(qualifying) !== 0n;
   const second: Pending[] = [calc(`${loanCents} - ${pointsAndFees}`)];
   if (aporTerm) second.push({ name: "apor", input: { date: rateSetOn, term_years: term / 12 } });
@@ -319,13 +331,16 @@ export function* ausSteps(p: Json, _call: Call): Step<Json> {
   if (apor === null || apr === null) blocked.add("UW-008");
 
   // Step 5, finished.
-  if (back !== null && above(back, "45")) findings.push("DTI_ELEVATED");
+  if (back !== null && above(back, RULES.dtiElevatedOverPct)) findings.push("DTI_ELEVATED");
   const atr = back !== null && withAssets.length === borrowers.length && borrowers.length > 0;
 
   // Step 6.
   const anyNonOccupant = borrowers.some((b) => b.occupies_property === false);
-  const byPurpose = !purchase ? 97 : primary ? 97 : occupancy === "second_home" ? 90 : 85;
-  const maxLtv = anyNonOccupant ? Math.min(byPurpose, 95) : byPurpose;
+  const ltvRule = RULES.maxLtvPct;
+  const byPurpose = !purchase
+    ? ltvRule.refinance
+    : ltvRule[occupancy as "primary_residence" | "second_home" | "investment"];
+  const maxLtv = anyNonOccupant ? Math.min(byPurpose, ltvRule.nonOccupant) : byPurpose;
   if (above(ltv, maxLtv)) findings.push("LTV_EXCEEDS_MAXIMUM");
 
   // Step 8, finished.
@@ -337,24 +352,28 @@ export function* ausSteps(p: Json, _call: Call): Step<Json> {
   }
 
   // Step 9.
-  const ipcCap =
-    occupancy === "investment" ? 2 : atLeast(ltv, "90.01") ? 3 : atLeast(ltv, "75.01") ? 6 : 9;
+  const ipcRule = RULES.ipcCapPct;
+  const ipcCap: number =
+    occupancy === "investment"
+      ? ipcRule.investment
+      : (ipcRule.bands.find((b) => atLeast(ltv, b.fromLtvPct))?.cap ?? ipcRule.otherwise);
   if (above(ipcRatio, ipcCap)) findings.push("IPC_EXCEEDS_LIMIT");
 
   // Steps 10 to 14: the thresholds and the limits they set.
-  const year2026 = rateSetOn.startsWith("2026-");
+  const thresholdsHeld = rateSetOn.startsWith(`${RULES.thresholdYear}-`);
+  const hoepa = RULES.hoepa;
   const limitRule = qmFeeLimit(loanCents);
   const third: Pending[] = [];
   const spreadKnown = apr !== null && apor !== null;
   if (spreadKnown) third.push(calc(`${apr} - ${apor}`));
-  if (year2026) {
+  if (thresholdsHeld) {
     if ("percent" in limitRule)
       third.push(calc(`round(${totalLoan} * ${limitRule.percent} / 100)`));
     third.push(
       calc(
-        loanCents >= 2_759_200
-          ? `round(${totalLoan} * 5 / 100)`
-          : `min(round(${totalLoan} * 8 / 100), 138000)`,
+        loanCents >= hoepa.smallBelowCents
+          ? `round(${totalLoan} * ${hoepa.feePct} / 100)`
+          : `min(round(${totalLoan} * ${hoepa.smallPct} / 100), ${hoepa.smallCapCents})`,
       ),
     );
   }
@@ -367,7 +386,7 @@ export function* ausSteps(p: Json, _call: Call): Step<Json> {
   const spread = spreadKnown ? last() : null;
   let qmLimit: string | null = null;
   let hoepaLimit: string | null = null;
-  if (year2026) {
+  if (thresholdsHeld) {
     qmLimit = "percent" in limitRule ? last() : String(limitRule.cents);
     hoepaLimit = last();
   }
@@ -375,14 +394,16 @@ export function* ausSteps(p: Json, _call: Call): Step<Json> {
 
   // Step 11.
   let qm: string | null = null;
-  if (spread === null || !year2026) blocked.add("UW-006");
-  else if (!atr) qm = "non_qm";
-  else
-    qm = milli(spread) < milli(qmSpreadCap(loanCents, String(property["type"]))) ? "qm" : "non_qm";
+  let qmThreshold: string | null = null;
+  if (spread === null || !thresholdsHeld) blocked.add("UW-006");
+  else {
+    qmThreshold = qmSpreadCap(loanCents, String(property["type"]));
+    qm = atr && milli(spread) < milli(qmThreshold) ? "qm" : "non_qm";
+  }
 
   // Step 12.
   let pfPass: boolean | null = null;
-  if (!year2026) blocked.add("UW-007");
+  if (!thresholdsHeld) blocked.add("UW-007");
   else {
     pfPass = BigInt(pointsAndFees) <= BigInt(qmLimit!);
     if (!pfPass) findings.push("POINTS_AND_FEES_EXCEEDED");
@@ -390,16 +411,20 @@ export function* ausSteps(p: Json, _call: Call): Step<Json> {
 
   // Step 13.
   let hpml: boolean | null = null;
+  let hpmlThreshold: string | null = null;
   if (spread !== null && primary) {
-    if (!year2026) blocked.add("UW-008");
-    else hpml = milli(spread) >= milli(loanCents > 83_275_000 ? "2.5" : "1.5");
+    if (!thresholdsHeld) blocked.add("UW-008");
+    else {
+      hpmlThreshold = loanCents > RULES.hpml.jumboOverCents ? RULES.hpml.jumboPct : RULES.hpml.pct;
+      hpml = milli(spread) >= milli(hpmlThreshold);
+    }
   }
 
   // Step 14.
   let highCost: boolean | null = null;
   if (primary) {
-    const rateTrigger = spread === null ? null : milli(spread) > milli("6.5");
-    const feeTrigger = !year2026 ? null : BigInt(pointsAndFees) > BigInt(hoepaLimit!);
+    const rateTrigger = spread === null ? null : milli(spread) > milli(hoepa.rateSpreadOverPct);
+    const feeTrigger = !thresholdsHeld ? null : BigInt(pointsAndFees) > BigInt(hoepaLimit!);
     const penaltyTrigger = product["prepayment_penalty"] === true ? null : false;
     const triggers = [rateTrigger, feeTrigger, penaltyTrigger];
     if (triggers.includes(true)) highCost = true;
@@ -412,7 +437,7 @@ export function* ausSteps(p: Json, _call: Call): Step<Json> {
   let ntbSatisfied: boolean | null = null;
   if (!purchase) {
     if (!ntbMeasured) blocked.add("APP-019");
-    else ntbSatisfied = recoup === null ? false : !above(recoup, "60");
+    else ntbSatisfied = recoup === null ? false : !above(recoup, RULES.recoupWithinMonths);
     if (ntbSatisfied === false) findings.push("NTB_NOT_SATISFIED");
   }
 
@@ -468,7 +493,10 @@ export function* ausSteps(p: Json, _call: Call): Step<Json> {
     apor_week_of: weekOf,
     apor_pct: apor === null ? null : fixed(apor, 2),
     apr_pct: apr === null ? null : fixed(apr, 3),
+    spread_pct: spread === null ? null : fixed(spread, 3),
+    qm_threshold_pct: qmThreshold === null ? null : fixed(qmThreshold, 2),
     qm_status: qm,
+    hpml_threshold_pct: hpmlThreshold === null ? null : fixed(hpmlThreshold, 2),
     is_hpml: hpml,
     ntb_recoup_months: recoup,
     ntb_satisfied: ntbSatisfied,

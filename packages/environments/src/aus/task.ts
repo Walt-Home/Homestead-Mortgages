@@ -22,7 +22,8 @@ export const AUS_ENVIRONMENT_VERSION = "1.0.0";
 
 export type Bureau = "equifax" | "experian" | "transunion";
 export type TradelineType = "mortgage" | "revolving" | "installment" | "auto" | "student" | "heloc";
-export type DtiExclusion = "paid_by_another_party" | "fewer_than_ten_payments_left";
+export type DtiExclusion =
+  "paid_by_another_party" | "fewer_than_ten_payments_left" | "paid_off_at_closing";
 export type PublicRecordType = "bankruptcy" | "foreclosure" | "short_sale" | "deed_in_lieu";
 export type AccountType = "checking" | "savings" | "money_market" | "brokerage" | "retirement";
 export type IncomeType =
@@ -46,7 +47,11 @@ export interface Tradeline {
   /** A revolving line's or a HELOC's limit; null on an installment debt. */
   readonly credit_limit_cents: number | null;
   readonly monthly_payment_cents: number;
-  /** Why the payment is left out of the debt-to-income ratio, or null when it counts. */
+  /**
+   * Why the payment is left out of the debt-to-income ratio, or null when it counts: paid by
+   * another party, fewer than ten payments left, or paid off at closing, as the mortgage a
+   * refinance pays off is.
+   */
   readonly dti_exclusion: DtiExclusion | null;
 }
 

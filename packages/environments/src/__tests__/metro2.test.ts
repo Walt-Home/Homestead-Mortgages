@@ -12,7 +12,15 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { daysBetween, plainDate, type PlainDate } from "@hm/kernel/calendar";
+import {
+  addDays,
+  addMonths,
+  daysBetween,
+  parts,
+  plainDate,
+  type PlainDate,
+} from "@hm/kernel/calendar";
+import { balanceAfter } from "@hm/refi-review";
 import { describe, expect, it } from "vitest";
 import { runEpisode } from "../episode.js";
 import { sha256, toJsonLine } from "../record.js";
@@ -21,8 +29,10 @@ import { applyFifo } from "../pmi/ported/delinquency.js";
 import {
   METRO2_EDGES,
   METRO2_HELDOUT_SUITE,
+  METRO2_RULEBOOK,
   METRO2_SPEC_CASES,
   Metro2ReferencePolicy,
+  asOfOf,
   delinquencyBegan,
   drawMetro2Candidate,
   drawMetro2Task,
@@ -31,6 +41,7 @@ import {
   generateMetro2Suite,
   generateMetro2Task,
   gradeMetro2Against,
+  ledgerAsOf,
   metro2EdgeOf,
   metro2FairToGrade,
   metro2Furnishing,
@@ -40,7 +51,9 @@ import {
   metro2SpecTasks,
   metro2TaskId,
   parseMetro2Submission,
+  referralEnded,
   stateFor,
+  type ConsumerAnswer,
   type FurnishedRecord,
   type InForce,
   type Metro2Answer,
@@ -132,6 +145,10 @@ const forbearanceMay: InForce = {
   effective_on: plainDate("2027-05-01"),
   plan_payment_cents: 0n,
 };
+const referredJune: InForce = {
+  kind: "foreclosure_referral",
+  referred_on: plainDate("2027-06-10"),
+};
 
 /** A spec task with some of its months changed, or with months added after its window, each a copy of its last. */
 function variant(
@@ -160,6 +177,158 @@ function variant(
     })),
   ].sort((a, b) => (a.received_on < b.received_on ? -1 : a.received_on > b.received_on ? 1 : 0));
   return { ...t, months, receipts, policy: { ...t.policy, ...change.policy } };
+}
+
+const CLOSING_KINDS = ["payoff", "short_sale", "foreclosure_sale", "deed_in_lieu"];
+const PHP_CHAR: Readonly<Record<string, string>> = {
+  "11": "0",
+  "71": "1",
+  "78": "2",
+  "80": "3",
+  "82": "4",
+  "83": "5",
+  "84": "6",
+};
+const m2date = (x: PlainDate | null) =>
+  x === null ? "00000000" : `${x.slice(5, 7)}${x.slice(8, 10)}${x.slice(0, 4)}`;
+
+/**
+ * An answer that never applies a receipt and never counts a day: every month-end is taken as current
+ * (status 11 but for a closing or a workout's, nothing past due but a repayment plan's arrears, no DOFD,
+ * a closing rated 0), and everything else is read off the task by the rulebook: the special comment, the
+ * balance, payment, terms and K4 off the books and what is in force, the month's receipts summed, the
+ * identifiers checked, the PHP carried with D for an omitted month, and the consumers' segments.
+ */
+function readingOnly(t: Metro2Task): Metro2Answer {
+  const round = t.policy.metro2_rounding === "round";
+  const money = (c: bigint) => metro2Money(c, round ? "round" : "truncate");
+  const P_ = t.loan.pi_cents + t.loan.escrow_cents;
+  let php = t.last_record
+    ? (t.last_record.payment_history_profile + "B".repeat(24)).slice(0, 24)
+    : null;
+  let prior = t.last_record ? (PHP_CHAR[t.last_record.account_status] ?? "0") : "B";
+  let special: string | null = null;
+  const records: MonthRecord[] = t.months.map((m) => {
+    const asOf = asOfOf(m.month);
+    const here = php === null ? "B".repeat(24) : (prior + php).slice(0, 24);
+    php = here;
+    const errors: string[] = [];
+    if (m.books.min === null) errors.push("K3_MIN_MISSING");
+    else if (!/^\d{18}$/.test(m.books.min)) errors.push("MIN_NOT_18_DIGITS");
+    if (!/^\d{10}$/.test(m.books.fnma_loan_number)) errors.push("K3_FNMA_LOAN_NUMBER");
+    if (errors.length > 0) {
+      prior = "D";
+      return { month: m.month, furnished: false, hard_errors: errors.sort() };
+    }
+    let status = "11";
+    let rating = "";
+    let closed: PlainDate | null = null;
+    let apd = 0n;
+    let sc = "";
+    let scheduled = P_;
+    let balance =
+      m.books.upb_cents + m.books.deferred_principal_cents + m.books.forborne_principal_cents;
+    let terms =
+      t.policy.terms_duration === "original"
+        ? t.loan.original_term_months
+        : m.books.remaining_term_months;
+    let k4: FurnishedRecord["k4"] = null;
+    const referral = m.in_force.some((e) => e.kind === "foreclosure_referral");
+    let closing = false;
+    for (const e of m.in_force) {
+      if (e.kind === "forbearance_plan") {
+        sc = "CP";
+        scheduled = e.plan_payment_cents;
+      } else if (e.kind === "repayment_plan") {
+        apd = e.remaining_arrears_cents;
+        if (e.plan_payment_cents < P_) sc = "AC";
+      } else if (e.kind === "trial_plan") sc = "AC";
+      else if (e.kind === "modification") {
+        sc = "CO";
+        scheduled = e.new_piti_cents;
+        terms = e.new_term_months;
+        if (m.books.forborne_principal_cents > 0n)
+          k4 = {
+            balloon_due_date: m2date(m.books.maturity_date),
+            balloon_amount: money(m.books.forborne_principal_cents),
+          };
+      } else if (e.kind === "payment_deferral")
+        k4 = {
+          balloon_due_date: m2date(m.books.maturity_date),
+          balloon_amount: money(m.books.deferred_principal_cents),
+        };
+      else if (CLOSING_KINDS.includes(e.kind) && "closed_on" in e) {
+        closing = true;
+        closed = e.closed_on;
+        rating = "0";
+        if (e.kind === "payoff") {
+          status = "13";
+          if (e.by_refinance) sc = "AS";
+          balance = 0n;
+        } else if (e.kind === "short_sale") {
+          status = referral ? "65" : "13";
+          sc = "AU";
+          balance = 0n;
+        } else {
+          status = e.kind === "foreclosure_sale" ? "94" : "89";
+          if (!e.deficiency_pursued) balance = 0n;
+        }
+      }
+    }
+    if (!closing && referral && sc === "") sc = "BO";
+    const payoff = m.in_force.find((e) => e.kind === "payoff");
+    const funds = payoff?.kind === "payoff" ? payoff.payoff_funds_cents : 0n;
+    const paid =
+      t.receipts
+        .filter((r) => r.received_on.slice(0, 7) === m.month && r.received_on <= asOf)
+        .reduce((a, r) => a + r.amount_cents, 0n) + funds;
+    const dates = [
+      ...t.receipts.filter((r) => r.received_on <= asOf).map((r) => r.received_on),
+      ...(payoff && "closed_on" in payoff ? [payoff.closed_on] : []),
+    ].sort();
+    prior = PHP_CHAR[status] ?? "0";
+    special = sc;
+    return {
+      month: m.month,
+      furnished: true,
+      account_status: status,
+      payment_rating: rating,
+      date_closed: m2date(closed),
+      amount_past_due: money(apd),
+      date_of_first_delinquency: "00000000",
+      payment_history_profile: here,
+      special_comment: sc,
+      current_balance: money(balance),
+      scheduled_monthly_payment: money(scheduled),
+      terms_duration: String(terms).padStart(3, "0"),
+      k4,
+      actual_payment_amount: money(paid),
+      date_of_last_payment: m2date(dates.at(-1) ?? null),
+    };
+  });
+  const consumers: ConsumerAnswer[] =
+    special === null
+      ? []
+      : t.consumers
+          .filter((c) => !c.successor_in_interest)
+          .sort((a, b) => a.position - b.position)
+          .map((c) => ({
+            party_id: c.party_id,
+            segment: c.position === 1 ? "base" : c.same_address_as_base ? "J1" : "J2",
+            ecoa: c.never_liable
+              ? "Z"
+              : c.deceased
+                ? "X"
+                : c.released
+                  ? "T"
+                  : c.liability === "guarantor"
+                    ? "5"
+                    : c.liability === "joint"
+                      ? "2"
+                      : "1",
+            special_comment: c.released ? "H" : special!,
+          }));
+  return { records, consumers };
 }
 
 describe("metro2-furnishing", () => {
@@ -407,6 +576,70 @@ describe("metro2-furnishing", () => {
       );
     });
 
+    it("a receipt on the month's last day counts at that month-end; on the next day, not (8.2 rule 10's variant)", () => {
+      const onTheLast = variant(SPEC[15]!, { receipts: [["2027-03-31", P]] });
+      const [, mar, apr] = recordsOf(onTheLast);
+      expect(mar).toMatchObject({
+        account_status: "11",
+        amount_past_due: "000000000",
+        date_of_first_delinquency: "00000000",
+        date_of_last_payment: "03312027",
+      });
+      expect([apr!.account_status, apr!.amount_past_due]).toEqual(["11", "000002459"]);
+      expect(apr!.payment_history_profile.slice(0, 3)).toBe("000");
+      const onTheFirst = variant(SPEC[15]!, { receipts: [["2027-04-01", P]] });
+      const [, mar2, apr2] = recordsOf(onTheFirst);
+      expect(mar2).toMatchObject({
+        account_status: "71",
+        amount_past_due: "000002459",
+        date_of_first_delinquency: "03012027",
+      });
+      expect(apr2!.payment_history_profile.slice(0, 3)).toBe("100");
+      for (const t of [onTheLast, onTheFirst]) expect(metro2FairToGrade(t), t.id).toBe(true);
+    });
+
+    it("reads a null MIN as K3_MIN_MISSING alone, as the engine and the rulebook both say (8.1 rule 9)", () => {
+      const missing = variant(SPEC[0]!, { months: { "2027-02": { books: { min: null } } } });
+      expect(expectedMetro2(missing).records[1]).toEqual({
+        month: "2027-02",
+        furnished: false,
+        hard_errors: ["K3_MIN_MISSING"],
+      });
+      const both = variant(SPEC[0]!, {
+        months: { "2027-02": { books: { min: null, fnma_loan_number: "12345678901" } } },
+      });
+      expect(expectedMetro2(both).records[1]).toEqual({
+        month: "2027-02",
+        furnished: false,
+        hard_errors: ["K3_FNMA_LOAN_NUMBER", "K3_MIN_MISSING"],
+      });
+      for (const t of [missing, both]) expect(metro2FairToGrade(t), t.id).toBe(true);
+      expect(METRO2_RULEBOOK).toContain(
+        "MIN_NOT_18_DIGITS: books.min is present and not exactly 18 digits (a null MIN is K3_MIN_MISSING alone)",
+      );
+    });
+
+    it("gives AC only to a plan paying less than the installment: one paying exactly P carries none", () => {
+      const plan = (pay: bigint) =>
+        variant(SPEC[0]!, {
+          months: {
+            "2027-04": {
+              in_force: [
+                {
+                  kind: "repayment_plan",
+                  plan_payment_cents: pay,
+                  remaining_arrears_cents: P * 2n,
+                },
+              ],
+            },
+          },
+        });
+      const at = (t: Metro2Task) => recordsOf(t).at(-1)!;
+      expect([at(plan(P)).special_comment, at(plan(P)).amount_past_due]).toEqual(["", "000004919"]);
+      expect(at(plan(P - 1n)).special_comment).toBe("AC");
+      for (const pay of [P, P - 1n]) expect(metro2FairToGrade(plan(pay))).toBe(true);
+    });
+
     it("are all in scope and solved by the rulebook, in the order the tests above read them", () => {
       for (const t of SPEC) {
         expect(metro2OutOfScope(t), t.id).toBeNull();
@@ -530,6 +763,49 @@ describe("metro2-furnishing", () => {
     expect(wrong(at(0, { special_comment: "" }))).toEqual(["month[2027-05].special_comment"]);
     expect(wrong(at(3, { date_of_last_payment: "08112027" }))).toEqual(["month[2027-08].payments"]);
     expect(wrong(at(3, { payment_rating: "0" }))).toEqual(["month[2027-08].status"]);
+    expect(wrong(at(3, { account_status: "71" }))).toEqual(["month[2027-08].status"]);
+    expect(wrong(at(3, { actual_payment_amount: "000002460" }))).toEqual([
+      "month[2027-08].payments",
+    ]);
+    expect(wrong(at(3, { terms_duration: "361" }))).toEqual(["month[2027-08].terms_and_balance"]);
+    // A closing's date and rating ride with its status (the foreclosure sale of 8.1-T8).
+    const sale = expectedMetro2(SPEC[7]!);
+    const saleWrong = (change: Partial<FurnishedRecord>) =>
+      gradeMetro2Against(sale, {
+        ...sale,
+        records: sale.records.map((r, i) =>
+          i === sale.records.length - 1 ? { ...furnished(r), ...change } : r,
+        ),
+      })
+        .fields.filter((x) => !x.ok)
+        .map((x) => x.field);
+    expect(saleWrong({ date_closed: "09212027" })).toEqual(["month[2027-09].status"]);
+    expect(saleWrong({ payment_rating: "5" })).toEqual(["month[2027-09].status"]);
+    // An omitted month answered with its hard errors less one, or one more: its seven fields either way.
+    const two = expectedMetro2(
+      variant(SPEC[0]!, {
+        months: { "2027-02": { books: { min: null, fnma_loan_number: "12345678901" } } },
+      }),
+    );
+    const omittedWith = (want: Metro2Answer, hard_errors: string[]) => ({
+      ...want,
+      records: want.records.map((r, i) =>
+        i === 1 ? { month: r.month, furnished: false as const, hard_errors } : r,
+      ),
+    });
+    for (const errors of [["K3_FNMA_LOAN_NUMBER"], ["K3_MIN_MISSING"]])
+      expect(
+        gradeMetro2Against(two, omittedWith(two, errors)).fields.filter((f) => !f.ok),
+      ).toHaveLength(7);
+    const missing = expectedMetro2(
+      variant(SPEC[0]!, { months: { "2027-02": { books: { min: null } } } }),
+    );
+    expect(
+      gradeMetro2Against(
+        missing,
+        omittedWith(missing, ["K3_MIN_MISSING", "MIN_NOT_18_DIGITS"]),
+      ).fields.filter((f) => !f.ok),
+    ).toHaveLength(7);
     // A month left out costs its seven fields; one that is not in the task is a field of its own.
     expect(wrong({ ...want, records: want.records.slice(1) })).toHaveLength(7);
     const extra = { ...furnished(want.records[3]), month: "2027-09" };
@@ -641,13 +917,13 @@ describe("metro2-furnishing", () => {
     });
   });
 
-  it("gives an answer that answers nothing little credit, and copying the last record forward not much more", () => {
+  it("passes nothing that never applies a receipt or counts a day, and states the floor that answer sets", () => {
     const tasks = generateMetro2Suite("heldout", 1, 200);
     const money = (c: bigint) => (c / 100n).toString().padStart(9, "0");
+    const grades = (f: (t: Metro2Task) => Metro2Answer) =>
+      tasks.map((t) => gradeMetro2Against(expectedMetro2(t), f(t)));
     const mean = (f: (t: Metro2Task) => Metro2Answer) =>
-      tasks
-        .map((t) => gradeMetro2Against(expectedMetro2(t), f(t)).score)
-        .reduce((a, b) => a + b, 0) / tasks.length;
+      grades(f).reduce((a, g) => a + g.score, 0) / tasks.length;
     const nothing = mean((t) => ({
       records: t.months.map((m) => ({
         month: m.month,
@@ -693,11 +969,21 @@ describe("metro2-furnishing", () => {
       })),
       consumers: [],
     }));
-    // About 0.24 and 0.41, the floors docs/environments.md states.
-    expect(nothing).toBeGreaterThan(0.18);
-    expect(nothing).toBeLessThan(0.3);
+    // Everything but the ledger read off the task: the floor docs/environments.md states, and it passes
+    // no task, because every window has a month-end whose ledger decides a graded field.
+    const reading = grades(readingOnly);
+    const floor = reading.reduce((a, g) => a + g.score, 0) / tasks.length;
+    expect(reading.filter((g) => g.pass)).toHaveLength(0);
+    // About 0.23, 0.40 and 0.65, as docs/environments.md states them.
+    expect(nothing).toBeGreaterThan(0.17);
+    expect(nothing).toBeLessThan(0.28);
     expect(forward).toBeGreaterThan(nothing);
-    expect(forward).toBeLessThan(0.5);
+    expect(forward).toBeLessThan(0.45);
+    expect(floor).toBeGreaterThan(0.6);
+    expect(floor).toBeLessThan(0.72);
+    // And on training draws: no window passes it.
+    for (const t of generateMetro2Suite("train", 5, 600))
+      expect(gradeMetro2Against(expectedMetro2(t), readingOnly(t)).pass, t.id).toBe(false);
   });
 
   it("can be solved from the rulebook and the tools: the reference passes the held-out suite and the spec", async () => {
@@ -841,7 +1127,7 @@ describe("metro2-furnishing", () => {
       expect(why(t)).toMatch(/^a closing current at its date/);
     });
 
-    it("a freeze at 30 days or more whose arrears are paid is omitted, then re-anchored later", () => {
+    it("a freeze at 30 days or more whose arrears are paid is omitted, then re-anchored later: a hard error no input satisfies", () => {
       // Five installments paid 06-20 under the freeze at 78.
       const t = variant(SPEC[1]!, {
         receipts: [["2027-06-20", P * 5n]],
@@ -856,7 +1142,7 @@ describe("metro2-furnishing", () => {
         date_of_first_delinquency: "07012027",
       });
       expect(furnished(jul).payment_history_profile.slice(0, 2)).toBe("D2");
-      expect(why(t)).toMatch(/DOFD_REQUIRED/);
+      expect(why(t)).toBe("a hard error the books cannot cause: DOFD_REQUIRED");
     });
 
     it("a deed in lieu or foreclosure sale with nothing unpaid needs a DOFD no input can give", () => {
@@ -896,6 +1182,51 @@ describe("metro2-furnishing", () => {
         },
       });
       expect(why(two)).toBe("two plans, workouts or closings in force at once");
+    });
+
+    it("a referral the loan has been cured of, or one beside a workout, would still be BO on a current loan", () => {
+      // 8.1-T8's referral of 06-10, and every installment paid 08-05: the engine furnishes 11, nothing past due, BO.
+      const cured = variant(SPEC[7]!, {
+        receipts: [["2027-08-05", P * 7n]],
+        months: { "2027-09": { in_force: [referredJune] } },
+      });
+      const [, , , aug] = recordsOf(cured);
+      expect([aug!.account_status, aug!.amount_past_due, aug!.special_comment]).toEqual([
+        "11",
+        "000000000",
+        "BO",
+      ]);
+      expect(
+        referralEnded(cured.installments, cured.receipts, d("2027-06-10"), d("2027-08-31")),
+      ).toBe(true);
+      expect(why(cured)).toBe(
+        "a foreclosure referral in force after the delinquency it was made on ended",
+      );
+      // 8.1-T4's deferral beside a referral: 8.1 rule 7 gives it a blank comment, the engine BO.
+      const deferred = variant(SPEC[1]!, {
+        months: {
+          "2027-08": {
+            in_force: [
+              { kind: "payment_deferral", completed_on: d("2027-08-15") },
+              { kind: "foreclosure_referral", referred_on: d("2027-07-20") },
+            ],
+          },
+        },
+      });
+      expect(furnished(expectedMetro2(deferred).records.at(-1)).special_comment).toBe("BO");
+      expect(why(deferred)).toBe("a foreclosure referral in force beside a workout");
+      // A referral dated after a short sale's closing.
+      const after = variant(SPEC[5]!, {
+        months: {
+          "2027-07": {
+            in_force: [
+              { kind: "short_sale", closed_on: d("2027-07-20") },
+              { kind: "foreclosure_referral", referred_on: d("2027-07-25") },
+            ],
+          },
+        },
+      });
+      expect(why(after)).toBe("a foreclosure referral after the closing date");
     });
 
     it("never hands the engine a disaster case, a charge-off or a transfer out", () => {
@@ -948,7 +1279,7 @@ describe("metro2-furnishing", () => {
     // A change here moves every score: bump METRO2_ENVIRONMENT_VERSION, then the pin.
     expect(
       sha256(generateMetro2Suite("heldout", 1, 200).map(toJsonLine).join("")),
-    ).toMatchInlineSnapshot(`"44af763367fd6369478ee984c44fdadf8d2c46988c2499c20cc1160a1cf2e4a2"`);
+    ).toMatchInlineSnapshot(`"8ca49c2ee3165b6b8f41fa015ea62860dee4813603bfc0b155d9d8f6c6fba9f1"`);
   });
 
   it("rebuilds a task from its coordinates, and never draws a held-out window into training", () => {
@@ -1264,7 +1595,7 @@ describe("metro2-furnishing", () => {
       ).toBeGreaterThan(10);
     });
 
-    it("draws modifications and deferrals, with K4 and without, and BO beside a deferral", () => {
+    it("draws modifications and deferrals, with K4 and without, each ending the referral before it", () => {
       expect(countMonths((x) => x.r.special_comment === "CO" && x.r.k4 !== null)).toBeGreaterThan(
         30,
       );
@@ -1280,8 +1611,24 @@ describe("metro2-furnishing", () => {
       const deferral = fm.filter((x) => x.state.condition.kind === "deferral");
       expect(deferral.length).toBeGreaterThan(60);
       expect(deferral.every((x) => x.r.k4 !== null && x.r.account_status === "11")).toBe(true);
-      expect(deferral.filter((x) => x.r.special_comment === "BO").length).toBeGreaterThan(3);
+      // A workout ends the foreclosure (13.3): a referral before it, and none in force beside it.
+      const referredBefore = (x: Month) =>
+        x.k > 0 && x.t.months[x.k - 1]!.in_force.some((e) => e.kind === "foreclosure_referral");
+      expect(
+        fm.filter(
+          (x) => ["deferral", "modification"].includes(x.state.condition.kind) && referredBefore(x),
+        ).length,
+      ).toBeGreaterThan(10);
+      expect(
+        fm.filter(
+          (x) =>
+            ["deferral", "modification"].includes(x.state.condition.kind) &&
+            kinds(x).includes("foreclosure_referral"),
+        ),
+      ).toEqual([]);
+      // BO only while the delinquency runs: never on a month-end with nothing unpaid.
       expect(countMonths((x) => x.r.special_comment === "BO")).toBeGreaterThan(200);
+      expect(countMonths((x) => x.r.special_comment === "BO" && x.unpaid === 0)).toBe(0);
     });
 
     it("draws a prior servicer's hand-off, full and short, and a loan boarded with none", () => {
@@ -1375,6 +1722,243 @@ describe("metro2-furnishing", () => {
         ),
       ).toBeGreaterThan(500);
       expect(count(({ t }) => t.policy.terms_duration === "remaining")).toBeGreaterThan(250);
+    });
+
+    /* What the reference and the engine both copy from the task, so neither would notice it wrong. */
+    const monthsApart = (a: PlainDate, b: PlainDate) => {
+      const x = parts(a);
+      const y = parts(b);
+      return (y.y - x.y) * 12 + (y.m - x.m);
+    };
+    const unpaidAt = (t: Metro2Task, on: PlainDate, strictly = false) =>
+      applyFifo(
+        t.installments,
+        t.receipts.filter((r) => (strictly ? r.received_on < on : r.received_on <= on)),
+      ).installments.filter(
+        (i) => i.due_date <= on && (i.satisfied_on === null || i.satisfied_on > on),
+      );
+
+    it("keeps the books the note and the ledger make them, a modification's month apart", () => {
+      for (const { t } of runs) {
+        const term = t.loan.original_term_months;
+        let left: number | null = null;
+        for (const m of t.months) {
+          if (m.in_force.some((e) => e.kind === "modification")) continue;
+          // The note's first payment, from the term left.
+          const first = addMonths(
+            plainDate(`${m.month}-01`),
+            -(term - m.books.remaining_term_months - 1),
+          );
+          expect(m.books.maturity_date, t.id).toBe(addMonths(first, term - 1));
+          const asOf = asOfOf(m.month);
+          const paid = ledgerAsOf(t, asOf).filter(
+            (i) => i.satisfied_on !== null && i.satisfied_on <= asOf,
+          ).length;
+          expect(m.books.upb_cents, `${t.id} ${m.month}`).toBe(
+            balanceAfter(
+              t.loan.original_amount_cents,
+              t.loan.note_rate_pct,
+              t.loan.pi_cents,
+              monthsApart(first, t.installments[0]!.due_date) + paid,
+            ),
+          );
+          if (left !== null) expect(m.books.remaining_term_months, t.id).toBe(left - 1);
+          left = m.books.remaining_term_months;
+        }
+      }
+    });
+
+    it("hands over a last record the ledger agrees with: its status, and a DOFD exactly when it is past 29 days", () => {
+      let checked = 0;
+      for (const { t } of runs) {
+        const last = t.last_record;
+        if (!last) continue;
+        expect(last.account_status === "11", t.id).toBe(
+          last.date_of_first_delinquency === "00000000",
+        );
+        // Contractual status but under the freeze.
+        if (last.special_comment === "CP") continue;
+        const on = asOfOf(last.month);
+        const oldest = unpaidAt(t, on)[0];
+        expect(last.account_status, t.id).toBe(
+          statusForDays(oldest ? daysBetween(oldest.due_date, on) : 0),
+        );
+        checked++;
+      }
+      expect(checked).toBeGreaterThan(900);
+    });
+
+    it("pays a payoff with funds, which the month's actual payment counts", () => {
+      let payoffs = 0;
+      for (const { t, a } of runs)
+        for (const [k, m] of t.months.entries())
+          for (const e of m.in_force) {
+            if (e.kind !== "payoff") continue;
+            payoffs++;
+            expect(e.payoff_funds_cents > m.books.upb_cents, t.id).toBe(true);
+            const paid = BigInt(furnished(a.records[k]).actual_payment_amount) * 100n;
+            expect(paid + 100n > e.payoff_funds_cents, t.id).toBe(true);
+          }
+      expect(payoffs).toBeGreaterThan(30);
+    });
+
+    it("refers a loan 121 days or more into its delinquency, and keeps the referral only while that delinquency runs", () => {
+      const referrals = new Set<string>();
+      for (const { t } of runs)
+        for (const m of t.months)
+          for (const e of m.in_force) {
+            if (e.kind !== "foreclosure_referral") continue;
+            expect(
+              referralEnded(t.installments, t.receipts, e.referred_on, asOfOf(m.month)),
+              t.id,
+            ).toBe(false);
+            if (referrals.has(`${t.id} ${e.referred_on}`)) continue;
+            referrals.add(`${t.id} ${e.referred_on}`);
+            const oldest = unpaidAt(t, e.referred_on)[0];
+            expect(oldest, t.id).toBeDefined();
+            expect(daysBetween(oldest!.due_date, e.referred_on), t.id).toBeGreaterThanOrEqual(121);
+          }
+      expect(referrals.size).toBeGreaterThan(100);
+      // A cure ends one: a referral in force one month, gone the next with no workout or closing.
+      const referral = (m: Metro2Month) =>
+        m.in_force.some((e) => e.kind === "foreclosure_referral");
+      expect(
+        count(({ t }) =>
+          t.months.some(
+            (m, k) =>
+              k > 0 &&
+              referral(t.months[k - 1]!) &&
+              !referral(m) &&
+              m.in_force.every((e) => e.kind === "repayment_plan"),
+          ),
+        ),
+      ).toBeGreaterThan(5);
+    });
+
+    it("draws workouts the servicing app could grant: a trial before every modification, 2 to 6 installments deferred, 12 months seasoned", () => {
+      let mods = 0;
+      let trialBeforeWindow = 0;
+      let deferrals = 0;
+      let sixBehind = 0;
+      for (const { t } of runs) {
+        const P_ = t.loan.pi_cents + t.loan.escrow_cents;
+        for (const [k, m] of t.months.entries())
+          for (const e of m.in_force) {
+            if (e.kind === "trial_plan") expect(e.trial_payment_cents < P_, t.id).toBe(true);
+            if (e.kind === "modification") {
+              mods++;
+              // 12.8: three trial months before it, the last record carrying AC for one before the window.
+              for (let i = Math.max(0, k - 3); i < k; i++)
+                expect(
+                  t.months[i]!.in_force.some((x) => x.kind === "trial_plan"),
+                  t.id,
+                ).toBe(true);
+              if (k < 3) {
+                expect(t.last_record?.special_comment, t.id).toBe("AC");
+                trialBeforeWindow++;
+              }
+              expect(e.new_piti_cents < P_, t.id).toBe(true);
+              expect(m.books.maturity_date, t.id).toBe(
+                addMonths(e.effective_on, e.new_term_months - 1),
+              );
+              expect(m.books.remaining_term_months, t.id).toBe(e.new_term_months);
+              // Evaluated the month before the trial, a year or more after the note.
+              expect(
+                monthsApart(t.loan.note_date, addMonths(e.effective_on, -4)),
+                t.id,
+              ).toBeGreaterThanOrEqual(13);
+            }
+            if (e.kind === "payment_deferral") {
+              deferrals++;
+              const deferred = unpaidAt(t, e.completed_on).length;
+              expect(m.books.deferred_principal_cents, t.id).toBe(P_ * BigInt(deferred));
+              expect(deferred, t.id).toBeGreaterThanOrEqual(2);
+              expect(deferred, t.id).toBeLessThanOrEqual(6);
+              // Evaluated at the month-end before: six behind then, the installment is paid first (12.6 rule 4).
+              const evaluated = addDays(plainDate(`${m.month}-01`), -1);
+              const behind = unpaidAt(t, evaluated).length;
+              expect(behind, t.id).toBeLessThanOrEqual(6);
+              if (behind === 6) {
+                sixBehind++;
+                expect(deferred, t.id).toBe(6);
+              }
+              expect(monthsApart(t.loan.note_date, evaluated), t.id).toBeGreaterThanOrEqual(13);
+            }
+          }
+      }
+      expect(mods).toBeGreaterThan(60);
+      expect(trialBeforeWindow).toBeGreaterThan(5);
+      expect(deferrals).toBeGreaterThan(60);
+      expect(sixBehind).toBeGreaterThan(3);
+    });
+
+    it("fails a trial only by a payment missed: nothing comes in the month a trial ends without a modification", () => {
+      let failed = 0;
+      for (const { t } of runs) {
+        const trial = t.months.map((m) => m.in_force.some((e) => e.kind === "trial_plan"));
+        const last = trial.lastIndexOf(true);
+        if (last < 0 || last === t.months.length - 1) continue;
+        const next = t.months[last + 1]!;
+        if (next.in_force.some((e) => e.kind === "modification")) continue;
+        failed++;
+        expect(
+          t.receipts.filter((r) => r.received_on.slice(0, 7) === next.month),
+          t.id,
+        ).toEqual([]);
+      }
+      expect(failed).toBeGreaterThan(15);
+    });
+
+    it("runs every repayment plan in its window, a plan's arrears falling and a partial payment agreement's growing", () => {
+      for (const { t, edge } of runs) {
+        const P_ = t.loan.pi_cents + t.loan.escrow_cents;
+        const plans = t.months.map((m) => m.in_force.find((e) => e.kind === "repayment_plan"));
+        if (edge === "repayment_plan") expect(plans.some(Boolean), t.id).toBe(true);
+        for (let k = 1; k < plans.length; k++) {
+          const [was, now] = [plans[k - 1], plans[k]];
+          if (was?.kind !== "repayment_plan" || now?.kind !== "repayment_plan") continue;
+          if (now.plan_payment_cents < P_)
+            expect(now.remaining_arrears_cents - was.remaining_arrears_cents, t.id).toBe(
+              P_ - now.plan_payment_cents,
+            );
+          else expect(now.remaining_arrears_cents < was.remaining_arrears_cents, t.id).toBe(true);
+        }
+      }
+    });
+
+    it("draws consumer flags only as 8.1 rule 5 allows them together, a liable consumer on every tradeline", () => {
+      for (const { t, a } of runs) {
+        for (const c of t.consumers) {
+          if (c.successor_in_interest)
+            expect(Boolean(c.released || c.deceased || c.never_liable), t.id).toBe(false);
+          if (c.released) expect(Boolean(c.never_liable) || c.position === 1, t.id).toBe(false);
+          if (c.position === 1) expect(Boolean(c.never_liable || c.released), t.id).toBe(false);
+        }
+        if (a.consumers.length > 0)
+          expect(
+            a.consumers.some((c) => ["1", "2", "5", "X"].includes(c.ecoa)),
+            t.id,
+          ).toBe(true);
+      }
+    });
+
+    it("draws receipts on a month's last day that its month-end counts, and on a forbearance's eve", () => {
+      // A receipt dated on the as_of decides the month-end's unpaid installments: "on or before".
+      expect(
+        months.filter((x) => unpaidAt(x.t, x.state.as_of, true).length !== x.unpaid).length,
+      ).toBeGreaterThan(40);
+      // And the entry figures, on the day before the plan.
+      expect(
+        count(({ t }) =>
+          t.months.some((m) =>
+            m.in_force.some((e) => {
+              if (e.kind !== "forbearance_plan") return false;
+              const eve = addDays(e.effective_on, -1);
+              return unpaidAt(t, eve, true).length !== unpaidAt(t, eve).length;
+            }),
+          ),
+        ),
+      ).toBeGreaterThan(5);
     });
   });
 });

@@ -22,18 +22,22 @@
  *     delinquency;
  *   - pool: a part payment waiting in the pool, completed after the
  *     month-end, a prepayment, a double payment, an overpayment that builds
- *     up, and an installment paid in two halves;
+ *     up, and an installment paid in two halves; each with a month-end that
+ *     finds an installment unpaid;
  *   - forbearance: entered current, at 1 to 29 days, or at 30 to 149, under
  *     the freeze and under contractual aging, with payments suspended or
  *     reduced, ending with the window, a reinstatement, or a payment
- *     deferral (spec 8.1-T4 and T5);
- *   - repayment_plan: a plan that repays the arrears in two to four months,
- *     and one paying less than the installment (AC), with and without a
- *     foreclosure referral;
- *   - trial: a trial plan (AC, aging), with or without a referral, then a
- *     modification or a failed trial;
- *   - workout: a modification or a payment deferral from delinquency, with
- *     forborne principal or none (K4), and with a referral (BO);
+ *     deferral of 2 to 6 installments (spec 8.1-T4 and T5, 12.6);
+ *   - repayment_plan: a plan that repays the arrears in two to six months,
+ *     still running at a month-end in the window, and one paying less than
+ *     the installment (AC), with and without a foreclosure referral, which
+ *     the cure ends;
+ *   - trial: a three-month trial plan (AC, aging) from 60 days or more
+ *     behind, with or without a referral, then a modification or a trial
+ *     failed by a payment missed (12.8);
+ *   - workout: a payment deferral of 2 to 6 installments from delinquency
+ *     (12.6), or a modification after its trial, with forborne principal or
+ *     none (K4); either ends a referral made before it;
  *   - foreclosure: a referral, then a foreclosure sale (at 179 or 180 days
  *     every other time) or a deed in lieu (on each side of 59/60 through
  *     149/150 in turn), with and without a deficiency, rated at the closing
@@ -43,12 +47,21 @@
  *     and one after a referral (65), in turn, each rated at the closing date
  *     on each side of a bucket's edge, in turn;
  *   - boarding: a prior servicer's hand-off, its PHP full or short, and a
- *     loan boarded with no history (24 B's);
+ *     loan boarded with no history (24 B's), current or past due (the
+ *     rulebook states the debt-collector hold lifted);
  *   - identifiers: a month whose MIN or Fannie Mae number is missing or
  *     malformed, omitted, and D in the next month's PHP;
  *   - consumers: joint borrowers at the same and another address, a
  *     guarantor, a released borrower (T, H), a deceased one (X), one never
- *     liable (Z), and a successor who is not furnished.
+ *     liable (Z), and a successor who is not furnished; the flags as 8.1
+ *     rule 5 allows them together, and the base always liable.
+ * A window "current" for an edge about something else is paid on time but
+ * once, a few days after a month's end, so every window has a month-end
+ * whose ledger decides a graded field. Receipts land now and then on a
+ * month's last day, which that month-end's ledger holds, and the day after.
+ * A workout's loan is seasoned 12 months at its evaluation (12.6, 12.8). A
+ * foreclosure referral is in force only while the delinquency it was made
+ * on continues: a cure or a workout ends it (13.3).
  * Every task also draws the policy (truncate or round, original or remaining
  * terms, the freeze or contractual aging) and sometimes an installment
  * ending in 50 or 49 cents, which rounding turns on.
@@ -209,17 +222,25 @@ const singleOrJoint = (r: Rng): CreditConsumer[] =>
         },
       ];
 
-/** Consumers with the flags each segment rule turns on. */
+/**
+ * Consumers with the flags each segment rule turns on, in the combinations 8.1 rule 5 allows. A
+ * confirmed successor is not on the note, so carries no other flag. A released borrower was liable
+ * until the assumption, so was never never-liable. The base is the assuming party when anyone is
+ * released, and is always liable (2, or X once deceased), so every tradeline has a liable consumer.
+ */
 function manyConsumers(r: Rng): CreditConsumer[] {
   const n = r.int(2, 4);
   const out: CreditConsumer[] = [];
   for (let p = 1; p <= n; p++) {
     const flags: Partial<CreditConsumer> = {};
-    // Released after an assumption: the assuming party is the base, so never position 1.
-    if (p > 1 && r.chance(0.25)) Object.assign(flags, { released: true });
-    if (r.chance(0.16)) Object.assign(flags, { deceased: true });
-    if (r.chance(0.12)) Object.assign(flags, { never_liable: true });
     if (p > 1 && r.chance(0.16)) Object.assign(flags, { successor_in_interest: true });
+    else {
+      // Released after an assumption: the assuming party is the base, so never position 1.
+      const released = p > 1 && r.chance(0.25);
+      if (released) Object.assign(flags, { released: true });
+      if (r.chance(0.16)) Object.assign(flags, { deceased: true });
+      if (p > 1 && !released && r.chance(0.14)) Object.assign(flags, { never_liable: true });
+    }
     out.push({
       party_id: `C${p}`,
       position: p,
@@ -245,15 +266,17 @@ function policyOf(r: Rng): CreditPolicy {
 /** The building blocks a script uses, over one loan and one window start. */
 class Builder {
   readonly s: Script;
+  /** Installments from the note's first to the ledger's first, all paid on time; `season` raises it. */
+  age: number;
   constructor(
     readonly r: Rng,
     readonly loan: Loan,
     W0: PlainDate,
-    /** Installments from the note's first to the ledger's first, all paid on time. */
-    readonly age: number,
+    age: number,
     /** The edge's own count: how many windows of this edge came before, for the arms taken in turn. */
     readonly turn: number,
   ) {
+    this.age = age;
     this.s = {
       W0,
       K: 3,
@@ -279,13 +302,36 @@ class Builder {
   };
   pay = (on: PlainDate, amount: Cents) =>
     this.s.receipts.push({ received_on: on, amount_cents: amount });
+  /**
+   * A day of month t from lo to hi, or now and then the month's last day: a receipt there is one the
+   * month-end's ledger holds ("received on or before D").
+   */
+  day = (t: number, lo: number, hi: number) =>
+    this.r.chance(0.15) ? this.eom(t) : this.on(t, this.r.int(lo, hi));
   /** Each installment from..to paid on time, early in its own month. */
   onTime(from: number, to: number) {
     for (let t = from; t <= to; t++) this.pay(this.on(t, this.r.int(1, 10)), this.loan.P);
   }
+  /** Installment t paid a few days after its month ends (the 1st now and then): that month-end finds it unpaid. */
+  late(t: number) {
+    this.pay(this.on(t + 1, this.r.int(1, 5)), this.loan.P);
+  }
+  /** Each installment from..to on time, but installment w late. */
+  onTimeBut(from: number, to: number, w: number) {
+    for (let t = from; t <= to; t++)
+      if (t === w) this.late(t);
+      else this.pay(this.on(t, this.r.int(1, 10)), this.loan.P);
+  }
   /** One installment a month, at any day of it. */
   oneAMonth(from: number, to: number) {
-    for (let t = from; t <= to; t++) this.pay(this.on(t, this.r.int(1, 26)), this.loan.P);
+    for (let t = from; t <= to; t++) this.pay(this.day(t, 1, 26), this.loan.P);
+  }
+  /**
+   * Seasoned: the note's first payment at least 13 months before month t's 1st, so the note is 12
+   * months old by then (12.6 and 12.8: originated 12 months before the evaluation). Call after span.
+   */
+  season(t: number) {
+    this.age = Math.max(this.age, 13 - this.s.h - t);
   }
   /** The installments listed, from month −h to one after the window. */
   installments() {
@@ -392,7 +438,7 @@ function buckets(b: Builder) {
   } else if (pattern === "partial") {
     // Nothing the first month, then part payments that wait in the pool.
     for (let t = s + 1; t < b.s.K; t++)
-      if (r.chance(0.7)) b.pay(b.on(t, r.int(1, 26)), (b.loan.P * BigInt(r.int(30, 80))) / 100n);
+      if (r.chance(0.7)) b.pay(b.day(t, 1, 26), (b.loan.P * BigInt(r.int(30, 80))) / 100n);
   } else if (r.chance(0.4)) {
     const upTo = daysBetween(b.due(s), b.eom(b.s.K - 1));
     if (upTo >= 121) b.refer(b.due(s), Math.min(upTo, 170));
@@ -416,7 +462,7 @@ function dofd(b: Builder) {
     const j = r.int(0, b.s.K - 2);
     const unpaid = j - s + 1;
     const c = r.int(1, Math.max(1, unpaid - 2));
-    b.pay(b.on(j, r.int(2, 26)), b.loan.P * BigInt(c));
+    b.pay(b.day(j, 2, 26), b.loan.P * BigInt(c));
     if (r.chance(0.5)) b.oneAMonth(j + 1, b.s.K - 1);
     return;
   }
@@ -426,7 +472,7 @@ function dofd(b: Builder) {
   b.onTime(-b.s.h, s - 1);
   // Cured from the second month on, so the window shows the first DOFD, the cure and the new one.
   const j = r.int(1, b.s.K - 3);
-  b.pay(b.on(j, r.int(2, 26)), b.loan.P * BigInt(j - s + 1));
+  b.pay(b.day(j, 2, 26), b.loan.P * BigInt(j - s + 1));
   const again = r.int(j + 1, b.s.K - 2);
   b.onTime(j + 1, again - 1);
 }
@@ -452,64 +498,85 @@ function pool(b: Builder) {
     b.pay(b.on(j + 1, r.chance(0.5) ? r.int(1, 5) : r.int(6, 25)), P - part + P);
     b.onTime(j + 2, K - 1);
   } else if (variant === "prepaid") {
+    // Two installments in month j and nothing in j+1, which is still current; another month is paid late.
     const j = r.int(-1, K - 2);
-    b.onTime(-b.s.h, j - 1);
-    b.pay(b.on(j, r.int(1, 15)), P * 2n);
-    b.onTime(j + 2, K - 1);
+    const w = j <= K - 3 ? r.int(j + 2, K - 1) : r.int(0, j - 1);
+    for (let t = -b.s.h; t < K; t++)
+      if (t === j) b.pay(b.on(j, r.int(1, 15)), P * 2n);
+      else if (t !== j + 1) b.onTimeBut(t, t, w);
   } else if (variant === "double") {
     const j = r.int(0, K - 2);
     b.onTime(-b.s.h, j - 1);
     b.pay(b.on(j + 1, r.int(1, 25)), P * 2n);
     b.onTime(j + 2, K - 1);
   } else if (variant === "overpaid") {
+    // The first month's arrives a few days late, while the pool (three overpayments at most) is short of P.
     const from = r.int(-3, 0);
     b.onTime(-b.s.h, from - 1);
     const extra = (P * BigInt(r.int(5, 25))) / 100n;
-    for (let t = from; t < K; t++) b.pay(b.on(t, r.int(1, 10)), P + extra);
+    for (let t = from; t < K; t++)
+      b.pay(t === 0 ? b.on(1, r.int(1, 5)) : b.on(t, r.int(1, 10)), P + extra);
   } else {
+    // Once, the second half lands a few days after the month-end, which finds half in the pool.
     const from = r.int(-2, 0);
     b.onTime(-b.s.h, from - 1);
+    const w = r.int(0, K - 1);
     for (let t = from; t < K; t++) {
       const half = (P * BigInt(r.int(35, 65))) / 100n;
       b.pay(b.on(t, r.int(1, 8)), half);
-      b.pay(b.on(t, r.int(9, 25)), P - half);
+      b.pay(t === w ? b.on(t + 1, r.int(1, 5)) : b.day(t, 9, 25), P - half);
     }
   }
 }
 
 function forbearance(b: Builder) {
   const { r, loan } = b;
-  b.s.policy = {
-    ...b.s.policy,
-    forbearance_status: r.chance(0.55) ? "freeze" : "contractual_aging",
-  };
-  const entryBehind = r.weighted<number>([
+  const freeze = r.chance(0.55);
+  b.s.policy = { ...b.s.policy, forbearance_status: freeze ? "freeze" : "contractual_aging" };
+  let entryBehind = r.weighted<number>([
     [0, 15],
     [1, 20],
-    [2, 25],
+    [2, 20],
     [3, 25],
-    [4, 15],
+    [4, 20],
   ]);
   const end = r.weighted<string>([
     ["window", 40],
     ["reinstated", 25],
     ["deferral", 35],
   ]);
-  const j = r.int(-2, 1);
+  // 12.6: a deferral takes 2 to 6 installments, so a plan that ends in one ends six behind at most.
+  if (end === "deferral") entryBehind = Math.min(entryBehind, 3);
+  // Entered current under the freeze, every plan month reports 11 and nothing past due: the window opens
+  // two months before the plan instead, the first of them paid a few days late.
+  const lateFirst = freeze && entryBehind === 0;
+  let j = lateFirst ? 2 : r.int(-2, 1);
   let d = r.int(3, 6);
   let K: number;
   if (end === "window") {
     if (j + d < 3) d = 3 - j;
     K = r.int(3, Math.min(6, j + d));
+  } else if (end === "deferral") {
+    // Deferred as the last month, the month after the plan.
+    d = Math.min(d, 6 - entryBehind);
+    if (j + d + 1 < 3) j = 2 - d;
+    if (j + d + 1 > 6) d = 5 - j;
+    K = j + d + 1;
   } else {
-    // The month after the plan: reinstated (and current after), or deferred as the last month.
+    // The month after the plan reinstated, and current after.
     if (j + d + 1 < 3) d = 3 - j - 1;
     if (j + d + 1 > 6) d = Math.max(3, 6 - j - 1);
-    K = end === "deferral" ? j + d + 1 : r.int(j + d + 1, 6);
+    K = r.int(j + d + 1, 6);
   }
   const s = j - entryBehind;
   b.span(K, Math.max(-s, -j) + r.int(1, 2));
-  b.onTime(-b.s.h, s - 1);
+  if (lateFirst) {
+    b.onTime(-b.s.h, -1);
+    b.late(0);
+    b.onTime(1, s - 1);
+  } else b.onTime(-b.s.h, s - 1);
+  // Three behind, now and then one installment caught up on the plan's eve: the entry figures count it.
+  if (entryBehind === 3 && r.chance(0.35)) b.pay(b.eom(j - 1), loan.P);
   // Reduced payments under half the installment: from the plan's second month the loan is two or more
   // behind, never back to one, which would blank the DOFD in a short month.
   const plan: InForce = {
@@ -530,7 +597,9 @@ function forbearance(b: Builder) {
     b.onTime(e + 1, b.s.K - 1);
     return;
   }
-  if (r.chance(0.7)) b.pay(b.on(e, r.int(2, 10)), loan.P);
+  // Evaluated as the plan ends: six behind then, the month's installment is paid before completion (12.6 rule 4).
+  b.season(e - 1);
+  if (b.unpaidAt(b.eom(e - 1)) >= 6 || r.chance(0.7)) b.pay(b.on(e, r.int(2, 10)), loan.P);
   const completed = b.on(e, r.int(11, 27));
   const deferred = BigInt(b.unpaidAt(completed)) * loan.P;
   b.s.cond.set(e, { kind: "payment_deferral", completed_on: completed });
@@ -543,7 +612,14 @@ function repaymentPlan(b: Builder) {
   const referred = r.chance(0.25);
   const ac = r.chance(0.25);
   const k = referred ? r.int(5, 6) : r.int(2, 4);
-  const j = r.int(-1, 1);
+  let j = r.int(-1, 1);
+  // The arrears in N months, N from two (and half the installments behind) to all of them: two installments
+  // or more a month. The plan runs N - 1 month-ends, the last of them in the window (j + N - 2 >= 0). The
+  // window's first month-end is two or more behind, 30 days or more: two behind, the plan's month-end is
+  // one behind, so the window opens the month before it; three behind, the plan starts in the window.
+  if (!ac && k === 2) j = 1;
+  else if (!ac && k === 3) j = Math.max(j, 0);
+  const N = ac ? 0 : r.int(Math.max(2, Math.ceil(k / 2), 2 - j), k);
   const s = j - k;
   b.span(r.int(3, 6), -s + r.int(1, 2));
   b.onTime(-b.s.h, s - 1);
@@ -564,8 +640,6 @@ function repaymentPlan(b: Builder) {
     }
     return;
   }
-  // The arrears in N months, N from half the installments behind to all of them: two installments or more a month.
-  const N = r.int(Math.ceil(k / 2), k);
   const share = (A0 + BigInt(N) - 1n) / BigInt(N);
   const pay = P + share;
   let arrears = A0;
@@ -585,23 +659,28 @@ function repaymentPlan(b: Builder) {
 function trial(b: Builder) {
   const { r } = b;
   const referred = r.chance(0.35);
-  const k = referred ? r.int(5, 6) : r.int(2, 6);
+  // 60 days or more behind when the trial is offered (12.8): three installments or more by its eve.
+  const k = referred ? r.int(5, 6) : r.int(3, 6);
   const modified = r.chance(0.6);
   const j = r.int(-1, 1);
   const K = modified ? j + 4 : r.int(Math.max(3, j + 1), 6);
   const s = j - k;
   b.span(K, -s + r.int(1, 2));
+  b.season(j - 1);
   b.onTime(-b.s.h, s - 1);
   if (referred) b.refer(b.due(s), daysBetween(b.due(s), b.eom(j - 1)));
-  // The trial payment is the modification's payment, set when the trial is offered.
+  // The trial payment is the modification's payment, set when the trial is offered. Three months from 31
+  // days or more behind; a payment not made by the end of its month fails the trial (12.8), and nothing
+  // more is paid.
   const before = b.eom(j - 1);
   const terms = modTerms(b, b.upbAt(before), b.unpaidAt(before));
-  const plan: InForce = { kind: "trial_plan", trial_payment_cents: terms.newPiti };
-  for (let t = j; t <= j + 2; t++) b.pay(b.on(t, r.int(1, 25)), terms.newPiti);
-  b.inForce(j, Math.min(j + 2, b.s.K - 1), plan);
-  if (!modified) return;
-  const m = j + 3;
-  modify(b, m, terms);
+  const ends = modified ? j + 3 : r.int(j + 1, j + 2);
+  for (let t = j; t < ends; t++) b.pay(b.on(t, r.int(1, 25)), terms.newPiti);
+  b.inForce(j, Math.min(ends - 1, b.s.K - 1), {
+    kind: "trial_plan",
+    trial_payment_cents: terms.newPiti,
+  });
+  if (modified) modify(b, j + 3, terms);
 }
 
 /** The modification effective on month m's 1st, its first payment made in that month. */
@@ -629,23 +708,38 @@ function modify(
 function workout(b: Builder) {
   const { r, loan } = b;
   const referred = r.chance(0.3);
-  const k = referred ? r.int(5, 6) : r.int(2, 6);
   const K = r.int(3, 6);
   const m = K - 1;
-  const s = m - k;
-  b.span(K, -s + r.int(1, 2));
-  b.onTime(-b.s.h, s - 1);
-  if (referred) b.refer(b.due(s), daysBetween(b.due(s), b.eom(m - 1)));
   if (r.chance(0.6)) {
-    if (r.chance(0.7)) b.pay(b.on(m, r.int(2, 10)), loan.P);
+    // A payment deferral evaluated at the month-end before it, 2 to 6 behind (12.6); six behind, the month's
+    // installment is paid before completion, so 2 to 6 are deferred.
+    const k = referred ? r.int(5, 6) : r.int(2, 6);
+    const s = m - k;
+    b.span(K, -s + r.int(1, 2));
+    b.season(m - 1);
+    b.onTime(-b.s.h, s - 1);
+    if (referred) b.refer(b.due(s), daysBetween(b.due(s), b.eom(m - 1)));
+    if (k >= 6 || r.chance(0.7)) b.pay(b.on(m, r.int(2, 10)), loan.P);
     const completed = b.on(m, r.int(11, 27));
     const deferred = BigInt(b.unpaidAt(completed)) * loan.P;
     b.s.cond.set(m, { kind: "payment_deferral", completed_on: completed });
     b.s.books.set(m, (base) => ({ ...base, deferred_principal_cents: deferred }));
     return;
   }
-  const before = b.eom(m - 1);
-  modify(b, m, modTerms(b, b.upbAt(before), b.unpaidAt(before)));
+  // A modification effective the 1st after its three-month trial (12.8), offered 60 days or more behind:
+  // the trial in the window, or begun before it (the last record then carries AC).
+  const k = referred ? r.int(5, 6) : r.int(3, 6);
+  const j = m - 3;
+  const s = j - k;
+  b.span(K, -s + r.int(1, 2));
+  b.season(j - 1);
+  b.onTime(-b.s.h, s - 1);
+  if (referred) b.refer(b.due(s), daysBetween(b.due(s), b.eom(j - 1)));
+  const before = b.eom(j - 1);
+  const terms = modTerms(b, b.upbAt(before), b.unpaidAt(before));
+  for (let t = j; t < m; t++) b.pay(b.on(t, r.int(1, 25)), terms.newPiti);
+  b.inForce(j, m - 1, { kind: "trial_plan", trial_payment_cents: terms.newPiti });
+  modify(b, m, terms);
 }
 
 /**
@@ -713,8 +807,9 @@ function closing(b: Builder) {
   const nth = Math.floor(b.turn / 4);
   const K = r.int(3, 6);
   if (kind === "payoff_current") {
+    // Current at its date; an earlier month in the window paid a few days after its month-end.
     b.span(K, r.int(3, 5));
-    b.onTime(-b.s.h, b.s.K - 2);
+    b.onTimeBut(-b.s.h, b.s.K - 2, r.int(0, b.s.K - 3));
     const paid = r.int(1, 8);
     b.pay(b.on(b.s.K - 1, paid), loan.P);
     const closed = b.on(b.s.K - 1, r.int(paid + 1, 28));
@@ -740,8 +835,11 @@ function closing(b: Builder) {
   );
 }
 
-/** A loan's history for an edge that is about something else: current, stopped, or two behind and paying. */
-function anyHistory(b: Builder, allowRolling: boolean) {
+/**
+ * A loan's history for an edge that is about something else: current but for one month paid a few days
+ * after its month-end (returned), stopped, or two behind and paying.
+ */
+function anyHistory(b: Builder, allowRolling: boolean): number | null {
   const { r } = b;
   b.span(r.int(3, 6), r.int(3, 6));
   const pattern = r.weighted<string>([
@@ -750,12 +848,14 @@ function anyHistory(b: Builder, allowRolling: boolean) {
     ["rolling", allowRolling ? 25 : 0],
   ]);
   if (pattern === "current") {
-    b.onTime(-b.s.h, b.s.K - 1);
-    return;
+    const w = r.int(0, b.s.K - 1);
+    b.onTimeBut(-b.s.h, b.s.K - 1, w);
+    return w;
   }
   const s = r.int(-b.s.h + 1, b.s.K - 1);
   b.onTime(-b.s.h, s - 1);
   if (pattern === "rolling") b.oneAMonth(s + 2, b.s.K - 1);
+  return null;
 }
 
 function boarding(b: Builder) {
@@ -779,9 +879,15 @@ const BAD_IDS: readonly [string, number][] = [
 
 function identifiers(b: Builder) {
   const { r } = b;
-  anyHistory(b, true);
-  const j = r.int(0, b.s.K - 2);
-  const months = r.chance(0.25) && j + 1 <= b.s.K - 2 ? [j, j + 1] : [j];
+  // The month paid late is never one omitted: its month-end is the one the ledger decides.
+  const late = anyHistory(b, true);
+  let two = r.chance(0.25);
+  const fits = (j: number) =>
+    j + (two ? 1 : 0) <= b.s.K - 2 && j !== late && !(two && j + 1 === late);
+  const range = Array.from({ length: b.s.K - 1 }, (_, j) => j);
+  if (!range.some(fits)) two = false;
+  const j = r.pick(range.filter(fits));
+  const months = two ? [j, j + 1] : [j];
   const bad = r.weighted<string>(BAD_IDS);
   const ids: { fnma_loan_number?: string; min?: string | null } = {};
   if (bad === "min_17") ids.min = `100${digits(r, 14)}`;
@@ -890,8 +996,17 @@ function assemble(
       };
     }
     if (c) inForce.push(c);
-    if (s.referral && s.referral <= asOf)
-      inForce.push({ kind: "foreclosure_referral", referred_on: s.referral });
+    if (
+      s.referral &&
+      s.referral <= asOf &&
+      !referralEnded(installments, receipts, s.referral, asOf)
+    ) {
+      // A workout ends the foreclosure too (13.3's closed_workout).
+      let workout = false;
+      for (let u = b.indexOf(s.referral); u <= t; u++)
+        workout ||= ["modification", "payment_deferral"].includes(s.cond.get(u)?.kind ?? "");
+      if (!workout) inForce.push({ kind: "foreclosure_referral", referred_on: s.referral });
+    }
     return { month: b.due(t).slice(0, 7), books, in_force: inForce };
   };
 
@@ -950,6 +1065,28 @@ function assemble(
 /* ── the guard ─────────────────────────────────────────────────────────── */
 
 /**
+ * Whether the delinquency a referral made on `referred` was made on has ended by `asOf`: the loan current
+ * at a receipt since, or at `asOf` itself. A reinstatement ends the foreclosure (13.3's
+ * closed_reinstated), so the referral is no longer in force.
+ */
+export function referralEnded(
+  installments: Metro2Task["installments"],
+  receipts: Metro2Task["receipts"],
+  referred: PlainDate,
+  asOf: PlainDate,
+): boolean {
+  const current = (d: PlainDate) =>
+    !applyFifo(
+      installments,
+      receipts.filter((x) => x.received_on <= d),
+    ).installments.some((i) => i.due_date <= d && (i.satisfied_on === null || i.satisfied_on > d));
+  return [
+    ...receipts.map((x) => x.received_on).filter((d) => d >= referred && d <= asOf),
+    asOf,
+  ].some(current);
+}
+
+/**
  * The due date that began the delinquency running at `on`: the first
  * installment, after the last receipt at which nothing was unpaid, that was
  * not paid by its own due date. Null when nothing is unpaid at `on`. Rule 3's
@@ -992,6 +1129,26 @@ export function metro2OutOfScope(task: Metro2Task): string | null {
     if (task.receipts.some((x) => x.received_on >= closed))
       return "D13: a receipt on or after the closing date";
   }
+  // A referral is in force only while its delinquency continues, never beside a workout, and never after
+  // a closing date.
+  for (const [i, m] of months.entries()) {
+    const ref = m.in_force.find((e) => e.kind === "foreclosure_referral");
+    if (!ref) continue;
+    const on = (ref as { referred_on: PlainDate }).referred_on;
+    if (referralEnded(task.installments, task.receipts, on, asOfOf(m.month)))
+      return "a foreclosure referral in force after the delinquency it was made on ended";
+    if (
+      months
+        .slice(0, i + 1)
+        .some((x) =>
+          x.in_force.some((e) => e.kind === "modification" || e.kind === "payment_deferral"),
+        )
+    )
+      return "a foreclosure referral in force beside a workout";
+    const closing = m.in_force.find((e) => CLOSINGS.includes(e.kind)) as
+      { closed_on: PlainDate } | undefined;
+    if (closing && on > closing.closed_on) return "a foreclosure referral after the closing date";
+  }
   let why: string | null = null;
   furnish(task, {
     month(m, state, s, errors) {
@@ -1004,7 +1161,8 @@ export function metro2OutOfScope(task: Metro2Task): string | null {
       // D15: the engine never furnishes E; a zero balance in a month that is not a closing would carry 0.
       else if (!s.final_reported && s.current_balance_cents === 0n)
         why = "D15: a zero balance before a closing";
-      // DOFD_REQUIRED and the rest no input can satisfy: the engine would omit the record.
+      // DOFD_REQUIRED and the rest no input can satisfy: the engine would omit the record. A freeze at 30
+      // days or more whose arrears are then paid lands here: its frozen status has no unpaid installment.
       else if (errors.some((e) => !IDENTIFIER_ERRORS.has(e)))
         why = `a hard error the books cannot cause: ${errors.join(",")}`;
       // D12: the DOFD moved later while the delinquency continued (or anything else off its commencement).
@@ -1033,14 +1191,6 @@ export function metro2OutOfScope(task: Metro2Task): string | null {
         ).installments;
         if (deriveDelinquency(post, asOf).days >= 30)
           why = "D2: a workout carried over unpaid installments";
-      } else if (s.special_comment === "CP" && state.condition.kind === "forbearance") {
-        // The freeze over a loan whose arrears are paid: the engine's DOFD_REQUIRED, then a later DOFD.
-        if (
-          task.policy.forbearance_status === "freeze" &&
-          state.condition.entry_status !== "11" &&
-          !unpaid
-        )
-          why = "a freeze at 30 days or more with nothing unpaid";
       }
       if (why) return;
       // D3: after a forbearance, aging resumes from the frozen position (78 to 80), not from the ledger.

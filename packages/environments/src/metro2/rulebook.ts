@@ -8,9 +8,12 @@
  * month's carry, the forbearance entry figures, what counts as a payment in
  * the month) stated where they apply. Where the engine departs from its own
  * spec, v1 never draws the month (see the generator's scope guard), so
- * nothing here teaches a departure. The reference policy follows these
- * words through the tools and is held to the engine on every generated
- * task. Change this text and the environment's version changes with it.
+ * nothing here teaches a departure. The one exception is a choice the spec
+ * leaves open: the engine uses the optional codes AS and H, which 8.1-Q10
+ * leaves off until confirmed, and Step 3 says so. The reference policy
+ * follows these words through the tools and is held to the engine on every
+ * generated task. Change this text and the environment's version changes
+ * with it.
  */
 
 export const METRO2_RULEBOOK = `# Furnishing a loan's Metro 2 Base records
@@ -57,8 +60,8 @@ Then apply what is in force (in_force holds at most one of these, beside any for
 - modification: account status "11"; special comment "CO"; amount past due 0; scheduled payment = new_piti_cents; terms duration = new_term_months, under either policy; K4 only when books.forborne_principal_cents is above 0: balloon due date books.maturity_date, balloon amount books.forborne_principal_cents.
 - payment_deferral: account status "11"; amount past due 0; K4 always: balloon due date books.maturity_date, balloon amount books.deferred_principal_cents.
 - A closing: date closed = closed_on; amount past due 0; payment rating = the rating for the days past due at closed_on, not at as_of: 0 to 29 days "0"; 30 to 59 "1"; 60 to 89 "2"; 90 to 119 "3"; 120 to 149 "4"; 150 to 179 "5"; 180 or more "6". Then:
-  - payoff: account status "13"; special comment "AS" when by_refinance, blank otherwise; current balance 0;
-  - short_sale: account status "65" when a foreclosure_referral in force was referred on or before closed_on, "13" otherwise; special comment "AU"; current balance 0;
+  - payoff: account status "13"; special comment "AS" when by_refinance, blank otherwise (this servicer furnishes the optional codes AS and H, Step 7); current balance 0;
+  - short_sale: account status "65" when a foreclosure_referral is in force, "13" otherwise; special comment "AU"; current balance 0;
   - foreclosure_sale: account status "94"; current balance 0 unless deficiency_pursued;
   - deed_in_lieu: account status "89"; current balance 0 unless deficiency_pursued.
 Last: when no closing is in force and a foreclosure_referral is, a special comment still blank becomes "BO". "CP", "AC" and "CO" are never replaced by it.
@@ -87,10 +90,11 @@ A record with any of these hard errors is not furnished:
 - PAYMENT_RATING_REQUIRED: account status "13", "65", "89", "94" or "05" with no payment rating;
 - PHP_LENGTH: a PHP that is not 24 characters;
 - APD_WITH_CLOSED_STATUS: an amount past due above 0 with account status "13", "94" or "89";
-- K3_MIN_MISSING: books.min is null; MIN_NOT_18_DIGITS: books.min is not exactly 18 digits;
+- K3_MIN_MISSING: books.min is null; MIN_NOT_18_DIGITS: books.min is present and not exactly 18 digits (a null MIN is K3_MIN_MISSING alone);
 - K3_FNMA_LOAN_NUMBER: books.fnma_loan_number is not exactly 10 digits;
 - NO_CONSUMER_SEGMENT: no consumer segments (Step 7).
 Report such a month as not furnished, with every hard error it has. Its record is still built in full: the next month carries its DOFD and PHP, with D for it in the PHP.
+Nothing else keeps a month from being furnished. A loan boarded with a payment already past due was sent its validation notice with the servicer's hello letter more than 14 days before the first month's end, and none came back undeliverable, so the debt-collector hold on furnishing it has lifted.
 
 ## Step 7. The consumers' segments
 

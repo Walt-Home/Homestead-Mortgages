@@ -5870,8 +5870,9 @@ elsewhere, each held to its line by a test:
   itself May's installment would count: $9,838.20;
 - the last record is read the way a hand-off is (`handoffHistory`): a PHP
   shorter than 24 padded with B;
-- a short sale's foreclosure had started when a referral in force was made
-  on or before the closing date.
+- a short sale's foreclosure had started when a referral is in force at its
+  month-end. v1 never dates one after the closing date, and the guard
+  refuses one that is.
 
 **What reading the engine found.** Each was reproduced against the vendored
 engine on 21 October, and the ones inside v1's reach are held by tests.
@@ -5927,8 +5928,12 @@ disaster comment expires a day early and lands a cycle early. A bankruptcy
 clears the base special comment but not the segments'.
 
 **So v1 stays out of those places.** Workouts come only in the window's last
-month, their first new installment paid. Forbearance ends with the window, a
-reinstatement or a deferral. A delinquency stays at two installments or
+month, their first new installment paid. A modification follows its
+three-month trial, a payment deferral takes 2 to 6 installments, and either
+ends a foreclosure referral made before it. Forbearance ends with the
+window, a reinstatement or a deferral. A referral is in force only while
+the delinquency it was made on continues: the engine reports BO whenever it
+is handed one, which on a cured loan is BO on an 11 with nothing past due. A delinquency stays at two installments or
 more once it has a DOFD: rolling two behind, reduced plan payments under half
 the installment, repayment plans that repay an installment a month or more,
 partial payment agreements from two behind. Payoff funds are never a
@@ -5946,15 +5951,25 @@ DOFD (policy †). The amount past due ages under contractual aging, which the
 spec does not state. A repayment plan reports its arrears balance, not the
 ledger's. A deferral carries K4 even at no deferred balance. A released
 consumer's segment comment is H whatever ECOA precedence gives, and every
-other segment repeats the record's special comment. The spec's January
+other segment repeats the record's special comment. The engine uses the
+optional codes AS and H, which 8.1-Q10 leaves off "until confirmed". The
+servicing app's own 8.1-T16 test asserts T and H, so the rulebook states
+both as this servicer's choice rather than leaving released borrowers and
+refinance payoffs out. A loan boarded past due is a debt collector's
+(11.4), held back from furnishing until a live contact or a validation
+notice plus 14 days (8.1-T17, 8.3 rule 8). The task carries no contact
+facts, so the rulebook states the gate open: the notice went with the hello
+letter, as 11.4 sends it, more than 14 days before the first month's end.
+The spec's January
 record assumes March 2025, the month of the first payment, was the first
 reported; the spec task carries December's record as the spec's test does.
 
 **What 1.0.0 leaves out:**
 
-- the §8.3 and §14.4 overlays above, and the deceased and FDCPA gates,
-  which are right and pure but whose omission lives in the cycle builder,
-  the first things for 1.1;
+- the §8.3 and §14.4 overlays above, the deceased gate, and the FDCPA gate
+  closed (the rulebook states it open, above): each is right and pure, but
+  its omission lives in the cycle builder. They are the first things for
+  1.1;
 - charge-off (97) and transfer out (05): the spec is silent on a 05
   record's balance and amount past due, and the bureaus' guide may want 0;
 - the cycle: the anomaly gate, the four bureau files, their trailers and
@@ -5968,6 +5983,82 @@ reported; the spec task carries December's record as the spec's test does.
 300-task training suite and the spec's 17 tasks through the tools alone,
 with no task redrawn in 600. It agrees with the engine on 2,000 candidates
 nothing filtered, and 12,000 were all in scope and fair when last measured.
-Its longest window is 43 tool calls in 12,000 training draws. An answer that
-answers nothing scores about 0.24; one that repeats the last record and
-reads the books, about 0.41.
+Its longest window is 42 tool calls in those 12,000 draws (40 in 5,000
+training tasks, 34 on the held-out suite). An answer that answers nothing
+scores about 0.23; one that repeats the last record and reads the books,
+about 0.40; one that reads everything but the ledger, about 0.65, and it
+passes nothing.
+
+**An adversarial review, before anything was scored, upheld fifteen
+findings.** All were handled at 1.0.0 with a new held-out pin, because
+nothing had been measured on the first. Three mattered most.
+
+- **Reading alone passed one task in five.** Three of a furnished month's
+  seven fields (special comment, terms and balance, payments) and the
+  consumers never touch the ledger, and about one window in six was current
+  at every month-end with nothing in force. An answer that never applied a
+  receipt or counted a day scored about 0.69 and passed 98 to 128 of 600
+  training tasks, against a stated floor of 0.41. Now every window has a
+  month-end whose ledger decides a graded field:
+  - a window current for an edge about something else is paid late once;
+  - the pool's prepaid, overpaid and halves arms leave an installment open
+    at a month-end, and a current payoff has a late month before it;
+  - a forbearance entered current under the freeze opens two months early,
+    the first paid late;
+  - a repayment plan runs at a window month-end, two or more behind.
+
+  The same answer now scores about 0.65 on the held-out suite and passes
+  none of it, and a test holds that, on 600 training draws too.
+
+- **A referral outlived its delinquency.** Once drawn, it stayed in force in
+  every later month. A completed deferral and a loan a repayment plan had
+  cured were furnished 11, nothing past due, BO: 160 and 92 of 10,000
+  training candidates. 8.1 rule 7 gives a deferral a blank comment, and 13.3
+  closes a reinstated or worked-out foreclosure. Now a cure or a workout
+  ends the referral, and the guard refuses one in force after either, or
+  dated after a closing.
+- **A null MIN read as two hard errors.** The rulebook listed
+  K3_MIN_MISSING and MIN_NOT_18_DIGITS as two conditions and said to report
+  every hard error, and a null MIN is not 18 digits. The engine reports
+  K3_MIN_MISSING alone, so a careful reader failed 2.6% of tasks. Step 6 now
+  says a null MIN is K3_MIN_MISSING alone, and a test holds both
+  identifier pairs.
+
+The draws, held to the servicing app's own rules:
+
+- A modification follows its three-month trial (12.8), offered 60 days or
+  more behind; 40% of modifications had none. A trial that ends without one
+  now fails by a missed payment, where every "failed" trial had made all
+  three.
+- A payment deferral takes 2 to 6 installments (12.6), evaluated at the
+  month-end before it, the month's installment paid first when six are
+  behind; 153 of 10,000 had deferred 7 to 11.
+- A workout's loan is twelve months seasoned at its evaluation.
+- Consumer flags come only in the combinations 8.1 rule 5 allows, and the
+  base is always liable; 22 of 10,000 tradelines had no liable consumer.
+- Receipts land on a month's last day, on the 1st after it, and on a
+  forbearance's eve. None had, so no task tested "on or before D", and a
+  grader that read it as "before" passed every test.
+
+Two choices the spec leaves open are now stated rather than assumed
+(above): the optional codes AS and H, and the debt-collector gate for a loan
+boarded past due. AS and H are recorded as the engine's choice over 8.1-Q10's
+default, because the servicing app's own 8.1-T16 test asserts T and H, and
+leaving released borrowers out would drop ECOA T. The gate is stated open
+because 11.4's hello letter carries the validation notice, so 8.1-T17's
+case, with no contact yet, is not one v1 draws.
+
+The tests:
+
+- Each field of each group is perturbed alone.
+- An omitted month is answered with one error too few and one too many.
+- The generator's books, referrals, workouts, plans, payoffs, last records
+  and consumers are held to the note and the ledger by invariants, not only
+  by the held-out hash.
+- A plan paying exactly P carries no AC, held on a hand-built task.
+
+The short sale's "on or before the closing date" decided nothing and is
+gone: a referral in force means 65. The guard's branch for a freeze paid up
+was unreachable and is gone; the hard-error branch refuses that case. The
+grader's comment and docs/environments.md said a wrong status costs the next
+month's PHP; it costs every later PHP in the window.

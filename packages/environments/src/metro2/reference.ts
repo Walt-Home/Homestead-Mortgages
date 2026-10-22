@@ -306,7 +306,7 @@ export function* metro2Steps(p: Json, call: Call): Step<Json> {
         if (closing["by_refinance"] === true) special = "AS";
         balance = "0";
       } else if (closing.kind === "short_sale") {
-        status = referral && String(referral["referred_on"]) <= on ? "65" : "13";
+        status = referral ? "65" : "13";
         special = "AU";
         balance = "0";
       } else {

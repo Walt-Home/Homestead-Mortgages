@@ -31,7 +31,8 @@
  *       is (metro2.ts handoffHistory): a PHP shorter than 24 is padded with
  *       B;
  *   (f) a short sale's foreclosure had started when a foreclosure referral
- *       in force was made on or before the closing date.
+ *       is in force at its month-end. v1 never dates one after the closing
+ *       date, and the generator's guard refuses one that is.
  * The record is renderBase's, under the policy's rounding, which
  * buildSnapshot never reads itself.
  */
@@ -112,11 +113,10 @@ export function conditionOf(task: Metro2Task, m: Metro2Month): LoanCondition {
         return { kind: "paid_in_full", closed_on: e.closed_on, by_refinance: e.by_refinance };
       case "short_sale": {
         // (f)
-        const referral = find(m, "foreclosure_referral");
         return {
           kind: "short_sale",
           closed_on: e.closed_on,
-          foreclosure_started: referral !== undefined && referral.referred_on <= e.closed_on,
+          foreclosure_started: find(m, "foreclosure_referral") !== undefined,
         };
       }
       case "foreclosure_sale":
@@ -305,8 +305,13 @@ export function metro2Verdict(task: Metro2Task): string {
  *   amount_past_due;
  *   dofd               date of first delinquency;
  *   php                payment history profile, graded against the
- *                      engine's own chain: a wrong status costs the next
- *                      month's PHP too, as it would at the bureaus;
+ *                      engine's own chain: a wrong status, or a month
+ *                      furnished that should be omitted (or the reverse),
+ *                      sits in every later month's PHP in the window, one
+ *                      position deeper each month, and costs each of them,
+ *                      as it would at the bureaus. An error in the first
+ *                      month of six costs five later PHPs; in the last,
+ *                      none;
  *   special_comment;
  *   terms_and_balance  current balance, scheduled payment, terms duration
  *                      and K4, which move together at a forbearance, a

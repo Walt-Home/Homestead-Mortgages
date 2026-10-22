@@ -14,5 +14,12 @@ export default defineConfig({
       "@hm/refi-review": resolve(packages, "refi-review/src/index.ts"),
     },
   },
-  test: { include: ["src/**/*.test.ts"] },
+  test: {
+    include: ["src/**/*.test.ts"],
+    // Every test here is computation over generated tasks, and the sweeps
+    // that take two seconds on a laptop took six to seven on CI's runners,
+    // past the five-second default: deploys failed on 22 October on tests
+    // that had not changed. A test's own longer timeout still wins.
+    testTimeout: 60_000,
+  },
 });

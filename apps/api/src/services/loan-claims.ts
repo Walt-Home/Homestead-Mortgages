@@ -185,10 +185,14 @@ export async function acceptLoanClaim(
   if (ownsTransaction(db)) {
     return prisma.$transaction((tx) => acceptLoanClaim(token, userId, tx));
   }
+  // The expiry is read against the clock that minted it, the app's, as the
+  // live-claim read below reads it. Against the database's now() the two
+  // could disagree, and a test that fixes the app's clock found its claims
+  // dead the moment the real date passed the fixed one by thirty days.
   const [locked] = await db.$queryRaw<{ id: string }[]>`
     SELECT id FROM loan_claims
      WHERE token_hash = ${hashInvitationToken(token)}
-       AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+       AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ${new Date()}
      FOR UPDATE`;
   const claim = locked ? await liveClaim(db, token) : null;
   if (!claim) throw new AppError(404, "That link is not good any more.", "NOT_FOUND");

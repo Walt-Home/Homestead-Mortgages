@@ -226,7 +226,8 @@ continuity. Later processes catch some of them, and each item says which.
    constructs it (`AS/src/domain/insurance/9-1.spec.test.ts:53`) and the cycle
    registry has no row for it
    (`AS/src/domain/operations-runtime/cycles.ts:279-326`), so on a boarded loan
-   nothing catches the lapse. Unpaid taxes surface only through the tax
+   nothing automatic catches the lapse; an agent working the 9.x insurance
+   tools could. Unpaid taxes surface only through the tax
    service's delinquency report (spec 3-7 :55). Combined with D-42 it takes a
    one-character injection.
 2. **D-35, loss mitigation or a trial plan not flagged.** This is the most

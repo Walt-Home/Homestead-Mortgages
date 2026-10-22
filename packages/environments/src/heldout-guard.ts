@@ -40,6 +40,7 @@ import { ARM_HELDOUT_SUITE, armTaskId } from "./arm/index.js";
 import { PAYOFF_HELDOUT_SUITE, payoffTaskId } from "./payoff/index.js";
 import { PMI_HELDOUT_SUITE, pmiTaskId } from "./pmi/index.js";
 import { INCOME_HELDOUT_SUITE, incomeTaskId } from "./income/index.js";
+import { LOSSMIT_HELDOUT_SUITE, lossmitTaskId } from "./lossmit/index.js";
 
 /** A held-out suite: the `name/version` its ids are drawn under, and its seed and size. */
 export interface HeldoutSuite {
@@ -82,6 +83,7 @@ export const HELDOUT_SUITES: readonly HeldoutSuite[] = Object.freeze([
   today(payoffTaskId, PAYOFF_HELDOUT_SUITE),
   today(pmiTaskId, PMI_HELDOUT_SUITE),
   today(incomeTaskId, INCOME_HELDOUT_SUITE),
+  today(lossmitTaskId, LOSSMIT_HELDOUT_SUITE),
   { namespace: "refi-tape/1.0.0", ...TAPE_HELDOUT_SUITE },
   { namespace: "refi-hard/1.0.0", ...HARD_HELDOUT_SUITE },
   { namespace: "regz-price-tests/1.0.0", ...REGZ_HELDOUT_SUITE },

@@ -27,3 +27,4 @@ export * as escrowHistory from "./escrow-history/index.js";
 export * as regzApr from "./regz-apr/index.js";
 export * as flexmod from "./flexmod/index.js";
 export * as arm from "./arm/index.js";
+export * as aus from "./aus/index.js";

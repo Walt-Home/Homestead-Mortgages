@@ -6670,3 +6670,190 @@ gone: a referral in force means 65. The guard's branch for a freeze paid up
 was unreachable and is gone; the hard-error branch refuses that case. The
 grader's comment and docs/environments.md said a wrong status costs the next
 month's PHP; it costs every later PHP in the window.
+
+## The shadow AUS's decision is graded by the engine, outside the questions it raises
+
+**Built 21 October 2026,** as `aus-decision` 1.0.0 in
+`packages/environments`: one loan file decided the way `underwrite` decides
+it, from the credit scores to the outcome.
+
+**Why this one, and why now.** The survey of origination ranked the whole
+decision first for importance, and regz-price-tests graded only the
+compliance block inside it, because the decision was not clean enough to
+grade (see "The origination side's first environment is Regulation Z's price
+tests"). Two of the three reasons have since gone: seasoning is counted in
+UTC from a zoned instant, and the record that decides is the one tested
+("Seasoning is counted in UTC, and the record that decides is the one
+tested"); second homes and investment properties are no longer referred on
+HOEPA. What remains is the placeholders and the questions of policy, and
+this environment grades the decision around both.
+
+**The map, and its two checks.** The engine was mapped as a grader before
+anything was built: every figure, rule, block and edge, with the file and
+line it comes from. A refuter checked each claim against the code, and a
+reproducer re-ran them through `underwrite`. Where they corrected the map,
+the corrections are followed:
+
+- the engine's rounding is binary, so a figure exactly on a half can round
+  down at several bright lines (the contribution ratio, the transcript
+  variance, reserve months, the recoup, an LTV in cents), not only at the
+  APR;
+- a credit report with no scores blocks only CRD-002 and UW-010, where a
+  missing report blocks the debts too;
+- a file carrying `reports` and no borrowers is an empty household;
+- the APR is refused for more than mortgage insurance and an adjustable
+  rate, and below about $1,598 the fee schedule leaves nothing financed;
+- CRD-016 belongs in the blocked set beside the debts.
+
+**The grader is the engine, imported.** The task is built into the
+`LoanFile` the decision route builds, every borrower's reports under
+`reports` and Borrower 1's mirrored onto the file-level fields, and
+`underwrite` is called as the route calls it, with no stated market, so the
+fee schedule, the APOR and the APR are derived as in production. Two things
+differ, both for reproducibility: the APOR table is a frozen copy of the
+engine's checked-in table, pinned by its hash, so `apor:vendor` never moves
+a graded answer; and the decision instant is the task's. The figures the
+engine computes from placeholders (the housing payment, with its escrow
+assumption and mortgage-insurance estimate; the closing cost total, with its
+national title premium) are given to the model as the lender's estimates and
+never graded, and the grader checks them against the engine's own before it
+grades anything. The LLPA basis points are not graded either: the grid is
+illustrative, and only its block is.
+
+**What v1 leaves out.** "Seasoning is counted in UTC, and the record that
+decides is the one tested" lists the questions of policy the engine raises:
+a ratio over 50 that is not ineligible, a score under 620 referred only
+through the grid's floor, funds to close never compared with assets, non-QM
+and higher-priced results with no finding, a refinance's maximum that
+ignores occupancy, INC-004 on every household without a base wage, a net
+tangible benefit on every refinance, ability to repay read from Borrower 1's
+reports, and bright lines compared on rounded binary figures. v1 never draws
+a file whose graded answer depends on one of them, and its rulebook states only
+what the engine does where the files are drawn. `ausInScope` runs on the
+engine's own derivations and rejects each, and a test builds a file for
+each clause and shows what the engine does there:
+
+- every borrower's own score is 620 or more, and the rulebook says so;
+- every back-end ratio is 50.00 or less, exactly and as rounded;
+- eligible assets always cover funds to close, and funds are never below
+  zero;
+- no file is non-QM or higher-priced. A file whose ability to repay is
+  undocumented (a missing report, no established income) has its APR or
+  APOR refused as well, so QM is undecided rather than non-QM;
+- every refinance is of a primary residence;
+- every household has a base wage, so INC-004 is met, and no file turns on
+  whether the sheet's wage earners include a commission or bonus earner
+  with no base;
+- every refinance is one whose investor requires a net tangible benefit,
+  and the rulebook says so;
+- asset reports come from every borrower or none, where the two readings of
+  ability to repay agree;
+- no bright line falls between the rounded figure and the exact one, and no
+  figure the engine rounds in binary lands exactly on a half. Two
+  borrowers' score average is drawn on a half on purpose: a whole number
+  over two is exact, and the engine and the rulebook both round it up.
+
+The same mapping found places the sheet scopes a rule and the engine does
+not, or the engine's maximum reads less than a guide does, and v1 stays out
+of those too: transcripts only on households with variable, self-employed
+or rental income (INC-009); no two-to-four-unit property over 75%,
+manufactured home over 80%, jumbo loan over 80% or loan past the
+high-balance limit; junior liens only on refinances and never past the
+maximum; and seasoning records dated on or before the decision's day of the
+month and never on the 1st, where calendar months and whole months agree.
+
+**What it showed.** The guard rejects none of 40,000 training candidates,
+because the generator aims around all of it, and the reference agrees with
+the engine on every one of them. The reference passes the held-out 200
+through `env:refi`, a 300-task training suite and twelve worked cases, in
+at most 27 tool calls and 4 turns; no task is redrawn. The grade is 38
+answers in 11 fields (12 on a refinance). Grading the findings, the blocked
+requirements, the recommendation and the outcome as four fields let an
+answer that works nothing score 0.22, because nearly half the files clear to
+close; graded as the engine's result and the outcome, the best answer that
+works nothing scores 0.134. Run in New York and in Tokyo, the same sample
+hashes the same.
+
+**An adversarial review, before anything was scored, upheld twelve
+findings, one of them twice.** All were fixed at 1.0.0 with a new held-out
+pin, because nothing had been measured on the first. Five mattered most,
+four of them about what the tests and the held-out suite can tell apart:
+
+- The proof that a file can be decided from the rulebook never read the
+  rulebook. The reference is a transcription of it, held to the engine;
+  the text itself was held by a hash pin that a version bump refreshes and
+  by 27 of its sentences. Eleven edits that change what it teaches (the
+  investment maximum, the reserve months, a General QM tier, the HOEPA rate
+  line, the recoup, which record decides, an APOR term, the flat fee limit,
+  ability to repay without assets, the UW-009 block, a joint debt counted
+  twice) passed every test once the pin was refreshed. Every number the
+  rulebook states is now in `AUS_RULES`, which the text is written from and
+  the reference reads, a test fails if a limit is typed into the reference
+  instead, and every rule the reference implements is pinned sentence by
+  sentence. Each of those edits now fails a test that is not a snapshot.
+- The held-out suite never told apart four stated rules, and a fifth on two
+  files: the prepayment penalty read either way, a 25-year term priced on
+  the 30-year column, documented income counting only established sources,
+  a chapter 11 or a bankruptcy with no chapter held to 24 months, and a
+  report with no scores blocking CRD-016. The rate-set cases now take a
+  25-year term and a penalty on a primary residence three times each in
+  fourteen, the 48-month chapters take turns, transcripts sit beside income
+  under review, and a report with no scores falls three times. With CLTV
+  read as the LTV, a base wage under review counted, and a manufactured
+  home's threshold read after the tiers, the held-out suite carries at
+  least three files for each of 30 wrong readings.
+- INC-004 was graded on the files the question of policy names. The guard
+  kept out a household with no wage income and counted overtime, a bonus
+  and commission as wage income, and the missing-reports edge aimed at
+  households with no base wage, every one referred on INC-004 alone; some
+  (overtime or a bonus with no base pay) cannot happen. The guard now keeps
+  out any household without a base wage, as the question is worded, the
+  rulebook no longer names INC-004, and the edge draws a base wage under
+  review beside one that counts.
+- The price tests only ever decided one way. No file is non-QM or
+  higher-priced, so qm_status and is_hpml followed from which figures were
+  missing, and the spread was never needed. The APR's field now carries the
+  spread and the two thresholds the tests were decided against, and the
+  rulebook says that no file reaches either.
+- The per-field test read each answer's field from the table it tested, so
+  moving an answer between fields failed nothing; and five things the
+  generator draws (a kept home-equity line, a deed in lieu, a chapter 11 or
+  a bankruptcy with no chapter, the 80% line off a primary residence,
+  transcripts beside income under review) had no count of their own. The
+  field of every answer is written out in the test, and each of those
+  draws, and each of the realism rules below, has a count or a check.
+
+The rest:
+
+- the General QM threshold listed the manufactured-home rule after the
+  tiers without saying it wins, and a reader taking the first tier gave
+  3.5 where the engine gives 6.5. It now comes first and says so, and the
+  generator draws manufactured homes in the middle tier three times in
+  fourteen;
+- the submitting paragraph described qualifying_income_cents as two
+  decimals or null, which the schema refuses; it now lists every field's
+  shape as the parser holds it;
+- a decimal with a leading zero was accepted and graded wrong though its
+  value was right; decimals are read as their value, as cents are;
+- refinances that cannot happen: the loan paid off was on no report, its
+  payment could be below its own interest or run past thirty years, a kept
+  home-equity line had no tradeline, and a chapter 7 could be filed inside
+  the same borrower's open chapter 13. The mortgage paid off is now on
+  Borrower 1's report, marked paid off at closing (the rule that leaves a
+  marked payment out of the ratio already covers it, so the engine needed
+  nothing); its rate is one at which its payment retires the balance within
+  thirty years; the line is a tradeline with a payment; and the two
+  bankruptcies are two borrowers';
+- about half the refinances needed exactly nothing to close, and the floor
+  of 0.101 was one hand-written answer rather than the best one. Nothing to
+  close is drawn one time in ten, and the floor is computed: each field its
+  commonest value on a training suite or the file's own figures copied,
+  whichever does better, for purchases and refinances apart. It is 0.134;
+- this entry said no rounded figure lands on a half, where two borrowers'
+  score average does, on purpose.
+
+**What a later version can lift.** Each hold above goes when its question
+is decided and the engine changes with it: a ratio over 50 drawn once it is
+an eligibility finding, scores under 620 once the minimum is one, and so on.
+The environment's version moves with any of them, and so does the frozen
+table if it is ever refreshed.

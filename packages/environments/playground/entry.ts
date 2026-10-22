@@ -167,6 +167,16 @@ import {
   metro2TaskId,
   metro2Verdict,
 } from "../src/metro2/index.js";
+import {
+  AUS_SPEC_CASES,
+  AusReferencePolicy,
+  ausDecision,
+  ausPayload,
+  ausSpecTasks,
+  ausTaskId,
+  expectedAus,
+  generateAusTask,
+} from "../src/aus/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
 
@@ -779,6 +789,21 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     expected: expectedMetro2,
     verdictOf: metro2Verdict,
     reference: () => new Metro2ReferencePolicy(),
+  }),
+  playground({
+    env: ausDecision,
+    title: "Underwriting decision",
+    side: "origination",
+    summary:
+      "One loan file decided the way the shadow AUS decides it: the scores and seasoning, income and debt-to-income, loan-to-value, funds to close and reserves, contributions, the Regulation Z price tests and a refinance's net tangible benefit, then the findings, what could not be computed, the recommendation and the outcome. Graded by the engine itself.",
+    id: ausTaskId,
+    one: generateAusTask,
+    spec: ausSpecTasks,
+    specNames: AUS_SPEC_CASES.map((c) => c.name),
+    payload: ausPayload,
+    expected: expectedAus,
+    verdictOf: (t) => expectedAus(t).outcome,
+    reference: () => new AusReferencePolicy(),
   }),
 ]);
 

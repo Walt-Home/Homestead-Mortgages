@@ -23,6 +23,7 @@
  *   npm run env:refi -w @hm/environments -- --env qualifying-income --policy reference
  *   npm run env:refi -w @hm/environments -- --env lossmit-retention --policy reference
  *   npm run env:refi -w @hm/environments -- --env metro2-furnishing --policy reference
+ *   npm run env:refi -w @hm/environments -- --env aus-decision --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -227,6 +228,19 @@ import {
   type Metro2Answer,
   type Metro2Task,
 } from "./metro2/index.js";
+import {
+  AUS_FINGERPRINT,
+  AUS_HELDOUT_SUITE,
+  AusReferencePolicy,
+  ausDecision,
+  ausSpecTasks,
+  ausTaskId,
+  expectedAus,
+  generateAusSuite,
+  generateAusTask,
+  type AusAnswer,
+  type AusTask,
+} from "./aus/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -257,7 +271,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof PMI_FINGERPRINT
     | typeof INCOME_FINGERPRINT
     | typeof LOSSMIT_FINGERPRINT
-    | typeof METRO2_FINGERPRINT;
+    | typeof METRO2_FINGERPRINT
+    | typeof AUS_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -509,6 +524,18 @@ const BENCHES = {
     verdictOf: metro2Verdict,
     reference: () => new Metro2ReferencePolicy(),
   } satisfies Bench<Metro2Task, Metro2Answer>,
+  // A loan file decided as the shadow AUS decides it, graded by the engine itself.
+  "aus-decision": {
+    env: ausDecision,
+    fingerprint: AUS_FINGERPRINT,
+    heldout: AUS_HELDOUT_SUITE,
+    suite: generateAusSuite,
+    one: generateAusTask,
+    taskId: ausTaskId,
+    spec: ausSpecTasks,
+    verdictOf: (t) => expectedAus(t).outcome,
+    reference: () => new AusReferencePolicy(),
+  } satisfies Bench<AusTask, AusAnswer>,
 };
 
 const { values } = parseArgs({
@@ -698,6 +725,7 @@ async function main(): Promise<void> {
   if (values.env === "qualifying-income") return run(BENCHES["qualifying-income"]);
   if (values.env === "lossmit-retention") return run(BENCHES["lossmit-retention"]);
   if (values.env === "metro2-furnishing") return run(BENCHES["metro2-furnishing"]);
+  if (values.env === "aus-decision") return run(BENCHES["aus-decision"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

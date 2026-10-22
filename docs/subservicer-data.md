@@ -40,7 +40,11 @@ precise synthetic data would have to be. It draws on three kinds of source:
 - **The servicing app models nearly all of it,** as tables and fake vendor
   connections. The gaps are narrower: no investor but Fannie Mae and private
   books, a sample transfer much thinner than Fannie Mae requires, and vendor
-  file layouts of the servicing app's own design.
+  file layouts of the servicing app's own design. Its runtime produces less:
+  six of its cycles have no runner
+  (`src/domain/operations-runtime/cycles.ts:285-286`, `:289-290`, `:294-295`),
+  and a boarded loan gets no periodic statement, ARM change or Metro 2 record
+  (statements-1, arm-15 and metro2-1 in docs/servicing-engine-defects.md).
 - **Some things only a real subservicer can show:** its system's own field
   names and reports, how its staff write call notes, and how uneven its data
   really is. Some layouts are not public: Metro 2 (its guide goes only to
@@ -76,7 +80,15 @@ data, because the second layer is the one no tape carries.
 
 Table names are the servicing app's, with the migration that creates them
 (`0003` is `apps/servicing/db/migrations/0003_cashiering.sql`). "Key fields"
-names the fields a synthetic loan has to get right, not every column.
+names the fields a synthetic loan has to get right, not every column. A
+table here is one the servicing app models, not one its runtime always fills,
+or fills correctly, for a boarded loan: nothing writes `payment_holds`
+(cashiering-18), `arm_schedule` stays empty (arm-15), `regx_ei_windows` is
+projected wrongly (ei-2), and the escrow-analysis, remittance and
+custodial-reconciliation cycles have no runner
+(`apps/servicing/src/domain/operations-runtime/cycles.ts:285`, `:289`, `:290`;
+none is in `runners.ts:247-261`). Each ID is an entry in
+docs/servicing-engine-defects.md.
 
 ### 1. Loan terms and identifiers
 
@@ -285,6 +297,10 @@ in at least these places:
   boarding code accepts a `custodial_recon` file kind, but the sample has
   none.
 - **The escrow analysis is a date and a balance,** not the analysis itself.
+- **ARM details have no change frequency, floor or rounding**
+  (`src/domain/boarding/tape-codec.ts:75-81`), and boarding drops the next
+  change date the tape does carry (`src/runtime/transfers.ts:194-197`; arm-15
+  in docs/servicing-engine-defects.md).
 - **Loss mitigation is two columns,** the status and the date received, where
   Regulation X wants the state of the discussions and any agreements to move
   with the loan.
@@ -315,7 +331,7 @@ only traces of a call.
 
 | Domain                       | Sample transfer                                               | Our environments generate                                                                                         | A partner's tape carries                                            |
 | ---------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Loan terms and identifiers   | Yes                                                           | Yes                                                                                                               | Yes                                                                 |
+| Loan terms and identifiers   | Yes, but no ARM change frequency, floor or rounding           | Yes                                                                                                               | Yes                                                                 |
 | Parties and contact          | Names, taxpayer number, phone, e-mail, consents, fair lending | Partly: Metro 2 consumer flags                                                                                    | One primary borrower's name; a date of birth from the supplement    |
 | Property and collateral      | Address, occupancy, parcel and flood flags                    | Partly: value, type, occupancy                                                                                    | Address, county, type, occupancy and valuations; no parcel or flood |
 | Investor and remittance      | Trial balance, Fannie Mae position, MERS                      | Partly: the payoff's split                                                                                        | Advance balances and accrued interest; investor columns dropped     |
@@ -364,7 +380,13 @@ an insurance lapse, a flood remap, an ARM change, an error notice or
 information request, a credit dispute, a bankruptcy, a military-status check,
 inspections once 90 days delinquent, a loss-mitigation application and
 modification, and a servicing transfer with its 60-day shield. The plan for
-generating these histories is separate.
+generating these histories is separate. Running the servicing app does not
+produce one: nothing in its runtime acts as the borrower, so what the borrower
+does has to be injected, and some of what the servicer does never comes on its
+own. The yearly escrow analysis and the ARM change are cycles with no runner
+(`src/domain/operations-runtime/cycles.ts:285`, `:294`; neither is in
+`runners.ts:247-261`), and a boarded ARM has no change schedule for one to read
+(arm-15 in docs/servicing-engine-defects.md).
 
 ## Gaps in the servicing app
 
@@ -379,6 +401,23 @@ generating these histories is separate.
 - **HOA dues** are entered by hand; there is no feed.
 - **Inspections** have tables and a schedule but no vendor connection.
 - **Vendor layouts** are the servicing app's own design, not a real vendor's.
+- **Six cycles have no runner:** the annual escrow analysis, daily loan
+  activity reporting, remittance, custodial reconciliation, ARM changes and MI
+  changes (`src/domain/operations-runtime/cycles.ts:285-286`, `:289-290`,
+  `:294-295`; none is in the runner map, `runners.ts:247-261`), which the app
+  marks as not landed (`cycles.ts:9-11`, `service.ts:96`). The month-end
+  ledger close waits on the reconciliation (`cycles.ts:302`), so it is
+  blocked too.
+- **The runtime does less than the engines model.** For a boarded loan it
+  opens no statement cycle (statements-1), writes no ARM schedule (arm-15),
+  links the borrower to no party, so no statement, Form 1098 or Metro 2
+  record reaches them (boarding-2), and drops a joint loan's co-borrower
+  (boarding-3). For every loan it never stops late
+  charges in forbearance or bankruptcy (cashiering-18), leaves the loan out
+  of every Metro 2 file (metro2-1), lets a paid installment's
+  early-intervention clocks breach (ei-1), misstates the early-intervention
+  windows (ei-2), and quotes the borrower's own payoff requests from the
+  wrong inputs (payoff-19). Each is in docs/servicing-engine-defects.md.
 
 ## Sources
 

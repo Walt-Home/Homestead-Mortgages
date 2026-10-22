@@ -1625,6 +1625,240 @@ The reference redraws none of 600 first draws and agrees with the engine on
 task is 34 tool calls in 10 turns across 5,000 training draws, well inside
 the episode's 80 turns at one call a turn.
 
+## metro2-furnishing
+
+metro2-furnishing 1.0.0 grades credit reporting: one loan's monthly Metro 2
+Base records for three to six consecutive month-ends, the way the servicing
+app furnishes them (its spec §8.1).
+
+**The task.** It gives what the servicer holds:
+
+- the reporting policy: truncate or round to whole dollars, the forbearance
+  freeze or contractual aging, original or remaining terms;
+- the note: date, amount, term, rate, P&I and escrow;
+- the consumers on the loan, with their position, address, liability and
+  flags (released, deceased, never liable, a successor in interest);
+- the installments from a few months before the first month, and every
+  receipt from the first of them through the last month's end;
+- the last record furnished before the first month: ours, a prior
+  servicer's hand-off (its PHP sometimes shorter than 24), or none;
+- for each month, its books (balance, deferred and forborne principal, term
+  left, maturity, the Fannie Mae loan number and the MIN) and what is in
+  force at its end: a forbearance, repayment or trial plan, a modification
+  or payment deferral, a foreclosure referral, or the loan's closing (a
+  payoff with its funds, a short sale, a foreclosure sale, a deed in lieu).
+
+The model applies the receipts to the installments oldest first, as the
+FIFO ledger does, and for each month in order finds the days past due, the
+account status, the amount past due and the date of first delinquency,
+carries the payment history profile from the record before, applies the
+condition matrix (the forbearance's entry figures under the freeze, a
+repayment plan's arrears, CO and K4 for a modification, K4 for a deferral, a
+closing's payment rating at its date), and validates the record. A record
+with a hard error is not furnished, and the next month's PHP shows D for it.
+Last, it reports the consumers' segments and ECOA codes.
+
+**The grade.** A pass is every field right. A furnished month is seven
+fields, each standing or falling whole, so fields that are constant on most
+months ride with the one that decides them:
+
+- status: account status, payment rating and date closed;
+- amount past due;
+- date of first delinquency;
+- payment history profile, graded against the engine's own chain. A wrong
+  status, or a month furnished that should be omitted (or the reverse), sits
+  in every later month's PHP in the window, one position deeper each month,
+  and costs each of them, as it would at the bureaus: an error in the first
+  of six months costs five later PHPs, one in the last costs none;
+- special comment;
+- terms and balance: current balance, scheduled payment, terms duration and
+  K4. On a closing month the scheduled payment is not graded (below);
+- payments: actual payment and date of last payment.
+
+A month the engine omits is the same seven fields, each right only when the
+answer omits it with the same hard errors, so furnishing a month that should
+be omitted costs what omitting one that should be furnished does. The last
+furnished month's consumer segments are one field, in any order. A month
+answered that the task does not have is a field of its own.
+
+An answer that answers nothing (every month current, nothing past due, 24
+B's) scores about 0.23 on the held-out suite. One that repeats the last
+record every month and reads the balance, payment and terms off the books
+scores about 0.40. The floor to read the mean field score against is
+higher, about 0.65. That is what an answer scores that never applies a
+receipt and never counts a day: it takes every month-end as current and
+reads everything else off the task by the rulebook (the special comment,
+the balance, payment, terms and K4, the month's receipts, the identifiers,
+the PHP carried with D, and the consumers' segments). It passes none of the
+200, because every window has a month-end whose ledger decides a graded
+field. A test holds that, and the same on 600 training draws. The mean
+field score never replaces the pass.
+
+**The grader is the servicing app's own engine.** `src/metro2/ported/` holds
+`metro2.ts` and `types.ts` from
+`apps/servicing/src/domain/credit-reporting/`, each byte for byte but for
+its import statements. metro2.ts's import from types.ts spans four lines,
+and the test joins each statement before it compares. The FIFO ledger both
+import is `boarding/delinquency.ts`, already ported for pmi-termination, so
+the port names `../../pmi/ported/delinquency.js` rather than keeping a second
+copy. The servicing app's one caller of the engine fixes no convention for a
+condition, a prior record or a month-end's ledger, so the grader restates the
+ones the servicing app keeps elsewhere, each with its line:
+
+- a month-end's ledger is FIFO over the receipts received on or before it, as
+  early-intervention's delinquency snapshot builds it;
+- a record that fails validation is omitted, and the next month carries it
+  with D for its month (the cycle builder and `phpAfterOmission`);
+- the actual payment is the receipts dated in the month and the date of last
+  payment the latest receipt, both on or before the month-end. A borrower's
+  payoff funds count in both, but never enter the ledger;
+- a forbearance's entry status and amount past due are the ledger's on the
+  day before the plan takes effect: 78 and $7,378.65 for the spec's plan
+  effective 05-01;
+- a last record's PHP shorter than 24 is padded with B, as a hand-off is;
+- a short sale's foreclosure had started when a referral is in force at its
+  month-end. v1 never dates one after the closing date, and the guard
+  refuses one that is.
+
+**The tools.** refi's `date_add`, `days_between`, `end_of_month` and
+`calculate`, and nothing else. The balances are the servicer's books, so no
+amortization tool is given. No tool applies a receipt, counts days into a
+status, carries a PHP, formats a field or validates a record: each of those
+is graded.
+
+**The tasks** cycle by index through twelve edges, a hundred windows each in
+a suite of 1,200:
+
+- buckets: a borrower who stops paying, pays one installment a month two or
+  three behind, or pays part of one, walking the month-ends across 29/30,
+  59/60 (February 2028 included: 59 days at a month-end needs a leap
+  February), 89/90, 119/120 and 149/150 days;
+- dofd: the date of first delinquency set, kept through a partial catch-up
+  that leaves 30 days or more, and reset by a cure and a new delinquency;
+- pool: a part payment waiting in the pool and completed after the
+  month-end, a prepayment, a double payment, an overpayment that builds up,
+  an installment paid in two halves, each with a month-end that finds an
+  installment unpaid;
+- forbearance: entered current, at 1 to 29 days or at 30 to 149, under the
+  freeze and under contractual aging, payments suspended or reduced, ending
+  with the window, a reinstatement or a payment deferral of 2 to 6
+  installments (8.1-T4 and T5, 12.6). Entered current under the freeze,
+  the window opens two months before the plan, the first of them paid a few
+  days late;
+- repayment_plan: one that repays the arrears in two to six months, still
+  running at a month-end in the window, and one paying less than the
+  installment (AC), each sometimes under a referral (BO), which the cure
+  ends;
+- trial: a three-month trial plan (AC, aging) offered 60 days or more
+  behind, sometimes under a referral, then a modification or a trial failed
+  by a payment missed (12.8);
+- workout: a payment deferral (K4) of 2 to 6 installments, evaluated at the
+  month-end before it, the month's installment paid first when six are
+  behind (12.6 rule 4); or a modification (480 or 360 months, with forborne
+  principal and K4, or without) after its three-month trial, in the window
+  or begun before it. Either ends a referral made before it;
+- foreclosure: a referral, then a foreclosure sale (at 179 or 180 days
+  every other time) or a deed in lieu (each side of a bucket's edge in
+  turn), with and without a deficiency;
+- closing: a payoff current at its date, a payoff of a delinquent loan (by
+  refinance or not), a short sale with no foreclosure started (13) and one
+  after a referral (65), each rated at the closing date on each side of a
+  bucket's edge in turn;
+- boarding: a prior servicer's hand-off, full or short, and a loan boarded
+  with no history, each current or past due;
+- identifiers: a month whose MIN is missing, 17 or 19 digits, or holds a
+  letter, or whose Fannie Mae number is not 10 digits, omitted, with D next;
+- consumers: joint borrowers at the same address and another, a guarantor
+  (5), a released borrower (T and H), a deceased one (X), one never liable
+  (Z), and a successor who is not furnished. The flags come only in the
+  combinations 8.1 rule 5 allows: a successor carries no other, a released
+  borrower was never never-liable, and the base is always liable.
+
+A window for an edge about something else, which would be current
+throughout, is paid on time but once, a few days after a month's end. Receipts land now and then
+on a month's last day, which that month-end's ledger holds, and on the 1st
+after it; a forbearance entered three behind sometimes has one installment
+caught up on the plan's eve, which its entry figures count. A workout's
+loan is twelve months seasoned at its evaluation (12.6, 12.8), and a
+foreclosure referral is in force only while the delinquency it was made on
+continues (13.3).
+
+Every task also draws the policy, and one in four an installment ending in 50
+or 49 cents, which rounding turns on. The spec's worked example and test
+cases are 17 spec tasks on its loan SM-1001: January to April (8.1-T1, T2),
+the forbearance under the freeze and its Payment Deferral (T3, T4), the same
+months under contractual aging, the reinstatement (T5), a Flex Modification
+after a trial (T6), the short sale with and without a referral (T7), the
+foreclosure sale, deed in lieu (with and without a deficiency) and payoff
+(T8), a hand-off and no hand-off (T15), the successor and released borrower
+(T16), January to April rounded (T19), 8.2 rule 10's corrected variant, and
+a malformed MIN omitted with D after it (T9).
+
+**What v1 leaves out, and why.** Mapping the engine against its spec turned
+up places where it furnishes what its spec calls wrong. v1 does not grade a
+model on any of them. `metro2InScope` runs on the engine's own outputs, and
+the generator aims around every one, so on 12,000 unfiltered draws it rejects
+none. It keeps out:
+
+- a modification or deferral carried into a month whose new installments
+  are 30 days unpaid: the engine reports 11 and nothing past due in every
+  month the condition is carried. Workouts come only in the window's last
+  month, their first payment made;
+- a month with contractual status after a forbearance month, with an
+  installment unpaid at its end: the spec resumes aging from the frozen
+  status (78 to 80), and the engine reads the ledger (84 at 211 days);
+- a date of first delinquency that is not the due date that began the
+  delinquency running: the engine blanks the DOFD at a month of 1 to 29 days
+  and re-anchors it later, against rule 3. The generator keeps a delinquency
+  at two installments or more once it has a DOFD;
+- a receipt on or after a closing date, and closing funds in the ledger: the
+  engine reads the payment rating off the ledger, so funds in it rate a loan
+  134 days late as current;
+- a closing current at its date with an installment unpaid at the month-end,
+  which the engine furnishes as 13 with a DOFD;
+- a hard error no input can satisfy: a freeze at 30 days or more whose
+  arrears are then paid, and a deed in lieu or foreclosure sale with nothing
+  unpaid (DOFD_REQUIRED). Only a missing or malformed identifier omits a
+  record;
+- a foreclosure referral in force once the delinquency it was made on has
+  ended, by a cure or a workout. The engine reports BO whenever it is handed
+  a referral, so a completed deferral or a reinstated loan would be 11 with
+  nothing past due and BO, where 8.1 rule 7 gives a deferral a blank comment
+  and 13.3 closes a reinstated or worked-out foreclosure. The generator ends
+  the referral there, and the guard refuses one in force after a cure,
+  beside a workout, or dated after a closing;
+- a zero balance before a closing: the engine never furnishes E;
+- a disaster case, a charge-off (97) and a transfer out (05). With a disaster
+  case the engine's trial reports AC where the spec's precedence gives AW; the
+  spec says nothing of a 05 record's balance or a 97's.
+
+A closing's scheduled payment is not graded: the engine keeps the PITI there,
+and the spec says only that the balances are 0. Two choices the spec leaves
+open are stated in the rulebook rather than left out. The engine uses the
+optional codes AS (a payoff by refinance) and H (a released borrower's
+segment), which 8.1-Q10 leaves off until confirmed. The servicing app's own
+8.1-T16 test asserts T and H, and the rulebook says this servicer furnishes
+both. And a loan boarded past due is a debt collector's (11.4), which 8.1's
+Reg F gate (8.1-T17, 8.3 rule 8) holds back until a live contact or a
+validation notice plus 14 days. The task carries no contact facts, so the
+rulebook states the gate open: the notice went with the hello letter, as
+11.4 sends it, more than 14 days before the first month's end, and none came
+back.
+
+The §8.3 and §14.4 overlays (the notice-of-error bar, bankruptcy, SCRA,
+disaster, deceased) are not in 1.0.0: reproducing them found the bar furnishing a more adverse status than
+the freeze, the confirmed Chapter 13 plan reading a FIFO ledger its overlay
+does not reset, and the SCRA stay leaving a DOFD on a frozen 11.
+docs/decisions.md has each departure, reproduced.
+
+**The proof of fairness.** The reference passes the held-out suite, a
+300-task training suite and the 17 spec tasks to the character, with no task
+redrawn in 600, and agrees with the engine on 2,000 candidates nothing
+filtered (12,000 when last measured, all in scope). Its longest window is 42
+tool calls, the submission included, across those 12,000 draws (34 on the
+held-out suite), well inside the episode's 80 turns. Step 1 says which ledger steps are reading: a
+receipt into an empty pool, and a pool below or exactly one installment.
+
 ## escrow-history
 
 escrow-history 1.0.0 is escrow-analysis started from the account's ledger.
@@ -1734,6 +1968,7 @@ npm run env:refi -w @hm/environments -- --env payoff-statement --policy referenc
 npm run env:refi -w @hm/environments -- --env pmi-termination --policy reference
 npm run env:refi -w @hm/environments -- --env qualifying-income --policy reference
 npm run env:refi -w @hm/environments -- --env lossmit-retention --policy reference
+npm run env:refi -w @hm/environments -- --env metro2-furnishing --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

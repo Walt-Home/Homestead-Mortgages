@@ -1,0 +1,36 @@
+The servicing app's Metro 2 furnishing engine (spec §8.1), ported for the
+metro2-furnishing environment's grader.
+
+Source       apps/servicing/src/domain/credit-reporting/{metro2,types}.ts
+Vendored at  293261b371fe97d2b6b39e1f29ca60dd808ac8fb (apps/servicing/VENDORED_FROM)
+Ported       2026-10-21
+
+Each file here is its source byte for byte except its import statements,
+and the rewrite is three rules and no more:
+  - the kernel's paths (../../kernel/{calendar,money}/<file>.ts) become
+    @hm/kernel/{calendar,money} (the same bytes; packages/kernel/VENDORED_FROM);
+  - a sibling's ./<file>.ts becomes ./<file>.js;
+  - ../boarding/<file>.ts becomes ../../pmi/ported/<file>.js. The FIFO
+    ledger both files import (boarding/delinquency.ts) is already ported,
+    byte for byte, for the pmi-termination environment, and held there
+    (src/pmi/ported/PORTED_FROM); one copy, not two.
+metro2.ts's import from ./types.ts spans four lines (10 to 13). Its last
+line, `} from "./types.ts";`, is part of the import statement and takes the
+same rewrite. Nothing else may be edited: src/__tests__/metro2.test.ts joins
+each import statement onto one line, rewrites the original's by these rules,
+compares, and compares the rest of each file, and fails on any difference.
+Lint and Prettier skip this directory for the reason they skip the vendored
+trees.
+
+No file the port needs is ours: the ledger types come with pmi's port.
+
+Not ported: credit-reporting/ops.ts (buildCycle, phpAfterOmission) and
+ops-8-3.ts, which import node:crypto and the stateful servicing-requests
+service; suppression.ts and bankruptcy/credit.ts (the §8.3 and §14.4
+overlays, which v1 does not grade). The conventions the environment runs
+the engine under (each month's ledger, an omitted month's carry, the
+forbearance entry figures, what counts as a payment in the month) are
+restated in src/metro2/grader.ts with the lines they come from.
+
+To take a change from the servicing app, copy the two files again and apply
+the same three rewrites.

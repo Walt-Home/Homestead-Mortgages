@@ -156,6 +156,17 @@ import {
   lossmitTaskId,
   lossmitVerdict,
 } from "../src/lossmit/index.js";
+import {
+  METRO2_SPEC_CASES,
+  Metro2ReferencePolicy,
+  expectedMetro2,
+  generateMetro2Task,
+  metro2Furnishing,
+  metro2Payload,
+  metro2SpecTasks,
+  metro2TaskId,
+  metro2Verdict,
+} from "../src/metro2/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
 
@@ -753,6 +764,21 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     expected: expectedLossmit,
     verdictOf: lossmitVerdict,
     reference: () => new LossmitReferencePolicy(),
+  }),
+  playground({
+    env: metro2Furnishing,
+    title: "Metro 2 credit reporting",
+    side: "servicing",
+    summary:
+      "One loan's monthly Metro 2 Base records for three to six month-ends, furnished in order: the account status from the FIFO ledger, the amount past due, the date of first delinquency kept or reset, the payment history profile carried from the record before, the special comment, balance and terms under a forbearance, a repayment or trial plan, a modification or deferral, a foreclosure referral or the loan's closing, and the consumers' segments. Graded by the servicing app's own furnishing engine.",
+    id: metro2TaskId,
+    one: generateMetro2Task,
+    spec: metro2SpecTasks,
+    specNames: METRO2_SPEC_CASES.map((c) => c.name),
+    payload: metro2Payload,
+    expected: expectedMetro2,
+    verdictOf: metro2Verdict,
+    reference: () => new Metro2ReferencePolicy(),
   }),
 ]);
 

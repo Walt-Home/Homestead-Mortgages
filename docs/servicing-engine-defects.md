@@ -6,12 +6,12 @@ reproduced again on 21 October 2026 against the commit
 `apps/servicing/VENDORED_FROM` names (`293261b`, committed 17 September 2026).
 One more, boarding-1, was found and reproduced on 22 October 2026 while
 cataloguing defects for synthetic data (docs/synthetic-data-defects.md).
-Seven more are in the runtime that wires the engines together rather than in
-an engine: cashiering-18, arm-15, payoff-19, statements-1, metro2-1, ei-1 and
-ei-2. They came from running the servicing app's runtime for 397 simulated
-days on a scratch database on 22 October 2026, and each was reproduced in
-isolation the same day, with none of that run's own choices, and upheld by two
-independent checks.
+Eight more are in the runtime that wires the engines together rather than in
+an engine: cashiering-18, arm-15, payoff-19, statements-1, boarding-2,
+metro2-1, ei-1 and ei-2. They came from running the servicing app's runtime
+for 397 simulated days on a scratch database on 22 October 2026, and each was
+reproduced in isolation the same day, with none of that run's own choices, and
+upheld by two independent checks.
 The environments keep all but one out of grading. pmi-9 is graded, because
 the spec states the engine's reading as its own rule. Four more
 (cashiering-4, cashiering-9, flexmod-1, flexmod-2) were graded at the
@@ -32,6 +32,7 @@ decided", says why each went the way it did.
 | arm-15        | arm        | A boarded ARM never gets its change schedule, so no adjustment or (c) notice can run                 | §7.2 inputs; Reg Z 1026.20(c)(2)       | 🔴     | `runtime/transfers.ts:141-150`, `:194-197`; `domain/notices/ops-7-2.ts:167-170`                 |
 | payoff-19     | payoff     | The borrower's own payoff quotes use ten times the rate, no late charges and a calendar LPI          | §16.1 rules 1, 6, 11; 1026.36(c)(3)    | 🔴     | `runtime/borrower/flows/9-servicing-requests.ts:94`, `:188-198`                                 |
 | statements-1  | statements | No statement cycle is ever opened for a boarded loan, so no periodic statement is sent               | §7.1 events and rule 1; 1026.41(a)(2)  | 🔴     | `domain/notices/ops-7-1.ts:74`; `domain/operations-runtime/cycles.ts:223-230`                   |
+| boarding-2    | boarding   | A transfer-boarded borrower never gets a party, so no statement, 1098 or bureau record reaches them  | 1026.41(a); §7.1 rule 11; C-4.1-01     | 🔴     | `runtime/transfers.ts:190`; read at `runtime/servicing-parties.ts:16-22`                        |
 | cashiering-2  | cashiering | The $50 rule can book negative escrow                                                                | §2.2 rule 2                            | 🟡     | `domain/cashiering/allocation.ts:114`                                                           |
 | cashiering-3  | cashiering | Named extra principal is credited to escrow, or parked, when the rest is short of a payment          | §2.4 rules 1-2; §2.5 example I         | 🟡     | `domain/cashiering/allocation.ts:137-158`                                                       |
 | cashiering-4  | cashiering | One suspense balance shields several installments from late charges                                  | §2.7 rule 1; 2.7-Q1                    | 🟡     | `domain/cashiering/latecharges.ts:65-66`                                                        |
@@ -105,7 +106,7 @@ decided", says why each went the way it did.
 | pmi-12        | pmi        | New York's appraisal sets the federal thresholds                                                     | §10.1 R2; 12 U.S.C. 4901(12)           | 🟢     | `domain/pmi/cancellation.ts:15`                                                                 |
 | pmi-13        | pmi        | An ARM reset inside an interest-only period amortizes at once                                        | §10.2 R2                               | 🟢     | `domain/pmi/schedule.ts:69-74`                                                                  |
 
-🔴 high (9) · 🟡 medium (42) · 🟢 low (30). ei is Reg X early intervention.
+🔴 high (10) · 🟡 medium (42) · 🟢 low (30). ei is Reg X early intervention.
 Section numbers are the servicing app's spec; paths are under
 `apps/servicing/src/`; amounts ending in c are cents. docs/decisions.md tells
 the longer story of most of these, in the entry for the environment that found
@@ -445,8 +446,7 @@ index date 2026-09-17).
   `SM_STATEMENT_GENERATE_T1`, and on the statement date the cycle planned a
   run and executed its unit. That unit then held the statement for two other
   reasons, not part of this entry: a transfer-boarded borrower has no
-  `party_id`, so it has "no recipients" (runtime/servicing-parties.ts:18-20;
-  notices/service.ts:116), and the runtime always renders the standard
+  `party_id`, so it has "no recipients" (boarding-2), and the runtime always renders the standard
   template (runtime/servicing.ts:174-175), so a loan more than 45 days
   delinquent is held for its missing (d)(8) box. Two independent checks
   reproduced it, one walking 41 days across two cycles' opening dates with the
@@ -460,6 +460,106 @@ index date 2026-09-17).
   Transfer boarding should also open the first cycle on `loan.boarded`, as
   §7.1 says.
 - **Kept out by.** No environment produces a periodic statement.
+
+### boarding-2. A transfer-boarded borrower never gets a party, so no statement, Form 1098 or Metro 2 record reaches them 🔴
+
+- **Spec says.** Reg Z 1026.41(a) and §7.1: a periodic statement every
+  billing cycle, on paper unless the consumer agreed to e-delivery. The
+  small-servicer exemption is closed, so "statements are required on every
+  loan"; rule 12 sends to "the borrower of record". §7.1 rule 11 and IRC
+  6050H: a Form 1098 to the payer of record by January 31. §8.1 and
+  C-4.1-01: "the status of each mortgage loan to each of the four major
+  credit repositories" every month. Rule 5 takes the Base segment from "the
+  first obligor on the note (`loan_borrowers.position=1`)". The Notice
+  Registry addresses parties (§7.1 `notices.recipient_party_ids`,
+  `tax_forms_1098.payer_party_id`; §7.4 rule 4, consent per party). §1.1 has
+  boarding keep the tape's phone and e-mail (W-001) and write its consents
+  with `provenance='transferor'`. §32.14 rule 8 and S6 have a servicing-book
+  borrower sign in by "the number on file", with SSN4 and DOB for L2. §34.5
+  rule 9(c) shows a boarded borrower without a party as "not yet an
+  account", and §34.5 (line 23) and §33.1 (line 14) say the transfer book
+  creates no party; both speak of accounts only. §8.1 reads the consumer
+  from `borrowers` and `loan_borrowers`, and `parties` only for successors
+  (8-1-furnish-tradeline-metro-2.md:57). Nothing makes a statement, a 1098
+  or a tradeline wait for a party.
+- **Engine does.** `insertBoardingRows` writes the borrower with name, TIN
+  last four, language and SCRA flag only: no `party_id`, no date of birth,
+  no contact (runtime/transfers.ts:190). The codec decodes the tape's e-mail
+  and phone (domain/boarding/tape-codec.ts:252), and the tape has no DOB
+  field (domain/boarding/types.ts:60). No consents are written, though
+  §1.1 has boarding store the tape's with `provenance='transferor'`. Every
+  servicing output finds the borrower through `borrowers.party_id`
+  (runtime/servicing-parties.ts:16-22):
+  - The statement renders with no recipients, is held "no recipients"
+    (notices/service.ts:116), and the unit throws (runtime/servicing.ts:175).
+  - The 1098 throws "no borrower party on the loan"
+    (runtime/servicing.ts:219).
+  - The Metro 2 builder drops the loan as `no_consumer`
+    (domain/operations-runtime/runners.ts:132-133) before 8.1 sees it, so
+    8.1's `NO_CONSUMER_SEGMENT` exception and its routing never fire
+    (domain/credit-reporting/metro2.ts:270).
+  - 12.2's denial notice reads the same parties
+    (domain/operations-runtime/derivers-35-8.ts:211, :222).
+
+  Nothing can link a party later:
+  - The code door links only `application_borrowers`
+    (infra/db/borrower-parties.ts:78-83), and boarding left no contact for
+    it to find.
+  - `party.linkLoan` matches on `b.date_of_birth`
+    (app/tools/section32-2.ts:321), which a transfer-boarded row never has.
+  - `account.provision` and the partner-book load cover monitored loans only
+    (app/tools/section33-1.ts:304; runtime/partner-book.ts:302-304).
+  - `linkBorrower` (infra/db/borrower-parties.ts:123) has no caller.
+
+  Originated loans escape, because `servicingParties` also reads
+  `application_borrowers.party_id`.
+
+- **Reproduction.** A scratch database, with the demo batch boarded through
+  the transfer path.
+  - **What boarding wrote.** 94 boarded borrowers, all 94 with no party and
+    no DOB; no borrower parties and no consents. Of the 100 tape rows, 74
+    carry an e-mail and 98 a phone.
+  - **Sign-in, loan A (SM-TR-0000001).** The code door, given the tape's own
+    e-mail, made a new party and linked nothing. `party.linkLoan` with the
+    tape's SSN last four and the loan's last four (or the ZIP) refused
+    `LINK_LOAN_MISMATCH`.
+  - **Control, loan B.** Linked to a party through the app's own repository.
+  - **Statements.** Both cycles were opened by hand (statements-1) for the
+    10-01 due date, and the demo clock walked from 09-10 to 09-21. B's
+    statement was mailed 09-17 and both of its clocks were satisfied. A's
+    job failed "statement held: no recipients", SM_STATEMENT_GENERATE_T1
+    breached 09-17 and REGZ_1026_41B_STATEMENT_PROMPT_4 breached 09-20.
+  - **1098, tax year 2026.** B was furnished on paper; A was refused "no
+    borrower party on the loan".
+  - **Metro 2.** As of 09-30, with `loans.min` supplied (metro2-1): one
+    record (B), 93 loans omitted as `no_consumer`, no 8.1 exceptions. The
+    cycle validated with one record per bureau.
+  - **Positive control.** With a DOB put on A's row, the same
+    `party.linkLoan` call linked A at L2, and A came back as recipient and
+    consumer.
+
+  Two independent checks reproduced it by other paths: one boarded through
+  the bus command `1.1 boardLoan` and ran the real `metro2_monthly` job
+  through 35.3's planner, where the 93 party-less loans appear nowhere, not
+  even in 8.1's own omitted count; the other started from the app's seed
+  entry. One also found 91 tape rows carrying E-SIGN evidence and 83 TCPA
+  evidence, and 0 consent rows written. The 397-day simulation database
+  shows the same: 92 of 94 boarded borrowers
+  with no party, no `statement.sent`, and 0 records in every Metro 2 cycle.
+  Found and reproduced on 22 October 2026.
+
+- **Smallest fix.** In `insertBoardingRows`, give each boarded borrower a
+  `parties{borrower}` row, as 33.1 rule 3 and
+  runtime/partner-book.ts:297-302 do. Use the tape's name and its
+  normalized e-mail and phone as `contact`, and link to an existing party
+  only on e-mail and name. Insert the borrower with `party_id` set, and
+  write the tape's consents on that party with `provenance='transferor'`,
+  `verified=false`. Separately, have `metro2RecordsFromTypedRows` pass a
+  loan with no consumers to 8.1, so `NO_CONSUMER_SEGMENT` routes it as an
+  exception instead of dropping it.
+- **Kept out by.** No environment boards a transfer or runs the runtime's
+  cycles. metro2-furnishing hands 8.1's engine consumers of its own
+  (packages/environments/src/metro2/generator.ts:214).
 
 ## Medium
 
@@ -1542,7 +1642,7 @@ credited_as_of 2026-10-15}` and the installment `satisfied`, with no
   Kept out: pmi-termination keeps out a rate change inside an interest-only
   period or after the 78% row.
 
-82 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+83 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

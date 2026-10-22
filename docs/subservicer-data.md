@@ -410,14 +410,17 @@ own. The yearly escrow analysis and the ARM change are cycles with no runner
   blocked too.
 - **The runtime does less than the engines model.** For a boarded loan it
   opens no statement cycle (statements-1), writes no ARM schedule (arm-15),
-  links the borrower to no party, so no statement, Form 1098 or Metro 2
-  record reaches them (boarding-2), and drops a joint loan's co-borrower
-  (boarding-3). For every loan it never stops late
-  charges in forbearance or bankruptcy (cashiering-18), leaves the loan out
-  of every Metro 2 file (metro2-1), lets a paid installment's
-  early-intervention clocks breach (ei-1), misstates the early-intervention
-  windows (ei-2), and quotes the borrower's own payoff requests from the
-  wrong inputs (payoff-19). Each is in docs/servicing-engine-defects.md.
+  sets up no mortgage insurance policy, schedule or Homeowners Protection Act
+  clock (pmi-15), links the borrower to no party, so no statement, Form 1098
+  or Metro 2 record reaches them (boarding-2), and drops a joint loan's
+  co-borrower (boarding-3). For every loan it never stops late charges in
+  forbearance or bankruptcy (cashiering-18), takes a paid late charge again
+  from later payments (cashiering-19), leaves the loan out of every Metro 2
+  file (metro2-1), lets a paid installment's early-intervention clocks breach
+  (ei-1), misstates the early-intervention windows (ei-2), quotes the
+  borrower's own payoff requests from the wrong inputs (payoff-19), and cannot
+  post a payoff or a ledger line over its HTTP tool routes (http-1). Each is
+  in docs/servicing-engine-defects.md.
 
 ## Sources
 

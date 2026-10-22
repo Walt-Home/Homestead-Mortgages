@@ -6,13 +6,13 @@ reproduced again on 21 October 2026 against the commit
 `apps/servicing/VENDORED_FROM` names (`293261b`, committed 17 September 2026).
 One more, boarding-1, was found and reproduced on 22 October 2026 while
 cataloguing defects for synthetic data (docs/synthetic-data-defects.md).
-Nine more are in the runtime that wires the engines together rather than in an
-engine: cashiering-18, arm-15, payoff-19, statements-1, boarding-2, metro2-1,
-ei-1, ei-2 and boarding-3. They came from running the servicing app's runtime
-for 397 simulated days on a scratch database on 22 October 2026, and from
-reproducing what that run found; each was reproduced in isolation the same
-day, with none of that run's own choices, and upheld by two independent
-checks.
+Twelve more are in the runtime that wires the engines together rather than in
+an engine: cashiering-18, cashiering-19, arm-15, payoff-19, pmi-15,
+statements-1, boarding-2, boarding-3, metro2-1, ei-1, ei-2 and http-1. They
+came from running the servicing app's runtime for 397 simulated days on a
+scratch database on 22 October 2026, and from reproducing what that run found;
+each was reproduced in isolation the same day, with none of that run's own
+choices, and upheld by two independent checks.
 The environments keep all but one out of grading. pmi-9 is graded, because
 the spec states the engine's reading as its own rule. Four more
 (cashiering-4, cashiering-9, flexmod-1, flexmod-2) were graded at the
@@ -34,6 +34,8 @@ decided", says why each went the way it did.
 | payoff-19     | payoff     | The borrower's own payoff quotes use ten times the rate, no late charges and a calendar LPI          | §16.1 rules 1, 6, 11; 1026.36(c)(3)    | 🔴     | `runtime/borrower/flows/9-servicing-requests.ts:94`, `:188-198`                                 |
 | statements-1  | statements | No statement cycle is ever opened for a boarded loan, so no periodic statement is sent               | §7.1 events and rule 1; 1026.41(a)(2)  | 🔴     | `domain/notices/ops-7-1.ts:74`; `domain/operations-runtime/cycles.ts:223-230`                   |
 | boarding-2    | boarding   | A transfer-boarded borrower never gets a party, so no statement, 1098 or bureau record reaches them  | 1026.41(a); §7.1 rule 11; C-4.1-01     | 🔴     | `runtime/transfers.ts:190`; read at `runtime/servicing-parties.ts:16-22`                        |
+| cashiering-19 | cashiering | A paid late charge stays `assessed` on its fee row, so each later remainder pays it again            | §2.7 states, rules 6, 8; §2.1 rule 5   | 🔴     | `app/tools/section2-1.ts:77`; `domain/operations-runtime/cashiering-cycle.ts:144-145`           |
+| pmi-15        | pmi        | A boarded MI loan gets no policy, schedule or HPA clock, and `mi_changes` finds nothing to do        | §10.2, §10.3; 12 U.S.C. 4902(b), (c)   | 🔴     | `domain/boarding/service.ts:357-366`; `domain/operations-runtime/cycles.ts:250`                 |
 | cashiering-2  | cashiering | The $50 rule can book negative escrow                                                                | §2.2 rule 2                            | 🟡     | `domain/cashiering/allocation.ts:114`                                                           |
 | cashiering-3  | cashiering | Named extra principal is credited to escrow, or parked, when the rest is short of a payment          | §2.4 rules 1-2; §2.5 example I         | 🟡     | `domain/cashiering/allocation.ts:137-158`                                                       |
 | cashiering-4  | cashiering | One suspense balance shields several installments from late charges                                  | §2.7 rule 1; 2.7-Q1                    | 🟡     | `domain/cashiering/latecharges.ts:65-66`                                                        |
@@ -77,6 +79,7 @@ decided", says why each went the way it did.
 | ei-1          | ei         | A paid installment does not cancel its Reg X early-intervention clocks, which breach                 | §11.1 rule 1; §11.2; 11.1-T3           | 🟡     | `infra/db/unit-of-work.ts:118-119`; `domain/early-intervention/timers.ts:276`                   |
 | ei-2          | ei         | A late payment cancels a breached window, and one contact satisfies every later window               | §11.1, §11.2 state machines; 11.1-T4   | 🟡     | `runtime/delinquency.ts:68-69`, `:87-88`, `:91-92`                                              |
 | boarding-3    | boarding   | A transfer tape's co-borrower is dropped without a trace, so a joint loan boards with one borrower   | §1.1 mapping rule; §8.1 rule 5         | 🟡     | `domain/boarding/tape-codec.ts:99`, `:252`; `runtime/transfers.ts:190-191`                      |
+| http-1        | http       | A payoff's buckets and a ledger line's amounts cannot cross the HTTP tool routes                     | §16.2 agent design; §35.1; §2.1        | 🟡     | `runtime/server.ts:140-150`; `app/tools/section16-2.ts:253`; `app/tools.ts:189-193`             |
 | cashiering-10 | cashiering | A $50-rule payment before its due date is labeled prepaid, and its counter row is skipped            | §2.2 rule 2                            | 🟢     | `domain/cashiering/allocation.ts:203`                                                           |
 | cashiering-16 | cashiering | A dispute overlay ignores its start date                                                             | §2.7 rule 3(viii)                      | 🟢     | `domain/cashiering/latecharges.ts:90`                                                           |
 | cashiering-17 | cashiering | Instruction text is matched by keyword                                                               | §2.1 rule 6                            | 🟢     | `domain/cashiering/allocation.ts:81`, `:170`                                                    |
@@ -108,7 +111,7 @@ decided", says why each went the way it did.
 | pmi-12        | pmi        | New York's appraisal sets the federal thresholds                                                     | §10.1 R2; 12 U.S.C. 4901(12)           | 🟢     | `domain/pmi/cancellation.ts:15`                                                                 |
 | pmi-13        | pmi        | An ARM reset inside an interest-only period amortizes at once                                        | §10.2 R2                               | 🟢     | `domain/pmi/schedule.ts:69-74`                                                                  |
 
-🔴 high (10) · 🟡 medium (43) · 🟢 low (30). ei is Reg X early intervention.
+🔴 high (12) · 🟡 medium (44) · 🟢 low (30). ei is Reg X early intervention.
 Section numbers are the servicing app's spec; paths are under
 `apps/servicing/src/`; amounts ending in c are cents. docs/decisions.md tells
 the longer story of most of these, in the entry for the environment that found
@@ -562,6 +565,143 @@ index date 2026-09-17).
 - **Kept out by.** No environment boards a transfer or runs the runtime's
   cycles. metro2-furnishing hands 8.1's engine consumers of its own
   (packages/environments/src/metro2/generator.ts:214).
+
+### cashiering-19. A paid late charge stays `assessed` on its fee row, so each later remainder pays it again 🔴
+
+- **Spec says.** §2.7's state machine: an `assessed` charge becomes
+  `collected` when funds are allocated to it, and §2.7 names the hand-off,
+  `fee.collect` (funds allocated to `late_charges` by 2.1). The `fees` row
+  carries `collected_cents` and the state. §2.1 rule 5: a remainder goes to
+  late charges only while one is outstanding, and otherwise stays in
+  `suspense_unapplied`. §2.7 rule 6 and 2.7-T12: a charge reversed for a
+  re-dated payment refunds what was collected. Rule 8, 2.7-T13 and A2-3-04:
+  the period's Σ `collected_cents` is reported to Fannie Mae, and
+  `fee.collected{late_charge}` arms FNMA_A2304_LC_COLLECTED_REPORT_MONTHLY.
+  §16.1 rule 6 and Reg Z 1026.36(c)(3): the payoff includes unpaid late
+  charges, accurately. Reg Z 1026.41(d)(1): the statement's amount due. Reg X
+  1024.35(b)(5): a fee with no reasonable basis is an error.
+- **Engine does.** The runtime's posting run, `postReceivedPayment`
+  (app/tools/section2-1.ts:40-101), credits the remainder to the loan's
+  `late_charges` account (:77) and writes it on the payment row (:86) and
+  `payment.posted` (:88). It never touches the fee row. 2.7's
+  `LateChargeOps.collect` (domain/cashiering/ops-2-7.ts:227-241), which sets
+  `collected_cents` and the state and emits `fee.collected`, has no caller
+  outside 2-7.spec.test.ts (:222, :276, :354, :357, :385). The cash state is
+  then rebuilt from the fee rows, not the ledger: `late_charges_due_cents` is
+  Σ amount − collected over `assessed` rows
+  (domain/operations-runtime/cashiering-cycle.ts:144-145, :153), and
+  `collected_on` is not read at all. So a paid charge is due again at the next
+  derivation, and every reader of the state or the row sees it: the next
+  payment's remainder (domain/cashiering/allocation.ts:195), the 35.8 work
+  screen's payoff quote (domain/operations-runtime/derivers-35-8.ts:117), the
+  periodic statement's amount due (runtime/servicing.ts:105, :120), the
+  re-date refund, which is the row's `collected_cents`
+  (domain/cashiering/latecharges.ts:135), a waiver, which treats the paid
+  charge as open (:106-113), 13.8's SCRA waiver
+  (app/tools/section13.ts:610-611), 35.12's own figures
+  (domain/operations-runtime/posture-35-12/ports.ts:56) and 5.1's collected
+  figure (latecharges.ts:170-172). Only 35.10's close-out, which reads the
+  ledger (domain/operations-runtime/closeout-35-10/derive.ts:62), sees it
+  paid.
+- **Reproduction.** A scratch database with the app's migrations. L-1 boarded
+  through the transfer path on 2026-08-20, no workout and no bankruptcy, with
+  the daily unit run every day. Payments were written through the cash-rows
+  port and posted by the unit, and the P&I and T&I custodial accounts came
+  from the app's own 35.5 harness. The unit assessed 7,901c on 09-17. A
+  227,158c payment on 09-25 paid the installment and sent 7,901c to
+  `late_charges`, which then stood at 0. The fee row, as the entity record and
+  in the typed `fees` table, still read `assessed` with `collected_cents` 0.
+  There was no `fee.collected` and no A2-3-04 timer, and the derived state
+  read 7,901c due. On 09-28 the work screen's payoff quote carried the 7,901c,
+  a total of 25,162,565c against 25,154,664c without it. The statement for
+  10-01 asked 227,158c and listed the same 7,901c as paid since the last
+  statement. A 224,257c payment on 10-01, 5,000c over the installment with no
+  instruction, sent the 5,000c to `late_charges` instead of suspense. A
+  227,158c payment on 11-01, the statement's figure, sent 7,901c again. That
+  is 20,802c taken for one 7,901c charge: the receivable stood at −12,901c,
+  and the row still read `assessed`. On a second loan, a 4.1 re-date of the
+  09-01 installment to 09-10, after the 09-25 payment, gave `refund_cents` 0.
+  An `error_correction` waiver on the first loan recorded 7,901c waived and
+  refunded nothing. First seen beside cashiering-18's reproduction, after the
+  397-day runtime simulation of 22 October 2026, and reproduced on an ordinary
+  loan the same day. Two independent checks reproduced it by other paths,
+  figure for figure.
+- **Smallest fix.** In `postReceivedPayment`, after the allocation set
+  (section2-1.ts:77), apply `plan.late_charge_cents` to the open late charges
+  oldest first through `LateChargeOps.collect` (`from: "remainder"`), and
+  write each fee row back with its state, `collected_cents` and
+  `collected_on`. The reversal (:115-148) undoes it, and
+  `loanCashStateFromRows` reads `collected_on` (cashiering-cycle.ts:144).
+  payoff-19's fix, which takes late charges from the same state, depends on
+  this one.
+- **Kept out by.** No environment runs the 35.5 cycle. payments-posting
+  carries `late_charges_due_cents` from receipt to receipt in its own state
+  (packages/environments/src/payments/reference.ts:71, :272) and never
+  rebuilds it from fee rows.
+
+### pmi-15. A boarded MI loan gets no policy, schedule or HPA clock, and `mi_changes` finds nothing to do 🔴
+
+- **Spec says.** §10.1 and §10.2 consume `loan.boarded`. The schedule is built
+  from the boarded terms, and `mi.schedule.updated` arms
+  `HPA_4902B_AUTO_TERMINATE_0` (§10.2) and `HPA_4902C_MIDPOINT_TERMINATE_0`
+  (§10.3). Each one breaches to an officer at sev-1 (12 U.S.C. 4902(b) and
+  (c)). A boarded MI loan with no original value arms
+  `SM_MI_ORIGINAL_VALUE_MISSING_60`, and one with no last disclosure gets its
+  first annual disclosure within 60 days (10.4-T8). A daily cycle with no
+  eligible unit files a receipt of zeros as "the day's evidence that the cycle
+  looked" (§35.3 edge case 7), so the empty receipt is right only if the
+  selector can see the loans.
+- **Engine does.** Transfer boarding reads `mi.flag` only for warning W-006
+  (boarding/rules.ts:168). `loan.boarded` carries no MI block
+  (boarding/service.ts:357-366). Nothing on the hosted runtime writes an MI
+  policy or schedule:
+  - The 10.4 `loan.boarded` hook (pmi/ops-10-4.ts:308) is attached only in the
+    spec harness (pmi/spec-harness.ts:88).
+  - Nothing calls the 10.2 boarding check, the `pmi.schedule.rebuild` tool
+    with op `board` (app/tools/section10.ts:234; section10-2.ts:99).
+  - `seedMiSchedule` (orig-boarding/ops-30-4.ts:437) has no caller outside
+    tests, and only appends `mi.schedule.updated` (:437-446), though its
+    comment says it seeds `mi_schedules`.
+
+  So no HPA clock arms (pmi/timers.ts:35, :42), and neither do the 10.4 clocks
+  (pmi/timers-10-4.ts:20, :24). The `mi_changes` selector reads the typed
+  `mi_schedules` table (operations-runtime/cycles.ts:250). No code writes that
+  table. Every 10.x tool uses the JSON kind (section10.ts:239;
+  section10-2.ts:49, :73; section10-3.ts:33), and that kind has no projector
+  map (operations-runtime/projectors/index.ts:14). So the cycle plans zero
+  units every day, and its receipt of zeros says it looked. Its missing runner
+  (cycles.ts:275, :295) is never reached (operations-runtime/service.ts:621),
+  so unlike `escrow_analysis_annual` and `lar_daily`, which die
+  `runner_missing` on the same sweep, it never shows as a gap. From reading
+  the code, not running it: the selector also drops the schedule's
+  "unhandled", so once a row exists, a passed 80% date would select the loan
+  every day.
+
+- **Reproduction.** A fresh `db-setup` and `seed-demo`, with nothing else
+  written. The tape's eight MI loans board `active`, and seven escrow a
+  premium (SM-TR-0000004: 506,600c a year). The database holds 0
+  `mi_policies`, `mi_schedules` or `mi_*` entity rows, 0 HPA or `SM_MI_*`
+  timers and 0 `mi.*` events. SM-TR-0000025 (180 months from 2020-01-01) has a
+  midpoint termination date of 2027-07-01. The selector returns 0 units on
+  2027-07-02, 2031-05-01 and 2045-01-01. `cycles.plan{as_of: 2027-07-02,
+cycle_codes: [mi_changes]}` opens and completes a run with a receipt of
+  zeros and appends `mi.schedule.run_completed`. It creates 0 jobs and 0
+  escalations, and the registry's `overdue_since` stays null. As a control,
+  `pmi.schedule.rebuild` called by hand arms both HPA clocks (midpoint
+  2027-07-01), but the selector still returns 0 units. With a typed row
+  inserted by hand, the next day's unit dies `runner_missing` with a sev-3
+  escalation to `ops_analyst`. The 397-day simulation shows the same: 105
+  `mi_changes` runs, 0 units, all completed. Two independent checks reproduced
+  it through the hosted `Runtime.sweep`, one with the 10.2 boarding op as the
+  control: once a policy was boarded by hand, its HPA clocks breached to an
+  officer, so the silence comes from boarding.
+- **Smallest fix.** On `loan.boarded` with `mi.flag`, run the 10.2 boarding
+  check. Carry the original value on the tape, or open
+  `SM_MI_ORIGINAL_VALUE_MISSING_60` when it is absent. Give the `mi_schedules`
+  kind a projector map, or point the selector at what `pmi.schedule.rebuild`
+  writes, and add "unhandled" to the selector.
+- **Kept out by.** No environment boards a loan or runs the cycle planner;
+  pmi-termination builds its schedule from the task's terms.
 
 ## Medium
 
@@ -1576,6 +1716,72 @@ credited_as_of 2026-10-15}` and the installment `satisfied`, with no
   (packages/environments/src/metro2/generator.ts:212-216), and no
   environment boards a transfer tape.
 
+### http-1. A payoff's buckets and a ledger line's amounts cannot cross the HTTP tool routes 🟡
+
+- **Spec says.** §16.2's AI agent design: the `payoff-release` agent posts the
+  payoff with `postPayoff`. §35.1's trigger runs every
+  `POST /v1/loans/{id}/tools/{process}/{name}` command. §35.11 rule 10 posts
+  every tool over HTTP as its own agent and counts a 500, or a 400 from a
+  `TypeError`, as errored. §2.1's human path puts the same commands on the ops
+  console, and the officer makes manual ledger adjustments over $10,000. The
+  route's wire convention is money as a decimal string of cents
+  (runtime/server.ts:50; docs/DEPLOY.md:542), and §35.1 revives "every
+  `*_cents` field" to bigint (35-1 :47). §2.1 says the console "exposes the
+  same commands with identical validators" (2-1 :146), and §16.2's AI-off path
+  is the "ops-console payoff workbench with the same tools" (16-2 :114).
+- **Engine does.** The /v1 route turns only keys ending `_cents` into bigints
+  (runtime/server.ts:140-150). The console's route converts nothing
+  (console/server.ts:464). `postPayoff` casts `buckets` (`accrued_interest`,
+  `principal`, …) without converting them (app/tools/section16-2.ts:253,
+  guardrail :272; domain/payoff/ops-16-2.ts:132, :142-144). `ledger.post`
+  hands `entry_set.lines[].amountCents` to the kernel ledger as sent
+  (app/tools.ts:189-193; kernel/ledger/ledger.ts:120-121). A decimal string
+  concatenates into the sum, and a number throws `TypeError`, so neither tool
+  completes on either route. Separately, `postPayoff` never checks the buckets
+  against the loan: a missing key defaults to zero (ops-16-2.ts:141), so a
+  buckets object with no principal, `{}` or one renamed `*_cents`, retires the
+  loan with nothing applied. That is reachable in process too.
+- **Reproduction.** A fresh database, with Runtime and createApiServer booted
+  as lifecycle.test.ts boots them. The loan holds principal 55,945,571c and
+  interest due 262,864c. A wire of 56,208,435c is cleared by
+  `matchPayoffFunds` over /v1 (200).
+  - `ledger.post` receipt over /v1, `amountCents` as strings: 500 ("sum
+    056208435-56208435 cents"). As numbers: 400, "Cannot mix BigInt and other
+    types".
+  - `postPayoff` over /v1, buckets as strings or numbers: 400, the same
+    TypeError.
+  - On `/ops/api/tools` as officer: 500 for both tools.
+  - Buckets named `principal_cents` and `accrued_interest_cents`: 200, applied
+    0c, unapplied 56,208,435c, `loan.paid_in_full`, `loans.status` paid_off.
+    Principal 55,945,571c stays on the ledger, and the wire is booked to
+    custodial T&I as an overage pending refund. `buckets: {}` does the same.
+  - The same inputs in process with bigints: zero, applied 56,208,435c, every
+    loan account at 0.
+
+  Two independent checks reproduced it by other paths, one through the real
+  `run.mjs serve` process with a loan boarded by the seed's transfer batch,
+  with curl and Python clients.
+
+- **Smallest fix.** Convert at the tool, not the route.
+  - In `ledgerPost` (tools.ts:189), pass each line's `amountCents` through
+    `cents()` (tools.ts:163).
+  - In `postPayoff` (section16-2.ts:253) and its NO_SHORT_APPLICATION
+    guardrail (:272), build the buckets with `cents()` per `PayoffBuckets`
+    key. Refuse an object that lacks `principal` or `accrued_interest`, or
+    carries any other key.
+  - Making `UnbalancedEntrySet` (ledger.ts:95) a `RangeError` turns the 500
+    into a 400.
+- **Kept out by.** Nothing in `packages/environments` runs the hosted runtime.
+  payoff-statement grades through ports of quote.ts, remit.ts and
+  investor/remittance.ts. The servicing app's own lifecycle test posts the
+  receipt and the payoff with `runtime.execute` and bigints
+  (lifecycle.test.ts:759, :790, :798), though its header and
+  docs/DEPLOY.md:545-547 say every step runs over HTTP. The hosted probe posts
+  `{}`, which both tools refuse before any arithmetic (docs/audit/hosted.json:
+  `LEDGER_VIA_COMMANDS` and `NO_POST_BEFORE_CLEARED`, both refused_typed).
+  Only the 35.10 refinance close pays a loan off, in process
+  (section35-10.ts:377, :408).
+
 ## Low
 
 - **cashiering-10.** A $50-rule payment received before its due date is
@@ -1740,7 +1946,7 @@ credited_as_of 2026-10-15}` and the installment `satisfied`, with no
   Kept out: pmi-termination keeps out a rate change inside an interest-only
   period or after the 78% row.
 
-84 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+87 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

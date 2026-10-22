@@ -415,12 +415,13 @@ own. The yearly escrow analysis and the ARM change are cycles with no runner
   or Metro 2 record reaches them (boarding-2), and drops a joint loan's
   co-borrower (boarding-3). For every loan it never stops late charges in
   forbearance or bankruptcy (cashiering-18), takes a paid late charge again
-  from later payments (cashiering-19), leaves the loan out of every Metro 2
-  file (metro2-1), lets a paid installment's early-intervention clocks breach
-  (ei-1), misstates the early-intervention windows (ei-2), quotes the
-  borrower's own payoff requests from the wrong inputs (payoff-19), and cannot
-  post a payoff or a ledger line over its HTTP tool routes (http-1). Each is
-  in docs/servicing-engine-defects.md.
+  from later payments (cashiering-19), never ends a forbearance plan at its
+  term (lossmit-1), leaves the loan out of every Metro 2 file (metro2-1), lets
+  a paid installment's early-intervention clocks breach (ei-1), misstates the
+  early-intervention windows (ei-2), quotes the borrower's own payoff requests
+  from the wrong inputs (payoff-19), and cannot post a payoff or a ledger line
+  over its HTTP tool routes (http-1). Each is in
+  docs/servicing-engine-defects.md.
 
 ## Sources
 

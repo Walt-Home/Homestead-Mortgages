@@ -6952,3 +6952,9 @@ the manufactured-home rule first and says it holds whatever the tier. No
 answer changed; the pinned rulebooks moved the versions and the held-out
 suites, and the reference passes all 200 on each. DeepSeek's scores on 1.1.0
 stand as what they measured.
+
+DeepSeek-V4.1-Flash on the 1.2.0 suites, the same evening, every task scored:
+regz-price-tests 198 of 200 (99.0 %, 96.4 to 99.7; 196 on 1.1.0),
+regz-policy 197 (98.5 %; 197), regz-apr 170 (85.0 %, 79.4 to 89.3; 171), at
+0.5 to 0.8¢ a task. Every regz-apr miss but one is the APR again. The moves are
+within what a run moves, so the wording was not what the model was missing.

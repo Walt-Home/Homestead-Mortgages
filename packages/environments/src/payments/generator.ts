@@ -7,9 +7,10 @@
  * loan further behind) to three after, paid through some month: current,
  * paid ahead, or one to five behind, with the late charges those months
  * earned. The window is four to six weeks, stretched to 8 to 14 days past
- * the first late-charge run where the edge needs that run inside it: 28 to
- * 63 days, and almost always one or two runs. Then the month is aimed, in
- * turn by index, at one edge of the cashiering:
+ * the first late-charge run where the edge needs that run inside it, or, for
+ * some prepayments, the days between two runs: 26 to 63 days, and almost
+ * always one or two runs. Then the month is aimed, in turn by index, at one
+ * edge of the cashiering:
  *   - on_time: the payment on or before the grace end, which may have rolled
  *     past a weekend or holiday, or the day after it, when the run comes first;
  *   - fifty_rule: a payment short by $50 or less, or by $50.01, on a loan the

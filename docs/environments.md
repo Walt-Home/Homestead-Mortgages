@@ -369,8 +369,9 @@ environments graded, decided".
 ## payments-posting
 
 payments-posting 1.1.0 is the third servicing environment: one loan's
-receipts posted over a window of four weeks to about two months (27 to 63
-days over 1,200 training draws; the spec's cases run one to three months),
+receipts posted over a window of about four weeks to about two months (26
+to 63 days over 12,000 training draws on ten seeds, the shortest a
+prepayment month between two runs; the spec's cases run one to three months),
 the way the servicing app's cashiering posts them (its spec §2.1 receipt and allocation, §2.2
 partials and the $50 rule, §2.4 curtailments, §2.7 late charges).
 

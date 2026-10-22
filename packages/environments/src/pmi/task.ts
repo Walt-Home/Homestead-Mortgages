@@ -21,7 +21,7 @@ import { PAYLOAD_START, plain, type Split } from "../refi/task.js";
 
 export const PMI_ENVIRONMENT_NAME = "pmi-termination";
 /** Bump on any change to the rulebook, the tools, the rendering or the generator. */
-export const PMI_ENVIRONMENT_VERSION = "1.0.0";
+export const PMI_ENVIRONMENT_VERSION = "1.1.0";
 
 export type Occupancy = "principal" | "second_home" | "investment";
 

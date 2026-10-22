@@ -6911,3 +6911,25 @@ the model wasted. It had happened once before, in refi-hard's held-out run on
 21 October, where `--resume` gave that task a second try. The policy now
 sends the call back wrapped (docs/environments.md, the `vertex` policy).
 These are held-out scores, and their transcripts are not read.
+
+## The mortgage-insurance rulebook stops teaching pmi-6
+
+**Decided 22 October 2026,** as pmi-termination 1.1.0. Step 10 said a value
+below the original value asks for another value. That is the engine's
+reading for a delivered valuation, which docs/servicing-engine-defects.md
+lists as pmi-6: the spec says such a valuation is a denial. No task drew one,
+so nothing was graded on it, but a servicer's staff reading the rulebook in
+the Gym would have learned the engine's reading as the rule. The servicer
+readiness review of the same day called that a blocker for using the Gym to
+train people. The step now says a delivered valuation is never below the
+original value in a task, and that an AVM below it asks for a valuation.
+
+Every answer is unchanged. The rulebook is pinned, so the version moved and
+the held-out suite with it; 1.0.0's namespace stays on the held-out guard's
+list, and DeepSeek's 196 of 200 stands as 1.0.0's score. Three tests held
+1.0.0's 200 tasks to a distribution (no ledger gap holding more than one
+sweep in eight; a schedule-free shortcut passing under 5 %; more than ten
+NOT_CURRENT requests). 1.1.0's draw sits in the tail of what 200 tasks give
+(a 16 % gap share, where forty 200-task suites ran 8 to 13 %), so those
+bounds now hold 2,000 training tasks, where the generator's own figures are
+7 to 9 % and 3.3 to 3.8 %, and the suite keeps a looser guard.

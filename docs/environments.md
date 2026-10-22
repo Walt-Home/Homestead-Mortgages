@@ -1088,7 +1088,7 @@ a payoff's disposition as its verdict.
 
 ## pmi-termination
 
-pmi-termination 1.0.0 is the fourth servicing environment: one loan's
+pmi-termination 1.1.0 is the fourth servicing environment: one loan's
 borrower-paid mortgage insurance under the Homeowners Protection Act, as the
 servicing app administers it (its spec §10.1 borrower-requested
 cancellation, §10.2 automatic termination at 78%, §10.3 final termination at
@@ -1304,6 +1304,18 @@ are reading: a receipt added to nothing held, and an installment taken from
 an equal amount. A model that also counts every window installment's days
 with a tool, ignoring Step 7.5's note, needs at most 57 turns at one call a
 turn.
+
+**1.1.0** (22 October) narrowed one sentence of Step 10. 1.0.0 said a value
+below the original value asks for another; for a delivered valuation the
+spec says it is a denial (docs/servicing-engine-defects.md, pmi-6), and the
+generator never draws one, so the sentence graded nothing and taught the
+wrong rule to anyone reading the rulebook in the Gym. It now says a delivered
+valuation is never below the original value in a task, and that the AVM
+below it asks for a valuation. No answer changed, but the rulebook is
+pinned, so the version and the held-out suite moved. Three of the tests that
+held 1.0.0's suite to a distribution now hold 2,000 training tasks to it,
+with a looser guard on the suite, because 1.1.0's draw sits in the tail of
+what 200 tasks give.
 
 ## qualifying-income
 

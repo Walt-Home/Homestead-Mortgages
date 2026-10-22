@@ -194,8 +194,9 @@ $400,000, change 2026-11-01, index date 2026-09-17).
 - **Smallest fix.** At cancellation.ts:154-155, return ineligible with
   VALUE_DECLINED_BELOW_ORIGINAL when a delivered borrower-paid valuation is
   below original value.
-- **Kept out by.** pmi-termination keeps out a borrower's paid valuation below
-  original value.
+- **Kept out by.** pmi-termination keeps out any delivered valuation below
+  original value, and since 1.1.0 its rulebook no longer states the engine's
+  reading of one.
 
 ## Medium
 

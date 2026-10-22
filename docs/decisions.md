@@ -6933,3 +6933,7 @@ NOT_CURRENT requests). 1.1.0's draw sits in the tail of what 200 tasks give
 (a 16 % gap share, where forty 200-task suites ran 8 to 13 %), so those
 bounds now hold 2,000 training tasks, where the generator's own figures are
 7 to 9 % and 3.3 to 3.8 %, and the suite keeps a looser guard.
+
+DeepSeek-V4.1-Flash on 1.1.0's suite, the same evening: 197 of 200 (98.5 %,
+95.7 to 99.5), every task scored, 2.4¢ each, where 1.0.0's was 196. No answer
+changed, and the two scores are within what a run moves.

@@ -1105,7 +1105,15 @@ details.plain > summary + * { margin-top: 8px; }
       try { renderOverview(); renderHead(); } catch (e) { /* the scores are a footnote; the page works without them */ }
     });
   }
-  function scoresFor(key) { return SCORES.scores.filter(function (x) { return x.env === key && x.scored > 0; }); }
+  /** An environment's held-out scores: the current version's, model by model, and an older version's only for a model not yet run on this one. */
+  function scoresFor(key) {
+    var env = ENVS.filter(function (e) { return e.key === key; })[0];
+    var all = SCORES.scores.filter(function (x) { return x.env === key && x.scored > 0; });
+    if (!env) return all;
+    var current = {};
+    all.forEach(function (x) { if (x.version === env.version) current[x.policy] = true; });
+    return all.filter(function (x) { return x.version === env.version || !current[x.policy]; });
+  }
   /** Wilson's 95% interval on a pass rate, in percent. */
   function wilson(k, n) {
     var z = 1.96, p = k / n, d = 1 + z * z / n;

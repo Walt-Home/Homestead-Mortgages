@@ -5894,6 +5894,21 @@ held-out guard's list. DeepSeek's baselines on flexmod-terms 1.1.0 and
 payments-posting 1.0.0 are scores on suites no longer drawn; the new ones
 want a run of their own.
 
+**Their own runs, the same evening.** DeepSeek-V4.1-Flash on the new
+suites, 400 episodes, every one scored, no transport errors, 1.4¢ each:
+
+| Environment            | Passed  | Rate   | 95% interval | Before         |
+| ---------------------- | ------- | ------ | ------------ | -------------- |
+| payments-posting 1.1.0 | 197/200 | 98.5 % | 95.7–99.5    | 197/200, 1.0.0 |
+| flexmod-terms 1.2.0    | 196/200 | 98.0 % | 95.0–99.2    | 192/200, 1.1.0 |
+
+Closing the four regions cost the model nothing it could measure. Flex
+Mod's four more passes are inside the few points a run moves. The fields
+missed are where they were: on payments, a receipt's remainder and the
+suspense it leaves; on Flex Mod, the payment-reduction percentage twice, the
+mark-to-market LTV once and the capitalization date once. These are
+held-out scores, and their transcripts are not read.
+
 ## Qualifying income is graded by the income engine, outside the places it departs from its spec
 
 **Built 21 October 2026,** as `qualifying-income` 1.0.0 in

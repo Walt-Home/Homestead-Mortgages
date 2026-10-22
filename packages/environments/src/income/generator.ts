@@ -5,11 +5,12 @@
  * a date and a scheduled note date a month or two later, one or two
  * borrowers, and three to six income sources across the file, each with the
  * figures its documents show: a paystub's year-to-date through a month's end
- * or its 15th (whole or half months), the prior year's W-2, the months of
- * history, an award letter, a decree and its receipts, account statements,
- * an agency letter, a Form 1007 and a Schedule E. Every borrower also carries
- * the facts Regulation B protects (age, retirement, part-time work, the
- * intake's flags), which never change a figure.
+ * or its 15th (whole or half months), one paystub a borrower and dated
+ * within 30 days of the application (B3-3.2-01), the prior year's W-2, the
+ * months of history, an award letter, a decree and its receipts, account
+ * statements, an agency letter, a Form 1007 and a Schedule E. Every borrower
+ * also carries the facts Regulation B protects (age, retirement, part-time
+ * work, the intake's flags), which never change a figure.
  *
  * One source on each file is aimed, in turn by index, at an edge of the
  * rules, on one side or the other by the index's turn:
@@ -25,13 +26,15 @@
  *   - decreasing: B3-3.3-02's figure since stabilization for overtime,
  *     commission and tips against B3-3.3-01's year-to-date over the months
  *     elapsed for variable hours, and no stabilization at all;
- *   - history: 11 months against 12, and 23 against 24;
+ *   - history: 11 months against 12, and 23 against 24, on an application
+ *     from April to August (at 12, a stabilized decline: below);
  *   - social_security: the 15% share by default and documented at 14%, 15%,
  *     15.01% and above, amounts where the two roundings differ from one,
  *     and benefits on another's record ending on the continuance date, a day
  *     before it, or years after;
  *   - child_support: the 18th birthday on the continuance date and a day
- *     before it, a state extension that does or does not reach it, a 29
+ *     before it, a state extension that does or does not reach it, one that
+ *     falls before the birthday (support to the later of the two), a 29
  *     February birth date, five months of receipts, a late payment, no decree;
  *   - alimony: with and without a term, the term on the line and a day short;
  *   - retirement: balances exactly 36 months of distributions, a cent short,
@@ -44,9 +47,28 @@
  *   - regb: a retired borrower past 62 with Social Security, part-time work,
  *     and a retirement distribution or public assistance.
  *
- * The rest of each file is ordinary, mostly counted and sometimes not. A
- * borrower holds one base job at most, and a working borrower under 62 draws
- * Social Security on another's record, never their own.
+ * The rest of each file is ordinary, mostly counted and sometimes not, and
+ * each borrower is a household that could exist. A borrower's work is decided
+ * before the rest: one base job at most, part-time below 30 hours, overtime
+ * only on a full-time job and tips only on a job, one stream of each kind of
+ * variable pay. One Social Security benefit a borrower: on their own record
+ * a retirement benefit from 62 or a disability benefit beside no earnings,
+ * and otherwise on another's record. A history, a management record or a
+ * child's birth begins no earlier than the borrower's 16th birthday (18th for
+ * managing property), a parent is at most 55 at a child's birth, and support
+ * is received no longer than the child has lived; a retired borrower holds no
+ * full-time job; public
+ * assistance sits beside no job paying over $50,000 a year; one alimony or
+ * separate maintenance award a borrower.
+ *
+ * A W-2 that covers part of the prior year is the one place the history
+ * and the year-to-date leave the engine and its spec apart: R3 compares and
+ * averages the prior year as twelve months, where B3-3.3-02 divides by the
+ * months the paystub and the W-2 include. So a source whose income began
+ * during the prior year is drawn only where the two readings agree: a rise
+ * past the months-included rate or a decline below the twelve-month one,
+ * and at 12 to 23 months a decline only, whose figure never reads the prior
+ * year. Every other 12-to-23-month history comes with a whole year's W-2.
  *
  * What v1 leaves out is in docs/environments.md. `incomeInScope` runs on the
  * engine's own results and keeps a file only when the engine does nothing
@@ -83,6 +105,7 @@ import { incomeSteps } from "./reference.js";
 import {
   INCOME_ENVIRONMENT_NAME,
   INCOME_ENVIRONMENT_VERSION,
+  PERIODS_PER_YEAR,
   incomePayload,
   sourcesOf,
   type Borrower,
@@ -148,6 +171,18 @@ export function exactTrend(e: EarningsHistory): "increasing" | "stable" | "decre
   return e.ytd_cents * 2400n >= e.prior_year_cents * m2 * 95n ? "stable" : "decreasing";
 }
 
+/**
+ * The trend as B3-3.3-02 words it, the year-to-date's monthly rate against the prior year's over
+ * the months the W-2 includes (all twelve, or those since the income began), in integers with the
+ * months doubled. On a whole year's W-2 it is `exactTrend`, which is R3's.
+ */
+export function monthsIncludedTrend(e: EarningsHistory): "increasing" | "stable" | "decreasing" {
+  const m2 = BigInt(Math.round(e.ytd_months * 2));
+  const c2 = BigInt(Math.round(Math.min(12, e.history_months - e.ytd_months) * 2));
+  if (e.ytd_cents * c2 > e.prior_year_cents * m2) return "increasing";
+  return e.ytd_cents * c2 * 100n >= e.prior_year_cents * m2 * 95n ? "stable" : "decreasing";
+}
+
 /* ── amounts and dates ──────────────────────────────────────────────────── */
 
 const dollars = (r: Rng, lo: number, hi: number): Cents =>
@@ -168,26 +203,25 @@ interface PayDate {
   readonly months: number;
 }
 
-/** The most recent paystub's year-to-date: a month's end or its 15th, at least three days before the application. */
+/** A paystub is no more than 30 days older than the application (B3-3.2-01, spec §22.1 R3). */
+export const PAYSTUB_MAX_AGE_DAYS = 30;
+
+/**
+ * The most recent paystub's year-to-date: a month's end or its 15th, at least three days before
+ * the application and no more than 30 days. Each borrower has one, and every source of theirs
+ * with earnings reads it.
+ */
 function ytdFor(r: Rng, app: PlainDate): PayDate {
   const { y } = parts(app);
   const limit = addDays(app, -3);
+  const oldest = addDays(app, -PAYSTUB_MAX_AGE_DAYS);
   const marks: PayDate[] = [];
   for (let m = 1; m <= 12; m++) {
     marks.push({ through: ymd(y, m, 15), months: m - 0.5 });
     marks.push({ through: ymd(y, m, daysInMonth(y, m)), months: m });
   }
-  const ok = marks.filter((x) => x.through <= limit && x.months >= 1);
+  const ok = marks.filter((x) => x.through <= limit && x.through >= oldest && x.months >= 1);
   return ok[ok.length - 1 - (ok.length > 1 && r.chance(0.35) ? 1 : 0)]!;
-}
-
-/** An older paystub from the same year, at most nine months in. */
-function earlierPay(r: Rng, pay: PayDate): PayDate {
-  const { y } = parts(pay.through);
-  const m = r.int(3, 9);
-  return r.chance(0.5)
-    ? { through: ymd(y, m, daysInMonth(y, m)), months: m }
-    : { through: ymd(y, m, 15), months: m - 0.5 };
 }
 
 interface FileCtx {
@@ -200,25 +234,48 @@ interface FileCtx {
 
 type HistoryKind = "long" | "short" | "under12";
 
-/** Months of history for a pay date: a full prior year and more, 12 to 23, or under 12. */
-function historyFor(r: Rng, pay: PayDate, kind: HistoryKind): number {
+/** The months since the borrower turned 16, the most a history of their own earnings can hold. */
+const workingMonths = (age: number) => (age - 16) * 12;
+
+/**
+ * Months of history for a pay date: a full prior year and more, 12 to 23 with a whole year's W-2
+ * (so the paystub is at most 11 months in), or under 12. Never longer than the borrower has been 16.
+ */
+function historyFor(r: Rng, pay: PayDate, kind: HistoryKind, age: number): number {
   if (kind === "under12") return r.int(Math.floor(pay.months) + 1, 11);
-  if (kind === "short") return r.int(Math.max(12, Math.floor(pay.months) + 1), 23);
-  return r.int(Math.max(24, Math.ceil(pay.months) + 12), 160);
+  if (kind === "short") return r.int(Math.ceil(pay.months) + 12, 23);
+  return r.int(Math.max(24, Math.ceil(pay.months) + 12), Math.min(160, workingMonths(age)));
 }
 const ordinaryHistory = (r: Rng, pay: PayDate): HistoryKind =>
   r.weighted<HistoryKind>([
     ["long", 82],
-    ["short", 11],
+    ["short", pay.months <= 11 ? 11 : 0],
     ["under12", pay.months <= 10 ? 7 : 0],
   ]);
 
 type TrendAim = "increasing" | "stable" | "decreasing";
 
+/** The months of the prior year the W-2 covers: all twelve, or those since the income began. */
+const coveredOf = (pay: PayDate, history: number) => Math.min(12, history - pay.months);
+
 /**
- * Earnings for a prior-year monthly level: the year-to-date drawn to the trend aimed at, the prior
- * year over the months of it the history covers, and for a decline, when asked, a flat run since a
- * month's first.
+ * The trend a source is drawn to. On a W-2 covering part of the prior year, R3 compares the
+ * year-to-date with the prior year over twelve months and B3-3.3-02 over the months the W-2
+ * includes; they agree only on a rise past the months-included rate or a decline below the
+ * twelve-month one, so only those are drawn there, and a decline only on a W-2 of four months
+ * or more (shorter, it would have to be a collapse).
+ */
+function trendFor(r: Rng, pay: PayDate, history: number): TrendAim {
+  const covered = coveredOf(pay, history);
+  if (covered >= 12) return ordinaryTrend(r);
+  return covered >= 4 && r.chance(0.5) ? "decreasing" : "increasing";
+}
+
+/**
+ * Earnings for a monthly level: the prior year over the months of it the history covers, the
+ * year-to-date drawn to the trend aimed at, and for a decline, when asked, a flat run since a
+ * month's first. A decline on a partial W-2 falls below the twelve-month rate, where both
+ * readings of the trend find it.
  */
 function earnings(
   r: Rng,
@@ -229,14 +286,14 @@ function earnings(
   stabilize: boolean,
 ): EarningsHistory {
   const m = pay.months;
-  const covered = Math.min(12, history - m);
+  const covered = coveredOf(pay, history);
   const prior = roundCents(level * covered);
   const f =
     trend === "increasing"
       ? 1.02 + r.next() * 0.33
       : trend === "stable"
         ? 0.957 + r.next() * 0.036
-        : 0.55 + r.next() * 0.37;
+        : (covered / 12) * (0.55 + r.next() * 0.37);
   const ytd = roundCents(level * f * m);
   return {
     ytd_through: pay.through,
@@ -279,12 +336,68 @@ type Draft = IncomeSource extends infer S
     ? Omit<S, "income_id">
     : never
   : never;
+type JobDraft = Extract<Draft, { type: "base_salary" | "hourly" }>;
 
-const LEVELS: Readonly<Record<"overtime" | "commission" | "tip", readonly [number, number]>> = {
+/** A borrower as their sources are drawn: what is already on the file decides what may come next. */
+interface Person {
+  readonly borrower_id: string;
+  readonly age: number;
+  /** The borrower's paystub: every source of theirs with earnings reads it. */
+  readonly pay: PayDate;
+  readonly drafts: Draft[];
+}
+
+/** One base job a borrower: a salary or hourly pay, never both, never two. */
+const isJob = (d: Draft): d is JobDraft => d.type === "base_salary" || d.type === "hourly";
+const jobOf = (p: Person) => p.drafts.find(isJob);
+const has = (p: Person, ...types: string[]) => p.drafts.some((d) => types.includes(d.type));
+const fullTime = (p: Person) => p.drafts.some((d) => isJob(d) && !d.part_time);
+const earns = (p: Person) => has(p, "base_salary", "hourly", "overtime", "commission", "tip");
+const onDisability = (p: Person) =>
+  p.drafts.some(
+    (d) => d.type === "social_security" && d.record === "own" && d.benefit === "disability",
+  );
+
+/** A job's pay over a year, in cents: the salary annualized, or the rate over the hours worked. */
+function annualPay(d: JobDraft): number {
+  return d.type === "base_salary"
+    ? Number(d.pay_rate_cents) * PERIODS_PER_YEAR[d.pay_frequency]
+    : Number(d.rate_cents) * (d.guaranteed_hours_per_week ?? d.avg_hours_per_week ?? 0) * 52;
+}
+/** Public assistance is means-tested: it sits beside no job paying over $50,000 a year. */
+export const ASSISTANCE_PAY_CEILING_CENTS = 5_000_000;
+const assistanceFits = (p: Person) => {
+  const j = jobOf(p);
+  return !j || annualPay(j) <= ASSISTANCE_PAY_CEILING_CENTS;
+};
+
+/** The odds a borrower works, by age. */
+const workOdds = (age: number) => (age < 62 ? 0.8 : age < 67 ? 0.45 : age < 75 ? 0.2 : 0.08);
+
+type VariableType = "overtime" | "commission" | "tip";
+const VARIABLE_WEIGHTS: readonly (readonly [VariableType, number])[] = [
+  ["overtime", 50],
+  ["commission", 35],
+  ["tip", 15],
+];
+const LEVELS: Readonly<Record<VariableType, readonly [number, number]>> = {
   overtime: [250, 2_500],
   commission: [800, 9_000],
   tip: [400, 3_200],
 };
+
+/**
+ * The variable pay a borrower may still draw: overtime only on a full-time job, tips only on a
+ * job, commission on either or none; one stream of each, and none beside a disability benefit.
+ */
+const variableTypesFor = (p: Person) =>
+  onDisability(p)
+    ? []
+    : VARIABLE_WEIGHTS.filter(
+        ([t]) =>
+          !has(p, t) &&
+          (t === "overtime" ? fullTime(p) : t === "tip" ? jobOf(p) !== undefined : true),
+      );
 
 function salary(r: Rng, aim?: string): Draft {
   const frequency: PayFrequency =
@@ -321,8 +434,15 @@ function salary(r: Rng, aim?: string): Draft {
   };
 }
 
-/** Rate and hours; what the hours are aimed at decides the class. */
-function hourly(r: Rng, pay: PayDate, aim: string, trend?: TrendAim, history?: number): Draft {
+/** Rate and hours; what the hours are aimed at decides the class, and under 30 hours is part-time. */
+function hourly(
+  r: Rng,
+  pay: PayDate,
+  age: number,
+  aim: string,
+  trend?: TrendAim,
+  history?: number,
+): Draft {
   const rate = BigInt(r.int(1_600, 8_500));
   let guaranteed: number | null = null;
   let lo: number | null = null;
@@ -354,10 +474,15 @@ function hourly(r: Rng, pay: PayDate, aim: string, trend?: TrendAim, history?: n
     }) === "base_hourly_variable";
   const h =
     history ??
-    historyFor(r, pay, variable ? ordinaryHistory(r, pay) : r.chance(0.85) ? "long" : "short");
-  const t = trend ?? (variable ? ordinaryTrend(r) : "stable");
+    historyFor(
+      r,
+      pay,
+      variable ? ordinaryHistory(r, pay) : r.chance(0.85) || pay.months > 11 ? "long" : "short",
+      age,
+    );
+  const t = trend ?? (variable ? trendFor(r, pay, h) : "stable");
   const e = earnings(r, pay, level, h, t, variable && t === "decreasing" && r.chance(0.65));
-  const partTime = aim === "guaranteed_part_time" || (hours < 30 && r.chance(0.5));
+  const partTime = hours < 30;
   return {
     type: "hourly",
     rate_cents: rate,
@@ -374,19 +499,16 @@ function hourly(r: Rng, pay: PayDate, aim: string, trend?: TrendAim, history?: n
 function variable(
   r: Rng,
   pay: PayDate,
+  age: number,
+  type: VariableType,
   trend?: TrendAim,
   history?: number,
   stabilize?: boolean,
 ): Draft {
-  const type = r.weighted<"overtime" | "commission" | "tip">([
-    ["overtime", 50],
-    ["commission", 35],
-    ["tip", 15],
-  ]);
   const [lo, hi] = LEVELS[type];
   const level = Number(dollars(r, lo, hi));
-  const t = trend ?? ordinaryTrend(r);
-  const h = history ?? historyFor(r, pay, ordinaryHistory(r, pay));
+  const h = history ?? historyFor(r, pay, ordinaryHistory(r, pay), age);
+  const t = trend ?? trendFor(r, pay, h);
   return {
     type,
     regb_flags: [],
@@ -398,12 +520,12 @@ function variable(
  * A trended source placed exactly on the trend band: a prior-year month of a multiple of 40 cents,
  * so 95% of it over whole or half months is exact cents, and the engine's decimals are exact.
  */
-function onTheBand(r: Rng, pay: PayDate, aim: string): Draft {
+function onTheBand(r: Rng, pay: PayDate, age: number, aim: string): Draft {
   // A full prior year, so its twelfth is the level the band is measured from.
-  const history = historyFor(r, pay, "long");
+  const history = historyFor(r, pay, "long", age);
   const base: Draft = r.chance(0.25)
-    ? hourly(r, pay, "wide", "stable", history)
-    : variable(r, pay, "stable", history);
+    ? hourly(r, pay, age, "wide", "stable", history)
+    : variable(r, pay, age, r.weighted(VARIABLE_WEIGHTS), "stable", history);
   const level = Number((base as unknown as EarningsHistory).prior_year_cents) / 12;
   const P = 40n * BigInt(Math.max(5, Math.round(level / 40)));
   const m2 = BigInt(Math.round(pay.months * 2));
@@ -428,13 +550,19 @@ function onTheBand(r: Rng, pay: PayDate, aim: string): Draft {
   } as Draft;
 }
 
-function socialSecurity(r: Rng, ctx: FileCtx, age: number, aim?: string, working = false): Draft {
-  // A benefit on the borrower's own record is retirement past 62 or disability, so a working
-  // borrower under 62 draws one on another's record (a survivor's or a dependent's).
+/**
+ * Social Security, one benefit a borrower. On the borrower's own record it is retirement from 62,
+ * or disability before 67 beside no earnings; anyone else draws one on another's record (a
+ * survivor's or a dependent's), which has an end.
+ */
+function socialSecurity(r: Rng, ctx: FileCtx, p: Person, aim?: string): Draft {
+  const age = p.age;
   const own =
-    aim === undefined ? (age >= 62 || !working) && r.chance(0.75) : !aim.startsWith("other");
+    aim === undefined ? (age >= 62 || !earns(p)) && r.chance(0.75) : !aim.startsWith("other");
+  const retiredOwn =
+    aim === "retired_own" || (age >= 62 && (age >= 67 || earns(p) || r.chance(0.8)));
   const benefit = own
-    ? aim === "retired_own" || (age >= 62 && r.chance(0.8))
+    ? retiredOwn
       ? "retirement"
       : "disability"
     : r.pick(["retirement", "survivor"] as const);
@@ -486,13 +614,29 @@ function socialSecurity(r: Rng, ctx: FileCtx, age: number, aim?: string, working
   };
 }
 
-function childSupport(r: Rng, ctx: FileCtx, aim?: string): Draft {
+/** The whole months from one date to a later one. */
+function wholeMonths(from: PlainDate, to: PlainDate): number {
+  const a = parts(from);
+  const b = parts(to);
+  let n = (b.y - a.y) * 12 + (b.m - a.m);
+  while (n > 0 && addMonths(from, n) > to) n--;
+  return Math.max(0, n);
+}
+
+/** A parent is 16 to 55 at a child's birth. */
+const PARENT_AGES = [16, 55] as const;
+/** Whether a borrower this age can have a child under 18 born when they were 16 to 55. */
+const canParent = (age: number) => age - PARENT_AGES[1] < 17;
+
+/** Child support for a child born when the borrower was 16 to 55 and under 18 on the note date. */
+function childSupport(r: Rng, ctx: FileCtx, age: number, aim?: string): Draft {
   let dob: PlainDate;
   let ext: PlainDate | null = null;
   const lineDob = (end: PlainDate): PlainDate => {
     const d = addMonths(end, -216);
     return addMonths(d, 216) === end ? d : addDays(d, -1);
   };
+  const eighteenth = (d: PlainDate) => addMonths(d, 216);
   switch (aim) {
     case "at_line":
       dob = lineDob(ctx.required);
@@ -508,23 +652,41 @@ function childSupport(r: Rng, ctx: FileCtx, aim?: string): Draft {
       dob = addDays(lineDob(ctx.required), -r.int(200, 900));
       ext = addDays(ctx.required, -r.int(1, 150));
       break;
+    case "extension_before_18":
+      // Support to the later of 18 and a high-school graduation that comes first: the birthday
+      // decides, and it reaches the line; the graduation mostly does not.
+      dob = addDays(lineDob(ctx.required), r.int(0, 200));
+      ext = addDays(eighteenth(dob), -r.int(1, 365));
+      break;
     case "leap":
       dob = plainDate("2012-02-29");
       break;
     default:
-      // Born before the application, and under 18 on the note date.
-      dob = addDays(ctx.app, -r.int(30, 365 * 17 + 250));
-      if (r.chance(0.12)) ext = addMonths(dob, r.chance(0.5) ? 228 : 240);
+      // Born before the application, when the borrower was 16 to 55, and under 18 on the note date.
+      dob = addDays(
+        ctx.app,
+        -r.int(
+          Math.max(30, (age - PARENT_AGES[1]) * 366),
+          Math.min(365 * 17 + 250, (age - PARENT_AGES[0]) * 365),
+        ),
+      );
+      if (r.chance(0.12))
+        ext = r.chance(0.75)
+          ? addMonths(dob, r.chance(0.5) ? 228 : 240)
+          : addDays(eighteenth(dob), -r.int(20, 330));
   }
   const agreement = aim !== "no_decree" && (aim !== undefined || r.chance(0.93));
-  const months =
+  // Never more months of receipts than the child has been alive.
+  const months = Math.min(
     aim === "receipts_5"
       ? 5
       : aim === "receipts_6"
         ? 6
         : aim === undefined && r.chance(0.07)
           ? r.int(2, 5)
-          : r.int(6, 60);
+          : r.int(6, 60),
+    wholeMonths(dob, ctx.app),
+  );
   const timely = aim !== "late" && (aim !== undefined || r.chance(0.94));
   return {
     type: "child_support",
@@ -622,7 +784,9 @@ function publicAssistance(r: Rng, ctx: FileCtx, aim?: string): Draft {
   };
 }
 
-function rental(r: Rng, aim?: string): Draft {
+/** Rent on the subject property; property managed since 18 at the earliest. */
+function rental(r: Rng, age: number, aim?: string): Draft {
+  const most = (months: number) => Math.min(months, (age - 18) * 12);
   let gross = dollars(r, 1_100, 4_800);
   if (aim === "odd_cent") gross = gross - (gross % 4n) + 2n;
   const net = (gross * 75n + 50n) / 100n;
@@ -645,13 +809,13 @@ function rental(r: Rng, aim?: string): Draft {
       case "exp11":
         return [r.chance(0.5) ? null : r.int(90, 300), 11];
       case "zero_exp":
-        return r.chance(0.5) ? [365, null] : [null, r.int(12, 96)];
+        return r.chance(0.5) ? [365, null] : [null, r.int(12, most(96))];
       case "zero_new":
         return [r.chance(0.5) ? null : r.int(30, 364), r.chance(0.5) ? null : r.int(0, 11)];
       default:
         return r.weighted<[number | null, number | null]>([
           [[365, null], 40],
-          [[null, r.int(12, 150)], 20],
+          [[null, r.int(12, most(150))], 20],
           [[r.int(30, 364), null], 15],
           [[null, null], 25],
         ]);
@@ -668,48 +832,44 @@ function rental(r: Rng, aim?: string): Draft {
   };
 }
 
-/** An ordinary source of any type, mostly counted and sometimes not. */
-/** One base job a borrower: a salary or hourly pay, never both, never two. */
-const isJob = (d: Draft) => d.type === "base_salary" || d.type === "hourly";
-
-function ordinary(
-  r: Rng,
-  ctx: FileCtx,
-  pay: PayDate,
-  age: number,
-  rentalAllowed: boolean,
-  working: boolean,
-): Draft {
-  const type = r.weighted<string>([
-    ["salary", working ? 0 : 24],
-    ["hourly", working ? 0 : 12],
-    ["variable", 19],
-    ["social_security", 9],
-    ["child_support", 6],
-    ["spousal", 6],
-    ["retirement", 6],
-    ["public_assistance", 4],
-    ["rental", rentalAllowed ? 8 : 0],
-  ]);
-  switch (type) {
-    case "salary":
-      return salary(r);
-    case "hourly":
-      return hourly(
+/** A base job: a salary or hourly pay. */
+function job(r: Rng, pay: PayDate, age: number): Draft {
+  return r.weighted<string>([
+    ["salary", 24],
+    ["hourly", 12],
+  ]) === "salary"
+    ? salary(r)
+    : hourly(
         r,
         pay,
+        age,
         r.weighted<string>([
           ["guaranteed", 40],
           ["inside", 30],
           ["wide", 30],
         ]),
       );
+}
+
+/** An ordinary source of any type but a job, mostly counted and sometimes not, that fits the borrower. */
+function ordinary(r: Rng, ctx: FileCtx, p: Person, rentalAllowed: boolean): Draft {
+  const pays = variableTypesFor(p);
+  const type = r.weighted<string>([
+    ["variable", pays.length > 0 ? 19 : 0],
+    ["social_security", has(p, "social_security") ? 0 : 9],
+    ["child_support", canParent(p.age) ? 6 : 0],
+    ["spousal", has(p, "alimony", "separate_maintenance") ? 0 : 6],
+    ["retirement", 6],
+    ["public_assistance", has(p, "public_assistance") || !assistanceFits(p) ? 0 : 4],
+    ["rental", rentalAllowed ? 8 : 0],
+  ]);
+  switch (type) {
     case "variable":
-      return variable(r, pay);
+      return variable(r, p.pay, p.age, r.weighted(pays));
     case "social_security":
-      return socialSecurity(r, ctx, age, undefined, working);
+      return socialSecurity(r, ctx, p);
     case "child_support":
-      return childSupport(r, ctx);
+      return childSupport(r, ctx, p.age);
     case "spousal":
       return spousal(r, ctx);
     case "retirement":
@@ -717,7 +877,7 @@ function ordinary(
     case "public_assistance":
       return publicAssistance(r, ctx);
     default:
-      return rental(r);
+      return rental(r, p.age);
   }
 }
 
@@ -753,6 +913,7 @@ const ASPECTS: Readonly<Record<IncomeEdge, readonly string[]>> = {
     "leap",
     "extended_short",
     "receipts_5",
+    "extension_before_18",
     "late",
     "no_decree",
     "receipts_6",
@@ -776,45 +937,53 @@ export const incomeAimOf = (index: number): string => {
   return aims[turnOf(index) % aims.length]!;
 };
 
-/** The source an edge aims at, on its turn's side. */
-function aimed(
-  r: Rng,
-  ctx: FileCtx,
-  pay: PayDate,
-  age: number,
-  edge: IncomeEdge,
-  aim: string,
-): Draft[] {
+/** Overtime is paid on a full-time job and tips on a job: an edge's overtime or tips come with one. */
+function withWork(r: Rng, p: Person, drafts: Draft[]): Draft[] {
+  if (drafts.some(isJob)) return drafts;
+  if (drafts.some((d) => d.type === "overtime")) return [...drafts, salary(r, "full_time")];
+  if (drafts.some((d) => d.type === "tip")) return [...drafts, hourly(r, p.pay, p.age, "inside")];
+  return drafts;
+}
+
+/** The source an edge aims at, on its turn's side, with the job it is paid on when it needs one. */
+function aimed(r: Rng, ctx: FileCtx, p: Person, edge: IncomeEdge, aim: string): Draft[] {
+  const { pay, age } = p;
   switch (edge) {
     case "salary":
       return [salary(r, aim)];
     case "hourly_band":
-      return [hourly(r, pay, aim)];
+      return [hourly(r, pay, age, aim)];
     case "trend_band":
-      return [onTheBand(r, pay, aim)];
+      return withWork(r, p, [onTheBand(r, pay, age, aim)]);
     case "decreasing": {
       const stabilize = !aim.startsWith("unstabilized");
+      const long = historyFor(r, pay, "long", age);
       if (aim.endsWith("b3301")) {
-        const h = hourly(r, pay, "wide", "decreasing", historyFor(r, pay, "long")) as HourlySource;
+        const h = hourly(r, pay, age, "wide", "decreasing", long) as HourlySource;
         return [{ ...h, stabilization: stabilize ? stabilizationFor(r, pay, h.ytd_cents) : null }];
       }
-      return [variable(r, pay, "decreasing", historyFor(r, pay, "long"), stabilize)];
+      const type = r.weighted(VARIABLE_WEIGHTS);
+      return withWork(r, p, [variable(r, pay, age, type, "decreasing", long, stabilize)]);
     }
     case "history": {
       const h = aim === "h11" ? 11 : aim === "h12" ? 12 : aim === "h23" ? 23 : 24;
-      // A paystub early enough in the year that 11 months is more than its year-to-date.
-      const early = pay.months <= 9 ? pay : earlierPay(r, pay);
-      const t = ordinaryTrend(r);
-      return [
-        r.chance(0.25)
-          ? hourly(r, early, "wide", t, h)
-          : variable(r, early, t, h, t === "decreasing" && r.chance(0.7)),
-      ];
+      // Twelve months of history to a paystub m months in leaves a W-2 of 12 − m months, which R3
+      // still divides by twelve: only a decline, whose figure never reads the prior year, is
+      // drawn at 12, and stabilized, so the twelfth month is what lets it count. Eleven is under
+      // 12 whatever the trend; 23 and 24 have a whole year's W-2.
+      const t = h === 12 ? "decreasing" : trendFor(r, pay, h);
+      if (r.chance(0.25)) {
+        const s = hourly(r, pay, age, "wide", t, h) as HourlySource;
+        return [h === 12 ? { ...s, stabilization: stabilizationFor(r, pay, s.ytd_cents) } : s];
+      }
+      const type = r.weighted(VARIABLE_WEIGHTS);
+      const stabilize = h === 12 || (t === "decreasing" && r.chance(0.7));
+      return withWork(r, p, [variable(r, pay, age, type, t, h, stabilize)]);
     }
     case "social_security":
-      return [socialSecurity(r, ctx, age, aim)];
+      return [socialSecurity(r, ctx, p, aim)];
     case "child_support":
-      return [childSupport(r, ctx, aim)];
+      return [childSupport(r, ctx, age, aim)];
     case "alimony":
       return [spousal(r, ctx, aim)];
     case "retirement":
@@ -822,17 +991,16 @@ function aimed(
     case "public_assistance":
       return [publicAssistance(r, ctx, aim)];
     case "rental":
-      return [rental(r, aim)];
+      return [rental(r, age, aim)];
     case "two_borrowers":
       return [];
     case "regb": {
-      const ss = socialSecurity(r, ctx, age, "retired_own");
-      const part = r.chance(0.5)
-        ? salary(r, "part_time_monthly")
-        : hourly(r, pay, "guaranteed_part_time");
-      const out: Draft[] = [ss, part];
-      out.push(r.chance(0.6) ? retirement(r, "ample") : publicAssistance(r, ctx, "no_end"));
-      return out;
+      const ss = socialSecurity(r, ctx, p, "retired_own");
+      const part = (
+        r.chance(0.5) ? salary(r, "part_time_monthly") : hourly(r, pay, age, "guaranteed_part_time")
+      ) as JobDraft;
+      const assistance = !r.chance(0.6) && annualPay(part) <= ASSISTANCE_PAY_CEILING_CENTS;
+      return [ss, part, assistance ? publicAssistance(r, ctx, "no_end") : retirement(r, "ample")];
     }
   }
 }
@@ -857,7 +1025,10 @@ export function drawIncomeCandidate(
     app = rollForward(addDays(note, -r.int(14, 24)), creditor);
   } else {
     const y = r.int(2026, 2028);
-    const m = r.int(2, 12);
+    // The history edge applies from April to August, so its paystub is two and a half to seven
+    // and a half months in: 11 months of history is more than the year-to-date, 12 leaves a W-2
+    // of four months or more, and a run since stabilization fits the year.
+    const m = edge === "history" ? r.int(4, 8) : r.int(2, 12);
     // Back to a business day, so a late-December application stays in its year.
     app = rollBack(ymd(y, m, r.int(m === 2 ? 10 : 1, daysInMonth(y, m))), creditor);
     note = rollForward(addDays(app, r.int(25, 70)), creditor);
@@ -875,39 +1046,50 @@ export function drawIncomeCandidate(
         ["investment", 15],
       ]);
 
-  const people = Array.from({ length: two ? 2 : 1 }, (_, k) => {
-    const retired = edge === "regb" && k === 0;
-    const age = retired ? r.int(62, 84) : r.int(23, 74);
-    return {
-      borrower_id: `B${k + 1}`,
-      age,
-      retired: retired || (age >= 62 && r.chance(0.3)),
-      pay: ytdFor(r, app),
-      drafts: [] as Draft[],
-    };
-  });
+  const people: Person[] = Array.from({ length: two ? 2 : 1 }, (_, k) => ({
+    borrower_id: `B${k + 1}`,
+    // The child support edge's child is 15 to 17 at the application: its parent is 34 to 68.
+    age:
+      k === 0 && edge === "regb"
+        ? r.int(62, 84)
+        : k === 0 && edge === "child_support"
+          ? r.int(34, 68)
+          : r.int(23, 74),
+    pay: ytdFor(r, app),
+    drafts: [],
+  }));
   const first = people[0]!;
-  const edgeDrafts = aimed(r, ctx, first.pay, first.age, edge, aim);
-  first.drafts.push(...edgeDrafts);
-  let rentalPlaced = edgeDrafts.some((d) => d.type === "rental_subject");
+  first.drafts.push(...aimed(r, ctx, first, edge, aim));
+  let rentalPlaced = first.drafts.some((d) => d.type === "rental_subject");
   // The rest, ordinary: the first borrower's up to their share, then the second's.
-  const share = two ? r.int(Math.max(1, edgeDrafts.length), n - 1) : n;
-  for (let k = edgeDrafts.length; k < n; k++) {
-    const p = k < share ? first : people[1]!;
-    const d = ordinary(r, ctx, p.pay, p.age, rentalFile && !rentalPlaced, p.drafts.some(isJob));
-    if (d.type === "rental_subject") rentalPlaced = true;
-    p.drafts.push(d);
-  }
+  const share = two ? r.int(Math.max(1, first.drafts.length), n - 1) : n;
+  const targets = two ? [share, n - share] : [n];
+  people.forEach((p, k) => {
+    const target = targets[k]!;
+    // Work first, so what is drawn on top of it can see it: a job, or none. Beside public
+    // assistance, a part-time salary under its ceiling.
+    if (p.drafts.length < target && !jobOf(p) && !onDisability(p) && r.chance(workOdds(p.age)))
+      p.drafts.push(
+        has(p, "public_assistance") ? salary(r, "part_time_monthly") : job(r, p.pay, p.age),
+      );
+    while (p.drafts.length < target) {
+      const d = ordinary(r, ctx, p, rentalFile && !rentalPlaced);
+      if (d.type === "rental_subject") rentalPlaced = true;
+      p.drafts.push(d);
+    }
+  });
 
-  // Each borrower's sources in a drawn order, numbered across the file.
+  // Each borrower's sources in a drawn order, numbered across the file. Retired is past 62 and
+  // in no full-time job.
   let next = 0;
-  const borrowers: Borrower[] = people.map((p) => {
+  const borrowers: Borrower[] = people.map((p, k) => {
+    const retired = (edge === "regb" && k === 0) || (p.age >= 62 && !fullTime(p) && r.chance(0.5));
     const order = p.drafts.map((d) => ({ d, key: r.next() }));
     order.sort((a, b) => a.key - b.key);
     return {
       borrower_id: p.borrower_id,
       age: p.age,
-      retired: p.retired,
+      retired,
       sources: order.map(({ d }) => ({ income_id: `INC-${++next}`, ...d }) as IncomeSource),
     };
   });
@@ -973,6 +1155,14 @@ function earningsOutside(e: EarningsHistory, result: SourceResult): string | nul
   }
   if (result.trend_detail && result.trend_detail.trend !== exactTrend(e))
     return "a trend the engine's decimals decide otherwise than exact arithmetic";
+  // E15 on a W-2 covering part of the prior year: R3 compares it and averages it as twelve months,
+  // B3-3.3-02 over the months the paystub and W-2 include. Kept only where the two agree.
+  if (result.trend_detail && e.history_months - e.ytd_months < 12) {
+    if (monthsIncludedTrend(e) !== result.trend_detail.trend)
+      return "a part-year W-2 whose trend R3's twelve months decide otherwise than B3-3.3-02's months included (E15)";
+    if (e.history_months >= 12 && result.trend_detail.trend !== "decreasing")
+      return "a part-year W-2 averaged over twelve months, where B3-3.3-02 averages over the months included (E15)";
+  }
   return null;
 }
 
@@ -1008,6 +1198,12 @@ const V1_TYPES = [
  *     prior year with earnings (E15), offsetting factors exactly when the
  *     history is 12 to 23 months (D4), a stabilized run that fits the year
  *     (E14), and the engine's trend equal to the exact one;
+ *   - on a W-2 covering part of the prior year (E15 again: R3 takes it as
+ *     twelve months, B3-3.3-02 as the months it includes), the engine's
+ *     trend equal to the months-included one, and at 12 months of history
+ *     or more only a decline, whose figure never reads the prior year;
+ *   - one paystub a borrower, dated within 30 days of the application
+ *     (B3-3.2-01) and not after it;
  *   - Social Security on another's record always with an end, on the
  *     borrower's own never (D6); child support always with a birth date
  *     and never a decree term (D6, D13);
@@ -1017,9 +1213,19 @@ const V1_TYPES = [
 export function incomeOutOfScope(task: IncomeTask): string | null {
   if (task.application.transaction !== "purchase") return "a refinance (D7)";
   const note = task.application.scheduled_note_date;
+  const app = task.application.application_date;
   for (const s of sourcesOf(task))
     if (!(V1_TYPES as readonly string[]).includes(s.type))
       return `a source of type ${s.type} (out of v1)`;
+  for (const b of task.borrowers) {
+    const paystubs = new Set(b.sources.flatMap((s) => ("ytd_through" in s ? [s.ytd_through] : [])));
+    if (paystubs.size > 1) return "one borrower's earnings read from two paystubs";
+    for (const d of paystubs) {
+      if (d > app) return "a paystub dated after the application";
+      if (d < addDays(app, -PAYSTUB_MAX_AGE_DAYS))
+        return "a paystub more than 30 days older than the application (B3-3.2-01)";
+    }
+  }
   let analysis: ReturnType<typeof analyzeIncome>;
   try {
     analysis = analyzeIncome(task);

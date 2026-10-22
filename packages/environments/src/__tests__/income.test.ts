@@ -11,22 +11,26 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { addDays, addMonths, type PlainDate } from "@hm/kernel/calendar";
+import { addDays, addMonths, daysBetween, type PlainDate } from "@hm/kernel/calendar";
 import type { EventStore } from "@hm/kernel/events";
 import { describe, expect, it } from "vitest";
+import { auditEpisode, type AuditRecord } from "../audit.js";
 import { runEpisode } from "../episode.js";
 import { drawsHeldoutStream, namespaceOf } from "../heldout-guard.js";
 import { sha256, toJsonLine } from "../record.js";
 import { solveNow } from "../refi/reference.js";
 import { rngFor } from "../rng.js";
 import {
+  ASSISTANCE_PAY_CEILING_CENTS,
   FLOAT_SAFE_HIGH_WEEKS,
   INCOME_EDGES,
+  INCOME_FINGERPRINT,
   INCOME_HELDOUT_SUITE,
   INCOME_RULEBOOK,
   INCOME_SPEC_NAMES,
   INCOME_TOOLS,
   IncomeReferencePolicy,
+  ROW_FIELDS,
   analyzeIncome,
   drawIncomeCandidate,
   drawIncomeTask,
@@ -46,8 +50,12 @@ import {
   incomeSpecTasks,
   incomeSteps,
   incomeTaskId,
+  monthsIncludedTrend,
+  PAYSTUB_MAX_AGE_DAYS,
+  PERIODS_PER_YEAR,
   parseIncomeSubmission,
   qualifyingIncome,
+  renderIncomeTask,
   sourcesOf,
   type ChildSupportSource,
   type HourlySource,
@@ -406,6 +414,81 @@ describe("qualifying-income", () => {
     expect(INCOME_RULEBOOK).toContain("a 29 February birth date gives 28 February");
   });
 
+  it("pins what a model is told, and states each of the engine's figures as the engine has it", () => {
+    // Any edit to the rulebook or the tools changes what every model is told: bump
+    // INCOME_ENVIRONMENT_VERSION with this pin.
+    expect(INCOME_FINGERPRINT.environment).toMatchInlineSnapshot(`
+      {
+        "name": "qualifying-income",
+        "rulebook_sha256": "53b0625c8d4d00a3bf9757f98d06bed061c778a8d646468273d94bb8dcf72bf1",
+        "tools_sha256": "33cc914558f518c1f7fa0a92a35b066a897c6d6d5be325e94c0da31bbab735ba",
+        "version": "1.0.0",
+      }
+    `);
+    // The engine's constants, and the figures it writes inline, each in the rulebook's words.
+    const months = engine.CONTINUANCE_YEARS * 12;
+    for (const phrase of [
+      `scheduled_note_date + ${months} months (date_add with months: ${months};`,
+      `(hours_per_week_max − hours_per_week_min) × 100 ≤ ${engine.HOURLY_MINOR_VARIANCE_PCT} × hours_per_week_max`,
+      "monthly = round(rate_cents × H × 52 ÷ 12)",
+      "(ytd_cents × 12 > prior_year_cents × ytd_months)",
+      `(ytd_cents × 1200 ≥ prior_year_cents × ytd_months × ${100 - engine.STABLE_BAND_PCT_DEFAULT})`,
+      "history_months under 12: monthly is 0 and exclusion_reason is history_under_12_months",
+      "monthly = round((ytd_cents + prior_year_cents) ÷ (ytd_months + 12))",
+      "overtime, commission or tip (B3-3.3-02): monthly = round(stabilization.cents_since ÷ stabilization.months_since)",
+      "variable hourly (B3-3.3-01): monthly = round(ytd_cents ÷ ytd_months)",
+      `documented_nontaxable_pct when that is above ${engine.SS_NONTAXABLE_PCT_DEFAULT}, and otherwise ${engine.SS_NONTAXABLE_PCT_DEFAULT}`,
+      `gross_up = round(nontaxable × ${engine.GROSS_UP_PCT} ÷ 100)`,
+      `gross_up = round(monthly × ${engine.GROSS_UP_PCT} ÷ 100)`,
+      "receipts_months under 6, or receipts not full, regular and timely",
+      `child_date_of_birth + ${engine.CHILD_SUPPORT_AGE_END * 12} months`,
+      "or state_extends_support_to when that is later",
+      `at least ${months} × monthly_cents`,
+      `net = round(form_1007_gross_rent_cents × ${engine.RENTAL_NET_PCT} ÷ 100)`,
+      `schedule_e_fair_rental_days of ${engine.FAIR_RENTAL_DAYS_FULL_YEAR} or more, or management_experience_months of ${engine.MANAGEMENT_EXPERIENCE_MONTHS} or more`,
+      "Such a source with a continuance_end_date before required_through does not continue three years",
+    ])
+      expect(INCOME_RULEBOOK).toContain(phrase);
+    // The figures the engine writes inline rather than names: six months of receipts, a year of
+    // history, 36 months of balances, the later of 18 and an extension.
+    const support = (receipts_months: number) =>
+      engine.supportIncome({
+        amount_cents: 80_000n,
+        kind: "alimony",
+        receipts_months,
+        receipts_full_regular_timely: true,
+        agreement_document_id: "decree",
+      }).reason;
+    expect([support(5), support(6)]).toEqual(["receipt_history_insufficient", null]);
+    const history = (history_months: number) =>
+      engine.variableIncome({
+        income_type: "overtime",
+        ytd_cents: 855_000n,
+        ytd_months: 9,
+        prior_year_cents: 1_080_000n,
+        history_months,
+      }).reason;
+    expect([history(11), history(12)]).toEqual(["history_under_12_months", null]);
+    const balances = (short: bigint) =>
+      engine.retirementDistribution({
+        monthly_cents: 100_000n,
+        eligible_balances_cents: [100_000n * BigInt(months) - short],
+        unrestricted_penalty_free: true,
+      }).reason;
+    expect([balances(0n), balances(1n)]).toEqual([null, "continuance_assets_insufficient"]);
+    const end = (ext: string) =>
+      engine.supportIncome({
+        amount_cents: 80_000n,
+        kind: "child_support",
+        receipts_months: 12,
+        receipts_full_regular_timely: true,
+        agreement_document_id: "decree",
+        child_date_of_birth: "2011-03-03" as PlainDate,
+        state_extends_support_to: ext as PlainDate,
+      }).continuance_end_date;
+    expect([end("2029-06-30"), end("2028-06-30")]).toEqual(["2029-06-30", "2029-03-03"]);
+  });
+
   it("reproduces each place the engine departs from its spec, which v1 keeps out", () => {
     // The 10% test in floating point: at exactly 10%, 30 of the 80 whole high weeks from 1 to 80
     // read variable, where exact arithmetic reads fixed. 33.3 to 37 is one.
@@ -645,10 +728,10 @@ describe("qualifying-income", () => {
         hours_per_week_max: 37,
       }),
     ).toBe("base_hourly_fixed");
-    // D4, E4, E15, E14.
-    expect(out([{ ...overtime, history_months: 15 }])).toMatch(/D4/);
+    // D4, E4, E15, E14. Twenty-one months to a September paystub is a whole year's W-2.
+    expect(out([{ ...overtime, history_months: 21 }])).toMatch(/D4/);
     expect(
-      out([{ ...overtime, history_months: 15, offsetting_factors: ["licensed in the field"] }]),
+      out([{ ...overtime, history_months: 21, offsetting_factors: ["licensed in the field"] }]),
     ).toBeNull();
     expect(out([{ ...overtime, ytd_months: 9.25 }])).toMatch(/E4/);
     expect(out([{ ...overtime, ytd_through: "2026-09-20" as PlainDate }])).toMatch(/E4/);
@@ -660,6 +743,34 @@ describe("qualifying-income", () => {
     expect(out([{ ...overtime, stabilization: { ...flat, cents_since: 900_000n } }])).toMatch(
       /E14/,
     );
+    // E15 on a W-2 covering six months of the prior year (15 months of history to a September
+    // paystub): R3 reads $10,800.00 as $900.00 a month and example A as increasing, B3-3.3-02's
+    // months included as $1,800.00 a month and decreasing.
+    const part = { history_months: 15, offsetting_factors: ["licensed in the field"] };
+    expect(out([{ ...overtime, ...part }])).toMatch(/trend R3's twelve months.*E15/);
+    expect(monthsIncludedTrend({ ...overtime, ...part })).toBe("decreasing");
+    // Increasing both ways, it is still averaged over 21 months where the Guide's are 15.
+    expect(out([{ ...overtime, ...part, prior_year_cents: 300_000n }])).toMatch(
+      /averaged over twelve.*E15/,
+    );
+    // A decline both ways is kept: its figure is the run since stabilization, which reads no prior year.
+    expect(
+      out([{ ...overtime, ...part, prior_year_cents: 1_440_000n, stabilization: flat }]),
+    ).toBeNull();
+    // Under 12 months the figure is 0 both ways, and the trend is kept where the two agree.
+    expect(out([{ ...overtime, history_months: 11, prior_year_cents: 100_000n }])).toBeNull();
+    expect(out([{ ...overtime, history_months: 11, prior_year_cents: 200_000n }])).toMatch(/E15/);
+    // One paystub a borrower, no more than 30 days older than the application (B3-3.2-01).
+    const earlier: VariableSource = {
+      ...overtime,
+      income_id: "INC-9",
+      ytd_through: "2026-09-15" as PlainDate,
+      ytd_months: 8.5,
+    };
+    expect(out([overtime, earlier])).toMatch(/two paystubs/);
+    expect(out([overtime], { application_date: "2026-10-30" as PlainDate })).toBeNull();
+    expect(out([overtime], { application_date: "2026-10-31" as PlainDate })).toMatch(/30 days/);
+    expect(out([overtime], { application_date: "2026-09-29" as PlainDate })).toMatch(/after/);
     // Fixed hours with under a year of history, which the engine never reads.
     expect(out([{ ...hourly, history_months: 11 }])).toMatch(/under a year/);
     // D6.
@@ -714,55 +825,106 @@ describe("qualifying-income", () => {
     expect(
       JSON.stringify(tasks.map(incomePayload), (_k, v) => (typeof v === "bigint" ? String(v) : v)),
     ).not.toMatch(/pregnan|childbearing|family_plan|maternity|leave/i);
-  });
+  }, 60_000);
 
-  it("fails an answer one cent off on exactly that field, and charges for a source that is not there", () => {
+  it("fails an answer wrong in any one field on exactly that row, and passes no answer with a field wrong", () => {
     const want = expectedIncome(SPEC[0]!);
-    const wrong = (answer: IncomeAnswer) =>
-      gradeIncomeAgainst(want, answer)
-        .fields.filter((f) => !f.ok)
-        .map((f) => f.field);
-    const bump = (r: SourceRow, k: keyof SourceRow): SourceRow => ({
-      ...r,
-      [k]: String(BigInt(r[k] as string) + 1n),
+    const graded = (task: IncomeTask, answer: IncomeAnswer) => {
+      // Every answer here is one the schema allows: the grader, not the parser, refuses it.
+      expect(parseIncomeSubmission(answer).ok).toBe(true);
+      const g = gradeIncomeAgainst(expectedIncome(task), answer);
+      return { ...g, wrong: g.fields.filter((f) => !f.ok).map((f) => f.field) };
+    };
+    const bump = (v: string) => String(BigInt(v) + 1n);
+    // Each field of a row, changed to another legal value on a spec row where it is not the default.
+    const r13 = SPEC[0]!;
+    const t8 = SPEC[6]!;
+    const cases: [IncomeTask, string, keyof SourceRow, (r: SourceRow) => unknown][] = [
+      [r13, "INC-1", "method", () => "base_hourly_fixed"],
+      [r13, "INC-2", "trend", () => "stable"],
+      [r13, "INC-2", "monthly_qualifying_cents", (r) => bump(r.monthly_qualifying_cents)],
+      [r13, "INC-3", "nontaxable_cents", (r) => bump(r.nontaxable_cents)],
+      [r13, "INC-3", "gross_up_cents", (r) => bump(r.gross_up_cents)],
+      [t8, "INC-1", "continuance_end_date", () => "2029-03-04"],
+      [t8, "INC-1", "continuance_end_date", () => null],
+      [t8, "INC-2", "counted", () => false],
+      [t8, "INC-1", "exclusion_reason", () => null],
+      [t8, "INC-1", "exclusion_reason", () => "receipt_history_insufficient"],
+      [r13, "INC-4", "liability_added_cents", (r) => bump(r.liability_added_cents)],
+    ];
+    expect(new Set(cases.map(([, , k]) => k))).toEqual(
+      new Set(ROW_FIELDS.filter((k) => k !== "income_id")),
+    );
+    for (const [task, id, key, change] of cases) {
+      const right = expectedIncome(task);
+      const answer = {
+        ...right,
+        sources: right.sources.map((r) =>
+          r.income_id === id ? ({ ...r, [key]: change(r) } as SourceRow) : r,
+        ),
+      };
+      const g = graded(task, answer);
+      const n = right.sources.length + 1;
+      expect([g.wrong, g.pass, g.score], `${id} ${key}`).toEqual([
+        [`source[${id}]`],
+        false,
+        (n - 1) / n,
+      ]);
+    }
+    // The file is one field: either total off by a cent fails it, and only it.
+    for (const file of [
+      { total_qualifying_cents: "924644" },
+      { obligations_from_rental_cents: "35001" },
+    ]) {
+      const g = graded(r13, { ...want, ...file });
+      expect([g.wrong, g.pass, g.score]).toEqual([["file"], false, 4 / 5]);
+    }
+    // A missing row fails that source; a row for a source the file does not have is a field of its own.
+    const missing = graded(r13, { ...want, sources: want.sources.slice(1) });
+    expect([missing.wrong, missing.pass, missing.score]).toEqual([["source[INC-1]"], false, 4 / 5]);
+    const both = graded(r13, {
+      ...want,
+      sources: [...want.sources.slice(1), { ...want.sources[0]!, income_id: "INC-9" }],
     });
-    expect(
-      wrong({
-        ...want,
-        sources: [
-          want.sources[0]!,
-          bump(want.sources[1]!, "monthly_qualifying_cents"),
-          ...want.sources.slice(2),
-        ],
-      }),
-    ).toEqual(["source[INC-2]"]);
-    expect(
-      wrong({
-        ...want,
-        sources: [
-          ...want.sources.slice(0, 2),
-          bump(want.sources[2]!, "gross_up_cents"),
-          want.sources[3]!,
-        ],
-      }),
-    ).toEqual(["source[INC-3]"]);
-    expect(wrong({ ...want, total_qualifying_cents: "924644" })).toEqual(["file"]);
-    expect(wrong({ ...want, obligations_from_rental_cents: "35001" })).toEqual(["file"]);
-    // A label is graded with its figure: the right money under the wrong trend is a wrong row.
-    expect(
-      wrong({
-        ...want,
-        sources: want.sources.map((r) => (r.income_id === "INC-2" ? { ...r, trend: "stable" } : r)),
-      }),
-    ).toEqual(["source[INC-2]"]);
-    // A missing row, and a row for a source the file does not have.
-    expect(wrong({ ...want, sources: want.sources.slice(1) })).toEqual(["source[INC-1]"]);
-    expect(
-      wrong({ ...want, sources: [...want.sources, { ...want.sources[0]!, income_id: "INC-9" }] }),
-    ).toEqual(["source[INC-9]"]);
+    expect([both.wrong, both.pass, both.score]).toEqual([
+      ["source[INC-1]", "source[INC-9]"],
+      false,
+      4 / 6,
+    ]);
     const g = gradeIncomeAgainst(want, want);
     expect([g.pass, g.score, g.fields.length]).toEqual([true, 1, 5]);
-    expect(gradeIncomeAgainst(want, null).score).toBe(0);
+    expect(gradeIncomeAgainst(want, null)).toMatchObject({ pass: false, score: 0 });
+  });
+
+  it("is audited figure by figure, every source's included", async () => {
+    const task = SPEC[0]!;
+    const result = await runEpisode(qualifyingIncome, task, new IncomeReferencePolicy());
+    const record: AuditRecord = {
+      task: { id: task.id, split: task.split, index: task.index, rendered: renderIncomeTask(task) },
+      policy: { id: "reference" },
+      result: result as unknown as AuditRecord["result"],
+    };
+    // The reference reads or computes every figure with a tool: nothing done in its head.
+    expect(auditEpisode(record).mental).toEqual([]);
+    // A source's figure no tool returned is flagged by the source it sits on, beside a total's.
+    const answer = result.answer!;
+    const doctored: AuditRecord = {
+      ...record,
+      result: {
+        ...record.result,
+        answer: {
+          ...answer,
+          sources: answer.sources.map((r) =>
+            r.income_id === "INC-2" ? { ...r, monthly_qualifying_cents: "92144" } : r,
+          ),
+          total_qualifying_cents: "924644",
+        },
+      },
+    };
+    expect(auditEpisode(doctored).mental).toEqual([
+      "sources[INC-2].monthly_qualifying_cents",
+      "total_qualifying_cents",
+    ]);
   });
 
   it("reads a submission strictly, as the schema says, and bounces what does not fit", () => {
@@ -869,10 +1031,36 @@ describe("qualifying-income", () => {
       total_qualifying_cents: "0",
       obligations_from_rental_cents: "0",
     }));
-    // Measured at 1.0.0: about 0.002, 0.13 and 0.12 (docs/environments.md).
+    // No rule at all: each stated amount and stated end copied, everything counted, nothing excluded.
+    const statedEnd = (s: IncomeSource): string | null =>
+      s.type === "social_security"
+        ? s.benefit_end_date
+        : s.type === "alimony" || s.type === "separate_maintenance"
+          ? s.term_end_date
+          : s.type === "public_assistance"
+            ? s.duration_end_date
+            : null;
+    const unchecked = mean((t) => ({
+      sources: sourcesOf(t).map((s) => ({
+        ...plainRow(s, stated(s), true),
+        continuance_end_date: statedEnd(s),
+      })),
+      total_qualifying_cents: String(sourcesOf(t).reduce((a, s) => a + stated(s), 0n)),
+      obligations_from_rental_cents: "0",
+    }));
+    // Measured at 1.0.0 (docs/environments.md).
+    expect([nothing, copied, labels, unchecked].map((x) => x.toFixed(4))).toMatchInlineSnapshot(`
+      [
+        "0.0024",
+        "0.1540",
+        "0.1381",
+        "0.1914",
+      ]
+    `);
     expect(nothing).toBeLessThan(0.02);
     expect(copied).toBeLessThan(0.2);
     expect(labels).toBeLessThan(0.2);
+    expect(unchecked).toBeLessThan(0.25);
   });
 
   it("can be solved from the rulebook and the tools: the reference passes the held-out suite and the spec", async () => {
@@ -912,7 +1100,7 @@ describe("qualifying-income", () => {
       }
     }
     expect(hourly).toBeGreaterThan(200);
-  });
+  }, 60_000);
 
   it("holds the rulebook to the engine on candidates nothing filtered", () => {
     // The guard and the fairness filter would hide a disagreement; the candidates they would see show none.
@@ -932,7 +1120,7 @@ describe("qualifying-income", () => {
     // A change here moves every score: bump INCOME_ENVIRONMENT_VERSION, then the pin.
     expect(
       sha256(generateIncomeSuite("heldout", 1, 200).map(toJsonLine).join("")),
-    ).toMatchInlineSnapshot(`"f1353782af05224282d31685ee22f6bc95fe3c2e17d27aa5569d78273fe2ba4d"`);
+    ).toMatchInlineSnapshot(`"93dd34f6d68aef63873832c1553895b19cac2f0b1c145e0b3c5c741d09c8dcbc"`);
   });
 
   it("rebuilds a task from its coordinates, and never draws a held-out application into training", () => {
@@ -947,7 +1135,7 @@ describe("qualifying-income", () => {
     expect(drawsHeldoutStream(incomeTaskId("heldout", 1, 0).replace("/heldout/", "/train/"))).toBe(
       false,
     );
-  });
+  }, 60_000);
 
   describe("each edge, and the configurations that decide an answer, turn up", () => {
     const tasks = generateIncomeSuite("train", 1, 1300);
@@ -1093,6 +1281,29 @@ describe("qualifying-income", () => {
       expect(count((x) => history(x, 12) && x.row.counted)).toBeGreaterThan(20);
       expect(count((x) => history(x, 23) && x.row.counted)).toBeGreaterThan(20);
       expect(count((x) => history(x, 24) && x.row.counted)).toBeGreaterThan(15);
+      // A W-2 that covers part of the prior year is drawn only where R3's twelve months and
+      // B3-3.3-02's months included read it alike: the same trend, and from 12 months of history a
+      // decline, whose figure never reads the prior year.
+      const partYear = runs.filter(
+        (x) =>
+          x.row.trend !== null && Number(x.s["history_months"]) < Number(x.s["ytd_months"]) + 12,
+      );
+      const id = (x: Run) => `${x.t.id} ${x.r.source.income_id}`;
+      expect(
+        partYear.filter((x) => monthsIncludedTrend(x.s as never) !== x.row.trend).map(id),
+      ).toEqual([]);
+      expect(
+        partYear
+          .filter((x) => Number(x.s["history_months"]) >= 12 && x.row.trend !== "decreasing")
+          .map(id),
+      ).toEqual([]);
+      const under = (x: Run, trend: string) =>
+        partYear.includes(x) && Number(x.s["history_months"]) < 12 && x.row.trend === trend;
+      expect(count((x) => under(x, "increasing"))).toBeGreaterThan(40);
+      expect(count((x) => under(x, "decreasing"))).toBeGreaterThan(20);
+      expect(count((x) => partYear.includes(x) && history(x, 12) && x.row.counted)).toBeGreaterThan(
+        20,
+      );
     });
 
     it("draws Social Security's share at 14%, 15.01% and above, its two roundings, and another's record on the line", () => {
@@ -1145,6 +1356,19 @@ describe("qualifying-income", () => {
       expect(
         count((x) => extended(x) && x.row.exclusion_reason === "continuance_3y"),
       ).toBeGreaterThan(8);
+      // An extension that falls before the 18th birthday: support runs to the later, the birthday,
+      // including where the birthday reaches the line and the extension does not.
+      const early = (x: Run) =>
+        extended(x) && (x.s["state_extends_support_to"] as PlainDate) < eighteenth(x);
+      expect(
+        count((x) => early(x) && x.row.continuance_end_date === eighteenth(x) && x.row.counted),
+      ).toBeGreaterThan(15);
+      expect(
+        count(
+          (x) =>
+            early(x) && (x.s["state_extends_support_to"] as PlainDate) < x.req && x.row.counted,
+        ),
+      ).toBeGreaterThan(5);
       expect(
         count(
           (x) =>
@@ -1275,6 +1499,98 @@ describe("qualifying-income", () => {
       expect(count((x) => flagged(x, "part_time") && x.row.counted)).toBeGreaterThan(80);
       expect(count((x) => flagged(x, "age_related") && x.row.counted)).toBeGreaterThan(80);
       expect(count((x) => flagged(x, "public_assistance") && x.row.counted)).toBeGreaterThan(150);
+    });
+
+    it("draws only households that could exist, each with one paystub no more than 30 days old", () => {
+      const broken: string[] = [];
+      for (const t of tasks)
+        for (const b of t.borrowers) {
+          const fail = (why: string) => broken.push(`${t.id} ${b.borrower_id}: ${why}`);
+          const of = (...types: string[]) =>
+            b.sources.filter((s) => types.includes(s.type)) as unknown as Facts[];
+          const jobs = of("base_salary", "hourly");
+          const fullTime = jobs.some((j) => j["part_time"] === false);
+          const earns = of("base_salary", "hourly", "overtime", "commission", "tip").length > 0;
+          const hours = (j: Facts) =>
+            Number(j["guaranteed_hours_per_week"] ?? j["avg_hours_per_week"]);
+          const annualPay = (j: Facts) =>
+            j["type"] === "base_salary"
+              ? Number(j["pay_rate_cents"]) *
+                PERIODS_PER_YEAR[j["pay_frequency"] as keyof typeof PERIODS_PER_YEAR]
+              : Number(j["rate_cents"]) * hours(j) * 52;
+          // Work: one base job, part-time under 30 hours, overtime on a full-time job, tips on a
+          // job, one stream of each kind of variable pay.
+          if (jobs.length > 1) fail("two base jobs");
+          for (const h of of("hourly"))
+            if (h["part_time"] !== hours(h) < 30) fail("part-time not under 30 hours");
+          if (of("overtime").length > 0 && !fullTime) fail("overtime with no full-time job");
+          if (of("tip").length > 0 && jobs.length === 0) fail("tips with no job");
+          for (const type of ["overtime", "commission", "tip"])
+            if (of(type).length > 1) fail(`two ${type} streams`);
+          // One Social Security benefit: on the borrower's own record a retirement benefit from 62,
+          // or a disability benefit before 67 beside no earnings.
+          const ss = of("social_security");
+          if (ss.length > 1) fail("two Social Security benefits");
+          for (const s of ss)
+            if (
+              s["record"] === "own" &&
+              !(s["benefit"] === "retirement"
+                ? b.age >= 62
+                : s["benefit"] === "disability" && !earns && b.age < 67)
+            )
+              fail(`an own-record ${String(s["benefit"])} benefit at ${b.age}`);
+          // A history from 16, a management record from 18, a child born to a parent of 16 to 55
+          // and paid for no longer than it has lived.
+          for (const s of b.sources)
+            if ("history_months" in s && s.history_months > (b.age - 16) * 12)
+              fail(`${s.income_id}: a history begun before 16`);
+          for (const s of of("rental_subject"))
+            if (Number(s["management_experience_months"] ?? 0) > (b.age - 18) * 12)
+              fail("property managed before 18");
+          for (const s of of("child_support")) {
+            const dob = s["child_date_of_birth"] as PlainDate;
+            const lived = daysBetween(dob, t.application.application_date);
+            const parentAt = b.age - lived / 365.25;
+            if (parentAt < 16 || parentAt > 55) fail(`a parent of ${parentAt.toFixed(1)} at birth`);
+            if (addMonths(dob, Number(s["receipts_months"])) > t.application.application_date)
+              fail("support received longer than the child has lived");
+          }
+          // Retired past 62 and in no full-time job; assistance beside no job over its ceiling,
+          // one award of it, one spousal award.
+          if (b.retired && (b.age < 62 || fullTime)) fail("retired under 62 or in a full-time job");
+          const assistance = of("public_assistance");
+          if (assistance.length > 1) fail("two public assistance awards");
+          if (
+            assistance.length > 0 &&
+            jobs.some((j) => annualPay(j) > ASSISTANCE_PAY_CEILING_CENTS)
+          )
+            fail("public assistance beside a job over its ceiling");
+          if (of("alimony", "separate_maintenance").length > 1) fail("two spousal awards");
+          // One paystub, dated before the application and no more than 30 days before it.
+          const paystubs = new Set(
+            b.sources.flatMap((s) => ("ytd_through" in s ? [s.ytd_through] : [])),
+          );
+          if (paystubs.size > 1) fail("two paystubs");
+          for (const d of paystubs) {
+            const age = daysBetween(d, t.application.application_date);
+            if (age <= 0 || age > PAYSTUB_MAX_AGE_DAYS) fail(`a paystub ${age} days old`);
+          }
+        }
+      expect(broken).toEqual([]);
+      // And the households are still varied: an own-record benefit before 62 on disability, one
+      // past 62 beside work, and assistance beside a job.
+      const own = (x: Run, benefit: string) =>
+        is(x, "social_security") && x.s["record"] === "own" && x.s["benefit"] === benefit;
+      expect(count((x) => own(x, "disability"))).toBeGreaterThan(50);
+      expect(
+        count(
+          (x) =>
+            own(x, "retirement") &&
+            x.t.borrowers
+              .find((b) => b.sources.some((s) => s.income_id === x.r.source.income_id))!
+              .sources.some((s) => s.type === "base_salary" || s.type === "hourly"),
+        ),
+      ).toBeGreaterThan(50);
     });
   });
 });

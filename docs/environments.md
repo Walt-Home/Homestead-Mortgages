@@ -1075,18 +1075,23 @@ excluded and why, and totals the household.
 - a rental loss carried to obligations.
 
 Most labels are nearly fixed by the type or usually empty, so each travels
-with the figure that decides it, and a guess at the common case earns
-nothing on its own. The file is one field: the total and the rental
-obligations together. A source answered that the file does not have is a
-failed field of its own. The submission is read strictly: anything the
-schema forbids, a source listed twice included, comes back as an error to
-correct.
+with the figure that decides it, and a label guessed alone earns nothing.
+The file is one field: the total and the rental obligations together. A
+source answered that the file does not have is a failed field of its own.
+The submission is read strictly: anything the schema forbids, a source
+listed twice included, comes back as an error to correct.
 
 On the held-out suite:
 
 - an answer that answers nothing scores about 0.002;
-- copying each stated amount as the monthly figure scores about 0.13;
-- every label right with no money scores about 0.12.
+- copying each stated amount as the monthly figure scores about 0.15;
+- every label right with no money scores about 0.14;
+- applying no rule at all scores about 0.19: copy each stated amount and
+  each stated end (a benefit's, a term's, a letter's), count every source,
+  exclude none. That is the floor to read a score against. It checks no
+  balance, letter, receipt or end against the line, and it is still right
+  on most retirement distributions, alimony, separate maintenance and public
+  assistance, because most of those count at their stated amount.
 
 **The grader is the servicing app's own engine.** `src/income/ported/`
 holds `ops-22-3.ts` and `ops-22-1.ts` from
@@ -1128,15 +1133,19 @@ has every one:
 - a decline under each formula: since stabilization for overtime,
   commission and tips (B3-3.3-02), year-to-date over the months elapsed for
   variable hours (B3-3.3-01), and no stabilization at all;
-- 11 months of history against 12, and 23 against 24;
+- 11 months of history against 12, and 23 against 24, on an application
+  from April to August. At 12 the W-2 covers only part of the prior year,
+  so the source is a stabilized decline, whose figure never reads it (see
+  below);
 - Social Security's share at the 15% default and documented at 14%, 15%,
   15.01% and above, with amounts where its two roundings differ from one;
   benefits on another's record ending on the continuance date, a day before
   it, or years after;
 - child support whose 18th birthday is on the continuance date or a day
-  before, a state extension that does or does not reach it, a 29 February
-  birth date against a 1 March line, five months of receipts, a late
-  payment, and no decree;
+  before, a state extension that does or does not reach it, an extension
+  that falls before the birthday (support runs to the later of the two), a
+  29 February birth date against a 1 March line, five months of receipts, a
+  late payment, and no decree;
 - alimony and separate maintenance with no term, and with a term on the line
   or a day short;
 - retirement balances of exactly 36 months of distributions, a cent short,
@@ -1151,7 +1160,25 @@ has every one:
   or public assistance, and part-time work.
 
 Year-to-date periods run through a month's end or its 15th, so the months
-are whole or half, on every trended source.
+are whole or half, on every trended source. Each borrower has one paystub,
+dated no more than 30 days before the application, as B3-3.2-01 requires of
+the qualifying paystub, and every source of theirs with earnings reads it.
+
+Every borrower is a household that could exist, and a test holds each rule
+over a suite:
+
+- work is drawn before the rest: one base job at most, part-time below 30
+  hours, overtime only on a full-time job and tips only on a job, one
+  stream of each kind of variable pay;
+- one Social Security benefit a borrower. On their own record it is a
+  retirement benefit from 62, or a disability benefit before 67 beside no
+  earnings. Anyone else draws one on another's record, which has an end;
+- a history of earnings begins no earlier than 16, a management record no
+  earlier than 18. A parent is 16 to 55 at a child's birth, and support is
+  received no longer than the child has lived;
+- a retired borrower is past 62 and holds no full-time job. Public
+  assistance sits beside no job paying over $50,000 a year. A borrower has
+  at most one alimony or separate maintenance award.
 
 **What v1 leaves out, and why.** Mapping the engine against its spec turned
 up places where it departs from its own text. v1 does not grade a model on
@@ -1176,7 +1203,16 @@ cannot carry most of them. These are never drawn:
   the exact one on every hourly source drawn;
 - fixed hours with under a year of history, which the engine never reads;
 - year-to-date months that are not whole or half on a paystub's own date;
+- a borrower's earnings read from two paystubs, or from one dated after the
+  application or more than 30 days before it (B3-3.2-01);
 - a prior year with no earnings;
+- a W-2 that covers part of the prior year, where the two readings of it
+  disagree. R3 divides the prior year by 12 and averages over the
+  year-to-date's months plus 12, whatever the history. The B3-3.3-02 text
+  the spec quotes divides by the months the paystub and the W-2s include.
+  So a source whose income began during the prior year is kept only when
+  both readings give the same trend, and, from 12 months of history, only
+  as a decline, whose figure never reads the prior year;
 - 12 to 23 months of history without offsetting factors, which the engine
   pays in full;
 - a stabilized run that does not fit the year;
@@ -1218,8 +1254,17 @@ cent:
 
 It redraws none of 600 first draws (none of 5,000 when last measured), and
 agrees with the engine on 2,000 candidates nothing filtered (5,000 when last
-measured). Its longest file is 23 tool calls in five turns across 5,000
+measured). Its longest file is 21 tool calls in five turns across 5,000
 training draws, well inside the episode's 80 turns even at one call a turn.
+
+The rulebook and the tools a model is told are pinned by their hashes, and
+a test states each of the engine's figures in the rulebook's words, built
+from the engine's own constants: an edit to either fails until the version
+and the pin move together. `env:audit` reads each source's figures as well
+as the totals, so a source's monthly figure, nontaxable share, gross-up or
+rental loss that no tool returned and the file does not state is flagged by
+its source. Neither it nor `env:compare` has a verdict to group this
+environment's files by yet; both show "?".
 
 ## escrow-history
 

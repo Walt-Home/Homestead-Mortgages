@@ -5927,14 +5927,22 @@ lines:
   reads increasing.
 - **The engine trusts its inputs.** A prior year of nothing reads
   increasing, and the history and months since stabilization are taken as
-  given.
+  given. So is a W-2 that covers only part of the prior year: R3 divides it
+  by 12 and averages over the year-to-date's months plus 12 whatever the
+  history says. Overtime with 15 months of history to a September paystub,
+  $8,550.00 year to date and a $10,800.00 W-2 covering six months, reads
+  increasing at $921.43; over the months the paystub and the W-2 include it
+  is $1,800.00 a month before and $950.00 now, a decline.
 
-The spec also disagrees with itself in three places. Its preamble rounds
+The spec also disagrees with itself in four places. Its preamble rounds
 once per source, and R6's Social Security formula rounds twice; on 1 in 8
 benefit amounts the two differ by a cent ($1,000.10 grosses up $37.51 one
 way, $37.50 the other). T8's "born after 6 November 2011" is strict, and
 its own gate row's `≥` is not. R3 lists a prior-prior-year input that no
-step reads.
+step reads. And R3's formula divides the prior year by 12, where the
+B3-3.3-02 text the same section quotes divides by "the number of months
+included in the year-to-date paystub and W-2s": the two agree only on a
+whole year's W-2.
 
 **So v1 stays out of those places.** The task cannot carry most of them, so
 the generator never draws:
@@ -5954,7 +5962,12 @@ reaches any of the rest:
   hourly source drawn;
 - fixed hours with under a year of history;
 - year-to-date months that are not whole or half on a paystub's own date;
+- a borrower's earnings read from two paystubs, or from one dated after the
+  application or more than 30 days before it (B3-3.2-01);
 - a prior year with no earnings;
+- a W-2 covering part of the prior year where R3's twelve months and the
+  months included give different trends, or, from 12 months of history,
+  anything but a decline, whose figure never reads the prior year;
 - 12 to 23 months of history without offsetting factors;
 - a stabilized run that does not fit the year;
 - a trend the engine's decimals decide otherwise than exact arithmetic;
@@ -5985,10 +5998,35 @@ supplement, not because Regulation B bars it: B3-3.3-09 uses it.
 training suite and the spec's worked examples through the tools alone, to
 the cent, in eleven files: R13's total of $9,246.43, examples A and B, T6 to
 T9, and T13. It redraws none of 5,000 first draws. It agrees with the
-engine on 5,000 candidates nothing filtered. Its longest file is 23 tool
+engine on 5,000 candidates nothing filtered. Its longest file is 21 tool
 calls in five turns. Answering nothing scores about 0.002 on the held-out
-suite. Copying each stated amount scores 0.13, and every label right with no
-money scores 0.12.
+suite. Copying each stated amount scores 0.15, and every label right with no
+money 0.14. Applying no rule at all (each stated amount and stated end
+copied, everything counted) scores 0.19, and that is the floor a score is
+read against.
+
+**Reviewed before anything was scored.** An adversarial review of 1.0.0
+upheld eleven findings, and the environment stays 1.0.0 with a new held-out
+pin:
+
+- the part-year W-2 above, on 13% of training files, and the history edge's
+  12 months, which always carries one. The 11/12 line is kept, with a
+  stabilized decline at 12;
+- the history edge read an older paystub, up to 288 days before the
+  application, beside a current one on the same borrower. Each borrower now
+  has one paystub, no more than 30 days old;
+- files no household could be: overtime and tips with no job, four overtime
+  streams on one job, two own-record Social Security benefits, a disability
+  benefit beside a full-time salary, a parent of 6 at a child's birth,
+  histories from age 10, a retired borrower in a full-time job, and public
+  assistance beside a six-figure salary. Support received for longer than
+  the child had lived was found in the same pass;
+- no state extension ever fell before the 18th birthday, so "the extension
+  whenever there is one" graded as well as "the later of the two";
+- the tests: no field of a row but three was checked to fail alone, no
+  wrong answer was checked to fail, and the rulebook's figures were tied to
+  nothing. All three are held now, and the rulebook and tools are pinned;
+- `env:audit` read only the two totals of an answer that lists its sources.
 
 The departures above are a list for the servicing app's own source. Until
 they are fixed there, a model here is graded only where the engine and its

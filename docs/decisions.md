@@ -6859,3 +6859,55 @@ is decided and the engine changes with it: a ratio over 50 drawn once it is
 an eligibility finding, scores under 620 once the minimum is one, and so on.
 The environment's version moves with any of them, and so does the frozen
 table if it is ever refreshed.
+
+## DeepSeek's held-out baseline on the seven newest environments
+
+**Measured 22 October 2026,** DeepSeek-V4.1-Flash on Vertex (thinking), on
+each environment's held-out suite (seed 1, 200 tasks), as the thirteen were
+the day before: 1,400 tasks, every one scored, about $19 in all. Claude was
+not run; its evaluation key is at its spending limit until 1 November.
+
+| Environment             | Passed  | Rate    | 95% interval | Cost each |
+| ----------------------- | ------- | ------- | ------------ | --------- |
+| arm-adjustment 1.0.0    | 200/200 | 100.0 % | 98.1–100.0   | 1.4¢      |
+| qualifying-income 1.0.0 | 199/200 | 99.5 %  | 97.2–99.9    | 0.6¢      |
+| pmi-termination 1.0.0   | 196/200 | 98.0 %  | 95.0–99.2    | 2.5¢      |
+| aus-decision 1.0.0      | 192/200 | 96.0 %  | 92.3–98.0    | 1.2¢      |
+| payoff-statement 1.0.0  | 191/200 | 95.5 %  | 91.7–97.6    | 1.1¢      |
+| lossmit-retention 1.0.0 | 190/200 | 95.0 %  | 91.0–97.3    | 1.0¢      |
+| metro2-furnishing 1.0.0 | 133/200 | 66.5 %  | 59.7–72.7    | 1.7¢      |
+
+**Metro 2 is the first environment inside the plan's band** of a 50 to 80 %
+pass rate, where a score separates models and training has something to
+learn. Every other environment is at 85.5 % or above. Read on 29 training
+tasks (20 passed, 69.0 %), the misses are two things, and the rulebook states
+both plainly:
+
+- A record's money written in cents where Metro 2 takes whole dollars
+  (`000106650` for `000001066`). Five of the nine missed tasks had nothing
+  else wrong. Step 1 says it with a worked example; the model holds it for a
+  month or two and then slips, often on one amount and not the next. On the
+  held-out suite the terms-and-balance group is the field missed most.
+- The payment history profile shifted wrong: a month's character taken from
+  the wrong record, or a character dropped in the shift.
+
+So the score measures holding an exact format across a long record, which is
+the job, rather than an unclear rule.
+
+**arm-adjustment is saturated,** at 200 of 200, as refi-review was at 1.0.0.
+It no longer separates models, and a harder version is what would make it
+useful for training.
+
+**The network dropped for seventeen seconds** at 14:33:36 UTC. arm-adjustment
+and loss mitigation had most of their tasks in flight or queued, and recorded
+171 and 168 episodes as `fetch failed`. Those cost nothing and were run
+again with `--resume`. Metro 2, the slowest at about nine thousand output
+tokens a task, went from 8 workers to 20 at its 28th task, the 28 kept.
+
+**A harness defect, found on a training task.** A tool call whose arguments
+were not JSON went back to Vertex as written, and Vertex refused the next
+request whole, so the episode ended as a transport error rather than a turn
+the model wasted. It had happened once before, in refi-hard's held-out run on
+21 October, where `--resume` gave that task a second try. The policy now
+sends the call back wrapped (docs/environments.md, the `vertex` policy).
+These are held-out scores, and their transcripts are not read.

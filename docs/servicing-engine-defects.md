@@ -6,12 +6,13 @@ reproduced again on 21 October 2026 against the commit
 `apps/servicing/VENDORED_FROM` names (`293261b`, committed 17 September 2026).
 One more, boarding-1, was found and reproduced on 22 October 2026 while
 cataloguing defects for synthetic data (docs/synthetic-data-defects.md).
-Eight more are in the runtime that wires the engines together rather than in
-an engine: cashiering-18, arm-15, payoff-19, statements-1, boarding-2,
-metro2-1, ei-1 and ei-2. They came from running the servicing app's runtime
-for 397 simulated days on a scratch database on 22 October 2026, and each was
-reproduced in isolation the same day, with none of that run's own choices, and
-upheld by two independent checks.
+Nine more are in the runtime that wires the engines together rather than in an
+engine: cashiering-18, arm-15, payoff-19, statements-1, boarding-2, metro2-1,
+ei-1, ei-2 and boarding-3. They came from running the servicing app's runtime
+for 397 simulated days on a scratch database on 22 October 2026, and from
+reproducing what that run found; each was reproduced in isolation the same
+day, with none of that run's own choices, and upheld by two independent
+checks.
 The environments keep all but one out of grading. pmi-9 is graded, because
 the spec states the engine's reading as its own rule. Four more
 (cashiering-4, cashiering-9, flexmod-1, flexmod-2) were graded at the
@@ -75,6 +76,7 @@ decided", says why each went the way it did.
 | metro2-1      | metro2     | The monthly cycle never reads the loan's MIN, so every loan is left out of every bureau file         | §8.1 rules 6 and 9; C-4.1-01           | 🟡     | `domain/operations-runtime/runners.ts:143` (query at :127)                                      |
 | ei-1          | ei         | A paid installment does not cancel its Reg X early-intervention clocks, which breach                 | §11.1 rule 1; §11.2; 11.1-T3           | 🟡     | `infra/db/unit-of-work.ts:118-119`; `domain/early-intervention/timers.ts:276`                   |
 | ei-2          | ei         | A late payment cancels a breached window, and one contact satisfies every later window               | §11.1, §11.2 state machines; 11.1-T4   | 🟡     | `runtime/delinquency.ts:68-69`, `:87-88`, `:91-92`                                              |
+| boarding-3    | boarding   | A transfer tape's co-borrower is dropped without a trace, so a joint loan boards with one borrower   | §1.1 mapping rule; §8.1 rule 5         | 🟡     | `domain/boarding/tape-codec.ts:99`, `:252`; `runtime/transfers.ts:190-191`                      |
 | cashiering-10 | cashiering | A $50-rule payment before its due date is labeled prepaid, and its counter row is skipped            | §2.2 rule 2                            | 🟢     | `domain/cashiering/allocation.ts:203`                                                           |
 | cashiering-16 | cashiering | A dispute overlay ignores its start date                                                             | §2.7 rule 3(viii)                      | 🟢     | `domain/cashiering/latecharges.ts:90`                                                           |
 | cashiering-17 | cashiering | Instruction text is matched by keyword                                                               | §2.1 rule 6                            | 🟢     | `domain/cashiering/allocation.ts:81`, `:170`                                                    |
@@ -106,7 +108,7 @@ decided", says why each went the way it did.
 | pmi-12        | pmi        | New York's appraisal sets the federal thresholds                                                     | §10.1 R2; 12 U.S.C. 4901(12)           | 🟢     | `domain/pmi/cancellation.ts:15`                                                                 |
 | pmi-13        | pmi        | An ARM reset inside an interest-only period amortizes at once                                        | §10.2 R2                               | 🟢     | `domain/pmi/schedule.ts:69-74`                                                                  |
 
-🔴 high (10) · 🟡 medium (42) · 🟢 low (30). ei is Reg X early intervention.
+🔴 high (10) · 🟡 medium (43) · 🟢 low (30). ei is Reg X early intervention.
 Section numbers are the servicing app's spec; paths are under
 `apps/servicing/src/`; amounts ending in c are cents. docs/decisions.md tells
 the longer story of most of these, in the entry for the environment that found
@@ -1478,6 +1480,102 @@ credited_as_of 2026-10-15}` and the installment `satisfied`, with no
   `cancelled_at` from the clock.
 - **Kept out by.** No environment grades early intervention.
 
+### boarding-3. A transfer tape's co-borrower is dropped without a trace, so a joint loan boards with one borrower 🟡
+
+- **Spec says.** §1.1: "every transferor column maps to a MISMO v3.6 path
+  … unmapped columns are stored raw and flagged `info`"
+  (1-1-loan-data-intake-validation-note-terms-remittance-type-a-as.md:99),
+  in `boarding_staging` (:69). The codec's own dictionary sends
+  `coborrower_name` there: "(unmapped → boarding_staging raw, flagged
+  info)" (domain/boarding/tape-codec.ts:99; fixtures/transfer-batch-demo/LAYOUT.md:80).
+  Boarding writes `borrowers`/`loan_borrowers` (:72). Reg X
+  1024.38(b)(4)(ii) has the transferee "identify necessary documents or
+  information that may not have been transferred" and obtain them (:28).
+  §8.1's boarding data contract asks for the transferor's last Base/J/K
+  segments, or at minimum "ECOA per consumer"
+  (8-1-furnish-tradeline-metro-2.md:51). Rule 5 makes "each additional
+  obligor → J1 (same address) or J2", ECOA `2` for joint liability (:115).
+  Reg V 1022.41 requires furnished information that "correctly reflects the
+  terms of and liability for the account" (:34). §1.3 mails the hello notice
+  to "each borrower on `loan_borrowers`"
+  (1-3-respa-transfer-notices-goodbye-hello.md:85). §4.4 treats a
+  co-borrower as a borrower, not a successor
+  (4-4-successor-in-interest.md:113). §14.4 reports a non-filing
+  co-obligor apart from the filer (14-4-credit-reporting-suspension-in-bk.md:64).
+- **Engine does.** The decoder never reads `coborrower_name`
+  (domain/boarding/tape-codec.ts:222-270; the one borrower at :252), and
+  `StagedLoan` has one borrower (domain/boarding/types.ts:60).
+  `insertBoardingRows` writes one `borrowers` row and one `loan_borrowers`
+  row with role `borrower` (runtime/transfers.ts:190-191). The bus command
+  `1.1 boardLoan{batch, files}` decodes and writes through the same two
+  functions (app/tools/section01.ts:69, :108). Neither path writes
+  `boarding_staging` or `boarding_tapes`, no rule raises an `info` row, and
+  `ingestTape` keeps the file's id, kind, hash and row count in memory, not its
+  bytes (domain/boarding/service.ts:104-114). The transfer path writes
+  `boarding_staging` for no column at all; its one writer is the origination
+  path (app/tools/section30-2.ts:32).
+  Once the transaction commits, the co-borrower's name exists nowhere on the
+  platform. The Metro 2 builder then reads a one-row loan as `individual`
+  (domain/operations-runtime/runners.ts:144), so the base segment is ECOA
+  `1` (domain/credit-reporting/metro2.ts:121-125) and no J1 is built. 8.2's
+  ACDV response takes its ECOA from that segment
+  (domain/credit-reporting/ops-8-2.ts:396-398). From reading, not running:
+  §14.1 matches a bankruptcy by last name and SSN4
+  (14-1-bankruptcy-monitoring-proof-of-claim.md:114), and the platform holds
+  no identity to match a co-borrower's petition against. Part of this is the
+  layout's. The tape carries only the co-borrower's name, with no TIN, date
+  of birth, contact, address or ECOA (tape-codec.ts:99), and §8.1's contract
+  asks for more. Dropping the name silently is the engine's doing.
+- **Reproduction.** Two scratch databases with the app's migrations, and the
+  demo batch boarded, once through `boardTransferBatch` and once through the
+  bus command.
+  - **The tape.** 100 rows, 33 naming a co-borrower. TR-0000002 is Maria
+    Reyes with co-borrower Linda Reyes, and `coborrower_name` is the only
+    co-borrower column. `decodeTransferBatch` leaves all 25 co-borrower names
+    that are not also a primary's name out of every `StagedLoan`.
+  - **What boarding wrote, on both paths.** All 33 joint loans boarded, each
+    with one `loan_borrowers` row, and all 100 rows in that table have role
+    `borrower`. `boarding_staging` and `boarding_tapes` are empty, and there
+    is no `info` validation. A search of every row of all 858 tables found
+    none of the 25 names; the same search finds the primaries in `borrowers`.
+  - **Metro 2, SM-TR-0000002, as of 2026-09-30.** boarding-2 and metro2-1
+    were patched in the process only: the borrower was linked to a party by
+    the 35.5 harness's `linkBorrowerParty`, and `k3.min` was taken from
+    `loans.min`. Result: one consumer, base ECOA `1`, no J1. The 8.1 cycle
+    validated it with no exception, and 8.2's `responsePayload` for that
+    borrower gives `ecoa: "1"`.
+  - **Control.** A `coborrower` row for Linda Reyes was written by hand
+    (`borrowers` and `loan_borrowers`, with a party). The same builder then
+    gives base ECOA `2` and J1 ECOA `2`. The furnishing side handles a joint
+    loan; boarding never gives it one.
+  - **Masked today.** boarding-2 leaves out every transfer-boarded loan as
+    `no_consumer`, and metro2-1 drops every record for its MIN. The rendered
+    bureau record also carries no consumer fields at all
+    (`renderBase`, domain/credit-reporting/metro2.ts:227-252), so no file
+    shows the wrong ECOA yet. SM-TR-0000002 is one of the 33 joint loans.
+
+  Two independent checks reproduced it by other paths: the committed fixture
+  files posted to the app's own `POST /v1/transfers/batches` route, and the
+  deploy's seed entry (`node scripts/run.mjs seed-demo`), each with a search
+  of the whole database, binary columns included.
+
+  Found on 22 October 2026 and reproduced the same day. The gap is also
+  catalogued as D-14 in docs/synthetic-data-defects.md.
+
+- **Smallest fix.** At the least, store unmapped columns in
+  `boarding_staging` with an `info` row, as §1.1 and the layout's own
+  dictionary say, so the co-borrower is not lost. Then decode
+  `coborrower_name` into a second borrower on the `StagedLoan`, and have
+  `insertBoardingRows` write it as a `borrowers` row and a `loan_borrowers`
+  row with role `coborrower` and `is_primary` false. It needs a party too
+  (boarding-2's fix), or the Metro 2 builder still skips it. While the tape
+  has no co-borrower TIN, raise a warning so the transferor is asked for it
+  (Reg X 1024.38(b)(4)(ii)).
+- **Kept out by.** Nothing needs to. metro2-furnishing generates its own
+  consumers, joint ones included
+  (packages/environments/src/metro2/generator.ts:212-216), and no
+  environment boards a transfer tape.
+
 ## Low
 
 - **cashiering-10.** A $50-rule payment received before its due date is
@@ -1642,7 +1740,7 @@ credited_as_of 2026-10-15}` and the installment `satisfied`, with no
   Kept out: pmi-termination keeps out a rate change inside an interest-only
   period or after the 78% row.
 
-83 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+84 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

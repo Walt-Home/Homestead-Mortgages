@@ -384,6 +384,20 @@ export function expectedLossmit(task: LossmitTask): LossmitAnswer {
   };
 }
 
+/**
+ * The class a task's score is read by: the option offered, and for Flex
+ * Modification which way the walk reached it. A permanent hardship's is
+ * Steps 1, 2 and 8 alone, as reinstatement is; one after a failed screen
+ * has walked the plan search and the screen first.
+ */
+export function lossmitVerdict(task: LossmitTask): string {
+  const offered = expectedLossmit(task).offered;
+  if (offered !== "flex_mod") return offered;
+  return task.borrower.hardship === "permanent"
+    ? "flex_mod on a permanent hardship"
+    : "flex_mod after the screen";
+}
+
 /* ── grading ──────────────────────────────────────────────────────────────
  * Six groups, each one field that stands or falls together: the arrears,
  * the option offered, its terms, the deferral screen, the deferral's
@@ -392,10 +406,15 @@ export function expectedLossmit(task: LossmitTask): LossmitAnswer {
  * them, and also wherever an answer gives one the engine does not, so that
  * answering a section that is not called for costs a field, the same as
  * leaving one out that is. A section that neither has is not a field: a
- * null that is right by default is not credit.
+ * null that is right by default is not credit. Nor is an eligible screen:
+ * the parser takes one only with the deferral offered, so it is the offer
+ * again, and the screen is a field only where a screen failed, in the
+ * engine's answer or the model's.
  */
 
 const CONDITIONAL = ["terms", "deferral_screen", "deferral_timeline"] as const;
+
+const screenFailed = (s: LossmitAnswer["deferral_screen"] | undefined) => s?.eligible === false;
 
 const canon = (v: unknown): string =>
   v === null || v === undefined ? "null" : typeof v === "object" ? JSON.stringify(v) : String(v);
@@ -411,7 +430,11 @@ export function gradeLossmitAgainst(want: LossmitAnswer, answer: LossmitAnswer |
   check("offered", want.offered, answer?.offered);
   for (const f of CONDITIONAL) {
     const given = answer ? answer[f] : null;
-    if (want[f] !== null || given !== null) check(f, want[f], given);
+    const graded =
+      f === "deferral_screen"
+        ? screenFailed(want.deferral_screen) || screenFailed(answer?.deferral_screen)
+        : want[f] !== null || given !== null;
+    if (graded) check(f, want[f], given);
   }
   check("regx", want.regx, answer?.regx);
   const right = fields.filter((f) => f.ok).length;

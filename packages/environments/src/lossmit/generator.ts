@@ -17,8 +17,9 @@
  *   - forbearance: a temporary hardship's first term, near the delinquency
  *     cap sometimes;
  *   - forbearance_caps: an extension at the cumulative cap, at the
- *     delinquency cap, at both (ties), a month under, and across Reg X's
- *     six forborne months;
+ *     delinquency cap, at both (ties), a month under, across Reg X's six
+ *     forborne months, and after installments paid during the plan, where
+ *     the cumulative cap binds alone;
  *   - repayment: a plan found by the term search, its capacity at a total to
  *     the cent;
  *   - repayment_limits: 150% of PITI exactly, the rounded-up installment
@@ -44,10 +45,14 @@
  */
 
 import {
+  addBusinessDays,
   addDays,
   addMonths,
+  daysBetween,
   daysInMonth,
   endOfMonth,
+  fannieEt,
+  fannieEtObserved,
   federal,
   parts,
   plainDate,
@@ -56,6 +61,7 @@ import {
   type PlainDate,
 } from "@hm/kernel/calendar";
 import { divRound, levelPayment, ratePercent, type Cents } from "@hm/kernel/money";
+import { monthsBetween } from "@hm/refi-review";
 import { rngFor, type Rng } from "../rng.js";
 import { solveNow } from "../refi/reference.js";
 import type { Split } from "../refi/task.js";
@@ -128,23 +134,89 @@ function evaluationIn(r: Rng, month: PlainDate, lo = 1, hi = 31): PlainDate {
   return r.pick(days);
 }
 
-/** A month whose last day is not a Fannie Mae business day, or is a Monday: the reporting deadline steps back over it. */
+/**
+ * Whether the spec disagrees with itself about the deferral's reporting
+ * deadline from this entry deadline. The engine steps back over the federal
+ * calendar. 5.1, which owns the timer, has Fannie Mae-only holidays such as
+ * the day after Thanksgiving shift reporting deadlines (the kernel's
+ * `fannieEtObserved`), where 19.1-T6 and 19.3 count that day a business day.
+ * It is 2026-11-30 in v1's years: no deferral is offered with it.
+ */
+export const larDisputed = (entry: PlainDate): boolean =>
+  addBusinessDays(entry, -1, fannieEt) !== addBusinessDays(entry, -1, fannieEtObserved);
+
+/**
+ * How early a workout can be, in months from the origination's month (12.6,
+ * 12.8). A payment deferral is evaluated a year after origination at the
+ * earliest (12.6 criterion 5) and takes effect the 1st of a later month; a
+ * later one is evaluated a year after the last took effect (criterion 7), so
+ * 13 months on. Each defers 2 to 6 months, the delinquency window, so
+ * `cumulative` months take ceil(cumulative ÷ 6) deferrals. A Flex
+ * Modification is evaluated a year after origination too (12.8), its three
+ * trial payments fall due from the 1st of the next month, and it takes effect
+ * the 1st of the month after the trial: 16 months on. A trial fails on the
+ * last day of a month a trial payment was due in, 13 months on at the
+ * earliest.
+ */
+export const DEFERRAL_SEASONED = 13;
+export const MODIFICATION_SEASONED = 16;
+export const TRIAL_SEASONED = 13;
+export const deferralsFor = (cumulative: number): number => Math.ceil(cumulative / 6);
+/**
+ * And how soon one can follow another: a deferral is evaluated a year after a
+ * modification or a failed trial at the earliest (12.6 criterion 6), so it
+ * takes effect 13 months after the modification's month or the trial's; a
+ * Flex Modification is evaluated a year after a failed trial (12.8), so with
+ * its own trial it takes effect 16 months after the failed one's month.
+ */
+export const LATER_DEFERRAL_AFTER = 13;
+export const LATER_MODIFICATION_AFTER = 16;
+
+/**
+ * A sale is on the calendar only where a first notice could have gone out
+ * before the application became complete: not before day 121 of the
+ * delinquency (1024.41(f)(1); 13.1 counts day N as the due date + N days),
+ * and not once the complete application is in ((f)(2)). So the evaluation is
+ * day 122 or later.
+ */
+export const SALE_FROM_DAY = 122;
+
+const MONTHS: readonly PlainDate[] = Array.from({ length: MONTHS_DRAWN }, (_, k) =>
+  addMonths(FIRST_MONTH, k),
+);
+/** The months a resolved hardship is evaluated in: none whose deferral would be entered on a disputed day. */
+const DEFERRAL_MONTHS = MONTHS.filter((m) => !larDisputed(endOfMonth(m)));
+/** And with a processing month elected, none whose next month's would be. */
+const ELECTABLE_MONTHS = DEFERRAL_MONTHS.filter((m) => !larDisputed(endOfMonth(addMonths(m, 1))));
+/** And on a month's last day, only where its day 30 is a business day. */
+const MONTH_END_MONTHS = DEFERRAL_MONTHS.filter((m) =>
+  federal.isBusinessDay(addDays(endOfMonth(m), 30)),
+);
+
+/**
+ * A month whose last day is not a Fannie Mae business day, or is a Monday: the reporting deadline
+ * steps back over it. None where the spec disputes the day it steps back to.
+ */
 const STEP_BACK_MONTHS: readonly PlainDate[] = Array.from({ length: MONTHS_DRAWN + 1 }, (_, k) =>
   addMonths(FIRST_MONTH, k),
 ).filter((m) => {
   const end = endOfMonth(m);
   const day = new Date(`${end}T00:00:00Z`).getUTCDay();
-  return !federal.isBusinessDay(end) || day === 1;
+  return (!federal.isBusinessDay(end) || day === 1) && !larDisputed(end);
 });
 
 /** What the aim fixes; the rest is drawn around it. */
 interface Aim {
   hardship: Hardship;
   md: number;
-  /** A temporary hardship's active plan (the evaluation in its last month), or a resolved one's ended plan. */
+  /**
+   * A temporary hardship's active plan (the evaluation in its last month), or a resolved one's ended
+   * plan. More months forborne than delinquent are installments paid during the plan.
+   */
   forborne?: number;
   requested?: number;
-  evaluation?: { month?: PlainDate; lo?: number; hi?: number };
+  /** The evaluation's month and days; `monthEnd` puts it on the month's last day. */
+  evaluation?: { month?: PlainDate; lo?: number; hi?: number; monthEnd?: boolean };
   /** Whole months from the evaluation to maturity, when it is aimed. */
   toMaturity?: number;
   /** The origination exactly 12 months before the evaluation. */
@@ -153,7 +225,7 @@ interface Aim {
   deferralBack?: number;
   cumulative?: number;
   disasterBack?: number;
-  /** Months back of a modification's effective month, or a failed trial a year back to the day. */
+  /** Months back of a modification's effective month, or a failed trial a year back to the day (a month's end). */
   modBack?: number;
   trialYearToTheDay?: boolean;
   noLateCharges?: boolean;
@@ -262,7 +334,24 @@ function aimFor(r: Rng, edge: LossmitEdge, index: number): Aim {
     }
     case "forbearance_caps": {
       // An extension decided in the active term's last month: the start is the day after its end.
-      const arm = lossmitArmOf(index, 6);
+      const arm = lossmitArmOf(index, 7);
+      if (arm === 6) {
+        // Installments paid during the plan: 12.4 rule 1's reduced payments sit in suspense until a
+        // full installment accrues, and it is applied. Fewer delinquent than forborne, so the
+        // cumulative cap is under the delinquency cap: alone at 1 or 2, tied with the increment at 3.
+        const forborne = r.int(9, 11);
+        const paid = r.int(1, 3);
+        return {
+          hardship: "temporary_unresolved",
+          md: forborne - paid + r.int(0, paid - 1),
+          forborne,
+          requested: r.weighted([
+            [1, 15],
+            [2, 30],
+            [3, 55],
+          ]),
+        };
+      }
       if (arm === 4) {
         // Across Reg X's six forborne payments: the request lands on 6, or on 7.
         const [forborne, requested] = r.pick([
@@ -343,7 +432,13 @@ function aimFor(r: Rng, edge: LossmitEdge, index: number): Aim {
       if (arm === 3) return { ...a, disasterBack: r.int(Math.max(1, a.md), 11) };
       if (arm === 4) return { ...a, toMaturity: 37 };
       if (arm === 5)
-        return r.chance(0.5) ? { ...a, modBack: 12 } : { ...a, trialYearToTheDay: true };
+        // A modification a year back passes the screen. Two installments behind, the delinquency
+        // reached Section 12's 60 days on the modification's first anniversary, outside its first
+        // year as 12.8 requires; three would put them inside it. A trial fails on a month's last
+        // day, so the evaluation a year on to the day is one too.
+        return r.chance(0.5)
+          ? { ...a, md: 2, modBack: 12 }
+          : { ...a, trialYearToTheDay: true, evaluation: { monthEnd: true } };
       return r.chance(0.2) ? { ...a, forborne: r.int(1, a.md - 1) } : a;
     }
     case "deferral_gate": {
@@ -403,9 +498,22 @@ interface Coordinates {
 }
 
 function build(r: Rng, aim: Aim, coordinates: Coordinates): LossmitTask {
-  // The evaluation, the delinquency and the oldest unpaid installment.
-  const month = aim.evaluation?.month ?? addMonths(FIRST_MONTH, r.int(0, MONTHS_DRAWN - 1));
-  const evaluation_date = evaluationIn(r, month, aim.evaluation?.lo ?? 1, aim.evaluation?.hi ?? 31);
+  // The evaluation, the delinquency and the oldest unpaid installment. Only a resolved hardship can be
+  // offered a deferral, so only its months are kept off the disputed reporting deadline.
+  const month =
+    aim.evaluation?.month ??
+    r.pick(
+      aim.evaluation?.monthEnd
+        ? MONTH_END_MONTHS
+        : aim.elect
+          ? ELECTABLE_MONTHS
+          : aim.hardship === "resolved"
+            ? DEFERRAL_MONTHS
+            : MONTHS,
+    );
+  const evaluation_date = aim.evaluation?.monthEnd
+    ? endOfMonth(month)
+    : evaluationIn(r, month, aim.evaluation?.lo ?? 1, aim.evaluation?.hi ?? 31);
   const { d: day } = parts(evaluation_date);
   const md = aim.md;
   const evalMonth = startOfMonth(evaluation_date);
@@ -427,18 +535,34 @@ function build(r: Rng, aim: Aim, coordinates: Coordinates): LossmitTask {
     ? divRound(pi_cents * BigInt(r.pick([4, 5])), 100n, "HALF_UP")
     : BigInt(r.int(15, 120)) * 100n;
 
+  // The workout history is counted in months back from the evaluation month, and never after the
+  // oldest unpaid installment, because a workout brings the loan current.
+  const backOf = (b: number | undefined) => (b === undefined ? undefined : Math.max(b, md - 1));
+  const aimedDeferral = backOf(aim.deferralBack);
+  const freshMonths = (): number => r.int(2, Math.min(10, Math.max(2, 12 - md)));
+  const aimedCumulative = aimedDeferral === undefined ? 0 : (aim.cumulative ?? freshMonths());
+
   // The loan's age, in months from its first installment to the evaluation month: old enough for
-  // the history the aim names, and seasoned past a year.
+  // the history the aim names (its origination at least a month before the first installment), and
+  // seasoned past a year.
   const forborne = aim.forborne ?? 0;
-  const aimedBack = Math.max(aim.deferralBack ?? 0, aim.disasterBack ?? 0, aim.modBack ?? 0);
-  const cumulativeAimed = aim.cumulative ?? 0;
   let age: number;
   if (aim.seasonedToTheDay) {
     age = 12 - r.pick([1, 2]);
   } else if (aim.toMaturity !== undefined) {
     age = term - 1 - aim.toMaturity - (day > 1 ? 1 : 0);
   } else {
-    const floor = Math.max(14, md + 2, cumulativeAimed * 2 + md + 14, aimedBack + 3);
+    const floor = Math.max(
+      14,
+      md + 2,
+      (aim.cumulative ?? 0) * 2 + md + 14,
+      (aim.disasterBack ?? 0) + 3,
+      aimedDeferral === undefined
+        ? 0
+        : aimedDeferral + DEFERRAL_SEASONED * deferralsFor(aimedCumulative) - 1,
+      aim.modBack === undefined ? 0 : aim.modBack + MODIFICATION_SEASONED - 1,
+      aim.trialYearToTheDay ? 12 + TRIAL_SEASONED - 1 : 0,
+    );
     age = r.int(floor, Math.max(floor, term - 40));
   }
   const first_payment = addMonths(evalMonth, -age);
@@ -448,27 +572,79 @@ function build(r: Rng, aim: Aim, coordinates: Coordinates): LossmitTask {
     ? addMonths(evaluation_date, -12)
     : ymd(parts(originatedIn).y, parts(originatedIn).m, r.int(1, 28));
 
-  // The workout history, in months back from the evaluation month: never before the loan's first
-  // installment, and never after the oldest unpaid one (a workout brings the loan current).
+  // The rest of the history is drawn around the aim: a deferral, a disaster deferral and a
+  // modification each on a month of its own, none before its seasoning (DEFERRAL_SEASONED), a
+  // disaster deferral after the first installment, and a failed trial on a month's last day.
+  const sinceOrigination = monthsBetween(startOfMonth(origination_date), evalMonth);
   const room = age - 2;
-  const noise = (p: number, lo: number): number | undefined =>
-    !aim.seasonedToTheDay && room >= lo && r.chance(p) ? r.int(lo, Math.min(room, 60)) : undefined;
+  const used = new Set(
+    [aimedDeferral, aim.disasterBack, aim.modBack].filter((b): b is number => b !== undefined),
+  );
+  /** Months back, `lo` to `hi`, with probability `p`; none without room, or on a month taken. */
+  const noise = (p: number, lo: number, hi: number): number | undefined => {
+    const top = Math.min(hi, 60);
+    if (aim.seasonedToTheDay || top < lo || !r.chance(p)) return undefined;
+    const back = r.int(lo, top);
+    if (used.has(back)) return undefined;
+    used.add(back);
+    return back;
+  };
   const at = (back: number | undefined) =>
     back === undefined ? null : before(addMonths(evalMonth, -back), next_due_date);
-  const deferralBack = aim.deferralBack ?? noise(0.15, Math.max(md - 1, 1));
-  const cumulative =
-    deferralBack === undefined
-      ? 0
-      : (aim.cumulative ?? r.int(2, Math.min(10, Math.max(2, 12 - md))));
+
+  let deferralBack = aimedDeferral;
+  let cumulative = aimedCumulative;
+  if (
+    deferralBack === undefined &&
+    aim.cumulative !== 0 &&
+    !aim.seasonedToTheDay &&
+    r.chance(0.15)
+  ) {
+    // The months deferred before decide how many deferrals there were, and so how late the last.
+    const months = aim.cumulative ?? freshMonths();
+    deferralBack = noise(
+      1,
+      Math.max(md - 1, 1),
+      sinceOrigination - DEFERRAL_SEASONED * deferralsFor(months),
+    );
+    cumulative = deferralBack === undefined ? 0 : months;
+  }
+  const disasterBack = aim.disasterBack ?? noise(0.08, Math.max(md - 1, 1), room);
+  // 12.8 bars a Flex Modification after one that went 60 days delinquent in its first year, or
+  // within the year before: the delinquency reaches Section 12's 60 days when its second installment
+  // falls due, at least a year after the last modification took effect (see flexFactsHold).
+  let modBack =
+    aim.modBack ?? noise(0.1, Math.max(12, md + 10), sinceOrigination - MODIFICATION_SEASONED);
+  // A failed trial is the month's last day, `trialBack` months back (a year to the day when aimed).
+  let trialBack = aim.trialYearToTheDay
+    ? 12
+    : noise(0.1, TRIAL_SEASONED, sinceOrigination - TRIAL_SEASONED);
+  // A later workout its own evaluation would have refused gives way, the one not aimed: a deferral
+  // within 13 months after a modification or a failed trial (12.6 criterion 6 at its evaluation),
+  // and a modification within 16 after a failed trial (12.8's year with none, then its trial).
+  const tooSoon = (later: number | undefined, earlier: number | undefined, gap: number) =>
+    later !== undefined && earlier !== undefined && earlier > later && earlier - later < gap;
+  if (tooSoon(deferralBack, modBack, LATER_DEFERRAL_AFTER)) {
+    if (aimedDeferral === undefined) [deferralBack, cumulative] = [undefined, 0];
+    else modBack = undefined;
+  }
+  if (tooSoon(deferralBack, trialBack, LATER_DEFERRAL_AFTER)) {
+    if (aimedDeferral === undefined) [deferralBack, cumulative] = [undefined, 0];
+    else trialBack = undefined;
+  }
+  if (tooSoon(modBack, trialBack, LATER_MODIFICATION_AFTER)) {
+    if (aim.trialYearToTheDay) modBack = undefined;
+    else trialBack = undefined;
+  }
   const last_deferral_effective = at(deferralBack);
-  const last_disaster_deferral_effective = at(aim.disasterBack ?? noise(0.08, Math.max(md - 1, 1)));
-  // A modification or failed trial within the year would bar the Flex Modification too (12.8): none is drawn.
-  const last_modification_effective = at(aim.modBack ?? noise(0.1, Math.max(md - 1, 12)));
-  const last_failed_trial_on = aim.trialYearToTheDay
-    ? addMonths(evaluation_date, -12)
-    : !aim.seasonedToTheDay && room >= 14 && r.chance(0.1)
-      ? addDays(addMonths(evaluation_date, -12), -r.int(1, Math.min(900, (room - 12) * 28)))
-      : null;
+  const last_disaster_deferral_effective = at(disasterBack);
+  const last_modification_effective = at(modBack);
+  const last_failed_trial_on =
+    trialBack === undefined
+      ? null
+      : aim.trialYearToTheDay
+        ? addMonths(evaluation_date, -12)
+        : endOfMonth(addMonths(evalMonth, -trialBack));
 
   // Late charges: one for each unpaid installment past its grace, none for a forborne month.
   const planEnd =
@@ -502,7 +678,9 @@ function build(r: Rng, aim: Aim, coordinates: Coordinates): LossmitTask {
     [BigInt(r.int(0, 3_990)) * 60n + 30n, 15],
     [dollars(r, 0, 3_999), 50],
   ]);
-  const processing_month_elected = day > 15 && (aim.elect ?? r.chance(0.55));
+  // No processing month where it would put the entry deadline on the disputed one (larDisputed).
+  const processing_month_elected =
+    day > 15 && !larDisputed(endOfMonth(addMonths(evalMonth, 1))) && (aim.elect ?? r.chance(0.55));
 
   const piti = pi_cents + escrow_cents;
   const arrears = BigInt(md) * piti + BigInt(unpaid_late_charges) * late_charge_cents;
@@ -564,9 +742,11 @@ function build(r: Rng, aim: Aim, coordinates: Coordinates): LossmitTask {
         ]))
       : null;
 
-  // A sale is scheduled only past 120 days delinquent, with no forbearance plan running, and never
-  // in New York, whose courts take years.
-  const saleAllowed = md >= 5 && !(aim.hardship === "temporary_unresolved" && forborne > 0);
+  // A sale is scheduled only once a first notice could have preceded the complete application
+  // (SALE_FROM_DAY), with no forbearance plan running, and never in New York, whose courts take years.
+  const saleAllowed =
+    daysBetween(next_due_date, evaluation_date) >= SALE_FROM_DAY &&
+    !(aim.hardship === "temporary_unresolved" && forborne > 0);
   const saleAim = saleAllowed
     ? r.weighted([
         ["none", 40],
@@ -637,29 +817,93 @@ const within12 = (task: LossmitTask, d: PlainDate | null) =>
   d !== null && addMonths(d, 12) > task.evaluation_date;
 
 /**
+ * The day the delinquency reached Fannie Mae's 60 days, as Section 12 counts
+ * them: its README counts the eligibility windows in `fnma_delinquency_status`
+ * months, the installments due through the day (12.6 rule 1, 12.8's worked
+ * example), so two installments are 60 days. That is the day the oldest
+ * unpaid installment's next one fell due.
+ */
+export const sixtyDaysOn = (task: LossmitTask): PlainDate => addMonths(task.loan.next_due_date, 1);
+
+/**
  * The Flex Modification's own criteria that a file carries whatever it is
  * offered (12.8, D2-3.2-06): originated a year before the evaluation, no
- * conflicting arrangement, no failed trial within 12 months, and no
- * modification within 12 months that the delinquency followed. v1 draws no
- * file that fails one, so flexmod_eligible is true on every file and
- * never contradicts what the file shows.
+ * conflicting arrangement, no failed trial within 12 months, no modification
+ * within 12 months, and no modification that went 60 days delinquent in its
+ * first year without reinstatement. The last modification of a Fannie Mae
+ * loan in these years is a Flex Modification, and an unpaid installment has
+ * never been reinstated, so it is barred when the delinquency reached 60 days
+ * before the modification's first anniversary. v1 draws no file that fails
+ * one, so flexmod_eligible is true on every file and never contradicts what
+ * the file shows.
  */
 export function flexFactsHold(task: LossmitTask): boolean {
+  const modified = task.history.last_modification_effective;
+  const sixty = sixtyDaysOn(task);
   return (
     addMonths(task.loan.origination_date, 12) <= task.evaluation_date &&
     task.history.active_arrangements.length === 0 &&
     !within12(task, task.history.last_failed_trial_on) &&
-    !within12(task, task.history.last_modification_effective)
+    !within12(task, modified) &&
+    !(modified !== null && sixty <= task.evaluation_date && sixty < addMonths(modified, 12))
   );
 }
 
 /**
- * And at the Flex Modification rung, two installments behind or more
- * (Fannie Mae's 60 days). A file the walk takes there without them would go
- * on to the liquidation options, which the engine offers with no test.
+ * And at the Flex Modification rung, 60 days delinquent: two installments
+ * behind or more (sixtyDaysOn). A file the walk takes there without them
+ * would go on to the liquidation options, which the engine offers with no
+ * test.
  */
 export const flexCriteriaHold = (task: LossmitTask): boolean =>
   flexFactsHold(task) && monthsDelinquent(task.loan.next_due_date, task.evaluation_date) >= 2;
+
+/**
+ * Whether the workout history is one the loan could have had (12.6, 12.8;
+ * DEFERRAL_SEASONED): a deferral with months deferred and none without, the
+ * last of them late enough for the deferrals its months took; a modification
+ * after its seasoning and trial; a failed trial on a month's last day, after
+ * its seasoning; each deferral or modification on a day of its own; and none
+ * that its own evaluation would have refused for the one before it
+ * (LATER_DEFERRAL_AFTER).
+ */
+export function historyCoheres(task: LossmitTask): boolean {
+  const h = task.history;
+  const originated = startOfMonth(task.loan.origination_date);
+  const deferrals = deferralsFor(h.cumulative_deferred_months);
+  if ((h.last_deferral_effective === null) !== (deferrals === 0)) return false;
+  if (
+    h.last_deferral_effective !== null &&
+    h.last_deferral_effective < addMonths(originated, DEFERRAL_SEASONED * deferrals)
+  )
+    return false;
+  if (
+    h.last_modification_effective !== null &&
+    h.last_modification_effective < addMonths(originated, MODIFICATION_SEASONED)
+  )
+    return false;
+  const trial = h.last_failed_trial_on;
+  if (
+    trial !== null &&
+    (trial !== endOfMonth(trial) || trial < endOfMonth(addMonths(originated, TRIAL_SEASONED)))
+  )
+    return false;
+  const follows = (later: PlainDate | null, earlier: PlainDate | null, gap: number) =>
+    later !== null &&
+    earlier !== null &&
+    earlier < later &&
+    later < addMonths(startOfMonth(earlier), gap);
+  const deferral = h.last_deferral_effective;
+  const modified = h.last_modification_effective;
+  if (
+    follows(deferral, modified, LATER_DEFERRAL_AFTER) ||
+    follows(deferral, trial, LATER_DEFERRAL_AFTER) ||
+    follows(modified, trial, LATER_MODIFICATION_AFTER)
+  )
+    return false;
+  const dated = [deferral, h.last_disaster_deferral_effective, modified].filter((x) => x !== null);
+  return new Set(dated).size === dated.length;
+}
 
 /**
  * v1's guard, run on the engine's own outputs: a file is kept only when the
@@ -682,11 +926,15 @@ export const flexCriteriaHold = (task: LossmitTask): boolean =>
  *     maturity, where the spec's gate rows (> 36) and the engine (≥ 36)
  *     disagree, and the borrower can make the deferral's new payment
  *     (criterion 2, which the screen does not test);
+ *   - a deferral offered is not entered by 2026-11-30, whose reporting
+ *     deadline the spec disputes (larDisputed);
  *   - a processing month is elected only where the engine permits it, and
  *     the notice goes out within the 30 days;
  *   - the inputs cohere: Flex Modification eligible on every file and its
- *     criteria met by every file, a sale only past 120 days delinquent with
- *     no plan running, and a forbearance never past either 12-month cap.
+ *     criteria met by every file, a sale only from day 122 of the
+ *     delinquency with no plan running (SALE_FROM_DAY), a forbearance never
+ *     past either 12-month cap, and a workout history the loan could have
+ *     had (historyCoheres).
  */
 export function lossmitInScope(task: LossmitTask): boolean {
   let a: ReturnType<typeof analyzeLossmit>;
@@ -717,13 +965,16 @@ export function lossmitInScope(task: LossmitTask): boolean {
     if (!a.screen.eligible || a.screen.months_deferred < 2) return false;
     if (installmentsToPay(task.history.cumulative_deferred_months, a.months_delinquent) > 1)
       return false;
+    if (larDisputed(want.deferral_timeline!.entry_deadline as PlainDate)) return false;
   }
+  if (!historyCoheres(task)) return false;
   if (a.screen_reached) {
     if (monthsToMaturity(task) === 36) return false;
     if (task.borrower.capacity_cents < a.new_payment.payment_cents) return false;
   }
   if (task.scheduled_sale_on !== null) {
-    if (a.months_delinquent < 5 || task.state === "NY") return false;
+    if (daysBetween(task.loan.next_due_date, task.evaluation_date) < SALE_FROM_DAY) return false;
+    if (task.state === "NY") return false;
     if (task.borrower.hardship === "temporary_unresolved" && task.forbearance.forborne_months > 0)
       return false;
   }
@@ -886,15 +1137,6 @@ export const LOSSMIT_SPEC_CASES: readonly { readonly name: string; readonly file
     }),
   },
   {
-    name: "12.6-T3: the same deferral, evaluated 2026-11-01: eligible",
-    file: worked({
-      evaluation_date: plainDate("2026-11-01"),
-      notice_provided_on: plainDate("2026-11-05"),
-      loan: { next_due_date: plainDate("2026-08-01"), unpaid_late_charges: 3 },
-      history: { cumulative_deferred_months: 3, last_deferral_effective: plainDate("2025-11-01") },
-    }),
-  },
-  {
     name: "12.6-T3: a disaster deferral effective 2025-11-01 does not count",
     file: worked({ history: { last_disaster_deferral_effective: plainDate("2025-11-01") } }),
   },
@@ -923,6 +1165,8 @@ export const LOSSMIT_SPEC_CASES: readonly { readonly name: string; readonly file
     file: worked({ state: "NY" }, PLAN),
   },
   {
+    // A permanent hardship, so the walk stops at Flex Modification: the worked loan's deferral would
+    // be entered by 2026-11-30, whose reporting deadline the spec disputes (larDisputed).
     name: "12.2-T2: complete 2026-11-01 with a sale on 2027-01-15: 7 days, no appeal",
     file: worked({
       evaluation_date: plainDate("2026-11-01"),
@@ -930,6 +1174,7 @@ export const LOSSMIT_SPEC_CASES: readonly { readonly name: string; readonly file
       scheduled_sale_on: plainDate("2027-01-15"),
       state: "TX",
       loan: { unpaid_late_charges: 5 },
+      borrower: { hardship: "permanent" },
     }),
   },
   {

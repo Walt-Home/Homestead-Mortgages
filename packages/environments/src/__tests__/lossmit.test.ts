@@ -2,23 +2,36 @@
  * lossmit-retention: the grader is the servicing app's hierarchy walk, plans
  * and deferral engines and no other (each port is its file byte for byte but
  * the imports), and the conventions it restates are held to the service's
- * own lines; it gives the spec's worked examples to the cent; every
- * generated file can be evaluated from the rulebook and the tools; the
- * guard keeps out each place the engine departs from its spec; and each
- * rung and edge turns up.
+ * own lines; the rulebook a model is told is pinned, and its rules are held
+ * to the grader's in order; it gives the spec's worked examples to the
+ * cent; every generated file can be evaluated from the rulebook and the
+ * tools; the guard keeps out each place the engine departs from its spec,
+ * and each fact the file could not have; and each rung and edge turns up.
  */
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { addDays, federal, plainDate, type PlainDate } from "@hm/kernel/calendar";
+import {
+  addBusinessDays,
+  addDays,
+  addMonths,
+  daysBetween,
+  endOfMonth,
+  fannieEtObserved,
+  federal,
+  plainDate,
+  type PlainDate,
+} from "@hm/kernel/calendar";
 import { runEpisode } from "../episode.js";
 import { sha256, toJsonLine } from "../record.js";
 import { solveNow } from "../refi/reference.js";
 import { rngFor } from "../rng.js";
 import {
   LOSSMIT_EDGES,
+  LOSSMIT_FINGERPRINT,
   LOSSMIT_HELDOUT_SUITE,
+  LOSSMIT_RULEBOOK,
   LOSSMIT_SPEC_CASES,
   LossmitReferencePolicy,
   RETENTION,
@@ -29,9 +42,12 @@ import {
   executeLossmitTool,
   expectedLossmit,
   flexCriteriaHold,
+  flexFactsHold,
   generateLossmitSuite,
   generateLossmitTask,
   gradeLossmitAgainst,
+  historyCoheres,
+  larDisputed,
   lossmitArmOf,
   lossmitEdgeOf,
   lossmitFairToGrade,
@@ -41,10 +57,12 @@ import {
   lossmitSpecTasks,
   lossmitSteps,
   lossmitTaskId,
+  lossmitVerdict,
   monthsDelinquent,
   monthsToMaturity,
   parseLossmitSubmission,
   pitiOf,
+  sixtyDaysOn,
   type DeferralTermsAnswer,
   type ForbearanceTermsAnswer,
   type LossmitAnswer,
@@ -130,6 +148,13 @@ const solveAll = async (tasks: readonly LossmitTask[]) => {
 
 const SPEC = lossmitSpecTasks();
 const [WORKED] = SPEC as [LossmitTask];
+/** A spec case's task, by how its name begins. */
+const specTask = (prefix: string): LossmitTask => {
+  const k = LOSSMIT_SPEC_CASES.findIndex((c) => c.name.startsWith(prefix));
+  if (k < 0) throw new Error(`no spec case ${prefix}`);
+  return SPEC[k]!;
+};
+const PLAN = specTask("12.5 worked example: $6,426.00");
 const d = plainDate;
 type Over = {
   [K in keyof LossmitTask]?: LossmitTask[K] extends Record<string, unknown>
@@ -243,6 +268,89 @@ describe("lossmit-retention", () => {
     `);
   });
 
+  it("pins what a model is told, and states each rule the way the grader applies it", () => {
+    // Any edit to the rulebook or the tools changes what every model is told: bump
+    // LOSSMIT_ENVIRONMENT_VERSION with this pin.
+    expect(LOSSMIT_FINGERPRINT.environment).toMatchInlineSnapshot(`
+      {
+        "name": "lossmit-retention",
+        "rulebook_sha256": "d9061711a9260b33d6e0095afd0189e9cfb9a86bc6965300bbd73065121dcb17",
+        "tools_sha256": "3dfda05961ff08f64610a3ef21d39e33805726afa034e4bfbb15fff15c6736f0",
+        "version": "1.0.0",
+      }
+    `);
+    // The sentences the reference follows and the engine computes, in the rulebook's order: a rule
+    // reworded, reordered or dropped fails here, where the reference (a separate transcription)
+    // would not notice.
+    const stated = [
+      // The conventions and Step 1 (monthsDelinquent, arrearsOf).
+      '"Round" means round half up (half away from zero) to a whole cent. "Floor" means round down, "ceil" round up.',
+      "PITI is loan.pi_cents + loan.escrow_cents: the full contractual monthly payment.",
+      "so it is whole_months_between(next_due_date, evaluation_date) + 1.",
+      "late_charges = loan.unpaid_late_charges × loan.late_charge_cents.",
+      "arrears = months_delinquent × PITI + late_charges.",
+      // Step 2: hierarchyWalk, in its order.
+      "Test the options in this order. The first that holds is the one offered, and nothing after it is tested.",
+      "(a) reinstatement, when borrower.funds_available_cents is at least the arrears, whatever the hardship.",
+      "(b) forbearance, when borrower.hardship is temporary_unresolved.",
+      "(c) repayment_plan, when borrower.hardship is resolved and Step 4 finds a plan.",
+      "(d) payment_deferral, when borrower.hardship is resolved and Step 5's screen is eligible.",
+      "(e) flex_mod, when flexmod_eligible is true.",
+      "A permanent hardship passes (c) and (d) without testing them.",
+      // Step 3: forbearanceTerm, forbearanceTermDates and the short-term test.
+      "The term starts on the 1st of the month after the evaluation month. The months delinquent at the start are months_delinquent",
+      "The caps, in this order: increment_3 = 3; requested = forbearance.requested_months; cumulative_12 = 12 − forbearance.forborne_months; delinquency_12 = 12 − months_delinquent.",
+      "months = the smallest cap (never below 0).",
+      "capped_by = the names of the caps equal to months, in the order above, leaving out requested (it is never named). Ties name every cap that ties; when only requested is that small, capped_by is empty.",
+      "exception_required is true when requested_months is more than months.",
+      "term_start is the start; term_end is the last day of the month of term_start + (months − 1) months.",
+      "regx_short_term is true when forborne_months + months is 6 or less.",
+      // Step 4: repaymentPlan's term search.
+      "For a term of m months: installment = ceil(arrears ÷ m); total = PITI + installment. The term is allowed when 2 × total is at most 3 × PITI (150% of PITI or less, tested on the rounded-up installment).",
+      "The plan is the smallest m from 1 to 12 that is allowed and whose total is at most borrower.capacity_cents. When no m qualifies there is no plan.",
+      "final_installment = arrears − installment × (m − 1).",
+      "pct_of_contractual = floor(total × 10000 ÷ PITI) ÷ 100, written with two decimals: truncated, never rounded",
+      "regx_short_term is true when floor(arrears ÷ PITI) is 3 or less and m is 6 or less.",
+      // Step 5: screen, its criteria in their order.
+      "Test these in order; the first that fails is the reason, and the screen is not eligible:",
+      "1. evaluation_date is before loan.origination_date + 12 months: INV_FNMA_D23204_SEASONING_12M.",
+      "2. months_delinquent is below 2 or above 6: INV_FNMA_D23204_DELQ_WINDOW.",
+      "3. history.last_deferral_effective is given and evaluation_date is before it + 12 months: INV_FNMA_D23204_PRIOR_DEFERRAL_12M. A disaster deferral (history.last_disaster_deferral_effective) never counts here.",
+      "4. months_to_maturity = whole_months_between(evaluation_date, loan.maturity_date) is below 36: INV_FNMA_D23204_MATURITY.",
+      "5. history.active_arrangements is not empty: INV_FNMA_D23204_CONFLICTING_ARRANGEMENT.",
+      "6. history.last_failed_trial_on or history.last_modification_effective is given and evaluation_date is before it + 12 months: INV_FNMA_D23204_TRIAL_OR_MOD_12M.",
+      '(Exactly 12 months on is not "before": a date 12 months back passes.)',
+      // Step 6: the deferral's terms (screen, capStructure, nib, newPayment).
+      "after = history.cumulative_deferred_months + months_delinquent.",
+      "months_deferred = months_delinquent when after is 12 or less; otherwise 12 − cumulative_deferred_months (the cumulative cap of 12 months).",
+      "installments_to_pay = months_delinquent − months_deferred: what the cap leaves to be paid.",
+      "contractual_payment_required is true when months_delinquent is 6, or after is more than 12.",
+      "cumulative_months_after = cumulative_deferred_months + months_deferred.",
+      "nib (the non-interest-bearing balance) = months_deferred × loan.pi_cents + deferral.escrow_advances_cents + deferral.servicing_advances_cents. It takes P&I, not PITI; late charges and the escrow shortage are never in it.",
+      "late_charges_waived = late_charges from Step 1: every unpaid late charge is waived.",
+      "shortage_monthly = round(deferral.escrow_shortage_cents ÷ 60).",
+      "new_payment = loan.pi_cents + loan.escrow_cents + shortage_monthly.",
+      // Step 7: timeline.
+      "processing_month is deferral.processing_month_elected",
+      "entry_deadline is the last day of the evaluation month, or of the month after it when processing_month is true.",
+      "lar_deadline = add_business_days(entry_deadline, −1, fannie_mae): one Fannie Mae business day before the entry deadline, whatever day the deadline falls on.",
+      "effective is the day after entry_deadline (the 1st of the next month). custodian_by = effective + 25 days.",
+      // Step 8: tier and evaluationDeadlines.
+      "The tier: ge_90 when scheduled_sale_on is null or days_between(evaluation_date, scheduled_sale_on) is 90 or more; lt_90 when it is 38 to 89; le_37 when it is 37 or less.",
+      "decision_due = evaluation_date + 30 days, a calendar date, never moved.",
+      "window_days is 14 at ge_90 (30 when state is NY), and 7 at lt_90 or le_37.",
+      "accept_by = notice_provided_on + window_days, a calendar date: not moved off a weekend or holiday.",
+      "deemed_rejected_on = accept_by + 3 days when window_days is 7, and + 5 days otherwise.",
+      "appeal_rights is true at ge_90, false otherwise.",
+      // Submitting: the sections the parser ties to the offer.
+      "deferral_screen: eligible and reason (null when eligible) whenever the walk reaches (d) with a resolved hardship, null otherwise;",
+      "deferral_timeline: processing_month, entry_deadline, lar_deadline, effective and custodian_by when the deferral is offered, null otherwise;",
+    ];
+    expect(stated.filter((rule) => !LOSSMIT_RULEBOOK.includes(rule))).toEqual([]);
+    const at = stated.map((rule) => LOSSMIT_RULEBOOK.indexOf(rule));
+    expect(at).toEqual([...at].sort((a, b) => a - b));
+  });
+
   describe("gives the spec's worked examples to the cent", () => {
     const want = SPEC.map(expectedLossmit);
     const named = (prefix: string) => {
@@ -294,7 +402,21 @@ describe("lossmit-retention", () => {
         eligible: false,
         reason: "INV_FNMA_D23204_PRIOR_DEFERRAL_12M",
       });
-      expect(named("12.6-T3: the same deferral").offered).toBe("payment_deferral");
+      // The same deferral evaluated 2026-11-01 is eligible, exactly a year on; held as an engine
+      // example, because its deferral is entered by 2026-11-30 (the LAR test below).
+      expect(
+        expectedLossmit(
+          workedWith({
+            evaluation_date: d("2026-11-01"),
+            notice_provided_on: d("2026-11-05"),
+            loan: { next_due_date: d("2026-08-01"), unpaid_late_charges: 3 },
+            history: {
+              cumulative_deferred_months: 3,
+              last_deferral_effective: d("2025-11-01"),
+            },
+          }),
+        ).offered,
+      ).toBe("payment_deferral");
       expect(named("12.6-T3: a disaster deferral").offered).toBe("payment_deferral");
       expect(deferralTerms(named("12.6-T4"))).toMatchObject({
         months_deferred: 3,
@@ -472,11 +594,11 @@ describe("lossmit-retention", () => {
         .fields.filter((f) => !f.ok)
         .map((f) => f.field);
     expect(gradeLossmitAgainst(want, want).pass).toBe(true);
+    // An eligible screen is the deferral offered again, so it is not a field of its own.
     expect(gradeLossmitAgainst(want, want).fields.map((f) => f.field)).toEqual([
       "arrears",
       "offered",
       "terms",
-      "deferral_screen",
       "deferral_timeline",
       "regx",
     ]);
@@ -495,8 +617,8 @@ describe("lossmit-retention", () => {
         deferral_timeline: { ...want.deferral_timeline!, lar_deadline: "2026-09-30" },
       }),
     ).toEqual(["deferral_timeline"]);
-    // A plan answered where the deferral is due: the offer, its terms, and the two deferral sections.
-    const plan = expectedLossmit(SPEC[7]!);
+    // A plan answered where the deferral is due: the offer, its terms, and the deferral's clock.
+    const plan = expectedLossmit(PLAN);
     expect(
       wrong({
         ...want,
@@ -505,9 +627,32 @@ describe("lossmit-retention", () => {
         deferral_screen: null,
         deferral_timeline: null,
       }),
+    ).toEqual(["offered", "terms", "deferral_timeline"]);
+    // Flex Modification answered there on a screen said to fail: the screen is a field, and wrong.
+    expect(
+      wrong({
+        ...want,
+        offered: "flex_mod",
+        terms: null,
+        deferral_screen: { eligible: false, reason: "INV_FNMA_D23204_MATURITY" },
+        deferral_timeline: null,
+      }),
     ).toEqual(["offered", "terms", "deferral_screen", "deferral_timeline"]);
+    // Where the screen failed, it is a field whatever the answer: left out, or the deferral offered.
+    const failed = expectedLossmit(specTask("12.6-T2: 7 months"));
+    expect(gradeLossmitAgainst(failed, failed).fields.map((f) => f.field)).toEqual([
+      "arrears",
+      "offered",
+      "deferral_screen",
+      "regx",
+    ]);
+    expect(
+      gradeLossmitAgainst(failed, { ...failed, deferral_screen: null })
+        .fields.filter((f) => !f.ok)
+        .map((f) => f.field),
+    ).toEqual(["deferral_screen"]);
     // Where the engine has no screen, an answer that gives one is graded on it, and fails.
-    const planWant = expectedLossmit(SPEC[7]!);
+    const planWant = expectedLossmit(PLAN);
     const graded = (a: LossmitAnswer) =>
       gradeLossmitAgainst(planWant, a).fields.map((f) => f.field);
     expect(graded(planWant)).toEqual(["arrears", "offered", "terms", "regx"]);
@@ -523,8 +668,8 @@ describe("lossmit-retention", () => {
 
   it("reads a submission strictly, as the schema says, and bounces what does not fit", () => {
     const want = expectedLossmit(WORKED);
-    const plan = expectedLossmit(SPEC[7]!);
-    const term1 = expectedLossmit(SPEC[11]!);
+    const plan = expectedLossmit(PLAN);
+    const term1 = expectedLossmit(specTask("12.4 worked example, term 1"));
     const ok = (x: unknown) => parseLossmitSubmission(x).ok;
     expect(ok(want)).toBe(true);
     expect(ok(plan)).toBe(true);
@@ -551,6 +696,12 @@ describe("lossmit-retention", () => {
     expect(ok({ ...want, terms: planTerms(plan) })).toBe(false);
     expect(ok({ ...plan, offered: "reinstatement" })).toBe(false);
     expect(ok({ ...want, deferral_timeline: null })).toBe(false);
+    // The clock only with the deferral, either way round, and a failed screen always names its reason.
+    expect(ok({ ...plan, deferral_timeline: want.deferral_timeline })).toBe(false);
+    const flex = expectedLossmit(specTask("12.6-T2: 7 months"));
+    expect(ok(flex)).toBe(true);
+    expect(ok({ ...flex, deferral_timeline: want.deferral_timeline })).toBe(false);
+    expect(ok({ ...flex, deferral_screen: { eligible: false, reason: null } })).toBe(false);
     expect(
       ok({ ...plan, deferral_screen: { eligible: false, reason: "INV_FNMA_D23204_MATURITY" } }),
     ).toBe(false);
@@ -602,27 +753,100 @@ describe("lossmit-retention", () => {
       return {
         mean: grades.reduce((s, g) => s + g.score, 0) / grades.length,
         passed: grades.filter((g) => g.pass).length,
+        passedIds: held.filter((_, k) => grades[k]!.pass).map((t) => t.id),
       };
     };
-    // One option offered every time, every section it does not call for null, nothing worked out:
-    // the arrears zero and the windows read straight off the task's own dates.
+    // One option offered every time, nothing worked out: the arrears zero, the sections the option
+    // needs filled with the task's own dates and zeros, and the windows read straight off its dates.
     const constant =
-      (offered: "reinstatement" | "flex_mod") =>
-      (t: LossmitTask): LossmitAnswer => ({
-        arrears: { months_delinquent: 0, late_charges_cents: "0", arrears_cents: "0" },
+      (offered: LossmitAnswer["offered"]) =>
+      (t: LossmitTask): LossmitAnswer => {
+        const day = t.evaluation_date;
+        const deferral = offered === "payment_deferral";
+        return {
+          arrears: { months_delinquent: 0, late_charges_cents: "0", arrears_cents: "0" },
+          offered,
+          terms:
+            offered === "forbearance"
+              ? {
+                  months: 3,
+                  capped_by: ["increment_3"],
+                  exception_required: false,
+                  term_start: day,
+                  term_end: day,
+                  regx_short_term: true,
+                }
+              : offered === "repayment_plan"
+                ? {
+                    months: 12,
+                    installment_cents: "0",
+                    final_installment_cents: "0",
+                    total_monthly_cents: "0",
+                    pct_of_contractual: "100.00",
+                    regx_short_term: false,
+                  }
+                : deferral
+                  ? {
+                      months_deferred: 0,
+                      installments_to_pay: 0,
+                      contractual_payment_required: false,
+                      cumulative_months_after: 0,
+                      nib_cents: "0",
+                      late_charges_waived_cents: "0",
+                      shortage_monthly_cents: "0",
+                      new_payment_cents: "0",
+                    }
+                  : null,
+          deferral_screen: deferral ? { eligible: true, reason: null } : null,
+          deferral_timeline: deferral
+            ? {
+                processing_month: false,
+                entry_deadline: day,
+                lar_deadline: day,
+                effective: day,
+                custodian_by: day,
+              }
+            : null,
+          regx: {
+            tier: "ge_90",
+            decision_due: day,
+            window_days: 14,
+            accept_by: t.notice_provided_on,
+            appeal_rights: true,
+            deemed_rejected_on: t.notice_provided_on,
+          },
+        };
+      };
+    // Steps 1 and 8 right, and the offer read off the funds and the hardship alone: reinstatement
+    // when the funds cover the arrears, forbearance on a temporary hardship, Flex Modification
+    // otherwise. None of Steps 3 to 7 is done: no terms (a forbearance's are the parser's minimum),
+    // no screen, no clock. A pass is earned only where Steps 1, 2 and 8 are the whole evaluation.
+    const shallow = (t: LossmitTask): LossmitAnswer => {
+      const want = expectedLossmit(t);
+      const offered =
+        t.borrower.funds_available_cents >= BigInt(want.arrears.arrears_cents)
+          ? "reinstatement"
+          : t.borrower.hardship === "temporary_unresolved"
+            ? "forbearance"
+            : "flex_mod";
+      return {
+        ...want,
         offered,
-        terms: null,
+        terms:
+          offered === "forbearance"
+            ? {
+                months: 0,
+                capped_by: [],
+                exception_required: false,
+                term_start: t.evaluation_date,
+                term_end: t.evaluation_date,
+                regx_short_term: false,
+              }
+            : null,
         deferral_screen: null,
         deferral_timeline: null,
-        regx: {
-          tier: "ge_90",
-          decision_due: t.evaluation_date,
-          window_days: 14,
-          accept_by: t.notice_provided_on,
-          appeal_rights: true,
-          deemed_rejected_on: t.notice_provided_on,
-        },
-      });
+      };
+    };
     // Every date and count right and no money: the arrears' count but not their amount, the offer
     // decided without comparing a figure (forbearance on a temporary hardship, Flex Modification on a
     // permanent one, and on a resolved one the deferral when the screen's dates pass), forbearance's
@@ -693,11 +917,26 @@ describe("lossmit-retention", () => {
     };
 
     it("one option every time, nothing worked out: about a twentieth, and never a pass", () => {
-      const reinstated = scored(constant("reinstatement"));
-      const flex = scored(constant("flex_mod"));
-      expect(reinstated.passed + flex.passed).toBe(0);
-      expect(reinstated.mean).toBeLessThan(0.08);
-      expect(flex.mean).toBeLessThan(0.08);
+      for (const o of RETENTION) {
+        const s = scored(constant(o));
+        expect(s.passed, o).toBe(0);
+        expect(s.mean, o).toBeLessThan(0.08);
+      }
+    });
+
+    it("the arrears, the windows and the offer read off the funds and the hardship: two thirds of the fields, and a pass only where that is the whole evaluation", () => {
+      // The floor to read the mean against. It passes every reinstatement and every Flex Modification
+      // on a permanent hardship, the two classes the bench reports by name, and nothing that needs
+      // Steps 3 to 7.
+      const s = scored(shallow);
+      const whole = held
+        .filter((t) =>
+          ["reinstatement", "flex_mod on a permanent hardship"].includes(lossmitVerdict(t)),
+        )
+        .map((t) => t.id);
+      expect(s.passedIds).toEqual(whole);
+      expect(s.mean).toBeGreaterThan(0.6);
+      expect(s.mean).toBeLessThan(0.72);
     });
 
     it("every date and count right and no money: about half the fields, and never a pass", () => {
@@ -740,8 +979,10 @@ describe("lossmit-retention", () => {
     }
   });
 
-  it("holds the rulebook to the engine on candidates nothing filtered", () => {
-    // The fairness filter would hide a disagreement; the candidates it would see show none.
+  it("holds the reference, the rulebook as code, to the engine on candidates nothing filtered", () => {
+    // The fairness filter would hide a disagreement; the candidates it would see show none. The
+    // reference is a transcription of the rulebook, not its text: the pin and the stated rules
+    // above hold the text.
     const unfair: string[] = [];
     for (let i = 0; i < 2_000; i++) {
       const id = lossmitTaskId("train", 99, i);
@@ -787,7 +1028,7 @@ describe("lossmit-retention", () => {
       expect(expectedLossmit(arrangement).deferral_screen?.reason).toBe(
         "INV_FNMA_D23204_CONFLICTING_ARRANGEMENT",
       );
-      const trial = workedWith({ history: { last_failed_trial_on: d("2026-01-20") } });
+      const trial = workedWith({ history: { last_failed_trial_on: d("2026-01-31") } });
       expect(expectedLossmit(trial).deferral_screen?.reason).toBe(
         "INV_FNMA_D23204_TRIAL_OR_MOD_12M",
       );
@@ -963,7 +1204,172 @@ describe("lossmit-retention", () => {
       ).toContain('"gt_37"');
     });
 
-    it("and the facts it is given cohere: a sale past 120 days with no plan running, never in New York", () => {
+    it("a deferral entered by 2026-11-30, whose reporting deadline the spec disputes", () => {
+      // 5.1 owns the timer and has Fannie Mae-only holidays such as the day after Thanksgiving shift
+      // reporting deadlines; 19.1-T6 and 19.3 count that day a business day; the engine steps back
+      // over the federal calendar, to it.
+      const november = workedWith({
+        evaluation_date: d("2026-11-01"),
+        notice_provided_on: d("2026-11-05"),
+        loan: { next_due_date: d("2026-08-01"), unpaid_late_charges: 3 },
+      });
+      const want = expectedLossmit(november);
+      expect(want.offered).toBe("payment_deferral");
+      expect(want.deferral_timeline).toMatchObject({
+        entry_deadline: "2026-11-30",
+        lar_deadline: "2026-11-27",
+      });
+      expect(addBusinessDays(d("2026-11-30"), -1, fannieEtObserved)).toBe("2026-11-25");
+      expect(lossmitInScope(november)).toBe(false);
+      // A processing month elected in late October is entered then too; not elected, it is not.
+      const october = workedWith({
+        evaluation_date: d("2026-10-20"),
+        notice_provided_on: d("2026-10-23"),
+        loan: { next_due_date: d("2026-07-01"), unpaid_late_charges: 3 },
+        deferral: { processing_month_elected: true },
+      });
+      expect(expectedLossmit(october).deferral_timeline?.entry_deadline).toBe("2026-11-30");
+      expect(lossmitInScope(october)).toBe(false);
+      const unelected = {
+        ...october,
+        deferral: { ...october.deferral, processing_month_elected: false },
+      };
+      expect(expectedLossmit(unelected).deferral_timeline?.lar_deadline).toBe("2026-10-30");
+      expect(lossmitInScope(unelected)).toBe(true);
+      // It is the one month end in v1's years where the two calendars step back to different days.
+      const ends = Array.from({ length: 37 }, (_, k) => endOfMonth(addMonths(d("2026-01-01"), k)));
+      expect(ends.filter(larDisputed)).toEqual(["2026-11-30"]);
+    });
+
+    it("12.8: no Flex Modification after one that went 60 days delinquent in its first year", () => {
+      // Modified 2025-05-01, unpaid since 2026-02-01: two installments, Section 12's 60 days, were
+      // due on 2026-03-01, inside the modification's first year, and never reinstated.
+      const redefault = workedWith({
+        loan: { next_due_date: d("2026-02-01"), unpaid_late_charges: 8 },
+        borrower: { hardship: "permanent" },
+        history: { last_modification_effective: d("2025-05-01") },
+      });
+      expect(sixtyDaysOn(redefault)).toBe("2026-03-01");
+      expect(expectedLossmit(redefault).offered).toBe("flex_mod");
+      expect(flexFactsHold(redefault)).toBe(false);
+      expect(lossmitInScope(redefault)).toBe(false);
+      // The same delinquency after a modification a year before the 60 days: not barred.
+      const later = {
+        ...redefault,
+        history: { ...redefault.history, last_modification_effective: d("2025-03-01") },
+      };
+      expect(flexFactsHold(later)).toBe(true);
+      expect(lossmitInScope(later)).toBe(true);
+      // A modification exactly a year back, two installments behind: its 60 days fell on the
+      // anniversary, outside the first year, and the deferral screen passes it.
+      const atYear = workedWith({
+        loan: { next_due_date: d("2026-08-01"), unpaid_late_charges: 2 },
+        borrower: { capacity_cents: 213_117n },
+        history: { last_modification_effective: d("2025-09-01") },
+      });
+      expect(flexFactsHold(atYear)).toBe(true);
+      expect(
+        flexFactsHold({ ...atYear, loan: { ...atYear.loan, next_due_date: d("2026-07-01") } }),
+      ).toBe(false);
+    });
+
+    it("a sale only from day 122, when a first notice could have preceded the complete application", () => {
+      // 1024.41(f)(1): no first notice until more than 120 days delinquent, day N being the due date
+      // + N days (13.1); (f)(2): none once the complete application is in. Unpaid since 2025-11-01.
+      const on = (evaluation: string) =>
+        workedWith({
+          evaluation_date: d(evaluation),
+          notice_provided_on: addDays(d(evaluation), 3),
+          scheduled_sale_on: addDays(d(evaluation), 70),
+          state: "TX",
+          loan: { next_due_date: d("2025-11-01"), unpaid_late_charges: 4 },
+          borrower: { hardship: "permanent" },
+        });
+      expect(daysBetween(d("2025-11-01"), d("2026-03-01"))).toBe(120);
+      expect(["2026-03-01", "2026-03-02", "2026-03-03"].map((e) => lossmitInScope(on(e)))).toEqual([
+        false,
+        false,
+        true,
+      ]);
+      expect(lossmitInScope({ ...on("2026-03-01"), scheduled_sale_on: null })).toBe(true);
+    });
+
+    it("and a workout history the loan could have had", () => {
+      // The worked loan was originated 2021-10-01; a permanent hardship, so nothing here is screened.
+      const file = (history: Partial<LossmitTask["history"]>) =>
+        workedWith({ borrower: { hardship: "permanent" }, history });
+      const holds = (history: Partial<LossmitTask["history"]>) => {
+        const t = file(history);
+        expect(historyCoheres(t), JSON.stringify(history)).toBe(lossmitInScope(t));
+        return historyCoheres(t);
+      };
+      const deferred = (on: string, months: number) => ({
+        last_deferral_effective: d(on),
+        cumulative_deferred_months: months,
+      });
+      // A deferral evaluated a year after origination, effective the month after; two deferrals
+      // (more than 6 months deferred) a year apart.
+      expect([holds(deferred("2022-11-01", 3)), holds(deferred("2022-10-01", 3))]).toEqual([
+        true,
+        false,
+      ]);
+      expect([holds(deferred("2023-12-01", 9)), holds(deferred("2023-11-01", 9))]).toEqual([
+        true,
+        false,
+      ]);
+      // A deferral with no months deferred, or months with no deferral.
+      expect(holds({ last_deferral_effective: d("2023-01-01") })).toBe(false);
+      expect(holds({ cumulative_deferred_months: 3 })).toBe(false);
+      // A modification a year after origination and a three-month trial on.
+      const modified = (on: string) => ({ last_modification_effective: d(on) });
+      expect([holds(modified("2023-02-01")), holds(modified("2023-01-01"))]).toEqual([true, false]);
+      // A trial fails on a month's last day, the first trial payment due 13 months on at the earliest.
+      const failed = (on: string) => ({ last_failed_trial_on: d(on) });
+      expect([holds(failed("2022-11-30")), holds(failed("2022-10-31"))]).toEqual([true, false]);
+      expect(holds(failed("2023-01-15"))).toBe(false);
+      // Each deferral and modification on a day of its own.
+      expect(
+        holds({ ...deferred("2024-01-01", 2), last_disaster_deferral_effective: d("2024-01-01") }),
+      ).toBe(false);
+      expect(
+        holds({ ...deferred("2024-01-01", 2), last_disaster_deferral_effective: d("2024-02-01") }),
+      ).toBe(true);
+      // None its own evaluation would have refused: a deferral within 13 months after a modification
+      // or a failed trial (12.6 criterion 6), a modification within 16 after a failed trial (12.8).
+      expect([
+        holds({ ...modified("2023-02-01"), ...deferred("2024-02-01", 2) }),
+        holds({ ...modified("2023-02-01"), ...deferred("2024-03-01", 2) }),
+        holds({ ...failed("2023-01-31"), ...deferred("2024-01-01", 2) }),
+        holds({ ...failed("2023-01-31"), ...deferred("2024-02-01", 2) }),
+        holds({ ...failed("2023-01-31"), ...modified("2024-04-01") }),
+        holds({ ...failed("2023-01-31"), ...modified("2024-05-01") }),
+      ]).toEqual([false, true, false, true, false, true]);
+    });
+
+    it("New York's 30 days only at ge_90: at lt_90 its window is Reg X's 7, held here because v1 puts no sale in New York", () => {
+      const ny = workedWith({
+        state: "NY",
+        scheduled_sale_on: addDays(WORKED.evaluation_date, 60),
+        loan: { next_due_date: d("2026-04-01"), unpaid_late_charges: 6 },
+        borrower: { hardship: "permanent" },
+      });
+      expect(expectedLossmit(ny).regx).toEqual({
+        tier: "lt_90",
+        decision_due: "2026-10-20",
+        window_days: 7,
+        accept_by: "2026-10-09",
+        appeal_rights: false,
+        deemed_rejected_on: "2026-10-12",
+      });
+      expect(byRulesMisses(ny)).toEqual([]);
+      expect(lossmitInScope(ny)).toBe(false);
+      expect(lossmitInScope({ ...ny, state: "TX" })).toBe(true);
+      const far = { ...ny, scheduled_sale_on: addDays(WORKED.evaluation_date, 90) };
+      expect(expectedLossmit(far).regx).toMatchObject({ tier: "ge_90", window_days: 30 });
+      expect(byRulesMisses(far)).toEqual([]);
+    });
+
+    it("and the facts it is given cohere: a sale from day 122 with no plan running, never in New York", () => {
       const sale = { scheduled_sale_on: d("2026-12-31"), state: "TX" };
       expect(lossmitInScope(workedWith(sale))).toBe(false); // four behind
       const sixBehind = workedWith({
@@ -979,7 +1385,7 @@ describe("lossmit-retention", () => {
         }),
       ).toBe(false);
       expect(lossmitInScope({ ...sixBehind, flexmod_eligible: false })).toBe(false);
-      const plan = SPEC[13]!;
+      const plan = specTask("12.4 worked example, term 3");
       expect(
         lossmitInScope({
           ...plan,
@@ -994,7 +1400,7 @@ describe("lossmit-retention", () => {
     // A change here moves every score: bump LOSSMIT_ENVIRONMENT_VERSION, then the pin.
     expect(
       sha256(generateLossmitSuite("heldout", 1, 200).map(toJsonLine).join("")),
-    ).toMatchInlineSnapshot(`"2eb5518025a2a4b25c9433457c90b02c65b216d2ac2baebc53ef1156e867c1e5"`);
+    ).toMatchInlineSnapshot(`"8c72bea0e412af1f9428e0e3b7de09df17f5b9821e767abde14a16eb5711cdec"`);
   });
 
   it("rebuilds a task from its coordinates, and never draws a held-out file into training", () => {
@@ -1051,6 +1457,9 @@ describe("lossmit-retention", () => {
         terms.filter(({ f }) => f.capped_by.join("+") === names).length;
       expect(capped("increment_3")).toBeGreaterThan(35);
       expect(capped("delinquency_12")).toBeGreaterThan(20);
+      // The cumulative cap alone, and with the increment: installments paid during the plan.
+      expect(capped("cumulative_12")).toBeGreaterThan(5);
+      expect(capped("increment_3+cumulative_12")).toBeGreaterThan(1);
       expect(capped("cumulative_12+delinquency_12")).toBeGreaterThan(10);
       expect(capped("increment_3+cumulative_12+delinquency_12")).toBeGreaterThan(5);
       expect(capped("increment_3+delinquency_12")).toBeGreaterThan(1);
@@ -1064,11 +1473,13 @@ describe("lossmit-retention", () => {
       expect(terms.filter(({ f }) => !f.regx_short_term).length).toBeGreaterThan(50);
       expect(terms.filter((y) => total(y) === 6 && y.f.regx_short_term).length).toBeGreaterThan(3);
       expect(terms.filter((y) => total(y) === 7 && !y.f.regx_short_term).length).toBeGreaterThan(3);
-      // The term starts the day after the active one ends: every extension is decided in its term's last month.
-      for (const { x } of terms)
-        expect(x.a.arrears.months_delinquent).toBeGreaterThanOrEqual(
-          x.t.forbearance.forborne_months,
-        );
+      // Fewer delinquent than forborne only where installments were paid during the plan, and there
+      // the cumulative cap is under the delinquency cap.
+      const paid = terms.filter(
+        ({ x }) => x.a.arrears.months_delinquent < x.t.forbearance.forborne_months,
+      );
+      expect(paid.length).toBeGreaterThan(10);
+      for (const { f } of paid) expect(f.capped_by).not.toContain("delinquency_12");
     });
 
     it("draws the repayment search at its limits", () => {
@@ -1241,7 +1652,7 @@ describe("lossmit-retention", () => {
       for (const { t, a } of runs) {
         if (t.scheduled_sale_on !== null) {
           expect(t.state).not.toBe("NY");
-          expect(a.arrears.months_delinquent).toBeGreaterThanOrEqual(5);
+          expect(daysBetween(t.loan.next_due_date, t.evaluation_date)).toBeGreaterThanOrEqual(122);
         }
         expect(federal.isBusinessDay(a.regx.decision_due as PlainDate)).toBe(true);
       }

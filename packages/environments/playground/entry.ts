@@ -143,6 +143,7 @@ import {
   lossmitRetention,
   lossmitSpecTasks,
   lossmitTaskId,
+  lossmitVerdict,
 } from "../src/lossmit/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
@@ -724,7 +725,7 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     specNames: LOSSMIT_SPEC_CASES.map((c) => c.name),
     payload: lossmitPayload,
     expected: expectedLossmit,
-    verdictOf: (t) => expectedLossmit(t).offered,
+    verdictOf: lossmitVerdict,
     reference: () => new LossmitReferencePolicy(),
   }),
 ]);

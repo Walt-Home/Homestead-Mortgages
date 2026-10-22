@@ -190,12 +190,12 @@ import {
   LOSSMIT_FINGERPRINT,
   LOSSMIT_HELDOUT_SUITE,
   LossmitReferencePolicy,
-  expectedLossmit,
   generateLossmitSuite,
   generateLossmitTask,
   lossmitRetention,
   lossmitSpecTasks,
   lossmitTaskId,
+  lossmitVerdict,
   type LossmitAnswer,
   type LossmitTask,
 } from "./lossmit/index.js";
@@ -452,7 +452,7 @@ const BENCHES = {
     one: generateLossmitTask,
     taskId: lossmitTaskId,
     spec: lossmitSpecTasks,
-    verdictOf: (t) => expectedLossmit(t).offered,
+    verdictOf: lossmitVerdict,
     reference: () => new LossmitReferencePolicy(),
   } satisfies Bench<LossmitTask, LossmitAnswer>,
 };

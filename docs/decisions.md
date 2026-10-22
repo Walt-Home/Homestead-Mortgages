@@ -5926,30 +5926,34 @@ The second pass found four more, and one was found building:
   three.
 - **Three of the screen's failures go to liquidation.** The Flex
   Modification's own criteria (12.8) bar a loan under a year old, one with a
-  conflicting arrangement, one with a failed trial in the last year, and one
-  whose modification in the last year went 60 days delinquent. Those match
-  three of the deferral screen's criteria. A file that fails the screen on
-  any of them is refused the Flex Modification too, and the walk then offers
-  D5's untested short sale.
+  conflicting arrangement, one with a failed trial or a modification in the
+  last year, and one whose modification went 60 days delinquent in its
+  first year without reinstatement. The first three match three of the
+  deferral screen's criteria. A file that fails the screen on any of them is
+  refused the Flex Modification too, and the walk then offers D5's untested
+  short sale.
 
 **So v1 stays out of those places.** The generator never draws liquidation,
 a disaster, imminent default, a sale 37 days away or less, a decision date
-off a business day, a file the Flex Modification would refuse, or a
-conflicting arrangement. It keeps a temporary hardship to 11 months
+off a business day, a file the Flex Modification would refuse, a conflicting
+arrangement, or a deferral entered by 2026-11-30, whose reporting deadline
+the spec disputes (below). It keeps a temporary hardship to 11 months
 delinquent and 11 forborne; the cumulative deferred months to what leaves at
 least 2 to defer and at most one installment to pay (the one contractual
 payment 12.6-T4 and rule 4 name); maturity off 36; and capacity at the
-screen at or above the deferral's new payment. A processing month is
-elected only after the 15th. `lossmitInScope` then runs on the engine's own
-outputs and rejects any file that reaches those places. It rejects none of
-40,000 training draws, because the generator aims around them.
+screen at or above the deferral's new payment. A processing month is elected
+only after the 15th. `lossmitInScope` then runs on the engine's own outputs
+and rejects any file that reaches those places. It rejects none of 40,000
+training draws, because the generator aims around them.
 
-The facts cohere as a servicer's would. A sale is scheduled only past 120
-days delinquent, with no forbearance plan running, in a state that
+The facts cohere as a servicer's would. A sale is scheduled only from day
+122 of the delinquency, with no forbearance plan running, in a state that
 forecloses outside the courts, and never in New York. An extension is
 decided in the active term's last month, so its start is the day after the
-term ends. A deferral or modification is dated after the loan's first
-installment and no later than its oldest unpaid one.
+term ends. The workout history is one the loan could have had: each
+deferral, modification and failed trial after its seasoning, none sooner
+after another than its own evaluation would allow, and none later than the
+oldest unpaid installment.
 
 **So the screen's reasons graded are three:** the delinquency window, a
 prior deferral within the year, and maturity, each on about a tenth of the
@@ -5968,13 +5972,15 @@ would offer it only on a resolved one.
 one field each on every file. The terms, the deferral screen and the
 deferral's clock are one field each where the engine has them, and wherever
 an answer gives one it does not, so answering a section not called for
-costs what leaving one out does. A null right by default earns nothing. The
-second pass estimated a constant answer at about 0.17 or 0.33, depending on
-whether null sections were counted, and carried by the null sections rather
-than the dates. With them not counted unless answered, offering reinstatement
-or Flex Modification every time scores 0.053 and 0.056 on the held-out
-suite. An answer with every date and count right and no money scores 0.522
-and passes nothing.
+costs what leaving one out does. A null right by default earns nothing, and
+neither does an eligible screen, which is the deferral offered again: the
+screen is a field only where one failed. The second pass estimated a
+constant answer at about 0.17 or 0.33, depending on whether null sections
+were counted, and carried by the null sections rather than the dates. With
+them not counted unless answered, offering one option every time scores
+0.045 to 0.056 on the held-out suite. The floor to read a mean against is
+higher: getting the arrears and the windows right and reading the offer off
+the funds and the hardship scores 0.680 and passes 49 of 200 (below).
 
 **What 1.0.0 leaves out:**
 
@@ -5992,7 +5998,110 @@ and passes nothing.
 - notices, the reviewer, SMDU, holds and the California overlays.
 
 **The proof of fairness.** The reference solves the held-out 200, a
-300-task training suite and 15 spec cases through the tools alone, with no
+300-task training suite and 14 spec cases through the tools alone, with no
 task redrawn in 600. It agrees with the engine on 2,000 candidates nothing
 filtered, and on 40,000 when last measured. Its longest task is 34 tool
 calls in 10 turns across 5,000 training draws.
+
+**An adversarial review, before anything was scored, upheld ten findings.**
+Three were facts that could not happen together, one a figure the spec
+disputes, one an edge the draws never reached, two were in how the grade
+counts, and three were missing tests. All were fixed at 1.0.0 with a new
+held-out pin, because nothing had been measured on the first.
+
+The draws:
+
+- **A reporting deadline the spec disputes.** Deferral files entered by
+  2026-11-30 were graded on a reporting deadline of Friday 2026-11-27, the
+  engine's step back over the federal calendar. Spec 5.1 owns that timer and
+  says Fannie Mae-only holidays such as the day after Thanksgiving shift
+  reporting deadlines, which gives 11-25. Sections 19.1-T6 and 19.3 count
+  the 27th as a business day, and the servicing app's audit report (its
+  first correctness defect) leaves the calendar to the spec owner. That was
+  35 of 1,164 deferrals in 5,000 training draws, and none held out. Now no
+  deferral is entered by 2026-11-30, and the guard checks it. 12.6-T3's
+  evaluation exactly a year on, 2026-11-01, is held as an engine example,
+  not a task, and 12.2-T2 is drawn on a permanent hardship, so its walk
+  stops at Flex Modification.
+- **Flex Modification after a redefaulted modification.** 12.8 bars a Flex
+  Modification after one that went 60 days delinquent in its first year
+  without reinstatement. The guard barred only a modification inside the
+  last year. Counted as Section 12 counts 60 days, two installments due, 286
+  of 20,000 training draws carried a modification whose current delinquency
+  reached 60 days inside its first year. 54 of them were graded flex_mod,
+  and one of the held-out 200 was. The guard now bars any file whose
+  delinquency reached 60 days before its last modification's first
+  anniversary, and a modification is drawn at least that far back. The
+  deferral edge's modification exactly a year back is two installments
+  behind, so its 60 days fall on the anniversary.
+- **A sale on day 120.** The gate was five installments, and five
+  installments evaluated on the 1st is exactly 120 days. 1024.41(f)(1)
+  allows no first notice until day 121, and (f)(2) none once the complete
+  application is in, so no sale could be on the calendar. 12 of 20,000
+  training draws and one held-out task had one. Now a sale needs day 122,
+  counted as 13.1 counts days, in the generator and the guard. A
+  forbearance that ended the month before still allows a sale. The first
+  notice can go out between the plan's end and the completion, so those
+  files stay.
+- **History the loan could not have had.** History was drawn as early as
+  two months after the first installment. So a deferral, a modification or
+  a failed trial could fall three months after origination, more than six
+  months deferred could sit inside two years, two workouts could take effect
+  on one day, and a trial could fail mid-month. That was 385 of 20,000
+  training draws, two held out, and four where the impossible deferral
+  decided the answer. Now each workout comes after its seasoning: a
+  deferral 13 months after origination and each later one 13 after the
+  last, a modification 16 months after origination, and a failed trial on
+  a month's last day, 13 months after origination. No deferral follows a
+  modification or a failed trial within 13 months, and no modification
+  follows a failed trial within 16, because its own evaluation would have
+  refused it. Each workout has a day of its own, and the guard checks all
+  of it.
+- **The cumulative cap never set a term.** Every forborne installment was
+  still unpaid, so the cumulative cap was never smaller than the delinquency
+  cap. An answer that left it out passed 85% of forbearance offers. One arm
+  now draws installments paid during the plan, as 12.4 rule 1's reduced
+  payments are applied once a full installment accrues. There the cumulative
+  cap binds alone, on about 4% of forbearance offers. The cap-less answer
+  still passes 83%, because most terms are capped by the increment or the
+  request.
+
+The grade:
+
+- **The floor was understated.** The documented floor was the dates-only
+  answer, 0.522 with no pass, and it misses the arrears on purpose. An
+  answer that gets the arrears and the windows right and reads the offer
+  off the funds and the hardship scored 0.665 and passed 49 of 200, doing
+  none of Steps 3 to 7. Its passes are earned. On a reinstatement, or a
+  Flex Modification on a permanent hardship, Steps 1, 2 and 8 are the whole
+  evaluation. So the grade stays, and that answer is now the documented
+  floor (0.680 after the change below), with a test that it passes those
+  two classes and nothing else. The bench reports Flex Modification as two
+  classes, "on a permanent hardship" and "after the screen", so a score can
+  be read against the classes that need the work.
+- **An eligible screen was a second credit for the offer.** The parser
+  takes an eligible screen only with the deferral offered, so on a deferral
+  the screen was right exactly when the offer was. It counted the offer
+  twice, 2 of 6 fields. It is now a field only where a screen failed, in the
+  engine's answer or the model's.
+
+The tests:
+
+- **No test read the rulebook.** The test named for it held the reference,
+  a separate transcription. Five rulebook edits that contradict the engine
+  passed every test. Now the rulebook and tools hashes are pinned, and 53
+  rule sentences are held to the rulebook in its order. The test that ran
+  the reference is named for what it does.
+- **New York's lt_90 window was never graded.** v1 puts no sale in New York,
+  so a model giving New York 30 days at every tier lost nothing, and an
+  engine change there survived every test. A sale in New York 5 to 11 months
+  into a delinquency is not one its courts give, so the draws stay as they
+  are. A test now holds New York at lt_90 to Reg X's 7 days, through the
+  engine and the reference.
+- **Two of the parser's bounces had no test**, a deferral clock under
+  another offer and a failed screen with no reason. Both have one now.
+
+Reading 12.8 for the redefault also corrected a wording. "Two installments,
+Fannie Mae's 60 days" holds only as Section 12 counts delinquency, in
+months by the installments due, which its README names for these windows.
+The guard's comments and docs/environments.md now say so.

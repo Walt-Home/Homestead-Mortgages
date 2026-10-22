@@ -6,12 +6,12 @@ reproduced again on 21 October 2026 against the commit
 `apps/servicing/VENDORED_FROM` names (`293261b`, committed 17 September 2026).
 One more, boarding-1, was found and reproduced on 22 October 2026 while
 cataloguing defects for synthetic data (docs/synthetic-data-defects.md).
-Six more are in the runtime that wires the engines together rather than in an
-engine: cashiering-18, arm-15, payoff-19, metro2-1, ei-1 and ei-2. They came
-from running the servicing app's runtime for 397 simulated days on a scratch
-database on 22 October 2026, and each was reproduced in isolation the same
-day, with none of that run's own choices, and upheld by two independent
-checks.
+Seven more are in the runtime that wires the engines together rather than in
+an engine: cashiering-18, arm-15, payoff-19, statements-1, metro2-1, ei-1 and
+ei-2. They came from running the servicing app's runtime for 397 simulated
+days on a scratch database on 22 October 2026, and each was reproduced in
+isolation the same day, with none of that run's own choices, and upheld by two
+independent checks.
 The environments keep all but one out of grading. pmi-9 is graded, because
 the spec states the engine's reading as its own rule. Four more
 (cashiering-4, cashiering-9, flexmod-1, flexmod-2) were graded at the
@@ -31,6 +31,7 @@ decided", says why each went the way it did.
 | cashiering-18 | cashiering | Forbearance and bankruptcy never reach the cashiering cycle, so their late charges are assessed      | §2.7 rule 3(ii), (iv); §14.1 rule 4    | 🔴     | `domain/operations-runtime/cashiering-cycle.ts:112`, `:153-154`                                 |
 | arm-15        | arm        | A boarded ARM never gets its change schedule, so no adjustment or (c) notice can run                 | §7.2 inputs; Reg Z 1026.20(c)(2)       | 🔴     | `runtime/transfers.ts:141-150`, `:194-197`; `domain/notices/ops-7-2.ts:167-170`                 |
 | payoff-19     | payoff     | The borrower's own payoff quotes use ten times the rate, no late charges and a calendar LPI          | §16.1 rules 1, 6, 11; 1026.36(c)(3)    | 🔴     | `runtime/borrower/flows/9-servicing-requests.ts:94`, `:188-198`                                 |
+| statements-1  | statements | No statement cycle is ever opened for a boarded loan, so no periodic statement is sent               | §7.1 events and rule 1; 1026.41(a)(2)  | 🔴     | `domain/notices/ops-7-1.ts:74`; `domain/operations-runtime/cycles.ts:223-230`                   |
 | cashiering-2  | cashiering | The $50 rule can book negative escrow                                                                | §2.2 rule 2                            | 🟡     | `domain/cashiering/allocation.ts:114`                                                           |
 | cashiering-3  | cashiering | Named extra principal is credited to escrow, or parked, when the rest is short of a payment          | §2.4 rules 1-2; §2.5 example I         | 🟡     | `domain/cashiering/allocation.ts:137-158`                                                       |
 | cashiering-4  | cashiering | One suspense balance shields several installments from late charges                                  | §2.7 rule 1; 2.7-Q1                    | 🟡     | `domain/cashiering/latecharges.ts:65-66`                                                        |
@@ -104,7 +105,7 @@ decided", says why each went the way it did.
 | pmi-12        | pmi        | New York's appraisal sets the federal thresholds                                                     | §10.1 R2; 12 U.S.C. 4901(12)           | 🟢     | `domain/pmi/cancellation.ts:15`                                                                 |
 | pmi-13        | pmi        | An ARM reset inside an interest-only period amortizes at once                                        | §10.2 R2                               | 🟢     | `domain/pmi/schedule.ts:69-74`                                                                  |
 
-🔴 high (8) · 🟡 medium (42) · 🟢 low (30). ei is Reg X early intervention.
+🔴 high (9) · 🟡 medium (42) · 🟢 low (30). ei is Reg X early intervention.
 Section numbers are the servicing app's spec; paths are under
 `apps/servicing/src/`; amounts ending in c are cents. docs/decisions.md tells
 the longer story of most of these, in the entry for the environment that found
@@ -406,6 +407,59 @@ index date 2026-09-17).
   check the figure.
 - **Kept out by.** payoff-statement ports only the §16.1 calculator and draws
   its own inputs; nothing in packages/environments runs the borrower flows.
+
+### statements-1. No statement cycle is ever opened for a boarded loan, so no periodic statement is sent 🔴
+
+- **Spec says.** §7.1: "`statement.cycle.opened` — emitted by the cycle
+  scheduler for each loan at 00:05 … on the day after `courtesy_period_end`
+  for the previous cycle …; also on `loan.boarded` for the first cycle"
+  (7-1-periodic-statement.md:57; rule 1 at :99). §35.3 plans its `statements`
+  cycle from that event (35-3-cycles-jobs-and-receipts.md:45, :77). The 41(b)
+  timer `REGZ_1026_41B_STATEMENT_PROMPT_4` also arms on it
+  (spec/registry/timers.json:4249). Reg Z 1026.41(a)(2) requires a periodic
+  statement for each billing cycle, and no exemption in 1026.41(e) applies to
+  this book. §35.3's own current-state note records the gap ("Statements and
+  1098s have runners but no scheduler", 35-3-cycles-jobs-and-receipts.md:27);
+  the cycle was added, but not the opener §7.1 requires.
+- **Engine does.** Only two things in the runtime emit the event.
+  `StatementCycleService.openCycle` (domain/notices/ops-7-1.ts:74-81) is
+  called only by tests (domain/notices/7-1.spec.test.ts:36;
+  domain/operations-runtime/35-3.spec.test.ts:141). 30.2's
+  `openFirstStatementCycle` (domain/orig-boarding/ops-30-2.ts:657-661, called
+  at :846) opens only the first cycle of a loan the app originated. Transfer
+  boarding (runtime/transfers.ts) opens no cycle, and nothing opens a second
+  cycle for any loan. The `statements` cycle's period keys and selector read
+  only that event (domain/operations-runtime/cycles.ts:133-137, :223-230), so
+  no run is planned and `statementsRunner` (runners.ts:86-93, registered at
+  :248) never runs. The 41(b) clock never arms either, so a loan paid on time
+  raises no alarm at all; only an unpaid loan's payment-reminder clock
+  (FNMA_D2_2_03_PAYMENT_REMINDER_20) breaches.
+- **Reproduction.** A fresh database with the app's migrations and the demo
+  transfer batch boarded (94 loans). The demo clock then walked 75 days from
+  10 September 2026, with every cycle active and the planner and borrower
+  flows wired as `main.ts` wires them: 75 `cashiering_daily` receipts and 94
+  installments due on each of 1 October and 1 November, and zero
+  `statement.cycle.opened` events, zero `statements` runs, zero statement
+  notices and zero 41(b) timers. As a control, one hand call to `openCycle`
+  for SM-TR-0000001 armed `REGZ_1026_41B_STATEMENT_PROMPT_4` and
+  `SM_STATEMENT_GENERATE_T1`, and on the statement date the cycle planned a
+  run and executed its unit. That unit then held the statement for two other
+  reasons, not part of this entry: a transfer-boarded borrower has no
+  `party_id`, so it has "no recipients" (runtime/servicing-parties.ts:18-20;
+  notices/service.ts:116), and the runtime always renders the standard
+  template (runtime/servicing.ts:174-175), so a loan more than 45 days
+  delinquent is held for its missing (d)(8) box. Two independent checks
+  reproduced it, one walking 41 days across two cycles' opening dates with the
+  runtime wired as `main.ts` does. In the 397-day runtime simulation the
+  `statements` cycle was active, never paused and never ran. Found on 22
+  October 2026 and reproduced the same day.
+- **Smallest fix.** Add a daily per-loan opener. The `cashiering_daily` unit
+  already visits every loan each day and has its installments and grace
+  period; on the day after an installment's courtesy period ends, it should
+  call `openCycle` with that due date, once per (loan, cycle_due_date).
+  Transfer boarding should also open the first cycle on `loan.boarded`, as
+  §7.1 says.
+- **Kept out by.** No environment produces a periodic statement.
 
 ## Medium
 
@@ -1488,7 +1542,7 @@ credited_as_of 2026-10-15}` and the installment `satisfied`, with no
   Kept out: pmi-termination keeps out a rate change inside an interest-only
   period or after the 78% row.
 
-81 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+82 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

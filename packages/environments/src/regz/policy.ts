@@ -38,7 +38,7 @@ The spread is APR − APOR, exactly. A loan has a spread only when it has both.
 
 Every quote's rate was set in 2026, and these are the year's figures:
 - The QM points-and-fees limit, by loan amount: at $137,958 or more, 3% of the total loan amount; at $82,775 or more, $4,139; at $27,592 or more, 5% of the total loan amount; at $17,245 or more, $1,380; below $17,245, 8% of the total loan amount.
-- The General QM threshold, in points of spread, by loan amount: at $137,958 or more, 2.25; at $82,775 or more, 3.5; below $82,775, 6.5. A manufactured home whose loan amount is below $137,958 has 6.5.
+- The General QM threshold, in points of spread: a manufactured home whose loan amount is below $137,958 has 6.5, whatever its tier. Any other loan has, by loan amount, 2.25 at $137,958 or more, 3.5 at $82,775 or more, and 6.5 below $82,775.
 - The higher-priced threshold: 1.5 points, and 2.5 for a loan amount more than $832,750, the conforming loan limit.
 - The HOEPA rate trigger: a spread of more than 6.5 points.
 - The HOEPA fee limit: 5% of the total loan amount for a loan amount of $27,592 or more; for a smaller loan, the lesser of 8% of the total loan amount and $1,380. The fee trigger fires when points and fees are more than this limit.

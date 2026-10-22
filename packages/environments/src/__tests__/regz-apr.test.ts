@@ -69,7 +69,7 @@ describe("regz-apr", () => {
     // A change here moves every score: bump REGZ_APR_ENVIRONMENT_VERSION, then the pin.
     expect(
       sha256(generateRegzAprSuite("heldout", 1, 200).map(toJsonLine).join("")),
-    ).toMatchInlineSnapshot(`"f89a3b3b57aacef870d98d4a6ec81e9b7fe025cc2002edca58673b9bc1136eb8"`);
+    ).toMatchInlineSnapshot(`"6081e0b40e4cd53324ba5f431ce249c1e7e322ce3f2aec26aace5f96f9f323a0"`);
   });
 
   it("rebuilds a task from its coordinates, and never draws a held-out quote into training", () => {

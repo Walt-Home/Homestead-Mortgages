@@ -92,6 +92,8 @@ export const HELDOUT_SUITES: readonly HeldoutSuite[] = Object.freeze([
   { namespace: "refi-hard/1.0.0", ...HARD_HELDOUT_SUITE },
   { namespace: "regz-price-tests/1.0.0", ...REGZ_HELDOUT_SUITE },
   { namespace: "regz-apr/1.0.0", ...REGZ_APR_HELDOUT_SUITE },
+  { namespace: "regz-price-tests/1.1.0", ...REGZ_HELDOUT_SUITE },
+  { namespace: "regz-apr/1.1.0", ...REGZ_APR_HELDOUT_SUITE },
   { namespace: "flexmod-terms/1.0.0", ...FLEX_HELDOUT_SUITE },
   { namespace: "flexmod-terms/1.1.0", ...FLEX_HELDOUT_SUITE },
   { namespace: "payments-posting/1.0.0", ...PAYMENTS_HELDOUT_SUITE },

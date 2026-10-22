@@ -42,7 +42,7 @@ export const REGZ_APR_ENVIRONMENT_NAME = "regz-apr";
  *
  * 1.1.0 (21 Oct 2026): with regz-price-tests 1.1.0.
  */
-export const REGZ_APR_ENVIRONMENT_VERSION = "1.1.0";
+export const REGZ_APR_ENVIRONMENT_VERSION = "1.2.0";
 
 const STEP_THREE_TOOL =
   "Otherwise the APR is annual_percentage_rate(loan amount, note rate, term_months, prepaid_finance_charges).";

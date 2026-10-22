@@ -6937,3 +6937,18 @@ bounds now hold 2,000 training tasks, where the generator's own figures are
 DeepSeek-V4.1-Flash on 1.1.0's suite, the same evening: 197 of 200 (98.5 %,
 95.7 to 99.5), every task scored, 2.4¢ each, where 1.0.0's was 196. No answer
 changed, and the two scores are within what a run moves.
+
+## The Reg Z rulebooks state the manufactured-home threshold first
+
+**Decided 22 October 2026,** as regz-price-tests, regz-policy and regz-apr
+1.2.0. The General QM threshold listed the loan-amount tiers (2.25, 3.5, 6.5)
+and then, last, that a manufactured home under $137,958 takes 6.5. A reader
+working down the list stops at the first tier its amount reaches, which for a
+manufactured home between $82,775 and $137,958 is 3.5. The aus-decision
+review found that reading in its own first draft and put the manufactured
+rule first; the Reg Z rulebooks had the same wording. The case is drawn: 6 of
+the 200 held-out tasks and 56 of 3,000 training tasks. The sentence now puts
+the manufactured-home rule first and says it holds whatever the tier. No
+answer changed; the pinned rulebooks moved the versions and the held-out
+suites, and the reference passes all 200 on each. DeepSeek's scores on 1.1.0
+stand as what they measured.

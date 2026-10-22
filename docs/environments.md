@@ -252,6 +252,16 @@ down. The engine has priced fees in exact cents since 21 October, and 1.1.0
 redraws none in 1,000. The held-out suite is seed 1, 200 tasks, pinned by
 hash.
 
+**1.2.0** (22 October) reworded the General QM threshold so the
+manufactured-home rule comes first and says it holds whatever tier the loan
+amount reaches. 1.1.0 listed the tiers and then the manufactured-home case,
+so a reader working down the tiers could stop at 3.5 for a manufactured home
+between $82,775 and $137,958, where the answer is 6.5; 6 of the 200 held-out
+tasks and 56 of 3,000 training tasks are that case. The underwriting
+decision's review found the same wording in its own rulebook first. No answer
+changed. regz-policy's policy text and regz-apr, which shares this rulebook,
+moved to 1.2.0 with it, and the 1.1.0 held-out namespaces stay on the guard.
+
 **The proof of fairness.** The reference passes all 501 tasks it was checked
 on. Hand-worked quotes at each edge are held to figures worked by hand,
 apart from the engine.

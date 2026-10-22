@@ -23,7 +23,7 @@ Conventions:
 
 The 2026 thresholds (every task's rate was set in 2026):
 - QM points-and-fees limit, by loan amount: $137,958 or more: 3% of the total loan amount. $82,775 or more: $4,139. $27,592 or more: 5% of the total loan amount. $17,245 or more: $1,380. Below $17,245: 8% of the total loan amount.
-- General QM threshold (points of APR over APOR), by loan amount: $137,958 or more: 2.25. $82,775 or more: 3.5. Below $82,775: 6.5. A manufactured home with a loan amount below $137,958: 6.5.
+- General QM threshold (points of APR over APOR): a manufactured home with a loan amount below $137,958 takes 6.5, whatever tier its amount reaches. Any other loan takes the first tier its amount reaches: $137,958 or more: 2.25. $82,775 or more: 3.5. Below $82,775: 6.5.
 - Higher-priced (HPML) threshold: 1.5 points; 2.5 when the loan amount is more than $832,750 (the conforming loan limit).
 - HOEPA rate trigger: APR more than 6.5 points over APOR. HOEPA fee trigger: points and fees more than 5% of the total loan amount when the loan amount is $27,592 or more; below that, more than the lesser of 8% of the total loan amount and $1,380.
 - Net tangible benefit: the closing costs must be recouped within 60 months.

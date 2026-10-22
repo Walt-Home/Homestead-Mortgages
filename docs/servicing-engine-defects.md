@@ -6,6 +6,12 @@ reproduced again on 21 October 2026 against the commit
 `apps/servicing/VENDORED_FROM` names (`293261b`, committed 17 September 2026).
 One more, boarding-1, was found and reproduced on 22 October 2026 while
 cataloguing defects for synthetic data (docs/synthetic-data-defects.md).
+Six more are in the runtime that wires the engines together rather than in an
+engine: cashiering-18, arm-15, payoff-19, metro2-1, ei-1 and ei-2. They came
+from running the servicing app's runtime for 397 simulated days on a scratch
+database on 22 October 2026, and each was reproduced in isolation the same
+day, with none of that run's own choices, and upheld by two independent
+checks.
 The environments keep all but one out of grading. pmi-9 is graded, because
 the spec states the engine's reading as its own rule. Four more
 (cashiering-4, cashiering-9, flexmod-1, flexmod-2) were graded at the
@@ -22,6 +28,9 @@ decided", says why each went the way it did.
 | pmi-1         | pmi        | The HPA scheduled-80% cancellation path is never tested                                              | §10.1 R3; 12 U.S.C. 4901(2)(A)(i)      | 🔴     | `domain/pmi/cancellation.ts:147-149`; `app/tools/section10.ts:48`                               |
 | pmi-5         | pmi        | A request under 24 months is sent for a paid valuation before seasoning is checked                   | §10.1 R7; F-1-02                       | 🔴     | `domain/pmi/cancellation.ts:144`                                                                |
 | pmi-6         | pmi        | A paid valuation below original value asks for another, and no denial can issue                      | §10.1 R6; §10.6                        | 🔴     | `domain/pmi/cancellation.ts:154-155`                                                            |
+| cashiering-18 | cashiering | Forbearance and bankruptcy never reach the cashiering cycle, so their late charges are assessed      | §2.7 rule 3(ii), (iv); §14.1 rule 4    | 🔴     | `domain/operations-runtime/cashiering-cycle.ts:112`, `:153-154`                                 |
+| arm-15        | arm        | A boarded ARM never gets its change schedule, so no adjustment or (c) notice can run                 | §7.2 inputs; Reg Z 1026.20(c)(2)       | 🔴     | `runtime/transfers.ts:141-150`, `:194-197`; `domain/notices/ops-7-2.ts:167-170`                 |
+| payoff-19     | payoff     | The borrower's own payoff quotes use ten times the rate, no late charges and a calendar LPI          | §16.1 rules 1, 6, 11; 1026.36(c)(3)    | 🔴     | `runtime/borrower/flows/9-servicing-requests.ts:94`, `:188-198`                                 |
 | cashiering-2  | cashiering | The $50 rule can book negative escrow                                                                | §2.2 rule 2                            | 🟡     | `domain/cashiering/allocation.ts:114`                                                           |
 | cashiering-3  | cashiering | Named extra principal is credited to escrow, or parked, when the rest is short of a payment          | §2.4 rules 1-2; §2.5 example I         | 🟡     | `domain/cashiering/allocation.ts:137-158`                                                       |
 | cashiering-4  | cashiering | One suspense balance shields several installments from late charges                                  | §2.7 rule 1; 2.7-Q1                    | 🟡     | `domain/cashiering/latecharges.ts:65-66`                                                        |
@@ -61,6 +70,9 @@ decided", says why each went the way it did.
 | pmi-11        | pmi        | The midpoint moves with an ARM reset                                                                 | §10.3                                  | 🟡     | `app/tools/section10.ts:236`, `:272`                                                            |
 | pmi-14        | pmi        | The midpoint termination is skipped for loans outside the 78% rule                                   | §10.3; B-8.1-04                        | 🟡     | `app/tools/section10.ts:251`                                                                    |
 | boarding-1    | boarding   | A yes-or-no tape cell other than "Y" boards as No, so a loan written "Yes" boards with no escrow     | §1.1 integrations (row-level rejects)  | 🟡     | `domain/boarding/tape-codec.ts:49`; HF-007 at `domain/boarding/rules.ts:94-98`                  |
+| metro2-1      | metro2     | The monthly cycle never reads the loan's MIN, so every loan is left out of every bureau file         | §8.1 rules 6 and 9; C-4.1-01           | 🟡     | `domain/operations-runtime/runners.ts:143` (query at :127)                                      |
+| ei-1          | ei         | A paid installment does not cancel its Reg X early-intervention clocks, which breach                 | §11.1 rule 1; §11.2; 11.1-T3           | 🟡     | `infra/db/unit-of-work.ts:118-119`; `domain/early-intervention/timers.ts:276`                   |
+| ei-2          | ei         | A late payment cancels a breached window, and one contact satisfies every later window               | §11.1, §11.2 state machines; 11.1-T4   | 🟡     | `runtime/delinquency.ts:68-69`, `:87-88`, `:91-92`                                              |
 | cashiering-10 | cashiering | A $50-rule payment before its due date is labeled prepaid, and its counter row is skipped            | §2.2 rule 2                            | 🟢     | `domain/cashiering/allocation.ts:203`                                                           |
 | cashiering-16 | cashiering | A dispute overlay ignores its start date                                                             | §2.7 rule 3(viii)                      | 🟢     | `domain/cashiering/latecharges.ts:90`                                                           |
 | cashiering-17 | cashiering | Instruction text is matched by keyword                                                               | §2.1 rule 6                            | 🟢     | `domain/cashiering/allocation.ts:81`, `:170`                                                    |
@@ -92,13 +104,14 @@ decided", says why each went the way it did.
 | pmi-12        | pmi        | New York's appraisal sets the federal thresholds                                                     | §10.1 R2; 12 U.S.C. 4901(12)           | 🟢     | `domain/pmi/cancellation.ts:15`                                                                 |
 | pmi-13        | pmi        | An ARM reset inside an interest-only period amortizes at once                                        | §10.2 R2                               | 🟢     | `domain/pmi/schedule.ts:69-74`                                                                  |
 
-🔴 high (5) · 🟡 medium (39) · 🟢 low (30). Section numbers are the servicing
-app's spec; paths are under `apps/servicing/src/`; amounts ending in c are
-cents. docs/decisions.md tells the longer story of most of these, in the entry
-for the environment that found each. Fixture L-1 is §2.1 worked example A
-(6.500%, P&I 158,017c, escrow 61,240c, payment 219,257c, installments monthly
-from 2026-09-01). Plan 4927 is §7.2's worked example (5.750%, margin 2.750,
-$400,000, change 2026-11-01, index date 2026-09-17).
+🔴 high (8) · 🟡 medium (42) · 🟢 low (30). ei is Reg X early intervention.
+Section numbers are the servicing app's spec; paths are under
+`apps/servicing/src/`; amounts ending in c are cents. docs/decisions.md tells
+the longer story of most of these, in the entry for the environment that found
+each. Fixture L-1 is §2.1 worked example A (6.500%, P&I 158,017c, escrow
+61,240c, payment 219,257c, installments monthly from 2026-09-01). Plan 4927 is
+§7.2's worked example (5.750%, margin 2.750, $400,000, change 2026-11-01,
+index date 2026-09-17).
 
 ## High
 
@@ -200,6 +213,199 @@ $400,000, change 2026-11-01, index date 2026-09-17).
 - **Kept out by.** pmi-termination keeps out any delivered valuation below
   original value, and since 1.1.0 its rulebook no longer states the engine's
   reading of one.
+
+### cashiering-18. Forbearance and bankruptcy never reach the cashiering cycle, so their late charges are assessed 🔴
+
+- **Spec says.** §2.7 rule 3(ii) and D2-3.2-01: no late charge accrues or is
+  collected during a forbearance plan, and §12.4 rule 3 refuses the assessment
+  while the plan is active. §2.7 rule 3(iv), 2.7-T8 and §14.1 rule 4: after a
+  petition, charges accrue suspended as a memo, with no collection and no
+  statement billing (Rule 3002.1(c)). §14.1 rule 1 applies the gates the
+  moment a notice is received (E-2.1-03). §14.1 names the wiring:
+  `payment_holds{bankruptcy}` and 2.7's `bankruptcy_active` overlay. §35.5
+  rule 6 skips the assessment under a `payment_holds` row.
+- **Engine does.** The runtime's cash state carries no overlays and no plan
+  flag. `loanCashStateFromRows` hard-codes `overlays: []` and `plan_active`
+  false (domain/operations-runtime/cashiering-cycle.ts:153-154), so 2.7's
+  overlay tests (app/tools/section02.ts:205-209) and its OVERLAYS guardrail
+  (:252) never fire. The unit's one suppression is an open `payment_holds` row
+  (cashiering-cycle.ts:112, :258), and nothing writes that table: no code
+  inserts into it, and no projector maps onto it
+  (domain/operations-runtime/projectors/index.ts:14 covers sections 2, 16 and
+  21). 17.3's freeze writes an entity-store record of the same name instead
+  (app/tools/section17-3.ts:145). What 12.4 and 14.1 do write, cashiering
+  never reads. 12.4's term op writes `workout_plans` with
+  `late_charges_suppressed` true (app/tools/section12-4.ts:64), and
+  `fees.suppress` writes `fee_suppressions` (:163). 14.1's ingest and verify
+  write `stay_gates` with `late_charges_blocked` true
+  (app/tools/section14-1.ts:75, :84; domain/bankruptcy/ops-14-1.ts:40). 2.7's
+  own hand-offs, `forbearanceOpened` and `bankruptcyFiled`
+  (domain/cashiering/ops-2-7.ts:127, :212), have no caller outside tests. So
+  every installment on a loan in forbearance or bankruptcy is assessed at its
+  grace end and booked as a receivable, and a later payment's remainder pays
+  it. This also corrects cashiering-13's note, which assumed the runtime skips
+  a loan with an open hold: it would, but nothing writes one.
+- **Reproduction.** A scratch database with the app's migrations, and four
+  copies of L-1 boarded through the transfer path on 2026-08-20. Loan F: 12.4
+  `workout_plan.*` offer and term (2026-09-01 to 11-30, payments suspended),
+  then `fees.suppress` from 09-01. Loan B: 14.1 `bk.case.read/write`
+  ingest_notice on 08-25 and verify (Chapter 13, petition 08-24, stay in
+  effect). Units ran on 09-01, 09-17, 10-01 and 10-17, with no payments. F and
+  B were each assessed 7,901c on 09-17 and on 10-17: state `assessed`, no
+  suppression, 15,802c in `late_charges`, the same as an untouched control
+  loan. Their derived state reads `holds` [] and `overlays` []. A 454,316c
+  payment on 10-20 sent 15,802c to `late_charges` on both loans. With a
+  `payment_holds{bankruptcy}` row inserted by hand, the unit recorded
+  `skipped_hold` and assessed nothing. 2.7's `dailyRun` on the same state with
+  the overlay added: forbearance `not_assessed`, bankruptcy
+  `accrued_suspended`. Two independent checks re-ran it by other paths, the
+  whole-book daily run every day from 08-21 to 10-20 and 12.4's
+  initial-activation path, with a bankruptcy loan whose notice was ingested
+  but not yet verified, and got the same charges. Found by the 397-day runtime
+  simulation on 22 October 2026, where the forbearance loan and the bankruptcy
+  loan each carried 13 charges, and reproduced the same day.
+- **Smallest fix.** In `loanCashStateFromRows`, build `overlays` from the
+  loan's records already in the store (cashiering-cycle.ts:99-100).
+  `forbearance_active` comes from each active 12.4 `workout_plans` row
+  (term_start to current_term_end, `defaulted_on` from a failed plan).
+  `bankruptcy_active` comes from `stay_gates` with `late_charges_blocked`,
+  starting at the petition date, or at the notice date before verification.
+  2.7 then decides as its own tests say.
+- **Kept out by.** No environment runs the 35.5 cashiering cycle.
+  payments-posting gives 2.7 its overlays directly
+  (packages/environments/src/payments/ported/latecharges.ts:148).
+
+### arm-15. A boarded ARM never gets its change schedule, so no adjustment or (c) notice can run 🔴
+
+- **Spec says.** §7.2's first input: "`loan.boarded` with `loan_terms.product
+= ARM` → build `arm_schedule` (all change dates to maturity) and schedule
+  timers for the next change", with the prerequisite "Boarded ARM terms per
+  loan (1.1)". Reg Z 1026.20(c)(2) requires the notice 60 to 120 days before
+  the first payment at the adjusted level. C-2.1-01 has the servicer enforce
+  each ARM by its note and use its own funds for any shortage from an untimely
+  adjustment.
+- **Engine does.** The 7.2 tools read the terms from the entity store's
+  `loan_terms` record for the loan (domain/notices/ops-7-2.ts:167-170) and the
+  schedule from its `arm_schedule` records (:208-211). Only `boardArmTerms`
+  writes them (:226-233), and only the spec tests call it
+  (domain/notices/7-2.spec.test.ts:61; 7-3.spec.test.ts:56;
+  domain/borrower/32-9.spec.test.ts:454). Neither boarding path calls it. The
+  transfer seed (runtime/transfers.ts:141-150) and `1.1 boardLoan` on the bus
+  (app/tools/section01.ts:108-114) write only the `loan_terms` table row and
+  the §35.5 hook, and that row's INSERT drops the tape's
+  `arm_next_change_date` (transfers.ts:194-197), which HF-006 required to
+  board (domain/boarding/rules.ts:87-92). So `arm.schedule.row_created` is
+  never appended, and none of the (c) clocks it triggers arm
+  (domain/notices/timers-7-2.ts:12-20), nor SM_ARM_INDEX_CAPTURE_T45. The
+  `arm_schedule` table the `arm_changes` cycle selects from stays empty
+  (domain/operations-runtime/cycles.ts:248, :294), so that cycle files an
+  empty receipt rather than its "no runner" escalation. `computeArmAdjustment`
+  on the loan (app/tools/section07.ts:17, :31) throws "no loan_terms for
+  <id>". Both writers of a new rate, `makeEffective` (ops-7-2.ts:478-486) and
+  the C-2.2-01 correction (:615-616), need the same record, so the loan
+  accrues at its boarding rate past every change date, and nothing breaches to
+  say so. The 7.3 boarding handler `openInitialFileCheck`
+  (domain/notices/ops-7-3.ts:115) is never called either. From reading the
+  code, not running it: the 30.2 hand-off writes the same incomplete row
+  (runtime/origination.ts:194-199).
+- **Reproduction.** On a fresh database with the app's migrations, the demo
+  batch was boarded through `boardTransferBatch` at its transfer date,
+  2026-09-01: 94 boarded, 11 of them ARMs. For all 11,
+  `loan_terms.arm_next_change_date` is null where the tape had a date
+  (2027-05-01 to 2029-12-01). There are 0 entity `loan_terms` or
+  `arm_schedule` records, 0 `arm_schedule` rows, 0 `arm.schedule.*` events and
+  0 ARM clocks. 7.2 `computeArmAdjustment`, run as `disclosures` on TR-0000024
+  at its tape change date of 2029-02-01, throws "no loan_terms for <id>".
+  Control: the same loan's tape terms passed to `boardArmTerms` in memory,
+  with a 6-month period assumed because the tape has none, give 42 rows and
+  arm SM_ARM_INDEX_CAPTURE_T45, the 120-day gate and the 60-day deadline; with
+  a 3.64883 print on the index date, `calculateAdjustment` gives 4.125% →
+  6.125% and P&I 119,612c → 142,158c. On the demo book, TR-0000067's first
+  change is 2027-05-01, so its (c) notice is due by 2027-04-02. Two
+  independent checks reproduced it on both boarding paths. Found by the
+  397-day runtime simulation on 22 October 2026 and reproduced the same day.
+- **Smallest fix.** In the boarding transaction on both paths, for each
+  boarded ARM, call `boardArmTerms` and `openInitialFileCheck` and persist the
+  entity versions and events with the batch, building the terms from the
+  staged loan and taking the tape's next change date as the first change.
+  Write `arm_next_change_date` in the `loan_terms` INSERT, and write
+  `arm_schedule` rows to the table the cycle reads. The tape has no
+  change-frequency column (domain/boarding/tape-codec.ts:74-81) and
+  `parseArmTerms` requires one (ops-7-2.ts:144), so the tape gains that column
+  and HF-006 checks it. That arms the clocks, which then breach visibly; for
+  an adjustment to take effect, `arm_changes` also needs its runner
+  (cycles.ts:294), because nothing in the runtime calls `openNoticeWindow`,
+  `sendAdjustmentNotice` or `makeEffective`.
+- **Kept out by.** arm-adjustment gives each task its boarded terms directly
+  (packages/environments/src/arm/task.ts:6-10) and never boards a loan. No
+  environment boards a transfer.
+
+### payoff-19. The borrower's own payoff quotes misread the record: ten times the rate, no late charges, a calendar LPI 🔴
+
+- **Spec says.** §16.1 rule 1: interest runs from the day after the LPI
+  installment's paid-through date, at the loan's rate. Rule 6: the total
+  includes unpaid late charges assessed under 2.7. Rule 11: the voice or chat
+  agent gives "the same computed figure". A portal request counts as a written
+  request (§16.1 Integrations). Reg Z 1026.36(c)(3) requires "an accurate
+  statement of the total outstanding balance". §35.8: "The engine's inputs are
+  the record's, not the caller's."
+- **Engine does.** `computePayoffQuote` takes its inputs from the caller by
+  design (app/tools/section16-1.ts:73). The callers that read the record get
+  them right: the 35.8 work screen's `derivePayoffQuote`
+  (domain/operations-runtime/derivers-35-8.ts:106-119) takes the rate, the LPI
+  and the late charges from `loanCashState`, and the 35.10 close-out
+  (app/tools/section35-10.ts:236) takes the rate and LPI from it (:99) and the
+  late charges from the ledger
+  (domain/operations-runtime/closeout-35-10/derive.ts:62). The borrower's own
+  paths do not.
+  - **The typed request and the spoken quote.** Both go through the 32.9
+    flow's `payoffInputs`
+    (runtime/borrower/flows/9-servicing-requests.ts:193-198), used at :346-353
+    and :409-416. Its `bpsToPct` divides `note_rate_bps` by 1,000 (:94, used
+    at :111). Every writer stores the rate × 10,000
+    (db/migrations/0001_baseline.sql:147; runtime/transfers.ts:196;
+    runtime/origination.ts:198), and every other reader divides by 10,000
+    (cashiering-cycle.ts:153). It passes no late charges or fees.
+  - **The LPI.** It comes from `paidThrough` (:188-192): the first payment
+    date advanced by the payments posted here, then rolled forward to last
+    month. On a boarded loan, the loan's installments never move it.
+  - **The agent's payoff card.** The 32.16 card
+    (app/tools/section32-16.ts:244-252) reads the rate correctly, but takes
+    the same LPI and no late charges.
+  - **Why the tests pass.** The journey fixture stores its 7% loan as 7000
+    (runtime/borrower/fixtures/journey.ts:565), the only writer on the ÷ 1,000
+    scale. 32.9-T10 checks the quote's type, not its figure
+    (domain/borrower/32-9.spec.test.ts:180).
+- **Reproduction.** The demo batch was boarded in-process, and the app's daily
+  cashiering unit was run from 11/01 to 11/17 on SM-TR-0000001: $334,084.09 at
+  3.750%, installments unpaid from 09/01, LPI 08/01. The unit assessed a
+  $191.16 late charge. Quotes on 11/20, good through 12/05:
+
+  | Path                | Rate    | LPI   | Late charge | Total       | Against the work screen |
+  | ------------------- | ------- | ----- | ----------- | ----------- | ----------------------- |
+  | 35.8 work screen    | 3.750%  | 08/01 | $191.16     | $338,618.59 | —                       |
+  | Typed request       | 37.500% | 10/01 | none        | $356,337.30 | $17,718.71 high         |
+  | Spoken quote        | 37.500% | 10/01 | none        | $356,337.30 | $17,718.71 high         |
+  | Agent's payoff card | 3.750%  | 10/01 | none        | $336,309.41 | $2,309.18 low           |
+
+  The voice agent says the $356,337.30 figure aloud, with a $343.24 per diem.
+  The card's $2,309.18 is two months' interest plus the late charge and the
+  work screen's $30.00 recording fee. `paidThrough` gives LPI 10/01 whether 0
+  or 3 payments have posted since boarding, so once the November payment has
+  posted the borrower is charged a month too much. Two independent checks
+  reproduced it, one through `flows.message` (the call the borrower API makes)
+  and one on a current loan with payments posted, where the extra month of
+  interest is real too. The simulation's own quotes (4.000% on a 4.875% loan,
+  no late charge) came from its driver's inputs to the tool, not from this
+  path.
+
+- **Smallest fix.** Build both borrower paths' inputs from `loanCashState`, as
+  `derivePayoffQuote` does: rate ÷ 10,000, LPI from `state.lpi_date`, late
+  charges from `state.late_charges_due_cents`. Drop the ÷ 1,000 `bpsToPct` and
+  `paidThrough`'s roll forward. Set journey.ts:565 to 70000, and have 32.9-T10
+  check the figure.
+- **Kept out by.** payoff-statement ports only the §16.1 calculator and draws
+  its own inputs; nothing in packages/environments runs the borrower flows.
 
 ## Medium
 
@@ -419,9 +625,10 @@ $400,000, change 2026-11-01, index date 2026-09-17).
   trial charges accrue suspended, pending waiver.
 - **Engine does.** Reads only the overlays. A bankruptcy or foreclosure hold
   in `state.holds`, or `trial_active`, without the matching overlay leaves the
-  charge assessed. The runtime skips the run for a loan with an open hold but
-  carries no trial flag or overlays, so trial, forbearance, SCRA and dispute
-  loans are assessed at every grace end.
+  charge assessed. The runtime would skip the run for a loan with an open hold,
+  but nothing writes one (cashiering-18), and it carries no trial flag or
+  overlays, so trial, forbearance, bankruptcy, SCRA and dispute loans are
+  assessed at every grace end.
 - **Reproduction.** L-1 with 09-01 unpaid, run 09-17, `holds` [bankruptcy] and
   no overlay: assessed 7,901c. With `trial_active` true: assessed 7,901c.
 - **Smallest fix.** In `assessLateCharge` (latecharges.ts:82-91), when no
@@ -945,6 +1152,178 @@ $400,000, change 2026-11-01, index date 2026-09-17).
   docs/synthetic-data-defects.md plants it on purpose (D-42), with D-31, D-35
   and D-37 built on it.
 
+### metro2-1. The monthly Metro 2 cycle never reads the loan's MIN, so every loan is left out of every bureau file 🟡
+
+- **Spec says.** §8.1 rule 6 and the K3 layout: every loan carries a K3
+  segment, and its Mortgage Identification Number is the 18-digit MERS MIN
+  (8-1-furnish-tradeline-metro-2.md:81, :116). Rule 9 makes "K3 missing" a
+  hard error (:140). 8.1-T1 expects "K3 with MIN" on a current loan (:201),
+  and 8.1-T12 fixes a MIN reject "from `loans`" (:212). C-4.1-01 (:28)
+  requires the status of each mortgage loan at each of the four repositories
+  every month.
+- **Engine does.** The runtime's `metro2_monthly` unit builds each loan's
+  state in `metro2RecordsFromTypedRows`. Its query does not select `l.min`
+  (domain/operations-runtime/runners.ts:127), and the state is written with
+  `min: null` (:143), though `loans.min` holds the MIN from boarding
+  (db/migrations/0001_baseline.sql:109; runtime/transfers.ts:185).
+  `buildSnapshot` copies the null into `k3.min`
+  (domain/credit-reporting/metro2.ts:221), and `validateSnapshot` raises
+  K3_MIN_MISSING (:267). `buildCycle` then leaves the record out as a hard
+  error (domain/credit-reporting/ops.ts:170-171). Every loan that reaches the
+  validator is left out, every month. A dropped record never reaches the
+  anomaly deltas (ops.ts:171-172), so the cycle validates and sends four empty
+  files (runners.ts:158-161). Those empty files satisfy
+  SM_METRO2_TRANSMIT_ALL4_BD3 and SM_METRO2_TRANSMIT_HARD_CD10, and no timer
+  arms on `credit.cycle.exception`, so nothing escalates. 35.3-T16 runs the
+  unit with no loan (domain/operations-runtime/35-3.spec.test.ts:894-935), so
+  the suite never sees this. From reading the code, not running it: the same
+  state hard-codes `interest_type: "F"` (runners.ts:142), so once the MIN is
+  passed every ARM would be reported as fixed-rate.
+- **Reproduction.** A scratch database migrated with db/migrate.sh. One loan,
+  boarded the way 35.3's fixture boards one (35-3.spec.test.ts:80-87), with
+  one borrower party and `loans.min` 100045600000000010 (check digit valid).
+  `metro2RecordsFromTypedRows` at 2026-10-31 gives `k3.min` null and
+  `validateSnapshot` ["K3_MIN_MISSING"]; with `k3.min` set from `loans.min` it
+  gives []. Running the 2026-10 unit through the executor gives
+  `credit.cycle.snapshot_completed` with record_count 0 and one exception,
+  K3_MIN_MISSING, sends four `metro2.file.transmitted` with record_count 0
+  plus the `all_bureaus` event, writes no `metro2.loan.furnished`, and leaves
+  both transmit timers `satisfied`. Two independent checks reproduced it, one
+  boarding the loan by a different path. In the 397-day runtime simulation, 13
+  monthly cycles sent 52 bureau files, all with 0 records; SM-TR-0000001 was
+  left out with K3_MIN_MISSING in 12 of them, while `loans.min` held its MIN.
+  Found on 22 October 2026 and reproduced the same day.
+- **Smallest fix.** Select `l.min` in the query at runners.ts:127 and pass it
+  at :143 (`min: l["min"] ?? null`), and take `interest_type` from the loan's
+  amortization.
+- **Kept out by.** Nothing needs to. metro2-furnishing ports metro2.ts and
+  types.ts, not the runtime's typed-row builder, and its generator supplies
+  the MIN.
+
+### ei-1. A paid installment does not cancel its Reg X early-intervention clocks 🟡
+
+- **Spec says.** Under §11.1 rule 1 and comment 39(a)-1, installment D paid
+  with `credited_as_of` on or before day 36 cancels the window's live-contact
+  duty. Under §11.2 and 1024.39(b)(1) ("so long as the borrower remains
+  delinquent"), an installment paid by day 45 owes no notice. Both timer
+  tables and the registry say each clock is "cancelled by installment paid ≤
+  due" (11-1-live-contact.md:86, :107;
+  11-2-written-early-intervention-notice.md:57, :78;
+  spec/registry/timers.json:6478, :6665). 11.1-T3 says a rolling-30 borrower
+  never breaches REGX_1024_39A_LIVE_CONTACT_36.
+- **Engine does.** The kernel engine cancels a timer only by id
+  (kernel/timers/engine.ts:223-227). The rows that map
+  `payment.applied{installment_due_date, credited_as_of}` to a window's clocks
+  are `EARLY_INTERVENTION_CANCELLATIONS`
+  (domain/early-intervention/timers.ts:205-219). They are applied by
+  `attachEarlyInterventionTimerCancellations` (:276), which is to be wired
+  "wherever the loan's TimerEngine is built (the unit of work)" (:274). The
+  runtime never wires it: `PgUnitOfWork.run` builds and restores the engine
+  and attaches nothing (infra/db/unit-of-work.ts:118-119). The one caller is
+  the §11 spec harness (domain/early-intervention/spec-harness.ts:40), so
+  11.1-T3's clock assertions pass and the hosted runtime never cancels.
+  - The payment's own path works. `payment.applied` names the window
+    (app/tools/section2-1.ts:87), the cashiering unit satisfies the
+    installment (domain/operations-runtime/cashiering-cycle.ts:300), and the
+    window row reads `cancelled_paid` (runtime/delinquency.ts:87-88).
+  - The clocks stay armed anyway. The breach pass breaches them and opens a
+    sev-1 `officer` escalation for each
+    (domain/operations-runtime/breach.ts:89-99, :113). A later live contact
+    marks them `satisfied_late` (kernel/timers/engine.ts:168-172).
+  - Neither code has a breach-action row, so the breach only escalates
+    (domain/operations-runtime/default-35-9/sweep.ts:49-52), and the runtime
+    calls and mails no one.
+  - The same unwired reader carries the bankruptcy-petition, FDCPA-cease and
+    discharge rows (timers.ts:209-218). Those were not reproduced.
+- **Reproduction.** 35.5's AZ tape (owner-occupied, P&I 189,620c, escrow
+  41,230c, next due 2026-10-01) boarded on 2026-10-01 on a scratch database.
+  On 10-02 the counter job opens the 10-01 window and arms three clocks: the
+  live-contact clock (due 11-06), its day-28 warning (10-29) and the notice
+  clock (11-15). 230,850c is received on 10-15 (day 14) and posted by the
+  hosted cashiering unit: `payment.applied{installment_due_date 2026-10-01,
+credited_as_of 2026-10-15}` and the installment `satisfied`, with no
+  `timer.cancelled`. The 11-07 sweep breaches the live-contact clock and its
+  warning, and the 11-16 sweep breaches the notice clock: two sev-1 `officer`
+  escalations while `regx_ei_windows` reads `cancelled_paid` on both legs.
+  Posting with `payments.read/write{op=post}` breaches the same three clocks.
+  The same two events through spec-harness.ts cancel all three
+  (`paid_before_36`, `paid_before_45`). Two independent checks reproduced it,
+  one with the full hosted sweep and the payment made on day 30, and one that
+  attached the reader to each restored engine in its own process: all three
+  clocks then cancelled. In the 397-day runtime simulation, SM-TR-0000001's
+  notice clock breached for 14 windows, 12 of them paid by day 33, and its
+  live-contact clock for six windows paid on day 2 or day 32; an inbound call
+  marked three more, paid on day 2, `satisfied_late`. Found on 22 October 2026
+  and reproduced the same day.
+- **Smallest fix.** In `PgUnitOfWork.run`, call
+  `attachEarlyInterventionTimerCancellations(timers, memEvents)` once the
+  engine is built at unit-of-work.ts:118, as spec-harness.ts:40 does.
+- **Kept out by.** No environment grades an early-intervention clock.
+
+### ei-2. A late payment cancels a breached window, and one contact satisfies every later window 🟡
+
+- **Spec says.** In 11.1's state machine, a live leg becomes `cancelled_paid`
+  only when its installment is paid on or before `live_due_at`, and
+  `satisfied_live` only through a live contact dated within (due_date,
+  live_due_at]. A leg still open past its deadline becomes `breached` and is
+  never deleted (11.1 rule 1: "if paid after `live_due_at`, the window's
+  obligation stood"). 11.2 says the same of the notice leg. 11.2-T2: when the
+  installment is paid the day after day 45, "the notice must already have been
+  provided". 11.1-T4: a contact on Feb 5 satisfies the Jan 1 and Feb 1
+  windows, and the Mar 1 window "remains open until Apr 6".
+- **Engine does.** Only the counter job's `projectWindows` writes
+  `regx_ei_windows` (runtime/delinquency.ts:76-95), and it is not that state
+  machine.
+  - It is told which installments are unpaid, but not when one was paid (:66,
+    :134). So any paid installment sets both open legs to `cancelled_paid`,
+    whatever the date (:87-88).
+  - It has no `breached` status (:68-69), though migration 0055 and 11.1's
+    state machine allow one, and it never moves a leg that is past its
+    deadline.
+  - contact.log emits `regx.ei_window.live.satisfied` with `due_dates: null`
+    for every live contact (app/tools/section11.ts:333). That event satisfies
+    every open window on the loan with no date test, on every later run
+    (delinquency.ts:91-92). This includes windows whose live deadline had
+    already passed and windows that open after the call. The domain's own
+    `applyContact` has the date test
+    (domain/early-intervention/windows.ts:96-98), but it is not called, and
+    neither are `installmentPaid` (:81-84) and `sweep` (:102-105).
+  - The contact is never linked, and `cancelled_at` comes from the database's
+    `now()`, not the runtime clock (delinquency.ts:93).
+  - It runs only while the loan has an installment due before today (:103-108,
+    :144-147), so a loan that cures keeps its open legs.
+
+  The timers work from the events, so the timers and the table disagree.
+  35.9's daily universe selects loans from the table
+  (domain/operations-runtime/cycles.ts:263), as does its case timeline
+  (default-35-9/timeline.ts:60), so contact work is steered to a current
+  borrower and away from one three payments behind.
+
+- **Reproduction.** Two AZ tape loans, boarded through the transfer route with
+  next due 2026-10-01; the counter job run by hand, payments posted by the
+  cashiering unit, nothing paused or written by SQL. Loan A pays 10-01 on
+  11-22, day 52, after both deadlines (11-06 and 11-15): both legs read
+  `cancelled_paid`, where the domain's `sweep` and `installmentPaid` give
+  `breached` and `breached`. Loan B logs one inbound live call through
+  contact.log on 11-24. On 11-25, window 10-01 (live due 11-06) and window
+  11-01 both read `satisfied_live`; window 12-01 opens `satisfied_live` on
+  12-02, and so does 2027-01-01 on 01-02, while their REGX_1024_39A timers
+  stay armed. B pays 10-01 on 12-03, day 63, and the notice leg reads
+  `cancelled_paid` though no notice was ever sent. On 2027-01-26, A is current
+  with windows 12-01 and 01-01 still open and is in 35.9's universe; B is
+  three installments behind and is not. Two independent checks reproduced all
+  of it on their own databases, with different dates and a control loan. In
+  the 397-day runtime simulation, SM-TR-0000001's September and October 2026
+  windows read `cancelled_paid` though they were paid on day 82 and day 63,
+  and every live leg from October 2026 read `satisfied_live` with no contact
+  linked. Found on 22 October 2026 and reproduced the same day.
+- **Smallest fix.** Feed `projectWindows` each installment's `credited_as_of`.
+  Fold with windows.ts's own `installmentPaid`, `applyContact` (given the
+  event's `on` and contact id) and `sweep`. Add `breached` at :68-69, run the
+  fold for every loan with an open leg, not only a delinquent one, and take
+  `cancelled_at` from the clock.
+- **Kept out by.** No environment grades early intervention.
+
 ## Low
 
 - **cashiering-10.** A $50-rule payment received before its due date is
@@ -1109,7 +1488,7 @@ $400,000, change 2026-11-01, index date 2026-09-17).
   Kept out: pmi-termination keeps out a rate change inside an interest-only
   period or after the 78% row.
 
-75 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+81 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

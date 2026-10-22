@@ -210,6 +210,15 @@ const stopOf = (reason: string | null): TurnStop =>
         ? "refusal"
         : "end";
 
+const isJsonObject = (raw: string): boolean => {
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return typeof v === "object" && v !== null && !Array.isArray(v);
+  } catch {
+    return false;
+  }
+};
+
 const argumentsOf = (raw: string): unknown => {
   try {
     return JSON.parse(raw) as unknown;
@@ -320,10 +329,27 @@ export class VertexOpenModelPolicy implements Policy {
         if (!choice) throw new Error("Vertex answered with no choice");
         const m = choice.message;
         const wireCalls = m.tool_calls ?? [];
+        // The history goes back as JSON, and Vertex refuses a whole request
+        // whose earlier tool call carries arguments that are not a JSON
+        // object (400, "Expected a valid JSON object"). So a malformed call
+        // goes back wrapped, as the model wrote it, and the episode goes on:
+        // the environment answers that call with an error, which is the
+        // model's to read, and the run is not lost to the server.
+        const historyCalls = wireCalls.map((c) =>
+          isJsonObject(c.function.arguments)
+            ? c
+            : {
+                ...c,
+                function: {
+                  ...c.function,
+                  arguments: JSON.stringify({ unparsed_arguments: c.function.arguments }),
+                },
+              },
+        );
         messages.push({
           role: "assistant",
           content: m.content ?? "",
-          ...(wireCalls.length ? { tool_calls: wireCalls } : {}),
+          ...(historyCalls.length ? { tool_calls: historyCalls } : {}),
           ...(m.reasoning_content ? { reasoning_content: m.reasoning_content } : {}),
         });
         const calls: ToolCall[] = wireCalls.map((c) => ({

@@ -2238,6 +2238,11 @@ There are three model policies, and none falls back to another model:
     some turns run past five minutes. Unstreamed, that is where Node's fetch
     gives up waiting for headers, which ended four of the first five smoke
     episodes. A dropped connection is retried whole.
+  - A tool call whose arguments are not a JSON object goes back in the
+    history wrapped as `{"unparsed_arguments": …}`. Sent back as written,
+    Vertex refused the next request whole (400, "Expected a valid JSON
+    object"), which ended 2 of about 4,000 episodes by 22 October; the
+    environment answers the call with an error, and the episode goes on.
 
 ## What keeps it honest
 

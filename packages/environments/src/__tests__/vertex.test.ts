@@ -200,6 +200,12 @@ describe("the Vertex open-model policy", () => {
       observations: [{ call_id: "c1", is_error: true }],
     });
     expect(r.outcome).toBe("no_submission");
+    // Vertex refuses a request whose history carries arguments that are not
+    // a JSON object, so the malformed call goes back wrapped, as written.
+    const back = (
+      sent[1]?.body.messages[1] as { tool_calls: { function: { arguments: string } }[] }
+    ).tool_calls[0]?.function.arguments;
+    expect(JSON.parse(back ?? "")).toEqual({ unparsed_arguments: "{not json" });
   });
 
   it("retries a 429, gives up on a 400, and reads a content filter as a refusal", async () => {

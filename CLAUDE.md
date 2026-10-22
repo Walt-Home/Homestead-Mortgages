@@ -39,6 +39,9 @@ where each piece comes from, the rule behind it, and how much of it the
 servicing app models, the environments generate and a partner's tape
 carries. Read it before building synthetic servicing data or anything that
 claims to look like a subservicer's.
+`docs/synthetic-data-defects.md` is its companion: 47 defects real servicing
+data has, each with its public evidence, how to plant it in synthetic data and
+what should catch it.
 
 `docs/environments.md` is the training and evaluation environments in
 `packages/environments`: a task, primitive tools, and a grader that is the

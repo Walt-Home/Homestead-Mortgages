@@ -4,6 +4,8 @@ These are defects in the servicing app's own engines, found while building the
 environments in `packages/environments` that grade with them, and each was
 reproduced again on 21 October 2026 against the commit
 `apps/servicing/VENDORED_FROM` names (`293261b`, committed 17 September 2026).
+One more, boarding-1, was found and reproduced on 22 October 2026 while
+cataloguing defects for synthetic data (docs/synthetic-data-defects.md).
 The environments keep all but one out of grading. pmi-9 is graded, because
 the spec states the engine's reading as its own rule. Four more
 (cashiering-4, cashiering-9, flexmod-1, flexmod-2) were graded at the
@@ -58,6 +60,7 @@ decided", says why each went the way it did.
 | pmi-10        | pmi        | The decision due date ignores the valuation's delivery                                               | §10.1 timers; B-8.1-04                 | 🟡     | `domain/pmi/cancellation.ts:124-127`                                                            |
 | pmi-11        | pmi        | The midpoint moves with an ARM reset                                                                 | §10.3                                  | 🟡     | `app/tools/section10.ts:236`, `:272`                                                            |
 | pmi-14        | pmi        | The midpoint termination is skipped for loans outside the 78% rule                                   | §10.3; B-8.1-04                        | 🟡     | `app/tools/section10.ts:251`                                                                    |
+| boarding-1    | boarding   | A yes-or-no tape cell other than "Y" boards as No, so a loan written "Yes" boards with no escrow     | §1.1 integrations (row-level rejects)  | 🟡     | `domain/boarding/tape-codec.ts:49`; HF-007 at `domain/boarding/rules.ts:94-98`                  |
 | cashiering-10 | cashiering | A $50-rule payment before its due date is labeled prepaid, and its counter row is skipped            | §2.2 rule 2                            | 🟢     | `domain/cashiering/allocation.ts:203`                                                           |
 | cashiering-16 | cashiering | A dispute overlay ignores its start date                                                             | §2.7 rule 3(viii)                      | 🟢     | `domain/cashiering/latecharges.ts:90`                                                           |
 | cashiering-17 | cashiering | Instruction text is matched by keyword                                                               | §2.1 rule 6                            | 🟢     | `domain/cashiering/allocation.ts:81`, `:170`                                                    |
@@ -89,7 +92,7 @@ decided", says why each went the way it did.
 | pmi-12        | pmi        | New York's appraisal sets the federal thresholds                                                     | §10.1 R2; 12 U.S.C. 4901(12)           | 🟢     | `domain/pmi/cancellation.ts:15`                                                                 |
 | pmi-13        | pmi        | An ARM reset inside an interest-only period amortizes at once                                        | §10.2 R2                               | 🟢     | `domain/pmi/schedule.ts:69-74`                                                                  |
 
-🔴 high (5) · 🟡 medium (38) · 🟢 low (30). Section numbers are the servicing
+🔴 high (5) · 🟡 medium (39) · 🟢 low (30). Section numbers are the servicing
 app's spec; paths are under `apps/servicing/src/`; amounts ending in c are
 cents. docs/decisions.md tells the longer story of most of these, in the entry
 for the environment that found each. Fixture L-1 is §2.1 worked example A
@@ -906,6 +909,42 @@ $400,000, change 2026-11-01, index date 2026-09-17).
 - **Kept out by.** pmi-termination runs the sweep at every trigger, whatever
   the 78% rule.
 
+### boarding-1. A yes-or-no tape cell other than "Y" boards as No 🟡
+
+- **Spec says.** §1.1 takes a fallback CSV "with agreed layout", where a
+  boolean is Y or N, and says rejects produce a message "listing row-level
+  failures".
+- **Engine does.** `rYn` reads blank as unknown, "Y" as yes and everything
+  else as no (tape-codec.ts:49). A transferor that writes "Yes", "y", "1" or
+  "TRUE" is read as No without a warning. For `escrowed` the loan then boards
+  as non-escrowed with its escrow lines still attached, and HF-007 passes,
+  because it checks only the reverse: escrowed with no lines (rules.ts:94-98).
+  The same reading turns off `bk_active`, `fc_active` and `lm_in_process`.
+  The bankruptcy and foreclosure details are dropped with their flags
+  (tape-codec.ts:248-249). The loss-mitigation details are kept (:250); only
+  the case-opening is lost, because with the flag off no case opens and no
+  (k) clock is armed (domain/transfers/ops-1-7.ts:101). Later processes catch
+  some of it. The PACER scrub before a foreclosure referral finds the
+  bankruptcy (app/tools/section13.ts:485-503). The §1.7 carryover
+  verification works from the loss-mitigation file rather than the flag, so
+  it should find the loss mitigation. On a loan wrongly boarded
+  non-escrowed, insurance tracking catches a hazard lapse
+  (domain/insurance/ops-9-1.ts:157-162), while unpaid taxes surface only
+  through the tax service's delinquency report (§3.7).
+- **Reproduction.** The demo batch with TR-0000001's `escrowed` cell changed
+  from "Y" to "Yes": decoded `escrowed=false`, 3 escrow lines, no rule
+  failure, boarded. With `bk_active`=y the loan boards with no failure and no
+  bankruptcy details; with `lm_in_process`=1 it boards with
+  `in_process=false` and the file's application status kept. Found on 22
+  October 2026 while cataloguing defects for synthetic data, and reproduced
+  the same day.
+- **Smallest fix.** In `rYn`, accept only "Y", "N" and blank, and reject the
+  row for anything else; and have HF-007 also fail a non-escrowed loan that
+  carries escrow lines.
+- **Kept out by.** No environment boards a transfer.
+  docs/synthetic-data-defects.md plants it on purpose (D-42), with D-31, D-35
+  and D-37 built on it.
+
 ## Low
 
 - **cashiering-10.** A $50-rule payment received before its due date is
@@ -1070,7 +1109,7 @@ $400,000, change 2026-11-01, index date 2026-09-17).
   Kept out: pmi-termination keeps out a rate change inside an interest-only
   period or after the 78% row.
 
-74 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+75 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

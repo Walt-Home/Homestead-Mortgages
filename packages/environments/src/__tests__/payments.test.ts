@@ -28,6 +28,10 @@ import {
   paymentsPosting,
   paymentsSpecTasks,
   paymentsTaskId,
+  postMonth,
+  separateCurtailmentHolding,
+  suspenseAttributable,
+  suspenseCountedTwice,
   type PaymentsTask,
 } from "../payments/index.js";
 import { rngFor } from "../rng.js";
@@ -149,11 +153,12 @@ describe("payments-posting", () => {
     });
   });
 
-  it("restates the engine where it departs from its spec, and the conventions it runs on", () => {
+  it("restates the engine where its spec leaves the reading open, and the conventions it runs on", () => {
     const [a] = paymentsSpecTasks();
-    // Example C: $2,000.00 held on 09-10, then the run. The spec assesses $79.01; the engine counts
-    // what is in suspense toward the installment (its 2.7-Q1 reading), and the rulebook says so.
-    const c = expectedPayments({
+    // Example C: $2,000.00 held on 09-10, then the run. The example assesses $79.01; 2.7-Q1's
+    // default counts funds in suspense that cover the P&I as received, the engine documents that as
+    // its decision, and the rulebook states it. One installment is open, so the balance is its alone.
+    const exampleC: PaymentsTask = {
       ...a!,
       receipts: [
         {
@@ -163,9 +168,11 @@ describe("payments-posting", () => {
           designation: "unspecified",
         },
       ],
-    });
+    };
+    const c = expectedPayments(exampleC);
     expect(c.receipts[0]).toMatchObject({ outcome: "unapplied", partial_hold: true });
     expect(c.late_charge_runs[0]!.outcome).toBe("not_assessed");
+    expect(paymentsInScope(exampleC)).toBe(true);
     // A grace end on a Sunday rolls to Monday: August 1 + 15 is Sunday the 16th.
     expect(graceEndFor(a!.loan, "2026-08-01" as never)).toBe("2026-08-17");
     // A refused instruction that also says principal curtails nothing.
@@ -186,24 +193,26 @@ describe("payments-posting", () => {
       curtailment_cents: "0",
       to_suspense_cents: "10000",
     });
-    // Designated principal on a current loan is applied apart: the whole payment curtails.
-    const separate = expectedPayments({
+    // Designated principal on a current loan, less than a payment, is applied apart (2.4 rule 2):
+    // the whole receipt curtails, and September waits for its own payment.
+    const separate: PaymentsTask = {
       ...a!,
       window: { from: "2026-08-20" as never, through: "2026-08-31" as never },
       receipts: [
         {
           payment_id: "S",
-          amount_cents: 219_257n,
+          amount_cents: 100_000n,
           received_on: "2026-08-25" as never,
           designation: "curtailment",
         },
       ],
-    });
-    expect(separate.receipts[0]).toMatchObject({
+    };
+    expect(expectedPayments(separate).receipts[0]).toMatchObject({
       outcome: "curtailment",
       installments: [],
-      curtailment_cents: "219257",
+      curtailment_cents: "100000",
     });
+    expect(paymentsInScope(separate)).toBe(true);
   });
 
   it("fails an answer one cent off on exactly that field, and charges for what is missing or extra", () => {
@@ -409,11 +418,101 @@ describe("payments-posting", () => {
     ).toBe(true);
   });
 
+  it("keeps out one suspense balance counted toward two installments (cashiering-4), and only that", () => {
+    const [a] = paymentsSpecTasks();
+    // L-1 with $1,580.17 in suspense and September and October both unpaid. The September run
+    // counts it (2.7-Q1); the October run counts it again, where 2.7 rule 1 counts what is
+    // attributable to October, which is nothing: the spec assesses $79.01 and the engine does not.
+    const twice: PaymentsTask = {
+      ...a!,
+      window: { from: "2026-09-01" as never, through: "2026-10-31" as never },
+      loan: { ...a!.loan, suspense_unapplied_cents: 158_017n },
+      receipts: [],
+    };
+    const runs = expectedPayments(twice).late_charge_runs;
+    expect(runs.map((r) => [r.installment_due_date, r.outcome])).toEqual([
+      ["2026-09-01", "not_assessed"],
+      ["2026-10-01", "not_assessed"],
+    ]);
+    const counted: string[] = [];
+    const curtailed: string[] = [];
+    postMonth(twice, {
+      run: (due, result, state) => {
+        if (suspenseCountedTwice(due, result, state)) counted.push(due);
+      },
+      receipt: (rc, _plan, before) => {
+        if (separateCurtailmentHolding(rc, before)) curtailed.push(rc.payment_id);
+      },
+    });
+    expect(counted).toEqual(["2026-10-01"]);
+    expect(curtailed).toEqual([]);
+    expect(paymentsInScope(twice)).toBe(false);
+    // The same balance and the September run alone: one installment, so the balance is its alone.
+    const once = { ...twice, window: { ...twice.window, through: "2026-10-16" as never } };
+    expect(expectedPayments(once).late_charge_runs).toHaveLength(1);
+    expect(paymentsInScope(once)).toBe(true);
+    // Attributed oldest first, the October test gets nothing: the rulebook's reading.
+    expect(suspenseAttributable(twice.loan, "2026-10-01" as never)).toBe(0n);
+    expect(suspenseAttributable(twice.loan, "2026-09-01" as never)).toBe(158_017n);
+  });
+
+  it("keeps out a separate curtailment that could carry the installment or pools suspense (cashiering-9), and only that", () => {
+    const [a] = paymentsSpecTasks();
+    const L = a!.loan;
+    const august = { from: "2026-08-20" as never, through: "2026-08-31" as never };
+    const curtail = (amount: bigint, loan = L): PaymentsTask => ({
+      ...a!,
+      window: august,
+      loan,
+      receipts: [
+        {
+          payment_id: "S",
+          amount_cents: amount,
+          received_on: "2026-08-25" as never,
+          designation: "curtailment",
+        },
+      ],
+    });
+    const clauses = (task: PaymentsTask) => {
+      const hit: string[] = [];
+      postMonth(task, {
+        run: (due, result, state) => {
+          if (suspenseCountedTwice(due, result, state)) hit.push("cashiering-4");
+        },
+        receipt: (rc, _plan, before) => {
+          if (separateCurtailmentHolding(rc, before)) hit.push("cashiering-9");
+        },
+      });
+      return hit;
+    };
+    // Spec example F's $3,192.57 a week early, designated principal: the engine curtails it whole
+    // and leaves September unpaid; 2.4 rule 2 takes the installment first from funds sent with it.
+    const whole = curtail(319_257n);
+    expect(expectedPayments(whole).receipts[0]).toMatchObject({
+      outcome: "curtailment",
+      curtailment_cents: "319257",
+    });
+    expect(clauses(whole)).toEqual(["cashiering-9"]);
+    expect(paymentsInScope(whole)).toBe(false);
+    // A payment exactly is out too; a cent less cannot carry it, and is curtailed apart.
+    expect(paymentsInScope(curtail(219_257n))).toBe(false);
+    expect(paymentsInScope(curtail(219_256n))).toBe(true);
+    // $500.00 held from an earlier partial is pooled into the curtailment: 2.2 rule 4 keeps it.
+    const pooled = curtail(100_000n, { ...L, suspense_unapplied_cents: 50_000n });
+    expect(expectedPayments(pooled).receipts[0]).toMatchObject({
+      curtailment_cents: "150000",
+      suspense_used_cents: "50000",
+    });
+    expect(clauses(pooled)).toEqual(["cashiering-9"]);
+    expect(paymentsInScope(pooled)).toBe(false);
+    expect(paymentsInScope(curtail(100_000n))).toBe(true);
+  });
+
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump PAYMENTS_ENVIRONMENT_VERSION, then the pin.
     expect(
       sha256(generatePaymentsSuite("heldout", 1, 200).map(toJsonLine).join("")),
-    ).toMatchInlineSnapshot(`"3f36154ff44c03c1c417e56e91a96c6a27fe7201b843ce9ab71fab73928f787a"`);
+    ).toMatchInlineSnapshot(`"cf47c7ca419928d4c229427da861d0b048c313c2c6d4ad72b422aac5b0e711fe"`);
   });
 
   it("rebuilds a task from its coordinates, and never draws a held-out month into training", () => {
@@ -471,6 +570,13 @@ describe("payments-posting", () => {
       expect(receipts.filter(({ x }) => x.partial_hold).length).toBeGreaterThan(60);
       expect(receipts.filter(({ x }) => x.suspense_used_cents !== "0").length).toBeGreaterThan(40);
       expect(receipts.filter(({ x }) => x.installments.length >= 2).length).toBeGreaterThan(80);
+      // Designated principal sent apart on a current loan, less than a payment, curtailed at once;
+      // some with an amount named, whose rest waits in suspense.
+      const apart = receipts.filter(
+        ({ x, r }) => x.outcome === "curtailment" && r.designation === "curtailment",
+      );
+      expect(apart.length).toBeGreaterThan(20);
+      expect(apart.filter(({ r }) => r.curtailment_cents !== undefined).length).toBeGreaterThan(5);
     });
 
     it("draws the $50 rule at $50.00 and refused at $50.01, and each loan it does not reach", () => {

@@ -7,9 +7,10 @@
  * loan further behind) to three after, paid through some month: current,
  * paid ahead, or one to five behind, with the late charges those months
  * earned. The window is four to six weeks, stretched to 8 to 14 days past
- * the first late-charge run where the edge needs that run inside it: 28 to
- * 63 days, and almost always one or two runs. Then the month is aimed, in
- * turn by index, at one edge of the cashiering:
+ * the first late-charge run where the edge needs that run inside it, or, for
+ * some prepayments, the days between two runs: 26 to 63 days, and almost
+ * always one or two runs. Then the month is aimed, in turn by index, at one
+ * edge of the cashiering:
  *   - on_time: the payment on or before the grace end, which may have rolled
  *     past a weekend or holiday, or the day after it, when the run comes first;
  *   - fifty_rule: a payment short by $50 or less, or by $50.01, on a loan the
@@ -19,11 +20,13 @@
  *     and a balance in suspense the late-charge test counts;
  *   - catch_up: a delinquent loan paid some or all of its arrears at once,
  *     and once they are all paid, the rest to late charges and then suspense;
- *   - curtailment: designated principal on a current loan (applied apart from
- *     the installments) and on a delinquent one (it cures first);
+ *   - curtailment: designated principal on a current loan, less than a
+ *     payment (applied apart from the installments), and on a delinquent one
+ *     (it cures first);
  *   - reserved: a payment carrying an amount of additional principal, which
  *     never prepays a future installment;
- *   - prepay: two or three installments in one receipt, ahead of their dates;
+ *   - prepay: two or three installments in one receipt, ahead of their dates,
+ *     sometimes in a window between two runs, so no run at all;
  *   - instruction: a principal instruction in words, a refused instruction to
  *     pay a second lien, and both at once;
  *   - hold: a bankruptcy (with its suspended charges), a foreclosure referred
@@ -33,6 +36,10 @@
  *     servicer was sent and forwarded late (spec example L);
  *   - terms: a PITI basis, a cap below the charge, a rate other than 5%, a
  *     grace other than 15 days.
+ * A receipt the engine parks in suspense with arrears still open (a partial,
+ * or anything under a hold) arrives after the window's last run for an
+ * installment with another unpaid before it, so suspense is counted toward
+ * one installment's late charge at a time.
  *
  * What v1 leaves out is in docs/environments.md: a payoff, fees other than
  * late charges, non-interest-bearing principal, items credited on another
@@ -65,7 +72,13 @@ import {
   parsePaymentsSubmission,
   postMonth,
 } from "./grader.js";
-import { assessLateCharge, graceEndFor, recordFee } from "./ported/latecharges.js";
+import {
+  assessLateCharge,
+  basisCents,
+  graceEndFor,
+  recordFee,
+  type AssessmentResult,
+} from "./ported/latecharges.js";
 import type { HoldType, InstallmentProjection, LoanCashState, Overlay } from "./ported/types.js";
 import { paymentsSteps } from "./reference.js";
 import {
@@ -154,12 +167,15 @@ function shapeOf(r: Rng, window: { from: PlainDate; through: PlainDate }, t: Ter
   const escrow_cents = t.escrowed ? cents(r, 150, 1_400) : 0n;
   const P = pi_cents + escrow_cents;
   // Suspense is what is short of a payment, and on a loan the $50 rule reaches, short by more than
-  // $50: a partial within $50 would have been applied. A hold is what lets it grow past a payment.
+  // $50: a partial within $50 would have been applied. A hold is what lets it grow past a payment,
+  // and what a hold has parked before the window is less than the P&I: more would be counted
+  // toward an installment the window's receipts may not reach (cashiering-4).
   const ceiling = fiftyRuleReaches(t) ? P - 5_001n : P - 1n;
   let suspense = t.suspense;
   if (t.shield && ceiling >= pi_cents)
     suspense = pi_cents + BigInt(r.int(0, Number(ceiling - pi_cents)));
   else if (!t.holds.length && suspense > ceiling) suspense = ceiling / 3n;
+  else if (t.holds.length && suspense >= pi_cents) suspense = pi_cents / 3n;
 
   // From four months before the window's first due date (more, for a loan further behind) to three
   // after; paid through d0 − behind − 1, or ahead through d0 + ahead − 1 when paid ahead.
@@ -209,7 +225,8 @@ function shapeOf(r: Rng, window: { from: PlainDate; through: PlainDate }, t: Ter
   const runDay = (due: PlainDate) => addDays(graceEndFor(base, due), 1);
 
   // The late charges the open months already earned: each open installment whose run came before
-  // the window, run by the engine itself and recorded as its run would have recorded it.
+  // the window, run by the engine itself and recorded as its run would have recorded it, with the
+  // suspense counted as 2.7 rule 1 counts it: only what is attributable to the installment.
   const loan: LoanCashState = { ...base, fees: [] };
   for (const i of installments) {
     if (i.status !== "due" || runDay(i.due_date) >= window.from) continue;
@@ -218,6 +235,7 @@ function shapeOf(r: Rng, window: { from: PlainDate; through: PlainDate }, t: Ter
       installment_due_date: i.due_date,
       run_on: runDay(i.due_date),
       unposted_receipts_on_or_before_grace: 0,
+      received_toward_basis_cents: suspenseAttributable(loan, i.due_date),
     });
     if (run.outcome === "assessed" || run.outcome === "accrued_suspended")
       recordFee(loan, { ...run.fee, id: `LC-${i.due_date}` });
@@ -403,6 +421,13 @@ export function drawPaymentsCandidate(
   // stream: once to find the dates, once with what they decide.
   const shapeKey = `${id}:shape:${r.int(0, 2 ** 30)}`;
   const draft = shapeOf(rngFor(shapeKey), window, t);
+  // Sometimes a prepayment's window falls between two runs, so a month with no late-charge run at
+  // all turns up. It opens the day after the run for the installment before d0, so d0 stays d0.
+  if (edge === "prepay" && r.chance(0.12))
+    window = {
+      from: addDays(draft.runDay(addMonths(draft.d0, -1)), 1),
+      through: addDays(draft.runDay(draft.d0), -1),
+    };
   // No installment whose run falls in the window may be due before a suppression begins: the
   // engine keys a suppression on the due date, and a run after a filing or referral for an
   // installment due before it would be a new charge the spec forbids.
@@ -464,6 +489,20 @@ export function drawPaymentsCandidate(
   )
     window = { from: window.from, through: addDays(runDay(d0), r.int(8, 14)) };
 
+  // The last run in the window for an installment with another unpaid one before it. Suspense held
+  // across that run would be counted toward both, where 2.7 rule 1 counts it toward the older one
+  // (cashiering-4), so a receipt the engine will park in suspense arrives on or after it.
+  const behindAnother = loan.installments
+    .filter((i) => i.status === "due" && i.due_date > firstOpen)
+    .map((i) => runDay(i.due_date))
+    .filter((d) => d >= window.from && d <= window.through)
+    .sort()
+    .at(-1);
+  const parkedOn = (on: PlainDate): PlainDate =>
+    behindAnother && on < behindAnother
+      ? addDays(behindAnother, r.int(0, daysBetween(behindAnother, window.through)))
+      : on;
+
   // Then the receipts.
   switch (edge) {
     case "on_time": {
@@ -488,30 +527,49 @@ export function drawPaymentsCandidate(
       const owed = shape.P(firstOpen);
       // On or after the due date: the rule applied ahead of it is reported as prepaid, and the
       // spec says applied_with_50_rule.
-      const on =
+      let on =
         firstOpen >= window.from
           ? addDays(firstOpen, r.int(0, 12))
           : addDays(window.from, r.int(0, 20));
+      // A partial the rule does not reach is parked in suspense.
+      if (!fiftyRuleReaches(t) || short > 5_000n) on = parkedOn(on);
       pay(owed - short, on);
       if (r.chance(0.3)) pay(short, addDays(on, r.int(3, 20)));
       break;
     }
     case "suspense": {
       const owed = shape.P(firstOpen);
-      if (loan.suspense_unapplied_cents === 0n) {
+      const pi = loan.installments[0]!.pi_cents;
+      const held = loan.suspense_unapplied_cents;
+      if (held === 0n) {
         // Two partials that make a payment between them; the first is too short for the $50 rule.
+        // A first of the P&I or more is counted toward the late-charge test while it waits.
         const first = owed / BigInt(r.int(2, 4)) - BigInt(r.int(0, 999));
-        pay(first, addDays(window.from, r.int(0, 10)));
-        pay(owed - first, addDays(window.from, r.int(10, 30)));
+        let firstOn = addDays(window.from, r.int(0, 10));
+        let secondOn = addDays(window.from, r.int(10, 30));
+        if (first >= pi) {
+          firstOn = parkedOn(firstOn);
+          if (secondOn < firstOn) secondOn = firstOn;
+        }
+        pay(first, firstOn);
+        pay(owed - first, secondOn);
       } else {
-        const rest = owed - loan.suspense_unapplied_cents;
+        const rest = owed - held;
         const short = rest - BigInt(r.int(6_000, 30_000));
-        pay(
-          // Exactly what completes it, or a partial still too short: anything over would go from
-          // the accumulated suspense to a late charge the run may have just assessed.
-          r.chance(0.65) || short <= 0n ? rest : short,
-          addDays(window.from, r.int(0, 30)),
-        );
+        // Exactly what completes it, or a partial still too short: anything over would go from the
+        // accumulated suspense to a late charge the run may have just assessed. A balance the
+        // late-charge test counts is completed before any run behind another unpaid installment;
+        // a partial that brings it to the P&I waits until after one.
+        if (held >= pi && behindAnother)
+          pay(
+            rest,
+            addDays(
+              window.from,
+              r.int(0, Math.max(0, daysBetween(window.from, behindAnother) - 1)),
+            ),
+          );
+        else if (r.chance(0.65) || short <= 0n) pay(rest, addDays(window.from, r.int(0, 30)));
+        else pay(short, parkedOn(addDays(window.from, r.int(0, 30))));
       }
       break;
     }
@@ -537,10 +595,14 @@ export function drawPaymentsCandidate(
       const when = addDays(window.from, r.int(0, 35));
       const extra = cents(r, 100, 8_000);
       if (t.behind === 0) {
-        // Submitted separately: designated principal alone, with or without an amount named.
-        pay(extra, when, {
+        // Submitted separately: designated principal alone, with or without an amount named, and
+        // less than a payment. One that could carry the next installment is, by spec 2.4 rule 2,
+        // the installment first when it was sent with it; the engine curtails it whole
+        // (cashiering-9).
+        const alone = extra < P ? extra : 10_000n + (extra % (P - 10_000n));
+        pay(alone, when, {
           designation: "curtailment",
-          ...(r.chance(0.3) ? { curtailment_cents: extra - BigInt(r.int(1, 5_000)) } : {}),
+          ...(r.chance(0.3) ? { curtailment_cents: alone - BigInt(r.int(1, 5_000)) } : {}),
         });
         if (r.chance(0.5)) pay(P, addDays(d0, r.int(-5, 10)));
       } else {
@@ -583,8 +645,9 @@ export function drawPaymentsCandidate(
       break;
     }
     case "hold": {
-      pay(P, addDays(window.from, r.int(0, 20)));
-      if (r.chance(0.5)) pay(cents(r, 100, 3_000), addDays(window.from, r.int(5, 40)));
+      // Every receipt is held in suspense.
+      pay(P, parkedOn(addDays(window.from, r.int(0, 20))));
+      if (r.chance(0.5)) pay(cents(r, 100, 3_000), parkedOn(addDays(window.from, r.int(5, 40))));
       break;
     }
     case "overlay": {
@@ -592,15 +655,16 @@ export function drawPaymentsCandidate(
         // Example L: paid to the old servicer on time, forwarded, and received after the grace end.
         pay(P, r.chance(0.8) ? addDays(runDay(d0), r.int(0, 8)) : addDays(d0, r.int(-3, 10)));
       } else if (r.chance(0.5)) {
-        // A forbearance plan's payments are not partials: a full payment, or none.
-        pay(
+        // A forbearance plan's payments are not partials: a full payment, or none. One held under
+        // a hold, or a partial, is parked in suspense.
+        const amount =
           aim === "bankruptcy_active" || aim === "foreclosure_referred"
             ? r.chance(0.5)
               ? P
               : P / 2n
-            : P,
-          addDays(window.from, r.int(0, 35)),
-        );
+            : P;
+        const on = addDays(window.from, r.int(0, 35));
+        pay(amount, t.holds.length > 0 || amount < P ? parkedOn(on) : on);
       }
       break;
     }
@@ -636,6 +700,72 @@ export function paymentsFairToGrade(task: PaymentsTask): boolean {
 }
 
 /**
+ * Suspense attributable to an unpaid installment (2.7 rule 1, decision
+ * 2.7-Q1): what is left of the balance once the bases of the unpaid
+ * installments due before it have taken theirs, no more than its own basis.
+ */
+export function suspenseAttributable(state: LoanCashState, due: PlainDate): Cents {
+  const inst = state.installments.find((i) => i.due_date === due);
+  if (!inst) throw new RangeError(`no installment ${due}`);
+  const basis = basisCents(state, inst);
+  const earlier = state.installments
+    .filter((i) => i.status === "due" && i.due_date < due)
+    .reduce((sum, i) => sum + basisCents(state, i), 0n);
+  const left = state.suspense_unapplied_cents - earlier;
+  return left <= 0n ? 0n : left > basis ? basis : left;
+}
+
+/**
+ * A run the engine excuses by counting suspense an earlier unpaid
+ * installment also has a claim on (cashiering-4). The engine counts the whole
+ * balance toward every unpaid installment's test; 2.7 rule 1 counts what is
+ * attributable to the installment, and one balance is not attributable to
+ * two. Attributed oldest first, the installment gets the least any
+ * attribution gives it, so a decision that changes under that one is a
+ * decision some reading of the spec would not make. Both are the engine's
+ * own `assessLateCharge`, once as it ran and once handed that amount.
+ */
+export function suspenseCountedTwice(
+  due: PlainDate,
+  result: AssessmentResult,
+  state: LoanCashState,
+): boolean {
+  if (result.outcome !== "not_assessed" || !result.reason.startsWith("paid within grace"))
+    return false;
+  if (state.installments.find((i) => i.due_date === due)?.status !== "due") return false;
+  const attributed = assessLateCharge({
+    state,
+    installment_due_date: due,
+    run_on: addDays(graceEndFor(state, due), 1),
+    unposted_receipts_on_or_before_grace: 0,
+    received_toward_basis_cents: suspenseAttributable(state, due),
+  });
+  // The engine ran as `result` says: not assessed. Handed less, it decides again.
+  return attributed.outcome !== "not_assessed";
+}
+
+/**
+ * A receipt the engine curtails as one sent apart from the installments
+ * (designated principal, on a loan with nothing due by its date) that could
+ * have carried the next installment, or that pools suspense held from before.
+ * Spec 2.4 rule 2 applies funds sent with a scheduled payment to the payment
+ * first, and 2.2 rule 4 keeps earlier suspense unapplied without an
+ * instruction; the engine curtails all of it (cashiering-9).
+ */
+export function separateCurtailmentHolding(rc: Receipt, before: LoanCashState): boolean {
+  if (rc.designation !== "curtailment" || before.holds.length > 0 || before.trial_active)
+    return false;
+  const open = before.installments
+    .filter((i) => i.status === "due")
+    .sort((a, b) => (a.due_date < b.due_date ? -1 : 1));
+  const next = open[0];
+  if (!next || open.some((i) => i.due_date <= rc.received_on)) return false;
+  return (
+    rc.amount_cents >= next.pi_cents + next.escrow_cents || before.suspense_unapplied_cents > 0n
+  );
+}
+
+/**
  * v1's guard, run on the engine's own postings: a month is kept only when the
  * engine does nothing its spec calls wrong in it, and nothing depends on where
  * the generator stopped projecting.
@@ -648,6 +778,12 @@ export function paymentsFairToGrade(task: PaymentsTask): boolean {
  *   - no charge is assessed under a bankruptcy or a foreclosure hold (2.7 rule 3);
  *   - the transfer shield spares only an installment the old servicer was paid
  *     for, which the forwarded receipt then satisfies (2.7 example L);
+ *   - one suspense balance never excuses two installments: a run is kept only
+ *     when it decides the same with the balance attributed oldest first (2.7
+ *     rule 1; cashiering-4);
+ *   - designated principal on a current loan, which the engine curtails whole,
+ *     is less than the next payment and pools no earlier suspense (2.4 rule
+ *     2; 2.2 rule 4; cashiering-9);
  *   - every receipt meets an open installment, and one is still open at the end.
  */
 export function paymentsInScope(task: PaymentsTask): boolean {
@@ -670,9 +806,11 @@ export function paymentsInScope(task: PaymentsTask): boolean {
         ok = false;
       if (result.outcome === "not_assessed" && result.reason.startsWith("transfer_window_60"))
         shielded.add(due);
+      if (suspenseCountedTwice(due, result, state)) ok = false;
     },
     receipt(rc, plan, before) {
       if (!before.installments.some((i) => i.status === "due")) ok = false;
+      if (separateCurtailmentHolding(rc, before)) ok = false;
       if (
         plan.late_charge_cents > 0n &&
         (plan.suspense_used_cents > 0n ||

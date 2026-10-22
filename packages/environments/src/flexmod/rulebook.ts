@@ -7,7 +7,13 @@
  * grader is the ported engine, so a sentence here that disagrees with it is
  * a task nobody can pass; the reference policy follows these words through
  * the tools alone and is held to the engine on every generated task.
- * Change this text and the environment's version changes with it.
+ * One clause says what F-1-27 says and the engine does not do: step 2's cap
+ * at the lifetime cap or final step (flexmod-2). It holds because
+ * `flexInScope` keeps out every loan where it would decide. The guard also
+ * keeps out a remaining term over 480, which the engine keeps as it finds
+ * it (flexmod-1), so Step 6 is the engine's and F-1-27's alike on every
+ * loan kept. Change this text and the environment's version changes with
+ * it.
  */
 
 export const FLEX_RULEBOOK = `# The Flex Modification evaluation
@@ -37,7 +43,7 @@ The MIR is the rate_pct of the mir_table row with the latest effective date on o
 
 ## Step 4. The rate (waterfall step 2)
 
-The rate is contract_rate_pct. When is_arm_not_final is true, it is the larger of contract_rate_pct and the MIR. The term is remaining_term_months. P&I is P&I(gross, rate, term).
+The rate is contract_rate_pct. When is_arm_not_final is true, it is the larger of contract_rate_pct and the MIR, but never above rate_cap_pct (the loan's lifetime rate cap, or its final step rate). The term is remaining_term_months. P&I is P&I(gross, rate, term).
 
 ## Step 5. Rate reduction (waterfall step 3)
 

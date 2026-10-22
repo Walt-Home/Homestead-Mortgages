@@ -4,13 +4,13 @@
  * §12.8.
  *
  * The model gets what the loss-mitigation analyst has on the evaluation
- * date: the loan's balances and arrears, its rate and remaining term, the
- * property's current value, the pre-modification payment, the Modification
- * Interest Rate table, the loan's history of modifications and failed
- * trials, and what the trial-plan notice will carry. It must decide whether
- * the loan is denied before the waterfall, run the waterfall's five steps,
- * decide eligibility, and for an offer set the trial plan and the
- * modification's dates.
+ * date: the loan's balances and arrears, its rate (and an adjustable rate's
+ * cap) and remaining term, the property's current value, the
+ * pre-modification payment, the Modification Interest Rate table, the
+ * loan's history of modifications and failed trials, and what the
+ * trial-plan notice will carry. It must decide whether the loan is denied
+ * before the waterfall, run the waterfall's five steps, decide eligibility,
+ * and for an offer set the trial plan and the modification's dates.
  */
 
 import type { Cents } from "@hm/kernel/money";
@@ -19,7 +19,7 @@ import { PAYLOAD_START, plain, type Split } from "../refi/task.js";
 
 export const FLEX_ENVIRONMENT_NAME = "flexmod-terms";
 /** Bump on any change to the rulebook, the tools, the rendering or the generator. */
-export const FLEX_ENVIRONMENT_VERSION = "1.1.0";
+export const FLEX_ENVIRONMENT_VERSION = "1.2.0";
 
 export interface FlexTask {
   readonly id: string;
@@ -37,6 +37,8 @@ export interface FlexTask {
     readonly value_cents: Cents;
     readonly contract_rate_pct: string;
     readonly is_arm_not_final: boolean;
+    /** The rate an ARM or step-rate loan not on its final rate can never exceed: its lifetime cap, or its final step. Null on any other loan. */
+    readonly rate_cap_pct: string | null;
     readonly remaining_term_months: number;
     readonly pre_mod_pi_cents: Cents;
     readonly delinquent_31_plus: boolean;

@@ -5,12 +5,21 @@
  * its engine computes it — `allocate` and `assessLateCharge` — with the
  * daily convention the servicing app runs them in, written out in the
  * engine's order and limited to what v1's months reach. Where the engine
- * departs from its own spec (the whole suspense balance counting toward
- * each unpaid installment's late-charge test, designated principal on a
- * delinquent loan), this says what the engine does. The grader is the
- * engine; the reference policy follows these words through the tools and
- * is held to it on every generated task. Change this text and the
- * environment's version changes with it.
+ * departs from its own spec, the generator and `paymentsInScope` keep those
+ * months out, so what this says the engine computes is never a figure the
+ * spec calls wrong. Two places are close to the line:
+ *   - suspense counts toward an installment's late-charge test. That is
+ *     2.7-Q1's default, which the engine documents as its decision, so it is
+ *     stated as the rule. Step 2 counts a balance once, oldest installment
+ *     first, as 2.7 rule 1 does; the engine counts the whole balance toward
+ *     each unpaid installment, and a month where that decides is kept out
+ *     (cashiering-4);
+ *   - designated principal on a current loan is a separate curtailment
+ *     (2.4 rule 2). A receipt that could have carried the next installment,
+ *     or that would pool earlier suspense, is kept out (cashiering-9).
+ * The grader is the engine; the reference policy follows these words
+ * through the tools and is held to it on every generated task. Change this
+ * text and the environment's version changes with it.
  */
 
 export const PAYMENTS_RULEBOOK = `# Posting a month of payments
@@ -33,7 +42,7 @@ Only two kinds of day change anything: the day after an installment's grace end 
 
 An installment's grace end is its due_date + late_charge_grace_days calendar days, moved forward to the next servicer business day when that is not one (next_business_day). On day d, take every installment, in the order the loan lists them, whose grace end is d − 1 day, whatever its status, and decide it:
 1. A late_charge fee already in loan.fees for that installment's due date: not_assessed (once per installment).
-2. Its basis is pi_cents (pi_cents + escrow_cents when late_charge_basis is "piti"). The amount received toward it is the basis when the installment is satisfied or prepaid (it was credited by then); otherwise it is the loan's whole suspense_unapplied_cents, but no more than the basis. Received ≥ basis: not_assessed (paid within grace).
+2. Its basis is pi_cents (pi_cents + escrow_cents when late_charge_basis is "piti"). The amount received toward it is the basis when the installment is satisfied or prepaid (it was credited by then). Otherwise it is the suspense held for it: funds in suspense count as received, though they have not been applied, and one balance is counted once, oldest installment first. So take suspense_unapplied_cents, less the basis of each installment with status due whose due_date is earlier than this one's; when nothing is left it is 0, and it is never more than the basis. Received ≥ basis: not_assessed (paid within grace).
 3. transfer_shield_until is set and the due date is on or before it: not_assessed.
 4. The first forbearance_active overlay whose from is on or before the due date covers it when its to is null or on or after the due date, and it has no defaulted_on or the due date is before defaulted_on: not_assessed.
 5. A bankruptcy_active overlay active on the due date (from ≤ due date, and to null or ≥ due date): accrued_suspended, for the amount below. It is recorded but adds nothing to late_charges_due_cents.

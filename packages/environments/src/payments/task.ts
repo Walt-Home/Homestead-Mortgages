@@ -18,7 +18,7 @@ import type { LoanCashState } from "./ported/types.js";
 
 export const PAYMENTS_ENVIRONMENT_NAME = "payments-posting";
 /** Bump on any change to the rulebook, the tools, the rendering or the generator. */
-export const PAYMENTS_ENVIRONMENT_VERSION = "1.0.0";
+export const PAYMENTS_ENVIRONMENT_VERSION = "1.1.0";
 
 export interface Receipt {
   readonly payment_id: string;

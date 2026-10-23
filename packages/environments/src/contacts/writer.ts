@@ -2216,10 +2216,15 @@ function writeCall(p: CallPlan): DraftTurn[] {
           ],
           "third_party",
         );
+        // Whoever answers hears the recording notice (the row marks it); nothing about the debt.
         x.agent(
           [
-            "[This is {agent} with {servicer}.|My name is {agent}.] [Could you ask them to call us back at {phone}?|I'll try back another time.]",
+            "[This is {agent} with {servicer}.|My name is {agent} with {servicer}.] [Just so you know, this call may be recorded.|This call may be recorded.]",
           ],
+          "recording_disclosure",
+        );
+        x.agent(
+          ["[Could you ask them to call us back at {phone}?|I'll try back another time.]"],
           "unverified_refusal",
         );
         x.caller(["[Sure.|Okay.|I'll let them know.]"], "react");

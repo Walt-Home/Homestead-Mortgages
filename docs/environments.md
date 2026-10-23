@@ -2909,7 +2909,7 @@ planted call draws the plant's finding on the planted line and nothing the
 plant does not name, and the rubric finds exactly the same on the
 recognizer's text and labels as on what was said, by whom. Of the first
 draws of 1,500 training tasks (seed 3), 469 found no call that fits their
-edge and drew again; of the other 1,031, 78 were turned away because the
+edge and drew again; of the other 1,031, 79 were turned away because the
 recognizer's noise moved a finding (a misheard amount reads as a wrong
 one) and 1 because a wrong amount's digits were already in the record. The
 contact center's clean calls draw no finding of their own, its dialer's

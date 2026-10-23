@@ -296,6 +296,24 @@ describe("contact center", () => {
     }
   });
 
+  it("marks a disclosure given on the row exactly when the call gives it", () => {
+    const problems: string[] = [];
+    for (const c of calls(120)) {
+      const turns = transcriptOf(center, book, c.id).turns;
+      const said = (...tags: string[]) =>
+        turns.some((t) => t.speaker !== "INTERPRETER" && tags.includes(t.tag));
+      const given = {
+        recording: said("recording_disclosure", "recording_disclosure_ivr"),
+        fdcpa: said("mini_miranda"),
+        bankruptcy: said("bk_disclaimer"),
+      };
+      for (const k of ["recording", "fdcpa", "bankruptcy"] as const)
+        if (c.disclosures_marked[k] !== given[k])
+          problems.push(`${c.id} (${c.outcome}): ${k} marked ${c.disclosures_marked[k]}`);
+    }
+    expect(problems.slice(0, 10)).toEqual([]);
+  });
+
   it("opens every call with identity checks, and tells nobody unverified anything", () => {
     const problems: string[] = [];
     for (const c of calls(80)) {

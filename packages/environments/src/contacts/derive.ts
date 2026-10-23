@@ -867,8 +867,9 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       human_agent: agent.id,
       transcript: true,
       // The attorney's call is how the servicer learns of the case: the disclaimer and the mini-Miranda are for the borrower.
+      // Nothing about the debt is said to a caller nobody verified (§1006.6(d)(1)): the menu's recording notice alone.
       disclosures_marked:
-        party === "attorney"
+        party === "attorney" || !live
           ? { recording: true, fdcpa: false, bankruptcy: false }
           : { ...voiceDisclosures(on, f, true), recording: true },
       complaint_voiced: complaint,
@@ -1386,7 +1387,11 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       tcpa_basis: phone.tcpa_voice ? "consent" : "human_manual_dial",
       tcpa_consent: phone.tcpa_voice,
       regf_counted: outcome !== "busy_or_failed" && outcome !== "disconnected",
-      disclosures_marked: voiceDisclosures(on, f, conv || outcome === "answered_unverified"),
+      // Whoever answers hears the recording notice; nothing about the debt is said to someone unverified (§1006.6(d)(1)).
+      disclosures_marked: {
+        ...voiceDisclosures(on, f, conv),
+        recording: conv || outcome === "answered_unverified",
+      },
       complaint_voiced: false,
       complaint_logged: false,
       counts_as_inquiry: false,

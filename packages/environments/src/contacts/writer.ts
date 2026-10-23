@@ -588,7 +588,10 @@ const st = {
       [
         "[Yes, I do see|Okay, so I'm showing|I see] a payment of {last_amount} [received|posted|that came in] on {last_on}[, and it was applied to the {applied_to} installment|].",
         "[Your last payment|The most recent payment] was {last_amount}, [received|posted] {last_on}[. It went to the {applied_to} payment|].",
-      ].filter((t) => !t.includes("{applied_to}") || x.has("applied_to")),
+      ].map((t) =>
+        // A payment that went to no installment (held in suspense, or all principal): the clause naming one is left out.
+        x.has("applied_to") ? t : t.replace(/\[[^[\]]*\{applied_to\}[^[\]]*\|\]/, ""),
+      ),
       "quote:last_payment",
     );
   },

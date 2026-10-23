@@ -258,6 +258,8 @@ export function plantInTurns(
       return replace(i, expand(r, line, s), expand(r, es, s));
     }
     case "C-02":
+      // A demand needs an amount: past due, or the next installment. A call with neither has no turn it can go in.
+      if (!f.past_due && !f.next) return null;
       return replace(
         i,
         expand(

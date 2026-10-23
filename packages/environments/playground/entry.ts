@@ -188,6 +188,28 @@ import {
   expectedEi,
   generateEiTask,
 } from "../src/ei/index.js";
+import {
+  CATCHUP_SPEC_CASES,
+  CatchupReferencePolicy,
+  catchupPayload,
+  catchupPosting,
+  catchupSpecTasks,
+  catchupTaskId,
+  catchupVerdict,
+  expectedCatchup,
+  generateCatchupTask,
+} from "../src/catchup/index.js";
+import {
+  REVIEW_SPEC_CASES,
+  ReviewReferencePolicy,
+  escrowReview,
+  expectedEscrowReview,
+  generateReviewTask,
+  reviewPayload,
+  reviewSpecTasks,
+  reviewTaskId,
+  reviewVerdict,
+} from "../src/escrow-review/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
 
@@ -830,6 +852,36 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     expected: expectedEi,
     verdictOf: eiVerdict,
     reference: () => new EiReferencePolicy(),
+  }),
+  playground({
+    env: catchupPosting,
+    title: "Catch-up posting",
+    side: "servicing",
+    summary:
+      "One catch-up payment on a loan that fell behind, drawn from a ten-year history: hold every late charge to the note's terms (a boarding may have lost the note's dollar cap), post the payment to interest, principal, escrow and the late charge, state what was collected above the cap and is owed back, and say whether the loan is current after posting. Graded by the servicing app's own cashiering and late-charge engine.",
+    id: catchupTaskId,
+    one: generateCatchupTask,
+    spec: catchupSpecTasks,
+    specNames: CATCHUP_SPEC_CASES.map((c) => c.name),
+    payload: catchupPayload,
+    expected: expectedCatchup,
+    verdictOf: catchupVerdict,
+    reference: () => new CatchupReferencePolicy(),
+  }),
+  playground({
+    env: escrowReview,
+    title: "Escrow analysis review",
+    side: "servicing",
+    summary:
+      "One annual escrow analysis drawn from a ten-year history, most after a tax reassessment or a premium increase at renewal: run it again from its inputs, find the shortage or surplus, the new payment, its effective date and the months a shortage is spread over, and say whether it is held for anomaly review. Graded by the servicing app's own escrow engine.",
+    id: reviewTaskId,
+    one: generateReviewTask,
+    spec: reviewSpecTasks,
+    specNames: REVIEW_SPEC_CASES.map((c) => c.name),
+    payload: reviewPayload,
+    expected: expectedEscrowReview,
+    verdictOf: reviewVerdict,
+    reference: () => new ReviewReferencePolicy(),
   }),
 ]);
 

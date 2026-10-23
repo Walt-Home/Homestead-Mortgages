@@ -14,7 +14,9 @@ lossmit-1, lossmit-2 and lossmit-3. They came from running the servicing app's
 runtime for 397 simulated days on a scratch database on 22 October 2026, and
 from reproducing what that run found; each was reproduced in isolation the
 same day, with none of that run's own choices, and upheld by two independent
-checks.
+checks. Five more, ei-4 to ei-8, are in the early-intervention engine itself,
+found while building the ei-clocks environment on 23 October 2026, reproduced
+with the vendored engine and upheld the same way.
 The environments keep all but one out of grading. pmi-9 is graded, because
 the spec states the engine's reading as its own rule. Four more
 (cashiering-4, cashiering-9, flexmod-1, flexmod-2) were graded at the
@@ -91,6 +93,8 @@ decided", says why each went the way it did.
 | boarding-6    | boarding   | A tape's late charges are on the ledger with no fee row, so statements and quotes omit them          | §2.7 transfer-in; §2.1 rule 5          | 🟡     | `domain/boarding/service.ts:390`; `domain/operations-runtime/cashiering-cycle.ts:144-145`       |
 | ei-3          | ei         | A written notice does not cover the next windows, so each later 45-day clock arms and breaches       | §11.2 rule 4; 11.2-T3; 1024.39(b)(1)   | 🟡     | `domain/early-intervention/ops-11-1.ts:315`; `runtime/delinquency.ts:125`                       |
 | transfers-1   | transfers  | The goodbye notice's address check reads parties no code writes, so no goodbye run is released       | §17.2 recipients; 1024.33(b)(3)(i)     | 🟡     | `app/tools/section17-2.ts:109-110`; `domain/transfers/ops-17-2.ts:142-145`                      |
+| ei-5          | ei         | A cease after a bankruptcy petition leaves the case's notice owed, and its clock breaches            | §11.2 rule 1; Reg X 1024.39(d)(2)      | 🟡     | `domain/early-intervention/windows.ts:135`; `domain/early-intervention/timers.ts:205-225`       |
+| ei-6          | ei         | A bankruptcy case's notice does not cover its later windows, so a new delinquency re-arms its clock  | §11.2 timers; 1024.39(c)(1)(iii)(C)    | 🟡     | `domain/early-intervention/windows.ts:71`; `domain/early-intervention/ops.ts:81`                |
 | cashiering-10 | cashiering | A $50-rule payment before its due date is labeled prepaid, and its counter row is skipped            | §2.2 rule 2                            | 🟢     | `domain/cashiering/allocation.ts:203`                                                           |
 | cashiering-16 | cashiering | A dispute overlay ignores its start date                                                             | §2.7 rule 3(viii)                      | 🟢     | `domain/cashiering/latecharges.ts:90`                                                           |
 | cashiering-17 | cashiering | Instruction text is matched by keyword                                                               | §2.1 rule 6                            | 🟢     | `domain/cashiering/allocation.ts:81`, `:170`                                                    |
@@ -122,8 +126,11 @@ decided", says why each went the way it did.
 | pmi-12        | pmi        | New York's appraisal sets the federal thresholds                                                     | §10.1 R2; 12 U.S.C. 4901(12)           | 🟢     | `domain/pmi/cancellation.ts:15`                                                                 |
 | pmi-13        | pmi        | An ARM reset inside an interest-only period amortizes at once                                        | §10.2 R2                               | 🟢     | `domain/pmi/schedule.ts:69-74`                                                                  |
 | lossmit-2     | lossmit    | The case fold listens for plan and hold events by names nothing emits, so they never reach a case    | §35.9 rules 1, 9                       | 🟢     | `domain/operations-runtime/default-35-9.ts:77-78`, `:184`                                       |
+| ei-4          | ei         | An fdcpa cycle is reviewed on day 190, not 180, so a catch-up between them drops the repeat          | §11.2 timer table; 1024.39(d)(3)(iii)  | 🟢     | `domain/early-intervention/windows.ts:235`, `:214`                                              |
+| ei-7          | ei         | The plan's D2-2-02 report never flags a gap that ends in a cure, though the 7-day clock breaches     | §11.1 timer table; D2-2-02             | 🟢     | `domain/early-intervention/plan.ts:194-195`                                                     |
+| ei-8          | ei         | A delinquency cured on its start deadline with no attempt is reported as a missed start              | §11.1 timer table; D2-2-02             | 🟢     | `domain/early-intervention/plan.ts:192-193`                                                     |
 
-🔴 high (16) · 🟡 medium (49) · 🟢 low (31). ei is Reg X early intervention.
+🔴 high (16) · 🟡 medium (51) · 🟢 low (34). ei is Reg X early intervention.
 Section numbers are the servicing app's spec; paths are under
 `apps/servicing/src/`; amounts ending in c are cents. docs/decisions.md tells
 the longer story of most of these, in the entry for the environment that found
@@ -2820,6 +2827,197 @@ index date 2026-09-17).
 - **Kept out by.** No environment runs a transfer out, a goodbye run or 17.2's
   tools.
 
+### ei-5. A cease after a bankruptcy petition leaves the case's notice owed, and its clock breaches 🟡
+
+- **Spec says.** Reg X exempts a servicer subject to the FDCPA from (b) while
+  a borrower is in bankruptcy and a written §805(c) cease stands, whichever
+  came first. §1024.39(c)(1)(ii) applies "while any borrower is a debtor" when
+  any borrower has sent a cease, and (d)(2) applies after a cease "while any
+  borrower is in bankruptcy" (11-2-written-early-intervention-notice.md:34,
+  :36).
+  - 11.2 rule 1 makes the decision "at send". A bankrupt debt collector's loan
+    with an active cease gets no notice. The combined variant is a courtesy
+    only, and it is off by default (:95). 11.2-Q2 adds "send nothing that
+    could be read as collection" (:165).
+  - The data model names the status, `exempt_fdcpa_bk` (:66). The edge cases
+    exempt a loan where one borrower has a cease and the other a petition
+    (:132).
+  - After a written cease, 11.4 rule 6 names the (d)(3) notice and "other
+    legally required notices" (11-4-fdcpa-compliance.md:110); the (c)(1)(iii)
+    notice is not among them, because (c)(1)(ii) makes it no longer required.
+- **Engine does.** It gets the cease-then-petition order right and the other
+  order wrong.
+  - `applyBankruptcyPetition` moves an open notice leg to `exempt_bk_cease`
+    when a cease already stands, and to `bk_modified_required` otherwise
+    (domain/early-intervention/windows.ts:126). `openWindow` passes the cease
+    through for a window opened during a case (:71).
+  - `applyFdcpaCease` moves a notice leg only from `open`, and only when no
+    option is available (:135). Comment 39(c)(1)(ii)-1 says that is never the
+    case for a Fannie Mae loan. Its own comment reads (d) without the
+    bankruptcy branch (:130). So a leg the petition made
+    `bk_modified_required` stays that way, and nothing in the engine produces
+    `exempt_fdcpa_bk` (:16).
+  - The leg is never swept to `breached`, because `sweep` reads only `open`
+    (:104). `noticeProvided` still takes a bankruptcy notice for it as
+    satisfied on time (:109-110).
+  - `writtenCease` is 11.4-T7's overlay and the hosted cease tool's body
+    (app/tools/section11.ts:400). It exempts the live legs only and answers
+    `ei_variant: "bk"` for a bankrupt loan
+    (domain/early-intervention/ops.ts:429, :431).
+  - The case's clock, REGX_1024_39C_BK_MODIFIED_NOTICE_45, is armed by
+    `regx.ei_notice.bk_modified_required`, which `petitionOverlay`
+    (ops.ts:185) or the counter's first delinquency in a case (ops.ts:81)
+    emits. Only a bankruptcy-variant `notice.sent` satisfies it
+    (domain/early-intervention/timers.ts:141; spec/registry/timers.json:6691).
+  - The cancellation table cancels the live clocks on
+    `fdcpa.cease.received{written=true}` (timers.ts:211-212) and has no row
+    for the case's clock (:205-225). So that clock breaches at severity 1 to
+    `officer` and `attorney`, even with ei-1's reader attached. Its breach
+    only escalates (domain/operations-runtime/default-35-9/sweep.ts:49-52),
+    and the only way to satisfy it is a bankruptcy notice to a borrower who
+    has written a cease.
+- **Reproduction.**
+  `/private/tmp/claude-502/ei-departures/cease-after-petition.mts` ran under
+  tsx against the servicing app's own windows.ts, ops.ts and ops-11-1.ts, and
+  the §11 spec harness (the registry with the section's overrides and the
+  cancellation reader attached). No database. The loan is a debt collector's
+  owner-occupied loan with 2026-11-01 unpaid. On 11-02 the counter opens the
+  window and arms the clocks for both legs.
+  - Control, cease 11-15 and then a Chapter 13 petition 11-21: the notice leg
+    reads `exempt_bk_cease`, no case clock arms, and nothing breaches through
+    2027-01-06.
+  - Petition 11-21, then cease 11-25:
+    - The petition leaves the leg `bk_modified_required` and arms the case
+      clock, due 2027-01-05.
+    - The cease moves nothing: not `writtenCease`, not `applyFdcpaCease`, not
+      `fdcpa.cease.received{written=true}`. `writtenCease` answers
+      `ei_variant: "bk"`.
+    - At 2027-01-06 00:05 the clock breaches at severity 1, escalating to
+      `officer` and `attorney`. `noticeProvided` would accept a bankruptcy
+      notice on 12-20 as satisfied.
+  - The hosted counter's own path, runtime/delinquency.ts:125 →
+    ops-11-1.ts:315 → ops.ts:81. The borrower is current at a 2026-10-20
+    petition and misses 11-01.
+    - `delinquencyCounterJob` opens the window `bk_modified_required` and arms
+      the case clock, due 12-16.
+    - After a cease on 11-25, the same job opens the 12-01 window
+      `exempt_bk_cease`.
+    - The 11-01 clock breaches at 12-17 00:05. In one case, under one cease,
+      the later window is exempt and the earlier one is owed.
+  - Found on 23 October 2026 while building ei-clocks (docs/decisions.md,
+    "Early intervention is graded by the windows engine, folded as its spec
+    runs it"), and reproduced the same day.
+- **Smallest fix.** Three changes.
+  - Give `applyFdcpaCease` whether a case is open, and have it move a
+    `bk_modified_required` leg to `exempt_fdcpa_bk` (windows.ts:135), as
+    `applyBankruptcyPetition` does in the other order (:126).
+  - Add a row to `EARLY_INTERVENTION_CANCELLATIONS` that cancels
+    REGX_1024_39C_BK_MODIFIED_NOTICE_45 on
+    `fdcpa.cease.received{written=true}`. It needs a select that leaves a
+    clock already past due standing, because a cease does not undo a missed
+    notice.
+  - Have `writtenCease` report the notice exempt rather than `bk`, unless the
+    courtesy is elected.
+
+  The hosted runtime applies the new row only once ei-1's reader is wired.
+
+- **Kept out by.** ei-clocks never draws a cease on or after the petition. The
+  generator says so (packages/environments/src/ei/generator.ts:827-829) and
+  refuses one (:933). A test holds the engine's reading beside that refusal
+  (packages/environments/src/**tests**/ei.test.ts:994-1009). So every drawn
+  case uses the order the engine gets right (grader.ts:295-300, :391).
+
+### ei-6. A bankruptcy case's one notice does not cover its later windows, so a delinquency after a cure re-arms its clock, which breaches 🟡
+
+- **Spec says.** §1024.39(c)(1)(iii)(C): the modified notice is owed "not more
+  than once during a single bankruptcy case"
+  (11-2-written-early-intervention-notice.md:34). In 11.2's state machine, the
+  petition makes the open legs "a single `bk_modified_required` task per case"
+  (:73). The timer table and the registry make
+  REGX_1024_39C_BK_MODIFIED_NOTICE_45 a "deadline (once per case)". It is
+  armed by a petition while delinquent "or first `loan.delinquency.started`
+  during the case" (:81; spec/registry/timers.json:6691-6699). A second bk
+  notice for the case is refused (REGX_1024_39C_ONCE_PER_CASE_GATE, :82).
+  11.2-T6: "a second `bk` notice for the same case is refused; reopening …
+  creates no new timer" (:149).
+- **Engine does.** With `bankruptcy: "active"`, `openWindow` sends every new
+  window through `applyBankruptcyPetition`, which opens its notice leg
+  `bk_modified_required` (domain/early-intervention/windows.ts:71, :126).
+  `OpenWindowOptions` cannot carry the case's notice: `active_cycle` is read
+  only after that return (:74). The engine's own once-per-case check,
+  `bkModifiedNoticeDue(petition, alreadySentForCase)` (:241), is never called.
+  So a window opened in the case after its notice is waiting on that notice
+  again.
+  - `sweep` moves only `open` legs (:104), so the leg reads as waiting for the
+    rest of the case. `noticeProvided` would accept a second bk notice into
+    it, never late (:109-110).
+  - The counter emits the clock's trigger,
+    `regx.ei_notice.bk_modified_required{basis: first_delinquency_in_case}`,
+    for such a leg whenever `first_delinquency` holds
+    (domain/early-intervention/ops.ts:81). The counter job sets that to
+    `due === earliest` (domain/early-intervention/ops-11-1.ts:315), which is
+    true at the start of every delinquency in the case, not only the first.
+    The kernel arms one instance per trigger
+    (kernel/timers/engine.ts:178-184). So a delinquency after a cure arms a
+    second REGX_1024_39C_BK_MODIFIED_NOTICE_45.
+  - Its only satisfier is a bk-variant `notice.sent`
+    (domain/early-intervention/timers.ts:141). notice.render refuses that
+    notice for the case (`BK_ONCE_PER_CASE`, app/tools/section11.ts:131-132),
+    and no cancellation row names the code (timers.ts:205-225). The clock
+    breaches into a sev-1 escalation to `officer` and `attorney`. Only a
+    second bk notice can meet it: `print.request` sends one with no render and
+    no once-per-case check (app/tools/section11.ts:147, :155-156, :167-168),
+    though the spec refuses one (REGX_1024_39C_ONCE_PER_CASE_GATE) and Reg X
+    does not require one. The servicer chooses between a sev-1 breach and a
+    notice the spec forbids.
+  - The hosted counter takes this path. `delinquencyLoanBody` reads the open
+    case off the log and hands it to `delinquencyCounterJob`
+    (runtime/delinquency.ts:119-126).
+  - A neighbor, not filed here and inside ei-2's reach: `projectWindows` has
+    no `bk_modified_required` in its status set, so it writes such a leg
+    `open` (runtime/delinquency.ts:69, :79).
+- **Reproduction.** In process, with the servicing app's own windows.ts,
+  ops.ts and ops-11-1.ts, and the §11 spec harness's TimerEngine; no database.
+  The case is 11.2-T6's current-borrower case: Chapter 13 case 27-10002,
+  petition 2027-01-20, borrower current.
+  - The first delinquency in the case is 2027-03-01. The 03-02 counter opens
+    the window `bk_modified_required` and arms the clock, due 04-15. The bk
+    notice is provided 03-20 and satisfies it.
+    `bkModifiedNoticeDue(petition, true)` answers null.
+  - In the same delinquency, 04-01 is also missed. `openWindow` opens it
+    `bk_modified_required`, and does so again when handed the bk notice's
+    cycle. Control: with no case and a standard notice on 03-20, the same
+    window opens `satisfied_by_prior_180`. `sweep` to 2027-12-31 leaves the
+    leg `bk_modified_required`, and a second bk notice on 06-01 is taken as
+    `sent`, on time.
+  - After a cure: 03-01 is credited 03-25, April and May are paid, and 06-01
+    is missed. On 06-02, `delinquencyCounterJob`, called as the runtime calls
+    it, opens the window `bk_modified_required` and emits
+    `regx.ei_notice.bk_modified_required{first_delinquency_in_case, anchor 2027-06-01}`.
+    A second REGX_1024_39C_BK_MODIFIED_NOTICE_45 arms beside the satisfied
+    one, due 07-16. Control: with 03-01 still unpaid, the 06-01 window emits
+    no second trigger.
+  - On 07-17 at 00:05 the second clock breaches: severity 1, `officer` and
+    `attorney`. notice.render, given the `ei_notice_cycles` row print.request
+    writes for the 03-20 notice (section11.ts:163), refuses the case's second
+    bk notice with `BK_ONCE_PER_CASE`, and the `11.2.onceBkNoticePerCase` gate
+    is closed.
+  - Found while building ei-clocks (docs/decisions.md, "What reading the
+    engine and its spec found") and reproduced on 23 October 2026. The hosted
+    runtime was read, not run.
+- **Smallest fix.** Add the case's provided notice to `OpenWindowOptions`.
+  When it is there, open the leg at windows.ts:71 as covered by that notice,
+  citing it the way `satisfied_by_prior_180` cites its cycle, instead of
+  `bk_modified_required`; ops.ts:81 then emits nothing. Have
+  `delinquencyLoanBody` read the case's bk row from `ei_notice_cycles`, as
+  notice.render already does (section11.ts:131).
+- **Kept out by.** ei-clocks ports windows.ts but not ops.ts, so the second
+  clock is not in it. Its generator keeps out the leg: no credit on or after
+  the petition, so no delinquency follows a cure inside a case, and no window
+  opens in the case after its notice
+  (packages/environments/src/ei/generator.ts:1050-1061). A test holds both
+  (src/**tests**/ei.test.ts:1011-1023, :1184).
+
 ## Low
 
 - **cashiering-10.** A $50-rule payment received before its due date is
@@ -2997,8 +3195,87 @@ index date 2026-09-17).
   consume what the sections emit, correct the specs' spellings, and test that
   every consumed type has a non-test emitter. Kept out: no environment runs
   35.9's fold.
+- **ei-4.** An fdcpa notice cycle is reviewed on day 190, not day 180.
+  `cycleEndReview` reviews a cycle on its `cycle_end_at`
+  (domain/early-intervention/windows.ts:235). For the fdcpa variant,
+  `noticeCycle` puts that date at day 190 (:214), and the review tests the
+  count of the day it is handed (:236). §1024.39(d)(3)(iii) tests the
+  delinquency "at the end of the 180 days"
+  (11-2-written-early-intervention-notice.md:36). So do the registry's
+  REGX_1024_39D_FDCPA_NOTICE_190 row ("at +180: if ≥45 days delinquent → due
+  +190", spec/registry/timers.json:6686), 11.2-T5 (:148) and the engine's
+  own note (timers.ts:72). A borrower 45 days or more delinquent on day 180
+  who catches up to within 45 days before day 190 therefore owes the repeat
+  by day 190. The engine moves it to day 45 of the installment still unpaid,
+  or drops it if that installment is paid first. Reproduced on 23 October
+  2026 on 11.2-T5's dates, with the vendored engine, its FIFO counter and
+  its timer harness: the notice was provided 2026-12-14, the loan was 223
+  days delinquent on day 180, November through May were credited on day 185,
+  and the loan was 21 days delinquent on day 190 (06-22). The engine answers
+  `reviewed: false` on day 180. On day 190 it emits
+  `regx.ei_cycle.reviewed{repeat_required=false}`, which cancels the 06-22
+  clock (timers.ts:222), so nothing breaches on 06-23. The duty moves to
+  07-16, and crediting June 1 on 07-10 cancels it. The rule's repeat is due
+  06-22, and the same catch-up on day 191 keeps the clock. Nothing in the
+  runtime calls `cycleEndReview` or `eiCycleNightly` (ops.ts:105). Fix:
+  review on `addDays(c.provided_on, CYCLE_DAYS)` with that day's count, and
+  keep `cycle_end_at` as the repeat's due date. 11.2's data model already
+  keeps the two dates apart (`cycle_end_at` +180, `fdcpa_cycle_end_190`,
+  :67), and migration 0013 has the second column (db/migrations/0013_early_intervention.sql:110), but nothing writes it; the print tool stores `cycle_end_at` as +190 (app/tools/section11.ts:163). Kept out: ei-clocks draws no fdcpa cycle whose day-180 and day-190
+  reviews differ (packages/environments/src/ei/generator.ts:1030-1042, held
+  by src/**tests**/ei.test.ts:1041).
+- **ei-7.** `fnmaCadenceBreaches`, the plan's own D2-2-02 report, compares each
+  outbound attempt only with the one before it (plan.ts:194) and tests the
+  trailing gap only while the episode is open (:195). So a gap that ends in a
+  cure, or in a cease or suspension with no contact logged after it, is never
+  reported. The 11.1 timer
+  table satisfies `FNMA_D2202_OUTBOUND_EVERY_7` only by the next attempt and
+  cancels it when the plan ceases (11-1-live-contact.md:90;
+  spec/registry/timers.json:6515-6524). D2-2-02 runs the cadence "until … the
+  delinquency is resolved", so a cure after the clock's due day comes too
+  late. Reproduced on 23 October 2026 through the §11 spec harness, with
+  installment 2026-11-01 unpaid, one attempt on 11-18 (day 17) and a cure on
+  11-30. The clock breaches at sev 2 at the 11-26 00:05 sweep, and the report
+  reads `[]`. Through 11-29 the same plan's report said "no attempt by
+  2026-11-25", and it dropped that once the cure closed the episode. A
+  petition on 11-30 gives the same result, while a second attempt on 11-30 is
+  reported (:194). Only `rollingDelinquency` (ops.ts:142, which calls the report at :163), the helper behind
+  11.1-T3, reads the report, and its attempts three or four days apart never
+  leave the gap. Fix: test each episode's last attempt + 7, shifted to the
+  next open day, against `e.closed_on ?? o.through`. Kept out: ei-clocks does
+  not port plan.ts, and its `outboundOf` counts the deadline missed when the
+  delinquency closes after it (grader.ts:481, rulebook.ts:99), which is how
+  the clock reads it.
+- **ei-8.** `fnmaCadenceBreaches` reports `FNMA_D2202_OUTBOUND_START_36`
+  breached for a delinquency that ends on its start deadline with no
+  outbound attempt (`end >= startDue`,
+  domain/early-intervention/plan.ts:192-193). D2-2-02 asks for the first
+  attempt "no later than the 36th day of delinquency" and for attempts only
+  "until … the delinquency is resolved" (11-1-live-contact.md:42). The timer
+  row is due on day 36 (:89; spec/registry/timers.json:6504) and names no
+  cancellation; the engine cancels it when the plan ceases (plan.ts:18-19), and
+  11.1-T3 (:183), rule 4 (:110) and rule 1 (:107) are the spec's basis for no
+  breach on a cure, which the
+  kernel holds to 23:59 that day (kernel/timers/engine.ts:72, :98, :211),
+  and the cure's `contact.plan.ceased{resolved}` cancels it before then
+  (plan.ts:116-123, :151-155; domain/early-intervention/timers.ts:276-283).
+  The same function takes an attempt on that day as on time
+  (`outbound[0] > startDue`, :193) and a 7-day gap as missed only after its
+  day (`o.through > p.cycle_due_at`, :195). The windows engine cancels both
+  Reg X legs on a day-36 credit (windows.ts:82), and the counter reads 0
+  that day, not 36 (boarding/delinquency.ts:51-64). Reproduced on 23 October
+  2026 with 11.1 rule 3's loan (due 2026-11-01, day 36 Monday 2026-12-07),
+  the plan open on day 17 and no attempt. Cured on 12-07, the report reads
+  "no outbound attempt by 2026-12-07". Cured on 12-06, it reads nothing.
+  Through spec-harness.ts the clock reads `cancelled` and nothing breaches
+  at 23:59, while the uncured control breaches. Only `rollingDelinquency`
+  (ops.ts:142, calling the report at :163), 11.1-T3's helper, reads the report, and its cures fall on
+  days 28 to 31, so no clock, escalation or spec test moves. Fix:
+  `end > startDue`. Kept out by `eiScopeIssues`
+  (packages/environments/src/ei/generator.ts:969-976): no delinquency closes
+  on its start deadline with no attempt.
 
-97 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+102 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

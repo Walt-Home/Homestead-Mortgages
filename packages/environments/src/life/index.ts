@@ -17,6 +17,7 @@
  */
 
 export * from "./calibration.js";
+export * from "./behavior.js";
 export * from "./feeds.js";
 export * from "./draw.js";
 export * from "./scenario.js";

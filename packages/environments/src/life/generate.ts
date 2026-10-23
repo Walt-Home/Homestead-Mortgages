@@ -24,7 +24,7 @@ import { normalizeScenario, scriptFor, type NormalScenario, type Scenario } from
 import { simulateLoan, type LoanLife, type SimContext } from "./simulate.js";
 
 /** Bump on any change to what the generator draws or how a history is computed. */
-export const LIFE_VERSION = "1.0.0";
+export const LIFE_VERSION = "1.1.0";
 
 export interface LifeBook {
   readonly seed: string;

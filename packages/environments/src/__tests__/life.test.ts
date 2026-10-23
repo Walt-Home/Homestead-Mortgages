@@ -411,10 +411,11 @@ describe("life generator", () => {
   });
 
   it("plants D-03, and its twin differs from the clean history only downstream of it", () => {
+    // No random payoff: a loan paid off before its transfer or its misses would plant a cap nothing reads.
     const scenario = {
       loans: 4,
       cohort_months: 1,
-      random: { delinquency: false },
+      random: { delinquency: false, payoff: false },
       pins: {
         1: { late_charge_cap_cents: 1_500, arm: null },
         2: { late_charge_cap_cents: 1_500, arm: null },
@@ -581,10 +582,11 @@ describe("life generator", () => {
       [60, 80, 0.75],
       [80, 95, 0.25],
     ]);
+    // Each open bin is as wide as the closed bin beside it.
     expect(read.rates.book.note_rate.map((b) => [b.lo, b.hi])).toEqual([
-      [2.5, 3],
+      [1, 3],
       [3, 5],
-      [7, 7.5],
+      [7, 9],
     ]);
     expect(read.rates.refi.pmms_30y.map((x) => x.rate)).toEqual([6.5, 6.3]);
     // Days 2 to 5 hold a fifth of their bin's half each, days 6 to 10 a fifth of 30, days 11 to 16 a 21st of 21.

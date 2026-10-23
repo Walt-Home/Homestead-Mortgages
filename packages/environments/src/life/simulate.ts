@@ -45,6 +45,7 @@ import {
   daysInMonth,
   endOfMonth,
   parts,
+  rollBack,
   rollForward,
   servicer as servicerCalendar,
   ymd,
@@ -124,6 +125,7 @@ import {
   rule78Applies,
 } from "../pmi/ported/termination.js";
 import { rngFor, type Rng } from "../rng.js";
+import { EARLY_DAYS, PARTIAL_LAG_DAYS, behaviorBase, borrowerRates } from "./behavior.js";
 import type { Rates } from "./calibration.js";
 import type { EscrowLine, LoanDraw } from "./draw.js";
 import { marketRateOn, normal, printsAround, type MarketMonth } from "./feeds.js";
@@ -438,14 +440,14 @@ function drawPayment(r: Rng, dayWeights: readonly number[]): PaymentDraw {
   return {
     uTiming,
     withinDay,
-    earlyDays: r.int(1, 6),
+    earlyDays: r.int(EARLY_DAYS[0], EARLY_DAYS[1]),
     afterDays: r.int(0, 10),
     uMiss: r.next(),
     uCure: r.next(),
     uRoll: r.next(),
     uPartial: r.next(),
     partialShort: BigInt(r.int(6_000, 80_000)),
-    partialLag: r.int(5, 25),
+    partialLag: r.int(PARTIAL_LAG_DAYS[0], PARTIAL_LAG_DAYS[1]),
     uFifty: r.next(),
     fiftyShort: BigInt(r.int(100, 5_000)),
     uCurtail: r.next(),
@@ -846,15 +848,15 @@ export function simulateLoan(
 
   /* ── the behavior layer ────────────────────────────────────────────────── */
 
-  // INVENTED: everything the borrower does. None of the ports has a borrower.
-  const pRoll = clamp01(R.delinquency.roll_current_to_30 * d.fragility, 0.5);
-  const pCure = clamp01(R.delinquency.cure_from_30);
-  const pRoll2 =
-    R.delinquency.cure_from_30 < 1
-      ? clamp01(R.delinquency.roll_30_to_60 / (1 - R.delinquency.cure_from_30))
-      : 0;
-  const pAfter = clamp01(R.payment.late_after_grace_share * d.lateness, 0.5);
-  const pWithin = clamp01(R.payment.late_within_grace_share * d.lateness, 0.95 - pAfter);
+  // INVENTED: everything the borrower does. None of the ports has a borrower. The book's shares become this
+  // borrower's probabilities through their habits (behavior.ts).
+  const base = behaviorBase(R);
+  const own = borrowerRates(base, d.lateness, d.fragility);
+  const pRoll = own.miss;
+  const pCure = base.cure;
+  const pRoll2 = base.miss_again;
+  const pAfter = own.after_grace;
+  const pWithin = own.within_grace;
   let disasterUntil: PlainDate | null = null;
   let lastRegular: Cents | null = null;
   const staleArmed = [...script.bill_pay_stale];
@@ -892,8 +894,12 @@ export function simulateLoan(
     const runDay = addDays(graceEndFor(state, due), 1);
     runEvents.set(due, push({ on: runDay, kind: "run", due }));
     let on: PlainDate;
-    if (rnd.payments && md.uTiming < pAfter) on = addDays(runDay, md.afterDays);
-    else if (rnd.payments && md.uTiming < pAfter + pWithin) on = addDays(due, md.withinDay - 1);
+    // After grace is late in the month: a payment never received in its month is a miss, drawn apart from timing.
+    if (rnd.payments && md.uTiming < pAfter) {
+      on = addDays(runDay, md.afterDays);
+      const last = rollBack(endOfMonth(due), servicerCalendar);
+      if (on > last) on = last < runDay ? runDay : last;
+    } else if (rnd.payments && md.uTiming < pAfter + pWithin) on = addDays(due, md.withinDay - 1);
     else on = d.persona === "early" ? addDays(due, -(rnd.payments ? md.earlyDays : 3)) : due;
     on = rollForward(on, servicerCalendar);
     const credited = on;

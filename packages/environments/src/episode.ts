@@ -90,8 +90,12 @@ export interface Environment<T, A> {
   readonly tools: readonly ToolSpec[];
   readonly submitTool: string;
   render(task: T): string;
-  /** Runs a non-submit tool. Throwing is an error observation, never a crash. */
-  execute(name: string, input: unknown): string;
+  /**
+   * Runs a non-submit tool. Throwing is an error observation, never a crash.
+   * The loop hands it the task, for a tool that reads the task's own
+   * material (call-qa's search of the transcript); every other tool ignores it.
+   */
+  execute(name: string, input: unknown, task?: T): string;
   parseAnswer(input: unknown): Parsed<A>;
   grade(task: T, answer: A | null): Grade;
 }
@@ -202,7 +206,7 @@ export async function runEpisode<T, A>(
         try {
           observations.push({
             call_id: call.id,
-            content: env.execute(call.name, call.input),
+            content: env.execute(call.name, call.input, task),
             is_error: false,
           });
         } catch (e) {

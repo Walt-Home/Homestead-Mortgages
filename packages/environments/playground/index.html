@@ -1623,7 +1623,7 @@ details.plain > summary + * { margin-top: 8px; }
     var entry = { kind: "call", n: ++s.logN, name: tool.name, input: got.input, output: null, error: null };
     if (got.problems.length) entry.error = got.problems.join(" ");
     else {
-      try { entry.output = String(env.execute(tool.name, got.input)); }
+      try { entry.output = String(env.execute(tool.name, got.input, s.task)); }
       catch (e) { entry.error = e && e.message ? e.message : String(e); }
     }
     s.log.push(entry);

@@ -8,7 +8,7 @@
  * them: `draw` is the environment's own generator, `grade` its own grader,
  * `solve` its reference policy run through `runEpisode`, the loop every
  * model is scored in. `scripts/build-playground.mjs` bundles this file, with
- * `node:crypto`, `node:fs` and `node:path` replaced by `shims/`.
+ * `node:crypto`, `node:fs`, `node:path` and `node:url` replaced by `shims/`.
  *
  * Only the train split and the spec's own cases are reachable. The held-out
  * suite is what every reported score is measured on, so `draw` refuses any
@@ -188,6 +188,17 @@ import {
   expectedEi,
   generateEiTask,
 } from "../src/ei/index.js";
+import {
+  CALL_QA_SPEC_CASES,
+  CallQaReferencePolicy,
+  callQa,
+  callQaPayload,
+  callQaSpecTasks,
+  callQaTaskId,
+  callQaVerdict,
+  expectedCallQa,
+  generateCallQaTask,
+} from "../src/call-qa/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
 
@@ -241,8 +252,11 @@ export interface PlaygroundEnvironment {
   render(task: TaskRef): string;
   /** The task's data, exactly as the rendered prompt carries it. */
   payload(task: TaskRef): Record<string, Json>;
-  /** Runs a tool other than the submit tool; throws on bad input, as the episode loop's tools do. */
-  execute(name: string, input: unknown): string;
+  /**
+   * Runs a tool other than the submit tool; throws on bad input, as the episode loop's tools do.
+   * A tool that reads the task's own material (call-qa's transcript search) is handed the task.
+   */
+  execute(name: string, input: unknown, task?: TaskRef): string;
   /** Reads a submission strictly, as the episode loop does. */
   parse(raw: unknown): ParseResult;
   /** An answer (parse's, or null for none) held to the engine's, field by field. */
@@ -372,7 +386,8 @@ function playground<T extends Coordinates, A>(d: Definition<T, A>): PlaygroundEn
     spec: (): TaskRef[] => d.spec().map((t) => refOf(remember(t))),
     render: (task: TaskRef): string => env.render(resolve(task)),
     payload: (task: TaskRef) => plain<Record<string, Json>>(d.payload(resolve(task))),
-    execute: (name: string, input: unknown): string => env.execute(name, input),
+    execute: (name: string, input: unknown, task?: TaskRef): string =>
+      env.execute(name, input, task === undefined ? undefined : resolve(task)),
     parse,
     grade(task: TaskRef, answer: unknown): Grade {
       const t = resolve(task);
@@ -830,6 +845,21 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     expected: expectedEi,
     verdictOf: eiVerdict,
     reference: () => new EiReferencePolicy(),
+  }),
+  playground({
+    env: callQa,
+    title: "Call QA",
+    side: "servicing",
+    summary:
+      "One recorded servicing call reviewed the way a QA desk reviews it: who was told what before they were verified, the AI, recording and collection disclosures, the dialer's pre-dial checks (consent, line type, time zone, the call cap, a cease, a bankruptcy, counsel), the servicemember script, threats, modification terms, a second voicemail, collection language in a bankruptcy, the credit misstatement, a complaint not logged, every figure against the record, a template read whole, the note against the record, and the options told. Graded by the call rubric, which runs the servicing app's own provenance and verbatim checks.",
+    id: callQaTaskId,
+    one: generateCallQaTask,
+    spec: callQaSpecTasks,
+    specNames: CALL_QA_SPEC_CASES.map((c) => c.name),
+    payload: callQaPayload,
+    expected: expectedCallQa,
+    verdictOf: callQaVerdict,
+    reference: () => new CallQaReferencePolicy(),
   }),
 ]);
 

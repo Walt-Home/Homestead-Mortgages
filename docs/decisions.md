@@ -7345,3 +7345,106 @@ automatically (plan section 4): C-01 to C-08. Each changes one turn, its
 interpreter relay, one row or one note. Every other turn stays word for word,
 because each turn's noise draws from a stream keyed by its place in the
 clean call. Each label is the life generator's, with the turn added.
+
+## A call is reviewed against the collections spec, by the servicing app's own checks where they carry over
+
+**Built 23 October 2026,** as the call rubric (`src/calls`) and `call-qa`
+1.0.0 in `packages/environments`. A task is one recorded call from the
+contact center: its row, its transcript as the recorder wrote it, the
+loan's record on the day, the dialer's facts and the agent's note. The
+model reviews it as a QA desk does: every rubric item the call fails, with
+its line; whether it fails outright; whether the note matches the record;
+and the options the agent named. docs/environments.md, "call-qa", has the
+rubric and the suite.
+
+**Why this one.**
+
+- QA is where a servicer finds out what its agents, and soon its AI voice,
+  actually said. The servicing app's collections spec asks for exactly this
+  before the AI voice goes live: evaluation suites for disclosure
+  compliance, prohibited-statement detection and the quiet-hour and
+  frequency guards (11.1, line 56), over a decision record that names every
+  pre-dial check (line 158).
+- The contact center already plants and labels the defects a QA team fails
+  a call for. What it lacked was the grader.
+- The work is reading, against rules, in a long noisy text: who was
+  verified before what was said, which disclosure was due, whether the dial
+  should have happened at all, and whether each figure has a source.
+
+**Two of the harness's five checks carry over, ported.** The servicing
+app's conversation harness grades its chat agent with provenance, verbatim,
+SAFE and inquiries, evidence and completion (`checks.ts:1-25`). Provenance
+and verbatim read only words and a record, so they read a call as well as a
+thread. The other three read the chat product's own tables (the turn log,
+the cards, the events). The port is the harness's `types.ts` byte for byte
+and its `checks.ts` through the second check, byte for byte but for the
+imports: the import of `ops-21-1.ts` is dropped because only the third check
+reads it. A port of a file's first part is new here; a test cuts the source
+at the third check's rule and compares, so a change above the cut fails it
+and a change below does not.
+
+**The rest of the rubric restates the servicing app where it can, and says
+so where it cannot.**
+
+- The pre-dial checks are `preDialChecks` (`section11.ts:84-105`) through
+  its evaluators, held line by line, less the post-conversation cooling-off,
+  the pre-sale stop and the workplace rule, which nothing here draws.
+- The threat words are `THREAT_WORDS`, the options the servicing app's own
+  names, the voicemail and counsel rules its guardrails at lines 336-337.
+- The recording notice, the AI disclosure, the servicemember script,
+  collection language, the credit misstatement, a complaint and terms
+  offered are phrase lists of ours. The servicing app reads these from its
+  own decision record (`statements_made`, `terms_quoted`), which a
+  recorded call does not carry.
+- The military flag stops no dial. 11.1's decision record lists it among
+  the pre-dial checks, and its guardrail sentence names it, but
+  `PreDialChecks` has no key for it, and the spec's edge case says the
+  cadence continues and the script adds the military path. The rubric reads
+  it as the script.
+
+**A rule reads words, and says which.** A reviewer of free text and a
+grader agree only when the grader's rule is one the reviewer can apply, so
+each text rule lists the phrases it reads, the rulebook writes the same
+constants in, and a line that means the same in other words is not a
+finding. That makes the environment's text rules narrow. What it keeps
+hard: deciding which disclosure was due, reading the dial's time in every
+zone and its counts in a trailing window, the servicing app's
+digit-run provenance over a whole record, and a note copied forward read
+against the day it was first written.
+
+**The tools read the task, so the episode loop hands them it.** A search of
+the transcript and the record on another day are task material. Every tool
+so far was a pure function of its input, and `Environment.execute` took
+none. It now takes the task as an optional third argument, which the loop
+passes and every other environment ignores; the playground passes the task
+it has drawn. The record on another day is rebuilt from the task's book
+seed, its scenario and the contact center's pins, at the typed default
+calibration, so the task never moves when the calibration file or its
+reader does.
+
+**The generator filters, and says why.** ei-clocks' guard rejects nothing
+it draws. call-qa's turns away about one built draw in nine: where the
+recognizer misheard a figure or a word a rule reads (the reviewer could
+not tell the slip from the agent's), where the contact center's own dialer
+dialed outside the rubric's window or over a state's cap (a real breach
+with no label), and where a wrong amount's digits are already the record's.
+Each is a filter on the suite's distribution, named in docs/environments.md
+under "What v1 leaves out".
+
+**Two defects in the contact center, fixed where they were.** Building the
+suite found two calls the contact center could not write:
+
+- a C-02 plant on a call whose record had neither an amount past due nor a
+  next installment threw on the missing slot. It now has no turn to go in,
+  as the other plants do when theirs is missing;
+- a payment that went to no installment (held in suspense, or all
+  principal) left the last-payment statement with no template, and a book
+  with one such call threw while writing its notes. The clause naming the
+  installment is now left out instead.
+
+Neither changes a call the contact center could write before.
+
+**Not in 1.0.0:** calls through an interpreter, mono recordings, welcome
+calls, the three gates above, 11.1-T23's fifteen-second rule, and whether
+an option told was appropriate (comment 39(a)-4). docs/environments.md has
+why for each.

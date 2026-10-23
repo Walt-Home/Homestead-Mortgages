@@ -31,3 +31,5 @@ export * as aus from "./aus/index.js";
 export * as life from "./life/index.js";
 export * as contacts from "./contacts/index.js";
 export * as ei from "./ei/index.js";
+export * as calls from "./calls/index.js";
+export * as callQa from "./call-qa/index.js";

@@ -11,7 +11,8 @@
  * - `environments.js`: `playground/entry.ts` bundled by esbuild as one
  *   minified IIFE that sets `globalThis.HMEnvironments`. The workspace
  *   packages are read from their source, so no `tsc -b` has to run first,
- *   and `node:crypto`, `node:fs` and `node:path` are `playground/shims/`.
+ *   and `node:crypto`, `node:fs`, `node:path` and `node:url` are
+ *   `playground/shims/`.
  *   Any other `node:` import, or any module only the CLI needs (the model
  *   clients, the archive, the comparison, the audit's command line), stops
  *   the build: a page that loads it would break where nobody is watching.
@@ -57,6 +58,7 @@ const SOURCES = {
   "node:crypto": join(pkg, "playground/shims/node-crypto.ts"),
   "node:fs": join(pkg, "playground/shims/node-fs.ts"),
   "node:path": join(pkg, "playground/shims/node-path.ts"),
+  "node:url": join(pkg, "playground/shims/node-url.ts"),
 };
 
 /**

@@ -25,6 +25,7 @@
  *   npm run env:refi -w @hm/environments -- --env metro2-furnishing --policy reference
  *   npm run env:refi -w @hm/environments -- --env aus-decision --policy reference
  *   npm run env:refi -w @hm/environments -- --env ei-clocks --policy reference
+ *   npm run env:refi -w @hm/environments -- --env call-qa --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -255,6 +256,19 @@ import {
   type EiAnswer,
   type EiTask,
 } from "./ei/index.js";
+import {
+  CALL_QA_FINGERPRINT,
+  CALL_QA_HELDOUT_SUITE,
+  CallQaReferencePolicy,
+  callQa,
+  callQaSpecTasks,
+  callQaTaskId,
+  callQaVerdict,
+  generateCallQaSuite,
+  generateCallQaTask,
+  type CallQaAnswer,
+  type CallQaTask,
+} from "./call-qa/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -287,7 +301,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof LOSSMIT_FINGERPRINT
     | typeof METRO2_FINGERPRINT
     | typeof AUS_FINGERPRINT
-    | typeof EI_FINGERPRINT;
+    | typeof EI_FINGERPRINT
+    | typeof CALL_QA_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -563,6 +578,18 @@ const BENCHES = {
     verdictOf: eiVerdict,
     reference: () => new EiReferencePolicy(),
   } satisfies Bench<EiTask, EiAnswer>,
+  // One recorded call reviewed against the call rubric, graded by the rubric's own functions.
+  "call-qa": {
+    env: callQa,
+    fingerprint: CALL_QA_FINGERPRINT,
+    heldout: CALL_QA_HELDOUT_SUITE,
+    suite: generateCallQaSuite,
+    one: generateCallQaTask,
+    taskId: callQaTaskId,
+    spec: callQaSpecTasks,
+    verdictOf: callQaVerdict,
+    reference: () => new CallQaReferencePolicy(),
+  } satisfies Bench<CallQaTask, CallQaAnswer>,
 };
 
 const { values } = parseArgs({
@@ -754,6 +781,7 @@ async function main(): Promise<void> {
   if (values.env === "metro2-furnishing") return run(BENCHES["metro2-furnishing"]);
   if (values.env === "aus-decision") return run(BENCHES["aus-decision"]);
   if (values.env === "ei-clocks") return run(BENCHES["ei-clocks"]);
+  if (values.env === "call-qa") return run(BENCHES["call-qa"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

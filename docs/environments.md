@@ -2756,17 +2756,203 @@ defects in all.
 
 **Not covered yet:**
 
-- the call-QA environment itself: its task, its rubric from the collections
-  spec, and its grader;
 - the §1024.40 assignment and the good-faith determination;
 - credit disputes, loss mitigation past the application package, and
   foreclosure;
-- the AI voice, as live contact only in a sandbox (11.1 rule 8);
+- the AI voice, as live contact only in a sandbox (11.1 rule 8). call-qa
+  (below) writes the AI voice's introduction into a call itself;
 - the text of e-mails and letters, and phone-menu transcripts;
 - a bankruptcy the history's payments know about.
 
 The 300-loan book's center takes about three seconds, and a thousand
 transcripts about a second.
+
+## call-qa
+
+call-qa 1.0.0 grades a QA reviewer: one recorded servicing call, reviewed
+the way the servicer's QA desk reviews it. The call comes from the contact
+center above; the form is the servicing app's collections spec, 11.1
+(`11-1-live-contact.md`): the decision record and guardrails every AI call
+is held to (line 158) and the evaluation suite its go-live needs (line 56:
+disclosure compliance, prohibited-statement detection, quiet-hour and
+frequency guard tests).
+
+**An AI voice is not yet the live contact the law requires.** 11.1 counts a
+conversation with the AI voice as Regulation X §1024.39(a) live contact and
+Fannie Mae QRPC only after a written legal opinion and the partner's
+sign-off are attached to the flag that turns it on (line 54); until then the
+flag is on only in a sandbox, and production's default waits on open
+decision 11.1-Q1. call-qa grades what an AI call said and whether it should
+have been dialed, never whether it was live contact.
+
+**The task.** It gives the call as the desk has it the day after:
+
+- the call's row: the direction, a person or the AI voice, the outcome, who
+  it was with, whether they passed the identity checks, whether the agent
+  logged a complaint, and the loan's debt-collector and active-duty flags;
+- the transcript, line by line: the time, the stereo recording's channel
+  (Agent, Customer, IVR) and the recognizer's text, noise and all;
+- the loan's record at the end of the call's day, in dollars;
+- for an outbound call, the facts the dialer held when it dialed, named as
+  the servicing app's `preDialChecks` names them;
+- the agent's note, when the call left one.
+
+The model lists every rubric item the call fails, with its line (or none,
+for what is missing and what happened before the call), says whether the
+call fails outright, whether the note matches the record (and what in it
+does not), and which loss-mitigation options the agent named, at the first
+line that names each.
+
+**The rubric** (`src/calls/`) is not an environment either; call-qa grades
+with it. Its items:
+
+- **Who was told what.** A dollar amount said to someone nobody verified.
+- **Disclosures.** The AI voice says it is an automated assistant among its
+  first three lines (11.1 design item 1). An outbound conversation carries
+  the recording notice. A conversation carries the mini-Miranda when the
+  servicer is a debt collector or the loan is past due, and during a
+  bankruptcy case the informational-only disclaimer in its place.
+- **Before the call.** Consent (an AI voice to a mobile number needs TCPA
+  consent), the line type (an AI voice to a landline without written
+  consent, three in 30 days), the time zone (after 08:00 and through 20:30
+  in every candidate zone), the call count (7 in 7 days for a debt
+  collector, 2 in Massachusetts, 5 elsewhere), and a cease, a bankruptcy or
+  counsel on file.
+- **The loan's flags.** An active-duty servicemember is told of the
+  Servicemembers Civil Relief Act. 11.1 makes the military flag part of the
+  pre-dial record but stops no dial on it ("cadence continues but scripts add
+  the military-indulgence path"), so the rubric reads it as the script.
+- **What is never said.** A threat, modification terms offered, a second
+  voicemail on a number within 7 days, collection language during a
+  bankruptcy case, "this won't hurt your credit", a complaint voiced and not
+  logged.
+- **Figures.** Every run of digits an agent says has a source in the
+  caller's words or the record: the servicing app's provenance check. A run
+  inside a dollar amount with no source is a wrong amount; any other is
+  provenance.
+- **Verbatim.** No agent line is a copy-library template read whole: the
+  servicing app's verbatim check, over six of its lines a delinquent
+  borrower's call could reach.
+- **The note.** Every number in the agent's own note is in the record of
+  the call's day, every number in a note copied forward is in the record of
+  the day it was first written, and an account the note calls current or
+  past due is.
+
+Five items fail a call outright, whatever else the call did well: a
+disclosure to someone unverified, collection language during a bankruptcy
+case, the credit misstatement, a complaint not logged, and a wrong amount.
+
+**The grader is the rubric, and two of its checks are the servicing app's
+own.** The conversation harness grades the app's chat agent with five
+checks (`apps/servicing/src/domain/borrower/eval/checks.ts:1-25`). Two read
+nothing but words and a record, and carry over to a call: provenance and
+verbatim. `src/calls/ported/` holds the harness's `types.ts` byte for byte
+and its `checks.ts` through those two checks, byte for byte but for the
+imports; a test compares them. The other three read the chat product's own
+tables. Every word list and gate the rubric restates is held by a test to
+the line it comes from: the threat words and the options
+(`section11.ts:54-57`), the pre-dial checks (`section11.ts:84-105` and the
+evaluators at `evaluators.ts:256-259`), the state caps
+(`early-intervention/ops.ts:499`), the voicemail and counsel guardrails
+(`section11.ts:336-337`), and the templates, parsed from the copy library
+the way `channels.ts` parses it. The rest of the words are ours, each a
+design choice that says so.
+
+**The tools.** `search_transcript` (the lines that say each phrase, read as
+the rulebook reads them), `record_on` (the record on any day up to the
+call's, rebuilt from the book's seed), `local_time` and `minutes_between`.
+No tool returns a finding. The first two read the task's own material: the
+episode loop now hands a tool the task, a third argument every other
+environment ignores, and the browser playground passes the task it has
+drawn.
+
+**The tasks** cycle by index through thirty edges, seven each in the
+210-task held-out suite:
+
+- eight clean calls: an inbound conversation; an outbound collection call;
+  a caller nobody verified (a spouse not on the note, an answering third
+  party or wrong number, a refusal); a voicemail; the AI voice (to a
+  consenting mobile, or a landline under its cap); an active-duty
+  servicemember told of the protections; a call during a bankruptcy case;
+  and a debt collector's call;
+- the contact center's eight defects, C-01 to C-08, planted by
+  `plantContactDefects`;
+- fourteen of ours, Q-01 to Q-14: the AI voice that does not disclose;
+  consent; the fourth landline call; the time zone, early and late; the
+  call count, a debt collector's and the policy's; a cease, oral and
+  written; a dial into a bankruptcy case; counsel; a servicemember not
+  told; a threat; terms offered; a second voicemail; a template read whole;
+  and an invented figure.
+
+Each draw is a fresh book of one loan (four for a complaint, a call few
+loans make) from the task's own key, behind the way its edge needs, run
+through the contact center. A dial into a bankruptcy is the one plant that
+brings findings beyond its own: the call that ignored the case carries the
+mini-Miranda, not the disclaimer, and often asks for a payment. On the
+held-out suite 63 calls are clean, 108 fail items and 39 fail outright;
+every item turns up seven times or more.
+
+**A draw is kept only when it is fair to grade, and this is a filter.**
+ei-clocks' guard rejects nothing it draws; this one does. A draw is kept
+when the call without its plant draws no finding and its note matches, the
+planted call draws the plant's finding on the planted line and nothing the
+plant does not name, and the rubric finds exactly the same on the
+recognizer's text and labels as on what was said, by whom. Of 1,500 first
+draws, 486 found no call that fits their edge and drew again; of the rest,
+86 were turned away because the recognizer's noise moved a finding (a
+misheard amount reads as a wrong one), 21 because the contact center's own
+dialer broke the rubric's window or a state's cap, and 1 because a wrong
+amount's digits were already in the record. The kept draws average 1.8
+attempts, at most 13 on the held-out suite.
+
+**What v1 leaves out, and why.**
+
+- A call the recognizer misheard where it matters: a figure, or a word a
+  rule reads. The reviewer reading the text could not tell the recognizer's
+  slip from the agent's, and only the label could.
+- A wrong amount whose digits the record already holds: the P&I quoted as
+  the payment, last year's payment, a transposition whose runs are other
+  figures' (the servicing app's check reads runs of digits, so $58.23 for
+  $85.23 passes when 58 and 23 are sources). The same for a note's figure.
+- The contact center's dialer calls from 08:00 to 21:00 and keeps no state
+  cap. A clean call it dialed at 08:00, after 20:30 or past Massachusetts'
+  two in seven days is a real breach of the rubric with no label, and v1
+  does not draw it.
+- Calls through an interpreter, mono recordings (whose speaker labels a
+  reviewer would have to infer), welcome calls after a transfer, and the
+  servicing app's other three pre-dial gates: the post-conversation
+  cooling-off (§1006.14(b)(2)(ii), which ei-clocks leaves out too), the
+  pre-sale stop and the workplace rule. 11.1-T23's first-fifteen-seconds
+  rule for an all-party-consent state is out too: the contact center's dead
+  air puts some clean notices past it.
+- Whether a loss-mitigation option was appropriate to tell (comment
+  39(a)-4). The rubric reads which options were named; the servicing app
+  checks named options against `lossmit_facts`, which the record here does
+  not carry.
+
+**The proof of fairness.** The reference reads its word lists from the
+rubric's constants (the rulebook writes the same constants in) and none of
+the rubric's code: it reads the figures, the templates and the note as the
+rulebook's sentences say. It passes the held-out suite, a 300-task training
+suite and seventeen spec cases: 11.1-T12's three dial times (20:45 ET and
+08:00 PT refused, 12:00 ET permitted), T10, T21 and its boundary, T13's
+eighth counted call, T7's dial into a Chapter 13 case, rule 13's $4,165.00
+and a balance worked out instead, design item 1, Q3, the threat and
+negotiation guardrails, T23, and the edge cases' cease and counsel. It
+takes two turns: every search, clock reading and other day's record in one,
+then the submission; at most 11 tool calls. On the contact center's own
+calls, as said, over a 120-loan book, the rubric finds nothing but the
+dialer's own breaches; on its planted defects it finds C-01 to C-04, C-06
+and C-07 every time, and C-05 and C-08 except where the record holds the
+planted figure.
+
+The scores to read a model against, on the held-out suite: an answer that
+says nothing scores 0.496 and passes 7 (clean calls with no note and no
+option named); one that calls every call clean but gets the note and the
+options right scores 0.762 and passes the 63 clean calls; one that names
+every finding but no line scores 0.912. A test holds the pins.
+
+Generating the held-out suite takes about six seconds.
 
 ## The Supermortgage Gym
 
@@ -2810,6 +2996,7 @@ npm run env:refi -w @hm/environments -- --env lossmit-retention --policy referen
 npm run env:refi -w @hm/environments -- --env metro2-furnishing --policy reference
 npm run env:refi -w @hm/environments -- --env aus-decision --policy reference
 npm run env:refi -w @hm/environments -- --env ei-clocks --policy reference
+npm run env:refi -w @hm/environments -- --env call-qa --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

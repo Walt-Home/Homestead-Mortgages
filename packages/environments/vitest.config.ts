@@ -12,6 +12,9 @@ export default defineConfig({
       "@hm/kernel/money": resolve(packages, "kernel/src/kernel/money/index.ts"),
       "@hm/kernel/calendar": resolve(packages, "kernel/src/kernel/calendar/index.ts"),
       "@hm/refi-review": resolve(packages, "refi-review/src/index.ts"),
+      // The tape reader, for the tape writer's round trip; a test-only import.
+      "@hm/partner-book": resolve(packages, "partner-book/src/index.ts"),
+      "@hm/shared/portfolio": resolve(packages, "shared/src/portfolio.ts"),
     },
   },
   test: {

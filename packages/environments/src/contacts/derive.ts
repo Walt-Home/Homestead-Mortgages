@@ -144,6 +144,26 @@ const ATTEMPT_GAP: readonly (readonly [number, number])[] = [
   [6, 0.15],
   [7, 0.15],
 ];
+/**
+ * When the dialer calls, in minutes of the day at the property: after 08:00
+ * and through 20:30 on a weekday (the voice window of 11.1 rule 8, which
+ * policy narrows from Reg F's 08:00 to 21:00), mornings, afternoons and
+ * evenings for A4-2.1-04's varied times, and 09:00 to 15:00 on a Saturday.
+ */
+const DIAL_MINUTES = {
+  morning: [8 * 60 + 1, 12 * 60 - 1],
+  afternoon: [12 * 60, 17 * 60 - 1],
+  evening: [17 * 60, 20 * 60 + 30],
+  saturday: [9 * 60, 15 * 60 - 1],
+} as const;
+/**
+ * Massachusetts allows two calls to a borrower in seven days (940 CMR 7.04),
+ * which the servicing app's `stateOverlay` (early-intervention/ops.ts:499)
+ * applies to every loan there, a debt collector's too. There the dialer
+ * waits at least this long after an attempt, and a third attempt is at
+ * least eight days after the first of the two before it.
+ */
+const TWO_IN_SEVEN_GAP = 4;
 /** A conversation that records a promise when the borrower pays within three weeks, or that promises and breaks it. */
 const BROKEN_PROMISE = 0.35;
 const LOSSMIT_PACKAGE_AFTER_HARDSHIP = 0.4;
@@ -1174,6 +1194,9 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
   const badCount = new Map<string, number>();
   const removed = new Set<string>();
   const notices: PlainDate[] = [];
+  const twoInSeven = d.property.state === "MA";
+  /** The day of every attempt so far, for Massachusetts' two calls in seven days. */
+  const dialed: PlainDate[] = [];
   for (const ep of episodes) {
     const issue = `dq:${ep.start}`;
     const r = rngFor(`${lk}/dq/${ep.start}`);
@@ -1196,9 +1219,16 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
           dd = dialOnOrAfter(addDays(w.to, 1));
           continue;
         }
+        // Massachusetts: the third call at least eight days after the first of the two before it.
+        const twoBack = dialed[dialed.length - 2];
+        if (twoInSeven && twoBack !== undefined && daysBetween(twoBack, dd) < 8) {
+          dd = dialOnOrAfter(addDays(twoBack, 8));
+          continue;
+        }
         const ar = rngFor(`${lk}/dq/${ep.start}/${n}`);
         const a = attempt(ar, dd, n, issue);
         drafts.push(a);
+        dialed.push(dd);
         n++;
         if (
           a.outcome === "conversation" &&
@@ -1225,7 +1255,7 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
           continue;
         }
         const g = r.weighted(ATTEMPT_GAP);
-        let nx = addDays(dd, g);
+        let nx = addDays(dd, twoInSeven ? Math.max(g, TWO_IN_SEVEN_GAP) : g);
         while (!isDialDay(nx) && nx > addDays(dd, 1)) nx = addDays(nx, -1);
         if (!isDialDay(nx)) nx = dialOnOrAfter(nx);
         dd = nx;
@@ -1257,11 +1287,11 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     const phone = usable[n % Math.max(1, usable.length)] ?? profile.phones[0]!;
     const sat = dayOfWeek(on) === 6;
     const minute = sat
-      ? minutesAt(r, 9, 15)
+      ? r.int(...DIAL_MINUTES.saturday)
       : r.weighted([
-          [minutesAt(r, 8, 12), 0.3],
-          [minutesAt(r, 12, 17), 0.4],
-          [minutesAt(r, 17, 21), 0.3],
+          [r.int(...DIAL_MINUTES.morning), 0.3],
+          [r.int(...DIAL_MINUTES.afternoon), 0.4],
+          [r.int(...DIAL_MINUTES.evening), 0.3],
         ] as const);
     const coB = b2 !== undefined && r.chance(0.25);
     const agent = agentFor(r, on);
@@ -1370,7 +1400,9 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     const r = rngFor(`${lk}/welcome`);
     if (r.chance(WELCOME_CALL)) {
       const on = dialOnOrAfter(addDays(life.transfer_in_on, r.int(7, 21)));
-      if (active(on) && !barred(on)) {
+      // In Massachusetts, never within a week of a collection attempt, so no seven days hold three calls.
+      const crowded = twoInSeven && dialed.some((x) => Math.abs(daysBetween(x, on)) < 8);
+      if (active(on) && !barred(on) && !crowded) {
         const a = attempt(r, on, 0, "transfer");
         drafts.push({
           ...a,

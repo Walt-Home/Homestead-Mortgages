@@ -55,7 +55,11 @@ export function replaceTurn(
   return out;
 }
 
-/** A new turn before index `i`, in the gap after the turn before it. */
+/**
+ * A new turn before index `i`, in the gap after the turn before it. Where
+ * the two turns around it overlap (crosstalk), it starts no later than the
+ * turn after it, so the transcript's times never run backwards.
+ */
 export function insertTurn(
   turns: readonly Turn[],
   i: number,
@@ -67,14 +71,19 @@ export function insertTurn(
 ): Turn[] {
   const before = turns[i - 1];
   const after = turns[i];
-  const start = before ? before.end_s + 0.4 : 0;
+  const gap = before ? before.end_s + 0.4 : 0;
+  // Rounded to a tenth, then held between the starts of the turns around it.
+  const start = Math.min(
+    Math.max(Math.round(gap * 10) / 10, before?.start_s ?? 0),
+    after?.start_s ?? Infinity,
+  );
   const want = start + said.split(/\s+/).length / RATE;
   const end = after ? Math.max(start + 0.5, Math.min(want, after.start_s - 0.2)) : want;
   const h = heard(rngFor(`${key}/asr`), said, lower);
   const turn: Turn = {
     speaker,
     label: LABEL[speaker],
-    start_s: Math.round(start * 10) / 10,
+    start_s: start,
     end_s: Math.round(end * 10) / 10,
     said,
     text: h.text,

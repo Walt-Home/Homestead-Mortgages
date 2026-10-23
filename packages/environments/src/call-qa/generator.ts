@@ -31,9 +31,8 @@
  * the plant's finding where it was planted, and nothing else but the
  * symptoms the plant names; and the rubric finds exactly the same on the
  * recognizer's text and labels as on what was said, by whom. Where the
- * recognizer's noise moves a finding, or the contact center's own dialer
- * dialed outside the rubric's window or over a state's cap, the draw is
- * redrawn, and docs/environments.md says so.
+ * recognizer's noise moves a finding, or a wrong amount's digits are the
+ * record's already, the draw is redrawn, and docs/environments.md says so.
  */
 
 import { addDays, type PlainDate } from "@hm/kernel/calendar";

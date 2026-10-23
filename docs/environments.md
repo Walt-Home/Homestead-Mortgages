@@ -2568,7 +2568,10 @@ rows.
   `:151-155`). A pending promise ceases it until its date; a petition
   suspends it (`plan.ts:179-181`). On a debt-collector loan, the next call
   after a conversation waits 7 days (§1006.14(b)(2)(ii)). The dialer runs
-  Monday to Saturday, in the morning, afternoon and evening.
+  Monday to Saturday, in the morning, afternoon and evening, after 08:00
+  and through 20:30 at the property (the voice window of 11.1 rule 8). On a
+  Massachusetts loan it calls twice in seven days at most (940 CMR 7.04),
+  and a welcome call stays a week away from the collection calls.
 - **How an attempt ends.** About one in seven is a conversation. The rest are
   no answer, voicemail (one per number per 7 days, the 11.1 guardrail),
   busy, someone else answering, a refusal, a reassigned number (wrong party)
@@ -2609,9 +2612,10 @@ rows.
   verification. A Spanish-speaking borrower (4%, or 40% with a Spanish
   surname) talks through an interpreter.
 - **A bankruptcy.** The life generator has none yet, so the contact center
-  draws one on 2% of delinquencies that reach day 30, 70% of them Chapter 13. From the petition no collection call is made, and every call after the
-  attorney's notice carries the informational-only disclaimer. The history's
-  payments do not know about the case.
+  draws one on 2% of delinquencies that reach day 30, 70% of them under
+  Chapter 13. From the petition no collection call is made, and every call
+  after the attorney's notice carries the informational-only disclaimer.
+  The history's payments do not know about the case.
 - **Handle time.** A lognormal around the calibration's mean, by reason (a
   hardship runs longest, a statement copy shortest), longer through an
   interpreter, with a 90-second floor.
@@ -2715,7 +2719,7 @@ the user, an area code and the text.
   agent's own rate.
 - **A collector often copies the last note on a delinquency forward**
   (`copied_from`), so its figures are of the day it was first written.
-- **The median agent note is 231 characters**, and a longer call leaves a
+- **The median agent note is 238 characters**, and a longer call leaves a
   longer note.
 
 **The seam for model-written text.** `ContactTextWriter` (`writer.ts`) is the
@@ -2759,8 +2763,10 @@ defects in all.
 - the §1024.40 assignment and the good-faith determination;
 - credit disputes, loss mitigation past the application package, and
   foreclosure;
-- the AI voice, as live contact only in a sandbox (11.1 rule 8). call-qa
-  (below) writes the AI voice's introduction into a call itself;
+- the AI voice, which 11.1 counts as live contact only in a sandbox until
+  a legal opinion and the partner's sign-off (design item 8;
+  `11-1-live-contact.md:54`). call-qa (below) writes the AI voice's
+  introduction into a call itself;
 - the text of e-mails and letters, and phone-menu transcripts;
 - a bankruptcy the history's payments know about.
 
@@ -2811,7 +2817,10 @@ with it. Its items:
   first three lines (11.1 design item 1). An outbound conversation carries
   the recording notice. A conversation carries the mini-Miranda when the
   servicer is a debt collector or the loan is past due, and during a
-  bankruptcy case the informational-only disclaimer in its place.
+  bankruptcy case the informational-only disclaimer in its place. The
+  FDCPA asks the mini-Miranda of a debt collector alone (§1006.18(e)); on a
+  past-due loan that is not one it is the contact center's policy (ours),
+  which the rubric holds its calls to.
 - **Before the call.** Consent (an AI voice to a mobile number needs TCPA
   consent), the line type (an AI voice to a landline without written
   consent, three in 30 days), the time zone (after 08:00 and through 20:30
@@ -2886,24 +2895,26 @@ drawn.
 
 Each draw is a fresh book of one loan (four for a complaint, a call few
 loans make) from the task's own key, behind the way its edge needs, run
-through the contact center. A dial into a bankruptcy is the one plant that
-brings findings beyond its own: the call that ignored the case carries the
-mini-Miranda, not the disclaimer, and often asks for a payment. On the
-held-out suite 63 calls are clean, 108 fail items and 39 fail outright;
-every item turns up seven times or more.
+through the contact center. Two plants bring findings beyond their own. A
+demand in a bankruptcy case (C-02) takes the disclaimer's turn, so the
+disclaimer is missing too. A dial into a bankruptcy (Q-07) ignored the case
+on the call as well: it carries the mini-Miranda, not the disclaimer, and
+often asks for a payment. On the held-out suite 63 calls are clean, 108
+fail items and 39 fail outright; every item turns up seven times or more.
 
 **A draw is kept only when it is fair to grade, and this is a filter.**
 ei-clocks' guard rejects nothing it draws; this one does. A draw is kept
 when the call without its plant draws no finding and its note matches, the
 planted call draws the plant's finding on the planted line and nothing the
 plant does not name, and the rubric finds exactly the same on the
-recognizer's text and labels as on what was said, by whom. Of 1,500 first
-draws, 486 found no call that fits their edge and drew again; of the rest,
-86 were turned away because the recognizer's noise moved a finding (a
-misheard amount reads as a wrong one), 21 because the contact center's own
-dialer broke the rubric's window or a state's cap, and 1 because a wrong
-amount's digits were already in the record. The kept draws average 1.8
-attempts, at most 13 on the held-out suite.
+recognizer's text and labels as on what was said, by whom. Of the first
+draws of 1,500 training tasks (seed 3), 469 found no call that fits their
+edge and drew again; of the other 1,031, 78 were turned away because the
+recognizer's noise moved a finding (a misheard amount reads as a wrong
+one) and 1 because a wrong amount's digits were already in the record. The
+contact center's clean calls draw no finding of their own, its dialer's
+times and counts included. The kept draws average 1.8 attempts, at most 13
+on the held-out suite.
 
 **What v1 leaves out, and why.**
 
@@ -2914,10 +2925,10 @@ attempts, at most 13 on the held-out suite.
   the payment, last year's payment, a transposition whose runs are other
   figures' (the servicing app's check reads runs of digits, so $58.23 for
   $85.23 passes when 58 and 23 are sources). The same for a note's figure.
-- The contact center's dialer calls from 08:00 to 21:00 and keeps no state
-  cap. A clean call it dialed at 08:00, after 20:30 or past Massachusetts'
-  two in seven days is a real breach of the rubric with no label, and v1
-  does not draw it.
+- An amount said before the identity checks on a call that passed them
+  later. The rubric reads the row's `identity_verified`, not the line where
+  the checks passed, which a transcript does not mark; the contact center
+  never quotes before its checks, and a test holds it to that.
 - Calls through an interpreter, mono recordings (whose speaker labels a
   reviewer would have to infer), welcome calls after a transfer, and the
   servicing app's other three pre-dial gates: the post-conversation
@@ -2941,13 +2952,12 @@ and a balance worked out instead, design item 1, Q3, the threat and
 negotiation guardrails, T23, and the edge cases' cease and counsel. It
 takes two turns: every search, clock reading and other day's record in one,
 then the submission; at most 11 tool calls. On the contact center's own
-calls, as said, over a 120-loan book, the rubric finds nothing but the
-dialer's own breaches; on its planted defects it finds C-01 to C-04, C-06
-and C-07 every time, and C-05 and C-08 except where the record holds the
-planted figure.
+calls, as said, over a 120-loan book, the rubric finds nothing; on its
+planted defects it finds C-01 to C-04, C-06 and C-07 every time, and C-05
+and C-08 except where the record holds the planted figure.
 
 The scores to read a model against, on the held-out suite: an answer that
-says nothing scores 0.496 and passes 7 (clean calls with no note and no
+says nothing scores 0.498 and passes 7 (clean calls with no note and no
 option named); one that calls every call clean but gets the note and the
 options right scores 0.762 and passes the 63 clean calls; one that names
 every finding but no line scores 0.912. A test holds the pins.

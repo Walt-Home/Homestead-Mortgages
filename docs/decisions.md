@@ -7423,16 +7423,14 @@ calibration, so the task never moves when the calibration file or its
 reader does.
 
 **The generator filters, and says why.** ei-clocks' guard rejects nothing
-it draws. call-qa's turns away about one built draw in nine: where the
+it draws. call-qa's turns away about one built draw in thirteen: where the
 recognizer misheard a figure or a word a rule reads (the reviewer could
-not tell the slip from the agent's), where the contact center's own dialer
-dialed outside the rubric's window or over a state's cap (a real breach
-with no label), and where a wrong amount's digits are already the record's.
-Each is a filter on the suite's distribution, named in docs/environments.md
-under "What v1 leaves out".
+not tell the slip from the agent's), and where a wrong amount's digits are
+already the record's. Each is a filter on the suite's distribution, named
+in docs/environments.md under "What v1 leaves out".
 
-**Two defects in the contact center, fixed where they were.** Building the
-suite found two calls the contact center could not write:
+**Three defects in the contact center, fixed where they were.** Building
+the suite found two calls the contact center could not write:
 
 - a C-02 plant on a call whose record had neither an amount past due nor a
   next installment threw on the missing slot. It now has no turn to go in,
@@ -7442,7 +7440,19 @@ suite found two calls the contact center could not write:
   with one such call threw while writing its notes. The clause naming the
   installment is now left out instead.
 
-Neither changes a call the contact center could write before.
+Neither changes a call the contact center could write before. The review
+of the branch found a third, which does: the dialer called from 08:00 to
+21:00 and kept no state cap, so 118 of the 4,303 calls it dialed on the
+300-loan book broke the voice window the rubric reads (after 08:00 and
+through 20:30, 11.1 rule 8), and a Massachusetts loan could take a third
+call in seven days (940 CMR 7.04). A clean book carried breaches nobody had
+labeled, and call-qa had to draw around them. The dialer now calls inside
+the window, waits four days between attempts on a Massachusetts loan with
+a third at least eight days after the first of the two before it, and
+keeps a welcome call there a week away from the collection calls; a test
+holds both, and the rubric finds nothing on the clean book's calls. The
+held-out suite was pinned again at 1.0.0, which nothing had yet been
+measured on.
 
 **Not in 1.0.0:** calls through an interpreter, mono recordings, welcome
 calls, the three gates above, 11.1-T23's fifteen-second rule, and whether

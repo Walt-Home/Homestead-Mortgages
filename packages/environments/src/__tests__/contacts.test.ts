@@ -261,6 +261,29 @@ describe("contact center", () => {
     expect(saturdays).toBeGreaterThan(0);
   });
 
+  it("dials inside the voice window, and in Massachusetts twice in seven days at most", () => {
+    const problems: string[] = [];
+    let ma = 0;
+    for (const l of center.loans) {
+      const out = l.contacts.filter((c) => c.direction === "outbound" && c.mode === "call");
+      // 11.1 rule 8: voice after 08:00 and through 20:30 at the property; the dialer rests on Sundays.
+      for (const c of out) {
+        if (!(c.at > "08:00" && c.at <= "20:30")) problems.push(`${c.id}: dialed at ${c.at}`);
+        if (new Date(`${c.on}T12:00:00Z`).getUTCDay() === 0) problems.push(`${c.id}: a Sunday`);
+      }
+      if (lifeOf(l).draw.property.state !== "MA") continue;
+      // 940 CMR 7.04: no seven days hold a third call, read by the clock at the property.
+      const at = (c: ContactRecord) => Date.parse(`${c.on}T${c.at}:00Z`) / 60_000;
+      for (let i = 2; i < out.length; i++) {
+        ma++;
+        if (at(out[i]!) - at(out[i - 2]!) < 7 * 1440)
+          problems.push(`${out[i]!.id}: a third call within 7 days of ${out[i - 2]!.id}`);
+      }
+    }
+    expect(problems.slice(0, 10)).toEqual([]);
+    expect(ma).toBeGreaterThan(20);
+  });
+
   it("leaves at most one voicemail per number per 7 days", () => {
     for (const l of center.loans) {
       const last = new Map<string, PlainDate>();

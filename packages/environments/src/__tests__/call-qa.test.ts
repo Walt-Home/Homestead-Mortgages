@@ -308,33 +308,24 @@ describe("the call rubric", () => {
     );
   });
 
-  it("finds nothing on the contact center's calls as they were said, but the dialer's own breaches of the window and a state's cap", () => {
-    const seen = new Map<string, number>();
+  it("finds nothing on the contact center's calls as they were said, its dialer's window and caps included", () => {
     let n = 0;
+    let dialed = 0;
     const problems: string[] = [];
     for (const loan of center.loans)
       for (const c of callsOf(loan)) {
         if (!reviewable(c)) continue;
         n++;
+        if (c.direction === "outbound") dialed++;
         const r = reviewContactCall(center, book, c.id).said;
-        for (const f of r.findings) {
-          seen.set(f.item, (seen.get(f.item) ?? 0) + 1);
-          // The contact center dials 08:00 to 21:00 (derive.ts `attempt`); the rubric's window is after 08:00 through 20:30.
-          if (f.item === "predial_time_zone" && (c.at > "20:30" || c.at === "08:00")) continue;
-          // It keeps no state cap: Massachusetts allows 2 calls in 7 days (940 CMR 7.04).
-          if (
-            f.item === "predial_regf_count" &&
-            book.loans[center.loans.indexOf(loan)]!.draw.property.state === "MA"
-          )
-            continue;
+        for (const f of r.findings)
           problems.push(`${c.id} ${f.item}@${f.line ?? "-"}: ${f.detail}`);
-        }
         if (r.note && !r.note.matches)
           problems.push(`${c.id} note: ${r.note.contradictions.join(", ")}`);
       }
     expect(problems.slice(0, 10)).toEqual([]);
     expect(n).toBeGreaterThan(400);
-    expect(seen.get("predial_time_zone") ?? 0).toBeGreaterThan(0);
+    expect(dialed).toBeGreaterThan(100);
   }, 60_000);
 
   it("finds each of the contact center's defects where it was planted, where the record can show it", () => {
@@ -372,13 +363,9 @@ describe("the call rubric", () => {
         if (ok) found++;
         // A wrong amount the check cannot see: its digit-runs are sources already (the P&I alone, last year's payment, a transposition).
         else if (id !== "C-05" && id !== "C-08") unexplained.push(`${cid}: ${l.planted_value}`);
-        // Nothing else but the dialer's own breach and C-02's missing disclaimer.
+        // Nothing else but C-02's missing disclaimer.
         for (const f of r.findings)
-          if (
-            f.item !== ITEM[id] &&
-            f.item !== "predial_time_zone" &&
-            !(id === "C-02" && f.item === "collection_disclosure")
-          )
+          if (f.item !== ITEM[id] && !(id === "C-02" && f.item === "collection_disclosure"))
             unexplained.push(`${cid}: ${f.item}@${f.line ?? "-"}`);
       }
       expect(unexplained.slice(0, 10), id).toEqual([]);
@@ -802,7 +789,7 @@ describe("call-qa", () => {
     // A change here moves every score: bump CALL_QA_ENVIRONMENT_VERSION, then the pin. The suite
     // is drawn from the life generator and the contact center: a change to either moves it too.
     expect(sha256(heldTasks().map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"57917dd53f5f551ead2b9e3cc2892338784736c984564c5d4607c4a33e45b0e7"`,
+      `"b5be1dea29f52aa1e9b12b6612f2ac07e188f4b46f623a8180a0b9930aa36f63"`,
     );
   }, 60_000);
 
@@ -895,6 +882,14 @@ describe("call-qa", () => {
             x.t.id,
           ).toContain(w);
       }
+    });
+
+    it("never runs a transcript's times backwards, a line written into the call included", () => {
+      for (const { t } of train)
+        for (let i = 1; i < t.transcript.length; i++)
+          expect(t.transcript[i]!.at >= t.transcript[i - 1]!.at, `${t.id} line ${i + 1}`).toBe(
+            true,
+          );
     });
 
     it("takes each edge's arms in turn: the AI's two lines, the zone's two sides, the cap's two owners, the cease's two kinds", () => {

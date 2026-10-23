@@ -7267,7 +7267,9 @@ statement tool takes the lines as given. So the wrapper pairs:
   `buildHistory` and `assembleAnnualStatement`, whose source lines a test
   holds;
 - the projected low is the projection's lowest target. §3.3's worked
-  example reads it there, and the spec names no other.
+  example reads it there, and the spec names no other. It is the cushion
+  unless the trial balance never falls to zero in the year, and it must be
+  a monthly projection's, because the history is twelve month-ends.
 
 **Held to the spec.** A test rebuilds §3.3's worked example from last
 year's projection and the year's bills. It gets exactly the four lines the
@@ -7281,9 +7283,10 @@ grades on its first spec task are the ones these lines explain.
 **A defect found on the way, kept out.** The engine prints a figure as its
 quotient and remainder by 100, so a negative low reads $-105.-50, and
 −$0.50 reads $0.-50 (escrow-4 in docs/servicing-engine-defects.md). An
-account overdrawn during the year has one: 81 of 6,827 computation years in
-a thousand-loan book from the life generator (1.0.0, seed 1). The wrapper
-refuses such a year rather than hand a grader a garbled line, and
+account overdrawn during the year has one: 75 of the 6,016 whole
+computation years in a thousand-loan book from the life generator (1.0.0,
+seed 1). The wrapper refuses such a year rather than hand a grader a
+garbled line, and
 `statementScopeIssues` names it for a caller that filters instead.
 
 **Not yet.** The life generator's analysis rows record the analysis's

@@ -5,7 +5,7 @@ environments in `packages/environments` that grade with them, and each was
 reproduced again on 21 October 2026 against the commit
 `apps/servicing/VENDORED_FROM` names (`293261b`, committed 17 September 2026).
 One more, boarding-1, was found and reproduced on 22 October 2026 while
-cataloguing defects for synthetic data (docs/synthetic-data-defects.md), and
+cataloging defects for synthetic data (docs/synthetic-data-defects.md), and
 another, escrow-4, on 23 October 2026 while porting the statement engine.
 Twenty-two more are in the runtime that wires the engines together rather than
 in an engine: cashiering-18, cashiering-19, cashiering-20, arm-15, payoff-19,
@@ -2955,11 +2955,13 @@ index date 2026-09-17).
   quotient and remainder by 100 (statement.ts:19), so a negative low balance
   carries its sign inside the cents, $-105.-50 for −$105.50, and loses it
   under a dollar, $0.-50 for −$0.50. An account overdrawn during the year has
-  a negative low: 81 of 6,827 computation years in a thousand-loan book from
-  the life generator (1.0.0, seed 1) were. Fix: format the absolute value
-  and put the sign in front, as `fmtMoney` does (ops.ts:106). Kept out:
-  `statementExplanation` refuses such a year, and `statementScopeIssues`
-  names it (`packages/environments/src/escrow/statement.ts`).
+  a negative low: in a thousand-loan book from the life generator (1.0.0,
+  seed 1), 75 of the 6,016 computation years it holds whole (each analysis's
+  twelve month-ends from its year start) ended a month below zero. Fix:
+  format the absolute value and put the sign in front, as `fmtMoney` does
+  (ops.ts:106). Kept out: `statementExplanation` refuses such a year, and
+  `statementScopeIssues` names it
+  (`packages/environments/src/escrow/statement.ts`).
 - **pmi-4.** The 78% sweep's current test checks only installments due by the
   1st of the preceding month (termination.ts:15-19), so a loan due on the 15th
   that missed that month's payment is current and its MI ends while 30 days
@@ -3009,7 +3011,7 @@ index date 2026-09-17).
   every consumed type has a non-test emitter. Kept out: no environment runs
   35.9's fold.
 
-97 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+98 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

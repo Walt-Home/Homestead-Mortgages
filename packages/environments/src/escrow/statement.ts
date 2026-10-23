@@ -30,8 +30,11 @@
  *   and each month's deposits and disbursements, as the servicing app's
  *   statement assembly computes it (`buildHistory` and
  *   `assembleAnnualStatement`, apps/servicing/src/domain/escrow/ops.ts); the
- *   projected low is the projection's lowest target, its cushion, as §3.3's
- *   worked example reads it.
+ *   projected low is the projection's lowest target, as §3.3's worked
+ *   example reads it. That is the cushion, unless the trial balance never
+ *   falls to zero in the year; then it is the cushion plus the trial
+ *   balance's lowest point. The projection must be monthly, twelve targets,
+ *   as the history is.
  *
  * The engine prints a negative amount wrongly (escrow-4 in
  * docs/servicing-engine-defects.md), and an account overdrawn during the year
@@ -116,8 +119,11 @@ export function statementHistory(
   for (const d of ledger.disbursements) inYear(`a ${d.line_type} disbursement`, d);
   for (const i of analysis.projection.items)
     inYear(`a projected ${i.line_type} bill`, { on: i.disburse_on, amount_cents: i.amount_cents });
-  if (analysis.projection.targets.length === 0)
-    throw new RangeError("the projection has no targets");
+  // The history is twelve month-ends, so the low it is held to must be a monthly projection's.
+  if (analysis.projection.targets.length !== 12)
+    throw new RangeError(
+      `a monthly projection has twelve targets, not ${analysis.projection.targets.length}`,
+    );
 
   // Paid and projected, each summed by month and line type, each in the order it first appears.
   const byDate = <T>(xs: readonly T[], on: (x: T) => PlainDate) =>

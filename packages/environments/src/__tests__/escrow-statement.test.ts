@@ -301,6 +301,34 @@ describe("the annual escrow statement's explanation", () => {
     expect(() => statementHistory({ ...PRIOR, year_start: D("2026-07-15") }, AS_PROJECTED)).toThrow(
       "a computation year starts on the first of a month, not 2026-07-15",
     );
+    // The history is twelve month-ends; a biweekly projection's 26 targets are not its low.
+    const biweekly = { ...PRIOR, projection: project(E, D("2026-07-01"), {}, { biweekly: true }) };
+    expect(() => statementHistory(biweekly, AS_PROJECTED)).toThrow(
+      "a monthly projection has twelve targets, not 26",
+    );
+  });
+
+  it("takes the projected low as the lowest target, which sits above the cushion when the trial balance never reaches zero", () => {
+    // One bill of $1,000.06 in June: the $83.34 payment rounds up, so the trial balance ends at 2 cents
+    // and never falls to zero. The cushion is $166.67; the lowest target, June's, is $166.69.
+    const june = project(
+      [{ line_type: "hazard", amount_cents: $("1000.06"), disburse_on: D("2027-06-15") }],
+      D("2026-07-01"),
+    );
+    expect(june.cushion_cents).toBe($("166.67"));
+    const h = statementHistory(
+      { year_start: D("2026-07-01"), projection: june },
+      {
+        opening_balance_cents: june.target_at_start_cents,
+        deposits: Array.from({ length: 12 }, (_, k) => ({
+          on: addMonths(D("2026-07-01"), k),
+          amount_cents: june.base_payment_cents,
+        })),
+        disbursements: [bill("2027-06-15", "hazard", "1000.06")],
+      },
+    );
+    expect(h.projected_low_cents).toBe($("166.69"));
+    expect(h.months.map((m) => m.balance_cents)).toEqual(june.targets);
   });
 
   it("keeps escrow-4 out: an account overdrawn during the year is a scope issue, not a garbled line", () => {

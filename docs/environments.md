@@ -240,7 +240,9 @@ the pairing is ours:
   statement assembly computes it (`buildHistory` and
   `assembleAnnualStatement` in its escrow `ops.ts`); a test holds those
   source lines;
-- the projected low is the projection's lowest target, its cushion.
+- the projected low is the projection's lowest target: the cushion, unless
+  the trial balance never falls to zero in the year. The projection must be
+  monthly, as the history is.
 
 **Held to the spec.** A test recomputes §3.3's worked example from last
 year's projection and the year's bills. It gets the four lines the spec
@@ -256,8 +258,8 @@ ones these lines explain.
   and −$0.50 as $0.-50 (escrow-4 in `docs/servicing-engine-defects.md`). An
   account overdrawn during the year has a negative low, so
   `statementScopeIssues` names it and `statementExplanation` refuses it. In a
-  thousand-loan book from the life generator (1.0.0, seed 1), 81 of 6,827
-  computation years had one.
+  thousand-loan book from the life generator (1.0.0, seed 1), 75 of the
+  6,016 computation years it holds whole had one.
 - **The shortage sentence.** Items (vi) and (vii), the surplus or shortage
   and the repayment plan, are `decisionText` and `planText` in the servicing
   app's escrow `ops.ts`. That file is not ported, because it carries the

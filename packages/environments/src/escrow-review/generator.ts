@@ -12,11 +12,14 @@
  * the delinquency and the payment it replaces. The task is one of those
  * analyses, with the account's recent history beside it.
  *
- * The arm cycles by index through six, so any six tasks hold each:
+ * The arm cycles by index through six, so any six tasks hold each, and each
+ * names the verdict it lands on, so every verdict the runner tallies is at
+ * least one arm in six:
  *   - reassessed_up: a reassessment of 25 to 80 % up, held, with a shortage;
- *   - premium_up: a premium 20 to 80 % higher at renewal, held;
+ *   - premium_up: a premium 20 to 80 % higher at renewal, held, with a
+ *     shortage;
  *   - reassessed_down: a reassessment of 30 to 60 % down on a larger loan,
- *     held, with a surplus;
+ *     held, with a surplus refunded;
  *   - ordinary_shortage, ordinary_refund and ordinary_credit: no event; an
  *     analysis of the second year or later, from a year drawn, that is not
  *     held, with a shortage, a refund, or a surplus under $50 credited.
@@ -188,11 +191,10 @@ export function onArm(arm: ReviewArm, task: EscrowReviewTask): boolean {
   const shortage = a.decision === "shortage";
   switch (arm) {
     case "reassessed_up":
-      return a.flag_stands && shortage;
     case "premium_up":
-      return a.flag_stands;
+      return a.flag_stands && shortage;
     case "reassessed_down":
-      return a.flag_stands && !shortage;
+      return a.flag_stands && a.decision === "refund";
     case "ordinary_shortage":
       return !a.flag_stands && shortage;
     case "ordinary_refund":

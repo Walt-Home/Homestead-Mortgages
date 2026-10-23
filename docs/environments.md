@@ -2455,8 +2455,9 @@ an installment still in grace at a payoff never ages to 30 days.
 
 **Moments.** `generate(…, { observe })` shows an environment what each engine
 is about to be handed, as it stands, in the clean history and in a twin
-(`LifeMoment`): every receipt with the cash state it is posted against and
-the rate each installment is charged at, and every annual analysis with the
+(`LifeMoment`): every receipt the waterfall posts, with the cash state it is
+posted against and the rate each installment is charged at (a payoff is
+quoted, not posted, and is not shown), and every annual analysis with the
 lines as the analyst has them, the CPI, the balance on the run date, what is
 still to post before the year and the payment it replaces. Each is a copy,
 and observing changes no draw. An environment built on the generator reads
@@ -2545,7 +2546,7 @@ receipt arrives, after that morning's late-charge run:
   beside them the terms the system boarded and charges with;
 - the cash state: the balance, the installment it is paid through, suspense,
   the late charges the system says are due, and the installments of the last
-  two years and the next one;
+  two to three years and the next one;
 - every late charge since the first payment, with the P&I it was charged on
   and what was collected on it;
 - the last twelve months of payments, each with where it went, and the last
@@ -2585,28 +2586,31 @@ unspecified, no instruction.
 **The tasks** are drawn from a decade the life generator runs for one loan,
 and its D-03 twin where the arm calls for it. The moment is the first
 catch-up after a scripted missed installment, and the task is read off that
-moment (`LifeMoment`). The arm cycles by index through six:
+moment (`LifeMoment`). The arm cycles by index through seven, one for each
+verdict the runner tallies and two for the commonest, so every verdict is
+14 % of a suite or more:
 
 - `breached`: the twin, meeting its first charge above the cap. The loan was
   boarded by transfer three to ten months before the miss, so nothing was
   collected above the cap before;
 - `breached_refund`: the twin, after charges already collected above it;
-- `breached_behind`: the twin, the borrower paying only the oldest
-  installment;
+- `breached_behind` and `breached_refund_behind`: the same two, the borrower
+  paying only the oldest installment;
 - `within_capped`, `within_uncapped` and `within_behind`: the clean history,
   with the cap boarded and holding a charge down, with no cap that binds,
-  and paying only the oldest installment.
+  and paying only the oldest installment (on a note with no cap three times
+  in ten).
 
-A draw that does not land on its arm is drawn again under the next key: 142
+A draw that does not land on its arm is drawn again under the next key: 122
 of the held-out suite's 200 are first draws. The suite holds:
 
-- 101 tasks above the cap, 68 of them current after posting and 33 still
-  behind, and 99 within the note;
-- 48 tasks with a refund due (a median of $216.93), 68 that send something
-  to suspense, and 31 that prepay an installment;
-- 72 loans boarded by transfer, and 31 notes with no cap;
-- up to 24 charges on a loan (5.5 on average), and catch-ups of up to nine
-  installments, from May 2027 to May 2036.
+- 116 tasks above the cap, 58 of them current after posting and 58 still
+  behind, and 84 within the note;
+- 58 tasks with a refund due (a median near $220), 58 that send something
+  to suspense, and 20 that prepay an installment;
+- 85 loans boarded by transfer, and 40 notes with no cap;
+- up to 23 charges on a loan (5.7 on average), and catch-ups of up to nine
+  installments, from January 2027 to November 2035.
 
 **Out of scope.** The receipts stay on the pay-in-full route, where every
 installment the money reaches is paid whole. They stay off the
@@ -2649,7 +2653,7 @@ hold the moments to their histories:
 - each twin's charges, held to the note, are the clean history's charges.
 
 An answer that trusts the system's charges passes every task within the note
-and none above it, with a mean score of 0.62 on those.
+and none above it, with a mean score of 0.65 on those.
 
 ## escrow-review
 
@@ -2657,9 +2661,9 @@ escrow-review 1.0.0 is the first demo's other graded moment. It is an annual
 escrow analysis that the servicing app holds for anomaly review before
 approval, drawn from a decade the life generator runs. A hold follows a
 large change in the payment or in a bill (spec §3.2 R10, `anomalies`,
-`apps/servicing/src/domain/escrow/analysis.ts:101-107`). Most analyses come
+`apps/servicing/src/domain/escrow/analysis.ts:101-107`). Half the analyses come
 from a history in which the county reassessed the property or the hazard
-premium rose at renewal; the rest are ordinary years, the negatives.
+premium rose at renewal; the other half are ordinary years, the negatives.
 
 **The task.** escrow-analysis's inputs exactly, read off the history at the
 analysis (`LifeMoment`):
@@ -2703,12 +2707,16 @@ prior-year total, wherever both exist. A test holds both cited lines.
 **The tasks.** The arm cycles by index through six:
 
 - `reassessed_up`: a reassessment 25 to 80 % up, held with a shortage;
-- `premium_up`: a premium 20 to 80 % higher at renewal, held;
+- `premium_up`: a premium 20 to 80 % higher at renewal, held with a
+  shortage;
 - `reassessed_down`: a reassessment 30 to 60 % down on a loan of $400,000 to
   $800,000, where the taxes are large enough to move the payment, held with
-  a surplus;
+  a surplus refunded;
 - `ordinary_shortage`, `ordinary_refund` and `ordinary_credit`: no event, an
   analysis of the second year or later, not held.
+
+Each arm names the verdict it lands on, so each of the five verdicts the
+runner tallies is 16 % of a suite or more.
 
 After an event the generator tries the first three analyses whose coming
 year ends after the first bill the event changed. The first can see a

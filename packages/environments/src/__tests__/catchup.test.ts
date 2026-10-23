@@ -398,7 +398,7 @@ describe("catchup-posting", () => {
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump CATCHUP_ENVIRONMENT_VERSION, then the pin.
     expect(sha256(heldoutSuite().map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"904733812e554dd51a85e1b5e0b2701a52a41b23ee86a9f32f3a691220676274"`,
+      `"37cfa813fdd7a209f2d90040071651bc398c02f57843a5cd6756175f66a46f5e"`,
     );
   }, 300_000);
 
@@ -416,16 +416,25 @@ describe("catchup-posting", () => {
     const share = (f: (x: ReturnType<typeof runs>[number]) => boolean) =>
       runs().filter(f).length / runs().length;
 
-    it("cycles through every arm, fifty tasks each in three hundred", () => {
-      expect(new Set(runs().map((x) => x.arm))).toEqual(new Set(CATCHUP_ARMS));
+    it("cycles through every arm, a seventh of the tasks each", () => {
+      const arms = new Map<string, number>();
+      for (const { arm } of runs()) arms.set(arm, (arms.get(arm) ?? 0) + 1);
+      expect(new Set(arms.keys())).toEqual(new Set(CATCHUP_ARMS));
+      for (const n of arms.values()) expect([42, 43]).toContain(n);
     }, 300_000);
 
-    it("draws every outcome at more than 12 %", () => {
+    it("draws every verdict the runner tallies at more than 12 %", () => {
       const verdicts = new Map<string, number>();
       for (const { t } of runs()) {
         const v = catchupVerdict(t);
         verdicts.set(v, (verdicts.get(v) ?? 0) + 1);
       }
+      // Above the cap, each of refund due or not and current or not; within the note, current or not.
+      expect(verdicts.size).toBe(6);
+      for (const [v, n] of verdicts) expect(n / runs().length, v).toBeGreaterThan(0.12);
+    }, 300_000);
+
+    it("draws every outcome at more than 12 %", () => {
       const above = (f: (x: ReturnType<typeof runs>[number]) => boolean) =>
         expect(share(f)).toBeGreaterThan(0.12);
       above((x) => capBreached(x.t) && x.a.current_after_posting);

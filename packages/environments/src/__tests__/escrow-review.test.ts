@@ -319,6 +319,19 @@ describe("escrow-review", () => {
     expect(trainSuite().filter((t) => t.history.analyses.length === 2).length).toBeGreaterThan(150);
   }, 300_000);
 
+  it("fails every analysis with a bill over 20 % reviewed without the bill comparison, and no other", () => {
+    let billed = 0;
+    for (const t of heldoutSuite()) {
+      const want = expectedEscrowReview(t);
+      const anomalies = want.anomalies.filter((x) => x !== "bill_variance_gt_20pct");
+      const without = { ...want, anomalies, flag_stands: anomalies.length > 0 };
+      const flagged = want.anomalies.includes("bill_variance_gt_20pct");
+      if (flagged) billed++;
+      expect(gradeReviewAgainst(want, without).pass, t.id).toBe(!flagged);
+    }
+    expect(billed).toBe(19);
+  }, 300_000);
+
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump REVIEW_ENVIRONMENT_VERSION, then the pin.
     expect(sha256(heldoutSuite().map(toJsonLine).join(""))).toMatchInlineSnapshot(
@@ -342,6 +355,24 @@ describe("escrow-review", () => {
 
     it("cycles through every arm, fifty analyses each in three hundred", () => {
       expect(new Set(runs().map((x) => x.arm))).toEqual(new Set(REVIEW_ARMS));
+    }, 300_000);
+
+    it("draws every verdict the runner tallies at more than 12 %, and only those", () => {
+      const verdicts = new Map<string, number>();
+      for (const { t } of runs()) {
+        const v = reviewVerdict(t);
+        verdicts.set(v, (verdicts.get(v) ?? 0) + 1);
+      }
+      expect(new Set(verdicts.keys())).toEqual(
+        new Set([
+          "flag stands, shortage",
+          "flag stands, refund",
+          "no flag, shortage",
+          "no flag, refund",
+          "no flag, credit",
+        ]),
+      );
+      for (const [v, n] of verdicts) expect(n / runs().length, v).toBeGreaterThan(0.12);
     }, 300_000);
 
     it("draws every outcome at more than 12 %", () => {

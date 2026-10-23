@@ -1,6 +1,6 @@
 /**
  * The escrow-review environment, assembled: an annual escrow analysis drawn
- * from a ten-year history the life generator wrote, most of them after a
+ * from a ten-year history the life generator wrote, half of them after a
  * reassessment or a premium increase, reviewed before approval.
  * escrow-analysis's rulebook through Step 9 with the servicing app's
  * anomaly triggers and the flag after it, escrow-analysis's tools, and the

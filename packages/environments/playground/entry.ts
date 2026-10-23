@@ -873,7 +873,7 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     title: "Escrow analysis review",
     side: "servicing",
     summary:
-      "One annual escrow analysis drawn from a ten-year history, most after a tax reassessment or a premium increase at renewal: run it again from its inputs, find the shortage or surplus, the new payment, its effective date and the months a shortage is spread over, and say whether it is held for anomaly review. Graded by the servicing app's own escrow engine.",
+      "One annual escrow analysis drawn from a ten-year history, half the time after a tax reassessment or a premium increase at renewal: run it again from its inputs, find the shortage or surplus, the new payment, its effective date and the months a shortage is spread over, and say whether it is held for anomaly review. Graded by the servicing app's own escrow engine.",
     id: reviewTaskId,
     one: generateReviewTask,
     spec: reviewSpecTasks,

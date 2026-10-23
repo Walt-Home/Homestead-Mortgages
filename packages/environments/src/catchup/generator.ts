@@ -15,16 +15,19 @@
  * day that receipt arrives, read off the history at that moment
  * (`LifeMoment`), and the last twelve months of its history.
  *
- * The arm cycles by index through six, so any six tasks hold each:
+ * The arm cycles by index through seven, so any seven tasks hold each, and
+ * each verdict the runner tallies is at least one arm in seven:
  *   - breached: the twin, a catch-up meeting a charge above the cap, and none
  *     collected above it before (a loan boarded by transfer shortly before);
  *   - breached_refund: the twin, a catch-up after charges already collected
  *     above the cap;
- *   - breached_behind: the twin, the oldest installment only;
+ *   - breached_behind: as breached, the oldest installment only;
+ *   - breached_refund_behind: as breached_refund, the oldest installment only;
  *   - within_capped: the clean history, the cap boarded, a catch-up meeting a
  *     charge the cap holds down;
  *   - within_uncapped: the clean history of a note with no cap that binds;
- *   - within_behind: the clean history, the oldest installment only.
+ *   - within_behind: the clean history, the oldest installment only, on a
+ *     note with no cap three times in ten.
  * A draw that does not land on its arm is drawn again under the next key.
  *
  * The receipts stay on the pay-in-full route, where every installment the
@@ -88,6 +91,7 @@ export const CATCHUP_ARMS = [
   "breached",
   "breached_refund",
   "breached_behind",
+  "breached_refund_behind",
   "within_capped",
   "within_uncapped",
   "within_behind",
@@ -318,7 +322,9 @@ export function onArm(arm: CatchupArm, task: CatchupTask): boolean {
     case "breached_refund":
       return breached && a.current_after_posting && a.refund_due_cents !== "0";
     case "breached_behind":
-      return breached && !a.current_after_posting;
+      return breached && !a.current_after_posting && a.refund_due_cents === "0";
+    case "breached_refund_behind":
+      return breached && !a.current_after_posting && a.refund_due_cents !== "0";
     case "within_capped":
       return !breached && a.current_after_posting && binds;
     case "within_uncapped":
@@ -339,16 +345,23 @@ export function drawCatchupCandidate(
   const arm = catchupArmOf(index);
   const twin = arm.startsWith("breached");
   const behind = arm.endsWith("behind");
+  const refund = arm === "breached_refund" || arm === "breached_refund_behind";
   const lifeSeed = r.int(0, 0x7fffffff);
-  // The breached arm meets its first charge above the cap soon after a transfer boarded the loan without it.
-  const transfer = arm === "breached" || r.chance(0.3);
+  // A breached arm with nothing to refund meets its first charge above the cap soon after a transfer boarded the
+  // loan without it; one with a refund misses an installment earlier, and pays the charge above the cap then.
+  const transfer = arm === "breached" || arm === "breached_behind" || r.chance(0.3);
   const transferMonth = r.int(12, 84);
-  const missMonth = transfer
-    ? transferMonth + r.int(3, 10)
-    : r.int(arm === "breached_refund" ? 30 : 6, 100);
-  const earlier = arm === "breached_refund" ? missMonth - r.int(6, 24) : null;
+  const missMonth = transfer ? transferMonth + r.int(3, 10) : r.int(refund ? 30 : 6, 100);
+  const earlier = refund ? missMonth - r.int(6, 24) : null;
+  // A note with no cap at all is the uncapped arm's usual draw, and a behind borrower's three times in ten.
   const cap: number | null =
-    arm === "within_uncapped" ? (r.chance(0.7) ? null : 5_000) : r.pick(CAPS);
+    arm === "within_uncapped"
+      ? r.chance(0.7)
+        ? null
+        : 5_000
+      : arm === "within_behind" && r.chance(0.3)
+        ? null
+        : r.pick(CAPS);
   const events: ScenarioEvent[] = [{ kind: "missed_payment", loan: 0, month: missMonth }];
   if (transfer) events.push({ kind: "transfer_in", loan: 0, month: transferMonth });
   if (earlier !== null) events.push({ kind: "missed_payment", loan: 0, month: earlier });

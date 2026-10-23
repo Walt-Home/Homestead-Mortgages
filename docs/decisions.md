@@ -7275,6 +7275,15 @@ to the same, so no charge the task lists was collected, or left uncharged,
 on a path the spec calls wrong. One rate covers every installment a receipt
 pays.
 
+**Every verdict the runner tallies is an arm.** A catch-up is tallied as
+above the cap or within the note, refund due or not, and current or still
+behind; a review as whether the flag stands, and its decision. One arm for
+"above the cap, still behind" split its tasks between a refund due and none,
+at 7 and 9.5 % of the held-out suite, so catchup-posting has seven arms, one
+for each verdict and two for the commonest. One arm for "a premium increase,
+held" drew a retained surplus once in 300 training tasks, so each review arm
+names its decision. A test in each holds every verdict above 12 %.
+
 **The bill comparison is the app's own, over a line's bills against last
 year.** R10's "bill amount variance > 20 % vs. prior year" reaches the
 engine as a flag the agent sets from `compareBillToPriorYear`

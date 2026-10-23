@@ -444,7 +444,7 @@ export type LifeMoment =
 export interface SimOverrides {
   /** What boarding writes, given the note's terms. The clean history boards the note as it is. */
   readonly boarded?: (note: BoardedTerms) => BoardedTerms;
-  /** Shown each receipt before it is posted, and each analysis before it is decided. */
+  /** Shown each receipt before the waterfall posts it (a payoff is quoted, not posted), and each analysis before it is decided. */
   readonly observe?: (moment: LifeMoment) => void;
 }
 

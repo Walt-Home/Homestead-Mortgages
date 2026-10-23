@@ -6,7 +6,7 @@
  * The servicing app holds an analysis for anomaly review when the new
  * payment moves by more than a quarter or $150, when a bill moves more than
  * 20 % against last year, and on a few other triggers (its spec §3.2 R10;
- * `anomalies`, apps/servicing/src/domain/escrow/analysis.ts:101-107). Most of
+ * `anomalies`, apps/servicing/src/domain/escrow/analysis.ts:101-107). Half
  * the analyses here come from a history in which the county reassessed the
  * property or the hazard premium rose at renewal; the rest are ordinary
  * years. The model gets escrow-analysis's inputs exactly (the lines, the

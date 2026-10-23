@@ -34,6 +34,7 @@ import {
   dayNumbers,
   factNumbers,
   kindOf,
+  lastContactOn,
   numberTokens,
   plantContactDefects,
   readHandleMinutes,
@@ -44,6 +45,7 @@ import {
   statusOf,
   templateWriter,
   transcriptOf,
+  money,
   unexplained,
   unionNumbers,
   type ContactCenter,
@@ -742,6 +744,72 @@ describe("contact center", () => {
       for (const n of l.notes) if (!touchedNotes.has(n.id)) expect(dn.get(n.id), n.id).toEqual(n);
     });
     expect(Object.keys(pinned.planted)).toEqual([]);
+  });
+
+  it("places the call a scenario's story needs: the day-22 promise, kept on its day", () => {
+    // Scenario 3's trunk: March missed, the borrower calls on day 22 and promises to pay by 5 April.
+    const story = generate(
+      "story",
+      {
+        loans: 1,
+        random: false,
+        start: "2027-01-01",
+        events: [
+          { kind: "missed_payment", loan: 0, on: "2028-03-01" },
+          { kind: "promise_to_pay", loan: 0, on: "2028-03-22", pay_on: "2028-04-05" },
+        ],
+      },
+      { calibration: cal },
+    ).clean;
+    const cc = contactCenter(story, { calibration: cal });
+    const loan = cc.loans[0]!;
+    const call = loan.contacts.find(
+      (c) => c.on === "2028-03-22" && c.purpose === "promise_to_pay",
+    )!;
+    expect(call).toMatchObject({
+      direction: "inbound",
+      mode: "call",
+      outcome: "conversation",
+      live_contact: true,
+      qrpc: true,
+      resolution: "promise_recorded",
+    });
+    const promise = loan.promises.find((p) => p.id === call.promise_id)!;
+    expect(promise).toMatchObject({
+      made_on: "2028-03-22",
+      pay_by: "2028-04-05",
+      status: "kept",
+      scripted: true,
+    });
+    const receipt = story.loans[0]!.receipts.find((r) => r.id === promise.receipt_id)!;
+    expect(receipt.on).toBe("2028-04-05");
+    expect(promise.amount).toBe(receipt.amount);
+    // The call says the promise in the record's figures, and the cadence waits for it.
+    const t = transcriptOf(cc, story, call.id);
+    expect(
+      t.turns.some((x) => x.tag === "quote:promise" && x.said.includes(money(promise.amount))),
+    ).toBe(true);
+    expect(checkTranscript(t, factNumbers(callPlan(cc, story, call.id).facts))).toEqual([]);
+    const ep = loan.cadence.find(
+      (e) => e.start <= "2028-03-22" && (e.cured_on === null || e.cured_on > "2028-03-22"),
+    )!;
+    expect(ep.paused.some((p) => p.reason === "ptp_pending" && p.to === "2028-04-05")).toBe(true);
+    expect(
+      loan.contacts.some(
+        (c) => c.purpose === "collection" && c.on > "2028-03-22" && c.on <= "2028-04-05",
+      ),
+    ).toBe(false);
+    // Attempts from day 17 until the call; the notes say the promise was set and kept.
+    expect(
+      loan.contacts.filter(
+        (c) => c.purpose === "collection" && c.on >= "2028-03-17" && c.on < "2028-03-22",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(loan.notes.some((n) => n.on === "2028-03-22" && n.text.startsWith("PTP SET"))).toBe(
+      true,
+    );
+    expect(loan.notes.some((n) => n.on === "2028-04-05" && n.text === "PTP KEPT")).toBe(true);
+    expect(lastContactOn(loan, "2028-03-31" as PlainDate)).toBe("2028-03-22");
   });
 
   it("holds a model writer to the record: the seam refuses a figure nobody computed", () => {

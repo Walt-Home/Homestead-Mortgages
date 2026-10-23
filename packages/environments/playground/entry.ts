@@ -903,7 +903,7 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     title: "Boarding triage",
     side: "servicing",
     summary:
-      "One servicing-transfer package before it boards, in the servicing app's own layout: one to four loans with their prior servicer's tape, payment history, escrow files and correspondence, some carrying a defect the boarding gate cannot see (an escrow flag written Yes, which boards the loan non-escrowed; a late-fee cap left off the tape) and some clean. The model names each defect, what the cell says and should say, and whether to correct it or query the prior servicer, and passes the clean loans. Graded against the package's label manifest.",
+      "One servicing-transfer package before it boards, in the servicing app's own layout: one to four loans with their prior servicer's tape, payment history, escrow files and correspondence, some carrying one of ten defects the boarding gate cannot see (an escrow flag written Yes; a late-fee cap left off the tape; a repayment plan, a bankruptcy or a servicemember's rate cap with its flag off; an ARM's first-change cap; a mortgage-insurance termination date; a flood zone; a payment-history row from before the loan was made; a payment posted with its principal to escrow) and some clean. The model names each defect at its root, what the cell says and should say, and whether to correct it, hold the loan or query the prior servicer, and passes the clean loans. Graded against the package's label manifest, which tells a root from its symptoms.",
     id: boardingTaskId,
     one: generateBoardingTask,
     spec: boardingSpecTasks,

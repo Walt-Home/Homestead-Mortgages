@@ -40,7 +40,8 @@ export const BOARDING_FINGERPRINT = {
     tools_sha256: sha256(JSON.stringify(BOARDING_TOOLS)),
   },
   grader: {
-    rule_set_version: "boarding.dq.v1 + the package's label manifest (D-03, D-42)",
+    rule_set_version:
+      "boarding.dq.v1 + the package's label manifest, roots and symptoms (D-42, D-35, D-03, D-01, D-12, D-37, D-18, D-24, D-25, D-15)",
     port_version: `apps/servicing@293261b3 src/domain/boarding/{tape-codec,rules,min}.ts + life generator ${LIFE_VERSION}`,
   },
 } as const;

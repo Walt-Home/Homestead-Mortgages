@@ -27,8 +27,10 @@
  * paid to, which is what `next_due` is on every other month-end, and counts
  * the remaining term from it rather than from the installment already paid.
  *
- * Foreclosure and bankruptcy are not generated yet, so those fields are
- * always empty; they are here so the tape writer's layout is complete.
+ * Foreclosure is not generated yet, so its fields are always empty; they are
+ * here so the tape writer's layout is complete. A bankruptcy is reported
+ * from the petition for as long as the servicer whose books the loan is on
+ * knows of it (a boarding that dropped the case, D-37, reports none).
  */
 
 import { addMonths, type PlainDate } from "@hm/kernel/calendar";
@@ -133,10 +135,11 @@ export interface TapeRow {
     readonly fc_sale_scheduled_date: null;
     readonly fc_sale_held_date: null;
   };
+  /** The case the servicer whose books the loan is on knows of (a boarding that dropped it reports none). */
   readonly bankruptcy: {
-    readonly bk_status: false;
-    readonly bk_chapter: null;
-    readonly bk_filed_date: null;
+    readonly bk_status: boolean;
+    readonly bk_chapter: string | null;
+    readonly bk_filed_date: PlainDate | null;
     readonly bk_motion_for_relief_date: null;
     readonly bk_discharged: false;
     readonly bk_discharged_date: null;
@@ -290,9 +293,9 @@ export function monthEndRow(loan: LoanLife, month: string): TapeRow | null {
       fc_sale_held_date: null,
     },
     bankruptcy: {
-      bk_status: false,
-      bk_chapter: null,
-      bk_filed_date: null,
+      bk_status: m.bankruptcy !== undefined,
+      bk_chapter: m.bankruptcy?.chapter ?? null,
+      bk_filed_date: m.bankruptcy?.filed_on ?? null,
       bk_motion_for_relief_date: null,
       bk_discharged: false,
       bk_discharged_date: null,

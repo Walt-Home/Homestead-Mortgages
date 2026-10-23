@@ -6,14 +6,15 @@ reproduced again on 21 October 2026 against the commit
 `apps/servicing/VENDORED_FROM` names (`293261b`, committed 17 September 2026).
 One more, boarding-1, was found and reproduced on 22 October 2026 while
 cataloguing defects for synthetic data (docs/synthetic-data-defects.md).
-Twenty-one more are in the runtime that wires the engines together rather than
+Twenty-two more are in the runtime that wires the engines together rather than
 in an engine: cashiering-18, cashiering-19, cashiering-20, arm-15, payoff-19,
 pmi-15, statements-1, boarding-2, boarding-3, boarding-4, boarding-5,
-boarding-6, scra-1, metro2-1, ei-1, ei-2, ei-3, http-1, transfers-1, lossmit-1
-and lossmit-2. They came from running the servicing app's runtime for 397
-simulated days on a scratch database on 22 October 2026, and from reproducing
-what that run found; each was reproduced in isolation the same day, with none
-of that run's own choices, and upheld by two independent checks.
+boarding-6, scra-1, metro2-1, ei-1, ei-2, ei-3, http-1, transfers-1,
+lossmit-1, lossmit-2 and lossmit-3. They came from running the servicing app's
+runtime for 397 simulated days on a scratch database on 22 October 2026, and
+from reproducing what that run found; each was reproduced in isolation the
+same day, with none of that run's own choices, and upheld by two independent
+checks.
 The environments keep all but one out of grading. pmi-9 is graded, because
 the spec states the engine's reading as its own rule. Four more
 (cashiering-4, cashiering-9, flexmod-1, flexmod-2) were graded at the
@@ -40,6 +41,7 @@ decided", says why each went the way it did.
 | cashiering-20 | cashiering | A waived or reversed late charge stays on the ledger, and a refinance's payoff collects it           | §2.7 rules 5, 6; §35.10 rule 3         | 🔴     | `app/tools/section02.ts:259`, `:273`                                                            |
 | boarding-4    | boarding   | A transfer-boarded loan gets no P&I or T&I custodial account, so no payment on it ever posts         | §35.1-T10; §6.1 outputs; §2.1 timers   | 🔴     | `runtime/transfers.ts:114`; `app/tools/section01.ts:86`                                         |
 | scra-1        | scra       | 13.8's SCRA waiver moves the ledger, not the fee row, so the waived charge is billed and collected   | §13.8 rule 8; §2.7 rule 5; D2-3.4-01   | 🔴     | `app/tools/section13.ts:655`; read at `domain/operations-runtime/cashiering-cycle.ts:144-145`   |
+| lossmit-3     | lossmit    | A plan's foreclosure hold is never written, so a borrower performing under forbearance is referred   | §12.4-T9; E-3.2-01; 1024.41(c)(2)(iii) | 🔴     | `app/tools/section12.ts:189-192`; `domain/lossmit/ops.ts:211`                                   |
 | cashiering-2  | cashiering | The $50 rule can book negative escrow                                                                | §2.2 rule 2                            | 🟡     | `domain/cashiering/allocation.ts:114`                                                           |
 | cashiering-3  | cashiering | Named extra principal is credited to escrow, or parked, when the rest is short of a payment          | §2.4 rules 1-2; §2.5 example I         | 🟡     | `domain/cashiering/allocation.ts:137-158`                                                       |
 | cashiering-4  | cashiering | One suspense balance shields several installments from late charges                                  | §2.7 rule 1; 2.7-Q1                    | 🟡     | `domain/cashiering/latecharges.ts:65-66`                                                        |
@@ -121,7 +123,7 @@ decided", says why each went the way it did.
 | pmi-13        | pmi        | An ARM reset inside an interest-only period amortizes at once                                        | §10.2 R2                               | 🟢     | `domain/pmi/schedule.ts:69-74`                                                                  |
 | lossmit-2     | lossmit    | The case fold listens for plan and hold events by names nothing emits, so they never reach a case    | §35.9 rules 1, 9                       | 🟢     | `domain/operations-runtime/default-35-9.ts:77-78`, `:184`                                       |
 
-🔴 high (15) · 🟡 medium (49) · 🟢 low (31). ei is Reg X early intervention.
+🔴 high (16) · 🟡 medium (49) · 🟢 low (31). ei is Reg X early intervention.
 Section numbers are the servicing app's spec; paths are under
 `apps/servicing/src/`; amounts ending in c are cents. docs/decisions.md tells
 the longer story of most of these, in the entry for the environment that found
@@ -1069,6 +1071,150 @@ index date 2026-09-17).
     case opens because no overlay reaches the unit. Here the charge was
     assessed before the waiver, and the reproduction ends before the next
     grace end on 10-17.
+
+### lossmit-3. A borrower performing under a forbearance plan is referred to foreclosure, because activation never writes the plan's hold 🔴
+
+- **Spec says.** 12.4's timer table arms `REGX_1024_41C2III_PERFORMANCE_HOLD`
+  on an active plan, with the breach action "13.x refuses referral/motion/sale
+  (`foreclosure_holds{kind=fnma_plan_performing}`)"
+  (12-4-forbearance-plan.md:86). That hold row is among the section's records
+  (:110), and 12.4-T9 reads "13.3 referral command refused while the plan is
+  active" (:142). 12.5 says the same for a repayment plan
+  (12-5-repayment-plan.md:78, :104; 12.5-T6 at :131). 13.2's vocabulary scopes
+  the kind to refer, judgment_motion, sale_schedule and sale_conduct
+  (13-2-dual-tracking-restriction.md:76), and calls a kind no section writes
+  "a dead gate" (:62). The rules behind it:
+  - Fannie Mae E-3.2-01: for a principal residence the servicer must not refer
+    when "there is an approved payment arrangement for a workout option" or
+    the borrower "has accepted an offer for a workout option and is performing
+    in accordance with its terms" (quoted at 13-4-prereferral-review.md:28).
+  - E-3.2-04, for any other property: once the first forbearance or repayment
+    payment is received, the servicer "must delay the foreclosure referral
+    until the borrower breaches the plan" (:30).
+  - D2-3.2-01: a forbearance plan needs no complete BRP, and referral is one
+    of the four outcomes that must follow once the plan is complete.
+  - Reg X 1024.41(c)(2)(iii): no first notice or filing, motion or sale while
+    the borrower performs under a short-term forbearance or repayment plan
+    offered on an incomplete application. The spec applies the same rule to
+    every plan (12-4-forbearance-plan.md:38).
+- **Engine does.** `forbearanceActivation` returns the hold,
+  `hold("fnma_plan_performing", term_start, term_end)`
+  (domain/lossmit/ops.ts:209-211), and the activation path drops it. 12.5's
+  `shortTermPlanOffer` computes the same hold (ops.ts:332-336), and only
+  domain/lossmit/12-5.spec.test.ts:155 calls it. It takes the notice dates,
+  writes `workout_plans` and emits `workout_plan.activated`
+  (app/tools/section12.ts:189-192). 12.4's `op: term`
+  (app/tools/section12-4.ts:51-65) and 12.5's activation
+  (section12.ts:216-224) write no hold either. The refusal exists only as
+  12.4's `op: referral_check`, over a `plan_status` the caller states
+  (section12.ts:184; ops.ts:272-273). No 13.x or 35.9 code calls it, and
+  12.4-T9's test drives only that op
+  (domain/lossmit/12-4.spec.test.ts:275-284). The armed clock
+  (domain/lossmit/timers.ts:167) has no reader. 13.1's refer gates read the
+  loan row, `lossmit_applications` and `foreclosure_holds`
+  (app/tools/section13.ts:231, :89-100, :289), never `workout_plans`. Its one
+  performing gate reads trial holds only, and not at `refer` (:330). 35.9's
+  referral step proposes on open gates, a 13.4 `refer` review, a retained firm
+  and no hold row (domain/operations-runtime/default-35-9/referral.ts:58-65,
+  :120-137). The officer's approval re-runs the gates (:83-88); that re-run is
+  what cancels a referral in 35.9-T8 when a 12.1 application arrives, and a
+  plan cancels nothing. What else might stop it:
+  - The 13.4 review. Its `PR_NO_APPROVED_ARRANGEMENT` item is the caller's
+    statement (`approved_arrangement`, section13.ts:451), and
+    `complete_review` reads the store for SCRA, bankruptcy and disaster only
+    (:376-381, :420-421). The referral step takes the latest completed review,
+    whenever it completed (referral.ts:26), so a plan activated after a
+    `refer` review is never seen.
+  - The officer. The 35.8 screen reads 13.1's gates and the case
+    (domain/operations-runtime/work-35-8/screens.ts:90), and the proposal's
+    rationale says "no hold".
+  - 12.1's and 12.2's holds (`regx_f2_prefiling`, `regx_g_dual_track`,
+    `lm_offer_pending`, `fnma_e3401_*`) open on complete applications, offers
+    and appeals (13-2-dual-tracking-restriction.md:66-74). A forbearance plan
+    on QRPC or an incomplete application gets none.
+  - A complete application does stop it, through the (f)(2) gate
+    (section13.ts:94, :309), not a hold. A 12.5 plan past 90 days delinquent
+    needs a complete BRP (domain/lossmit/ops.ts:287), so a repayment-plan loan
+    past day 120 normally has one, and a performing repayment plan opened on
+    QRPC cures arrears before day 121. The exposure is forbearance, whose
+    suspended payments let the delinquency grow through the term: 12.4's own
+    worked example is 11 months delinquent in its third term
+    (12-4-forbearance-plan.md:93).
+  - Trial plans: 12.6 writes none, and 12.8's trial is not wired into the
+    runtime (lossmit-2).
+  - After the referral, 13.1's `first_notice` gates do not name the plan
+    either (section13.ts:308-331).
+  - Reach: no runtime code opens a `prereferral` foreclosure case or writes
+    `note_custody` or the case's `referral_package_document_id`. Only tests
+    write them (domain/operations-runtime/35-9.spec.test.ts:100, :494), so the
+    runtime as wired refers no loan yet. Seeded as 35.9-T8 seeds them, the
+    plan never stops the referral.
+- **Reproduction.** A scratch database built by the app's own `db-setup` with
+  all 177 migrations. Six copies of L-1 (Texas, owner-occupied, due
+  2026-09-01, never paid) were boarded through the transfer path on
+  2026-08-20. No payment was posted, so no custodial account was needed. The
+  hosted sweep ran daily at 11:00Z as main.ts runs it: 204 sweeps from
+  2026-08-21 to 2027-03-12, all completed. Instrumented, in 35.9-T8's shapes
+  because nothing else writes them: a retained FAKE Texas firm, and on
+  2026-12-16 a `prereferral` case with its package document and a
+  `note_custody` row on each loan. Everything else went through the sections'
+  tools. On 12-22, inside the review window, each loan's 13.4 review ran
+  `start_review`, `dmdc.verify`, `bk.scrub` and `pr_prohibitions` with
+  `complete_review`. All but D's completed `refer`.
+  - F: a 12.1 incomplete application on 12-26, then on 12-28 a 12.4 short-term
+    offer on it and the activation path. The term ran 2027-01-01 to 03-31 with
+    payments suspended, the (c)(2)(iii) shape. T: no application, offer and
+    then `op: term`. N: no plan.
+  - On 12-31 (day 121) the daily unit proposed the referral on N, F and T
+    alike, with the rationale "gates open (19 evaluated) … no hold". 13.1's
+    refer gates were all open on F and T, no gate named the plan,
+    `foreclosure_holds` was empty, and the performance-hold clock was armed.
+  - On 2027-01-04 (day 125, the plan's fourth day) the officer approved. The
+    re-run gates were open, and `foreclosure.referral.sent`,
+    `attorney_referrals` and a `referral_package` dispatch were written for F
+    and T as for N. The same day, 12.4's own `referral_check` refused: "13.3
+    referral refused: workout plan active (REGX_1024_41C2III_PERFORMANCE_HOLD
+    / D2-3.2-01)".
+  - On 01-05 the firm acknowledged, and F's `first_notice` gates were all
+    open. On 02-18 the FAKE firm's FIRST_LEGAL report recorded
+    `foreclosure.first_notice.filed`, and on 03-11 a sale was scheduled for
+    04-10. The plan read `active` throughout, and no hold instruction went to
+    the firm.
+  - Controls. H: as F, plus 12.1's own `foreclosure_holds.set` for kind
+    `fnma_plan_performing` on 12-28. 13.1 closed `HOLD:fnma_plan_performing`,
+    nothing was proposed, and the officer's `propose` by hand returned "gates
+    closed". D: the plan activated 12-18, and the reviewer stated
+    `approved_arrangement: true`. The review read `hold_lossmit`, and nothing
+    was proposed. R: a 12.1 complete application on 12-23 and a 12.5
+    nine-month plan on 12-28. `REGX_1024_41F2_PRE_FILING_APP_GATE` closed,
+    nothing was proposed, and R had no `fnma_plan_performing` row either.
+  - The same script on a second scratch database, sweeping from 2026-12-14,
+    gave the same proposals, approvals and refusals. Found while reproducing
+    lossmit-2, and reproduced in isolation on 22 and 23 October 2026. Two
+    independent checks reproduced it, one on 35.9-T8's own fixture path with a
+    Florida judicial loan and the daily unit called directly. The other found
+    a variant: a plan activated after the engine's proposal and before the
+    officer's approval is not caught either, because the re-run gates still
+    see no plan. High, with one limit on reach: no runtime code yet opens a
+    prereferral case or writes the note custody and package records, so the
+    runtime as wired refers no loan today; once those writers exist, every
+    forbearance loan past day 120 is referable.
+- **Smallest fix.** At each activation (section12.ts:189-192,
+  section12-4.ts:51-65, section12.ts:223-224), write the hold in 12.1's writer
+  shape (app/tools/section12-1.ts:24-27). Use kind `fnma_plan_performing`,
+  scoped to refer, first_notice, judgment_motion, sale_schedule and
+  sale_conduct, from the activation date, citing 1024.41(c)(2)(iii) and
+  E-3.2-01. Close it in `planLifecycle`'s end ops (section12.ts:79-86) with
+  `foreclosure_holds.closed`, so a `terminated{failed_terms}` loan opens 1 BD
+  later (12.4-T9). The scope should carry `first_notice`, which 13.2's table
+  omits, because (c)(2)(iii) bars the first filing on a loan referred before
+  its plan began. 13.2's table also names 12.6/12.7 as the writer, against
+  12.4's and 12.5's own outputs; correct both in the same change. 13.1 already
+  refuses on the row (section13.ts:332), as H shows. Fix lossmit-1 with it, or
+  the hold is never released.
+- **Kept out by.** No environment runs 12.4's lifecycle, 13.1's gates or
+  35.9's referral. lossmit-retention ports only the plan term calculators
+  (packages/environments/src/lossmit/ported/plans.ts).
 
 ## Medium
 
@@ -2843,7 +2989,7 @@ index date 2026-09-17).
   every consumed type has a non-test emitter. Kept out: no environment runs
   35.9's fold.
 
-96 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+97 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

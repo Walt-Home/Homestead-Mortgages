@@ -37,7 +37,7 @@ import { rngFor, type Rng } from "../rng.js";
 import { demoLoan } from "../life/demo.js";
 import { defaultCalibration, type Calibration } from "../life/calibration.js";
 import { generate } from "../life/generate.js";
-import type { LoanPins } from "../life/draw.js";
+import { STATE_CODES, type LoanPins } from "../life/draw.js";
 import type { ScenarioEvent } from "../life/scenario.js";
 import {
   PACKAGE_DEFAULTS,
@@ -91,25 +91,8 @@ const EARLIEST = plainDate("2026-03-01");
 
 /* ── the gate ────────────────────────────────────────────────────────────── */
 
-/** The licensed states the gate is told of: the sixteen the life generator draws. */
-const LICENSED = new Set([
-  "CA",
-  "TX",
-  "FL",
-  "NY",
-  "IL",
-  "PA",
-  "OH",
-  "GA",
-  "NC",
-  "MI",
-  "NJ",
-  "VA",
-  "WA",
-  "AZ",
-  "MA",
-  "CO",
-]);
+/** The licensed states the gate is told of: every state the life generator draws a property in. */
+const LICENSED: ReadonlySet<string> = new Set(STATE_CODES);
 
 /**
  * The servicing app's gate over a package as its decoder reads it: every rule
@@ -243,8 +226,11 @@ export function drawBoardingCandidate(
       { loans: plan.length, start, cohort_months: cohort, months, outreach: true, pins, events },
       { calibration, defects: requests },
     );
-  } catch {
-    return null; // a defect the drawn note cannot carry (a cap that does not bind)
+  } catch (e) {
+    // A defect the drawn note cannot carry (a cap that does not bind) is redrawn. Anything else is a defect in the
+    // generator, and is thrown: redrawing it would quietly leave a kind of loan out of every suite.
+    if (e instanceof RangeError && / cannot be planted on loan \d+: /.test(e.message)) return null;
+    throw e;
   }
   const book = res.defective ?? res.clean;
   // Every loan reached the transfer; one paid off before it is no transfer at all.

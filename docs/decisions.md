@@ -7366,9 +7366,9 @@ fall in that year. The demo runs its whole decade.
 - **The floors.** On the held-out suite, submitting nothing passes 50 of 200
   packages, and finding every escrow Yes while reading no statement passes 100.
 - **The reference.** It passes the held-out suite, 300 training tasks and
-  the four spec packages, in three turns and at most 18 tool calls. Of 1,000
-  training candidates, 707 reached the fairness check, and it missed nothing
-  on any of them.
+  the four spec packages, in three turns and at most 18 tool calls. Of the
+  first draws of 1,000 training tasks (train seed 11), 707 reached the
+  fairness check, and it missed nothing on any of them.
 
 Not in 1.0.0:
 

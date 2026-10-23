@@ -2460,9 +2460,9 @@ statement passes 100.
 **The proof of fairness.** The reference passes the held-out suite (seed 1,
 200 packages, pinned by hash), 300 training tasks and four spec cases: the
 demo loan clean, with D-42, with D-03, and with both. It takes three turns
-and at most 18 tool calls. Of 1,000 training candidates, 707 reached the
-fairness check (the rest were redrawn for those reasons), and the reference
-missed nothing on any of them.
+and at most 18 tool calls. Of the first draws of 1,000 training tasks
+(train seed 11), 707 reached the fairness check (the rest were redrawn for
+those reasons), and the reference missed nothing on any of them.
 
 **What the servicing app does with them.**
 `apps/servicing/scripts/board-life-package.mjs` boards packages through the

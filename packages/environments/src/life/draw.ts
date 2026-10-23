@@ -197,6 +197,8 @@ const STATES: readonly (readonly [string, number, string, string])[] = [
   ["MA", 2, "Worcester", "016"],
   ["CO", 3, "Denver", "802"],
 ];
+/** The states a drawn property can be in. */
+export const STATE_CODES: readonly string[] = STATES.map((s) => s[0]);
 const STREETS = [
   "Maple",
   "Oak",

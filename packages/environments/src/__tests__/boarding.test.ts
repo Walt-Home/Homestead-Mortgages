@@ -398,7 +398,7 @@ describe("boarding-triage", () => {
   });
 });
 
-/** One staged loan, from the first spec task's tape as the decoder reads it. */
+/** One staged loan: the clean demo package's, as the writer encodes it and the decoder reads it back. */
 function decodeOne() {
   return demoLoan(defaultCalibration()).packages.clean.loans[0]!;
 }

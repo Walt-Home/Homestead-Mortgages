@@ -2449,13 +2449,122 @@ is the one defect so far (docs/synthetic-data-defects.md).
 `bookTape(book, month)` return what a partner's tape carries, under the m3-v1
 profile's keys: terms, balances, status and dates, a twelve-month pay
 string, the escrow balance, twelve months of cash flow, and the PMI,
-foreclosure and bankruptcy fields. A tape writer only lays them out. The
-month a loan pays off or transfers out is measured on the day it closed, so
-an installment still in grace at a payoff never ages to 30 days.
+foreclosure and bankruptcy fields. The tape writer lays them out. The month
+a loan pays off or transfers out is measured on the day it closed, so an
+installment still in grace at a payoff never ages to 30 days.
+
+**The tape writer.** `writeTape(book, month)` (`src/life/tape.ts`) writes a
+month's tape in the m3-v1 layout that `@hm/partner-book` reads:
+
+- one row per loan on the servicer's books at the month-end;
+- the profile's 118 columns, in its order, with its header text;
+- the month's last day as the as-of date, on every row.
+
+`tapeStream(book)` writes a tape for every month, 131 of them for the
+default ten-year book. `writeSupplement(book, month)` writes the supplement
+that goes with each tape, because the layout carries no date of birth. With
+`{ servicer: "prior" }`, both write the prior servicer's files for a loan
+transferred in.
+
+Each cell is the projection's value, in the form a partner's export gives:
+
+- **Dates** are m/d/yyyy. A real tape writes the year in two digits, and the
+  reader puts a two-digit year in the century nearest the day it reads it.
+  Four digits keep the round trip from depending on the clock.
+- **Money** is dollars and cents, with no symbol or grouping and a minus
+  sign before a negative.
+- **Rates** are in percent. A rate of 1 or less carries its percent sign,
+  because the reader takes a bare one for a fraction. The PMI rate is in
+  basis points, the form the one borrower-paid loan on a real tape uses.
+- **Flags and codes.** Flags are Y and N. Codes follow `M3_NOTATION`, which
+  uses the sample partner's notation where it has one, and "Current
+  Occupancy" fills both of its columns. A code with no notation stops the
+  writer.
+- **Pay strings** are written as the projection writes them.
+
+A column the projection has nothing for is left empty: FICO, a BPO, the
+property's rooms, the investor's economics. The writer invents nothing.
+
+**The round trip.** `tape.test.ts` writes a 200-loan book over ten years,
+with transfers out on: 131 tapes and 15,997 rows. It reads each tape back
+through `readBook`.
+
+- The reader raises no exception.
+- Every fact it keeps equals the projection's, and so does every field of
+  the `ImportedLoanRecord` it makes.
+- A test holds the writer's columns equal to the profile's, and a workbook
+  of the same rows reads the same as the CSV.
+
+What the layout cannot carry, the record does not have: the co-borrower, a
+mailing address, and the loan's purpose (the projection has none).
+
+The contract's status is the reader's, not the projection's. A closed loan
+keeps its own status; otherwise the MBA status decides. "C" is current at
+zero days, and a bucket is delinquent by its days. The projection's status
+follows the Regulation X count instead. At the end of a month shorter than
+31 days, a loan one payment behind is under 30 days by that count and 30 by
+the MBA's. So the contract says delinquent where the projection says current
+on 98 of the 15,997 rows.
+
+**Tape-stream defects** are what a delivery does to right values. The 47 in
+docs/synthetic-data-defects.md are wrong values in a servicer's records;
+these are their own family, in `src/life/tape-defects.ts`:
+
+| ID   | Defect                                              | Built |
+| ---- | --------------------------------------------------- | ----- |
+| T-01 | a month missing from the stream, or delivered twice | no    |
+| T-02 | a renamed column                                    | no    |
+| T-03 | leading zeros stripped from a column of codes       | yes   |
+| T-04 | dates mangled by a spreadsheet                      | no    |
+| T-05 | an as-of date that drifts from the month-end        | no    |
+
+`plantTapeDefects(book, stream, requests)` plants them in a written stream.
+A request names its months, or reaches each tape at a rate. The rate is
+drawn from a stream keyed by the book, the defect and the month. A month
+carries one tape defect.
+
+- **Root causes.** Each definition gets the whole stream, so one that drops,
+  repeats or renames a file has the stream to do it in. It returns each value
+  it changed: the file, row and column, the true value and the planted one.
+  The labels are the generator's `DefectLabel` with the file added.
+- **Symptoms.** `tapeSymptomLabels(planted, read)` finds them by difference,
+  as a twin's are found. It reads each planted month's clean and planted
+  files with the reader it is handed. Every difference in the records, the
+  facts, the exceptions or the refusal is a label.
+- **Why the reader is handed in.** The life generator cannot import
+  `@hm/partner-book`, because its profile reaches `node:zlib` through the
+  vendored workbook reader. The tests hand it `readBook`, a dev dependency
+  here as it is in refi-review.
+
+**T-03** is a file opened in a spreadsheet. A column of digits is read as a
+number and loses its leading zeros. On the m3 tape that hits two columns:
+
+- a ZIP code that starts with 0. Massachusetts and New Jersey are the
+  generator's states with one;
+- every pay string whose oldest month was current, so "000000000000"
+  arrives as "0". That is 13,606 of the 15,997 rows.
+
+The reader takes both as written. The record's postal code, the ZIP fact
+and the pay-string fact change, and nothing else does. The review reads
+only the pay string's last character, which survives. The test plants T-03
+in three months and holds the symptoms equal to what each root reaches.
+
+**Still to build.** Each is one more `TapeDefectDefinition`:
+
+- T-01 drops a month's file, or sends one twice: the same file again, or a
+  month's rows under the next month's name. Its symptoms are rows read from
+  one stream and not the other.
+- T-02 renames a header. A required one gets the file rejected by name. Any
+  other leaves its fact empty and keeps the cell under `raw`.
+- T-04 rewrites dates as a spreadsheet does: two-digit years, serial numbers,
+  day and month swapped.
+- T-05 writes an as-of date that is not the month-end, such as the export
+  date or last month's.
 
 **Not covered yet:**
 
 - the transfer package and the other 46 defects;
+- tape-stream defects T-01, T-02, T-04 and T-05;
 - bankruptcy, foreclosure, loss mitigation, forbearance and modification.
   Their tape fields are present and always empty;
 - returned payments and NSF fees;
@@ -2469,7 +2578,7 @@ an installment still in grace at a payoff never ages to 30 days.
   that overpays, and neither the overage nor the escrow balance is refunded.
 
 A thousand loan-decades run in about 3.5 seconds, and a test holds them
-under 15.
+under 15. Reading the round trip's 131 tapes takes about five.
 
 ## Calibration
 

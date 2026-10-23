@@ -1,6 +1,6 @@
 /**
  * The month-end projection: per loan per month, what a partner's tape
- * carries, so a tape writer only has to lay it out.
+ * carries, so the tape writer (tape.ts) only has to lay it out.
  *
  * The groups and their field names follow the m3-v1 profile's keys
  * (packages/partner-book/src/m3-v1.ts): the terms, the balances, the status

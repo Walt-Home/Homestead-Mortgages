@@ -13,7 +13,9 @@
  * changes, MI events, contacts, the installment ledger, month-ends with their
  * Metro 2 records) and, when defects are asked for, the defective twin and
  * its labels. `monthEndRow` and `bookTape` project a month-end onto what a
- * partner's tape carries. See docs/environments.md, "The life generator".
+ * partner's tape carries, `writeTape` and `tapeStream` write it in the m3-v1
+ * layout, and `plantTapeDefects` plants what a delivery does to the files.
+ * See docs/environments.md, "The life generator".
  */
 
 export * from "./calibration.js";
@@ -24,4 +26,6 @@ export * from "./simulate.js";
 export * from "./defects.js";
 export * from "./generate.js";
 export * from "./projection.js";
+export * from "./tape.js";
+export * from "./tape-defects.js";
 export * from "./check.js";

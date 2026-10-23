@@ -3125,6 +3125,15 @@ in three months and holds the symptoms equal to what each root reaches.
 A thousand loan-decades run in about 3.5 seconds, and a test holds them
 under 15. Reading the round trip's 131 tapes takes about five.
 
+**Checked against the servicing app.** docs/cross-check.md boards 178
+generated loans in the servicing app, replays their receipts and steps its
+own cashiering, delinquency and Metro 2 cycles every day, about 305
+loan-years. Away from logged defects the two agree on every receipt's split,
+installment, late charge and month-end balance; it also lists two generator
+bugs and three unlogged credit-reporting defects. Its figures are life
+1.0.0's, and the harness (`apps/servicing/scripts/cross-check-life.mts`)
+refuses to read back a run drawn under another life version.
+
 ### The demo page
 
 `npm run env:demo -w @hm/environments` writes `playground/dist/demo.html`,

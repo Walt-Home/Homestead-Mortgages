@@ -7836,3 +7836,49 @@ garbled line, and
 figures but not its projection's items and targets, which the wrapper
 needs to explain a generated year. It is a small addition to `src/life`,
 left for the work that builds the call.
+
+## The life generator is checked against the servicing app's own cycles
+
+**Decided 23 October 2026.** The life generator's histories are checked by
+replaying them through the servicing app's per-loan cycles, not by running
+the servicing app as a generator. `apps/servicing/scripts/cross-check-life.mts`
+boards each generated loan through the transfer route, replays its receipts,
+steps the cashiering unit, the delinquency counters and the monthly Metro 2
+unit every day on a scratch database, and compares receipts, installments,
+late charges, suspense, balances and the Metro 2 record month by month.
+docs/cross-check.md has the method, the scale and every disagreement class,
+from one run against life 1.0.0. Life 1.1.0 draws other books from the same
+seeds, so the batch's figures are 1.0.0's, it has not been rerun, and the
+harness refuses to read back a run drawn under another life version.
+
+**Why a check and not a generator.** The path costs about 0.4 seconds per
+loan-day per process and rises as the database's records grow; the generator
+writes a loan-decade in about 3.5 milliseconds. A first run of 305 loan-years,
+drawn under life 1.0.0, took two hours in eight processes.
+
+**What it settled.**
+
+- Away from the logged defects, the two agree on every receipt's split, every
+  installment, every late charge and every month-end balance, to the cent.
+  The generator's carried state is the servicing app's.
+- Every money disagreement is cashiering-11, -18 or -19 or boarding-6, already
+  logged. On cashiering-11 the generator is wrong too: it shields every
+  installment due in the 60 days after a transfer, which is the engine's half
+  of that defect. The servicing app is not a reference for a transfer's first
+  two months until one side shields only payments the prior servicer received
+  on time.
+- Three runtime defects in credit reporting are not logged: the Metro 2
+  builder never carries the prior month (an empty payment history profile, and
+  a date of first delinquency re-aged each time a borrower who stays behind
+  pays an installment), counts only posted payments, and never sees a
+  transfer's prior history. They are described in docs/cross-check.md and
+  not filed.
+- Two generator bugs, in fields nothing grades yet: a MIN whose check digit is
+  random, and no next due date on a month-end whose next installment is paid
+  ahead. They are left for the branches changing the generator; the tape row's
+  half of the second was fixed there the same day (life 1.1.0).
+
+**What the harness supplies, and says so.** The P&I and T&I custodial
+accounts (boarding-4), a borrower party (boarding-2), the note's late-charge
+cap (no tape column, D-03), and each escrow analysis's new payment on the
+schedule rows (no runner). Each run names them in its output.

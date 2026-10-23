@@ -21,7 +21,7 @@ import { defectById, rootLabel, symptomLabels, type DefectLabel } from "./defect
 import { buildLines, drawLoan, type BillChange, type LoanDraw } from "./draw.js";
 import { indexFeed, marketPath, type MarketMonth } from "./feeds.js";
 import { normalizeScenario, scriptFor, type NormalScenario, type Scenario } from "./scenario.js";
-import { simulateLoan, type LoanLife, type SimContext } from "./simulate.js";
+import { simulateLoan, type LifeMoment, type LoanLife, type SimContext } from "./simulate.js";
 
 /** Bump on any change to what the generator draws or how a history is computed. */
 export const LIFE_VERSION = "1.0.0";
@@ -63,6 +63,8 @@ export interface GenerateOptions {
   readonly defects?: readonly DefectRequest[];
   /** The calibration to draw from; default, `calibration.json` beside this module (or every default without it). */
   readonly calibration?: Calibration;
+  /** Shown each loan's receipts and analyses as they come, in the clean history and in its twin. */
+  readonly observe?: (loan: number, history: "clean" | "twin", moment: LifeMoment) => void;
 }
 
 interface Prepared {
@@ -141,7 +143,17 @@ export function generate(
       script.transfer_in?.on ??
       (sc.boarding === "book" && age > 0 ? addMonths(draw.first_due, age) : null);
     prepared.push({ draw, lines, script, transferIn });
-    loans.push(simulateLoan(ctx, draw, lines, script, transferIn));
+    const observe = opts.observe;
+    loans.push(
+      simulateLoan(
+        ctx,
+        draw,
+        lines,
+        script,
+        transferIn,
+        observe ? { observe: (m) => observe(i, "clean", m) } : {},
+      ),
+    );
   }
   const clean: LifeBook = {
     seed: String(seed),
@@ -192,8 +204,10 @@ export function generate(
   for (const [i, id] of [...placed].sort((a, b) => a[0] - b[0])) {
     const def = defectById(id);
     const p = prepared[i]!;
+    const observe = opts.observe;
     const twin = simulateLoan(ctx, p.draw, p.lines, p.script, p.transferIn, {
       boarded: def.boarded,
+      ...(observe ? { observe: (m: LifeMoment) => observe(i, "twin", m) } : {}),
     });
     const c = loans[i]!;
     twins.set(c.loan_id, twin);

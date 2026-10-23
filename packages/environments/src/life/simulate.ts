@@ -398,9 +398,54 @@ export interface SimContext {
   readonly market: readonly MarketMonth[];
 }
 
+/**
+ * A moment an environment draws a task from: what an engine is about to be
+ * handed, as it stands, before the engine runs. Each is a copy, so nothing an
+ * observer does reaches the history.
+ */
+export type LifeMoment =
+  | {
+      readonly kind: "receipt";
+      readonly receipt_id: string;
+      readonly mode: ReceiptMode;
+      readonly on: PlainDate;
+      readonly credited_as_of: PlainDate;
+      readonly amount: Cents;
+      readonly curtailment: Cents;
+      /** The cash state the receipt is posted against. */
+      readonly state: LoanCashState;
+      /** The note rate each installment in the state is charged at. */
+      readonly rates: Readonly<Record<string, string>>;
+    }
+  | {
+      readonly kind: "analysis";
+      readonly year: number;
+      readonly as_of: PlainDate;
+      readonly year_start: PlainDate;
+      readonly sent_on: PlainDate;
+      /** The lines as the analyst has them, the inputs `projectLines` is handed. */
+      readonly lines: readonly EscrowLineInput[];
+      readonly cpi_change_pct: string;
+      /** The escrow balance on the run date. */
+      readonly balance: Cents;
+      /** The escrow shares of the installments still to be paid before the year, assumed paid. */
+      readonly deposits: readonly { readonly on: PlainDate; readonly amount: Cents }[];
+      /** The bills still to be paid out before the year. */
+      readonly disbursements: readonly {
+        readonly on: PlainDate;
+        readonly line: string;
+        readonly amount: Cents;
+      }[];
+      readonly regx_days_delinquent: number;
+      /** The escrow payment the new one replaces. */
+      readonly old_payment: Cents;
+    };
+
 export interface SimOverrides {
   /** What boarding writes, given the note's terms. The clean history boards the note as it is. */
   readonly boarded?: (note: BoardedTerms) => BoardedTerms;
+  /** Shown each receipt before it is posted, and each analysis before it is decided. */
+  readonly observe?: (moment: LifeMoment) => void;
 }
 
 /* ── the draws ───────────────────────────────────────────────────────────── */
@@ -983,6 +1028,24 @@ export function simulateLoan(
     while (fiftyDates.length && fiftyDates[0]! < cutoff) fiftyDates.shift();
     state.partial_count_12m = fiftyDates.length;
     const id = `${d.loan_id}-R${++receiptSeq}`;
+    if (ov.observe)
+      ov.observe({
+        kind: "receipt",
+        receipt_id: id,
+        mode,
+        on,
+        credited_as_of: credited,
+        amount,
+        curtailment: curtail,
+        state: {
+          ...state,
+          installments: state.installments.map((i) => ({ ...i })),
+          holds: [...state.holds],
+          fees: (state.fees ?? []).map((f) => ({ ...f })),
+          overlays: (state.overlays ?? []).map((o) => ({ ...o })),
+        },
+        rates: Object.fromEntries(state.installments.map((i) => [i.due_date, rateOf(i.due_date)])),
+      });
     const plansMade = allocateAtRates(
       state,
       {
@@ -1300,12 +1363,13 @@ export function simulateLoan(
     // The projected actual balance as escrow/grader.ts's projectedActual reads it: the balance now, plus the deposits
     // still due before the year (assumed paid), less what is still to be paid out. An installment due after the run
     // date that an early payer has already paid is in the balance now, and is not counted twice.
-    let pa = escrowBal;
+    const deposits: { on: PlainDate; amount: Cents }[] = [];
     for (let due = addMonths(ys, -3); due < ys; due = addMonths(due, 1)) {
       if (due <= asOf) continue;
       const inst = state.installments.find((i) => i.due_date === due);
-      if (!inst || inst.status === "due") pa += escrowFor(due);
+      if (!inst || inst.status === "due") deposits.push({ on: due, amount: escrowFor(due) });
     }
+    const toPay: { on: PlainDate; line: string; amount: Cents }[] = [];
     for (const l of lines)
       for (const b of l.bills)
         if (
@@ -1313,7 +1377,10 @@ export function simulateLoan(
           b.on < ys &&
           !(l.basis === "mi" && miTerminatedOn && b.on >= miTerminatedOn)
         )
-          pa -= b.amount;
+          toPay.push({ on: b.on, line: l.line_type, amount: b.amount });
+    let pa = escrowBal;
+    for (const x of deposits) pa += x.amount;
+    for (const x of toPay) pa -= x.amount;
     const dq = regxDaysDelinquent(applied(), asOf);
     const decision = decide({
       projection,
@@ -1328,6 +1395,21 @@ export function simulateLoan(
     const sent = addDays(asOf, sentAfter);
     const eff = effectiveDate(ys, sent);
     const oldPayment = escrowFor(eff);
+    if (ov.observe)
+      ov.observe({
+        kind: "analysis",
+        year: y,
+        as_of: asOf,
+        year_start: ys,
+        sent_on: sent,
+        lines: inputs,
+        cpi_change_pct: cpi,
+        balance: escrowBal,
+        deposits,
+        disbursements: toPay,
+        regx_days_delinquent: dq,
+        old_payment: oldPayment,
+      });
     const flags = [...pl.anomalies, ...escrowAnomalies(oldPayment, pay.payment_cents, decision)];
     for (let k = 0; k < 24; k++) {
       const due = addMonths(eff, k);

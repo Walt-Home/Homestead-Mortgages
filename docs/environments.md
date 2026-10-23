@@ -2752,9 +2752,10 @@ draws were redrawn:
 - 15 at the gate: 11 for a hazard renewal within 30 days of the transfer
   (W-005), 4 for that and an analysis more than a year old (W-009);
 - 15 for a defect the draw cannot carry. Five had no plan in force at the
-  transfer (D-35), and four drew a cap the P&I never reaches (D-03). Three
-  of D-12's loans and two of D-24's had paid off before the call to duty or
-  the transfer, and one of D-25's had no payment to misapply.
+  transfer (D-35), and four drew a cap the P&I never reaches (D-03). Six had
+  paid off before the transfer, which the defect's own check meets before
+  the payoff check does: three of D-12's (before the call to duty, too), two
+  of D-24's and one of D-25's.
 
 **The floors.** Submitting nothing passes 20 of the 200 held-out packages,
 the ones with nothing planted, with a mean score of 0.27. Correcting every
@@ -2774,9 +2775,9 @@ check, and the reference missed nothing on any of them.
 servicing app's own `decodeTransferBatch` and `BoardingService`, in process,
 with no database. With no argument it writes and boards the demo's four and
 one training package of each defect alone (`npm run env:transfer-package --
---each`, `src/boarding/one-of-each.ts`). It reports every label, the root and
-each symptom, with whether the gate caught it, and what boarded in the root's
-place:
+--out DIR --each`, `src/boarding/one-of-each.ts`). It reports every label,
+the root and each symptom, with whether the gate caught it, and what boarded
+in the root's place:
 
 - every tape is accepted, and every loan boards with no hard failure and no
   warning. The gate catches none of the ten, at the root or beside it;
@@ -2927,18 +2928,18 @@ bankruptcy it no longer knows of, is labeled too.
 first ten of docs/synthetic-data-defects.md, each with what it needs, what
 it plants and what its twin does:
 
-| ID   | Needs                                                        | Planted                                                     | The twin                                                                                                                     |
-| ---- | ------------------------------------------------------------ | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| D-42 | escrow lines, a transfer                                     | Yes in the tape's escrow cell                               | boards non-escrowed (D-31): no escrow billed, paid or analyzed from the transfer                                             |
-| D-35 | a repayment plan in force at the transfer                    | N in `lm_in_process`, the loss-mitigation row kept          | the plan's charges assessed rather than suspended, nothing waived at its end, no plan reported to the bureaus or on the tape |
-| D-03 | a dollar cap that binds                                      | a blank cap                                                 | cashiering charges the full percent                                                                                          |
-| D-01 | an ARM                                                       | the periodic cap in the first-change cap's cell             | every rate change after boarding reads the wrong cap                                                                         |
-| D-12 | a servicemember on a fixed rate above 6 %                    | N in `scra_active`, the cap's reason kept                   | billed the note's rate and P&I from the next installment, and charged late fees again                                        |
-| D-37 | a petition before the transfer                               | N in `bk_active`, the case kept in the bankruptcy file      | charges on post-petition installments assessed, the borrower called, no case on the tape                                     |
-| D-18 | mortgage insurance in force                                  | a termination date computed from 95 % of the original value | the insurance and its premium run past the date the law ends them                                                            |
-| D-24 | a closing after the first of its month                       | a history row due on the first of the closing month, unpaid | boards an installment behind: the last installment paid is open again, and each payment after pays the one before its own    |
-| D-25 | escrow, a regular payment 3 to 12 months before the transfer | that payment's principal posted to escrow                   | the balance keeps the principal: every later split, analysis, month-end and payoff on it                                     |
-| D-15 | a flood line                                                 | zone X where the determination says AE                      | the history is the clean one: flood tracking is not modeled, so the root is its only label                                   |
+| ID   | Needs                                                        | Planted                                                     | The twin                                                                                                                       |
+| ---- | ------------------------------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| D-42 | escrow lines, a transfer                                     | Yes in the tape's escrow cell                               | boards non-escrowed (D-31): no escrow billed, paid or analyzed from the transfer                                               |
+| D-35 | a repayment plan in force at the transfer                    | N in `lm_in_process`, the loss-mitigation row kept          | the plan's charges assessed rather than suspended, nothing waived at its end, no plan reported to the bureaus or on the tape   |
+| D-03 | a dollar cap that binds                                      | a blank cap                                                 | cashiering charges the full percent                                                                                            |
+| D-01 | an ARM                                                       | the periodic cap in the first-change cap's cell             | every rate change after boarding reads the wrong cap                                                                           |
+| D-12 | a servicemember on a fixed rate above 6 %                    | N in `scra_active`, the cap's reason kept                   | billed the note's rate and P&I from the transfer date, and charged late fees again; what was past due keeps the capped payment |
+| D-37 | a petition before the transfer                               | N in `bk_active`, the case kept in the bankruptcy file      | charges on post-petition installments assessed, the borrower called, no case on the tape                                       |
+| D-18 | mortgage insurance in force                                  | a termination date computed from 95 % of the original value | the insurance and its premium run past the date the law ends them                                                              |
+| D-24 | a closing after the first of its month                       | a history row due on the first of the closing month, unpaid | boards an installment behind: the last installment paid is open again, and each payment after pays the one before its own      |
+| D-25 | escrow, a regular payment 3 to 12 months before the transfer | that payment's principal posted to escrow                   | the balance keeps the principal: every later split, analysis, month-end and payoff on it                                       |
+| D-15 | a flood line                                                 | zone X where the determination says AE                      | the history is the clean one: flood tracking is not modeled, so the root is its only label                                     |
 
 Every defect but D-03 enters only through a transfer. A loan may carry two
 that enter at boarding. Its twin boards both, and each symptom is labeled

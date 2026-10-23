@@ -7688,7 +7688,10 @@ enter at boarding, as a value boarding writes, and the engines run on it:
   boarding that leaves the flag off ends the overlay the day before the
   transfer, so the charges are assessed. D-35's twin also waives nothing at
   the plan's end and reports no plan. D-37's twin calls a borrower in
-  bankruptcy and reports no case on the tape;
+  bankruptcy and reports no case on the tape. D-12's twin bills the note's
+  P&I on every installment due from the transfer date, as D-42's drops the
+  escrow; one already past due keeps the capped payment the prior servicer
+  billed, which is what the package's history boards it at;
 - D-01's twin reads the wrong cap at every rate change after boarding, and
   D-18's MI sweep reads the wrong termination date;
 - D-24's boarding applies the package's history oldest first, as
@@ -7771,7 +7774,10 @@ confirms the catalog: the gate catches none of the ten. The script also
 showed a harm the catalog left out. One D-24 package boards its loan 15 days
 delinquent, though its tape says the borrower is paid ahead. The catalog
 counted a pre-origination row as a receipt; an unpaid one is an installment
-boarding pays first. docs/synthetic-data-defects.md now says so.
+boarding pays first. And the catalog said a misapplied receipt changes the
+oldest-first result too, but D-25's split does not: its package boards
+exactly as far behind as its clean twin's, with only the balance wrong.
+docs/synthetic-data-defects.md now says both.
 
 **The suite.** 1.1.0 takes twenty plans in turn. Each defect is planted on at
 least 20 of the 200 held-out packages (D-03 and D-42 on 40, D-35 and D-24 on

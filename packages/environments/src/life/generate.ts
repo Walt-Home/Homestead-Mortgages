@@ -218,7 +218,7 @@ export function generate(
         );
       if (def.applies && !def.applies(loans[i]!))
         throw new RangeError(
-          `${def.id} cannot be planted on loan ${i}: its history has nothing ${def.title.toLowerCase()} needs`,
+          `${def.id} cannot be planted on loan ${i}: its history lacks what the defect needs (${def.title})`,
         );
       const already = placed.get(i) ?? [];
       if (!already.includes(def.id)) placed.set(i, [...already, def.id]);

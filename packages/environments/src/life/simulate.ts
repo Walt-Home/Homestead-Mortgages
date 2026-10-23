@@ -1852,27 +1852,30 @@ export function simulateLoan(
       bkKnownUntil = dayBefore;
       endOverlay("bankruptcy_active", e.on);
     }
-    // D-12: the servicer bills the tape's terms, the note's rate and P&I, from the next installment due, and charges
-    // late fees again.
+    // D-12: the servicer bills the tape's terms, the note's rate and P&I, on every installment due from the transfer
+    // date (as D-42's twin drops the escrow), and charges late fees again. An installment already past due keeps what
+    // the prior servicer billed, the capped payment, which is what the package's history boards it at.
     if (scraCall && !boardedTerms.scra_carried) {
       if (scraCall.capped_pi !== null)
         termsFrom(
-          nextDue > scraCall.first_due ? nextDue : scraCall.first_due,
+          e.on > scraCall.first_due ? e.on : scraCall.first_due,
           d.initial_pi_cents,
           d.note_rate_pct,
         );
       endOverlay("scra_reduced_rate", e.on);
     }
-    // D-18: the MI sweep reads the termination date boarding wrote.
+    // D-18: the MI sweep reads the termination date boarding wrote. A date still to come replaces the sweep; one
+    // already past leaves it as it stands, so a sweep deferred while the borrower was behind keeps looking each month,
+    // as it would on the right date.
     if (
       d.mi &&
       !miTerminatedOn &&
       boardedTerms.mi_termination_date !== noteTerms.mi_termination_date
     ) {
       const nt = pendingTriggerDate(boardedTerms.mi_termination_date, mid, rule78);
-      if (nt !== miTrigger) {
+      if (nt > e.on && nt !== miTrigger) {
         miTrigger = nt;
-        if (nt > e.on && nt <= windowEnd) push({ on: nt, kind: "pmi", due: nt });
+        if (nt <= windowEnd) push({ on: nt, kind: "pmi", due: nt });
       }
     }
     // D-24: boarding derives the ledger from the package's payment history, oldest first (service.ts:272, :345-347),

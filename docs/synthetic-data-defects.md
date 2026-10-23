@@ -332,12 +332,15 @@ continuity. Later processes catch some of them, and each item says which.
 9. **D-24 and D-25, history dated before the loan was made, and misapplied
    payments.** OCW ¶41† alleges both. They can corrupt every delinquency
    figure computed from the history (`delinquency.ts:11-12`): an unpaid
-   pre-origination row, or a misapplied receipt, changes the oldest-first
-   result. D-24 is deterministic to grade. A gate rule (W-014) sees it only
-   when a planted row breaks the history's continuity, and then for the wrong
-   reason. The vendored sample already carries it, unlabeled, on 16 loans.
-   D-25 goes in the ten-year history, where the payments environment's
-   allocation engine grades it.
+   pre-origination row, or a receipt posted to the wrong loan, changes the
+   oldest-first result. A receipt split wrong, its principal posted to
+   escrow, does not: the history carries a date and an amount, so the loan
+   boards exactly as far behind as its clean twin, and only its balance is
+   wrong (`AS/scripts/board-life-package.mjs`). D-24 is deterministic to
+   grade. A gate rule (W-014) sees it only when a planted row breaks the
+   history's continuity, and then for the wrong reason. The vendored sample
+   already carries it, unlabeled, on 16 loans. D-25 goes in the ten-year
+   history, where the payments environment's allocation engine grades it.
 10. **D-15, wrong flood data.** The CFPB alleges that Ocwen's own review found
     inconsistent or incomplete flood determination data loaded for its loans
     (OCW ¶138†) and inaccurate flood-zone data on more than 3,000 loans (OCW

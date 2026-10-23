@@ -16,7 +16,11 @@ import { addDays, addMonths, daysBetween, type PlainDate } from "@hm/kernel/cale
 import { lateChargeAmount } from "../payments/ported/latecharges.js";
 import { applyFifo } from "../pmi/ported/delinquency.js";
 import { toJsonLine } from "../record.js";
-import { decodeTransferBatch, parseCsv } from "../boarding/ported/tape-codec.js";
+import {
+  decodeTransferBatch,
+  parseCsv,
+  PAYMENT_HISTORY_HEADER,
+} from "../boarding/ported/tape-codec.js";
 import { gateFailures } from "../boarding/generator.js";
 import {
   CAP_COLUMN,
@@ -431,6 +435,27 @@ describe("the first ten's twins", () => {
     );
   });
 
+  it("D-12: a servicemember behind at the transfer keeps the capped payment on what was past due", () => {
+    // The installment due the month before the transfer is missed, so it is open at the boarding. The package's
+    // history boards it at what the prior servicer billed, the capped payment; the note's P&I starts at the transfer.
+    const behind = {
+      ...ten,
+      events: [...ten.events, { kind: "missed_payment" as const, loan: 4, on: "2028-05-01" }],
+    };
+    const r = generate("ten", behind, { calibration: cal, defects: [{ id: "D-12", loans: [4] }] });
+    const c = r.clean.loans[4]!;
+    const t = r.defective!.loans[4]!;
+    expect(c.at_transfer!.next_due < TEN_T).toBe(true);
+    const pi = (l: LoanLife, due: string) => l.installments.find((i) => i.due === due)!.pi;
+    const pastDue = c.installments.filter((i) => i.due >= c.at_transfer!.next_due && i.due < TEN_T);
+    expect(pastDue.map((i) => i.due)).toContain("2028-05-01");
+    for (const i of pastDue) expect([i.due, pi(t, i.due)]).toEqual([i.due, c.scra!.capped_pi]);
+    expect(
+      t.installments.filter((i) => i.due >= TEN_T).every((i) => i.pi === t.draw.initial_pi_cents),
+    ).toBe(true);
+    expect([t.invariants.ok, c.invariants.ok]).toEqual([true, true]);
+  });
+
   it("D-37: the bankruptcy's twin reports no case and calls a borrower in bankruptcy once it is ours", () => {
     const { c, t } = pair("D-37");
     expect(c.bankruptcy).toEqual({ chapter: "13", filed_on: "2027-12-05" });
@@ -495,14 +520,23 @@ describe("the first ten's twins", () => {
     ]);
     // The package writes it from the twin's books: the root in the history, the balance it left on the tape.
     const pkg = writeTransferPackage([{ life: t, clean: c, defects: ["D-25"] }]);
-    const labelled = pkg.manifest.labels.map(
+    const labeled = pkg.manifest.labels.map(
       (l) => `${l.root_cause ? "root" : "symptom"} ${l.file_or_table} ${l.field}`,
     );
-    expect(labelled[0]).toBe("root payment_history.csv principal");
-    expect(labelled).toContain("symptom boarding_tape.final.csv upb");
+    expect(labeled[0]).toBe("root payment_history.csv principal");
+    expect(labeled).toContain("symptom boarding_tape.final.csv upb");
     expect(() => writeTransferPackage([{ life: t, defects: ["D-25"] }])).toThrow(
       /clean twin's history/,
     );
+    // The history's own columns, the ones the decoder reads, are the clean twin's: a split misapplied leaves every
+    // date and amount as it was, so boarding derives the same delinquency, and only the balance is wrong.
+    const decoded = (files: Readonly<Record<string, string>>) =>
+      parseCsv(files["payment_history.csv"]!).map((row) =>
+        PAYMENT_HISTORY_HEADER.map((col) => row[col]),
+      );
+    const cleanPkg = writeTransferPackage([{ life: c }]);
+    expect(decoded(pkg.files)).toEqual(decoded(cleanPkg.files));
+    expect(pkg.files["payment_history.csv"]).not.toBe(cleanPkg.files["payment_history.csv"]);
   });
 
   it("D-01, D-15: what the generator does not compute leaves the twin's history as it was but for the root", () => {
@@ -518,7 +552,7 @@ describe("the first ten's twins", () => {
       expect(l.on >= addMonths(first, -2)).toBe(true);
   });
 
-  it("writes each into a package the gate passes, labelling the root and every cell it reached", () => {
+  it("writes each into a package the gate passes, labeling the root and every cell it reached", () => {
     for (const id of TEN) {
       const { c, t } = pair(id);
       const pkg = writeTransferPackage([{ life: t, clean: c, defects: [id] }]);

@@ -1,0 +1,571 @@
+<title>Synthetic Loan Histories</title>
+<style>
+/* Layout: a reading column for the story and the book; the three lanes side by side from 1100px, stacked below. */
+:root {
+  --paper: #FCFCFC; --raised: #F4F4F4; --chosen: #EBEBEB; --line: #E5E5E5; --edge: #DEDEDE;
+  --ink: #080808; --muted: #68686A; --quiet: #A2A2A4;
+  --accent: #BF242B; --accent-text: #842128; --accent-soft: #F9E1E2;
+  --ok: #1F7A45; --ok-soft: #E3F1E8; --d30: #A86A00; --d30-soft: #F8ECD6; --d60: #9A3D12; --d60-soft: #F5E0D6; --d90: #3B3B3F;
+  --serif: Georgia, "Times New Roman", serif;
+  --sans: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  --mono: Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #111113; --raised: #19191C; --chosen: #232328; --line: #26262B; --edge: #303036;
+  --ink: #EDEDEE; --muted: #A4A4AA; --quiet: #6E6E75;
+  --accent: #E35A60; --accent-text: #F08A8E; --accent-soft: #3A1C1E;
+  --ok: #57C285; --ok-soft: #16301F; --d30: #E2A64A; --d30-soft: #3A2C14; --d60: #E5845A; --d60-soft: #3A2116; --d90: #C9C9CE; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --paper: #111113; --raised: #19191C; --chosen: #232328; --line: #26262B; --edge: #303036;
+  --ink: #EDEDEE; --muted: #A4A4AA; --quiet: #6E6E75;
+  --accent: #E35A60; --accent-text: #F08A8E; --accent-soft: #3A1C1E;
+  --ok: #57C285; --ok-soft: #16301F; --d30: #E2A64A; --d30-soft: #3A2C14; --d60: #E5845A; --d60-soft: #3A2116; --d90: #C9C9CE; color-scheme: dark }
+* { box-sizing: border-box }
+html { -webkit-text-size-adjust: 100% }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--sans); overflow-x: hidden }
+.wrap { max-width: 1360px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 64px; display: grid; gap: 40px; min-width: 0 }
+@media (min-width: 720px) { .wrap { padding-inline: 28px } }
+.col { max-width: 980px; display: grid; gap: 14px; min-width: 0 }
+h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(1.7rem, 4.6vw, 2.3rem); line-height: 1.12 }
+h2 { font-size: 1.45rem; line-height: 1.2 }
+h3 { font-size: 1.12rem; line-height: 1.25 }
+h4 { font-size: 1rem }
+p { margin: 0; max-width: 72ch }
+ul { margin: 0; padding-left: 18px }
+li { margin: 2px 0 }
+.eyebrow { font: 600 .72rem/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--accent-text) }
+.muted { color: var(--muted) }
+.small { font-size: .86rem }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: .84rem }
+section { display: grid; gap: 16px; min-width: 0 }
+.lede { display: grid; gap: 12px }
+.trio { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 28px; border-top: 1px solid var(--line); padding-top: 14px }
+.trio h4 { font: 600 .74rem var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px }
+.trio ul { font-size: .9rem }
+.terms { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 24px; padding: 16px; background: var(--raised); border-radius: 6px; margin: 0 }
+.terms div { display: grid; gap: 1px; min-width: 0 } .terms dt { color: var(--muted); font-size: .78rem } .terms dd { margin: 0; font-family: var(--mono); font-size: .88rem; overflow-wrap: anywhere }
+.story { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none }
+.story li { margin: 0 }
+.story button { width: 100%; text-align: left; display: grid; gap: 2px; padding: 9px 10px; border: 1px solid var(--edge); border-radius: 5px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; min-height: 44px }
+.story button .d { font: .74rem var(--mono); color: var(--muted) }
+.story button .t { font-size: .86rem; line-height: 1.3 }
+.story button.moment { border-color: var(--accent) }
+.story button.moment .d { color: var(--accent-text) }
+.controls { display: grid; gap: 10px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--paper) }
+@media (min-width: 900px) { .controls { position: sticky; top: 0; z-index: 5 } }
+.row-ctl { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center }
+.seg { display: inline-flex; border: 1px solid var(--edge); border-radius: 5px; overflow: hidden }
+.seg button { font: 500 .9rem var(--sans); color: var(--ink); background: transparent; border: 0; padding: 8px 14px; cursor: pointer; min-height: 40px }
+.seg button + button { border-left: 1px solid var(--edge) }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text) }
+.years { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; flex: 1 1 420px; min-width: 0 }
+@media (min-width: 700px) { .years { grid-template-columns: repeat(10, minmax(0, 1fr)) } }
+.years button { position: relative; font: .8rem var(--mono); color: var(--ink); background: transparent; border: 1px solid var(--edge); border-radius: 4px; padding: 7px 2px 12px; cursor: pointer; min-height: 40px }
+.years button[aria-pressed="true"] { border-color: var(--ink); background: var(--chosen) }
+.years .marks { position: absolute; left: 0; right: 0; bottom: 3px; display: flex; justify-content: center; gap: 3px }
+.years .marks i { width: 5px; height: 5px; border-radius: 50%; display: block }
+.mk-moment { background: var(--accent) } .mk-late { background: var(--d30) } .mk-transfer { border: 1.2px solid var(--ink); width: 6px !important; height: 6px !important } .mk-label { background: var(--d60); border-radius: 1px !important }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .78rem; color: var(--muted) }
+.legend span { display: inline-flex; align-items: center; gap: 5px }
+.legend i { width: 7px; height: 7px; border-radius: 50%; display: inline-block }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.lanes { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; align-items: start }
+@media (min-width: 1100px) { .lanes { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.15fr) minmax(0, 1fr); gap: 22px } }
+.lane { display: grid; gap: 12px; min-width: 0; align-content: start }
+.lane > header { display: grid; gap: 4px; border-bottom: 2px solid var(--ink); padding-bottom: 8px }
+.lane > header p { font-size: .84rem; color: var(--muted) }
+.lanenum { font: 600 .7rem var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+.note { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; font-size: .88rem }
+.note.plain { border-left-color: var(--edge) }
+.month { border-top: 1px solid var(--line); padding: 8px 0 6px; display: grid; gap: 4px; min-width: 0 }
+.month.focus { background: var(--raised); box-shadow: -8px 0 0 var(--raised), 8px 0 0 var(--raised) }
+.mhead { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; background: transparent; border: 0; padding: 2px 0; color: var(--ink); font: inherit; cursor: pointer; text-align: left; width: 100% }
+.mhead b { font: 400 1rem var(--serif) }
+.chip { font: 600 .64rem/1 var(--sans); letter-spacing: .04em; text-transform: uppercase; padding: 4px 6px; border-radius: 3px; white-space: nowrap; display: inline-block }
+.chip.cur { background: var(--ok-soft); color: var(--ok) } .chip.d30 { background: var(--d30-soft); color: var(--d30) } .chip.d60 { background: var(--d60-soft); color: var(--d60) }
+.chip.prior { background: var(--raised); color: var(--muted); border: 1px solid var(--edge) }
+.chip.def { background: var(--accent-soft); color: var(--accent-text) }
+.chip.pass { background: var(--ok-soft); color: var(--ok) } .chip.fail { background: var(--d60-soft); color: var(--d60) } .chip.na { background: var(--raised); color: var(--muted); border: 1px solid var(--edge) }
+.figs { font: .76rem var(--mono); color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 12px }
+.ev { list-style: none; margin: 0; padding: 0; display: grid }
+.ev li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; padding: 4px 0 4px 6px; font-size: .86rem; align-items: baseline; border-left: 2px solid transparent; margin: 0 }
+.ev li .d { font: .74rem var(--mono); color: var(--muted) }
+.ev li .a { font: .8rem var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap }
+.ev li .x { display: block; font-size: .78rem; color: var(--muted) }
+.ev li.quiet { color: var(--muted); font-size: .8rem }
+.ev li.prior { color: var(--muted) }
+.ev li.marked { border-left-color: var(--accent); background: linear-gradient(90deg, var(--accent-soft), transparent 70%) }
+.ev li.ghost .t { text-decoration: line-through; text-decoration-color: var(--accent); color: var(--muted) }
+.ev li.ghost .a { color: var(--muted); text-decoration: line-through }
+.ev li .m { display: block; font-size: .76rem; color: var(--accent-text) }
+.labels { font-size: .78rem; color: var(--accent-text); display: grid; gap: 2px; padding-left: 6px }
+.tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; border: 1px solid var(--line); border-radius: 5px }
+table { border-collapse: collapse; width: 100%; font-size: .82rem }
+th { text-align: left; font: 600 .68rem/1.25 var(--sans); letter-spacing: .02em; color: var(--muted); padding: 7px 8px; border-bottom: 1px solid var(--edge); vertical-align: bottom; background: var(--raised) }
+td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top }
+td.n, th.n { text-align: right }
+td.num, .tape td { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: .78rem; white-space: nowrap }
+.tape tr.focus td { background: var(--chosen) }
+.tape tr { cursor: pointer }
+.tape td.off { color: var(--quiet); font-family: var(--sans); white-space: normal; font-size: .78rem }
+.tape td.diff { color: var(--accent-text); box-shadow: inset 0 -2px 0 var(--accent) }
+.hidden-list { display: grid; gap: 6px }
+.hidden-list h4 { font: 600 .74rem var(--sans); letter-spacing: .05em; text-transform: uppercase; color: var(--muted) }
+.hidden-list li { font-size: .84rem }
+.fullrow td:first-child { font-family: var(--sans); white-space: normal; color: var(--muted); min-width: 160px }
+.fullrow td:last-child { font-family: var(--mono); font-size: .78rem; overflow-wrap: anywhere }
+.card { border: 1px solid var(--edge); border-radius: 6px; padding: 14px; display: grid; gap: 10px; min-width: 0 }
+.card.posed { border-top: 3px solid var(--accent) }
+.card .meta { font: .74rem var(--mono); color: var(--muted) }
+.card .why { font-size: .88rem }
+details { border-top: 1px solid var(--line); padding-top: 8px; min-width: 0 }
+summary { cursor: pointer; font: 600 .8rem var(--sans); color: var(--ink); list-style-position: outside; padding: 2px 0 }
+summary span { font-weight: 400; color: var(--muted) }
+.opening { font: .8rem/1.45 var(--mono); background: var(--raised); padding: 8px 10px; border-radius: 4px; margin: 8px 0; overflow-wrap: anywhere }
+.facts { display: grid; gap: 4px; margin: 6px 0 10px }
+.facts h5 { margin: 6px 0 2px; font: 600 .72rem var(--sans); color: var(--muted); letter-spacing: .03em }
+.fact { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 8px; font-size: .8rem; padding: 2px 0 2px 6px; border-left: 2px solid transparent }
+.fact .k { color: var(--muted); overflow-wrap: anywhere }
+.fact .v { font-family: var(--mono); font-size: .78rem; overflow-wrap: anywhere }
+.fact.flag { border-left-color: var(--accent); background: linear-gradient(90deg, var(--accent-soft), transparent 80%) }
+.graded td:first-child { font-family: var(--mono); font-size: .74rem; overflow-wrap: anywhere; white-space: normal; min-width: 120px }
+.graded td:nth-child(2) { font-size: .78rem; overflow-wrap: anywhere; white-space: normal }
+.ok { color: var(--ok) } .bad { color: var(--d60) }
+.harm { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px }
+.big { font: 1.6rem/1.1 var(--serif) }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px 22px }
+.stat { display: grid; gap: 2px } .stat .v { font: 1.45rem/1.1 var(--serif) } .stat .l { color: var(--muted); font-size: .82rem }
+.book td.test { font-weight: 600; white-space: normal }
+.book tr.group td { border-top: 2px solid var(--edge); background: var(--raised) }
+.book td.part { padding-left: 20px; white-space: normal }
+.book td.notecell { color: var(--muted); font-size: .78rem; white-space: normal; max-width: 70ch }
+.book td.num { white-space: normal }
+footer { color: var(--muted); font-size: .84rem; border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 8px }
+footer code, .k code { font-family: var(--mono); font-size: .8rem }
+button { -webkit-tap-highlight-color: transparent }
+</style>
+
+<div class="wrap">
+  <header class="lede col">
+    <div class="eyebrow">Synthetic servicing data · the first demo</div>
+    <h1>Ten years of one loan, and the three moments a model is graded on</h1>
+    <p>One synthetic Fannie Mae loan, run month by month for ten years by the life generator over the servicing engines we port. It reaches us by servicing transfer in its second year with two defects planted in the transfer package. Switch between its clean history and its defective twin to see where the defects reach, what a partner's monthly tape shows and hides, and how a model is posed and graded at three moments.</p>
+    <div class="trio" id="trio"></div>
+  </header>
+
+  <section class="col" id="loan"></section>
+
+  <div class="controls" id="controls" aria-label="Choose the history and the year"></div>
+
+  <div class="lanes" id="lanes">
+    <section class="lane" id="lane-system" aria-labelledby="h-system"></section>
+    <section class="lane" id="lane-tape" aria-labelledby="h-tape"></section>
+    <section class="lane" id="lane-moments" aria-labelledby="h-moments"></section>
+  </div>
+
+  <section class="col" id="harm" aria-labelledby="h-harm"></section>
+
+  <section id="book" aria-labelledby="h-book"></section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script type="application/json" id="demo-data">__DEMO_DATA__</script>
+<script>
+(function () {
+  'use strict';
+  var DATA = JSON.parse(document.getElementById('demo-data').textContent);
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var TWINS = ['clean', 'defective'];
+  var TWIN_NAME = { clean: 'Clean history', defective: 'Defective twin' };
+
+  function el(tag, attrs) {
+    var e = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === 'class') e.className = v;
+      else if (k === 'text') e.textContent = v;
+      else if (k === 'on') { for (var ev in v) e.addEventListener(ev, v[ev]); }
+      else e.setAttribute(k, v === true ? '' : String(v));
+    }
+    for (var i = 2; i < arguments.length; i++) add(e, arguments[i]);
+    return e;
+  }
+  function add(e, kid) {
+    if (kid === null || kid === undefined || kid === false) return;
+    if (Array.isArray(kid)) { for (var j = 0; j < kid.length; j++) add(e, kid[j]); return; }
+    e.append(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+  }
+  function usd(c) {
+    if (c === null || c === undefined) return '';
+    var neg = c < 0, a = Math.abs(c);
+    return (neg ? '−' : '') + '$' + Math.floor(a / 100).toLocaleString('en-US') + '.' + String(a % 100).padStart(2, '0');
+  }
+  function monthName(m) { return MON[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4); }
+  function dayName(d) { return MON[+d.slice(5, 7) - 1] + ' ' + (+d.slice(8, 10)) + ', ' + d.slice(0, 4); }
+  function shortDay(d) { return MON[+d.slice(5, 7) - 1] + ' ' + (+d.slice(8, 10)); }
+  function statusChip(m) {
+    if (m.status === 'paid_off') return el('span', { class: 'chip cur', text: 'paid off' });
+    if (m.mba === 'current') return el('span', { class: 'chip cur', text: 'current' });
+    return el('span', { class: 'chip ' + (m.mba === '30' ? 'd30' : 'd60'), text: m.mba + ' days' });
+  }
+  function store(k, v) { try { globalThis.localStorage.setItem('demo-page-' + k, v); } catch (e) { /* no storage */ } }
+  function load(k) { try { return globalThis.localStorage.getItem('demo-page-' + k); } catch (e) { return null; } }
+
+  /* ── indexes ─────────────────────────────────────────────────────────── */
+
+  var MOMENT_NO = { triage: 1, catchup: 2, escrow: 3 };
+  var MARK_WORDS = { moment: 'a graded moment', transfer: 'the transfer', late: 'a month behind', label: 'where the defects reach' };
+  var YEARS = [];
+  (function () {
+    var seen = {};
+    DATA.twins.clean.months.forEach(function (m) { var y = m.month.slice(0, 4); if (!seen[y]) { seen[y] = 1; YEARS.push(y); } });
+  })();
+  function monthsOf(twin, year) { return DATA.twins[twin].months.filter(function (m) { return m.month.slice(0, 4) === year; }); }
+  function cleanMonth(month) { var ms = DATA.twins.clean.months; for (var i = 0; i < ms.length; i++) if (ms[i].month === month) return ms[i]; return null; }
+  function momentsIn(year) { return DATA.moments.filter(function (x) { return x.on.slice(0, 4) === year; }); }
+  function yearMarks(twin, year) {
+    var ms = monthsOf(twin, year), marks = [];
+    if (momentsIn(year).length) marks.push('moment');
+    if (ms.some(function (m) { return m.events.some(function (e) { return e.kind === 'transfer'; }); })) marks.push('transfer');
+    if (ms.some(function (m) { return m.mba !== 'current' && m.status !== 'paid_off'; })) marks.push('late');
+    if (twin === 'defective' && ms.some(function (m) { return m.labels.count > 0; })) marks.push('label');
+    return marks;
+  }
+
+  /* ── state ───────────────────────────────────────────────────────────── */
+
+  var state = { twin: 'defective', year: DATA.moments[0].on.slice(0, 4), month: null, quiet: false };
+  (function () {
+    var t = load('twin'), y = load('year');
+    if (t && TWINS.indexOf(t) >= 0) state.twin = t;
+    if (y && YEARS.indexOf(y) >= 0) state.year = y;
+    state.quiet = load('quiet') === '1';
+  })();
+  function defaultMonth(twin, year) {
+    var ms = monthsOf(twin, year);
+    var mo = momentsIn(year);
+    if (mo.length) { var mm = mo[0].on.slice(0, 7); if (ms.some(function (m) { return m.month === mm; })) return mm; }
+    for (var i = 0; i < ms.length; i++) if (ms[i].events.some(function (e) { return e.mark || e.kind === 'transfer' || e.kind === 'late_charge' || e.kind === 'analysis' && !e.prior; })) return ms[i].month;
+    return ms.length ? ms[0].month : null;
+  }
+  function go(patch) {
+    for (var k in patch) state[k] = patch[k];
+    if (!state.month || state.month.slice(0, 4) !== state.year) state.month = defaultMonth(state.twin, state.year);
+    store('twin', state.twin); store('year', state.year); store('quiet', state.quiet ? '1' : '0');
+    renderControls(); renderLanes();
+  }
+
+  /* ── the header ──────────────────────────────────────────────────────── */
+
+  function renderTrio() {
+    var box = document.getElementById('trio');
+    var cols = [
+      ['Computed by the engines', [
+        'Every payment split, late charge, escrow analysis and disbursement, the mortgage insurance ending and the payoff: the servicing engines we port, run month by month.',
+        'The tape: the m3-v1 writer, in the layout a partner’s tape uses, read back by our tape reader in its tests.',
+        'Each moment: the environment’s own task, its reference policy working through its tools, and its grader.'
+      ]],
+      ['Invented', [
+        'The borrower, the house and every name and number on them.',
+        'The story: the transfer, the missed March, the promise, the reassessment, the premium increase and the payoff are scripted.',
+        'The rates. The book of 1,000 draws from calibration.json: public figures where one exists, design choices, marked, where none does. The demo loan draws from the calibration’s typed defaults, as the environments do.'
+      ]],
+      ['Not yet', [
+        'Contacts beyond the collection calls and the borrower’s call, and every call note and transcript: a later wave.',
+        'Returned payments, loss mitigation, bankruptcy, foreclosure and a tax penalty.',
+        'FHA and VA loans. Everything here is Fannie Mae conventional.'
+      ]]
+    ];
+    cols.forEach(function (c) { box.append(el('div', null, el('h4', { text: c[0] }), el('ul', null, c[1].map(function (t) { return el('li', { text: t }); })))); });
+  }
+
+  function renderLoan() {
+    var L = DATA.loan, box = document.getElementById('loan');
+    box.append(el('h2', { text: 'The loan' }));
+    var items = [
+      ['Borrower (invented)', L.borrowers.join(', ') + ', ' + L.city + ', ' + L.state],
+      ['Original balance', usd(L.orig_upb) + ' at ' + L.ltv_pct + '% of value'],
+      ['Rate and term', L.note_rate_pct + '% fixed, ' + L.term_months + ' months'],
+      ['P&I', usd(L.pi) + ' a month'],
+      ['Mortgage insurance', L.mi ? 'Borrower-paid, ' + usd(L.mi.annual) + ' a year' : 'None'],
+      ['Late charge (the note)', L.late_charge.pct + '% of P&I after ' + L.late_charge.grace_days + ' days, capped at ' + (L.late_charge.cap_cents === null ? 'nothing' : usd(L.late_charge.cap_cents))],
+      ['First payment', dayName(L.first_due) + ', to another servicer'],
+      ['Transferred to us', dayName(L.transfer_on)],
+      ['Loan numbers', L.servicer_loan_number + ' (ours), ' + L.prior_servicer_loan_number + ' (prior)']
+    ];
+    var dl = el('dl', { class: 'terms' });
+    items.forEach(function (it) { dl.append(el('div', null, el('dt', { text: it[0] }), el('dd', { text: it[1] }))); });
+    box.append(dl);
+    box.append(el('p', { class: 'small muted', text: 'Paid by the borrower’s bank bill pay a few days before each due date. The defective twin carries ' + L.defects.join(' and ') + ' from its transfer package: an escrow cell written “Yes”, which the servicing app’s decoder reads as No, and the note’s late-fee cap left off the tape. Everything before the transfer is the same in both.' }));
+    var ol = el('ol', { class: 'story', 'aria-label': 'The story, by date' });
+    DATA.story.forEach(function (s) {
+      ol.append(el('li', null, el('button', {
+        class: s.moment ? 'moment' : null,
+        on: { click: function () { go({ year: s.on.slice(0, 4), month: s.on.slice(0, 7) }); var c = document.getElementById('controls'); if (c && c.scrollIntoView) c.scrollIntoView({ block: 'start' }); } }
+      }, el('span', { class: 'd', text: dayName(s.on) + (s.moment ? ' · moment ' + MOMENT_NO[s.moment] : '') }), el('span', { class: 't', text: s.text }))));
+    });
+    box.append(ol);
+  }
+
+  /* ── controls ────────────────────────────────────────────────────────── */
+
+  function renderControls() {
+    var box = document.getElementById('controls');
+    box.replaceChildren();
+    var seg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Which history' });
+    TWINS.forEach(function (t) {
+      seg.append(el('button', { 'aria-pressed': String(state.twin === t), on: { click: function () { go({ twin: t }); } } }, TWIN_NAME[t]));
+    });
+    var years = el('div', { class: 'years', role: 'group', 'aria-label': 'Year' });
+    YEARS.forEach(function (y) {
+      var marks = yearMarks(state.twin, y);
+      years.append(el('button', { 'aria-pressed': String(state.year === y), 'aria-label': y + (marks.length ? ': ' + marks.map(function (k) { return MARK_WORDS[k]; }).join(', ') : ''), on: { click: function () { go({ year: y }); } } },
+        y, el('span', { class: 'marks', 'aria-hidden': 'true' }, marks.map(function (k) { return el('i', { class: 'mk-' + k }); }))));
+    });
+    box.append(el('div', { class: 'row-ctl' }, seg, years));
+    box.append(el('div', { class: 'legend' },
+      el('span', null, el('i', { class: 'mk-moment' }), 'a graded moment'),
+      el('span', null, el('i', { class: 'mk-transfer' }), 'the transfer'),
+      el('span', null, el('i', { class: 'mk-late' }), 'a month behind'),
+      state.twin === 'defective' ? el('span', null, el('i', { class: 'mk-label' }), 'where the defects reach') : null,
+      el('span', { text: state.twin === 'defective' ? 'Defective twin: ' + DATA.twins.defective.label_count.toLocaleString('en-US') + ' labeled differences from the clean history.' : 'Clean history: the loan as it should have been serviced.' })));
+  }
+
+  /* ── lane 1: inside the servicing system ─────────────────────────────── */
+
+  function eventItem(e) {
+    var cls = [e.quiet ? 'quiet' : '', e.prior ? 'prior' : '', e.mark ? 'marked' : '', e.ghost ? 'ghost' : ''].join(' ').trim();
+    var body = el('span', null, el('span', { class: 't', text: e.text }));
+    e.detail.forEach(function (d) { body.append(el('span', { class: 'x', text: d })); });
+    if (e.mark) body.append(el('span', { class: 'm' }, el('span', { class: 'chip def', text: e.mark.defects.join(' + ') + (e.mark.root ? ' · planted' : '') }), e.mark.note ? ' ' + e.mark.note : ''));
+    return el('li', { class: cls || null }, el('span', { class: 'd', text: shortDay(e.on) }), body, el('span', { class: 'a', text: e.amount === null ? '' : usd(e.amount) }));
+  }
+
+  function renderSystem(box) {
+    box.append(el('header', null, el('span', { class: 'lanenum', text: 'Lane 1' }), el('h2', { id: 'h-system', text: 'Inside the servicing system' }),
+      el('p', { text: 'Receipts and their splits, late charges, escrow analyses and disbursements, calls, the transfer. What a servicer’s own records hold.' })));
+    var ms = monthsOf(state.twin, state.year);
+    if (ms.some(function (m) { return m.servicer === 'prior'; }))
+      box.append(el('p', { class: 'note plain', text: 'Until ' + dayName(DATA.loan.transfer_on) + ' the loan is another servicer’s. Its months are generated in full, and reach us only as the transfer package.' }));
+    var showQuiet = state.quiet;
+    var q = el('button', { class: 'chip na', 'aria-pressed': String(showQuiet), on: { click: function () { go({ quiet: !showQuiet }); } } }, showQuiet ? 'Hide the monthly MI premium' : 'Show the monthly MI premium');
+    box.append(el('div', null, q));
+    ms.forEach(function (m) {
+      var block = el('div', { class: 'month' + (state.month === m.month ? ' focus' : '') });
+      block.append(el('button', { class: 'mhead', 'aria-pressed': String(state.month === m.month), on: { click: function () { go({ month: m.month }); } } },
+        el('b', { text: monthName(m.month) }), statusChip(m), m.servicer === 'prior' ? el('span', { class: 'chip prior', text: 'prior servicer' }) : null,
+        m.labels.count ? el('span', { class: 'chip def', text: m.labels.count + ' labeled' }) : null));
+      block.append(el('div', { class: 'figs' },
+        el('span', { text: 'Balance ' + usd(m.upb) }), el('span', { text: 'Escrow ' + usd(m.escrow_balance) }),
+        m.suspense ? el('span', { text: 'Suspense ' + usd(m.suspense) }) : null,
+        m.late_charges_due ? el('span', { text: 'Late charges owed ' + usd(m.late_charges_due) }) : null,
+        el('span', { text: 'Payment ' + usd(m.pi + m.escrow_payment) })));
+      var list = el('ul', { class: 'ev' });
+      var shown = m.events.filter(function (e) { return showQuiet || !e.quiet; });
+      shown.forEach(function (e) { list.append(eventItem(e)); });
+      var hiddenQuiet = m.events.length - shown.length;
+      if (!shown.length) list.append(el('li', { class: 'quiet' }, el('span', { class: 'd' }), el('span', { text: hiddenQuiet ? 'Only the mortgage-insurance premium.' : 'Nothing this month.' }), el('span')));
+      block.append(list);
+      if (m.labels.fields.length) {
+        var lab = el('div', { class: 'labels' });
+        m.labels.fields.forEach(function (f) { lab.append(el('span', { text: f.defect + ' · ' + f.table + '.' + f.field + ': ' + f.true_value + ' clean, ' + f.planted_value + ' here' })); });
+        block.append(lab);
+      }
+      box.append(block);
+    });
+  }
+
+  /* ── lane 2: the monthly tape ────────────────────────────────────────── */
+
+  function renderTape(box) {
+    box.append(el('header', null, el('span', { class: 'lanenum', text: 'Lane 2' }), el('h2', { id: 'h-tape', text: 'The monthly tape' }),
+      el('p', { text: 'The row our tape writer writes for this loan at each month-end, in the m3-v1 layout a partner sends: ' + DATA.tape_headers.length + ' columns, ' + DATA.tape_lane.length + ' shown here. This is all a partner sees.' })));
+    var ms = monthsOf(state.twin, state.year);
+    var t = el('table', { class: 'tape' });
+    var head = el('tr', null, el('th', { text: 'Month' }));
+    DATA.tape_lane.forEach(function (i) { head.append(el('th', { text: DATA.tape_headers[i] })); });
+    t.append(el('thead', null, head));
+    var tb = el('tbody');
+    ms.forEach(function (m) {
+      var tr = el('tr', { class: state.month === m.month ? 'focus' : null, on: { click: function () { go({ month: m.month }); } } }, el('td', { text: monthName(m.month).slice(0, 3) }));
+      if (!m.tape) {
+        tr.append(el('td', { class: 'off', colspan: DATA.tape_lane.length, text: 'Not on our tape: the prior servicer’s books.' }));
+      } else {
+        var c = state.twin === 'defective' ? cleanMonth(m.month) : null;
+        DATA.tape_lane.forEach(function (i) {
+          var diff = c && c.tape && c.tape[i] !== m.tape[i];
+          tr.append(el('td', { class: diff ? 'diff' : null, title: diff ? 'Clean history: ' + (c.tape[i] || '(blank)') : null, text: m.tape[i] }));
+        });
+      }
+      tb.append(tr);
+    });
+    t.append(tb);
+    box.append(el('div', { class: 'tablewrap' }, t));
+    if (state.twin === 'defective') box.append(el('p', { class: 'small muted', text: 'Underlined cells differ from the clean history’s tape that month.' }));
+
+    var hidden = [];
+    ms.forEach(function (m) { m.hidden.forEach(function (h) { hidden.push([m.month, h]); }); });
+    var hl = el('div', { class: 'hidden-list' }, el('h4', { text: 'What this year’s tape does not say' }));
+    if (!hidden.length) hl.append(el('p', { class: 'small muted', text: ms.some(function (m) { return m.tape; }) ? 'Nothing it leaves out this year: the receipts show as cash flow and the dates move.' : 'The loan is not on our tape this year.' }));
+    else hl.append(el('ul', null, hidden.map(function (h) { return el('li', null, el('span', { class: 'num', text: monthName(h[0]).slice(0, 3) + ' ' }), h[1]); })));
+    box.append(hl);
+
+    var focus = ms.filter(function (m) { return m.month === state.month; })[0];
+    if (focus && focus.tape) {
+      var rows = [], empty = 0;
+      var c2 = state.twin === 'defective' ? cleanMonth(focus.month) : null;
+      DATA.tape_headers.forEach(function (h, i) {
+        if (focus.tape[i] === '') { empty++; return; }
+        var diff = c2 && c2.tape && c2.tape[i] !== focus.tape[i];
+        rows.push(el('tr', null, el('td', { text: h }), el('td', { class: diff ? 'diff' : null, text: focus.tape[i] + (diff ? '   (clean: ' + (c2.tape[i] || 'blank') + ')' : '') })));
+      });
+      var d = el('details', null, el('summary', null, 'The whole row for ' + monthName(focus.month) + ' ', el('span', { text: '(' + rows.length + ' filled, ' + empty + ' empty)' })),
+        el('div', { class: 'tablewrap' }, el('table', { class: 'fullrow' }, el('tbody', null, rows))),
+        el('p', { class: 'small muted', text: empty + ' columns are empty: the writer leaves a column empty when the history carries nothing for it (FICO, a BPO, the property’s rooms, the investor’s economics). It invents nothing.' }));
+      box.append(d);
+    }
+  }
+
+  /* ── lane 3: moments ─────────────────────────────────────────────────── */
+
+  function factList(groups) {
+    var box = el('div', { class: 'facts' });
+    groups.forEach(function (g) {
+      box.append(el('h5', { text: g.heading }));
+      g.facts.forEach(function (f) { box.append(el('div', { class: 'fact' + (f.flag ? ' flag' : '') }, el('span', { class: 'k', text: f.label }), el('span', { class: 'v', text: f.value }))); });
+    });
+    return box;
+  }
+
+  function momentCard(mo) {
+    var p = mo.twins[state.twin];
+    var card = el('article', { class: 'card' + (p.posed ? ' posed' : '') });
+    card.append(el('div', { class: 'meta', text: 'Moment ' + MOMENT_NO[mo.id] + ' · ' + dayName(mo.on) + ' · ' + mo.env.name + ' ' + mo.env.version }));
+    card.append(el('h3', { text: mo.title }));
+    card.append(el('p', { class: 'small', text: mo.summary }));
+    if (!p.posed) { card.append(el('p', { class: 'note', text: p.why })); return card; }
+    card.append(el('p', { class: 'why note', text: p.why }));
+    card.append(el('div', { class: 'row-ctl' },
+      el('span', { class: 'chip ' + (p.pass ? 'pass' : 'fail'), text: p.pass ? 'reference passes' : 'reference fails' }),
+      el('span', { class: 'small muted', text: 'Verdict: ' + p.verdict + (p.arm ? ' · arm ' + p.arm : '') })));
+    card.append(el('details', null, el('summary', null, 'The task, as the model sees it ', el('span', { text: '(abridged)' })),
+      el('div', { class: 'opening', text: p.opening }),
+      factList(p.shown),
+      el('p', { class: 'small muted', text: p.elided + ' The whole prompt is ' + p.prompt_chars.toLocaleString('en-US') + ' characters. Tools: ' + p.tools.join(', ') + '.' })));
+    card.append(el('details', null, el('summary', null, 'The right answer ', el('span', { text: '(the reference policy, ' + p.tool_calls + ' tool calls)' })),
+      factList([{ heading: 'Submitted', facts: p.answer }])));
+    var t = el('table', { class: 'graded' });
+    t.append(el('thead', null, el('tr', null, el('th', { text: 'Field' }), el('th', { text: 'Expected' }), el('th', { class: 'n', text: '' }))));
+    var tb = el('tbody');
+    p.graded.forEach(function (g) { tb.append(el('tr', null, el('td', { text: g.field }), el('td', { text: g.shown }), el('td', { class: 'n ' + (g.ok ? 'ok' : 'bad'), text: g.ok ? '✓' : '✗' }))); });
+    t.append(tb);
+    card.append(el('details', { open: true }, el('summary', null, 'What is graded ', el('span', { text: '(' + p.graded.length + ' fields; a pass is every one right)' })), el('div', { class: 'tablewrap' }, t)));
+    return card;
+  }
+
+  function renderMoments(box) {
+    box.append(el('header', null, el('span', { class: 'lanenum', text: 'Lane 3' }), el('h2', { id: 'h-moments', text: 'Moments a model is asked to act' }),
+      el('p', { text: 'Each is an exception a servicer pays staff for. The task is the environment’s own, read off this history at that moment; the answer is its reference policy’s; the grade is its grader’s.' })));
+    var here = momentsIn(state.year);
+    here.forEach(function (mo) { box.append(momentCard(mo)); });
+    if (!here.length) box.append(el('p', { class: 'small muted', text: 'No graded moment this year.' }));
+    var others = DATA.moments.filter(function (mo) { return here.indexOf(mo) < 0; });
+    if (others.length) box.append(el('div', { class: 'row-ctl' }, others.map(function (mo) {
+      return el('button', { class: 'chip na', on: { click: function () { go({ year: mo.on.slice(0, 4), month: mo.on.slice(0, 7) }); } } }, 'Moment ' + MOMENT_NO[mo.id] + ': ' + mo.title.toLowerCase() + ', ' + mo.on.slice(0, 4));
+    })));
+  }
+
+  function renderLanes() {
+    ['system', 'tape', 'moments'].forEach(function (k) { document.getElementById('lane-' + k).replaceChildren(); });
+    renderSystem(document.getElementById('lane-system'));
+    renderTape(document.getElementById('lane-tape'));
+    renderMoments(document.getElementById('lane-moments'));
+  }
+
+  /* ── what missing the defects costs ──────────────────────────────────── */
+
+  function renderHarm() {
+    var H = DATA.harm, box = document.getElementById('harm');
+    box.append(el('h2', { id: 'h-harm', text: 'What missing the defects costs' }));
+    box.append(el('p', { text: 'On the defective twin, where triage let both defects board. Every figure is the engines’: the late charge is cashiering’s, held to the note by its own late-charge function; the bills are the ones the clean history’s escrow account paid and the twin’s never did.' }));
+    var g = el('div', { class: 'harm' });
+
+    var d3 = el('article', { class: 'card' }, el('div', { class: 'meta', text: 'D-03 · the note’s late-fee cap never boarded' }),
+      el('div', { class: 'big', text: usd(H.d03.refund_total) }),
+      el('p', { class: 'small', text: 'owed back to the borrower: collected above the note’s cap of ' + usd(H.d03.cap_cents) + ', because the system charged ' + H.d03.pct + '% of P&I.' }));
+    var t3 = el('table');
+    t3.append(el('thead', null, el('tr', null, ['Installment', 'Charged', 'The note allows', 'Over the cap', 'Collected', 'Refund'].map(function (h, i) { return el('th', { class: i ? 'n' : null, text: h }); }))));
+    var b3 = el('tbody');
+    H.d03.rows.forEach(function (r) { b3.append(el('tr', null, el('td', { class: 'num', text: monthName(r.installment_due) }), el('td', { class: 'num n', text: usd(r.charged) }), el('td', { class: 'num n', text: usd(r.allowed) }), el('td', { class: 'num n', text: usd(r.over) }), el('td', { class: 'num n', text: usd(r.collected) + (r.collected_on ? ' ' + shortDay(r.collected_on) : '') }), el('td', { class: 'num n', text: usd(r.refund) }))); });
+    t3.append(b3);
+    d3.append(el('div', { class: 'tablewrap' }, t3));
+    d3.append(el('p', { class: 'small muted', text: 'Moment 2 is where it is caught or not: a model that holds the charge to the note sends the excess to suspense instead of collecting it.' }));
+    g.append(d3);
+
+    var lead = 'in property taxes the escrow account never paid' + (H.d31.first_tax ? ', from the ' + usd(H.d31.first_tax.amount) + ' due ' + dayName(H.d31.first_tax.on) : '') + '.' +
+      (H.d31.first_hazard ? ' The hazard renewal due ' + dayName(H.d31.first_hazard.on) + ', a month after boarding, went unpaid too, and so did every renewal after it.' : '') +
+      ' In all, ' + H.d31.bills + ' bills for ' + usd(H.d31.total) + ' through the payoff, the monthly mortgage-insurance premium among them.';
+    var d31 = el('article', { class: 'card' }, el('div', { class: 'meta', text: 'D-42 read as D-31 · boarded non-escrowed' }),
+      el('div', { class: 'big', text: usd(H.d31.tax_total) }),
+      el('p', { class: 'small', text: lead }));
+    var t31 = el('table');
+    t31.append(el('thead', null, el('tr', null, ['Line', 'Bills', 'Total', 'First', 'Last'].map(function (h, i) { return el('th', { class: i === 1 || i === 2 ? 'n' : null, text: h }); }))));
+    var b31 = el('tbody');
+    H.d31.lines.forEach(function (l) { b31.append(el('tr', null, el('td', { text: l.label }), el('td', { class: 'num n', text: String(l.bills) }), el('td', { class: 'num n', text: usd(l.total) }), el('td', { class: 'num', text: shortDay(l.first_due) + ', ' + l.first_due.slice(0, 4) }), el('td', { class: 'num', text: shortDay(l.last_due) + ', ' + l.last_due.slice(0, 4) }))); });
+    t31.append(b31);
+    d31.append(el('div', { class: 'tablewrap' }, t31));
+    d31.append(el('ul', { class: 'small' },
+      el('li', { text: 'Escrow never billed: ' + usd(H.d31.escrow_not_billed.total) + ' over ' + H.d31.escrow_not_billed.installments + ' installments. The borrower paid only the P&I they were billed.' }),
+      el('li', { text: 'Escrow refunded at the payoff: ' + usd(H.d31.payoff_refund.defective) + ' on the twin, ' + usd(H.d31.payoff_refund.clean) + ' in the clean history.' }),
+      el('li', null, el('b', { text: 'Penalty: ' }), H.d31.penalty_note)));
+    g.append(d31);
+    box.append(g);
+  }
+
+  /* ── the book ────────────────────────────────────────────────────────── */
+
+  function renderBook() {
+    var B = DATA.book, box = document.getElementById('book');
+    box.append(el('div', { class: 'col' }, el('h2', { id: 'h-book', text: 'A book of ' + B.loans.toLocaleString('en-US') + ' loans against the public figures' }),
+      el('p', { text: 'The same generator, drawing from calibration.json, read against every test in calibration-acceptance.json: the tests a partner’s validation sample will be held to. Our figure, the figure it is held to, the tolerance, and whether the book is within it.' }),
+      el('p', { class: 'small muted', text: 'Read the labels. A public figure has a source and a date in the calibration file; a design choice has none, and says so. Every tolerance is a design choice, with its reason in the acceptance file. Most tests want more than 1,000 loans, so a row below its sample floor is read for direction, not as a verdict. A test the book cannot be read on yet says why instead of passing or failing.' })));
+    var stats = el('div', { class: 'stats' });
+    [[B.loans.toLocaleString('en-US') + ' × 10 yrs', B.loan_years.toLocaleString('en-US') + ' loan-years'], [B.receipts.toLocaleString('en-US'), 'payments received'], [B.late_charges.toLocaleString('en-US'), 'late charges'], [B.analyses.toLocaleString('en-US'), 'escrow analyses'], [B.contacts.toLocaleString('en-US'), 'borrower calls'], [B.passed + ' · ' + B.failed + ' · ' + B.unmeasured, 'tests within · outside · not a verdict']]
+      .forEach(function (s) { stats.append(el('div', { class: 'stat' }, el('div', { class: 'v', text: s[0] }), el('div', { class: 'l', text: s[1] }))); });
+    box.append(stats);
+    var t = el('table', { class: 'book' });
+    t.append(el('thead', null, el('tr', null, el('th', { text: 'Test' }), el('th', { class: 'n', text: 'Ours' }), el('th', { class: 'n', text: 'Held to' }), el('th', { class: 'n', text: 'Tolerance' }), el('th', { text: 'Result' }))));
+    var tb = el('tbody');
+    B.rows.forEach(function (r) {
+      var res = r.pass === true ? ['pass', 'within'] : r.pass === false ? ['fail', 'outside'] : ['na', 'not a verdict'];
+      var floor = r.floor.ours === null ? '' : ' Sample: ' + r.floor.ours.toLocaleString('en-US') + ' of the ' + r.floor.count.toLocaleString('en-US') + ' ' + r.floor.of + ' it wants' + (r.floor.met ? '.' : ', below its floor.');
+      tb.append(el('tr', { class: 'group' }, el('td', { class: 'test', colspan: 4 }, r.id + ' ', el('span', { class: 'chip ' + (r.kind === 'public' ? 'cur' : 'prior'), text: r.kind })), el('td', null, el('span', { class: 'chip ' + res[0], text: res[1] }))));
+      r.parts.forEach(function (p) {
+        tb.append(el('tr', null, el('td', { class: 'part', text: p.label }), el('td', { class: 'num n', text: p.ours }), el('td', { class: 'num n', text: p.target }), el('td', { class: 'num n', text: p.tolerance }),
+          el('td', { class: p.pass === true ? 'ok' : p.pass === false ? 'bad' : 'muted', text: p.pass === true ? '✓' : p.pass === false ? '✗' : '—' })));
+      });
+      tb.append(el('tr', null, el('td', { class: 'notecell', colspan: 5, text: r.measure + (r.note ? ' ' + r.note : '') + floor })));
+    });
+    t.append(tb);
+    box.append(el('div', { class: 'tablewrap' }, t));
+  }
+
+  function renderFooter() {
+    var f = document.getElementById('footer'), B = DATA.book;
+    f.append(el('div', null, 'Built by ', el('code', { text: 'npm run env:demo -w @hm/environments' }), ' from the code on disk: life generator ' + DATA.life_version + ', tape writer ' + DATA.tape.profile + ' ' + DATA.tape.version + ', ' + DATA.envs.map(function (e) { return e.name + ' ' + e.version; }).join(', ') + '. Page ' + DATA.page_version + '.'));
+    f.append(el('div', { text: 'The demo loan draws from the calibration’s typed defaults (version ' + DATA.demo_calibration.version + '), as the three environments draw their tasks, so the page shows the tasks they pose. The book draws from calibration.json (version ' + B.calibration_version + ', seed ' + B.seed + ') and is read against calibration-acceptance.json (version ' + B.acceptance_version + ').' }));
+    f.append(el('div', { text: 'Synthetic data only: no borrower’s or partner’s data. Amounts are dollars; dates are the story’s, from 2026 forward.' }));
+  }
+
+  renderTrio();
+  renderLoan();
+  renderHarm();
+  renderBook();
+  renderFooter();
+  go({ twin: state.twin, year: state.year });
+  globalThis.DemoPage = { go: go, years: YEARS, twins: TWINS, state: state };
+})();
+</script>

@@ -7662,3 +7662,71 @@ first draws, 47 redrawn, 707 training draws reaching the fairness check,
 gives 1.1.0's, and the tape test's floor is 13,000 rows. Each suite's fingerprint names the life version it is drawn
 under, read from `LIFE_VERSION`, so a run record says which book it was
 graded on.
+
+## The first demo's page is computed from the code, and says what it cannot price
+
+**Decided 23 October 2026.** The first demo is one page,
+`playground/dist/demo.html`, written by `npm run env:demo` and titled
+"Synthetic Loan Histories". It replaces the earlier page of that name, which
+was built from a scratch generator outside the repo.
+docs/environments.md, "The demo page", says what it shows.
+
+**Every figure is computed by a build.** `scripts/build-demo.mjs` bundles
+`src/demo/page-data.ts` from the workspace's sources, runs it, and inlines
+the result in the template. A test runs the build and holds the page's data
+equal to `demoPageData`. It then works every graded field and every cost
+again from the environments and the ports, without the page's code. The
+page checks itself without a browser: its script must parse and render every
+view against a stub DOM, on every build.
+
+**The page shows what the environments pose.**
+
+- **One calibration each.** The demo loan draws from the calibration's typed
+  defaults, as boarding-triage, catchup-posting and escrow-review draw. The
+  book of 1,000 draws from `calibration.json`, because the book is where the
+  calibration is shown.
+- **The moments are the environments' own.** Triage is boarding-triage's
+  own spec cases. The catch-up and the analysis are read off the history
+  with each environment's task builder. The build stops unless the
+  environment's own filters would pose them: in scope, fair to grade, and on
+  one of its arms. Two catchup-posting helpers are exported for this
+  (`catchupTaskAt`, `catchupMomentInScope`). Nothing they do changed, so no
+  version moved and every pin holds.
+- **The twin's catch-up carries both defects.** catchup-posting plants D-03
+  alone. The page poses the catch-up on the twin the lanes show, with no
+  escrow on its installments, and it still lands on the environment's
+  `breached` arm and passes every filter. On the clean history it lands on
+  `within_capped`.
+- **The twin poses no escrow review.** It boarded non-escrowed, so no
+  analysis runs, and the page says so in the moment's place.
+
+**What missing the defects costs, and what it does not price.**
+
+- **D-03.** The late charge above the note's cap is held to the note by
+  `lateChargeAmount`, and $63.77 is owed back.
+- **D-31.** The unpaid bills are every bill the clean history's escrow paid
+  after boarding and the twin's never did, the monthly mortgage-insurance
+  premium among them. The taxes are stated on their own: $64,355.26.
+- **No penalty.** No engine here prices a county's penalty or interest, and
+  the life generator models no tax sale, lapse or force-placed policy. The
+  page says "not computed" rather than invent a rate. A penalty needs a rule
+  per county, and an engine to own it.
+
+**The book is held to the acceptance tests as written.** Each of the 20
+tests is our figure, its target, its tolerance and a result: within,
+outside, or not a verdict. Every target is labeled public or design choice,
+and every row says whether 1,000 loans meet its sample floor. Most do not.
+Three are not a verdict, each with the reason:
+
+- call notes, which arrive with the contacts wave;
+- the loan-age distribution, which describes a book boarded by transfer;
+- defect rates, where only D-03 is eligible.
+
+Six are outside. Returned payments are not generated, and missed months are
+a check that reads low. The all-loans delinquency stock includes FHA and VA.
+Contacts by status are a design-choice split the borrower's own calls do
+not reach. Loan-to-value is drawn at origination against a mark-to-market
+target. The ARM share is 5.5 % against 4.3 %, on a fifth of its floor. Two
+tests need a counting rule the acceptance file does not state:
+transactions per loan-year, and contacts by status. For each, the page
+states the rule it used.

@@ -3054,6 +3054,71 @@ in three months and holds the symptoms equal to what each root reaches.
 A thousand loan-decades run in about 3.5 seconds, and a test holds them
 under 15. Reading the round trip's 131 tapes takes about five.
 
+### The demo page
+
+`npm run env:demo -w @hm/environments` writes `playground/dist/demo.html`,
+the first demo as one self-contained page titled "Synthetic Loan
+Histories", its data inlined (about 500 KB). `scripts/build-demo.mjs`
+bundles `src/demo/page-data.ts` from the workspace's sources, runs it, and
+fills `playground/demo/template.html`. No figure on it is typed by hand, and
+the same code writes the same bytes.
+
+It shows the demo loan by year, in its clean history and its defective twin,
+in three lanes:
+
+- **Inside the servicing system.** Each month's receipts and their splits,
+  late charges, escrow analyses and disbursements, calls, the transfer and
+  the payoff. On the twin, every row a label names carries its defect, and
+  what the clean history did that the twin did not (the bills, the
+  analyses, the calls) is struck through.
+- **The monthly tape.** The m3-v1 row `writeTape` writes for the loan at
+  each month-end: fourteen of its 118 columns, and the whole row on demand.
+  Cells that differ from the clean tape are underlined, and each year lists
+  what its months did that no column carries. The year-4 payment rises in
+  February 2030 with no reason given.
+- **Moments a model is asked to act.** Boarding triage on 16 December 2027
+  (boarding-triage's own spec cases on the demo's packages), the catch-up
+  on 5 April 2028 and the flagged analysis of 15 January 2030. Each is read
+  off the history with its environment's task builder (`catchupTaskAt`,
+  `reviewTaskAt`), and the build stops unless the environment's own filters
+  would pose it. Each shows the task abridged, the reference policy's
+  answer through the environment's tools, and every graded field. The twin
+  poses no analysis, because it boarded non-escrowed.
+
+Below the lanes is what missing the defects costs on the twin:
+
+- the late charge above the note's cap and its refund, $63.77, from
+  `lateChargeAmount`;
+- the bills its escrow never paid, $64,355.26 of them county tax.
+
+No engine prices a tax penalty, so the page says so rather than inventing
+one.
+
+Last is a book of 1,000 loans drawn from `calibration.json` (seed
+`demo-book-1`), read against every test in `calibration-acceptance.json`
+(`src/demo/book-panel.ts`). Each test shows our figure, the figure it is
+held to, the tolerance, and whether the book is within it, outside it, or
+not a verdict. Each also shows the target's provenance and whether the book
+meets the test's sample floor. On 23 October 11 were within, 6 outside and
+3 not a verdict. The six outside:
+
+- returned payments, which are not generated;
+- missed months, a check that reads low;
+- the all-loans delinquency stock, whose target includes FHA and VA;
+- contacts by delinquency status, a design-choice split that the
+  borrower's own calls do not reach;
+- loan-to-value, drawn at origination against a mark-to-market target;
+- the ARM share, 5.5 % against 4.3 %, on a fifth of the test's sample
+  floor.
+
+The demo loan draws from the calibration's typed defaults, as the three
+environments do, so the page shows the tasks they pose. `demo-page.test.ts`
+runs the build. It checks that the script parses and renders every view
+against a stub DOM (`playground/demo/check-page.mjs`, which the build runs
+too), and holds the page's data equal to `demoPageData`. It then works
+every graded field and every cost again from the environments and the
+ports.
+
 ## Calibration
 
 `src/life/calibration.json` holds the rates the life generator draws loan
@@ -3297,6 +3362,7 @@ npm run env:refi -w @hm/environments -- --env catchup-posting --policy reference
 npm run env:refi -w @hm/environments -- --env escrow-review --policy reference
 npm run env:refi -w @hm/environments -- --env boarding-triage --policy reference
 npm run env:transfer-package -w @hm/environments -- --out /tmp/packages   # the demo loan's four packages
+npm run env:demo -w @hm/environments                                      # the first demo's page, playground/dist/demo.html
 npm run board:life-package -w @hm/servicing -- /tmp/packages/defective     # boarded by the servicing app's own boarding
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]

@@ -154,8 +154,12 @@ export function historyInScope(life: LoanLife, before: number): boolean {
   return true;
 }
 
-/** The task, read off the history at the moment the receipt was about to be posted. */
-function taskAt(
+/**
+ * The task, read off the history at the moment the receipt was about to be
+ * posted. Exported for the demo page, which poses the demo loan's catch-up
+ * the way a drawn task is posed.
+ */
+export function catchupTaskAt(
   coords: Pick<CatchupTask, "id" | "split" | "suite_seed" | "index">,
   life: LoanLife,
   moment: Extract<LifeMoment, { kind: "receipt" }>,
@@ -255,7 +259,10 @@ function taskAt(
 }
 
 /** The moment's own guards: a whole-installment catch-up on a loan the engine posts without a logged defect. */
-function momentInScope(moment: Extract<LifeMoment, { kind: "receipt" }>, life: LoanLife): boolean {
+export function catchupMomentInScope(
+  moment: Extract<LifeMoment, { kind: "receipt" }>,
+  life: LoanLife,
+): boolean {
   const s = moment.state;
   if (moment.credited_as_of !== moment.on) return false;
   if (s.holds.length > 0 || s.trial_active || s.plan_active) return false;
@@ -403,11 +410,16 @@ export function drawCatchupCandidate(
   if (at < 0) return null;
   const row = life.receipts[at]!;
   const moment = moments.get(row.id);
-  if (!moment || !momentInScope(moment, life) || !historyInScope(life, at)) return null;
+  if (!moment || !catchupMomentInScope(moment, life) || !historyInScope(life, at)) return null;
   // One rate for every installment the receipt pays: a payment across an ARM change is posted in two.
   const rates = new Set(row.installments.map((x) => x.rate_pct));
   if (rates.size !== 1 || row.installments.length === 0) return null;
-  const task = taskAt({ id, split, suite_seed: suiteSeed, index }, life, moment, [...rates][0]!);
+  const task = catchupTaskAt(
+    { id, split, suite_seed: suiteSeed, index },
+    life,
+    moment,
+    [...rates][0]!,
+  );
   return { task, life, clean, moment };
 }
 

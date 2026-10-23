@@ -7238,9 +7238,9 @@ late charges, suspense, balances and the Metro 2 record month by month.
 docs/cross-check.md has the method, the scale and every disagreement class.
 
 **Why a check and not a generator.** The path costs about 0.4 seconds per
-loan-day per process and rises as a loan's records grow; the generator writes
-a loan-decade in about 3 milliseconds. A first run of 305 loan-years took two
-hours in eight processes.
+loan-day per process and rises as the database's records grow; the generator
+writes a loan-decade in about 3.5 milliseconds. A first run of 305 loan-years
+took two hours in eight processes.
 
 **What it settled.**
 
@@ -7254,13 +7254,15 @@ hours in eight processes.
   two months until one side shields only payments the prior servicer received
   on time.
 - Three runtime defects in credit reporting are not logged: the Metro 2
-  builder never carries the prior month (an empty payment history profile and
-  a date of first delinquency re-aged every month), counts only posted
-  payments, and never sees a transfer's prior history. They are described in
-  docs/cross-check.md and not filed.
+  builder never carries the prior month (an empty payment history profile, and
+  a date of first delinquency re-aged each time a borrower who stays behind
+  pays an installment), counts only posted payments, and never sees a
+  transfer's prior history. They are described in docs/cross-check.md and
+  not filed.
 - Two generator bugs, in fields nothing grades yet: a MIN whose check digit is
   random, and no next due date on a month-end whose next installment is paid
-  ahead. They are left for the branches changing the generator.
+  ahead. They are left for the branches changing the generator; the tape row's
+  half of the second was fixed there the same day (life 1.1.0).
 
 **What the harness supplies, and says so.** The P&I and T&I custodial
 accounts (boarding-4), a borrower party (boarding-2), the note's late-charge

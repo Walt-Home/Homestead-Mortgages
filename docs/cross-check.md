@@ -16,7 +16,7 @@ Run on 23 October 2026, against life 1.0.0 and the servicing app at the commit
 
 ## At a glance
 
-- **179 loans, 3,503 loan-months, 3,240 receipts, 111,334 loan-days** (about
+- **178 loans, 3,503 loan-months, 3,240 receipts, 111,334 loan-days** (about
   305 loan-years) stepped through the servicing app's own cycles, in eight
   processes over two hours.
 - **Wherever no defect stood between them, the two agree on every figure of
@@ -35,17 +35,20 @@ Run on 23 October 2026, against life 1.0.0 and the servicing app at the commit
   much, while the runtime never sets it at all.
 - **Three defects in the servicing app's runtime that are not logged, all in
   credit reporting.** Its monthly Metro 2 builder never carries the prior
-  month, so the payment history profile never fills and the date of first
-  delinquency moves later each month a delinquency continues. It counts only
-  posted payments, so a receipt held in suspense is reported as no payment.
-  And a transferred loan's history from the prior servicer never reaches it,
-  so the first month reports no date of last payment.
+  month, so the payment history profile never fills, and the date of first
+  delinquency moves later each time a borrower who stays behind pays an
+  installment. It counts only posted payments, so a receipt held in suspense
+  is reported as no payment. And a transferred loan's history from the prior
+  servicer never reaches it, so a first month with no receipt of the
+  servicing app's own reports no date of last payment.
 - **Two generator bugs, neither in a figure an environment grades.** The MIN's
   check digit is drawn at random, so 188 of 216 generated MINs fail Mod-10;
   and 2,311 of 16,704 active month-ends (13.8 %) have no next due date,
-  because the next installment was paid before the generator created it.
+  because the borrower paid the next installment early and the generator
+  creates the one after it only the next month. The tape's half of the second
+  is fixed on main since this run (below).
 - **The path is a check, not a generator.** About 0.4 seconds per loan-day per
-  process on a loaded machine, rising as each loan's records grow: a
+  process on a loaded machine, rising as the database's records grow: a
   thousand loan-decades would take two days. The generator writes them in
   3.5 seconds.
 
@@ -172,22 +175,28 @@ origination books of 24 loans and four transfer books of 30, each loan for up
 to 24 months, each process stopping at the first month-end after 6,600
 seconds. The origination books are o1 to o4, seeds 101 to 104; the transfer
 books are b1 to b4, seeds 201 to 204; each reruns from its seed with the
-commands above. The transfer books reached 83 of their 120 loans before their
-deadlines; 37 were not reached, and none was refused at boarding.
+commands above. The transfer books boarded 83 of their 120 loans before their
+deadlines, one of them on the day its process stopped, so 82 were compared; 37
+were never reached, and none was refused at boarding.
 
 | Process  | Loans compared | Loan-days | Wall             | Cashiering | Delinquency counters | Month-ends and Metro 2 |
 | -------- | -------------- | --------- | ---------------- | ---------- | -------------------- | ---------------------- |
 | o1 to o4 | 96             | 60,985    | 7,316 to 7,366 s | 63 to 89 % | 7 to 34 %            | 1.1 to 1.4 %           |
-| b1 to b4 | 83             | 50,349    | 7,210 to 7,286 s | 60 to 85 % | 11 to 37 %           | 1.5 to 1.9 %           |
+| b1 to b4 | 82             | 50,349    | 7,210 to 7,286 s | 60 to 85 % | 11 to 37 %           | 1.5 to 1.9 %           |
 
 The walls include about 31 minutes in which the machine was suspended (the
 load log has no sample from 17:30:43Z to 18:01:47Z). Without it, a process
 stepped a loan-day in 0.36 to 0.44 seconds. The machine was shared: the
 one-minute load average, sampled every minute, ran from 13 to 164, with a
-median of 36, on ten cores. Cost per loan-day rose as each loan's records
-grew: in the origination books, with 22 to 24 loans live, it went from 0.16
-to 0.23 seconds in the loans' first months to 0.43 to 0.53 a year later,
-though the load moved too.
+median of 36, on ten cores. Cost per loan-day rose as the records grew: in
+the origination books, with 22 to 24 loans live, it went from 0.16 to 0.23
+seconds in the loans' first months to 0.43 to 0.53 a year later, though the
+load moved too. The records that matter are the database's, not only the
+loan's: each cashiering unit finds its own decision by a subject that
+`agent_decisions` has no index on
+(`domain/operations-runtime/cashiering-cycle.ts:301`; the table's one index
+is on the loan, `db/migrations/0001_baseline.sql:385`), so it reads every
+decision of every loan in the database.
 
 At about 20 loan-days a second across eight processes, a thousand
 loan-decades (3.65 million loan-days) would take two days of wall clock, and
@@ -242,10 +251,10 @@ charge paid, before any receipt pays it again. The payment history profile
 agrees only in the first month-end of each of the 96 loans boarded at
 origination, which have no history yet.
 
-Of the 179 loans, 134 agree on every receipt, installment, late charge,
+Of the 178 loans, 133 agree on every receipt, installment, late charge,
 month-end balance, suspense and ledger figure, and Metro 2 status, amount
 past due and current balance from boarding to the end of their window: 89 of
-the 96 boarded at origination and 45 of the 83 boarded by transfer. Of the
+the 96 boarded at origination and 44 of the 82 boarded by transfer. Of the
 loans scripted with a repayment plan, 7 of 26 do.
 
 ## Disagreement classes
@@ -284,12 +293,12 @@ case, which became its own class.
 
 **What the logged defects cost here.**
 
-- **cashiering-19** reaches more loans than anything else: 131 of 179 carry a
-  late charge that was paid and still reads due. On the loans where a receipt
-  then paid it again, the borrower's money went to the charge instead of the
-  installment, the next installment went unpaid, another charge was assessed,
-  and the loan read delinquent to the bureaus while the generator's read
-  current.
+- **cashiering-19** reaches more loans than any other defect in money: 131
+  of 178 carry a late charge that was paid and still reads due. On the loans
+  where a receipt then paid it again, the borrower's money went to the charge
+  instead of the installment, the next installment went unpaid, another
+  charge was assessed, and the loan read delinquent to the bureaus while the
+  generator's read current.
 - **cashiering-18** is logged for forbearance and bankruptcy. A repayment
   plan is a third case of the same lines: the cycle's cash state hard-codes
   `overlays: []` and `plan_active: false`
@@ -308,9 +317,10 @@ case, which became its own class.
   generator's zero is the engine's error. Neither side is right on a
   forwarded payment the old servicer received on time, which the generator
   draws only when a scenario asks for one.
-- **boarding-6**: 32 of 83 transfers carried late charges. The cash state
-  never sees them, so the servicing app never collects them, and the money the
-  borrower sends for them goes to suspense or to the next installment.
+- **boarding-6**: 32 of the 82 transfers compared carried late charges. The
+  cash state never sees them, so the servicing app never collects them, and
+  the money the borrower sends for them goes to suspense or to the next
+  installment.
 - **metro2-1**: all 344 monthly units sent files with no records. The
   comparison reads the records the unit built before validation left them
   out.
@@ -332,7 +342,7 @@ as a typed row"). `carryPhp` returns 24 B's for a null prior
 profile is empty in every month: 3,407 of 3,503 month-ends disagree, and the
 96 that agree are the first month-ends of loans with no history yet.
 `deriveDofd` keeps an earlier date of first delinquency only from the prior
-snapshot (`metro2.ts:104`), so with none the date restarts at the oldest
+snapshot (`metro2.ts:105`), so with none the date restarts at the oldest
 unpaid installment each month. A
 borrower who pays one installment a month while staying behind is re-aged
 every month: b1 LN-4ee506e5-00025 fell behind on 1 December 2028 and stayed
@@ -340,7 +350,7 @@ behind into July 2029, rising from 30 to 120 days; the generator reported
 1 December 2028 throughout, and the servicing app moved the date to
 1 January, then 1 March, then 1 April 2029. The engine's own rule is that the
 date is "never moved later while the same delinquency continues"
-(`metro2.ts:98-100`), and 8.1-T14 blocks such a move without evidence. 109
+(`metro2.ts:98-99`), and 8.1-T14 blocks such a move without evidence. 109
 month-ends disagree this way with the account status agreeing. Impact: high
 once metro2-1 is fixed, because a re-aged date of first delinquency moves
 when the delinquency leaves a consumer's credit report.
@@ -350,16 +360,17 @@ the month's payments and finds the last payment date over
 `status === "posted"` records only (`runners.ts:137-139`). A partial or plan
 payment the servicing app holds in suspense was received but is not posted, so
 the month's actual payment amount leaves it out and the date of last payment
-skips it: 74 month-ends on 39 loans. o1 LN-6e9cb854-00005 sent a $599.86 plan
-payment on 10 May 2027, held in suspense; May was reported with an actual
-payment of $0 and a last payment in February. Impact: medium; Metro 2 asks
-for the amount received in the period, and a borrower paying what they can is
-reported as paying nothing.
+skips it: 74 fields in 48 month-ends on 39 loans. o1 LN-6e9cb854-00005 sent
+a $599.86 plan payment on 10 May 2027, held in suspense; May was reported
+with an actual payment of $0 and a last payment in February. Impact: medium;
+Metro 2 asks for the amount received in the period, and a borrower paying
+what they can is reported as paying nothing.
 
 **A transfer's payment history never reaches the bureau record.** Boarding
-hashes and counts the tape's payment history (`domain/boarding/service.ts:104-112`)
-and books none of it, and the builder reads only the servicing app's own
-posted payments (`runners.ts:137-139`). Until the servicing app posts a
+reads the tape's payment history only to seed the delinquency it inherits, by
+FIFO (`domain/boarding/service.ts:166`, `:367-371`), and writes no payment
+record from it, and the builder reads only the servicing app's own posted
+payments (`runners.ts:137-139`). Until the servicing app posts a
 receipt of its own, a transferred loan's date of last payment is zero-filled:
 4 loans, each in its first month with the servicing app, whose last payment
 had gone to the prior servicer. Impact: low; it lasts until the first receipt
@@ -369,7 +380,8 @@ posts, but every transferred loan whose first month brings none meets it.
 
 Neither touches a figure an environment grades; both were worked around in
 the harness, and neither is fixed here, because the generator is being
-changed on other branches. Paths are under `packages/environments/src/life/`.
+changed on other branches. Paths are under `packages/environments/src/life/`,
+and the lines are life 1.0.0's, the version this run drew from.
 
 - **The MIN's check digit is random.** `draw.ts:361` writes `"1000001"` and
   eleven random digits, so the eighteenth digit is the Mod-10 check digit only
@@ -385,6 +397,9 @@ changed on other branches. Paths are under `packages/environments/src/life/`.
   has already paid next month's installment, none is open, and the month-end,
   and so the tape row (`projection.ts:249`), has no next due date: 2,311 of
   16,704 active month-ends. A tape row for an active loan always carries one.
+  Main fixed the tape row the same day, in life 1.1.0 (e0aa1f4): the
+  projection takes the installment after the one interest is paid to. The
+  month-end's own `next_due` is still null there.
 
 The generator also inherits the engine half of cashiering-11 (above): it
 shields every installment due in the 60 days after a transfer, paid or not.
@@ -395,8 +410,14 @@ into it on every transfer rather than steering around it.
 
 - **The scheduled monthly payment** (1,587 fields) is the harness's: it
   writes each escrow analysis onto the due rows, and the Metro 2 builder reads
-  the boarded terms (`runners.ts:141`), which the servicing app's 3.x path
-  would version and the harness does not. Every installment's amount agrees.
+  the terms (`runners.ts:141`), which the harness leaves at the boarded
+  figure. The servicing app's own path would move them: an escrow change
+  arrives as `loan_terms.versioned`, and the reprojection reactor writes a new
+  `loan_terms` version from it (`domain/operations-runtime/installments.ts:298`).
+  The harness writes rows instead of raising that event because the
+  generator's first month after an analysis can differ from the rest
+  (`first_month_payment`), which one terms version cannot carry. Every
+  installment's amount agrees.
 - **Found and fixed before the main batch.** The first transfer tapes were
   cut from the null next due date above, so a loan whose next installment
   was paid ahead boarded a month behind, and every installment after read as

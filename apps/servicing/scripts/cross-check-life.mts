@@ -261,7 +261,7 @@ async function run(): Promise<void> {
     const lastAnalysis = l.analyses.filter((a) => a.as_of < t.board).at(-1)?.as_of ?? null;
     const p0 = d.parties[0]!;
     const n = `${l.loan_id}`;
-    // The generator draws the MIN's check digit at random (draw.ts:361); boarding refuses one that fails Mod-10 (HF-008).
+    // The generator draws the MIN's check digit at random (draw.ts, `min`); boarding refuses one that fails Mod-10 (HF-008).
     const min = isValidMin(d.min) ? d.min : makeMin(d.min.slice(0, 7), d.min.slice(7, 17));
     if (min !== d.min) t.minRepaired = true;
     const loan: StagedLoan = {
@@ -543,7 +543,7 @@ async function run(): Promise<void> {
         upb: facts.state.upb_cents,
         suspense: facts.state.suspense_unapplied_cents,
         late_charges_due_state: facts.state.late_charges_due_cents,
-        // `balancesOf` negates every loan account; the late-charge receivable is a debit, so its owed figure is the negation.
+        // `balancesOf` negates every loan account but principal; the late-charge receivable is a debit, so its owed figure is the negation.
         late_charges_ledger: -facts.balances.late_charges,
         metro2: snap ? renderBase(snap) : null,
         metro2_errors: snap ? validateErrors(snap) : [],
@@ -681,10 +681,12 @@ async function run(): Promise<void> {
   // ---------------------------------------------------------------- read back and compare
   const loans: Record<string, unknown>[] = [];
   for (const t of tracks) {
-    if (!t.loanId) {
+    // Not reached: never boarded, or boarded on the day the run stopped, so its window ends before it begins.
+    if (!t.loanId || t.end < t.board) {
       loans.push({
         loan: t.life.loan_id,
         index: t.index,
+        loan_id: t.loanId,
         board: t.board,
         end: t.end,
         transfer: t.transfer,
@@ -719,6 +721,9 @@ async function run(): Promise<void> {
     "D-03": `the note's dollar late-charge cap written onto loan_terms after boarding on ${lateCapApplied.length} loan(s); the tape has no column for it`,
     "escrow analysis":
       "no runner (cycles.ts:285): each analysis's new escrow payment written onto the due rows on its date",
+    "HF-020":
+      "MI, VA and MA passed on the batch's licensed_states; the shop's default license list leaves them out",
+    "HF-008": `the MIN's check digit repaired before boarding on ${tracks.filter((t) => t.minRepaired).length} loan(s); the generator draws it at random`,
   };
   result.metro2_runs = metro2Runs;
   result.loans = loans;
@@ -1137,7 +1142,7 @@ const CLASSES: Record<
   },
   "metro2-prior": {
     kind: "new",
-    ref: "domain/operations-runtime/runners.ts:144; credit-reporting/metro2.ts:65, :104",
+    ref: "domain/operations-runtime/runners.ts:144; credit-reporting/metro2.ts:65, :105",
     what: "the typed-row builder passes `prior: null` every month: the payment history profile is the boarding hand-off (24 × B) forever, and the date of first delinquency restarts at each month's oldest unpaid installment",
   },
   "metro2-held": {
@@ -1177,8 +1182,8 @@ const CLASSES: Record<
   },
   "transfer-history": {
     kind: "new",
-    ref: "domain/boarding/service.ts:104-112; domain/operations-runtime/runners.ts:137-139",
-    what: "the tape's payment history is hashed and counted at boarding but never booked, so until the servicing app posts a receipt of its own the bureaus are told the borrower never paid",
+    ref: "domain/boarding/service.ts:166, :367-371; domain/operations-runtime/runners.ts:137-139",
+    what: "boarding reads the tape's payment history only to seed delinquency and writes no payment record, so until the servicing app posts a receipt of its own the bureaus are told the borrower never paid",
   },
   "escrow-sync": {
     kind: "harness",
@@ -1337,9 +1342,18 @@ function triageLoan(
   return out;
 }
 
+/** A run file's database, refused unless it is a scratch one: `report` and `loan` read only what `run` wrote. */
+function scratchDb(r: Row): string {
+  const db = String(r.db);
+  if (!SCRATCH.test(db))
+    throw new Error(`run ${String(r.label)} names ${db}, not a hm_xcheck_<short> database`);
+  return db;
+}
+
 async function report(): Promise<void> {
   const OUT = args.get("out") ?? "cross-check-report.json";
   const runs = positional.map((p) => JSON.parse(readFileSync(p, "utf8")) as Row);
+  for (const r of runs) scratchDb(r);
   const per = new Map<
     string,
     {
@@ -1350,7 +1364,10 @@ async function report(): Promise<void> {
       explained: Map<string, number>;
     }
   >();
-  const classes = new Map<string, { fields: number; loans: Set<string>; examples: unknown[] }>();
+  const classes = new Map<
+    string,
+    { fields: number; loans: Set<string>; months: Set<string>; examples: unknown[] }
+  >();
   const unclassified: unknown[] = [];
   const totals = {
     runs: runs.length,
@@ -1387,14 +1404,15 @@ async function report(): Promise<void> {
           if (m.next_due === null) gen.next_due_null++;
         }
     }
-    const client = new pg.Client({ connectionString: `${BASE_URL}/${String(r.db)}` });
+    const client = new pg.Client({ connectionString: `${BASE_URL}/${scratchDb(r)}` });
     await client.connect();
     totals.loan_days += Number((r.stepping as Row).loan_days);
     totals.wall_s = Math.max(totals.wall_s, Number((r.stepping as Row).wall_s));
     for (const l of (r.loans as Row[]) ?? []) {
       if (l.board_error) totals.board_errors++;
-      if (l.not_reached) totals.not_reached++;
-      if (!l.fields) continue;
+      // A loan boarded on the day its run stopped has no field (run files written before `run` said so name it here).
+      if (l.not_reached || (Array.isArray(l.fields) && !l.fields.length)) totals.not_reached++;
+      if (!Array.isArray(l.fields) || !l.fields.length) continue;
       totals.loans++;
       if (l.min_repaired) totals.min_repaired++;
       totals.receipts += Number(l.receipts);
@@ -1447,9 +1465,15 @@ async function report(): Promise<void> {
         per.set(t.f.field, x);
         if (t.f.agree) continue;
         x.explained.set(t.cls, (x.explained.get(t.cls) ?? 0) + 1);
-        const k = classes.get(t.cls) ?? { fields: 0, loans: new Set<string>(), examples: [] };
+        const k = classes.get(t.cls) ?? {
+          fields: 0,
+          loans: new Set<string>(),
+          months: new Set<string>(),
+          examples: [],
+        };
         k.fields++;
         k.loans.add(String(l.loan));
+        k.months.add(`${String(l.loan)}|${t.f.month}`);
         if (t.root && k.examples.length < 4)
           k.examples.push({
             run: r.label,
@@ -1483,6 +1507,8 @@ async function report(): Promise<void> {
       ...classOf(cls),
       fields: k.fields,
       loans: k.loans.size,
+      // Distinct loan-months the class shows in (a month-end can carry several of its fields).
+      loan_months: k.months.size,
       examples: k.examples,
       loan_ids: [...k.loans].sort(),
     }))
@@ -1511,7 +1537,7 @@ async function report(): Promise<void> {
     );
   for (const k of classTable)
     console.log(
-      `${k.class.padEnd(16)} ${k.kind.padEnd(12)} fields ${String(k.fields).padStart(6)} loans ${String(k.loans).padStart(4)}`,
+      `${k.class.padEnd(16)} ${k.kind.padEnd(12)} fields ${String(k.fields).padStart(6)} loans ${String(k.loans).padStart(4)} loan-months ${String(k.loan_months).padStart(5)}`,
     );
 }
 
@@ -1582,7 +1608,7 @@ async function loan(): Promise<void> {
           dofd: x.metro2.record?.date_of_first_delinquency ?? null,
         }),
       );
-  const client = new pg.Client({ connectionString: `${BASE_URL}/${String(r.db)}` });
+  const client = new pg.Client({ connectionString: `${BASE_URL}/${scratchDb(r)}` });
   await client.connect();
   for (const kind of ["payments", "fees"]) {
     const rows = await client.query<{ d: Row }>(
@@ -1627,7 +1653,7 @@ else if (mode === "report") await report();
 else if (mode === "loan") await loan();
 else {
   console.error(
-    "usage: cross-check-life.mts run --db hm_xcheck_<short> … | report --out <file> <run.json>…",
+    "usage: cross-check-life.mts run --db hm_xcheck_<short> … | report --out <file> <run.json>… | loan <run.json> <loan> [from] [to]",
   );
   process.exit(2);
 }

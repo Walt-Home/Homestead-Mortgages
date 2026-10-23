@@ -39,7 +39,14 @@ import {
   VOICE_WINDOW,
 } from "../calls/index.js";
 
-const q = (xs: readonly string[]): string => xs.map((x) => `"${x}"`).join(", ");
+/** A list of phrases as the rulebook writes it: "a", or one of "a", "b" or "c". */
+export const phraseList = (xs: readonly string[]): string => {
+  const quoted = xs.map((x) => `"${x}"`);
+  return quoted.length === 1
+    ? quoted[0]!
+    : `one of ${quoted.slice(0, -1).join(", ")} or ${quoted[quoted.length - 1]}`;
+};
+const q = phraseList;
 
 export const CALL_QA_RULEBOOK = `# Call QA
 
@@ -105,7 +112,7 @@ ${CALL_TEMPLATES.map((t) => `- ${t.key}: "${t.text}"`).join("\n")}
 
 ## Fails outright
 
-fails_outright is true exactly when some finding is ${AUTOMATIC_FAILS.join(", ")}.
+fails_outright is true exactly when some finding is ${AUTOMATIC_FAILS.slice(0, -1).join(", ")} or ${AUTOMATIC_FAILS[AUTOMATIC_FAILS.length - 1]}.
 
 ## The note
 

@@ -74,6 +74,7 @@ import {
   gradeCallQaAgainst,
   judge,
   parseCallQaSubmission,
+  phraseList,
   recordFor,
   reviewContactCall,
   type CallQaAnswer,
@@ -487,7 +488,7 @@ describe("call-qa", () => {
     expect(CALL_QA_FINGERPRINT.environment).toMatchInlineSnapshot(`
       {
         "name": "call-qa",
-        "rulebook_sha256": "ea14cb95ac6923df48dc75312cc6684c53254ff1bd9f0b234ee30c21ea9ec297",
+        "rulebook_sha256": "466daf75b5ddb9b747056814e6bc66740d093e507d2f31efb9cb553b649f1ac5",
         "tools_sha256": "b183a3f242ecfd6dfa18e20426c0def3fca41bfcc7cc364a0d411ddbc005dbd6",
         "version": "1.0.0",
       }
@@ -495,18 +496,18 @@ describe("call-qa", () => {
     const stated = [
       "identity: when call.identity_verified is not true, every agent line that says a dollar amount is a finding on its line. An automatic fail.",
       'ai_disclosure: when call.voice is "ai", one of the first 3 agent lines must say "automated assistant".',
-      `recording_disclosure: when call.direction is "outbound" and call.outcome is "conversation", some agent line must say ${RECORDING_PHRASES.map((x) => `"${x}"`).join(", ")}.`,
+      `recording_disclosure: when call.direction is "outbound" and call.outcome is "conversation", some agent line must say ${phraseList(RECORDING_PHRASES)}.`,
       'collection_disclosure: when call.outcome is "conversation" and call.with is not "attorney", one disclosure is due:',
       "it is not a Chapter 13 case with a discharged_on on or before the call's day.",
       "otherwise the mini-Miranda, when call.debt_collector is true or record.past_due is not null.",
       "predial_time_zone: in some zone of time_zones, the local time of dial_at is not after 08:00 or is after 20:30",
       'The cap is 7 when fdcpa_debt_collector is true; otherwise 2 when state is "MA", and 5 elsewhere.',
-      `negotiation: an agent line that says ${NEGOTIATION_PHRASES.map((x) => `"${x}"`).join(", ")}.`,
-      `bankruptcy_collection: when the record shows a bankruptcy case (as for the disclaimer above, whatever the outcome), an agent line that says ${COLLECTION_PHRASES.map((x) => `"${x}"`).join(", ")}. An automatic fail.`,
-      `credit_misstatement: an agent line that says ${CREDIT_MISSTATEMENT_PHRASES.map((x) => `"${x}"`).join(", ")}. An automatic fail.`,
-      `complaint_not_logged: when call.complaint_logged is false, a caller line that says ${COMPLAINT_PHRASES.map((x) => `"${x}"`).join(", ")}. An automatic fail.`,
+      `negotiation: an agent line that says ${phraseList(NEGOTIATION_PHRASES)}.`,
+      `bankruptcy_collection: when the record shows a bankruptcy case (as for the disclaimer above, whatever the outcome), an agent line that says ${phraseList(COLLECTION_PHRASES)}. An automatic fail.`,
+      `credit_misstatement: an agent line that says ${phraseList(CREDIT_MISSTATEMENT_PHRASES)}. An automatic fail.`,
+      `complaint_not_logged: when call.complaint_logged is false, a caller line that says ${phraseList(COMPLAINT_PHRASES)}. An automatic fail.`,
       "A run on an agent line with no source is a finding on that line: wrong_amount when the run is part of a dollar amount on the line (an automatic fail), provenance when it is not.",
-      `fails_outright is true exactly when some finding is ${AUTOMATIC_FAILS.join(", ")}.`,
+      `fails_outright is true exactly when some finding is ${AUTOMATIC_FAILS.slice(0, -1).join(", ")} or wrong_amount.`,
       'Otherwise split note.text at the first " | PREV: "',
     ];
     expect(stated.filter((rule) => !CALL_QA_RULEBOOK.includes(rule))).toEqual([]);
@@ -517,9 +518,7 @@ describe("call-qa", () => {
       expect(CALL_QA_RULEBOOK, item).toMatch(new RegExp(`\\b${item}\\b`));
     for (const t of CALL_TEMPLATES) expect(CALL_QA_RULEBOOK).toContain(`- ${t.key}: "${t.text}"`);
     for (const o of OPTIONS)
-      expect(CALL_QA_RULEBOOK).toContain(
-        `${o} is named by ${OPTION_PHRASES[o].map((x) => `"${x}"`).join(", ")}`,
-      );
+      expect(CALL_QA_RULEBOOK).toContain(`${o} is named by ${phraseList(OPTION_PHRASES[o])}`);
     // An item takes a line exactly when the rulebook finds it on one.
     for (const item of LINE_ITEMS) expect(RUBRIC_ITEMS).toContain(item);
   });

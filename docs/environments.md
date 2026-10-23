@@ -3099,8 +3099,11 @@ Last is a book of 1,000 loans drawn from `calibration.json` (seed
 (`src/demo/book-panel.ts`). Each test shows our figure, the figure it is
 held to, the tolerance, and whether the book is within it, outside it, or
 not a verdict. Each also shows the target's provenance and whether the book
-meets the test's sample floor. On 23 October 11 were within, 6 outside and
-3 not a verdict. The six outside:
+meets the test's sample floor. Every target and tolerance is read from the
+two files, the ones the acceptance file states only in words too (0.01 on
+the delinquency total, 0.08 on the cure, 25 % on each contact status), and
+words the panel cannot read stop the build. On 23 October 11 were within,
+6 outside and 3 not a verdict. The six outside:
 
 - returned payments, which are not generated;
 - missed months, a check that reads low;

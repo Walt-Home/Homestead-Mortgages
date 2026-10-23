@@ -7726,7 +7726,26 @@ Six are outside. Returned payments are not generated, and missed months are
 a check that reads low. The all-loans delinquency stock includes FHA and VA.
 Contacts by status are a design-choice split the borrower's own calls do
 not reach. Loan-to-value is drawn at origination against a mark-to-market
-target. The ARM share is 5.5 % against 4.3 %, on a fifth of its floor. Two
-tests need a counting rule the acceptance file does not state:
-transactions per loan-year, and contacts by status. For each, the page
-states the rule it used.
+target. The ARM share is 5.5 % against 4.3 %, on a fifth of its floor.
+
+**Nothing on the page is typed.** Every pass and fail is computed against
+the figures the two files hold, and so is every figure in a row's note. A
+tolerance the acceptance file gives only in its unit's words (0.01 on the
+delinquency total, 0.08 on the cure, 25 % on each contact status, and the
+order the statuses rise in) is read from those words, and words the panel
+cannot read stop the build. Where a test's measure needs a reading the file
+does not spell out, the row says the one it used. Transactions per
+loan-year are counted over calendar years a loan was open all twelve
+months and current at every month-end. A call takes the status of its
+month's month-end. The escrow medians are read on the first year's bills,
+because the targets are 2024's.
+
+**An analysis's "old payment" is the old schedule's.** The life generator
+hands each analysis, and escrow-review its `current_escrow_payment_cents`,
+the escrow payment the old schedule charges from the new one's effective
+date, after last year's shortage or credit has run out: $900.23 for the
+flagged analysis, where the borrower is billed $908.79 that month. The
+review triggers compare the new payment with it. The page labels it as the
+old schedule's and shows the billed amount beside it; whether the triggers
+should read the billed payment is a question for escrow-review's next
+version.

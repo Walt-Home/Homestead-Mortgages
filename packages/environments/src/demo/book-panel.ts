@@ -23,7 +23,7 @@ import type { Calibration, CalibrationFile, CalibrationKey } from "../life/calib
 import { arrivals, calibrationCheck, type ArrivalRow, type CheckRow } from "../life/check.js";
 import { DEFECTS } from "../life/defects.js";
 import { generate, type LifeBook } from "../life/generate.js";
-import type { LoanLife } from "../life/simulate.js";
+import { BEHIND_CONTACT_MULTIPLIER, type LoanLife } from "../life/simulate.js";
 
 /* ── the acceptance file ─────────────────────────────────────────────────── */
 
@@ -126,6 +126,16 @@ const within = (ours: number, target: number, tol: number, kind: "abs" | "rel"):
     ? Math.abs(ours - target) <= tol + 1e-12
     : Math.abs(ours / target - 1) <= tol + 1e-12;
 
+/**
+ * A second tolerance the acceptance file states only in its unit's words (0.01 on a total, 0.08 on a cure, 25% on
+ * each status), read from those words: a change to the file reaches the page, or stops the build.
+ */
+function unitTolerance(t: AcceptanceTest, pattern: RegExp, scale = 1): number {
+  const m = pattern.exec(t.tolerance.unit);
+  if (!m) throw new Error(`${t.id}: the tolerance's unit no longer reads ${String(pattern)}`);
+  return Number(m[1]) * scale;
+}
+
 /** Failed when any part failed, passed when every part passed, and otherwise not a verdict. */
 const overall = (parts: readonly PageBookPart[]): boolean | null =>
   parts.some((p) => p.pass === false) ? false : parts.every((p) => p.pass === true) ? true : null;
@@ -203,7 +213,8 @@ export function bookPanel(o: BookPanelOptions): PageBook {
   const borrowerReceipts = loans.flatMap((l) =>
     l.receipts.filter((r) => r.mode !== "partial_rest" && r.mode !== "payoff"),
   );
-  const contacts = loans.flatMap((l) => l.contacts);
+  // The tests count inbound contacts; with outreach off (the book's default) every contact is the borrower's own.
+  const contacts = loans.flatMap((l) => l.contacts.filter((c) => c.direction === "inbound"));
   const fees = loans.reduce((s, l) => s + l.fees.length, 0);
 
   const floorOurs: Readonly<Record<string, number>> = {
@@ -256,6 +267,8 @@ export function bookPanel(o: BookPanelOptions): PageBook {
   for (const t of o.acceptance.tests) {
     const parts: PageBookPart[] = [];
     let note = "";
+    /** The sample this row was read over, where it is narrower than the floor's unit across the whole book. */
+    let floorOverride: number | undefined;
     let kind = kindOf(t.key);
     const tv = t.tolerance.value;
     const part = (
@@ -358,8 +371,11 @@ export function bookPanel(o: BookPanelOptions): PageBook {
           (x) => pct(x, 2),
           rel(tv),
         );
-        note =
-          "Not drawn, so it is read as a check. The public quarterly roll makes a current borrower miss about 0.36% of months; the file's 1.2% is a design choice its own note bounds below at 0.28%. Drawing it would put three times the New York Fed's roll on the book.";
+        {
+          const roll = cal.rates.delinquency.roll_current_to_30;
+          const stated = num(value(t.key), t.key);
+          note = `Not drawn, so it is read as a check. A current borrower misses at the monthly roll the generator solves from the New York Fed's quarterly figures, ${pct(roll)} of months; the file's ${pct(stated, 1)} is a design choice, and drawing it would put ${fixed(stated / roll, 1)} times that roll on the book.`;
+        }
         break;
       }
       case "delinquency-stock": {
@@ -374,12 +390,13 @@ export function bookPanel(o: BookPanelOptions): PageBook {
             (x) => pct(x, 2),
             pts(tv),
           );
+        const totalTol = unitTolerance(t, /([\d.]+) on the total/);
         parts.push({
           label: "total",
           ours: pct(qAvg("all")),
           target: pct(num(at(v, "total"), "total")),
-          tolerance: pts(0.01),
-          pass: Math.abs(qAvg("all") - num(at(v, "total"), "total")) <= 0.01 + 1e-12,
+          tolerance: pts(totalTol),
+          pass: within(qAvg("all"), num(at(v, "total"), "total"), totalTol, "abs"),
         });
         note =
           "The target is all loans, FHA and VA among them; this book is conventional only, so it should sit below it. The next row is the conventional figure.";
@@ -394,8 +411,7 @@ export function bookPanel(o: BookPanelOptions): PageBook {
           (x) => pct(x, 2),
           pts(tv),
         );
-        note =
-          "Averaged over the quarter-ends after the book's first year. A monthly cure of 16% against a repeat miss of 33% runs deeper than MBA's buckets show.";
+        note = `Averaged over the quarter-ends after the book's first year. A monthly cure of ${pct(cal.rates.delinquency.cure_from_30, 0)} against a monthly roll to 60 days of ${pct(cal.rates.delinquency.roll_30_to_60, 0)} runs deeper than MBA's buckets show.`;
         break;
       }
       case "quarterly-transitions": {
@@ -414,12 +430,13 @@ export function bookPanel(o: BookPanelOptions): PageBook {
           tolerance: rel(tv),
           pass: within(roll.realized, target, tv, "rel"),
         });
+        const cureTol = unitTolerance(t, /([\d.]+) absolute on the cure/);
         parts.push({
           label: "30 to 60 days → current",
           ours: pct(cure.realized, 1),
           target: pct(cureTarget, 1),
-          tolerance: pts(0.08),
-          pass: within(cure.realized, cureTarget, 0.08, "abs"),
+          tolerance: pts(cureTol),
+          pass: within(cure.realized, cureTarget, cureTol, "abs"),
         });
         note =
           "Each quarter-end against the next. A quarter-end also finds loans behind that missed nothing (the rest of a partial still to come), so the roll reads above the monthly chain's.";
@@ -446,16 +463,35 @@ export function bookPanel(o: BookPanelOptions): PageBook {
           (x) => fixed(x, 2),
           `±${tv} a loan-year`,
         );
+        const statusTol = unitTolerance(t, /(\d+)% relative on each status/, 0.01);
+        const rate: Partial<Record<keyof typeof months, number>> = {};
         for (const s of ["current", "d30", "d60", "d90_plus"] as const) {
           const ours = months[s] > 0 ? calls[s] / (months[s] / 12) : null;
+          if (ours !== null) rate[s] = ours;
           parts.push({
             label: `${s === "current" ? "current" : s.replace("d", "").replace("_plus", "+") + " days"} (design choice)`,
             ours: ours === null ? "no loan-months" : fixed(ours, 2),
             target: fixed(num(byStatus[s], s), 1),
-            tolerance: "±25%",
-            pass: ours === null ? null : within(ours, num(byStatus[s], s), 0.25, "rel"),
+            tolerance: rel(statusTol),
+            pass: ours === null ? null : within(ours, num(byStatus[s], s), statusTol, "rel"),
           });
         }
+        // The unit's last clause: the rates rise with delinquency.
+        if (!/current below d30 below d60 at or below d90_plus/.test(t.tolerance.unit))
+          throw new Error(`${t.id}: the tolerance's unit no longer orders the statuses`);
+        const [c0, c30, c60, c90] = [rate.current, rate.d30, rate.d60, rate.d90_plus];
+        const ordered =
+          c0 === undefined || c30 === undefined || c60 === undefined || c90 === undefined
+            ? null
+            : c0 < c30 && c30 < c60 && c60 <= c90;
+        parts.push({
+          label: "rising with delinquency (design choice)",
+          ours:
+            ordered === null ? "not every status reached" : ordered ? "in order" : "out of order",
+          target: "current < 30 < 60 ≤ 90+",
+          tolerance: "in that order",
+          pass: ordered,
+        });
         parts.push({
           label: "foreclosure (design choice)",
           ours: "none generated",
@@ -463,8 +499,7 @@ export function bookPanel(o: BookPanelOptions): PageBook {
           tolerance: "±25%",
           pass: null,
         });
-        note =
-          "Each call is counted in the status of its month's month-end. The book's calls are the borrower's own: a borrower who is behind calls three times as often, and nothing else rises with delinquency until the servicer's outreach and loss-mitigation follow-up are generated. The split by status is the acceptance file's design choice; the CFPB gives none.";
+        note = `Each call is counted in the status of its month's month-end. The book's calls are the borrower's own: a borrower who is behind calls ${BEHIND_CONTACT_MULTIPLIER} times as often, and nothing else rises with delinquency until the servicer's outreach and loss-mitigation follow-up are generated. The split by status is the acceptance file's design choice; the CFPB gives none.`;
         break;
       }
       case "contact-reason-mix": {
@@ -497,7 +532,7 @@ export function bookPanel(o: BookPanelOptions): PageBook {
         });
         kind = "public";
         note =
-          "The mix is of complaints, a skewed proxy for why people call: every call draws its reason from it, so disputes are as common in a current borrower's calls as in complaints.";
+          "Read over every call, because the book marks none as a complaint or a notice of error. The mix is of complaints, a skewed proxy for why people call: every call draws its reason from it, so disputes are as common in a current borrower's calls as in complaints, and the match is by construction.";
         break;
       }
       case "call-note-length": {
@@ -520,10 +555,11 @@ export function bookPanel(o: BookPanelOptions): PageBook {
           tolerance: `±${tv} min`,
           pass: lo >= v.min - tv && hi <= v.max + tv,
         });
+        const band = at(t.target, "note_median_chars") as { min: number; max: number };
         parts.push({
           label: "median note length (design choice)",
           ours: "no notes yet",
-          target: "150 to 800 characters",
+          target: `${num(band.min, "note_median_chars.min")} to ${num(band.max, "note_median_chars.max")} characters`,
           tolerance: "inside the band",
           pass: null,
         });
@@ -532,29 +568,44 @@ export function bookPanel(o: BookPanelOptions): PageBook {
         break;
       }
       case "transactions-per-loan-year": {
+        // Loans current at every due date of the year: read as a calendar year the loan was open all twelve
+        // months and current at every month-end.
         let tx = 0;
+        let years = 0;
         for (const l of loans) {
-          for (const r of l.receipts) {
-            if (r.mode === "payoff") continue;
-            tx += 1;
-            if (r.curtailment > 0n) tx += 1;
+          const byYear = new Map<string, LoanLife["months"][number][]>();
+          for (const m of l.months)
+            byYear.set(m.month.slice(0, 4), [...(byYear.get(m.month.slice(0, 4)) ?? []), m]);
+          for (const [y, ms] of byYear) {
+            if (
+              ms.length !== 12 ||
+              !ms.every((m) => isOpen(m.status) && m.mba_status === "current")
+            )
+              continue;
+            years += 1;
+            const inYear = (d: string) => d.slice(0, 4) === y;
+            for (const r of l.receipts) {
+              if (r.mode === "payoff" || !inYear(r.on)) continue;
+              tx += 1;
+              if (r.curtailment > 0n) tx += 1;
+            }
+            tx += l.fees.filter((f) => inYear(f.assessed_on)).length;
+            tx += l.disbursements.filter(
+              (d) => d.kind === "bill" && d.line !== "mi_borrower_paid" && inYear(d.on),
+            ).length;
           }
-          tx += l.fees.length;
-          tx += l.disbursements.filter(
-            (d) => d.kind === "bill" && d.line !== "mi_borrower_paid",
-          ).length;
         }
+        floorOverride = years;
         part(
           "transactions a loan-year",
-          tx / loanYears,
+          years > 0 ? tx / years : null,
           num(t.target.expected, t.id),
           "rel",
           (x) => fixed(x, 2),
           rel(tv),
         );
         kind = "design choice";
-        note =
-          "Counted as every receipt (each half of a partial), one more for each that carried extra principal, every late charge, and every tax, hazard and flood disbursement; the monthly mortgage-insurance premium, which the formula leaves out, is not counted. The target is a formula over design choices.";
+        note = `Over the calendar years a loan was open all twelve months and current at every month-end, ${years.toLocaleString("en-US")} of them: every receipt (each half of a partial), one more for each that carried extra principal, every late charge, and every tax, hazard and flood disbursement. The monthly mortgage-insurance premium, which the formula leaves out, is not counted. The target is a formula over design choices.`;
         break;
       }
       case "defect-rates-by-field": {
@@ -679,7 +730,10 @@ export function bookPanel(o: BookPanelOptions): PageBook {
           (x) => pct(x, 1),
           pts(tv),
         );
-        note = "All loans' share, 4.3%. Enterprise loans alone are 1.1%.";
+        {
+          const byMarket = at(value(t.key), "loans_by_market.enterprise");
+          note = `The target is all loans' share; Enterprise loans alone are ${pct(num(byMarket, "loans_by_market.enterprise"), 1)}.`;
+        }
         break;
       }
       case "escrow-share": {
@@ -718,14 +772,15 @@ export function bookPanel(o: BookPanelOptions): PageBook {
           dollars,
           rel(tv),
         );
-        note = "The ACS medians are 2024's; the book bills its first year at them.";
+        note =
+          "Read on each escrowed loan's first-year bills, not on its newest full year's as the test states: the ACS medians are 2024's, the book bills its first year at them, and later years grow by the calibration's growth keys.";
         break;
       }
       default:
         parts.push({ label: t.measure, ours: "not read", target: "", tolerance: "", pass: null });
         note = "The page has no reading for this test yet.";
     }
-    const floorOurs0 = floorOurs[t.sample_floor.of];
+    const floorOurs0 = floorOverride ?? floorOurs[t.sample_floor.of];
     rows.push({
       id: t.id,
       measure: t.measure,

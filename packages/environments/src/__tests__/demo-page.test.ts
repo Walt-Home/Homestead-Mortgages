@@ -23,6 +23,7 @@ import {
   defaultCalibration,
   demoLoan,
   generate,
+  loadCalibration,
   writeTape,
   type CalibrationFile,
   type LifeMoment,
@@ -33,7 +34,7 @@ import { boardingSpecTasks, expectedTriage, gradeTriage } from "../boarding/inde
 import { catchupTaskAt, expectedCatchup, gradeCatchup } from "../catchup/index.js";
 import { expectedEscrowReview, gradeReview, reviewTaskAt } from "../escrow-review/index.js";
 import { demoPageData, type DemoPageData, type PagePosed } from "../demo/page-data.js";
-import type { AcceptanceFile } from "../demo/book-panel.js";
+import { bookPanel, type AcceptanceFile } from "../demo/book-panel.js";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
@@ -326,5 +327,44 @@ describe("the demo page", () => {
     expect(by("loan-age-distribution").pass).toBeNull();
     expect(by("call-note-length").pass).toBeNull();
     expect(toJsonLine(by("payment-within-grace").parts[0])).toContain("50.8%");
+  });
+
+  it("reads every tolerance from the acceptance file, the ones it states only in words too", () => {
+    const pkg = here("../..");
+    const file = JSON.parse(
+      readFileSync(join(pkg, "src/life/calibration.json"), "utf8"),
+    ) as CalibrationFile;
+    const acceptance = JSON.parse(
+      readFileSync(join(pkg, "src/life/calibration-acceptance.json"), "utf8"),
+    ) as AcceptanceFile;
+    const calibration = loadCalibration({ file });
+    const panel = (a: AcceptanceFile) =>
+      bookPanel({ calibration, file, acceptance: a, loans: 40, seed: "demo-page-test" });
+    const reword = (id: string, from: string, to: string): AcceptanceFile => ({
+      ...acceptance,
+      tests: acceptance.tests.map((t) =>
+        t.id === id
+          ? { ...t, tolerance: { ...t.tolerance, unit: t.tolerance.unit.replace(from, to) } }
+          : t,
+      ),
+    });
+    const part = (b: ReturnType<typeof panel>, id: string, label: string) =>
+      b.rows.find((r) => r.id === id)!.parts.find((p) => p.label === label)!;
+    const moved = panel(reword("delinquency-stock", "0.01 on the total", "0.02 on the total"));
+    expect(part(moved, "delinquency-stock", "total").tolerance).toBe("±2.0 pts");
+    const cure = panel(reword("quarterly-transitions", "0.08 absolute", "0.05 absolute"));
+    expect(part(cure, "quarterly-transitions", "30 to 60 days → current").tolerance).toBe(
+      "±5.0 pts",
+    );
+    const status = panel(
+      reword("contacts-per-loan-year-by-status", "25% relative", "40% relative"),
+    );
+    expect(
+      part(status, "contacts-per-loan-year-by-status", "current (design choice)").tolerance,
+    ).toBe("±40%");
+    // Words the page cannot read stop the build rather than fall back to a typed figure.
+    expect(() =>
+      panel(reword("delinquency-stock", "0.01 on the total", "a point on the total")),
+    ).toThrow(/delinquency-stock/);
   });
 });

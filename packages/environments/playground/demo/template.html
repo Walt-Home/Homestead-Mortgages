@@ -108,6 +108,8 @@ td.n, th.n { text-align: right }
 td.num, .tape td { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: .78rem; white-space: nowrap }
 .tape tr.focus td { background: var(--chosen) }
 .tape tr { cursor: pointer }
+.tape td.mo { padding: 0 }
+.tape td.mo button { font: inherit; color: inherit; background: transparent; border: 0; padding: 6px 8px; cursor: pointer; width: 100%; text-align: left }
 .tape td.off { color: var(--quiet); font-family: var(--sans); white-space: normal; font-size: .78rem }
 .tape td.diff { color: var(--accent-text); box-shadow: inset 0 -2px 0 var(--accent) }
 .hidden-list { display: grid; gap: 6px }
@@ -132,7 +134,7 @@ summary span { font-weight: 400; color: var(--muted) }
 .graded td:first-child { font-family: var(--mono); font-size: .74rem; overflow-wrap: anywhere; white-space: normal; min-width: 120px }
 .graded td:nth-child(2) { font-size: .78rem; overflow-wrap: anywhere; white-space: normal }
 .ok { color: var(--ok) } .bad { color: var(--d60) }
-.harm { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px }
+.harm { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 18px }
 .big { font: 1.6rem/1.1 var(--serif) }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px 22px }
 .stat { display: grid; gap: 2px } .stat .v { font: 1.45rem/1.1 var(--serif) } .stat .l { color: var(--muted); font-size: .82rem }
@@ -275,6 +277,7 @@ button { -webkit-tap-highlight-color: transparent }
       ]],
       ['Not yet', [
         'Contacts beyond the collection calls and the borrower’s call, and every call note and transcript: a later wave.',
+        'Our letters and notices: periodic statements, the transfer letters, 1098s. Only the prior servicer’s, in the transfer package, are written.',
         'Returned payments, loss mitigation, bankruptcy, foreclosure and a tax penalty.',
         'FHA and VA loans. Everything here is Fannie Mae conventional.'
       ]]
@@ -299,7 +302,8 @@ button { -webkit-tap-highlight-color: transparent }
     var dl = el('dl', { class: 'terms' });
     items.forEach(function (it) { dl.append(el('div', null, el('dt', { text: it[0] }), el('dd', { text: it[1] }))); });
     box.append(dl);
-    box.append(el('p', { class: 'small muted', text: 'Paid by the borrower’s bank bill pay a few days before each due date. The defective twin carries ' + L.defects.join(' and ') + ' from its transfer package: an escrow cell written “Yes”, which the servicing app’s decoder reads as No, and the note’s late-fee cap left off the tape. Everything before the transfer is the same in both.' }));
+    var DEFECT_WORDS = { 'D-03': 'the note’s late-fee cap left off the tape (D-03)', 'D-42': 'an escrow cell written “Yes”, which the servicing app’s decoder reads as No (D-42)' };
+    box.append(el('p', { class: 'small muted', text: 'Paid by the borrower’s bank bill pay a few days before each due date. The defective twin carries ' + (['no', 'one', 'two', 'three'][L.defects.length] || L.defects.length) + (L.defects.length === 1 ? ' defect' : ' defects') + ' from its transfer package: ' + L.defects.map(function (d) { return DEFECT_WORDS[d] || d; }).join(', and ') + '. Everything before the transfer is the same in both.' }));
     var ol = el('ol', { class: 'story', 'aria-label': 'The story, by date' });
     DATA.story.forEach(function (s) {
       ol.append(el('li', null, el('button', {
@@ -382,7 +386,7 @@ button { -webkit-tap-highlight-color: transparent }
 
   function renderTape(box) {
     box.append(el('header', null, el('span', { class: 'lanenum', text: 'Lane 2' }), el('h2', { id: 'h-tape', text: 'The monthly tape' }),
-      el('p', { text: 'The row our tape writer writes for this loan at each month-end, in the m3-v1 layout a partner sends: ' + DATA.tape_headers.length + ' columns, ' + DATA.tape_lane.length + ' shown here. This is all a partner sees.' })));
+      el('p', { text: 'The row our tape writer writes for this loan at each month-end, in the m3-v1 layout of a partner’s monthly tape: ' + DATA.tape_headers.length + ' columns, ' + DATA.tape_lane.length + ' shown here. A loan watched through a tape is seen through this row alone.' })));
     var ms = monthsOf(state.twin, state.year);
     var t = el('table', { class: 'tape' });
     var head = el('tr', null, el('th', { text: 'Month' }));
@@ -390,7 +394,9 @@ button { -webkit-tap-highlight-color: transparent }
     t.append(el('thead', null, head));
     var tb = el('tbody');
     ms.forEach(function (m) {
-      var tr = el('tr', { class: state.month === m.month ? 'focus' : null, on: { click: function () { go({ month: m.month }); } } }, el('td', { text: monthName(m.month).slice(0, 3) }));
+      // The row takes the click; the month's button is how a keyboard reaches it, its click bubbling to the row.
+      var tr = el('tr', { class: state.month === m.month ? 'focus' : null, on: { click: function () { go({ month: m.month }); } } },
+        el('td', { class: 'mo' }, el('button', { type: 'button', 'aria-pressed': String(state.month === m.month), 'aria-label': monthName(m.month) + ': show this month' }, monthName(m.month).slice(0, 3))));
       if (!m.tape) {
         tr.append(el('td', { class: 'off', colspan: DATA.tape_lane.length, text: 'Not on our tape: the prior servicer’s books.' }));
       } else {
@@ -506,7 +512,7 @@ button { -webkit-tap-highlight-color: transparent }
     g.append(d3);
 
     var lead = 'in property taxes the escrow account never paid' + (H.d31.first_tax ? ', from the ' + usd(H.d31.first_tax.amount) + ' due ' + dayName(H.d31.first_tax.on) : '') + '.' +
-      (H.d31.first_hazard ? ' The hazard renewal due ' + dayName(H.d31.first_hazard.on) + ', a month after boarding, went unpaid too, and so did every renewal after it.' : '') +
+      (H.d31.first_hazard ? ' The hazard renewal due ' + dayName(H.d31.first_hazard.on) + ', ' + H.d31.first_hazard.days_after_boarding + ' days after boarding, went unpaid too, and so did every renewal after it.' : '') +
       ' In all, ' + H.d31.bills + ' bills for ' + usd(H.d31.total) + ' through the payoff, the monthly mortgage-insurance premium among them.';
     var d31 = el('article', { class: 'card' }, el('div', { class: 'meta', text: 'D-42 read as D-31 · boarded non-escrowed' }),
       el('div', { class: 'big', text: usd(H.d31.tax_total) }),
@@ -530,10 +536,10 @@ button { -webkit-tap-highlight-color: transparent }
   function renderBook() {
     var B = DATA.book, box = document.getElementById('book');
     box.append(el('div', { class: 'col' }, el('h2', { id: 'h-book', text: 'A book of ' + B.loans.toLocaleString('en-US') + ' loans against the public figures' }),
-      el('p', { text: 'The same generator, drawing from calibration.json, read against every test in calibration-acceptance.json: the tests a partner’s validation sample will be held to. Our figure, the figure it is held to, the tolerance, and whether the book is within it.' }),
+      el('p', { text: 'The same generator, drawing from calibration.json, read against every test in calibration-acceptance.json: the tests the generator’s validation sample is held to, and that a subservicer’s own sample would be read against once one is in hand. Our figure, the figure it is held to, the tolerance, and whether the book is within it.' }),
       el('p', { class: 'small muted', text: 'Read the labels. A public figure has a source and a date in the calibration file; a design choice has none, and says so. Every tolerance is a design choice, with its reason in the acceptance file. Most tests want more than 1,000 loans, so a row below its sample floor is read for direction, not as a verdict. A test the book cannot be read on yet says why instead of passing or failing.' })));
     var stats = el('div', { class: 'stats' });
-    [[B.loans.toLocaleString('en-US') + ' × 10 yrs', B.loan_years.toLocaleString('en-US') + ' loan-years'], [B.receipts.toLocaleString('en-US'), 'payments received'], [B.late_charges.toLocaleString('en-US'), 'late charges'], [B.analyses.toLocaleString('en-US'), 'escrow analyses'], [B.contacts.toLocaleString('en-US'), 'borrower calls'], [B.passed + ' · ' + B.failed + ' · ' + B.unmeasured, 'tests within · outside · not a verdict']]
+    [[B.loan_years.toLocaleString('en-US'), 'loan-years open: ' + B.loans.toLocaleString('en-US') + ' loans over up to ten years'], [B.receipts.toLocaleString('en-US'), 'payments received'], [B.late_charges.toLocaleString('en-US'), 'late charges'], [B.analyses.toLocaleString('en-US'), 'escrow analyses'], [B.contacts.toLocaleString('en-US'), 'borrower calls'], [B.passed + ' · ' + B.failed + ' · ' + B.unmeasured, 'tests within · outside · not a verdict']]
       .forEach(function (s) { stats.append(el('div', { class: 'stat' }, el('div', { class: 'v', text: s[0] }), el('div', { class: 'l', text: s[1] }))); });
     box.append(stats);
     var t = el('table', { class: 'book' });

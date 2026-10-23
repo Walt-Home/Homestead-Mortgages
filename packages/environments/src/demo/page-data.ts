@@ -24,7 +24,7 @@
  * its grader writes it.
  */
 
-import { addDays } from "@hm/kernel/calendar";
+import { addDays, addMonths, daysBetween, type PlainDate } from "@hm/kernel/calendar";
 import { formatCents, type Cents } from "@hm/kernel/money";
 import type { FieldGrade } from "../episode.js";
 import { solveNow, type Json } from "../refi/reference.js";
@@ -270,7 +270,11 @@ export interface PageHarm {
     readonly total: number;
     readonly tax_total: number;
     readonly first_tax: { readonly on: string; readonly amount: number } | null;
-    readonly first_hazard: { readonly on: string; readonly amount: number } | null;
+    readonly first_hazard: {
+      readonly on: string;
+      readonly amount: number;
+      readonly days_after_boarding: number;
+    } | null;
     readonly escrow_not_billed: { readonly installments: number; readonly total: number };
     readonly payoff_refund: { readonly clean: number; readonly defective: number };
     readonly penalty: null;
@@ -342,6 +346,21 @@ const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct
 const usd = (c: Cents | number): string => formatCents(BigInt(c));
 const n = (c: Cents): number => Number(c);
 const monthName = (d: string): string => `${MON[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`;
+const MONTH = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+const fullMonth = (d: string): string => `${MONTH[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`;
 const dayName = (d: string): string =>
   `${MON[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}, ${d.slice(0, 4)}`;
 const plural = (k: number, one: string, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
@@ -373,11 +392,14 @@ const REASON: Readonly<Record<string, string>> = {
 };
 const reasonName = (r: string) => REASON[r] ?? r.replace(/_/g, " ");
 
+/** The escrow engine's review triggers (escrow/analysis.ts's `anomalies`, and the line anomalies of its projection). */
 const ANOMALY: Readonly<Record<string, string>> = {
   payment_change_gt_25pct: "payment change over 25%",
   payment_change_gt_150: "payment change over $150",
-  refund_gt_2500: "refund over $2,500",
+  surplus_gt_2500: "a surplus over $2,500",
   bill_variance_gt_20pct: "a bill over 20% against last year",
+  missing_penalty_date: "a tax bill with no penalty date",
+  pmi_without_termination: "mortgage insurance with no termination date",
 };
 const anomalyName = (a: string) => ANOMALY[a] ?? a.replace(/_/g, " ");
 
@@ -611,10 +633,10 @@ function twinView(
       on: run.on,
       kind: "no_late_charge",
       prior: run.servicer === "prior",
-      text: `Late-charge run on the ${monthName(run.due)} installment: none assessed (${run.reason ?? run.outcome})`,
+      text: `Late-charge run on the ${monthName(run.due)} installment: none assessed (the engine's reason: ${(run.reason ?? run.outcome).replace(/_/g, " ")})`,
       amount: null,
       detail: [
-        "The installment is still unpaid, but the cashiering engine counts funds held in suspense toward its P&I (decision 2.7-Q1, latecharges.ts:58-66), and the old amount covers the P&I.",
+        "The installment is still unpaid, but the cashiering engine counts the money held in suspense toward its P&I (the servicing app's decision 2.7-Q1), and the old amount covers the P&I.",
       ],
       quiet: false,
       mark: null,
@@ -658,7 +680,9 @@ function twinView(
       text: `Annual escrow analysis for the year from ${monthName(a.year_start)}: ${result}`,
       amount: null,
       detail: [
-        `Escrow payment ${usd(a.old_payment)} → ${usd(a.new_payment)} from ${dayName(a.effective)}; statement sent ${dayName(a.sent_on)}`,
+        // `old_payment` is what the old schedule charges from the effective date, once last year's shortage or
+        // credit has run out; it is what the engine's review triggers compare with, not the payment billed today.
+        `New escrow payment ${usd(a.new_payment)} from ${dayName(a.effective)}, against ${usd(a.old_payment)} on the old schedule from that date; statement sent ${dayName(a.sent_on)}`,
         a.anomalies.length > 0
           ? `Held for review: ${a.anomalies.map(anomalyName).join(", ")}`
           : "Not held for review",
@@ -797,12 +821,19 @@ function twinView(
         ghost: true,
       });
     }
+    // The clean history's month of bill pay sending the old amount, if it had one: why its calls were made.
+    const stale = clean.behavior.find((b) => b.kind === "stale_bill_pay" && b.servicer === "us");
     for (const l of labels.filter((x) => x.file_or_table === "contacts" && x.field === "*")) {
       const c = JSON.parse(l.true_value ?? "{}") as {
-        on: string;
+        on: PlainDate;
         reason: string;
         outcome?: string;
       };
+      const afterStale =
+        stale !== undefined &&
+        c.reason === "collection_call" &&
+        c.on > stale.on &&
+        daysBetween(stale.on, c.on) <= 45;
       add({
         on: c.on,
         kind: "call",
@@ -810,7 +841,9 @@ function twinView(
         text: `Not made: a ${reasonName(c.reason)} (${c.outcome === "voicemail" ? "voicemail" : "no answer"} in the clean history)`,
         amount: null,
         detail: [
-          "The clean history's payment rose in March and bill pay sent the old amount; here nothing changed, so nothing was late.",
+          afterStale
+            ? `The clean history's payment rose and bill pay sent the old amount on ${dayName(stale.on)}, so an installment was late; here the payment never rose, and nothing was.`
+            : "The clean history made this call; this history did not.",
         ],
         quiet: false,
         mark: {
@@ -871,7 +904,7 @@ function twinView(
         hidden.push(
           life.boarded.terms.escrowed
             ? "The transfer itself: the first row simply appears."
-            : "The transfer, and that the loan boarded non-escrowed: no column carries an escrow flag, so T&I of 0.00 is the only sign.",
+            : "The transfer, and that the loan boarded non-escrowed: no column carries an escrow flag. The signs are a T&I of 0.00 beside an escrow balance, and in the months after, a balance that never moves.",
         );
       for (const f of life.fees.filter((x) => x.servicer === "us" && inMonth(x.assessed_on)))
         hidden.push(`The ${usd(f.amount)} late charge: no column carries a late charge or a fee.`);
@@ -884,7 +917,7 @@ function twinView(
         );
       if (life.analyses.some((a) => a.servicer === "us" && inMonth(a.as_of)))
         hidden.push(
-          "The escrow analysis and what it found: the tape shows only the T&I payment it sets, from the month it takes effect.",
+          "The escrow analysis and what it found: the tape shows only the T&I payment it sets, from the month-end when an installment it applies to is next due.",
         );
       if (life.contacts.some((c) => c.servicer === "us" && inMonth(c.on)))
         hidden.push("The calls and what was said: only Srv Last Contact Date moves.");
@@ -1027,6 +1060,7 @@ function shownValue(field: string, v: string): string {
     }
   }
   if (field === "anomalies") return v === "" ? "none" : v.split(",").map(anomalyName).join(", ");
+  if (v === '""') return "(blank)";
   return v === "null" ? "none" : v.replace(/^"(.*)"$/, "$1");
 }
 
@@ -1041,6 +1075,18 @@ function gradedOf(fields: readonly FieldGrade[]): PageGraded[] {
 }
 
 const firstLine = (rendered: string) => rendered.split("\n")[0]!;
+
+/** A transfer package's files, for a reader. */
+const FILE_NAME: Readonly<Record<string, string>> = {
+  "lossmit_file.csv": "loss mitigation",
+  "fc_bk_file.csv": "foreclosure and bankruptcy",
+  "consents_file.csv": "consents",
+  "images_manifest.csv": "images",
+  "trial_balance.csv": "trial balance",
+  "fnma_position.csv": "Fannie Mae position",
+  "mers_lookup.csv": "MERS",
+  "fair_lending.csv": "fair-lending",
+};
 
 function triagePosed(task: BoardingTask, why: string): PagePosed {
   const env = boardingTriage;
@@ -1067,6 +1113,12 @@ function triagePosed(task: BoardingTask, why: string): PagePosed {
   const history = parseCsv(task.files["payment_history.csv"]);
   const unpaid = history.find((h) => !h["received_on"]);
   const answer = parsed.answer as TriageAnswer;
+  // The files the payload shows whole that this card does not, and the files it never shows.
+  const SHOWN = ["boarding_tape.final.csv", "escrow_history.csv", "escrow_analysis.csv"];
+  const whole = Object.keys(files).filter((f) => !SHOWN.includes(f));
+  const restricted = Object.keys(task.files).filter(
+    (f) => !(f in files) && f !== "payment_history.csv" && f !== CORRESPONDENCE_FILE,
+  );
   return {
     posed: true,
     task_id: task.id,
@@ -1120,7 +1172,7 @@ function triagePosed(task: BoardingTask, why: string): PagePosed {
         ],
       },
     ],
-    elided: `Left out here: the tape's other ${Object.keys(tape).length - 10} cells, seven more short files the model sees whole (loss mitigation, foreclosure and bankruptcy, consents, images, trial balance, Fannie Mae position, MERS), and the rulebook of ${words(env.system).toLocaleString("en-US")} words. The fair-lending file is restricted and not read.`,
+    elided: `Left out here: the tape's other ${Object.keys(tape).length - 10} cells, ${plural(whole.length, "more short file")} the model sees whole (${whole.map((f) => FILE_NAME[f] ?? f).join(", ")}), and the rulebook of ${words(env.system).toLocaleString("en-US")} words.${restricted.length ? ` The ${restricted.map((f) => FILE_NAME[f] ?? f).join(" and ")} ${restricted.length === 1 ? "file is" : "files are"} restricted and not shown.` : ""}`,
     answer:
       answer.findings.length === 0
         ? [{ label: "Findings", value: "none: the loan is passed as it is" }]
@@ -1233,7 +1285,7 @@ function catchupPosed(task: CatchupTask, why: string): PagePosed {
   };
 }
 
-function escrowPosed(task: EscrowReviewTask, why: string): PagePosed {
+function escrowPosed(task: EscrowReviewTask, why: string, billedCents: Cents): PagePosed {
   const env = escrowReview;
   const { raw, calls } = reference(escrowReviewSteps, reviewPayload(task), executeReviewTool);
   const parsed = env.parseAnswer(raw);
@@ -1281,7 +1333,12 @@ function escrowPosed(task: EscrowReviewTask, why: string): PagePosed {
             label: `Bills still to pay before the year (${task.ledger.disbursements.length})`,
             value: usd(task.ledger.disbursements.reduce((s, d) => s + d.amount_cents, 0n)),
           },
-          { label: "Escrow payment today", value: usd(task.current_escrow_payment_cents) },
+          {
+            // The task's "payment today" is the old schedule's from the effective date, which is what the review
+            // triggers compare with; the installment billed now still carries last year's shortage or credit.
+            label: "Escrow payment today (the old schedule's, from the effective date)",
+            value: `${usd(task.current_escrow_payment_cents)}${billedCents !== task.current_escrow_payment_cents ? `; ${usd(billedCents)} is billed on the next installment, last year's shortage or credit included` : ""}`,
+          },
           { label: "Days delinquent", value: String(task.regx_days_delinquent) },
           {
             label: "Cushion",
@@ -1375,6 +1432,7 @@ function harmOf(clean: LoanLife, twin: LoanLife): PageHarm {
     const d = unpaid.find(f);
     return d ? { on: d.on, amount: n(d.amount) } : null;
   };
+  const hazard = first((d) => d.line === "hazard");
   return {
     d03: {
       pct: note.pct,
@@ -1391,7 +1449,10 @@ function harmOf(clean: LoanLife, twin: LoanLife): PageHarm {
         unpaid.filter((d) => d.line.startsWith("tax")).reduce((s, d) => s + d.amount, 0n),
       ),
       first_tax: first((d) => d.line.startsWith("tax")),
-      first_hazard: first((d) => d.line === "hazard"),
+      first_hazard: hazard && {
+        ...hazard,
+        days_after_boarding: daysBetween(twin.boarded.on, hazard.on),
+      },
       escrow_not_billed: {
         installments: notBilled.length,
         total: n(notBilled.reduce((s, i) => s + (cleanInst.get(i.due)!.escrow - i.escrow), 0n)),
@@ -1456,6 +1517,11 @@ export function demoPageData(o: DemoPageOptions): DemoPageData {
       ? { made: promiseEvent.on, pay_on: promiseEvent.pay_on }
       : null;
 
+  // The note's late-charge terms, as the copy below states them.
+  const noteTerms = clean.draw.late_charge;
+  if (noteTerms.cap_cents === null) throw new Error("the demo loan's note has no cap");
+  const cap = usd(noteTerms.cap_cents);
+
   const twins = {
     clean: twinView("clean", clean, res.clean, clean, [], promise),
     defective: twinView("defective", twin, res.defective!, clean, res.labels, promise),
@@ -1477,7 +1543,7 @@ export function demoPageData(o: DemoPageOptions): DemoPageData {
       ),
       defective: triagePosed(
         spec[3]!,
-        "The package as it transfers: the escrow cell says Yes, which the decoder would read as No, and the note's $50.00 cap on a late charge is not on the tape. The statements quote the capped fee.",
+        `The package as it transfers: the escrow cell says Yes, which the decoder would read as No, and the note's ${cap} cap on a late charge is not on the tape. The statements quote the capped fee.`,
       ),
     },
   };
@@ -1521,8 +1587,8 @@ export function demoPageData(o: DemoPageOptions): DemoPageData {
     return catchupPosed(
       task,
       name === "clean"
-        ? "The cap boarded, so the system already charged the $50.00 the note allows. The model holds every charge to the note, posts the receipt and says the loan is current."
-        : "The cap never boarded, so the system charged 5% of P&I. The model must hold the charge to the note's $50.00; what the borrower sent above it goes to suspense.",
+        ? `The cap boarded, so the system already charged the ${cap} the note allows. The model holds every charge to the note, posts the receipt and says the loan is current.`
+        : `The cap never boarded, so the system charged ${noteTerms.pct}% of P&I. The model must hold the charge to the note's ${cap}; what the borrower sent above it goes to suspense. catchup-posting plants D-03 alone; this twin carries D-42 too, so its installments carry no escrow. Its filters pass it all the same, on its "${CATCHUP_ARMS.find((x) => catchupOnArm(x, task)) ?? "no"}" arm.`,
     );
   };
   const catchup: PageMoment = {
@@ -1561,7 +1627,8 @@ export function demoPageData(o: DemoPageOptions): DemoPageData {
     twins: {
       clean: escrowPosed(
         reviewTask,
-        "The payment rises by more than a quarter and by more than $150, so the hold stands. On the tape the new payment appears in February's row, when March's installment is next due, with no reason given.",
+        `The payment rises by more than a quarter and by more than $150, so the hold stands. On the tape the new payment appears in the row for ${fullMonth(addMonths(flagged.effective, -1))}, when ${MONTH[Number(flagged.effective.slice(5, 7)) - 1]}'s installment is next due, with no reason given.`,
+        clean.installments.find((i) => i.due > flagged.as_of)!.escrow,
       ),
       defective: {
         posed: false,

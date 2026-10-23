@@ -145,8 +145,8 @@ const REFI_MONTHLY_PER_POINT = 0.02;
 const REFI_MONTHLY_MAX = 0.03;
 /** A curtailment is never more than a tenth of the balance. */
 const CURTAILMENT_MAX_SHARE = 10n;
-/** Contacts from a borrower who is behind come three times as often. */
-const BEHIND_CONTACT_MULTIPLIER = 3;
+/** Contacts from a borrower who is behind come three times as often. Exported for the demo page's book panel. */
+export const BEHIND_CONTACT_MULTIPLIER = 3;
 /** A payment the prior servicer forwards reaches us 5 to 10 days after it reached them. */
 const FORWARD_LAG_DAYS: readonly [number, number] = [5, 10];
 /** The escrow balance is refunded this many business days after a payoff (the quote says within 20). */

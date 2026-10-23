@@ -21,6 +21,7 @@
     "env:compare": "tsx src/compare-cli.ts",
     "env:audit": "tsx src/audit-cli.ts",
     "env:archive": "tsx src/archive-cli.ts",
+    "env:transfer-package": "tsx src/boarding/package-cli.ts",
     "env:playground": "node scripts/build-playground.mjs",
     "env:gym": "node scripts/build-playground.mjs && python3 -m http.server 8765 --directory playground/dist"
   },

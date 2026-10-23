@@ -11,8 +11,8 @@
  * - `environments.js`: `playground/entry.ts` bundled by esbuild as one
  *   minified IIFE that sets `globalThis.HMEnvironments`. The workspace
  *   packages are read from their source, so no `tsc -b` has to run first,
- *   and `node:crypto`, `node:fs` and `node:path` are `playground/shims/`.
- *   Any other `node:` import, or any module only the CLI needs (the model
+ *   and `node:crypto`, `node:fs`, `node:path` and `node:url` are
+ *   `playground/shims/`. Any other `node:` import, or any module only the CLI needs (the model
  *   clients, the archive, the comparison, the audit's command line), stops
  *   the build: a page that loads it would break where nobody is watching.
  *
@@ -57,6 +57,7 @@ const SOURCES = {
   "node:crypto": join(pkg, "playground/shims/node-crypto.ts"),
   "node:fs": join(pkg, "playground/shims/node-fs.ts"),
   "node:path": join(pkg, "playground/shims/node-path.ts"),
+  "node:url": join(pkg, "playground/shims/node-url.ts"),
 };
 
 /**
@@ -106,6 +107,10 @@ const result = await build({
   minify: true,
   charset: "utf8",
   legalComments: "none",
+  // The life generator's `loadCalibration` finds its file from import.meta.url, which an IIFE has none of. No
+  // environment in the page calls it (they draw from the calibration's defaults), and its fileURLToPath is a shim
+  // that throws; this only keeps the bundle from warning about a value nothing reads.
+  define: { "import.meta.url": JSON.stringify("file:///playground/src/life/calibration.ts") },
   metafile: true,
   logLevel: "warning",
   plugins: [sources],

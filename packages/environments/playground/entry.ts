@@ -188,6 +188,17 @@ import {
   expectedEi,
   generateEiTask,
 } from "../src/ei/index.js";
+import {
+  BOARDING_SPEC_CASES,
+  BoardingReferencePolicy,
+  boardingPayload,
+  boardingSpecTasks,
+  boardingTaskId,
+  boardingTriage,
+  boardingVerdict,
+  expectedTriage,
+  generateBoardingTask,
+} from "../src/boarding/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
 
@@ -241,8 +252,11 @@ export interface PlaygroundEnvironment {
   render(task: TaskRef): string;
   /** The task's data, exactly as the rendered prompt carries it. */
   payload(task: TaskRef): Record<string, Json>;
-  /** Runs a tool other than the submit tool; throws on bad input, as the episode loop's tools do. */
-  execute(name: string, input: unknown): string;
+  /**
+   * Runs a tool other than the submit tool; throws on bad input, as the episode loop's tools do. A tool that
+   * reads the task (boarding-triage's file reader) reads the one passed.
+   */
+  execute(name: string, input: unknown, task?: TaskRef): string;
   /** Reads a submission strictly, as the episode loop does. */
   parse(raw: unknown): ParseResult;
   /** An answer (parse's, or null for none) held to the engine's, field by field. */
@@ -372,7 +386,8 @@ function playground<T extends Coordinates, A>(d: Definition<T, A>): PlaygroundEn
     spec: (): TaskRef[] => d.spec().map((t) => refOf(remember(t))),
     render: (task: TaskRef): string => env.render(resolve(task)),
     payload: (task: TaskRef) => plain<Record<string, Json>>(d.payload(resolve(task))),
-    execute: (name: string, input: unknown): string => env.execute(name, input),
+    execute: (name: string, input: unknown, task?: TaskRef): string =>
+      env.execute(name, input, (task ? resolve(task) : undefined) as T),
     parse,
     grade(task: TaskRef, answer: unknown): Grade {
       const t = resolve(task);
@@ -830,6 +845,21 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     expected: expectedEi,
     verdictOf: eiVerdict,
     reference: () => new EiReferencePolicy(),
+  }),
+  playground({
+    env: boardingTriage,
+    title: "Boarding triage",
+    side: "servicing",
+    summary:
+      "One servicing-transfer package before it boards, in the servicing app's own layout: one to four loans with their prior servicer's tape, payment history, escrow files and correspondence, some carrying a defect the boarding gate cannot see (an escrow flag written Yes, which boards the loan non-escrowed; a late-fee cap left off the tape) and some clean. The model names each defect, what the cell says and should say, and whether to correct it or query the prior servicer, and passes the clean loans. Graded against the package's label manifest.",
+    id: boardingTaskId,
+    one: generateBoardingTask,
+    spec: boardingSpecTasks,
+    specNames: BOARDING_SPEC_CASES.map((c) => c.name),
+    payload: boardingPayload,
+    expected: expectedTriage,
+    verdictOf: boardingVerdict,
+    reference: () => new BoardingReferencePolicy(),
   }),
 ]);
 

@@ -1,0 +1,41 @@
+The servicing app's transfer-batch codec and its 1.1 data-quality gate
+(spec §1.1), ported for the life generator's transfer-package writer and the
+boarding-triage environment.
+
+Source       apps/servicing/src/domain/boarding/{tape-codec,rules,min}.ts
+Vendored at  293261b371fe97d2b6b39e1f29ca60dd808ac8fb (apps/servicing/VENDORED_FROM)
+Ported       2026-10-23
+
+Each file here is its source byte for byte except its import statements,
+and the rewrite is three rules and no more:
+  - the kernel's paths (../../kernel/{calendar,money}/<file>.ts) become
+    @hm/kernel/{calendar,money} (the same bytes; packages/kernel/VENDORED_FROM);
+  - ./types.ts becomes ../../pmi/ported/types.js. The boarding types are
+    already ported, byte for byte, for the pmi-termination environment, and
+    held there (src/pmi/ported/PORTED_FROM); one copy, not two;
+  - a sibling's ./<file>.ts becomes ./<file>.js.
+Nothing else may be edited: src/__tests__/boarding.test.ts rewrites each
+original's imports by these rules, compares, and compares the rest of each
+file, and fails on any difference. Lint and Prettier skip this directory for
+the reason they skip the vendored trees.
+
+No file the port needs is ours.
+
+What each is for. The writer encodes every package through
+`encodeTransferBatch`, so a package is laid out exactly as the sample batch
+is (apps/servicing/fixtures/transfer-batch-demo/) and reads back through the
+decoder the servicing app boards with. The environment's generator runs the
+gate's own rules (`runRules`) over every package, planted or clean, and keeps
+only one on whose every loan all thirty-five pass, so what is left for the
+model to find is what the gate cannot see. The code-list tool reads the
+final tape's column dictionary (`FINAL_TAPE_COLUMNS`), and a test holds the
+detail files' columns to the codec's headers.
+
+Not ported: service.ts (the stateful boarding service, which imports the
+event store, the ledger and the transfers modules), delinquency.ts (already
+ported for pmi-termination), demo-batch.ts and fixtures.ts (the sample's
+generator and the test harness). apps/servicing/scripts/board-life-package.mjs
+runs the servicing app's own service, in process, over a written package.
+
+To take a change from the servicing app, copy the three files again and apply
+the same three rewrites.

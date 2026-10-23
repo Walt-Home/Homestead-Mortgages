@@ -90,8 +90,12 @@ export interface Environment<T, A> {
   readonly tools: readonly ToolSpec[];
   readonly submitTool: string;
   render(task: T): string;
-  /** Runs a non-submit tool. Throwing is an error observation, never a crash. */
-  execute(name: string, input: unknown): string;
+  /**
+   * Runs a non-submit tool. Throwing is an error observation, never a crash.
+   * The task is passed for a tool that reads it (boarding-triage's file
+   * reader); every other environment's tools are functions of their input.
+   */
+  execute(name: string, input: unknown, task: T): string;
   parseAnswer(input: unknown): Parsed<A>;
   grade(task: T, answer: A | null): Grade;
 }
@@ -202,7 +206,7 @@ export async function runEpisode<T, A>(
         try {
           observations.push({
             call_id: call.id,
-            content: env.execute(call.name, call.input),
+            content: env.execute(call.name, call.input, task),
             is_error: false,
           });
         } catch (e) {

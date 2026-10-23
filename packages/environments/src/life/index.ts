@@ -25,3 +25,5 @@ export * from "./defects.js";
 export * from "./generate.js";
 export * from "./projection.js";
 export * from "./check.js";
+export * from "./transfer-package.js";
+export * from "./demo.js";

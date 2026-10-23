@@ -142,10 +142,17 @@ export function contactRates(cal: Calibration): ContactRates {
   const warnings: string[] = [];
   const provenance: Record<string, "file" | "default"> = {};
   const used = (key: CalibrationKey): "file" | "default" => cal.entries[key]?.used ?? "default";
-  const take = <T>(key: CalibrationKey, field: string, parse: (v: unknown) => T | null, fallback: T): T => {
+  const take = <T>(
+    key: CalibrationKey,
+    field: string,
+    parse: (v: unknown) => T | null,
+    fallback: T,
+  ): T => {
     const v = parse(raw[field]);
     if (v === null) {
-      warnings.push(`${key}: ${JSON.stringify(raw[field])} could not be read; the contact center's default is used`);
+      warnings.push(
+        `${key}: ${JSON.stringify(raw[field])} could not be read; the contact center's default is used`,
+      );
       provenance[key] = "default";
       return fallback;
     }
@@ -154,13 +161,23 @@ export function contactRates(cal: Calibration): ContactRates {
       warnings.push(`${key}: the calibration reader used its own default for this key`);
     return v;
   };
-  const per = take("contacts.per_loan_year", "per_loan_year", readPerLoanYear, CONTACT_DEFAULTS.per_loan_year);
+  const per = take(
+    "contacts.per_loan_year",
+    "per_loan_year",
+    readPerLoanYear,
+    CONTACT_DEFAULTS.per_loan_year,
+  );
   const handle = take("contacts.handle_time_minutes", "handle_time_minutes", readHandleMinutes, {
     mean: CONTACT_DEFAULTS.handle_mean_minutes,
     min: 4.3,
     max: 19.8,
   });
-  const mix = take("contacts.inbound_reason_mix", "inbound_reason_mix", readMix, [] as [string, number][]);
+  const mix = take(
+    "contacts.inbound_reason_mix",
+    "inbound_reason_mix",
+    readMix,
+    [] as [string, number][],
+  );
   return {
     per_loan_year: per,
     handle_minutes: handle,

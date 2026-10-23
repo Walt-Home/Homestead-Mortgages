@@ -61,7 +61,11 @@ export function contactCenter(book: LifeBook, opts: ContactCenterOptions = {}): 
   const key = `contacts/${CONTACTS_VERSION}/${book.seed}`;
   const writer = opts.writer ?? templateWriter;
   const loans: LoanContacts[] = book.loans.map((life, index) => {
-    const d = deriveLoan(life, { key, rates, ...(opts.pins?.[index] ? { pins: opts.pins[index] } : {}) });
+    const d = deriveLoan(life, {
+      key,
+      rates,
+      ...(opts.pins?.[index] ? { pins: opts.pins[index] } : {}),
+    });
     const partial = {
       loan_id: life.loan_id,
       index,
@@ -88,13 +92,19 @@ export function contactCenter(book: LifeBook, opts: ContactCenterOptions = {}): 
 
 const loanIdOf = (contactId: string) => contactId.replace(/-K\d+$/, "");
 
-function locate(center: ContactCenter, book: LifeBook, contactId: string): { life: LoanLife; loan: LoanContacts; contact: ContactRecord } {
+function locate(
+  center: ContactCenter,
+  book: LifeBook,
+  contactId: string,
+): { life: LoanLife; loan: LoanContacts; contact: ContactRecord } {
   const id = loanIdOf(contactId);
   const loan = center.loans.find((l) => l.loan_id === id);
   const life = book.loans.find((l) => l.loan_id === id);
   const contact = loan?.contacts.find((c) => c.id === contactId);
-  if (!loan || !life || !contact) throw new RangeError(`no contact ${contactId} in this center and book`);
-  if (book.seed !== center.seed) throw new RangeError(`the center is seed ${center.seed}'s; the book is seed ${book.seed}'s`);
+  if (!loan || !life || !contact)
+    throw new RangeError(`no contact ${contactId} in this center and book`);
+  if (book.seed !== center.seed)
+    throw new RangeError(`the center is seed ${center.seed}'s; the book is seed ${book.seed}'s`);
   return { life, loan, contact };
 }
 
@@ -104,14 +114,23 @@ export function callPlan(center: ContactCenter, book: LifeBook, contactId: strin
 }
 
 /** A call's transcript, with its planted defect when the center has one there. */
-export function transcriptOf(center: ContactCenter, book: LifeBook, contactId: string, writer: ContactTextWriter = templateWriter): Transcript {
-  const built = buildTranscript(callPlan(center, book, contactId), { writer, defect: center.planted[contactId] ?? null });
+export function transcriptOf(
+  center: ContactCenter,
+  book: LifeBook,
+  contactId: string,
+  writer: ContactTextWriter = templateWriter,
+): Transcript {
+  const built = buildTranscript(callPlan(center, book, contactId), {
+    writer,
+    defect: center.planted[contactId] ?? null,
+  });
   if (!built) throw new RangeError(`${contactId}: the planted defect has no turn to go in`);
   return built.transcript;
 }
 
 /** Every call on a loan with a transcript. */
-export const callsOf = (loan: LoanContacts): ContactRecord[] => loan.contacts.filter((c) => kindOf(c) !== null);
+export const callsOf = (loan: LoanContacts): ContactRecord[] =>
+  loan.contacts.filter((c) => kindOf(c) !== null);
 
 /* ── defects ─────────────────────────────────────────────────────────────── */
 
@@ -135,7 +154,9 @@ export function plantContactDefects(
 ): ContactDefectResult {
   const planted: Record<string, ContactDefectId> = { ...center.planted };
   const labels: ContactDefectLabel[] = [];
-  const contactsByLoan = new Map(center.loans.map((l) => [l.loan_id, new Map(l.contacts.map((c) => [c.id, c]))]));
+  const contactsByLoan = new Map(
+    center.loans.map((l) => [l.loan_id, new Map(l.contacts.map((c) => [c.id, c]))]),
+  );
   const notesByLoan = new Map(center.loans.map((l) => [l.loan_id, [...l.notes]]));
   const taken = new Set<string>(Object.keys(planted));
   for (const req of requests) {
@@ -145,22 +166,49 @@ export function plantContactDefects(
     const candidates: string[] = r.contacts
       ? [...r.contacts]
       : center.loans.flatMap((l) =>
-          l.contacts.filter((c) => def.eligible(c) && rngFor(`${center.key}/defects/${def.id}/${c.id}`).next() < rate).map((c) => c.id),
+          l.contacts
+            .filter(
+              (c) =>
+                def.eligible(c) && rngFor(`${center.key}/defects/${def.id}/${c.id}`).next() < rate,
+            )
+            .map((c) => c.id),
         );
     for (const cid of candidates) {
       if (taken.has(cid)) continue;
       const { life, loan, contact } = locate(center, book, cid);
-      if (!def.eligible(contact)) throw new RangeError(`${def.id} cannot be planted on ${cid}: ${def.title.toLowerCase()} needs a contact it fits`);
+      if (!def.eligible(contact))
+        throw new RangeError(
+          `${def.id} cannot be planted on ${cid}: ${def.title.toLowerCase()} needs a contact it fits`,
+        );
       const plan = planCall(life, loan, contact, center.key);
       if (def.id === "C-08") {
         const notes = notesByLoan.get(loan.loan_id)!;
         const k = notes.findIndex((n) => n.kind === "agent" && n.contact_id === cid);
         if (k < 0) continue;
         const note = notes[k]!;
-        const p = plantInNote(rngFor(`${center.key}/defects/C-08/${cid}/note`), note.text.split(" | PREV: ")[0]!, plan);
-        const rest = note.text.includes(" | PREV: ") ? note.text.slice(note.text.indexOf(" | PREV: ")) : "";
+        const p = plantInNote(
+          rngFor(`${center.key}/defects/C-08/${cid}/note`),
+          note.text.split(" | PREV: ")[0]!,
+          plan,
+        );
+        const rest = note.text.includes(" | PREV: ")
+          ? note.text.slice(note.text.indexOf(" | PREV: "))
+          : "";
         notes[k] = { ...note, text: p.text + rest };
-        labels.push(label(life, def.id, "contact_notes", "text", note.id, note.on, null, p.true_value, p.planted_value, true));
+        labels.push(
+          label(
+            life,
+            def.id,
+            "contact_notes",
+            "text",
+            note.id,
+            note.on,
+            null,
+            p.true_value,
+            p.planted_value,
+            true,
+          ),
+        );
         taken.add(cid);
         continue;
       }
@@ -174,26 +222,99 @@ export function plantContactDefects(
         const voiced = bad.transcript.turns.findIndex((t) => t.tag === "complaint");
         const rows = contactsByLoan.get(loan.loan_id)!;
         rows.set(cid, { ...contact, complaint_logged: false });
-        labels.push(label(life, "C-04", "contacts", "complaint_logged", cid, contact.on, voiced, "true", "false", true));
-        labels.push(label(life, "C-04", "contact_transcripts", "said", cid, contact.on, bad.plant.at, bad.plant.true_value, bad.plant.planted_value, false));
+        labels.push(
+          label(
+            life,
+            "C-04",
+            "contacts",
+            "complaint_logged",
+            cid,
+            contact.on,
+            voiced,
+            "true",
+            "false",
+            true,
+          ),
+        );
+        labels.push(
+          label(
+            life,
+            "C-04",
+            "contact_transcripts",
+            "said",
+            cid,
+            contact.on,
+            bad.plant.at,
+            bad.plant.true_value,
+            bad.plant.planted_value,
+            false,
+          ),
+        );
         const notes = notesByLoan.get(loan.loan_id)!;
         const sysIdx = notes.findIndex((n) => n.contact_id === cid && n.area === "CMPL");
         if (sysIdx >= 0) {
           const gone = notes[sysIdx]!;
           notes.splice(sysIdx, 1);
-          labels.push(label(life, "C-04", "contact_notes", "text", gone.id, gone.on, null, gone.text, null, false));
+          labels.push(
+            label(
+              life,
+              "C-04",
+              "contact_notes",
+              "text",
+              gone.id,
+              gone.on,
+              null,
+              gone.text,
+              null,
+              false,
+            ),
+          );
         }
         const agentIdx = notes.findIndex((n) => n.kind === "agent" && n.contact_id === cid);
         if (agentIdx >= 0 && contact.human_agent) {
           const before = notes[agentIdx]!;
           const quiet: CallPlan = { ...plan, needs: { ...plan.needs, complaint: false } };
-          const after = inHand(rngFor(`${center.key}/${life.loan_id}/notes/${cid}`), fillFigures(templateWriter.callNote(quiet, templateWriter.callTurns(plan)), quiet, contact.human_agent), contact.human_agent);
+          const after = inHand(
+            rngFor(`${center.key}/${life.loan_id}/notes/${cid}`),
+            fillFigures(
+              templateWriter.callNote(quiet, templateWriter.callTurns(plan)),
+              quiet,
+              contact.human_agent,
+            ),
+            contact.human_agent,
+          );
           notes[agentIdx] = { ...before, text: after };
-          labels.push(label(life, "C-04", "contact_notes", "text", before.id, before.on, null, before.text, after, false));
+          labels.push(
+            label(
+              life,
+              "C-04",
+              "contact_notes",
+              "text",
+              before.id,
+              before.on,
+              null,
+              before.text,
+              after,
+              false,
+            ),
+          );
         }
         continue;
       }
-      labels.push(label(life, def.id, "contact_transcripts", "said", cid, contact.on, bad.plant.at, bad.plant.true_value, bad.plant.planted_value, true));
+      labels.push(
+        label(
+          life,
+          def.id,
+          "contact_transcripts",
+          "said",
+          cid,
+          contact.on,
+          bad.plant.at,
+          bad.plant.true_value,
+          bad.plant.planted_value,
+          true,
+        ),
+      );
     }
   }
   const defective: ContactCenter = {
@@ -231,7 +352,9 @@ function label(
     turn,
     true_value: truth,
     planted_value: planted,
-    expected_handling: root ? def.handling : `Downstream of ${id}: corrects when the root cause is corrected.`,
+    expected_handling: root
+      ? def.handling
+      : `Downstream of ${id}: corrects when the root cause is corrected.`,
     root_cause: root,
   };
 }
@@ -242,7 +365,17 @@ export interface VolumeSummary {
   readonly loan_years: number;
   readonly inquiries: number;
   readonly per_loan_year: number;
-  readonly by_status: Readonly<Record<StatusBucket, { readonly loan_years: number; readonly inquiries: number; readonly per_loan_year: number; readonly target: number }>>;
+  readonly by_status: Readonly<
+    Record<
+      StatusBucket,
+      {
+        readonly loan_years: number;
+        readonly inquiries: number;
+        readonly per_loan_year: number;
+        readonly target: number;
+      }
+    >
+  >;
   /** What the calibration and the status mix of this book say the whole should be. */
   readonly target: number;
 }
@@ -262,22 +395,39 @@ export function contactVolumes(center: ContactCenter, book: LifeBook): VolumeSum
     }
   });
   const per = center.rates.per_loan_year;
-  const by = {} as Record<StatusBucket, { loan_years: number; inquiries: number; per_loan_year: number; target: number }>;
+  const by = {} as Record<
+    StatusBucket,
+    { loan_years: number; inquiries: number; per_loan_year: number; target: number }
+  >;
   let ly = 0;
   let n = 0;
   let target = 0;
   for (const s of Object.keys(months) as StatusBucket[]) {
     const y = months[s] / 12;
-    by[s] = { loan_years: y, inquiries: count[s], per_loan_year: y ? count[s] / y : 0, target: per * STATUS_MULTIPLIER[s] };
+    by[s] = {
+      loan_years: y,
+      inquiries: count[s],
+      per_loan_year: y ? count[s] / y : 0,
+      target: per * STATUS_MULTIPLIER[s],
+    };
     ly += y;
     n += count[s];
     target += y * per * STATUS_MULTIPLIER[s];
   }
-  return { loan_years: ly, inquiries: n, per_loan_year: ly ? n / ly : 0, by_status: by, target: ly ? target / ly : 0 };
+  return {
+    loan_years: ly,
+    inquiries: n,
+    per_loan_year: ly ? n / ly : 0,
+    by_status: by,
+    target: ly ? target / ly : 0,
+  };
 }
 
 /** The last day of contact with the borrower on or before `asOf`, by the contact center's log: what a tape's last-contact date reads. */
-export function lastContactOn(loan: LoanContacts, asOf: ContactRecord["on"]): ContactRecord["on"] | null {
+export function lastContactOn(
+  loan: LoanContacts,
+  asOf: ContactRecord["on"],
+): ContactRecord["on"] | null {
   let last: ContactRecord["on"] | null = null;
   for (const c of loan.contacts) {
     if (c.on > asOf) break;

@@ -20,7 +20,13 @@ import type { NoiseOp, Transcript } from "./types.js";
 
 export type NumberToken =
   | { readonly kind: "money"; readonly raw: string; readonly cents: string }
-  | { readonly kind: "date"; readonly raw: string; readonly m: number; readonly d: number; readonly y: number | null }
+  | {
+      readonly kind: "date";
+      readonly raw: string;
+      readonly m: number;
+      readonly d: number;
+      readonly y: number | null;
+    }
   | { readonly kind: "pct"; readonly raw: string; readonly value: string }
   | { readonly kind: "phone"; readonly raw: string }
   | { readonly kind: "key"; readonly raw: string }
@@ -28,7 +34,10 @@ export type NumberToken =
 
 const MONTH_RE = MONTHS.join("|");
 const MES_RE = MESES.join("|");
-const PATTERNS: readonly (readonly [NumberToken["kind"] | "markup" | "money_bare" | "date_es" | "date_num", RegExp])[] = [
+const PATTERNS: readonly (readonly [
+  NumberToken["kind"] | "markup" | "money_bare" | "date_es" | "date_num",
+  RegExp,
+])[] = [
   ["markup", /\[[^\]]*\]|‹[^›]*›/g],
   ["phone", /\b1-\d{3}-\d{3}-\d{4}\b/g],
   ["money", /\$\s?\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\$\s?\d+(?:\.\d{2})?/g],
@@ -60,7 +69,8 @@ export function numberTokens(text: string): NumberToken[] {
       spans.push([m.index, m.index + raw.length]);
       if (kind === "markup") continue;
       let t: NumberToken | null = null;
-      if (kind === "money" || kind === "money_bare") t = { kind: "money", raw, cents: centsOf(raw) };
+      if (kind === "money" || kind === "money_bare")
+        t = { kind: "money", raw, cents: centsOf(raw) };
       else if (kind === "phone") t = { kind: "phone", raw };
       else if (kind === "key") t = { kind: "key", raw };
       else if (kind === "pct") t = { kind: "pct", raw, value: pctKey(raw.replace(/[^\d.]/g, "")) };
@@ -112,7 +122,8 @@ export function unexplained(text: string, n: FactNumbers): NumberToken[] {
 const sameToken = (a: NumberToken, b: NumberToken): boolean => {
   if (a.kind !== b.kind) return false;
   if (a.kind === "money" && b.kind === "money") return a.cents === b.cents;
-  if (a.kind === "date" && b.kind === "date") return a.m === b.m && a.d === b.d && (a.y === null || b.y === null || a.y === b.y);
+  if (a.kind === "date" && b.kind === "date")
+    return a.m === b.m && a.d === b.d && (a.y === null || b.y === null || a.y === b.y);
   if (a.kind === "pct" && b.kind === "pct") return a.value === b.value;
   if (a.kind === "int" && b.kind === "int") return a.value === b.value;
   return a.raw === b.raw;
@@ -132,10 +143,14 @@ export function checkTranscript(
   const out: { turn: number; where: "said" | "text"; token: string }[] = [];
   t.turns.forEach((turn, i) => {
     if (allowed.has(i)) return;
-    for (const tok of unexplained(turn.said, n)) out.push({ turn: i, where: "said", token: tok.raw });
-    const heard = turn.noise.flatMap((op: NoiseOp) => (op.kind === "misheard_number" ? numberTokens(op.heard) : []));
+    for (const tok of unexplained(turn.said, n))
+      out.push({ turn: i, where: "said", token: tok.raw });
+    const heard = turn.noise.flatMap((op: NoiseOp) =>
+      op.kind === "misheard_number" ? numberTokens(op.heard) : [],
+    );
     for (const tok of unexplained(turn.text, n))
-      if (!heard.some((h) => sameToken(h, tok))) out.push({ turn: i, where: "text", token: tok.raw });
+      if (!heard.some((h) => sameToken(h, tok)))
+        out.push({ turn: i, where: "text", token: tok.raw });
   });
   return out;
 }

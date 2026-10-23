@@ -2519,6 +2519,255 @@ Version 2026-10-23, every source fetched that day:
 - **HMDA was not read.** It covers originations only, and the NMDB covered
   both the outstanding book and 2025's originations.
 
+## The contact center
+
+`src/contacts/` is not an environment either. It writes what a
+subservicer's contact center would hold for a book the life generator wrote:
+the contacts, the call transcripts, the comment log, and planted, labeled
+call and note defects for a call-QA environment to grade.
+
+- `contactCenter(book)` derives every loan's contact rows, promises,
+  bankruptcy, cadence and notes.
+- `transcriptOf(center, book, id)` writes one call's transcript when asked.
+  A 300-loan decade holds about 2,900 handled calls and two million words, so
+  transcripts are not written in advance.
+- `plantContactDefects(center, book, requests)` makes the defective twin and
+  its labels.
+
+Every draw comes from a stream keyed by the book's seed, the loan and the
+month, delinquency, event or call, and none reads another loan. So a center
+is a function of its book's seed, byte for byte, and a loan's contacts are
+the same in a book of 30 as in a book of 300.
+
+**The rows** are shaped like the servicing app's `contacts` table
+(`apps/servicing/db/migrations/0005_servicing_requests.sql:201`, with
+`outcome`, `purpose`, the disclosures, the TCPA basis and the Reg F count
+added at `0013_early_intervention.sql:53`). Each row holds:
+
+- the direction, the mode (a call, the phone menu, the portal, an e-mail, a
+  text or a letter), the day and the local time;
+- the outcome, in the 11.1 spec's vocabulary ("wrong party" is
+  `wrong_number`, "bad number" is `disconnected`), plus four of ours for the
+  menu, the portal and mail received;
+- live contact and its basis, QRPC, and whether the person passed the
+  identity checks;
+- the purpose, the reason and the resolution, the last because "an inbound
+  contact resolved" is a rate-card event;
+- the issue, and the earlier contacts on the same issue;
+- the language and any interpreter, the duration and the handle time;
+- the TCPA basis and consent, the Reg F count, the disclosures the agent
+  marked, and a complaint voiced and logged.
+
+Promises, a bankruptcy and each delinquency's cadence are kept beside the
+rows.
+
+**What the history decides:**
+
+- **The outbound cadence.** It opens on day 17 of a delinquency (`plan.ts:16`)
+  and makes an attempt at least every 7 days until the cure (`plan.ts:17`,
+  `:151-155`). A pending promise ceases it until its date; a petition
+  suspends it (`plan.ts:179-181`). On a debt-collector loan, the next call
+  after a conversation waits 7 days (§1006.14(b)(2)(ii)). The dialer runs
+  Monday to Saturday, in the morning, afternoon and evening.
+- **How an attempt ends.** About one in seven is a conversation. The rest are
+  no answer, voicemail (one per number per 7 days, the 11.1 guardrail),
+  busy, someone else answering, a refusal, a reassigned number (wrong party)
+  or a disconnected one.
+- **Written outreach.** The written early-intervention notice goes out
+  between days 38 and 44, at most once in 180 days. A text reminder goes on
+  days 6 to 9 only with consent, and a STOP ends them. Without texts, an
+  e-mail reminder goes to a paperless borrower.
+- **The calls each event brings.** An escrow analysis (more for a shortage
+  or a flagged one), an ARM change notice, a transfer in, a disaster, a late
+  charge, bill pay sending the old amount, an MI termination, a refund, the
+  1098 in January, a payoff before and after.
+- **Promises.** The scenario's promise calls, read through the history's
+  behavior rows. A promise drawn on a call is kept when a receipt in the
+  next three weeks keeps it; otherwise some are made and broken.
+
+**What it draws.** Every figure below is a design choice, named in
+`derive.ts` and `profile.ts`.
+
+- **The inbound volume, by the loan's status in the month.** The
+  calibration's inquiries per loan-year are split 0.85, 3, 4.5 and 5 times
+  over current, 30, 60 and 90+ days. That is the acceptance file's split
+  (1.7, 6, 9 and 10 at 2.0, `contacts-per-loan-year-by-status`), so a change
+  to the calibration moves all four. Each status's ordinary calls are its
+  share less what its events bring, so the total lands on the share.
+- **The reason mix.** Separate tables for a performing loan and a delinquent
+  one. January and February add the 1098; an unescrowed loan has no escrow
+  calls; a loan without MI has no MI calls.
+- **The channel.** A share of each reason's calls is served by the phone
+  menu (more than half of "did you get my payment"), and some reasons come
+  by e-mail, text or letter. A portal user logs in about four times a year,
+  and more after an analysis and in January. Most inbound contact ends in
+  the menu or the portal.
+- **Who calls.** Mostly the borrower or a co-borrower. Also a spouse not on
+  the note (authorized, or with the borrower beside them, or refused), a
+  housing counselor on a hardship 30 or more days late (the authorization
+  arrives first), the borrower's bankruptcy attorney, and a caller who fails
+  verification. A Spanish-speaking borrower (4%, or 40% with a Spanish
+  surname) talks through an interpreter.
+- **A bankruptcy.** The life generator has none yet, so the contact center
+  draws one on 2% of delinquencies that reach day 30, 70% of them Chapter 13. From the petition no collection call is made, and every call after the
+  attorney's notice carries the informational-only disclaimer. The history's
+  payments do not know about the case.
+- **Handle time.** A lognormal around the calibration's mean, by reason (a
+  hardship runs longest, a statement copy shortest), longer through an
+  interpreter, with a 90-second floor.
+- **Complaints.** About 4% of handled calls, more from an irritated
+  borrower, weighted by reason toward the calibration's complaint mix. That
+  is the one use of `contacts.inbound_reason_mix`, which is a complaint mix
+  and not a reason to call.
+
+**The calibration, in either shape.** `contactRates` reads the three
+`contacts.*` keys through `loadCalibration` and takes a scalar or the file's
+object: `inquiries_per_loan_year` (or a range's midpoint), a mean with its
+`min` and `max` (with only the range, their geometric mean, 9.23 minutes),
+and a mix's `shares` or `counts`.
+
+Today's reader cannot read the file's objects. It hands over its defaults
+(1.5 a loan-year, 7 minutes), and the contact center reports the reader's
+default in its warnings. On the 300-loan seed-7 book:
+
+|                                                        | Defaults               | The file's figures   |
+| ------------------------------------------------------ | ---------------------- | -------------------- |
+| Inquiries a loan-year, against the status mix's target | 1.33 against 1.34      | 1.77 against 1.79    |
+| Current; 30, 60 and 90+ days                           | 1.26; 5.1, 7.6, 7.7    | 1.67; 6.7, 9.6, 10.8 |
+| Mean handle time                                       | 6.99 against 7 minutes | 9.09 against 9.23    |
+| Words in a transcript, on average                      | 370                    | 481                  |
+
+The life generator itself reads `Rates.contacts` as a number and a list of
+pairs. A reader that passes the objects through would stop it at
+`monthHazards` (`simulate.ts:1637`), while the contact center reads either.
+
+**The life generator's own contacts.** The life generator draws a few inbound
+contacts a year: a reason and a duration, flat across the year. The contact
+center draws the volume itself, so the calibration is met once, and reads
+only the scenario's promise calls, through the history's behavior rows. A
+tape writer that wants the contact center's last contact date reads
+`lastContactOn`.
+
+**The record on the day.** `recordOn(life, day)` holds every figure an agent
+may say or write that day. It reads the history as dated on or before the
+day, plus the contact center's own records (the promise a call writes, the
+bankruptcy notice, an authorization on file). The figures:
+
+- the next installment and its grace;
+- what is past due, with the late charges outstanding;
+- the last receipt;
+- the escrow balance on the last statement;
+- the latest analysis and ARM change;
+- the last tax and premium paid;
+- the latest late charge, and the 1098;
+- MI, a transfer, a payoff, the last Metro 2 month;
+- the servicer's own constants.
+
+The facts come first and the text second: `checkTranscript` reads every
+number back out of a transcript (money, dates in English and Spanish, rates,
+the telephone number, the menu's keys, counts) and finds it in
+`factNumbers`. A number the recognizer misheard is logged on its turn, and
+a planted wrong amount is labeled. Every figure is written in digits, as a
+recognizer writes them.
+
+**Transcripts.** A call's plan comes first: the record on the day, the
+shape from the row, the agent's manner, further questions, side topics and
+holds. The template writer then writes it:
+
+- the menu, its recording notice and the agent's answer;
+- the identity checks (two or three of the loan number, the address, the
+  last four and the date of birth), or a refusal to someone unverified;
+- the mini-Miranda or the bankruptcy disclaimer when needed;
+- the question and its answer, each figure stated by a statement turn;
+- a credit question, a complaint, a transfer to loss mitigation, a
+  promise, side topics and small talk, holds;
+- the recap and the close.
+
+The words come from a small phrase grammar (`grammar.ts`): `[a|b]` picks
+one, `{slot}` fills a figure and throws if the record lacks it. Leads,
+fillers and restarts vary by the borrower's manner and the agent's. An
+interpreter call adds the interpreter's Spanish after every agent turn and
+the caller's Spanish before the interpreter's English.
+
+The timing fills the row's duration exactly. Speech runs at each speaker's
+rate, and the rest is dead air of at most 25 seconds a gap, or holds. Then
+the recognizer adds noise:
+
+- personal data `[REDACTED]`, and now and then an amount;
+- numbers misheard (a digit, a teen for a ty) and logged;
+- words misheard, dropped or `[inaudible]`;
+- speakers swapped on a mono recording, crosstalk;
+- two engine styles, one cased and one lower case.
+
+On the defaults, the speech runs at about 96 words a minute across a call,
+dead air included.
+
+**Notes.** The comment log is one line a note: the loan, the day and time,
+the user, an area code and the text.
+
+- **System notes outnumber agent notes about nine to one.** Each dialer
+  attempt, menu session, portal login, text and letter writes one, and so do
+  the history's late charges, analyses, disbursements, transfers, payoffs
+  and the 1098.
+- **An agent writes one note per call handled**, from the call's turns: what
+  was asked, what was quoted, what else came up. The note is in that agent's
+  hand: capitals and codes, lower case, or sentences, each misspelled at the
+  agent's own rate.
+- **A collector often copies the last note on a delinquency forward**
+  (`copied_from`), so its figures are of the day it was first written.
+- **The median agent note is 231 characters**, and a longer call leaves a
+  longer note.
+
+**The seam for model-written text.** `ContactTextWriter` (`writer.ts`) is the
+seam. It has two calls: `callTurns(plan)` and `callNote(plan, turns)`.
+`templateWriter` is the one there is, and no model is called anywhere. A
+model writer replaces it and is held to what the templates are held to:
+
+- every number in its text is the record's, or `checkTranscript` refuses
+  it;
+- it writes the tagged turns the defects need;
+- it is written once, offline, and kept by contact id, so the book stays a
+  function of its seed.
+
+The timing, the noise and the defects are applied after the writer,
+whoever wrote the words.
+
+**Defects.** Eight call and note defects, numbered apart from
+docs/synthetic-data-defects.md's data defects:
+
+| Id   | Defect                                            | Planted in                                                        |
+| ---- | ------------------------------------------------- | ----------------------------------------------------------------- |
+| C-01 | Account details disclosed to someone not verified | The refusal turn of an unverified call or a wrong number          |
+| C-02 | Collection language during a bankruptcy stay      | The disclaimer turn, replaced by a demand                         |
+| C-03 | "This won't hurt your credit"                     | The answer to the credit question                                 |
+| C-04 | A complaint voiced and not logged                 | The row's flag, the acknowledgment turn, the log entry (symptoms) |
+| C-05 | A wrong amount quoted                             | The first statement turn quoting a record amount                  |
+| C-06 | The mini-Miranda missing on a call that needed it | The disclosure turn, removed                                      |
+| C-07 | The recording notice missing on an outbound call  | The disclosure turn, removed                                      |
+| C-08 | A note that contradicts the record                | A figure in the agent's note, or a status the record lacks        |
+
+Each label is the life generator's (the loan, the defect, the table and
+field, the row, the day, the true and planted values, the expected handling,
+root cause or symptom), plus the turn. A defect changes one turn and its
+interpreter relay. Every other turn is the clean call's, word for word,
+because each turn's noise has a stream of its own. At the default rate, 2%
+of the contacts each defect fits, the 300-loan book carries about 180
+defects in all.
+
+**Not covered yet:**
+
+- the call-QA environment itself: its task, its rubric from the collections
+  spec, and its grader;
+- the §1024.40 assignment and the good-faith determination;
+- credit disputes, loss mitigation past the application package, and
+  foreclosure;
+- the AI voice, as live contact only in a sandbox (11.1 rule 8);
+- the text of e-mails and letters, and phone-menu transcripts;
+- a bankruptcy the history's payments know about.
+
+The 300-loan book's center takes about three seconds, and a thousand
+transcripts about a second.
+
 ## The Supermortgage Gym
 
 Every environment also runs in a browser, for people without a checkout:

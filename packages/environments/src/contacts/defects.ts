@@ -54,7 +54,10 @@ export const CONTACT_DEFECTS: Readonly<Record<ContactDefectId, ContactDefect>> =
     table: "contact_transcripts",
     field: "said",
     tag: "unverified_refusal",
-    eligible: (c) => c.mode === "call" && c.transcript && (c.outcome === "answered_unverified" || c.outcome === "wrong_number"),
+    eligible: (c) =>
+      c.mode === "call" &&
+      c.transcript &&
+      (c.outcome === "answered_unverified" || c.outcome === "wrong_number"),
     handling:
       "Fail the call: the agent disclosed the loan's details to someone who had not passed the identity checks " +
       "(Gramm-Leach-Bliley privacy; Reg F §1006.6(d)(1) on a debt-collector loan; 11.1 rule 3). Log a privacy incident, " +
@@ -74,7 +77,7 @@ export const CONTACT_DEFECTS: Readonly<Record<ContactDefectId, ContactDefect>> =
   },
   "C-03": {
     id: "C-03",
-    title: "\"This won't hurt your credit\" said on a delinquent loan",
+    title: '"This won\'t hurt your credit" said on a delinquent loan',
     table: "contact_transcripts",
     field: "said",
     tag: "credit_answer",
@@ -123,7 +126,8 @@ export const CONTACT_DEFECTS: Readonly<Record<ContactDefectId, ContactDefect>> =
     table: "contact_transcripts",
     field: "said",
     tag: "recording_disclosure",
-    eligible: (c) => c.mode === "call" && c.direction === "outbound" && c.outcome === "conversation",
+    eligible: (c) =>
+      c.mode === "call" && c.direction === "outbound" && c.outcome === "conversation",
     handling:
       "Fail the call: the agent did not say the call was recorded. In an all-party-consent state the recording itself may " +
       "be unlawful; refer to compliance, and coach the agent.",
@@ -143,7 +147,10 @@ export const CONTACT_DEFECTS: Readonly<Record<ContactDefectId, ContactDefect>> =
 
 export function contactDefectById(id: string): ContactDefect {
   const d = (CONTACT_DEFECTS as Record<string, ContactDefect>)[id];
-  if (!d) throw new RangeError(`no contact defect ${id}; there are ${Object.keys(CONTACT_DEFECTS).join(", ")}`);
+  if (!d)
+    throw new RangeError(
+      `no contact defect ${id}; there are ${Object.keys(CONTACT_DEFECTS).join(", ")}`,
+    );
   return d;
 }
 
@@ -173,16 +180,27 @@ export function wrongAmount(r: Rng, cents: bigint, plan: CallPlan): bigint {
     if (v !== cents && v > 0n) options.push(v);
   }
   if (f.next && cents === f.next.amount && f.next.escrow > 0n) options.push(f.next.pi);
-  if (f.analysis && cents === f.analysis.new_total && f.analysis.old_total !== cents) options.push(f.analysis.old_total);
+  if (f.analysis && cents === f.analysis.new_total && f.analysis.old_total !== cents)
+    options.push(f.analysis.old_total);
   options.push(cents + BigInt(r.int(1, 9)) * 1000n + BigInt(r.int(0, 99)));
   return r.pick(options);
 }
 
 const relayOf = (turns: readonly DraftTurn[], i: number): number =>
-  turns[i + 1] && turns[i + 1]!.speaker === "INTERPRETER" && turns[i + 1]!.tag === `${turns[i]!.tag}:relay` ? i + 1 : -1;
+  turns[i + 1] &&
+  turns[i + 1]!.speaker === "INTERPRETER" &&
+  turns[i + 1]!.tag === `${turns[i]!.tag}:relay`
+    ? i + 1
+    : -1;
 
 /** Plant a defect in a call's turns, or return null when the call has no turn it can go in. */
-export function plantInTurns(id: ContactDefectId, r: Rng, plan: CallPlan, slots: Slots, turns: readonly DraftTurn[]): TurnPlant | null {
+export function plantInTurns(
+  id: ContactDefectId,
+  r: Rng,
+  plan: CallPlan,
+  slots: Slots,
+  turns: readonly DraftTurn[],
+): TurnPlant | null {
   const def = CONTACT_DEFECTS[id];
   const t = [...turns];
   const replace = (i: number, said: string, es: string | null): TurnPlant => {
@@ -204,8 +222,14 @@ export function plantInTurns(id: ContactDefectId, r: Rng, plan: CallPlan, slots:
     const nums = factNumbers(f);
     for (let i = 0; i < t.length; i++) {
       const turn = t[i]!;
-      if ((turn.speaker !== "AGENT" && turn.speaker !== "AGENT_2") || !turn.tag.startsWith("quote:")) continue;
-      const tok = numberTokens(turn.said).find((x) => x.kind === "money" && nums.money.has(x.cents));
+      if (
+        (turn.speaker !== "AGENT" && turn.speaker !== "AGENT_2") ||
+        !turn.tag.startsWith("quote:")
+      )
+        continue;
+      const tok = numberTokens(turn.said).find(
+        (x) => x.kind === "money" && nums.money.has(x.cents),
+      );
       if (!tok || tok.kind !== "money") continue;
       const wrong = money(wrongAmount(r, BigInt(tok.cents), plan));
       const said = turn.said.replace(tok.raw, wrong);
@@ -226,27 +250,49 @@ export function plantInTurns(id: ContactDefectId, r: Rng, plan: CallPlan, slots:
         : f.next
           ? "[Well, I can tell you|What I can say is] the next payment of {next_amount} is due {next_due}[, so have them call if they have questions|]."
           : "[I can tell you|Well,] the principal balance is {upb}.";
-      const es = f.past_due ? "Dice que la cuenta tiene {dias} de atraso y que deben {past_due_total}." : f.next ? "Dice que el próximo pago de {next_amount} vence el {next_due_es}." : "Dice que el saldo de capital es {upb}.";
+      const es = f.past_due
+        ? "Dice que la cuenta tiene {dias} de atraso y que deben {past_due_total}."
+        : f.next
+          ? "Dice que el próximo pago de {next_amount} vence el {next_due_es}."
+          : "Dice que el saldo de capital es {upb}.";
       return replace(i, expand(r, line, s), expand(r, es, s));
     }
     case "C-02":
       return replace(
         i,
-        expand(r, f.past_due
-          ? "[I see you're|The account is] {days_past} past due, and [we need|you need] to bring the account current. [The amount due is|You owe] {past_due_total}. [Can we set up a payment today?|When can you make that payment?]"
-          : "[I do need to remind you|Just a reminder] that your payment [is due|needs to be made] on time, [and we expect|we're going to need] the full payment of {next_amount} by {next_due}.", slots),
-        expand(r, f.past_due ? "Dice que tiene {dias} de atraso y que debe ponerse al corriente con {past_due_total}." : "Dice que espera el pago completo de {next_amount}.", slots),
+        expand(
+          r,
+          f.past_due
+            ? "[I see you're|The account is] {days_past} past due, and [we need|you need] to bring the account current. [The amount due is|You owe] {past_due_total}. [Can we set up a payment today?|When can you make that payment?]"
+            : "[I do need to remind you|Just a reminder] that your payment [is due|needs to be made] on time, [and we expect|we're going to need] the full payment of {next_amount} by {next_due}.",
+          slots,
+        ),
+        expand(
+          r,
+          f.past_due
+            ? "Dice que tiene {dias} de atraso y que debe ponerse al corriente con {past_due_total}."
+            : "Dice que espera el pago completo de {next_amount}.",
+          slots,
+        ),
       );
     case "C-03":
       return replace(
         i,
-        expand(r, "[Oh, no,|No, no,|Don't worry,] this won't hurt your credit[, that's only if it goes to foreclosure|, as long as you get caught up|. We don't report that].", slots),
+        expand(
+          r,
+          "[Oh, no,|No, no,|Don't worry,] this won't hurt your credit[, that's only if it goes to foreclosure|, as long as you get caught up|. We don't report that].",
+          slots,
+        ),
         "Dice que no se preocupe, que esto no va a afectar su crédito.",
       );
     case "C-04":
       return replace(
         i,
-        expand(r, "[I understand.|Okay.|I hear you.] [Unfortunately there's not much I can do about that.|That's just how the system works.|I can't really do anything about that from here.]", slots),
+        expand(
+          r,
+          "[I understand.|Okay.|I hear you.] [Unfortunately there's not much I can do about that.|That's just how the system works.|I can't really do anything about that from here.]",
+          slots,
+        ),
         "Dice que entiende, pero que no puede hacer nada.",
       );
     case "C-06":
@@ -258,7 +304,11 @@ export function plantInTurns(id: ContactDefectId, r: Rng, plan: CallPlan, slots:
 }
 
 /** Plant a contradiction in a note: a figure changed, or a status the record does not have. */
-export function plantInNote(r: Rng, text: string, plan: CallPlan): { text: string; true_value: string; planted_value: string } {
+export function plantInNote(
+  r: Rng,
+  text: string,
+  plan: CallPlan,
+): { text: string; true_value: string; planted_value: string } {
   const toks = numberTokens(text);
   const m = toks.find((t) => t.kind === "money");
   if (m && m.kind === "money") {
@@ -272,7 +322,11 @@ export function plantInNote(r: Rng, text: string, plan: CallPlan): { text: strin
   const d = toks.find((t) => t.kind === "date");
   if (d && d.kind === "date") {
     const day = Math.min(28, Math.max(1, d.d + (d.d > 14 ? -r.int(3, 9) : r.int(3, 9))));
-    const raw = d.raw.replace(/^(\d{1,2})\/(\d{1,2})/, (_m, mo: string, dd: string) => `${mo}/${dd.length === 2 ? String(day).padStart(2, "0") : day}`);
+    const raw = d.raw.replace(
+      /^(\d{1,2})\/(\d{1,2})/,
+      (_m, mo: string, dd: string) =>
+        `${mo}/${dd.length === 2 ? String(day).padStart(2, "0") : day}`,
+    );
     return { text: text.replace(d.raw, raw), true_value: d.raw, planted_value: raw };
   }
   const claim = plan.facts.past_due ? "ACCT CURRENT." : "ACCT PAST DUE, LC ASSESSED.";

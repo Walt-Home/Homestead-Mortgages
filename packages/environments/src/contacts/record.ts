@@ -162,7 +162,11 @@ export interface RecordFacts {
     readonly refund_on: PlainDate | null;
   } | null;
   /** The last month furnished to the credit bureaus: its Metro 2 account status and the days delinquent behind it. */
-  readonly credit: { readonly month: string; readonly status: string; readonly days: number } | null;
+  readonly credit: {
+    readonly month: string;
+    readonly status: string;
+    readonly days: number;
+  } | null;
   /** The promise this contact records, when it records one. */
   readonly promise: { readonly amount: Cents; readonly pay_by: PlainDate } | null;
   readonly bankruptcy: {
@@ -213,10 +217,13 @@ export function recordOn(life: LoanLife, on: PlainDate, ctx: RecordContext): Rec
   const d = life.draw;
   const servicer = servicerOn(life, on);
   const loanNumber = servicer === "prior" ? d.prior_servicer_loan_number : d.servicer_loan_number;
-  const terms = servicer === "us" ? life.boarded.terms : {
-    late_charge_pct: d.late_charge.pct,
-    late_charge_grace_days: d.late_charge.grace_days,
-  };
+  const terms =
+    servicer === "us"
+      ? life.boarded.terms
+      : {
+          late_charge_pct: d.late_charge.pct,
+          late_charge_grace_days: d.late_charge.grace_days,
+        };
   const grace = terms.late_charge_grace_days;
 
   // An installment exists in the record once it is projected, about a month ahead of its due date.
@@ -225,38 +232,43 @@ export function recordOn(life: LoanLife, on: PlainDate, ctx: RecordContext): Rec
   const unpaid = known.filter((i) => !paidBy(i, on));
   const ahead = life.installments.find((i) => i.due > horizon && !paidBy(i, on));
   const nx = unpaid[0] ?? (ahead && ahead.due <= addDays(on, 62) ? ahead : undefined);
-  const ended = (life.payoff && life.payoff.on <= on) || (life.transfer_out_on && life.transfer_out_on <= on);
-  const next = nx && !ended
-    ? {
-        due: nx.due,
-        amount: nx.pi + nx.escrow,
-        pi: nx.pi,
-        escrow: nx.escrow,
-        grace_end: addDays(nx.due, grace),
-      }
-    : null;
+  const ended =
+    (life.payoff && life.payoff.on <= on) || (life.transfer_out_on && life.transfer_out_on <= on);
+  const next =
+    nx && !ended
+      ? {
+          due: nx.due,
+          amount: nx.pi + nx.escrow,
+          pi: nx.pi,
+          escrow: nx.escrow,
+          grace_end: addDays(nx.due, grace),
+        }
+      : null;
 
   const late = life.fees.filter(
     (f) => f.assessed_on <= on && f.state !== "waived" && f.state !== "accrued_suspended",
   );
   const lateOutstanding = sum(
-    late.map((f) => (f.collected_on !== null && f.collected_on <= on ? f.amount - f.collected : f.amount)),
+    late.map((f) =>
+      f.collected_on !== null && f.collected_on <= on ? f.amount - f.collected : f.amount,
+    ),
   );
   const behind = unpaid.filter((i) => i.due < on);
-  const pastDue = behind.length && !ended
-    ? (() => {
-        const inst = sum(behind.map((i) => i.pi + i.escrow));
-        const lc = lateOutstanding > 0n ? lateOutstanding : 0n;
-        return {
-          oldest_due: behind[0]!.due,
-          installments: behind.length,
-          days: daysBetween(behind[0]!.due, on),
-          installment_total: inst,
-          late_charges: lc,
-          total: inst + lc,
-        };
-      })()
-    : null;
+  const pastDue =
+    behind.length && !ended
+      ? (() => {
+          const inst = sum(behind.map((i) => i.pi + i.escrow));
+          const lc = lateOutstanding > 0n ? lateOutstanding : 0n;
+          return {
+            oldest_due: behind[0]!.due,
+            installments: behind.length,
+            days: daysBetween(behind[0]!.due, on),
+            installment_total: inst,
+            late_charges: lc,
+            total: inst + lc,
+          };
+        })()
+      : null;
 
   const lr = last(life.receipts, (r) => r.on <= on && r.mode !== "payoff");
   const lastPayment = lr
@@ -279,7 +291,11 @@ export function recordOn(life: LoanLife, on: PlainDate, ctx: RecordContext): Rec
   const stmt = d.escrowed ? last(life.months, (m) => m.as_of < on) : null;
 
   const window12 = (from: PlainDate, to: PlainDate, pred: (line: string) => boolean) =>
-    sum(life.disbursements.filter((x) => x.kind === "bill" && pred(x.line) && x.on >= from && x.on < to).map((x) => x.amount));
+    sum(
+      life.disbursements
+        .filter((x) => x.kind === "bill" && pred(x.line) && x.on >= from && x.on < to)
+        .map((x) => x.amount),
+    );
   const isTax = (l: string) => l.startsWith("tax");
   const isHaz = (l: string) => l === "hazard";
   const an = last(life.analyses, (a) => a.sent_on <= on && a.sent_on >= addDays(on, -400));
@@ -303,7 +319,10 @@ export function recordOn(life: LoanLife, on: PlainDate, ctx: RecordContext): Rec
       }
     : null;
 
-  const ac = last(life.arm_changes, (a) => a.notice_sent_on <= on && a.notice_sent_on >= addDays(on, -400));
+  const ac = last(
+    life.arm_changes,
+    (a) => a.notice_sent_on <= on && a.notice_sent_on >= addDays(on, -400),
+  );
   const armFacts = ac
     ? {
         change: ac.change,
@@ -318,7 +337,10 @@ export function recordOn(life: LoanLife, on: PlainDate, ctx: RecordContext): Rec
 
   const tax = last(life.disbursements, (x) => x.kind === "bill" && isTax(x.line) && x.on <= on);
   const haz = last(life.disbursements, (x) => x.kind === "bill" && isHaz(x.line) && x.on <= on);
-  const ref = last(life.disbursements, (x) => x.kind === "refund" && x.on <= on && x.on >= addDays(on, -120));
+  const ref = last(
+    life.disbursements,
+    (x) => x.kind === "refund" && x.on <= on && x.on >= addDays(on, -120),
+  );
 
   const fee = last(life.fees, (f) => f.assessed_on <= on && f.assessed_on >= addDays(on, -75));
   const feeInst = fee ? life.installments.find((i) => i.due === fee.due) : undefined;
@@ -337,33 +359,51 @@ export function recordOn(life: LoanLife, on: PlainDate, ctx: RecordContext): Rec
     const y = p.y - 1;
     const inYear = (x: PlainDate) => parts(x).y === y && servicerOn(life, x) === servicer;
     let interest = 0n;
-    for (const r of life.receipts) if (inYear(r.on)) for (const x of r.installments) interest += x.interest;
+    for (const r of life.receipts)
+      if (inYear(r.on)) for (const x of r.installments) interest += x.interest;
     if (life.payoff && inYear(life.payoff.on)) interest += life.payoff.interest;
-    const taxes = sum(life.disbursements.filter((x) => x.kind === "bill" && isTax(x.line) && inYear(x.on)).map((x) => x.amount));
+    const taxes = sum(
+      life.disbursements
+        .filter((x) => x.kind === "bill" && isTax(x.line) && inYear(x.on))
+        .map((x) => x.amount),
+    );
     if (interest > 0n)
       form1098 = { year: y, interest, taxes, mailed_by: `${p.y}-01-31` as PlainDate };
   }
 
-  const term = last(life.pmi, (x) => x.status === "terminated" && x.effective_on !== null && x.effective_on <= on);
-  const mi = { active: d.mi !== null && !term && !ended, terminated_on: term?.effective_on ?? null };
+  const term = last(
+    life.pmi,
+    (x) => x.status === "terminated" && x.effective_on !== null && x.effective_on <= on,
+  );
+  const mi = {
+    active: d.mi !== null && !term && !ended,
+    terminated_on: term?.effective_on ?? null,
+  };
 
   const tin = life.transfer_in_on;
-  const transfer = tin && tin <= on && on <= addDays(tin, 150)
-    ? {
-        on: tin,
-        shield_until: addDays(tin, SERVICER.transfer_shield_days),
-        first_due: life.installments.find((i) => i.due >= tin)?.due ?? null,
-      }
-    : null;
+  const transfer =
+    tin && tin <= on && on <= addDays(tin, 150)
+      ? {
+          on: tin,
+          shield_until: addDays(tin, SERVICER.transfer_shield_days),
+          first_due: life.installments.find((i) => i.due >= tin)?.due ?? null,
+        }
+      : null;
 
   const po = life.payoff && life.payoff.on <= on ? life.payoff : null;
   const poRefund = po ? life.disbursements.find((x) => x.kind === "payoff_refund") : undefined;
   const payoff = po
-    ? { on: po.on, refund: po.escrow_refund, refund_on: poRefund && poRefund.on <= on ? poRefund.on : null }
+    ? {
+        on: po.on,
+        refund: po.escrow_refund,
+        refund_on: poRefund && poRefund.on <= on ? poRefund.on : null,
+      }
     : null;
 
   const cm = last(life.months, (m) => m.as_of < on);
-  const credit = cm ? { month: cm.month, status: cm.metro2.account_status, days: cm.days_delinquent } : null;
+  const credit = cm
+    ? { month: cm.month, status: cm.metro2.account_status, days: cm.days_delinquent }
+    : null;
 
   const bk = ctx.bankruptcy && ctx.bankruptcy.noticed_on <= on ? ctx.bankruptcy : null;
   const firstNumber = /^\d+/.exec(d.property.street)?.[0] ?? "";
@@ -496,7 +536,20 @@ export function factNumbers(f: RecordFacts): FactNumbers {
   if (f.analysis) {
     const a = f.analysis;
     for (const x of [a.as_of, a.sent_on, a.effective]) dt(x);
-    for (const x of [a.shortage, a.surplus, a.old_escrow, a.new_escrow, a.first_month_escrow, a.old_total, a.new_total, a.tax_12m, a.tax_prior_12m, a.hazard_12m, a.hazard_prior_12m]) m(x);
+    for (const x of [
+      a.shortage,
+      a.surplus,
+      a.old_escrow,
+      a.new_escrow,
+      a.first_month_escrow,
+      a.old_total,
+      a.new_total,
+      a.tax_12m,
+      a.tax_prior_12m,
+      a.hazard_12m,
+      a.hazard_prior_12m,
+    ])
+      m(x);
   }
   if (f.arm) {
     for (const x of [f.arm.change, f.arm.first_new_payment, f.arm.notice_on]) dt(x);
@@ -505,7 +558,11 @@ export function factNumbers(f: RecordFacts): FactNumbers {
     m(f.arm.old_pi);
     m(f.arm.new_pi);
   }
-  for (const x of [f.tax_paid, f.hazard_paid, f.refund]) if (x) { dt(x.on); m(x.amount); }
+  for (const x of [f.tax_paid, f.hazard_paid, f.refund])
+    if (x) {
+      dt(x.on);
+      m(x.amount);
+    }
   if (f.late_charge) {
     dt(f.late_charge.due);
     dt(f.late_charge.assessed_on);
@@ -543,11 +600,28 @@ export function factNumbers(f: RecordFacts): FactNumbers {
   }
   dt(f.authorization_on);
   // The servicer's own figures, said on every loan.
-  for (const k of ["hours_open", "hours_close", "transfer_shield_days", "payoff_statement_business_days", "credit_report_days", "shortage_spread_months", "qwr_ack_business_days", "qwr_response_business_days", "reset_link_minutes", "form_number"] as const)
+  for (const k of [
+    "hours_open",
+    "hours_close",
+    "transfer_shield_days",
+    "payoff_statement_business_days",
+    "credit_report_days",
+    "shortage_spread_months",
+    "qwr_ack_business_days",
+    "qwr_response_business_days",
+    "reset_link_minutes",
+    "form_number",
+  ] as const)
     n(SERVICER[k]);
   pcts.add(pctKey(SERVICER.mi_request_ltv_pct));
   pcts.add(pctKey(SERVICER.mi_auto_ltv_pct));
-  return { money, dates, ints, pcts, phones: new Set([f.servicer === "us" ? SERVICER.phone : PRIOR_SERVICER.phone]) };
+  return {
+    money,
+    dates,
+    ints,
+    pcts,
+    phones: new Set([f.servicer === "us" ? SERVICER.phone : PRIOR_SERVICER.phone]),
+  };
 }
 
 /**
@@ -580,7 +654,8 @@ export function dayNumbers(life: LoanLife, on: PlainDate): FactNumbers {
     }
   for (const a of life.analyses)
     if (a.as_of === on || a.sent_on === on) {
-      for (const c of [a.shortage, a.surplus, a.new_payment, a.old_payment, a.first_month_payment]) m(c);
+      for (const c of [a.shortage, a.surplus, a.new_payment, a.old_payment, a.first_month_payment])
+        m(c);
       dt(a.effective);
     }
   for (const a of life.arm_changes)
@@ -598,5 +673,11 @@ export function dayNumbers(life: LoanLife, on: PlainDate): FactNumbers {
 /** Several sets of numbers as one. */
 export function unionNumbers(...xs: readonly FactNumbers[]): FactNumbers {
   const u = <T>(f: (x: FactNumbers) => ReadonlySet<T>) => new Set<T>(xs.flatMap((x) => [...f(x)]));
-  return { money: u((x) => x.money), dates: u((x) => x.dates), ints: u((x) => x.ints), pcts: u((x) => x.pcts), phones: u((x) => x.phones) };
+  return {
+    money: u((x) => x.money),
+    dates: u((x) => x.dates),
+    ints: u((x) => x.ints),
+    pcts: u((x) => x.pcts),
+    phones: u((x) => x.phones),
+  };
 }

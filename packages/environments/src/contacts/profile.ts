@@ -42,7 +42,18 @@ const STYLES: readonly (readonly [ContactProfile["style"], number])[] = [
   ["anxious", 0.15],
   ["irritated", 0.15],
 ];
-const SPOUSE_GIVEN = ["Chris", "Alex", "Jordan", "Sam", "Taylor", "Pat", "Robin", "Jamie", "Morgan", "Casey"];
+const SPOUSE_GIVEN = [
+  "Chris",
+  "Alex",
+  "Jordan",
+  "Sam",
+  "Taylor",
+  "Pat",
+  "Robin",
+  "Jamie",
+  "Morgan",
+  "Casey",
+];
 const MAIL_HOSTS = ["mail.example", "inbox.example", "post.example"];
 
 const digits4 = (r: Rng) => String(r.int(0, 9999)).padStart(4, "0");
@@ -51,7 +62,8 @@ export function drawProfile(r: Rng, life: LoanLife, pins: ProfilePins = {}): Con
   const d = life.draw;
   const b1 = d.parties[0]!;
   const uLang = r.next();
-  const nPhones = 1 + (r.chance(SECOND_PHONE_SHARE) ? 1 : 0) + (r.chance(THIRD_PHONE_SHARE) ? 1 : 0);
+  const nPhones =
+    1 + (r.chance(SECOND_PHONE_SHARE) ? 1 : 0) + (r.chance(THIRD_PHONE_SHARE) ? 1 : 0);
   const phoneDraws = [0, 1, 2].map(() => ({
     mobile: r.chance(MOBILE_SHARE),
     last4: digits4(r),
@@ -69,7 +81,9 @@ export function drawProfile(r: Rng, life: LoanLife, pins: ProfilePins = {}): Con
   const style = r.weighted(STYLES);
   const host = r.pick(MAIL_HOSTS);
 
-  const spanishShare = HISPANIC_SURNAMES.has(b1.surname) ? SPANISH_SHARE_HISPANIC_SURNAME : SPANISH_SHARE;
+  const spanishShare = HISPANIC_SURNAMES.has(b1.surname)
+    ? SPANISH_SHARE_HISPANIC_SURNAME
+    : SPANISH_SHARE;
   const phones: PhoneOnFile[] = phoneDraws.slice(0, nPhones).map((p, i) => ({
     id: `${d.loan_id}-PH${i + 1}`,
     kind: p.mobile ? "mobile" : "landline",

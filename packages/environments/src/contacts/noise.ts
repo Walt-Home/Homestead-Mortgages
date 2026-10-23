@@ -50,7 +50,7 @@ const CONFUSIONS: Readonly<Record<string, readonly string[]>> = {
   delinquent: ["delinquents"],
   modification: ["notification"],
   bankruptcy: ["bank ruptcy"],
-  "late": ["latest"],
+  late: ["latest"],
   waive: ["wave"],
   lien: ["lean", "lane"],
   premium: ["premiums"],
@@ -62,8 +62,20 @@ const CONFUSIONS: Readonly<Record<string, readonly string[]>> = {
 const FILLERS = new Set(["um,", "uh,", "um", "uh", "like,", "you know,"]);
 const DATE_WORD = new RegExp(`^(${[...MONTHS, ...MESES].join("|")})$`, "i");
 const TEENS: Readonly<Record<string, string>> = {
-  "13": "30", "14": "40", "15": "50", "16": "60", "17": "70", "18": "80", "19": "90",
-  "30": "13", "40": "14", "50": "15", "60": "16", "70": "17", "80": "18", "90": "19",
+  "13": "30",
+  "14": "40",
+  "15": "50",
+  "16": "60",
+  "17": "70",
+  "18": "80",
+  "19": "90",
+  "30": "13",
+  "40": "14",
+  "50": "15",
+  "60": "16",
+  "70": "17",
+  "80": "18",
+  "90": "19",
 };
 
 /** A misheard amount: one digit off, never the first, so the amount still reads like one. */
@@ -82,7 +94,12 @@ export interface Recognized {
   readonly noise: NoiseOp[];
 }
 
-export function recognize(r: Rng, said: string, pii: readonly string[], lower: boolean): Recognized {
+export function recognize(
+  r: Rng,
+  said: string,
+  pii: readonly string[],
+  lower: boolean,
+): Recognized {
   const noise: NoiseOp[] = [];
   let text = said;
   // Personal data first: the recorder redacts before anything else touches the words.
@@ -110,7 +127,8 @@ export function recognize(r: Rng, said: string, pii: readonly string[], lower: b
     if (t.kind === "money") heard = mishearMoney(r, t.raw);
     else if (t.kind === "int" && TEENS[t.raw]) heard = TEENS[t.raw]!;
     else if (t.kind === "date" && /\b13th\b/.test(t.raw)) heard = t.raw.replace("13th", "30th");
-    else if (t.kind === "date" && /\b30th\b/.test(t.raw) && v < 0.5) heard = t.raw.replace("30th", "13th");
+    else if (t.kind === "date" && /\b30th\b/.test(t.raw) && v < 0.5)
+      heard = t.raw.replace("30th", "13th");
     if (heard && heard !== t.raw) {
       text = text.replace(t.raw, heard);
       noise.push({ kind: "misheard_number", said: t.raw, heard });
@@ -127,7 +145,11 @@ export function recognize(r: Rng, said: string, pii: readonly string[], lower: b
     // A figure, markup, the words that make a date of a number ("March", "de"), and the phone menu's
     // "press" before its key are written as said: a misheard figure is logged above, not made here.
     const nearDigit = [i - 2, i - 1, i + 1].some((k) => /\d/.test(words[k] ?? ""));
-    if (/\d|\[|\]|\$/.test(w) || /^(press|oprima)$/i.test(core) || (nearDigit && (DATE_WORD.test(core) || core.length <= 3))) {
+    if (
+      /\d|\[|\]|\$/.test(w) ||
+      /^(press|oprima)$/i.test(core) ||
+      (nearDigit && (DATE_WORD.test(core) || core.length <= 3))
+    ) {
       out.push(w);
       continue;
     }

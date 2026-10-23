@@ -84,7 +84,12 @@ export type StatusBucket = keyof typeof STATUS_MULTIPLIER;
  * events bring about 0.6 calls a year, a delinquent loan's (mostly the late
  * charge each month) one and a half to two and a half.
  */
-export const EVENT_CALLS: Readonly<Record<StatusBucket, number>> = { current: 0.58, d30: 1.6, d60: 2.4, d90_plus: 2.4 };
+export const EVENT_CALLS: Readonly<Record<StatusBucket, number>> = {
+  current: 0.58,
+  d30: 1.6,
+  d60: 2.4,
+  d90_plus: 2.4,
+};
 /** A share of the inquiries that come in by e-mail (when one is on file), by text (with consent), and by letter. */
 const EMAIL_SHARE = 0.09;
 const TEXT_SHARE = 0.04;
@@ -291,7 +296,8 @@ const dialOnOrAfter = (d: PlainDate): PlainDate => {
   return x;
 };
 const minutesAt = (r: Rng, from: number, to: number) => r.int(from * 60, to * 60 - 1);
-const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const hhmm = (m: number) =>
+  `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 /** The handle-time factor's mean over a performing book's mix, so the mean handle time is the calibration's. */
 /**
@@ -302,7 +308,7 @@ const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${St
  * books, so a book's mean handle time is the calibration's; a loan's draws
  * never read another loan's.
  */
-const HANDLE_NORM = 1.17;
+const HANDLE_NORM = 1.14;
 
 /** Complaint weight per category: the calibration's complaint share over the performing mix's share, so complaints follow the complaint mix. */
 function complaintWeights(rates: ContactRates): (reason: InquiryReason) => number {
@@ -412,16 +418,40 @@ interface Draft {
 }
 
 /** The servicer's agents: invented names and user ids, one pool per servicer. */
-export const AGENTS: Readonly<Record<"us" | "prior", readonly { readonly id: string; readonly name: string }[]>> = {
+export const AGENTS: Readonly<
+  Record<"us" | "prior", readonly { readonly id: string; readonly name: string }[]>
+> = {
   us: [
-    ["DMR4471", "Dana"], ["KLT2208", "Kevin"], ["JHS9032", "Jasmine"], ["RBC1176", "Ruben"], ["AMW5520", "Angela"],
-    ["TPN3381", "Tyler"], ["MSG7045", "Monique"], ["BFK6612", "Brian"], ["LEO2890", "Lena"], ["CQD4157", "Carlos"],
-    ["SVR8823", "Shonda"], ["NHY1934", "Nathan"], ["IPB5076", "Irene"], ["OGT6348", "Omar"], ["YLM2461", "Yolanda"],
-    ["WKS7709", "Wesley"], ["FAJ3195", "Fatima"], ["EZR8540", "Eric"], ["GTH1023", "Gloria"], ["HVN4686", "Hector"],
+    ["DMR4471", "Dana"],
+    ["KLT2208", "Kevin"],
+    ["JHS9032", "Jasmine"],
+    ["RBC1176", "Ruben"],
+    ["AMW5520", "Angela"],
+    ["TPN3381", "Tyler"],
+    ["MSG7045", "Monique"],
+    ["BFK6612", "Brian"],
+    ["LEO2890", "Lena"],
+    ["CQD4157", "Carlos"],
+    ["SVR8823", "Shonda"],
+    ["NHY1934", "Nathan"],
+    ["IPB5076", "Irene"],
+    ["OGT6348", "Omar"],
+    ["YLM2461", "Yolanda"],
+    ["WKS7709", "Wesley"],
+    ["FAJ3195", "Fatima"],
+    ["EZR8540", "Eric"],
+    ["GTH1023", "Gloria"],
+    ["HVN4686", "Hector"],
   ].map(([id, name]) => ({ id: id!, name: name! })),
   prior: [
-    ["P10442", "Melissa"], ["P10587", "Derek"], ["P11036", "Tamika"], ["P11290", "Scott"], ["P11745", "Rosa"],
-    ["P12018", "Jared"], ["P12331", "Keisha"], ["P12764", "Paul"],
+    ["P10442", "Melissa"],
+    ["P10587", "Derek"],
+    ["P11036", "Tamika"],
+    ["P11290", "Scott"],
+    ["P11745", "Rosa"],
+    ["P12018", "Jared"],
+    ["P12331", "Keisha"],
+    ["P12764", "Paul"],
   ].map(([id, name]) => ({ id: id!, name: name! })),
 };
 const ATTORNEYS = [
@@ -448,7 +478,8 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
   const R = ctx.rates;
   const complaintW = complaintWeights(R);
   const lastMonth = life.months[life.months.length - 1];
-  const endOn: PlainDate = life.payoff?.on ?? life.transfer_out_on ?? (lastMonth ? lastMonth.as_of : d.first_due);
+  const endOn: PlainDate =
+    life.payoff?.on ?? life.transfer_out_on ?? (lastMonth ? lastMonth.as_of : d.first_due);
   const active = (on: PlainDate) => on <= endOn;
   const drafts: Draft[] = [];
   let seq = 0;
@@ -492,12 +523,20 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
   const bk = bankruptcy;
   /** Collection is barred from the petition, until a Chapter 13 discharge; after a Chapter 7 discharge it never resumes. */
   const barred = (on: PlainDate) =>
-    bk !== null && on >= bk.petition_on && !(bk.chapter === 13 && bk.discharged_on !== null && on >= bk.discharged_on);
+    bk !== null &&
+    on >= bk.petition_on &&
+    !(bk.chapter === 13 && bk.discharged_on !== null && on >= bk.discharged_on);
   const disclaimer = (on: PlainDate) =>
-    bk !== null && on >= bk.noticed_on && !(bk.chapter === 13 && bk.discharged_on !== null && on >= bk.discharged_on);
+    bk !== null &&
+    on >= bk.noticed_on &&
+    !(bk.chapter === 13 && bk.discharged_on !== null && on >= bk.discharged_on);
 
   const rec = (on: PlainDate) =>
-    recordOn(life, on, { profile, bankruptcy: bk, authorization_on: authorizations.filter((a) => a <= on).pop() ?? null });
+    recordOn(life, on, {
+      profile,
+      bankruptcy: bk,
+      authorization_on: authorizations.filter((a) => a <= on).pop() ?? null,
+    });
 
   /** A promise window: from the call to the day it is due, when the cadence is ceased (ptp_pending). */
   const promiseWindows: { from: PlainDate; to: PlainDate }[] = [];
@@ -510,12 +549,26 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     if (promiseWindows.some((w) => w.from <= addDays(on, 21) && w.to >= on)) return null;
     const next = life.receipts.find((x) => x.on > on && x.mode !== "payoff");
     if (next && daysBetween(on, next.on) <= 21) {
-      return { made_on: on, pay_by: next.on, amount: next.amount, status: "kept", receipt_id: next.id, scripted: false };
+      return {
+        made_on: on,
+        pay_by: next.on,
+        amount: next.amount,
+        status: "kept",
+        receipt_id: next.id,
+        scripted: false,
+      };
     }
     if (uBroken < BROKEN_PROMISE && f.past_due) {
       const by = addDays(on, lagBroken);
       if (by <= endOn)
-        return { made_on: on, pay_by: by, amount: f.past_due.total, status: "broken", receipt_id: null, scripted: false };
+        return {
+          made_on: on,
+          pay_by: by,
+          amount: f.past_due.total,
+          status: "broken",
+          receipt_id: null,
+          scripted: false,
+        };
     }
     return null;
   };
@@ -528,7 +581,11 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
 
   const handleSeconds = (r: Rng, factor: number, interpreter: boolean) => {
     const mean = R.handle_minutes.mean * 60;
-    const x = mean * (factor / HANDLE_NORM) * lognormalMeanOne(r, 0.5) * (interpreter ? INTERPRETER_FACTOR : 1);
+    const x =
+      mean *
+      (factor / HANDLE_NORM) *
+      lognormalMeanOne(r, 0.5) *
+      (interpreter ? INTERPRETER_FACTOR : 1);
     return Math.max(90, Math.round(x));
   };
   const acwOf = (r: Rng, handle: number) => Math.min(Math.round(handle * 0.25), r.int(20, 90));
@@ -543,7 +600,12 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     readonly scriptedPromise?: Draft["promise"];
     readonly followUp?: boolean;
   }
-  const inbound = (r: Rng, on: PlainDate, reason: InquiryReason, o: InboundOpts = {}): Draft | null => {
+  const inbound = (
+    r: Rng,
+    on: PlainDate,
+    reason: InquiryReason,
+    o: InboundOpts = {},
+  ): Draft | null => {
     if (!active(on) && reason !== "lien_release") return null;
     const f = rec(on);
     const uChannel = r.next();
@@ -560,13 +622,39 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     const promiseR = rngFor(`${lk}/promise/${on}/${reason}`);
     const smsOk = smsConsentOn(on);
     const issue = o.issue ?? `${reason}:${on.slice(0, 7)}`;
-    const base: Omit<Draft, "mode" | "outcome" | "party" | "party_name" | "live_contact" | "live_contact_basis" | "identity_verified" | "resolution" | "duration_s" | "handle_s" | "human_agent" | "transcript" | "disclosures_marked" | "complaint_voiced" | "complaint_logged" | "qrpc" | "promise" | "interpreter"> = {
+    const base: Omit<
+      Draft,
+      | "mode"
+      | "outcome"
+      | "party"
+      | "party_name"
+      | "live_contact"
+      | "live_contact_basis"
+      | "identity_verified"
+      | "resolution"
+      | "duration_s"
+      | "handle_s"
+      | "human_agent"
+      | "transcript"
+      | "disclosures_marked"
+      | "complaint_voiced"
+      | "complaint_logged"
+      | "qrpc"
+      | "promise"
+      | "interpreter"
+    > = {
       on,
       minute,
       seq: seq++,
       direction: "inbound",
       phone_number_id: null,
-      purpose: o.purpose ?? (o.scriptedPromise ? "promise_to_pay" : reason === "bankruptcy" ? "bankruptcy_notice" : "borrower_inquiry"),
+      purpose:
+        o.purpose ??
+        (o.scriptedPromise
+          ? "promise_to_pay"
+          : reason === "bankruptcy"
+            ? "bankruptcy_notice"
+            : "borrower_inquiry"),
       reason,
       issue,
       language: profile.language,
@@ -595,7 +683,8 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     if (!o.forceChannel && !o.scriptedPromise && reason !== "bankruptcy") {
       const pLetter = LETTER_SHARE[reason] ?? 0;
       const pEmail = profile.email_on_file && reason !== "disaster_assistance" ? EMAIL_SHARE : 0;
-      const pText = smsOk && (reason === "payment_received" || reason === "make_payment") ? TEXT_SHARE : 0;
+      const pText =
+        smsOk && (reason === "payment_received" || reason === "make_payment") ? TEXT_SHARE : 0;
       if (uChannel < pLetter) channel = "letter";
       else if (uChannel < pLetter + pEmail) channel = "email";
       else if (uChannel < pLetter + pEmail + pText) channel = "sms";
@@ -606,7 +695,9 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
         ...quiet,
         mode: channel,
         outcome: "received",
-        purpose: o.purpose ?? (channel === "letter" && reason === "hardship" ? "hardship_letter" : base.purpose),
+        purpose:
+          o.purpose ??
+          (channel === "letter" && reason === "hardship" ? "hardship_letter" : base.purpose),
         resolution: reason === "hardship" ? "pending_documents" : "information_provided",
         duration_s: 0,
         handle_s: 0,
@@ -617,9 +708,26 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     if (!o.scriptedPromise && !o.followUp && reason !== "bankruptcy" && channel === "call") {
       const self = IVR_SELF_SERVE[reason] ?? 0.03;
       if (uIvr < IVR_ABANDON)
-        return { ...base, ...quiet, mode: "ivr", outcome: "ivr_abandoned", resolution: "unresolved", duration_s: Math.min(ivrSecs, 90), handle_s: 0 };
+        return {
+          ...base,
+          ...quiet,
+          mode: "ivr",
+          outcome: "ivr_abandoned",
+          resolution: "unresolved",
+          duration_s: Math.min(ivrSecs, 90),
+          handle_s: 0,
+        };
       if (uIvr < IVR_ABANDON + self)
-        return { ...base, ...quiet, purpose: "self_service", mode: "ivr", outcome: "ivr_self_served", resolution: "self_served", duration_s: ivrSecs, handle_s: 0 };
+        return {
+          ...base,
+          ...quiet,
+          purpose: "self_service",
+          mode: "ivr",
+          outcome: "ivr_self_served",
+          resolution: "self_served",
+          duration_s: ivrSecs,
+          handle_s: 0,
+        };
     }
     // An agent: who is calling, and whether they pass the checks.
     let party: PartyRole = o.party ?? "borrower";
@@ -636,7 +744,12 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
         partyName = profile.spouse.name;
         verified = profile.spouse.authorized || uPresent < SPOUSE_WITH_BORROWER_PRESENT;
         basis = profile.spouse.authorized ? "authorized_agent" : "borrower_initiated";
-      } else if (reason === "hardship" && f.past_due && f.past_due.days >= 30 && uParty > 1 - COUNSELOR_ON_HARDSHIP) {
+      } else if (
+        reason === "hardship" &&
+        f.past_due &&
+        f.past_due.days >= 30 &&
+        uParty > 1 - COUNSELOR_ON_HARDSHIP
+      ) {
         party = "housing_counselor";
         partyName = null;
         basis = "authorized_agent";
@@ -668,14 +781,22 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       partyName = bk ? bk.attorney : null;
       basis = "authorized_agent";
     }
-    const interpreter = profile.language === "es" && party !== "attorney" && party !== "housing_counselor";
+    const interpreter =
+      profile.language === "es" && party !== "attorney" && party !== "housing_counselor";
     const live = verified && party !== "unknown_caller";
-    const complaintP = COMPLAINT_BASE * complaintW(reason) * (profile.style === "irritated" ? IRRITATED_COMPLAINT : 1);
+    const complaintP =
+      COMPLAINT_BASE *
+      complaintW(reason) *
+      (profile.style === "irritated" ? IRRITATED_COMPLAINT : 1);
     const complaint = live && uComplaint < complaintP;
     const behind = f.past_due !== null;
-    const promise = live && behind && !barred(on) && (reason === "payment_arrangement" || reason === "hardship" || o.scriptedPromise)
-      ? (o.scriptedPromise ?? drawPromise(promiseR, on, f))
-      : null;
+    const promise =
+      live &&
+      behind &&
+      !barred(on) &&
+      (reason === "payment_arrangement" || reason === "hardship" || o.scriptedPromise)
+        ? (o.scriptedPromise ?? drawPromise(promiseR, on, f))
+        : null;
     if (promise) promiseWindows.push({ from: promise.made_on, to: promise.pay_by });
     const resolution: Resolution = !live
       ? "unresolved"
@@ -684,10 +805,16 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
         : complaint
           ? "escalated"
           : reason === "hardship" || reason === "disaster_assistance"
-            ? uRes < 0.5 ? "transferred" : "referred_lossmit"
+            ? uRes < 0.5
+              ? "transferred"
+              : "referred_lossmit"
             : reason === "late_fee"
-              ? uRes < 0.4 ? "escalated" : "information_provided"
-              : reason === "online_access" || reason === "autopay_setup" || reason === "account_update"
+              ? uRes < 0.4
+                ? "escalated"
+                : "information_provided"
+              : reason === "online_access" ||
+                  reason === "autopay_setup" ||
+                  reason === "account_update"
                 ? "resolved"
                 : reason === "payoff_request" || reason === "statement_copy"
                   ? "resolved"
@@ -704,7 +831,13 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       party,
       party_name: partyName,
       live_contact: live,
-      live_contact_basis: live ? (party === "co_borrower" || party === "borrower" || (party === "spouse_not_on_note" && basis === "borrower_initiated") ? "borrower_initiated" : basis) : null,
+      live_contact_basis: live
+        ? party === "co_borrower" ||
+          party === "borrower" ||
+          (party === "spouse_not_on_note" && basis === "borrower_initiated")
+          ? "borrower_initiated"
+          : basis
+        : null,
       qrpc: live && behind && (reason === "hardship" || reason === "payment_arrangement"),
       identity_verified: verified,
       resolution,
@@ -714,7 +847,10 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       human_agent: agent.id,
       transcript: true,
       // The attorney's call is how the servicer learns of the case: the disclaimer and the mini-Miranda are for the borrower.
-      disclosures_marked: party === "attorney" ? { recording: true, fdcpa: false, bankruptcy: false } : { ...voiceDisclosures(on, f, true), recording: true },
+      disclosures_marked:
+        party === "attorney"
+          ? { recording: true, fdcpa: false, bankruptcy: false }
+          : { ...voiceDisclosures(on, f, true), recording: true },
       complaint_voiced: complaint,
       complaint_logged: complaint,
       promise,
@@ -734,10 +870,14 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
   /* scripted promise calls: the scenario's, through the history's behavior rows */
   for (const b of life.behavior) {
     if (b.kind !== "promise_made") continue;
-    const outcome = life.behavior.find((x) => x.on >= b.on && (x.kind === "promise_kept" || x.kind === "promise_broken"));
+    const outcome = life.behavior.find(
+      (x) => x.on >= b.on && (x.kind === "promise_kept" || x.kind === "promise_broken"),
+    );
     if (!outcome) continue;
     const kept = outcome.kind === "promise_kept";
-    const receipt = kept ? life.receipts.find((x) => x.on === outcome.on && x.mode === "promise") : undefined;
+    const receipt = kept
+      ? life.receipts.find((x) => x.on === outcome.on && x.mode === "promise")
+      : undefined;
     const f = rec(b.on);
     const amount: Cents | undefined = receipt?.amount ?? f.past_due?.total ?? f.next?.amount;
     if (amount === undefined) continue;
@@ -767,13 +907,18 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     const monthStart = addMonths(firstMonth, k);
     const r = rngFor(`${lk}/in/${m.month}`);
     const bucket = statusOf(m.days_delinquent);
-    const yearly = Math.max(0.1, perYear * STATUS_MULTIPLIER[bucket] - EVENT_CALLS[bucket] * eventScale);
+    const yearly = Math.max(
+      0.1,
+      perYear * STATUS_MULTIPLIER[bucket] - EVENT_CALLS[bucket] * eventScale,
+    );
     const n = poisson(r, yearly / 12);
     const { y, m: mo } = parts(monthStart);
     const dim = daysInMonth(y, mo);
     if (n === 0) continue;
     const f0 = rec(monthStart);
-    const mix: Partial<Record<InquiryReason, number>> = { ...(bucket === "current" ? MIX_CURRENT : MIX_BEHIND) };
+    const mix: Partial<Record<InquiryReason, number>> = {
+      ...(bucket === "current" ? MIX_CURRENT : MIX_BEHIND),
+    };
     if (mo === 1) mix.form_1098 = (mix.form_1098 ?? 0) + JANUARY_1098;
     if (mo === 2) mix.form_1098 = (mix.form_1098 ?? 0) + FEBRUARY_1098;
     if (!d.escrowed) {
@@ -799,7 +944,14 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
   }
 
   /* calls the events bring */
-  const spike = (key: string, lambda: number, from: PlainDate, days: readonly [number, number], reasons: Partial<Record<InquiryReason, number>>, issue: string) => {
+  const spike = (
+    key: string,
+    lambda: number,
+    from: PlainDate,
+    days: readonly [number, number],
+    reasons: Partial<Record<InquiryReason, number>>,
+    issue: string,
+  ) => {
     const r = rngFor(`${lk}/ev/${key}`);
     const n = poisson(r, lambda * eventScale);
     for (let c = 0; c < n; c++) {
@@ -812,20 +964,61 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
   for (const a of life.analyses) {
     const changed = a.shortage !== null || a.new_payment * 100n > a.old_payment * 105n;
     const lambda = 0.15 + (changed ? 0.3 : 0) + (a.anomalies.length ? 0.15 : 0);
-    spike(`analysis/${a.year}`, lambda, a.sent_on, [4, 40], changed ? { escrow_analysis: 0.55, payment_change: 0.45 } : { escrow_analysis: 1 }, `escrow:${a.year}`);
+    spike(
+      `analysis/${a.year}`,
+      lambda,
+      a.sent_on,
+      [4, 40],
+      changed ? { escrow_analysis: 0.55, payment_change: 0.45 } : { escrow_analysis: 1 },
+      `escrow:${a.year}`,
+    );
   }
-  for (const a of life.arm_changes) spike(`arm/${a.change}`, 0.35, a.notice_sent_on, [3, 30], { rate_change: 1 }, `arm:${a.change}`);
+  for (const a of life.arm_changes)
+    spike(
+      `arm/${a.change}`,
+      0.35,
+      a.notice_sent_on,
+      [3, 30],
+      { rate_change: 1 },
+      `arm:${a.change}`,
+    );
   if (life.transfer_in_on)
-    spike("boarding", 0.7, life.transfer_in_on, [2, 45], { servicing_transfer: 0.45, payment_received: 0.2, online_access: 0.2, autopay_setup: 0.15 }, "transfer");
+    spike(
+      "boarding",
+      0.7,
+      life.transfer_in_on,
+      [2, 45],
+      { servicing_transfer: 0.45, payment_received: 0.2, online_access: 0.2, autopay_setup: 0.15 },
+      "transfer",
+    );
   for (const b of life.behavior) {
-    if (b.kind === "disaster") spike(`disaster/${b.on}`, 0.4, b.on, [3, 50], { disaster_assistance: 0.6, insurance: 0.4 }, `disaster:${b.on}`);
-    if (b.kind === "stale_bill_pay") spike(`stale/${b.on}`, 0.5, b.on, [3, 20], { payment_change: 0.7, late_fee: 0.3 }, `stale:${b.on}`);
+    if (b.kind === "disaster")
+      spike(
+        `disaster/${b.on}`,
+        0.4,
+        b.on,
+        [3, 50],
+        { disaster_assistance: 0.6, insurance: 0.4 },
+        `disaster:${b.on}`,
+      );
+    if (b.kind === "stale_bill_pay")
+      spike(
+        `stale/${b.on}`,
+        0.5,
+        b.on,
+        [3, 20],
+        { payment_change: 0.7, late_fee: 0.3 },
+        `stale:${b.on}`,
+      );
   }
-  for (const fee of life.fees) spike(`fee/${fee.due}`, 0.12, fee.assessed_on, [2, 25], { late_fee: 1 }, `fee:${fee.due}`);
+  for (const fee of life.fees)
+    spike(`fee/${fee.due}`, 0.12, fee.assessed_on, [2, 25], { late_fee: 1 }, `fee:${fee.due}`);
   for (const x of life.pmi)
-    if (x.status === "terminated" && x.effective_on) spike(`mi/${x.on}`, 0.2, x.effective_on, [10, 40], { mi_cancellation: 1 }, "mi");
+    if (x.status === "terminated" && x.effective_on)
+      spike(`mi/${x.on}`, 0.2, x.effective_on, [10, 40], { mi_cancellation: 1 }, "mi");
   for (const x of life.disbursements)
-    if (x.kind === "refund") spike(`refund/${x.on}`, 0.1, x.on, [5, 25], { escrow_analysis: 1 }, `refund:${x.on}`);
+    if (x.kind === "refund")
+      spike(`refund/${x.on}`, 0.1, x.on, [5, 25], { escrow_analysis: 1 }, `refund:${x.on}`);
   {
     // The 1098 in January, for a loan that paid interest to this servicer the year before.
     for (let y = parts(d.first_due).y + 1; y <= parts(endOn).y; y++) {
@@ -841,7 +1034,12 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
   }
   if (bk) {
     // The attorney's call with the notice of filing, and the notice itself by mail.
-    push(inbound(rngFor(`${lk}/bk/call`), bk.noticed_on, "bankruptcy", { party: "attorney", issue: "bankruptcy" }));
+    push(
+      inbound(rngFor(`${lk}/bk/call`), bk.noticed_on, "bankruptcy", {
+        party: "attorney",
+        issue: "bankruptcy",
+      }),
+    );
     const r = rngFor(`${lk}/bk/letter`);
     drafts.push({
       on: rollForward(addDays(bk.noticed_on, r.int(1, 5)), servicerCalendar),
@@ -880,12 +1078,22 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
 
   /* follow-ups on issues left open */
   for (const x of [...drafts]) {
-    if (x.direction !== "inbound" || x.mode !== "call" || x.outcome !== "conversation" || !x.reason) continue;
-    if (!["pending_documents", "unresolved", "escalated", "callback_scheduled"].includes(x.resolution)) continue;
+    if (x.direction !== "inbound" || x.mode !== "call" || x.outcome !== "conversation" || !x.reason)
+      continue;
+    if (
+      !["pending_documents", "unresolved", "escalated", "callback_scheduled"].includes(x.resolution)
+    )
+      continue;
     const r = rngFor(`${lk}/fu/${x.on}/${x.seq}`);
     const go = r.chance(FOLLOW_UP);
     const lag = r.int(3, 15);
-    if (go) push(inbound(rngFor(`${lk}/fu/${x.on}/${x.seq}/call`), addDays(x.on, lag), x.reason, { issue: x.issue, followUp: true }));
+    if (go)
+      push(
+        inbound(rngFor(`${lk}/fu/${x.on}/${x.seq}/call`), addDays(x.on, lag), x.reason, {
+          issue: x.issue,
+          followUp: true,
+        }),
+      );
   }
 
   /* outbound: payment reminders by text and e-mail, between days 6 and 9 */
@@ -899,7 +1107,11 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     if (inst.satisfied_on !== null && inst.satisfied_on <= day) continue;
     if (!active(day) || barred(day)) continue;
     const textOk = smsConsentOn(day);
-    const mode: ContactMode | null = textOk ? "sms" : profile.paperless && uEmail < EMAIL_REMINDER ? "email" : null;
+    const mode: ContactMode | null = textOk
+      ? "sms"
+      : profile.paperless && uEmail < EMAIL_REMINDER
+        ? "email"
+        : null;
     if (!mode) continue;
     drafts.push(outboundWritten(day, minute, mode, "payment_reminder", `dq:${inst.due}`, textOk));
     if (mode === "sms" && uStop < STOP_REPLY) {
@@ -913,7 +1125,14 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       });
     }
   }
-  function outboundWritten(on: PlainDate, minute: number, mode: ContactMode, purpose: ContactPurpose, issue: string, consent: boolean): Draft {
+  function outboundWritten(
+    on: PlainDate,
+    minute: number,
+    mode: ContactMode,
+    purpose: ContactPurpose,
+    issue: string,
+    consent: boolean,
+  ): Draft {
     return {
       on,
       minute,
@@ -981,10 +1200,18 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
         const a = attempt(ar, dd, n, issue);
         drafts.push(a);
         n++;
-        if (a.outcome === "conversation" && a.qrpc && !packageSent && ar.chance(LOSSMIT_PACKAGE_AFTER_HARDSHIP)) {
+        if (
+          a.outcome === "conversation" &&
+          a.qrpc &&
+          !packageSent &&
+          ar.chance(LOSSMIT_PACKAGE_AFTER_HARDSHIP)
+        ) {
           packageSent = true;
           const day = addBusinessDays(dd, ar.int(1, 2), servicerCalendar);
-          if (day < stop) drafts.push(outboundWritten(day, minutesAt(ar, 9, 17), "letter", "lossmit_package", issue, false));
+          if (day < stop)
+            drafts.push(
+              outboundWritten(day, minutesAt(ar, 9, 17), "letter", "lossmit_package", issue, false),
+            );
         }
         if (a.promise) {
           promiseWindows.push({ from: a.promise.made_on, to: a.promise.pay_by });
@@ -1012,16 +1239,30 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       const prev = notices[notices.length - 1];
       if (day >= stop || barred(day) || (prev && daysBetween(prev, day) < 180)) continue;
       notices.push(day);
-      drafts.push(outboundWritten(day, minutesAt(nr, 6, 8), "letter", "ei_written_notice", issue, false));
+      drafts.push(
+        outboundWritten(day, minutesAt(nr, 6, 8), "letter", "ei_written_notice", issue, false),
+      );
     }
-    cadence.push({ start: ep.start, cured_on: ep.cured_on, opened_on: ep.day17 && ep.day17 < stop ? ep.day17 : null, closed_on: closed, paused });
+    cadence.push({
+      start: ep.start,
+      cured_on: ep.cured_on,
+      opened_on: ep.day17 && ep.day17 < stop ? ep.day17 : null,
+      closed_on: closed,
+      paused,
+    });
   }
 
   function attempt(r: Rng, on: PlainDate, n: number, issue: string): Draft {
     const usable = profile.phones.filter((p) => !removed.has(p.id));
     const phone = usable[n % Math.max(1, usable.length)] ?? profile.phones[0]!;
     const sat = dayOfWeek(on) === 6;
-    const minute = sat ? minutesAt(r, 9, 15) : r.weighted([[minutesAt(r, 8, 12), 0.3], [minutesAt(r, 12, 17), 0.4], [minutesAt(r, 17, 21), 0.3]] as const);
+    const minute = sat
+      ? minutesAt(r, 9, 15)
+      : r.weighted([
+          [minutesAt(r, 8, 12), 0.3],
+          [minutesAt(r, 12, 17), 0.4],
+          [minutesAt(r, 17, 21), 0.3],
+        ] as const);
     const coB = b2 !== undefined && r.chance(0.25);
     const agent = agentFor(r, on);
     const durRing = r.int(22, 40);
@@ -1055,14 +1296,25 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     const conv = outcome === "conversation";
     const person = coB && conv ? b2! : b1;
     const promise = conv ? drawPromise(promiseR, on, f) : null;
-    const voice = outcome === "conversation" || outcome === "answered_unverified" || outcome === "refused" || outcome === "wrong_number" || outcome === "voicemail_left";
+    const voice =
+      outcome === "conversation" ||
+      outcome === "answered_unverified" ||
+      outcome === "refused" ||
+      outcome === "wrong_number" ||
+      outcome === "voicemail_left";
     const duration =
-      outcome === "conversation" ? hs - acw
-        : outcome === "voicemail_left" ? durVm
-          : outcome === "no_answer" || outcome === "no_voicemail" ? durRing
-            : outcome === "wrong_number" ? durWrong
-              : outcome === "answered_unverified" ? durUnv
-                : outcome === "refused" ? durRefused
+      outcome === "conversation"
+        ? hs - acw
+        : outcome === "voicemail_left"
+          ? durVm
+          : outcome === "no_answer" || outcome === "no_voicemail"
+            ? durRing
+            : outcome === "wrong_number"
+              ? durWrong
+              : outcome === "answered_unverified"
+                ? durUnv
+                : outcome === "refused"
+                  ? durRefused
                   : durShort;
     return {
       on,
@@ -1077,15 +1329,29 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       live_contact: conv,
       live_contact_basis: conv ? "human_voice" : null,
       qrpc: conv,
-      identity_verified: conv ? true : outcome === "answered_unverified" || outcome === "refused" || outcome === "wrong_number" ? false : null,
+      identity_verified: conv
+        ? true
+        : outcome === "answered_unverified" || outcome === "refused" || outcome === "wrong_number"
+          ? false
+          : null,
       purpose: "collection",
       reason: null,
-      resolution: conv ? (promise ? "promise_recorded" : r.chance(0.5) ? "referred_lossmit" : "information_provided") : "no_contact",
+      resolution: conv
+        ? promise
+          ? "promise_recorded"
+          : r.chance(0.5)
+            ? "referred_lossmit"
+            : "information_provided"
+        : "no_contact",
       issue,
       language: profile.language,
       interpreter: conv && profile.language === "es",
       duration_s: duration,
-      handle_s: conv ? hs : outcome === "answered_unverified" ? duration + acwOf(r, duration) : duration,
+      handle_s: conv
+        ? hs
+        : outcome === "answered_unverified"
+          ? duration + acwOf(r, duration)
+          : duration,
       human_agent: agent.id,
       tcpa_basis: phone.tcpa_voice ? "consent" : "human_manual_dial",
       tcpa_consent: phone.tcpa_voice,
@@ -1106,7 +1372,14 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       const on = dialOnOrAfter(addDays(life.transfer_in_on, r.int(7, 21)));
       if (active(on) && !barred(on)) {
         const a = attempt(r, on, 0, "transfer");
-        drafts.push({ ...a, purpose: "welcome", qrpc: false, promise: null, resolution: a.outcome === "conversation" ? "information_provided" : "no_contact", disclosures_marked: { ...a.disclosures_marked, fdcpa: false } });
+        drafts.push({
+          ...a,
+          purpose: "welcome",
+          qrpc: false,
+          promise: null,
+          resolution: a.outcome === "conversation" ? "information_provided" : "no_contact",
+          disclosures_marked: { ...a.disclosures_marked, fdcpa: false },
+        });
       }
     }
   }
@@ -1119,7 +1392,21 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       if (!r.chance(DEC_PAGE)) continue;
       const on = rollForward(addDays(x.on, -r.int(10, 40)), servicerCalendar);
       if (!active(on)) continue;
-      drafts.push({ ...outboundWritten(on, minutesAt(r, 9, 17), "letter", "insurance_document", `insurance:${x.on}`, false), direction: "inbound", outcome: "received", party: r.chance(0.6) ? "insurance_agent" : "borrower", resolution: "acknowledged", reason: "insurance" });
+      drafts.push({
+        ...outboundWritten(
+          on,
+          minutesAt(r, 9, 17),
+          "letter",
+          "insurance_document",
+          `insurance:${x.on}`,
+          false,
+        ),
+        direction: "inbound",
+        outcome: "received",
+        party: r.chance(0.6) ? "insurance_agent" : "borrower",
+        resolution: "acknowledged",
+        reason: "insurance",
+      });
     }
   for (const x of [...drafts]) {
     if (x.direction !== "inbound" || x.mode !== "call" || x.outcome !== "conversation") continue;
@@ -1130,23 +1417,55 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     const qLag = r.int(4, 25);
     if (x.reason === "hardship" && uLetter < HARDSHIP_LETTER_AFTER_CALL) {
       const on = rollForward(addDays(x.on, lag), servicerCalendar);
-      if (active(on)) drafts.push({ ...outboundWritten(on, minutesAt(r, 9, 17), "letter", "hardship_letter", x.issue, false), direction: "inbound", outcome: "received", resolution: "pending_documents", reason: "hardship" });
+      if (active(on))
+        drafts.push({
+          ...outboundWritten(on, minutesAt(r, 9, 17), "letter", "hardship_letter", x.issue, false),
+          direction: "inbound",
+          outcome: "received",
+          resolution: "pending_documents",
+          reason: "hardship",
+        });
     }
-    if (x.complaint_voiced && uQwr < QWR_AFTER_COMPLAINT) qwr(r, rollForward(addDays(x.on, qLag), servicerCalendar), x.reason ?? "late_fee", x.issue);
+    if (x.complaint_voiced && uQwr < QWR_AFTER_COMPLAINT)
+      qwr(r, rollForward(addDays(x.on, qLag), servicerCalendar), x.reason ?? "late_fee", x.issue);
   }
   {
     const r = rngFor(`${lk}/qwr`);
     const n = poisson(r, QWR_PER_LOAN_YEAR * (life.months.length / 12));
     for (let c = 0; c < n; c++) {
-      const on = rollForward(addDays(d.first_due, r.int(30, Math.max(31, life.months.length * 30))), servicerCalendar);
-      qwr(r, on, r.pick(["late_fee", "escrow_analysis", "payment_received", "credit_reporting"] as const), `qwr:${on}`);
+      const on = rollForward(
+        addDays(d.first_due, r.int(30, Math.max(31, life.months.length * 30))),
+        servicerCalendar,
+      );
+      qwr(
+        r,
+        on,
+        r.pick(["late_fee", "escrow_analysis", "payment_received", "credit_reporting"] as const),
+        `qwr:${on}`,
+      );
     }
   }
   function qwr(r: Rng, on: PlainDate, reason: InquiryReason, issue: string) {
     if (!active(on)) return;
-    drafts.push({ ...outboundWritten(on, minutesAt(r, 9, 17), "letter", "qualified_written_request", issue, false), direction: "inbound", outcome: "received", resolution: "acknowledged", reason, counts_as_inquiry: true });
+    drafts.push({
+      ...outboundWritten(
+        on,
+        minutesAt(r, 9, 17),
+        "letter",
+        "qualified_written_request",
+        issue,
+        false,
+      ),
+      direction: "inbound",
+      outcome: "received",
+      resolution: "acknowledged",
+      reason,
+      counts_as_inquiry: true,
+    });
     const ack = addBusinessDays(on, r.int(2, 5), servicerCalendar);
-    drafts.push(outboundWritten(ack, minutesAt(r, 6, 8), "letter", "qwr_acknowledgment", issue, false));
+    drafts.push(
+      outboundWritten(ack, minutesAt(r, 6, 8), "letter", "qwr_acknowledgment", issue, false),
+    );
   }
 
   /* portal sessions */
@@ -1156,18 +1475,43 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       const monthStart = addMonths(firstMonth, k);
       const r = rngFor(`${lk}/web/${m.month}`);
       const { y, m: mo } = parts(monthStart);
-      const bump = (life.analyses.some((a) => a.sent_on.slice(0, 7) === m.month) ? 0.5 : 0) + (mo === 1 ? 0.3 : 0);
+      const bump =
+        (life.analyses.some((a) => a.sent_on.slice(0, 7) === m.month) ? 0.5 : 0) +
+        (mo === 1 ? 0.3 : 0);
       const n = poisson(r, PORTAL_PER_YEAR / 12 + bump);
       for (let c = 0; c < n; c++) {
         const on = ymd(y, mo, r.int(1, daysInMonth(y, mo)));
         if (!active(on)) continue;
-        drafts.push({ ...outboundWritten(on, minutesAt(r, 6, 23), "portal", "self_service", `web:${m.month}`, false), direction: "inbound", outcome: "portal_session", resolution: "self_served", duration_s: r.int(60, 900), counts_as_inquiry: false, phone_number_id: null });
+        drafts.push({
+          ...outboundWritten(
+            on,
+            minutesAt(r, 6, 23),
+            "portal",
+            "self_service",
+            `web:${m.month}`,
+            false,
+          ),
+          direction: "inbound",
+          outcome: "portal_session",
+          resolution: "self_served",
+          duration_s: r.int(60, 900),
+          counts_as_inquiry: false,
+          phone_number_id: null,
+        });
       }
     }
   }
 
   /* order, ids, related contacts, promises */
-  drafts.sort((a, b) => (a.on !== b.on ? (a.on < b.on ? -1 : 1) : a.minute !== b.minute ? a.minute - b.minute : a.seq - b.seq));
+  drafts.sort((a, b) =>
+    a.on !== b.on
+      ? a.on < b.on
+        ? -1
+        : 1
+      : a.minute !== b.minute
+        ? a.minute - b.minute
+        : a.seq - b.seq,
+  );
   const byIssue = new Map<string, string[]>();
   const contacts: ContactRecord[] = [];
   const promises: PromiseRecord[] = [];
@@ -1214,5 +1558,12 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     });
     byIssue.set(x.issue, [...prior, id]);
   });
-  return { profile, contacts, promises, bankruptcy, cadence, authorizations: [...authorizations].sort() };
+  return {
+    profile,
+    contacts,
+    promises,
+    bankruptcy,
+    cadence,
+    authorizations: [...authorizations].sort(),
+  };
 }

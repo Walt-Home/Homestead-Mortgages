@@ -282,7 +282,11 @@ export interface CadenceEpisode {
   /** The last day attempts were due: the day before the cure, the loan's end or the petition. */
   readonly closed_on: PlainDate | null;
   /** Stretches when the cadence was ceased: a promise pending, or suspended by a bankruptcy. */
-  readonly paused: readonly { readonly from: PlainDate; readonly to: PlainDate; readonly reason: "ptp_pending" | "bankruptcy" }[];
+  readonly paused: readonly {
+    readonly from: PlainDate;
+    readonly to: PlainDate;
+    readonly reason: "ptp_pending" | "bankruptcy";
+  }[];
 }
 
 export interface LoanContacts {

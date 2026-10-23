@@ -52,7 +52,14 @@ export const TOPICS = [
 ] as const;
 export type Topic = (typeof TOPICS)[number];
 /** The side topics an agent raises with someone calling for the borrower: nothing that asks them to speak as the borrower. */
-export const THIRD_PARTY_TOPICS: ReadonlySet<Topic> = new Set(["payment_options", "hours", "survey", "statement_walkthrough", "fraud_warning", "system_slow"]);
+export const THIRD_PARTY_TOPICS: ReadonlySet<Topic> = new Set([
+  "payment_options",
+  "hours",
+  "survey",
+  "statement_walkthrough",
+  "fraud_warning",
+  "system_slow",
+]);
 
 export interface CallPlan {
   readonly key: string;
@@ -62,7 +69,11 @@ export interface CallPlan {
   readonly reason: InquiryReason | null;
   /** Further questions asked before the call ends, in order. */
   readonly seconds: readonly InquiryReason[];
-  readonly agent: { readonly id: string; readonly name: string; readonly manner: "scripted" | "casual" | "new" };
+  readonly agent: {
+    readonly id: string;
+    readonly name: string;
+    readonly manner: "scripted" | "casual" | "new";
+  };
   /** The specialist a transfer reaches. */
   readonly agent2: { readonly name: string } | null;
   readonly caller: {
@@ -101,12 +112,33 @@ export interface CallPlan {
   readonly words_target: number;
 }
 
-const HARDSHIPS = ["job_loss", "hours_cut", "medical", "divorce", "car", "family", "business", "overtime"] as const;
-const AGENCIES = ["Neighborhood Housing Services", "Community Housing Partners", "HomeFree Counseling", "Clearpoint Housing Counsel"] as const;
+const HARDSHIPS = [
+  "job_loss",
+  "hours_cut",
+  "medical",
+  "divorce",
+  "car",
+  "family",
+  "business",
+  "overtime",
+] as const;
+const AGENCIES = [
+  "Neighborhood Housing Services",
+  "Community Housing Partners",
+  "HomeFree Counseling",
+  "Clearpoint Housing Counsel",
+] as const;
 const SPECIALISTS = ["Marisol", "Trevor", "Bianca", "Leon", "Priya", "Walter"] as const;
 /** Words a second over the time not on hold: speech runs about 150 a minute, and a call has dead air while the agent reads and types. */
 export const WORDS_PER_SECOND = 2.0;
-const LIGHT_SECONDS: readonly InquiryReason[] = ["statement_copy", "account_update", "online_access", "insurance", "tax", "autopay_setup"];
+const LIGHT_SECONDS: readonly InquiryReason[] = [
+  "statement_copy",
+  "account_update",
+  "online_access",
+  "insurance",
+  "tax",
+  "autopay_setup",
+];
 
 export function mannerOf(agentId: string): "scripted" | "casual" | "new" {
   const h = hash32(agentId) % 10;
@@ -115,7 +147,8 @@ export function mannerOf(agentId: string): "scripted" | "casual" | "new" {
 
 export function kindOf(c: ContactRecord): CallKind | null {
   if (c.mode !== "call" || !c.transcript) return null;
-  if (c.direction === "inbound") return c.outcome === "conversation" ? "inbound" : "inbound_unverified";
+  if (c.direction === "inbound")
+    return c.outcome === "conversation" ? "inbound" : "inbound_unverified";
   switch (c.outcome) {
     case "conversation":
       return "outbound";
@@ -132,10 +165,17 @@ export function kindOf(c: ContactRecord): CallKind | null {
   }
 }
 
-export function planCall(life: LoanLife, loan: LoanContacts, contact: ContactRecord, centerKey: string): CallPlan {
+export function planCall(
+  life: LoanLife,
+  loan: LoanContacts,
+  contact: ContactRecord,
+  centerKey: string,
+): CallPlan {
   const kind = kindOf(contact);
   if (!kind) throw new RangeError(`${contact.id} is not a call with a voice on it`);
-  const promise = contact.promise_id ? loan.promises.find((p) => p.id === contact.promise_id) ?? null : null;
+  const promise = contact.promise_id
+    ? (loan.promises.find((p) => p.id === contact.promise_id) ?? null)
+    : null;
   const auth = [...loan.contacts]
     .filter((c) => c.purpose === "third_party_authorization" && c.on <= contact.on)
     .map((c) => c.on)
@@ -170,12 +210,25 @@ export function planCall(life: LoanLife, loan: LoanContacts, contact: ContactRec
   const reason = contact.reason;
   const transfer = contact.resolution === "transferred" && conversation;
   const borrowerOnLine = contact.party === "borrower" || contact.party === "co_borrower";
-  const credit = conversation && behind && borrowerOnLine && !facts.bankruptcy && reason !== "credit_reporting" && uCredit < 0.4;
+  const credit =
+    conversation &&
+    behind &&
+    borrowerOnLine &&
+    !facts.bankruptcy &&
+    reason !== "credit_reporting" &&
+    uCredit < 0.4;
   const talk = contact.duration_s;
   // A longer call covers more: a second question on one call in four, more on a long one; a hold on most
   // calls past four minutes, a second past ten, a third past seventeen.
-  const lightOk = LIGHT_SECONDS.filter((x) => x !== reason && (x !== "insurance" || facts.hazard_paid) && (x !== "tax" || facts.tax_paid));
-  const secondShare = [talk < 400 ? 0.25 : talk < 900 ? 0.5 : 0.9, talk < 400 ? 0 : talk < 900 ? 0.15 : 0.5, talk < 900 ? 0 : 0.2];
+  const lightOk = LIGHT_SECONDS.filter(
+    (x) =>
+      x !== reason && (x !== "insurance" || facts.hazard_paid) && (x !== "tax" || facts.tax_paid),
+  );
+  const secondShare = [
+    talk < 400 ? 0.25 : talk < 900 ? 0.5 : 0.9,
+    talk < 400 ? 0 : talk < 900 ? 0.15 : 0.5,
+    talk < 900 ? 0 : 0.2,
+  ];
   const seconds: InquiryReason[] = [];
   if (kind === "inbound" && reason !== "bankruptcy")
     for (let k = 0; k < 3 && lightOk.length; k++) {
@@ -188,7 +241,10 @@ export function planCall(life: LoanLife, loan: LoanContacts, contact: ContactRec
     if (talk > 600 && uHolds[1]! < 0.4) holds.push(holdSecs[1]!);
     if (talk > 1000 && uHolds[2]! < 0.5) holds.push(holdSecs[2]!);
   }
-  let held = holds.reduce((s, x) => s + x, 0) + (transfer ? transferS : 0) + (contact.interpreter ? conferenceS : 0);
+  let held =
+    holds.reduce((s, x) => s + x, 0) +
+    (transfer ? transferS : 0) +
+    (contact.interpreter ? conferenceS : 0);
   while (holds.length && held > talk * 0.35) {
     held -= holds.pop()!;
   }
@@ -198,7 +254,8 @@ export function planCall(life: LoanLife, loan: LoanContacts, contact: ContactRec
     (t) =>
       (t !== "confirm_email" || loan.profile.email_on_file) &&
       (t !== "paperless" || (loan.profile.email_on_file && !loan.profile.paperless)) &&
-      (t !== "text_offer" || (!loan.profile.sms_consent && loan.profile.phones[0]!.kind === "mobile")) &&
+      (t !== "text_offer" ||
+        (!loan.profile.sms_consent && loan.profile.phones[0]!.kind === "mobile")) &&
       (t !== "portal_offer" || !loan.profile.portal_user) &&
       (t !== "autopay_offer" || !behind) &&
       (t !== "statement_walkthrough" || facts.next !== null),
@@ -238,9 +295,15 @@ export function planCall(life: LoanLife, loan: LoanContacts, contact: ContactRec
       promise: promise !== null,
       hardship: behind || reason === "hardship" ? HARDSHIPS[uHard]! : null,
       borrower_joins:
-        contact.party === "spouse_not_on_note" && contact.identity_verified === true && !(loan.profile.spouse?.authorized ?? false),
+        contact.party === "spouse_not_on_note" &&
+        contact.identity_verified === true &&
+        !(loan.profile.spouse?.authorized ?? false),
     },
-    topics: !conversation ? [] : contact.party === "borrower" || contact.party === "co_borrower" ? order : order.filter((t) => THIRD_PARTY_TOPICS.has(t)),
+    topics: !conversation
+      ? []
+      : contact.party === "borrower" || contact.party === "co_borrower"
+        ? order
+        : order.filter((t) => THIRD_PARTY_TOPICS.has(t)),
     holds,
     transfer_s: transfer ? transferS : 0,
     conference_s: contact.interpreter ? conferenceS : 0,

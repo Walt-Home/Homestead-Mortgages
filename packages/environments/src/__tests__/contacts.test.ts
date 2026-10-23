@@ -14,7 +14,14 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { addDays, daysBetween, parts, type PlainDate } from "@hm/kernel/calendar";
 import { toJsonLine } from "../record.js";
-import { defaultCalibration, generate, loadCalibration, type Calibration, type LifeBook, type LoanLife } from "../life/index.js";
+import {
+  defaultCalibration,
+  generate,
+  loadCalibration,
+  type Calibration,
+  type LifeBook,
+  type LoanLife,
+} from "../life/index.js";
 import {
   CONTACT_DEFECTS,
   buildTranscript,
@@ -56,13 +63,21 @@ const lifeOf = (l: LoanContacts): LoanLife => book.loans[l.index]!;
 const calls = (n: number) => center.loans.slice(0, n).flatMap((l) => callsOf(l));
 
 /** The record's numbers for a note: the facts that day (with the call's own, for a call's note), the day's history rows, and the day a copied note was first written. */
-function noteNumbers(c: ContactCenter, b: LifeBook, loan: LoanContacts, note: NoteRecord): FactNumbers {
+function noteNumbers(
+  c: ContactCenter,
+  b: LifeBook,
+  loan: LoanContacts,
+  note: NoteRecord,
+): FactNumbers {
   const life = b.loans[loan.index]!;
   const ctx = { profile: loan.profile, bankruptcy: loan.bankruptcy };
-  const sets: FactNumbers[] = [factNumbers(recordOn(life, note.on, ctx)), dayNumbers(life, note.on)];
+  const sets: FactNumbers[] = [
+    factNumbers(recordOn(life, note.on, ctx)),
+    dayNumbers(life, note.on),
+  ];
   const contact = note.contact_id ? loan.contacts.find((x) => x.id === note.contact_id) : undefined;
   if (contact && kindOf(contact)) sets.push(factNumbers(callPlan(c, b, contact.id).facts));
-  for (let from = note.copied_from; from; ) {
+  for (let from = note.copied_from; from;) {
     const prior = loan.notes.find((n) => n.id === from)!;
     sets.push(noteNumbers(c, b, loan, prior));
     from = prior.copied_from;
@@ -79,7 +94,9 @@ describe("contact center", () => {
     for (const i of [0, 12, 29]) expect(toJsonLine(a.loans[i])).toBe(toJsonLine(center.loans[i]));
     const id = callsOf(a.loans[3]!).find((x) => x.outcome === "conversation")!.id;
     expect(toJsonLine(transcriptOf(a, small, id))).toBe(toJsonLine(transcriptOf(center, book, id)));
-    const other = contactCenter(generate(8, { loans: 30 }, { calibration: cal }).clean, { calibration: cal });
+    const other = contactCenter(generate(8, { loans: 30 }, { calibration: cal }).clean, {
+      calibration: cal,
+    });
     expect(toJsonLine(other.loans[0]!.contacts)).not.toBe(toJsonLine(a.loans[0]!.contacts));
   });
 
@@ -95,27 +112,35 @@ describe("contact center", () => {
         if (`${c.on} ${c.at}` < prev) problems.push(`${where}: out of order`);
         prev = `${c.on} ${c.at}`;
         // Live contact only on a spoken, two-way outcome (ops-11-1.ts liveContactOf), with its basis.
-        if (c.live_contact && c.outcome !== "conversation") problems.push(`${where}: live without a conversation`);
+        if (c.live_contact && c.outcome !== "conversation")
+          problems.push(`${where}: live without a conversation`);
         if (c.live_contact !== (c.live_contact_basis !== null)) problems.push(`${where}: basis`);
         if (c.qrpc && !c.live_contact) problems.push(`${where}: QRPC without live contact`);
         // Reg F counts outbound voice calls that reached the number (section11.ts:328).
-        if (c.regf_counted && !(c.direction === "outbound" && c.mode === "call")) problems.push(`${where}: regf`);
-        if (c.mode === "call" && c.outcome === "conversation" && c.identity_verified !== true) problems.push(`${where}: unverified conversation`);
-        if (c.complaint_logged && !c.complaint_voiced) problems.push(`${where}: complaint logged unvoiced`);
+        if (c.regf_counted && !(c.direction === "outbound" && c.mode === "call"))
+          problems.push(`${where}: regf`);
+        if (c.mode === "call" && c.outcome === "conversation" && c.identity_verified !== true)
+          problems.push(`${where}: unverified conversation`);
+        if (c.complaint_logged && !c.complaint_voiced)
+          problems.push(`${where}: complaint logged unvoiced`);
         if (c.transcript !== (kindOf(c) !== null)) problems.push(`${where}: transcript flag`);
-        if (c.handle_s < c.duration_s && c.mode === "call" && c.outcome === "conversation") problems.push(`${where}: handle under duration`);
+        if (c.handle_s < c.duration_s && c.mode === "call" && c.outcome === "conversation")
+          problems.push(`${where}: handle under duration`);
         for (const r of c.related) {
           const e = l.contacts.find((x) => x.id === r);
           if (!e || e.issue !== c.issue || e.id >= c.id) problems.push(`${where}: related ${r}`);
         }
-        if (c.promise_id && !l.promises.some((p) => p.id === c.promise_id && p.contact_id === c.id)) problems.push(`${where}: promise`);
+        if (c.promise_id && !l.promises.some((p) => p.id === c.promise_id && p.contact_id === c.id))
+          problems.push(`${where}: promise`);
         ids.add(c.id);
       }
       if (ids.size !== l.contacts.length) problems.push(`${l.loan_id}: duplicate ids`);
     }
     expect(problems.slice(0, 10)).toEqual([]);
     // Every channel and outcome the contact center meets turns up.
-    const seen = new Set(center.loans.flatMap((l) => l.contacts.map((c) => `${c.direction}/${c.mode}/${c.outcome}`)));
+    const seen = new Set(
+      center.loans.flatMap((l) => l.contacts.map((c) => `${c.direction}/${c.mode}/${c.outcome}`)),
+    );
     for (const k of [
       "inbound/call/conversation",
       "inbound/call/answered_unverified",
@@ -135,7 +160,13 @@ describe("contact center", () => {
     ])
       expect(seen.has(k), k).toBe(true);
     const purposes = new Set(center.loans.flatMap((l) => l.contacts.map((c) => c.purpose)));
-    for (const p of ["hardship_letter", "insurance_document", "qualified_written_request", "ei_written_notice", "payment_reminder"] as const)
+    for (const p of [
+      "hardship_letter",
+      "insurance_document",
+      "qualified_written_request",
+      "ei_written_notice",
+      "payment_reminder",
+    ] as const)
       expect(purposes.has(p), p).toBe(true);
   });
 
@@ -150,7 +181,11 @@ describe("contact center", () => {
       }
       for (const c of l.contacts)
         if (c.direction === "outbound" && c.mode === "call")
-          expect(c.tcpa_basis, c.id).toBe(l.profile.phones.find((p) => p.id === c.phone_number_id)!.tcpa_voice ? "consent" : "human_manual_dial");
+          expect(c.tcpa_basis, c.id).toBe(
+            l.profile.phones.find((p) => p.id === c.phone_number_id)!.tcpa_voice
+              ? "consent"
+              : "human_manual_dial",
+          );
     }
   });
 
@@ -170,12 +205,15 @@ describe("contact center", () => {
         }
         return 0;
       };
-      const collection = l.contacts.filter((c) => c.direction === "outbound" && c.mode === "call" && c.purpose === "collection");
+      const collection = l.contacts.filter(
+        (c) => c.direction === "outbound" && c.mode === "call" && c.purpose === "collection",
+      );
       attempts += collection.length;
       conversations += collection.filter((c) => c.outcome === "conversation").length;
       evenings += collection.filter((c) => c.at >= "17:00").length;
       saturdays += collection.filter((c) => new Date(`${c.on}T12:00:00Z`).getUTCDay() === 6).length;
-      for (const c of collection) if (late(c.on) === 0) problems.push(`${c.id}: dialed on ${c.on}, not delinquent`);
+      for (const c of collection)
+        if (late(c.on) === 0) problems.push(`${c.id}: dialed on ${c.on}, not delinquent`);
       const days = new Set(collection.map((c) => c.on));
       for (const ep of l.cadence) {
         if (!ep.opened_on || !ep.closed_on) continue;
@@ -186,11 +224,17 @@ describe("contact center", () => {
             first = d;
             break;
           }
-        if (first !== ep.opened_on) problems.push(`${l.loan_id} ${ep.start}: opened ${ep.opened_on}, day 17 is ${first}`);
+        if (first !== ep.opened_on)
+          problems.push(`${l.loan_id} ${ep.start}: opened ${ep.opened_on}, day 17 is ${first}`);
         // Each pause is a pending promise or a bankruptcy.
         for (const p of ep.paused) {
-          if (p.reason === "ptp_pending" && !l.promises.some((x) => x.pay_by === p.to && x.made_on <= p.from)) problems.push(`${l.loan_id}: a pause with no promise`);
-          if (p.reason === "bankruptcy" && (!l.bankruptcy || p.from < l.bankruptcy.petition_on)) problems.push(`${l.loan_id}: a pause with no petition`);
+          if (
+            p.reason === "ptp_pending" &&
+            !l.promises.some((x) => x.pay_by === p.to && x.made_on <= p.from)
+          )
+            problems.push(`${l.loan_id}: a pause with no promise`);
+          if (p.reason === "bankruptcy" && (!l.bankruptcy || p.from < l.bankruptcy.petition_on))
+            problems.push(`${l.loan_id}: a pause with no petition`);
         }
         const paused = (d: PlainDate) => ep.paused.some((p) => p.from <= d && d <= p.to);
         let anchor = ep.opened_on;
@@ -233,16 +277,23 @@ describe("contact center", () => {
       const t = transcriptOf(center, book, c.id);
       const plan = callPlan(center, book, c.id);
       const nums = factNumbers(plan.facts);
-      const firstQuote = t.turns.findIndex((x) => x.tag.startsWith("quote:") && x.speaker !== "INTERPRETER");
+      const firstQuote = t.turns.findIndex(
+        (x) => x.tag.startsWith("quote:") && x.speaker !== "INTERPRETER",
+      );
       const checked = t.turns.findIndex((x) => /^verify|^verify_authorization/.test(x.tag));
       if (plan.kind === "inbound" || plan.kind === "outbound") {
         if (checked < 0) problems.push(`${c.id}: no identity check`);
-        else if (firstQuote >= 0 && firstQuote < checked) problems.push(`${c.id}: quoted before the checks`);
+        else if (firstQuote >= 0 && firstQuote < checked)
+          problems.push(`${c.id}: quoted before the checks`);
       } else {
         if (firstQuote >= 0) problems.push(`${c.id}: quoted to someone unverified`);
-        if (plan.kind !== "voicemail" && !t.turns.some((x) => x.tag === "unverified_refusal")) problems.push(`${c.id}: no refusal`);
+        if (plan.kind !== "voicemail" && !t.turns.some((x) => x.tag === "unverified_refusal"))
+          problems.push(`${c.id}: no refusal`);
         for (const x of t.turns)
-          if (x.speaker === "AGENT" && numberTokens(x.said).some((n) => n.kind === "money" && nums.money.has(n.cents)))
+          if (
+            x.speaker === "AGENT" &&
+            numberTokens(x.said).some((n) => n.kind === "money" && nums.money.has(n.cents))
+          )
             problems.push(`${c.id}: an amount said to someone unverified`);
       }
     }
@@ -251,7 +302,14 @@ describe("contact center", () => {
 
   it("meets third parties, a Spanish speaker and a caller who fails verification", () => {
     const parties = new Set(center.loans.flatMap((l) => l.contacts.map((c) => c.party)));
-    for (const p of ["borrower", "co_borrower", "spouse_not_on_note", "housing_counselor", "unknown_caller", "wrong_party"] as const)
+    for (const p of [
+      "borrower",
+      "co_borrower",
+      "spouse_not_on_note",
+      "housing_counselor",
+      "unknown_caller",
+      "wrong_party",
+    ] as const)
       expect(parties.has(p), p).toBe(true);
     const spanish = center.loans.flatMap((l) => l.contacts).filter((c) => c.interpreter);
     expect(spanish.length).toBeGreaterThan(5);
@@ -260,39 +318,84 @@ describe("contact center", () => {
     expect(t.turns.some((x) => x.speaker === "CALLER" && /[áéíóúñ¿]/.test(x.said))).toBe(true);
     // A bankruptcy, its attorney, and the disclaimer on every call after the notice.
     const i = book.loans.findIndex((l) => l.months.some((m) => m.days_delinquent >= 45));
-    const pinned = contactCenter(book, { calibration: cal, pins: { [i]: { bankruptcy: true, language: "es" } } });
+    const pinned = contactCenter(book, {
+      calibration: cal,
+      pins: { [i]: { bankruptcy: true, language: "es" } },
+    });
     const loan = pinned.loans[i]!;
     expect(loan.bankruptcy).not.toBeNull();
-    expect(loan.contacts.some((c) => c.party === "attorney" && c.purpose === "bankruptcy_notice")).toBe(true);
+    expect(
+      loan.contacts.some((c) => c.party === "attorney" && c.purpose === "bankruptcy_notice"),
+    ).toBe(true);
     for (const c of loan.contacts) {
       if (c.on < loan.bankruptcy!.petition_on) continue;
-      expect(c.purpose === "collection" && c.mode === "call", `${c.id}: a collection call in the stay`).toBe(false);
+      expect(
+        c.purpose === "collection" && c.mode === "call",
+        `${c.id}: a collection call in the stay`,
+      ).toBe(false);
       // Every call with the borrower after the notice carries the disclaimer; the attorney's own call is how the notice arrives.
-      if (c.mode === "call" && c.outcome === "conversation" && c.party !== "attorney" && c.on >= loan.bankruptcy!.noticed_on && (loan.bankruptcy!.discharged_on === null || c.on < loan.bankruptcy!.discharged_on))
+      if (
+        c.mode === "call" &&
+        c.outcome === "conversation" &&
+        c.party !== "attorney" &&
+        c.on >= loan.bankruptcy!.noticed_on &&
+        (loan.bankruptcy!.discharged_on === null || c.on < loan.bankruptcy!.discharged_on)
+      )
         expect(c.disclosures_marked.bankruptcy, c.id).toBe(true);
     }
-    expect(loan.contacts.filter((c) => c.mode === "call").every((c) => c.language === "es")).toBe(true);
+    expect(loan.contacts.filter((c) => c.mode === "call").every((c) => c.language === "es")).toBe(
+      true,
+    );
   });
 
   it("asks why by status and month: the 1098 in January, and spikes after an analysis", () => {
-    const all = center.loans.flatMap((l) => l.contacts.filter((c) => c.counts_as_inquiry && c.reason).map((c) => ({ c, l })));
-    const share = (xs: typeof all, pred: (c: ContactRecord) => boolean) => xs.filter((x) => pred(x.c)).length / Math.max(1, xs.length);
+    const all = center.loans.flatMap((l) =>
+      l.contacts.filter((c) => c.counts_as_inquiry && c.reason).map((c) => ({ c, l })),
+    );
+    const share = (xs: typeof all, pred: (c: ContactRecord) => boolean) =>
+      xs.filter((x) => pred(x.c)).length / Math.max(1, xs.length);
     const jan = all.filter((x) => parts(x.c.on).m === 1);
     const rest = all.filter((x) => parts(x.c.on).m >= 4 && parts(x.c.on).m <= 11);
-    expect(share(jan, (c) => c.reason === "form_1098")).toBeGreaterThan(3 * share(rest, (c) => c.reason === "form_1098"));
-    const behind = all.filter((x) => statusOf(lifeOf(x.l).months.find((m) => m.month === x.c.on.slice(0, 7))?.days_delinquent ?? 0) !== "current");
-    const current = all.filter((x) => statusOf(lifeOf(x.l).months.find((m) => m.month === x.c.on.slice(0, 7))?.days_delinquent ?? 0) === "current");
-    const hardship = (c: ContactRecord) => c.reason === "hardship" || c.reason === "payment_arrangement";
+    expect(share(jan, (c) => c.reason === "form_1098")).toBeGreaterThan(
+      3 * share(rest, (c) => c.reason === "form_1098"),
+    );
+    const behind = all.filter(
+      (x) =>
+        statusOf(
+          lifeOf(x.l).months.find((m) => m.month === x.c.on.slice(0, 7))?.days_delinquent ?? 0,
+        ) !== "current",
+    );
+    const current = all.filter(
+      (x) =>
+        statusOf(
+          lifeOf(x.l).months.find((m) => m.month === x.c.on.slice(0, 7))?.days_delinquent ?? 0,
+        ) === "current",
+    );
+    const hardship = (c: ContactRecord) =>
+      c.reason === "hardship" || c.reason === "payment_arrangement";
     expect(share(behind, hardship)).toBeGreaterThan(0.3);
     expect(share(current, hardship)).toBeLessThan(0.05);
-    const afterAnalysis = all.filter((x) => lifeOf(x.l).analyses.some((a) => x.c.on >= a.sent_on && daysBetween(a.sent_on, x.c.on) <= 45));
-    const escrowish = (c: ContactRecord) => c.reason === "escrow_analysis" || c.reason === "payment_change";
+    const afterAnalysis = all.filter((x) =>
+      lifeOf(x.l).analyses.some((a) => x.c.on >= a.sent_on && daysBetween(a.sent_on, x.c.on) <= 45),
+    );
+    const escrowish = (c: ContactRecord) =>
+      c.reason === "escrow_analysis" || c.reason === "payment_change";
     expect(share(afterAnalysis, escrowish)).toBeGreaterThan(2 * share(all, escrowish));
     // Payments received, payment changes, payoffs, insurance and online access are among a performing book's leading reasons.
     const counts = new Map<string, number>();
     for (const x of current) counts.set(x.c.reason!, (counts.get(x.c.reason!) ?? 0) + 1);
-    const top = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k]) => k);
-    for (const k of ["payment_received", "escrow_analysis", "online_access", "payoff_request", "insurance"]) expect(top, k).toContain(k);
+    const top = [...counts]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([k]) => k);
+    for (const k of [
+      "payment_received",
+      "escrow_analysis",
+      "online_access",
+      "payoff_request",
+      "insurance",
+    ])
+      expect(top, k).toContain(k);
   });
 
   it("calls at the calibration's volume, by status, under the scalar defaults", () => {
@@ -300,10 +403,14 @@ describe("contact center", () => {
     expect(center.rates.per_loan_year).toBe(1.5);
     expect(Math.abs(v.per_loan_year - v.target) / v.target).toBeLessThan(0.1);
     // The acceptance file's tolerance on each status is a quarter; current is held tighter.
-    expect(Math.abs(v.by_status.current.per_loan_year / v.by_status.current.target - 1)).toBeLessThan(0.1);
+    expect(
+      Math.abs(v.by_status.current.per_loan_year / v.by_status.current.target - 1),
+    ).toBeLessThan(0.1);
     expect(Math.abs(v.by_status.d30.per_loan_year / v.by_status.d30.target - 1)).toBeLessThan(0.25);
     expect(v.by_status.current.per_loan_year).toBeLessThan(v.by_status.d30.per_loan_year);
-    const handled = center.loans.flatMap((l) => l.contacts).filter((c) => c.mode === "call" && c.outcome === "conversation");
+    const handled = center.loans
+      .flatMap((l) => l.contacts)
+      .filter((c) => c.mode === "call" && c.outcome === "conversation");
     const mean = handled.reduce((s, c) => s + c.handle_s, 0) / handled.length / 60;
     expect(Math.abs(mean / 7 - 1)).toBeLessThan(0.1);
   });
@@ -311,15 +418,25 @@ describe("contact center", () => {
   it("reads the calibration's object shapes and holds a month's handle time inside the CFPB's range", () => {
     // What the calibration file says, as the reader on another branch will hand it over.
     const path = loadCalibration().path;
-    const raw = (path ? (JSON.parse(readFileSync(path, "utf8")) as { rates: Record<string, { value: unknown }> }).rates : {}) as Record<string, { value: unknown } | undefined>;
+    const raw = (
+      path
+        ? (JSON.parse(readFileSync(path, "utf8")) as { rates: Record<string, { value: unknown }> })
+            .rates
+        : {}
+    ) as Record<string, { value: unknown } | undefined>;
     const objects: Calibration = {
       ...cal,
       rates: {
         ...cal.rates,
         contacts: {
           per_loan_year: raw["contacts.per_loan_year"]?.value ?? { inquiries_per_loan_year: 2 },
-          handle_time_minutes: raw["contacts.handle_time_minutes"]?.value ?? { min: 4.3, max: 19.8 },
-          inbound_reason_mix: raw["contacts.inbound_reason_mix"]?.value ?? { shares: { payment_process: 1 } },
+          handle_time_minutes: raw["contacts.handle_time_minutes"]?.value ?? {
+            min: 4.3,
+            max: 19.8,
+          },
+          inbound_reason_mix: raw["contacts.inbound_reason_mix"]?.value ?? {
+            shares: { payment_process: 1 },
+          },
         } as never,
       },
     };
@@ -336,7 +453,8 @@ describe("contact center", () => {
     // calibration-acceptance.json, call-note-length: each month's average within [min, max], half a minute either side.
     const byMonth = new Map<string, number[]>();
     for (const c of c2.loans.flatMap((l) => l.contacts))
-      if (c.mode === "call" && c.outcome === "conversation") byMonth.set(c.on.slice(0, 7), [...(byMonth.get(c.on.slice(0, 7)) ?? []), c.handle_s / 60]);
+      if (c.mode === "call" && c.outcome === "conversation")
+        byMonth.set(c.on.slice(0, 7), [...(byMonth.get(c.on.slice(0, 7)) ?? []), c.handle_s / 60]);
     let months = 0;
     for (const [m, xs] of byMonth) {
       if (xs.length < 30) continue;
@@ -350,14 +468,34 @@ describe("contact center", () => {
 
   it("reads either shape of each contact key", () => {
     expect(readPerLoanYear(1.5)).toBe(1.5);
-    expect(readPerLoanYear({ inquiries_per_loan_year: 2, monthly_range_per_loan_year: [1.9, 2.08] })).toBe(2);
+    expect(
+      readPerLoanYear({ inquiries_per_loan_year: 2, monthly_range_per_loan_year: [1.9, 2.08] }),
+    ).toBe(2);
     expect(readPerLoanYear({ monthly_range_per_loan_year: [1.9, 2.08] })).toBeCloseTo(1.99, 9);
     expect(readPerLoanYear("lots")).toBeNull();
     expect(readHandleMinutes(7)).toEqual({ mean: 7, min: null, max: null });
-    expect(readHandleMinutes({ min: 4.3, max: 19.8, mean: 11 })).toEqual({ mean: 11, min: 4.3, max: 19.8 });
-    expect(readMix({ payment: 3, escrow: 1 })).toEqual([["payment", 0.75], ["escrow", 0.25]]);
-    expect(readMix({ year: 2025, complaints: 10, shares: { fees: 0.5, payoff: 0.5 } })).toEqual([["fees", 0.5], ["payoff", 0.5]]);
-    expect(readMix([["a", 1], ["b", 3]])).toEqual([["a", 0.25], ["b", 0.75]]);
+    expect(readHandleMinutes({ min: 4.3, max: 19.8, mean: 11 })).toEqual({
+      mean: 11,
+      min: 4.3,
+      max: 19.8,
+    });
+    expect(readMix({ payment: 3, escrow: 1 })).toEqual([
+      ["payment", 0.75],
+      ["escrow", 0.25],
+    ]);
+    expect(readMix({ year: 2025, complaints: 10, shares: { fees: 0.5, payoff: 0.5 } })).toEqual([
+      ["fees", 0.5],
+      ["payoff", 0.5],
+    ]);
+    expect(
+      readMix([
+        ["a", 1],
+        ["b", 3],
+      ]),
+    ).toEqual([
+      ["a", 0.25],
+      ["b", 0.75],
+    ]);
     // Today's reader cannot read the file's objects, takes its defaults, and the contact center says so.
     const disk = contactRates(loadCalibration());
     expect(disk.per_loan_year).toBeGreaterThan(0);
@@ -371,14 +509,23 @@ describe("contact center", () => {
     for (const c of calls(60)) {
       const t = transcriptOf(center, book, c.id);
       const end = t.turns[t.turns.length - 1]!.end_s;
-      if (Math.abs(end - t.answered_at_s - c.duration_s) > 1) problems.push(`${c.id}: ends at ${end}, call is ${c.duration_s}`);
-      for (let i = 1; i < t.turns.length; i++) if (t.turns[i]!.start_s + 2 < t.turns[i - 1]!.start_s) problems.push(`${c.id}: turn ${i} goes back`);
+      if (Math.abs(end - t.answered_at_s - c.duration_s) > 1)
+        problems.push(`${c.id}: ends at ${end}, call is ${c.duration_s}`);
+      for (let i = 1; i < t.turns.length; i++)
+        if (t.turns[i]!.start_s + 2 < t.turns[i - 1]!.start_s)
+          problems.push(`${c.id}: turn ${i} goes back`);
       if (c.outcome !== "conversation") continue;
-      const held = t.turns.reduce((s, x) => s + (x.speaker === "SYSTEM" && x.tag !== "dtmf" ? x.end_s - x.start_s : 0), 0);
+      const held = t.turns.reduce(
+        (s, x) => s + (x.speaker === "SYSTEM" && x.tag !== "dtmf" ? x.end_s - x.start_s : 0),
+        0,
+      );
       const holds = t.turns.reduce((s, x) => s + (x.tag === "hold" ? x.end_s - x.start_s : 0), 0);
       // The plan holds the holds, the transfer and the interpreter's joining to about a third of the call.
-      if (holds > 0.36 * c.duration_s || held > 0.6 * c.duration_s) problems.push(`${c.id}: on hold ${held} of ${c.duration_s}`);
-      words += t.turns.filter((x) => x.speaker !== "SYSTEM" && x.speaker !== "IVR").reduce((s, x) => s + x.said.split(/\s+/).length, 0);
+      if (holds > 0.36 * c.duration_s || held > 0.6 * c.duration_s)
+        problems.push(`${c.id}: on hold ${held} of ${c.duration_s}`);
+      words += t.turns
+        .filter((x) => x.speaker !== "SYSTEM" && x.speaker !== "IVR")
+        .reduce((s, x) => s + x.said.split(/\s+/).length, 0);
       seconds += c.duration_s - held;
     }
     expect(problems.slice(0, 10)).toEqual([]);
@@ -402,7 +549,16 @@ describe("contact center", () => {
       }
     }
     expect(problems.slice(0, 10)).toEqual([]);
-    for (const k of ["misheard_number", "misheard_word", "dropped_word", "inaudible", "redacted", "speaker_swapped", "crosstalk"]) expect(noise.get(k) ?? 0, k).toBeGreaterThan(0);
+    for (const k of [
+      "misheard_number",
+      "misheard_word",
+      "dropped_word",
+      "inaudible",
+      "redacted",
+      "speaker_swapped",
+      "crosstalk",
+    ])
+      expect(noise.get(k) ?? 0, k).toBeGreaterThan(0);
     expect(redacted).toBeGreaterThan(100);
   });
 
@@ -419,7 +575,10 @@ describe("contact center", () => {
         if (x.tag === "greeting") greetings.add(x.said);
         if (x.tag.startsWith("quote:") && x.speaker === "AGENT") {
           nQuotes++;
-          const shape = x.said.replace(/\$[\d,]+\.\d{2}|[A-Z][a-z]+ \d{1,2}(st|nd|rd|th)(, \d{4})?|\d+/g, "#");
+          const shape = x.said.replace(
+            /\$[\d,]+\.\d{2}|[A-Z][a-z]+ \d{1,2}(st|nd|rd|th)(, \d{4})?|\d+/g,
+            "#",
+          );
           quotes.set(shape, (quotes.get(shape) ?? 0) + 1);
         }
       }
@@ -441,10 +600,20 @@ describe("contact center", () => {
     const median = lens[Math.floor(lens.length / 2)]!;
     expect(median).toBeGreaterThan(150);
     expect(median).toBeLessThan(800);
-    expect(agent.some((n) => n.text === n.text.toUpperCase() && /[A-Z]{3}/.test(n.text))).toBe(true);
-    expect(agent.some((n) => n.text === n.text.toLowerCase() && /[a-z]{3}/.test(n.text))).toBe(true);
+    expect(agent.some((n) => n.text === n.text.toUpperCase() && /[A-Z]{3}/.test(n.text))).toBe(
+      true,
+    );
+    expect(agent.some((n) => n.text === n.text.toLowerCase() && /[a-z]{3}/.test(n.text))).toBe(
+      true,
+    );
     expect(agent.some((n) => /^Borrower|^Co-borrower/.test(n.text))).toBe(true);
-    expect(agent.filter((n) => /recieved|borower|payemnt|verifed|escorw|insurnace|advsied|requset|acount|statment|PAYMNET|ADVSD|VERIFED|ESCORW|REQUET|STATMENT/.test(n.text)).length).toBeGreaterThan(10);
+    expect(
+      agent.filter((n) =>
+        /recieved|borower|payemnt|verifed|escorw|insurnace|advsied|requset|acount|statment|PAYMNET|ADVSD|VERIFED|ESCORW|REQUET|STATMENT/.test(
+          n.text,
+        ),
+      ).length,
+    ).toBeGreaterThan(10);
     expect(agent.filter((n) => n.copied_from !== null).length).toBeGreaterThan(5);
     for (const n of agent.filter((x) => x.copied_from)) expect(n.text).toContain(" | PREV: ");
     // A longer call leaves a longer note (calibration-acceptance.json, call-note-length: Spearman above 0.3).
@@ -453,7 +622,8 @@ describe("contact center", () => {
       for (const n of l.notes)
         if (n.kind === "agent" && n.contact_id) {
           const c = l.contacts.find((x) => x.id === n.contact_id)!;
-          if (c.mode === "call" && c.outcome === "conversation") pairs.push([c.handle_s, n.text.split(" | PREV: ")[0]!.length]);
+          if (c.mode === "call" && c.outcome === "conversation")
+            pairs.push([c.handle_s, n.text.split(" | PREV: ")[0]!.length]);
         }
     expect(spearman(pairs)).toBeGreaterThan(0.3);
   });
@@ -473,12 +643,25 @@ describe("contact center", () => {
     const pinned = contactCenter(book, { calibration: cal, pins: { [i]: { bankruptcy: true } } });
     const ids = Object.keys(CONTACT_DEFECTS) as ContactDefectId[];
     const bkCall = pinned.loans[i]!.contacts.find((c) => CONTACT_DEFECTS["C-02"].eligible(c))!;
-    const res = plantContactDefects(pinned, book, [{ id: "C-02", contacts: [bkCall.id] }, ...ids.filter((x) => x !== "C-02").map((id) => ({ id, rate: 0.03 }))]);
+    const res = plantContactDefects(pinned, book, [
+      { id: "C-02", contacts: [bkCall.id] },
+      ...ids.filter((x) => x !== "C-02").map((id) => ({ id, rate: 0.03 })),
+    ]);
     const roots = res.labels.filter((x) => x.root_cause);
-    for (const id of ids) expect(roots.filter((x) => x.defect_id === id).length, id).toBeGreaterThan(0);
+    for (const id of ids)
+      expect(roots.filter((x) => x.defect_id === id).length, id).toBeGreaterThan(0);
     // Every label carries the life generator's fields and says what to do.
     for (const x of res.labels) {
-      for (const k of ["loan", "defect_id", "file_or_table", "field", "row", "on", "expected_handling"] as const) expect(x[k], `${x.defect_id} ${k}`).toBeTruthy();
+      for (const k of [
+        "loan",
+        "defect_id",
+        "file_or_table",
+        "field",
+        "row",
+        "on",
+        "expected_handling",
+      ] as const)
+        expect(x[k], `${x.defect_id} ${k}`).toBeTruthy();
       expect(x.true_value !== x.planted_value, `${x.defect_id} ${x.row}`).toBe(true);
     }
     const problems: string[] = [];
@@ -487,47 +670,69 @@ describe("contact center", () => {
       if (x.defect_id === "C-08") {
         const note = loan.notes.find((n) => n.id === x.row)!;
         if (!note.text.includes(x.planted_value!)) problems.push(`${x.row}: planted value missing`);
-        const clean = pinned.loans.find((l) => l.loan_id === x.loan)!.notes.find((n) => n.id === x.row)!;
-        if (!clean.text.includes(x.true_value!.replace(/\.$/, "")) && !x.planted_value!.startsWith("ACCT")) problems.push(`${x.row}: true value missing from the clean note`);
+        const clean = pinned.loans
+          .find((l) => l.loan_id === x.loan)!
+          .notes.find((n) => n.id === x.row)!;
+        if (
+          !clean.text.includes(x.true_value!.replace(/\.$/, "")) &&
+          !x.planted_value!.startsWith("ACCT")
+        )
+          problems.push(`${x.row}: true value missing from the clean note`);
         continue;
       }
       const clean = transcriptOf(pinned, book, x.row);
       const bad = transcriptOf(res.defective, book, x.row);
       if (x.defect_id === "C-04") {
         const row = loan.contacts.find((c) => c.id === x.row)!;
-        if (row.complaint_logged !== false || !row.complaint_voiced) problems.push(`${x.row}: complaint flags`);
-        if (bad.turns[x.turn!]!.tag !== "complaint") problems.push(`${x.row}: turn ${x.turn} is not the complaint`);
+        if (row.complaint_logged !== false || !row.complaint_voiced)
+          problems.push(`${x.row}: complaint flags`);
+        if (bad.turns[x.turn!]!.tag !== "complaint")
+          problems.push(`${x.row}: turn ${x.turn} is not the complaint`);
         continue;
       }
       const removal = x.defect_id === "C-06" || x.defect_id === "C-07";
       const tag = CONTACT_DEFECTS[x.defect_id as ContactDefectId].tag!;
       if (removal) {
-        if (!clean.turns.some((t) => t.tag === tag)) problems.push(`${x.row}: the clean call lacks ${tag}`);
+        if (!clean.turns.some((t) => t.tag === tag))
+          problems.push(`${x.row}: the clean call lacks ${tag}`);
         if (bad.turns.some((t) => t.tag === tag)) problems.push(`${x.row}: ${tag} still there`);
         if (bad.turns.length >= clean.turns.length) problems.push(`${x.row}: nothing removed`);
       } else {
         const turn = bad.turns[x.turn!]!;
-        if (turn.defect !== x.defect_id) problems.push(`${x.row}: turn ${x.turn} carries ${turn.defect}`);
-        if (x.defect_id === "C-05" && !turn.said.includes(x.planted_value!)) problems.push(`${x.row}: wrong amount not said`);
+        if (turn.defect !== x.defect_id)
+          problems.push(`${x.row}: turn ${x.turn} carries ${turn.defect}`);
+        if (x.defect_id === "C-05" && !turn.said.includes(x.planted_value!))
+          problems.push(`${x.row}: wrong amount not said`);
         // Every other turn as the clean call has it, word for word, the planted turn's interpreter relay aside.
         if (bad.turns.length !== clean.turns.length) problems.push(`${x.row}: turns added or lost`);
         bad.turns.forEach((t, k) => {
           if (k === x.turn || (k === x.turn! + 1 && t.speaker === "INTERPRETER")) return;
-          if (t.said !== clean.turns[k]!.said || t.text !== clean.turns[k]!.text) problems.push(`${x.row}: turn ${k} moved`);
+          if (t.said !== clean.turns[k]!.said || t.text !== clean.turns[k]!.text)
+            problems.push(`${x.row}: turn ${k} moved`);
         });
       }
       // The only number the record does not hold is the planted wrong amount, on its labeled turn.
       const plan = callPlan(res.defective, book, x.row);
       const allowed = new Set(x.defect_id === "C-05" ? [x.turn!, x.turn! + 1] : []);
       const errs = checkTranscript(bad, factNumbers(plan.facts), allowed);
-      if (errs.length) problems.push(`${x.row}: unexplained ${errs.map((e) => e.token).join(", ")}`);
-      if (x.defect_id === "C-05" && checkTranscript(bad, factNumbers(plan.facts)).filter((e) => e.where === "said").length === 0 && !factNumbers(plan.facts).money.has(String(BigInt(x.planted_value!.replace(/[$,.]/g, "")))))
+      if (errs.length)
+        problems.push(`${x.row}: unexplained ${errs.map((e) => e.token).join(", ")}`);
+      if (
+        x.defect_id === "C-05" &&
+        checkTranscript(bad, factNumbers(plan.facts)).filter((e) => e.where === "said").length ===
+          0 &&
+        !factNumbers(plan.facts).money.has(String(BigInt(x.planted_value!.replace(/[$,.]/g, ""))))
+      )
         problems.push(`${x.row}: the wrong amount reads as the record's`);
     }
     expect(problems.slice(0, 10)).toEqual([]);
     // Nothing else moved: rows but the complaints' flags, notes but the planted and their symptoms.
-    const touchedRows = new Set(res.labels.filter((x) => x.file_or_table === "contacts").map((x) => x.row));
-    const touchedNotes = new Set(res.labels.filter((x) => x.file_or_table === "contact_notes").map((x) => x.row));
+    const touchedRows = new Set(
+      res.labels.filter((x) => x.file_or_table === "contacts").map((x) => x.row),
+    );
+    const touchedNotes = new Set(
+      res.labels.filter((x) => x.file_or_table === "contact_notes").map((x) => x.row),
+    );
     pinned.loans.forEach((l, k) => {
       const d = res.defective.loans[k]!;
       l.contacts.forEach((c, j) => {
@@ -544,13 +749,18 @@ describe("contact center", () => {
     const plan = callPlan(center, book, c.id);
     const inventive: ContactTextWriter = {
       id: "inventive",
-      callTurns: (p) => [...templateWriter.callTurns(p), { speaker: "AGENT", said: "Your balance is $123,456.78.", tag: "quote:invented", pii: [] }],
+      callTurns: (p) => [
+        ...templateWriter.callTurns(p),
+        { speaker: "AGENT", said: "Your balance is $123,456.78.", tag: "quote:invented", pii: [] },
+      ],
       callNote: templateWriter.callNote,
     };
     const honest = buildTranscript(plan)!.transcript;
     const bad = buildTranscript(plan, { writer: inventive })!.transcript;
     expect(checkTranscript(honest, factNumbers(plan.facts))).toEqual([]);
-    expect(checkTranscript(bad, factNumbers(plan.facts)).map((e) => e.token)).toContain("$123,456.78");
+    expect(checkTranscript(bad, factNumbers(plan.facts)).map((e) => e.token)).toContain(
+      "$123,456.78",
+    );
     expect(bad.writer).toBe("inventive");
     expect(renderTranscript(honest).split("\n").length).toBe(honest.turns.length + 1);
   });
@@ -560,7 +770,7 @@ function spearman(pairs: readonly [number, number][]): number {
   const rank = (xs: number[]) => {
     const order = xs.map((x, i) => [x, i] as const).sort((a, b) => a[0] - b[0]);
     const r = new Array<number>(xs.length);
-    for (let i = 0; i < order.length; ) {
+    for (let i = 0; i < order.length;) {
       let j = i;
       while (j + 1 < order.length && order[j + 1]![0] === order[i]![0]) j++;
       for (let k = i; k <= j; k++) r[order[k]![1]] = (i + j) / 2;

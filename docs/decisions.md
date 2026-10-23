@@ -7225,3 +7225,123 @@ cadence's cessation on a promise to pay or a workout request (a conversation
 here carries no commitment, so the cadence runs on), the pre-sale stop, TCPA
 consent and quiet hours, Reg F's seven days after a conversation, and the
 notices' content.
+
+## The contact center draws its own calls, and every figure in its text is the record's
+
+**Built 23 October 2026,** as `packages/environments/src/contacts`, a
+module beside the life generator and, like it, not an environment. From a
+book the life generator wrote, it derives what a subservicer's contact
+center would hold:
+
+- contact rows shaped like the servicing app's `contacts` table;
+- promises, a bankruptcy, and each delinquency's outbound cadence;
+- the comment log;
+- call transcripts, written on demand;
+- eight planted, labeled call and note defects for a call-QA environment.
+
+docs/environments.md, "The contact center", says what each holds.
+
+**The contact center draws the inbound volume itself.** The life generator
+draws a few contacts a year of its own: a reason and a duration, flat across
+the year, at the calibration's rate. Two choices were open:
+
+- build on those rows, and add the spikes the plan asks for (after an
+  analysis, a transfer and a disaster, and the 1098 in January);
+- or draw the whole volume here.
+
+Building on them would have met the calibration twice: the generator's rows
+already make the full rate, and every spike lands on top. So the contact
+center draws by status and month, and its events' calls come out of each
+status's share rather than on top of it. It reads only the scenario's
+promise calls from the history, through its behavior rows. The tape's last
+contact date still reads the generator's rows; `lastContactOn` is the
+contact center's, for a tape writer that wants it.
+
+**The split by status is the acceptance file's.** The CFPB gives one figure,
+about 2.0 inquiries a loan-year, and no split. calibration-acceptance.json
+already set one as a design choice (1.7, 6, 9 and 10 for current, 30, 60
+and 90+ days, averaging 2.0 over the all-loans delinquency mix). The
+contact center uses it as multiples of whatever the calibration says, so
+the two cannot drift apart. What each status's events bring was measured on
+300-loan books and taken off its ordinary calls: about 0.6 a loan-year on a
+current loan, and 1.6 to 2.4 on a delinquent one, mostly the call after each
+month's late charge.
+
+**Either shape of the calibration.** The calibration file states the three
+`contacts.*` keys as objects (the CFPB's figures and their derivation). The
+reader that turns the file into `Rates` is changing on another branch, and
+today it cannot read them: it hands over its defaults and warns. The
+contact center reads a scalar or the object from whatever `Rates` holds,
+and on the 300-loan seed-7 book it meets either:
+
+|                                       | Defaults          | The file's figures |
+| ------------------------------------- | ----------------- | ------------------ |
+| Inquiries a loan-year, against target | 1.33 against 1.34 | 1.77 against 1.79  |
+| Mean handle time                      | 6.99 against 7    | 9.09 against 9.23  |
+
+The life generator does not tolerate the objects: `simulate.ts` reads
+`contacts.per_loan_year` as a number and the reason mix as pairs, and stops
+at `monthHazards` (line 1637) when handed the object. Whoever changes the
+reader must keep those two as they are or change the generator beside it.
+
+**The complaint mix weights complaints and nothing else.** The calibration's
+reason mix is the CFPB's complaint database, a skewed proxy for why people
+call (plan section 4). So the reasons for calling are design-choice tables
+by status and month, and the complaint mix decides only which calls carry a
+voiced complaint.
+
+**Facts first.** Every figure an agent says or writes is one the record held
+that day (`recordOn`): the history as dated on or before the day, plus the
+contact center's own records. The text is written after, from slots that
+throw when the record lacks a figure, in digits as a recognizer writes
+them. `checkTranscript` reads every number back out.
+
+- A number the recognizer misheard is logged as noise on its turn.
+- A planted wrong amount is labeled.
+- So a QA reader can tell the two apart only by the label, as a QA reviewer
+  can only by the audio.
+
+Four places where the first draft broke the rule, each now held by a test:
+
+- a filler word inserted inside a spoken date of birth split it, and the
+  redaction left the year behind;
+- the recognizer dropped "press" from the phone menu, leaving a bare key;
+- a negative escrow balance was said with a sign the reader did not read
+  (an amount is now said by its size, "overdrawn by");
+- a date lost its month to a dropped word. Words next to a figure are no
+  longer dropped.
+
+**One number a borrower brings: the promise.** A promise is the one figure a
+call adds to the record. It is drawn from what the borrower then did: a
+receipt in the next three weeks keeps it, at that receipt's amount and
+date. Otherwise some borrowers promise the amount past due and break it. A
+promise pauses the cadence until its date, as D2-2-02's promise-to-pay
+cessation does.
+
+**The bankruptcy lives in the contact center for now.** The life generator
+has no bankruptcy, and the stay defect needs one. So the contact center
+draws a petition on 2% of delinquencies that reach day 30. From the petition
+no collection call goes out, the attorney's call brings the notice, and
+every later call carries the informational-only disclaimer. The history's
+payments do not know about the case; when the generator models one, the
+contact center reads it instead.
+
+**Transcripts are written on demand, notes from the turns.** A 300-loan
+decade's calls run to about two million words, so the center holds the rows
+and the notes, and `transcriptOf` writes a call when asked. The agent's
+note is written from the call's turns, so it mentions what was said and
+nothing else. A longer call leaves a longer note.
+
+**The seam for model-written text is the writer.** `ContactTextWriter` takes
+the call's plan (the record and the shape) and returns tagged turns and a
+note. The template writer is the one there is, and no model is called. A
+model writer is held to the provenance check, writes the tags defects
+need, and is written once, offline, by contact id, so the book stays a
+function of its seed. The timing, noise and defects come after the writer.
+
+**Call defects are numbered apart.** docs/synthetic-data-defects.md catalogs
+data defects. These are conduct, the items a QA team fails a call for
+automatically (plan section 4): C-01 to C-08. Each changes one turn, its
+interpreter relay, one row or one note. Every other turn stays word for word,
+because each turn's noise draws from a stream keyed by its place in the
+clean call. Each label is the life generator's, with the turn added.

@@ -421,11 +421,12 @@ own. The yearly escrow analysis and the ARM change are cycles with no runner
   bankruptcy (cashiering-18), takes a paid late charge again from later
   payments (cashiering-19), leaves a waived or reversed charge on the ledger
   (cashiering-20), bills a charge its SCRA waiver removed (scra-1), never ends
-  a forbearance plan at its term (lossmit-1), leaves the loan out of every
-  Metro 2 file (metro2-1), lets a paid installment's early-intervention clocks
-  breach (ei-1), misstates the early-intervention windows (ei-2), lets each
-  window after a written notice breach for a notice not owed (ei-3), releases
-  no transfer goodbye notice (transfers-1), quotes the borrower's own payoff
+  a forbearance plan at its term (lossmit-1), refers a borrower performing
+  under one to foreclosure (lossmit-3), leaves the loan out of every Metro 2
+  file (metro2-1), lets a paid installment's early-intervention clocks breach
+  (ei-1), misstates the early-intervention windows (ei-2), lets each window
+  after a written notice breach for a notice not owed (ei-3), releases no
+  transfer goodbye notice (transfers-1), quotes the borrower's own payoff
   requests from the wrong inputs (payoff-19), and cannot post a payoff or a
   ledger line over its HTTP tool routes (http-1). Each is in
   docs/servicing-engine-defects.md.

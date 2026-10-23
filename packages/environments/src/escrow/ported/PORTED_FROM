@@ -1,16 +1,28 @@
 The servicing app's escrow analysis engine, ported for the escrow-analysis
-environment's grader.
+environment's grader, and its annual escrow statement engine beside it.
 
-Source       apps/servicing/src/domain/escrow/analysis.ts
+Source       apps/servicing/src/domain/escrow/analysis.ts      (ported 2026-10-21)
+             apps/servicing/src/domain/escrow/statement.ts     (ported 2026-10-23)
 Vendored at  293261b371fe97d2b6b39e1f29ca60dd808ac8fb (apps/servicing/VENDORED_FROM)
-Ported       2026-10-21
 
-analysis.ts here is that file byte for byte except its three import lines,
-which name @hm/kernel instead of the servicing app's copy of the kernel (the
-two are the same bytes; packages/kernel/VENDORED_FROM). Nothing else may be
-edited: src/__tests__/escrow.test.ts compares the two files with their import
-lines removed and fails on any difference. Lint and Prettier skip this
-directory for the reason they skip the vendored trees.
+Each file here is its source byte for byte except its three import lines,
+which name @hm/kernel/money and @hm/kernel/calendar instead of the servicing
+app's copy of the kernel (the two are the same bytes;
+packages/kernel/VENDORED_FROM). Nothing else may be edited:
+src/__tests__/escrow.test.ts compares analysis.ts, and
+src/__tests__/escrow-statement.test.ts compares statement.ts, with their
+import lines removed, holds each import line to that rewrite, and fails on
+any difference. Lint and Prettier skip this directory for the reason they
+skip the vendored trees.
+
+statement.ts (§3.3, the annual escrow account statement) imports nothing
+but the kernel. It is ported for its item (viii) explanation,
+lowPointExplanation, which src/escrow/statement.ts runs over an analysis the
+port above computed; the escrow-analysis grader does not read it. The
+statement's other sentences (the surplus or shortage, the repayment plan)
+are decisionText and planText in the servicing app's ops.ts, which is not
+ported: it carries the stateful operations layer (the event store, the timer
+engine, the interest and disbursement modules) around them.
 
 To take a change from the servicing app, copy the file again and rewrite the
 same three imports.

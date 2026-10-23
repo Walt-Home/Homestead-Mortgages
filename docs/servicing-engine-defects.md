@@ -5,7 +5,8 @@ environments in `packages/environments` that grade with them, and each was
 reproduced again on 21 October 2026 against the commit
 `apps/servicing/VENDORED_FROM` names (`293261b`, committed 17 September 2026).
 One more, boarding-1, was found and reproduced on 22 October 2026 while
-cataloguing defects for synthetic data (docs/synthetic-data-defects.md).
+cataloging defects for synthetic data (docs/synthetic-data-defects.md), and
+another, escrow-4, on 23 October 2026 while porting the statement engine.
 Twenty-two more are in the runtime that wires the engines together rather than
 in an engine: cashiering-18, cashiering-19, cashiering-20, arm-15, payoff-19,
 pmi-15, statements-1, boarding-2, boarding-3, boarding-4, boarding-5,
@@ -120,6 +121,7 @@ decided", says why each went the way it did.
 | flexmod-6     | flexmod    | The MIR lookup has no consistent winner on a tied date                                               | §12.8 rule 1                           | 🟢     | `domain/lossmit/ops.ts:641`                                                                     |
 | flexmod-8     | flexmod    | The capitalization date has three answers                                                            | §2.6 rule 5; §12.8                     | 🟢     | `domain/lossmit/flexmod.ts:57`                                                                  |
 | escrow-3      | escrow     | A dollar cushion in the instrument overrides the policy and state months                             | §3.4 rule 1                            | 🟢     | `domain/escrow/analysis.ts:25`                                                                  |
+| escrow-4      | escrow     | The statement's low-point lines print a negative balance with the sign inside the cents              | §3.3 rule 3; Reg X 1024.17(i)(1)(viii) | 🟢     | `domain/escrow/statement.ts:19`                                                                 |
 | pmi-4         | pmi        | The 78% current test misses an installment due after the 1st                                         | §10.2 R3; B-8.1-04                     | 🟢     | `domain/pmi/termination.ts:15-19`                                                               |
 | pmi-8         | pmi        | The HPA decision-date currency test is computed and discarded                                        | §10.1 R1 and R4                        | 🟢     | `domain/pmi/cancellation.ts:49-53`, `:150`                                                      |
 | pmi-9         | pmi        | A floored LTV grants a balance up to $39.99 over 80%                                                 | 12 U.S.C. 4901(2)                      | 🟢     | `domain/pmi/cancellation.ts:21`                                                                 |
@@ -130,7 +132,7 @@ decided", says why each went the way it did.
 | ei-7          | ei         | The plan's D2-2-02 report never flags a gap that ends in a cure, though the 7-day clock breaches     | §11.1 timer table; D2-2-02             | 🟢     | `domain/early-intervention/plan.ts:194-195`                                                     |
 | ei-8          | ei         | A delinquency cured on its start deadline with no attempt is reported as a missed start              | §11.1 timer table; D2-2-02             | 🟢     | `domain/early-intervention/plan.ts:192-193`                                                     |
 
-🔴 high (16) · 🟡 medium (51) · 🟢 low (34). ei is Reg X early intervention.
+🔴 high (16) · 🟡 medium (51) · 🟢 low (35). ei is Reg X early intervention.
 Section numbers are the servicing app's spec; paths are under
 `apps/servicing/src/`; amounts ending in c are cents. docs/decisions.md tells
 the longer story of most of these, in the entry for the environment that found
@@ -3156,6 +3158,17 @@ index date 2026-09-17).
   copy the shortcut. Fix: treat the dollar figure as one more candidate and
   take the least. Kept out: escrow-analysis and escrow-review state cushions
   in months only.
+- **escrow-4.** The annual statement's item (viii) prints a figure as its
+  quotient and remainder by 100 (statement.ts:19), so a negative low balance
+  carries its sign inside the cents, $-105.-50 for −$105.50, and loses it
+  under a dollar, $0.-50 for −$0.50. An account overdrawn during the year has
+  a negative low: in a thousand-loan book from the life generator (1.0.0,
+  seed 1), 75 of the 6,016 computation years it holds whole (each analysis's
+  twelve month-ends from its year start) ended a month below zero. Fix:
+  format the absolute value and put the sign in front, as `fmtMoney` does
+  (ops.ts:106). Kept out: `statementExplanation` refuses such a year, and
+  `statementScopeIssues` names it
+  (`packages/environments/src/escrow/statement.ts`).
 - **pmi-4.** The 78% sweep's current test checks only installments due by the
   1st of the preceding month (termination.ts:15-19), so a loan due on the 15th
   that missed that month's payment is current and its MI ends while 30 days
@@ -3284,7 +3297,7 @@ index date 2026-09-17).
   (packages/environments/src/ei/generator.ts:969-976): no delinquency closes
   on its start deadline with no attempt.
 
-102 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+103 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

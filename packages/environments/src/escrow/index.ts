@@ -47,5 +47,6 @@ export * from "./generator.js";
 export * from "./grader.js";
 export * from "./reference.js";
 export * from "./rulebook.js";
+export * from "./statement.js";
 export * from "./task.js";
 export * from "./tools.js";

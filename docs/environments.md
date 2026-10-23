@@ -2817,8 +2817,8 @@ twin differs only where the defect reaches. The labels are the planted value
 (`root_cause: true`) and every difference between the two histories, field
 by field (`root_cause: false`).
 
-`DEFECTS` in `defects.ts` is the registry each wave extends. It holds two
-(docs/synthetic-data-defects.md):
+`DEFECTS` in `defects.ts` is the registry each wave extends. Two enter at
+boarding (docs/synthetic-data-defects.md):
 
 - D-03, the note's late-fee cap never boarded, so cashiering charges the
   full percent;
@@ -2828,9 +2828,51 @@ by field (`root_cause: false`).
   its account, no analysis is run, and the borrower pays the P&I billed. It
   enters only through a transfer.
 
-A loan may carry both. Its twin boards both, and each symptom is labeled
-for the defect whose own twin shows it, or for the pair when neither does
-alone.
+Four are errors made in the history after boarding, by a vendor or a system
+the servicer depends on:
+
+| ID   | Whose  | The error                                                                                      | Its root cause                                    |
+| ---- | ------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| V-01 | vendor | the tax service reports a bill ten times the county's, and it is paid from escrow as reported  | `escrow_bills.amount_cents`                       |
+| V-02 | vendor | the first hazard renewal after a transfer is billed to the prior servicer, and paid late       | `insurance_policies.mortgagee_clause`             |
+| D-28 | system | a borrower's payment drafted twice, the same amount on the same day                            | the second draft, a `payments` row                |
+| D-25 | system | a payment keyed to a loan number a keystroke away, and posted to the loan that has that number | a `payments` row on each loan: missing, and extra |
+
+A history error is made on one event the clean history had: a bill, or a
+borrower's own payment on our books. It is read off that history, so the
+twin is the clean history until that event, and the engines' from there:
+
+- **V-01.** The county returns the excess 45 to 120 days later, into
+  escrow. Until then the account is short by nine times the bill, and an
+  analysis that runs in between finds a shortage the borrower is billed for.
+  The analyst still projects from the county's bill.
+- **V-02.** The renewal reaches the servicer 30 to 75 days late, when the
+  prior servicer sends it on, and is paid then. Until then the account holds
+  the premium. Whether the policy lapsed is the carrier's, and not modeled.
+- **D-28.** The waterfall posts the second draft as it posts any payment:
+  to the next installment, paid ahead, and the borrower's own payment for it
+  then finds it paid. An early payer's second draft, with nothing billed yet,
+  sits in suspense. Nothing in the history returns it.
+- **D-25.** The payer's installment stays open and runs late, with a late
+  charge, and the other loan is paid ahead. Nothing in the history moves it
+  back: the catalog's reversal weeks later is a correction cashiering has no
+  engine for. A book draws its loan numbers at random from a hundred
+  million, so no two are a keystroke apart unless a scenario pins one
+  (`LoanPins.servicer_loan_number`). D-25 lands only there.
+
+A request names the loans and the date to make it from (`at`), or a rate
+per eligible event: per bill or per payment, where a boarding defect's rate
+is per loan. D-25 names the loan it lands on with `with`. A row an error adds
+is named off the row it comes from, and a row it removes keeps its id
+spent, so every other row keeps its id. The payments table is compared by
+day and kind of payment rather than by receipt number, because a payment one
+history never sends would renumber every receipt after it. Staff errors that
+need the contacts layer, such as a promise not tracked or a complaint not
+logged, are not planted here.
+
+A loan may carry two defects. Its twin carries both, and each symptom is
+labeled for the defect whose own twin shows it, or for the pair when neither
+does alone.
 
 **Moments.** `generate(…, { observe })` shows an environment what each
 engine is about to be handed, as it stands, in the clean history and in the
@@ -2977,20 +3019,22 @@ on 94 of the 13,478 rows.
 
 **Tape-stream defects** are what a delivery does to right values. The 47 in
 docs/synthetic-data-defects.md are wrong values in a servicer's records;
-these are their own family, in `src/life/tape-defects.ts`:
+these are their own family, in `src/life/tape-defects.ts`. All five are
+built, each in the forms a request may name (`variant`):
 
-| ID   | Defect                                              | Built |
-| ---- | --------------------------------------------------- | ----- |
-| T-01 | a month missing from the stream, or delivered twice | no    |
-| T-02 | a renamed column                                    | no    |
-| T-03 | leading zeros stripped from a column of codes       | yes   |
-| T-04 | dates mangled by a spreadsheet                      | no    |
-| T-05 | an as-of date that drifts from the month-end        | no    |
+| ID   | Defect                                        | Forms                                   | Loads                                    |
+| ---- | --------------------------------------------- | --------------------------------------- | ---------------------------------------- |
+| T-01 | a month missing, or last month's sent again   | `missing`, `resent`, `relabeled`        | not until the partner sends it           |
+| T-02 | a renamed column                              | `required`, `optional`                  | refused by name; or read, the fact empty |
+| T-03 | leading zeros stripped from a column of codes | `stripped`                              | once the codes are padded back           |
+| T-04 | a column of dates mangled by a spreadsheet    | `two_digit_year`, `serial`, `day_first` | as delivered; day first once re-read     |
+| T-05 | an as-of date that drifts from the month-end  | `export_date`, `prior_month_end`        | once the as-of is the month-end          |
 
 `plantTapeDefects(book, stream, requests)` plants them in a written stream.
-A request names its months, or reaches each tape at a rate. The rate is
-drawn from a stream keyed by the book, the defect and the month. A month
-carries one tape defect.
+A request names its months, or reaches each tape at a rate. The rate, the
+form and the column (for T-02 and T-04, which reach one) are drawn from
+streams keyed by the book, the defect and the month, so a defect's months
+move with nothing else.
 
 - **Root causes.** Each definition gets the whole stream, so one that drops,
   repeats or renames a file has the stream to do it in. It returns each value
@@ -2999,11 +3043,30 @@ carries one tape defect.
 - **Symptoms.** `tapeSymptomLabels(planted, read)` finds them by difference,
   as a twin's are found. It reads each planted month's clean and planted
   files with the reader it is handed. Every difference in the records, the
-  facts, the exceptions or the refusal is a label.
+  facts, the cells kept under `raw`, the exceptions or the refusal is a
+  label.
+- **How each loads** (`loading`) is stated per form, and a test holds it to
+  the reader: a form that loads as delivered has no symptom at all, one
+  loaded once corrected has symptoms and is not refused, and one the partner
+  must send again is refused or is not the month's tape.
 - **Why the reader is handed in.** The life generator cannot import
   `@hm/partner-book`, because its profile reaches `node:zlib` through the
   vendored workbook reader. The tests hand it `readBook`, a dev dependency
   here as it is in refi-review.
+
+**T-01** is the stream. A month's file never comes (`missing`), or last
+month's comes in its place, under its own name (`resent`) or under this
+month's (`relabeled`). The planted file's `month` is the month it was
+delivered for; its rows and as-of are last month's. Missing, every row of the
+month is read from one stream and not the other. Sent again, every row
+reads as last month's.
+
+**T-02** is the export's configuration. One header is written in other words
+(`T02_RENAMES`, none of which reads as another of the profile's headers). A
+`required` one gets the file refused by name, and every row is lost. Any
+other is read, with that column's fact empty on every row and its cells kept
+under `raw`: a renamed "MBA Delinquency Status" leaves the reader to date
+delinquency from the next due date to the as-of.
 
 **T-03** is a file opened in a spreadsheet. A column of digits is read as a
 number and loses its leading zeros. On the m3 tape that hits two columns:
@@ -3015,25 +3078,53 @@ number and loses its leading zeros. On the m3 tape that hits two columns:
 
 The reader takes both as written. The record's postal code, the ZIP fact
 and the pay-string fact change, and nothing else does. The review reads
-only the pay string's last character, which survives. The test plants T-03
-in three months and holds the symptoms equal to what each root reaches.
+only the pay string's last character, which survives. Text columns are
+found by position, so a renamed header does not hide one.
 
-**Still to build.** Each is one more `TapeDefectDefinition`:
+**T-04** is a spreadsheet's date format, on one of six date columns that
+carry a date on every live loan (`T04_COLUMNS`; the as-of is T-05's):
 
-- T-01 drops a month's file, or sends one twice: the same file again, or a
-  month's rows under the next month's name. Its symptoms are rows read from
-  one stream and not the other.
-- T-02 renames a header. A required one gets the file rejected by name. Any
-  other leaves its fact empty and keeps the cell under `raw`.
-- T-04 rewrites dates as a spreadsheet does: two-digit years, serial numbers,
-  day and month swapped.
-- T-05 writes an as-of date that is not the month-end, such as the export
-  date or last month's.
+- `two_digit_year`, "5/1/57". The reader puts a two-digit year in the
+  century nearest the day it reads it, which is right for every date here
+  read near its month: no symptom.
+- `serial`, Excel's day number, "57100". The reader converts it: no symptom.
+- `day_first`, "1/5/2057" for 1 May. The reader takes a date month first,
+  so a day of 12 or less reads as the month, silently, and a day over 12 is
+  an `unreadable_cell` exception. A day the same as the month reads right,
+  and is not changed.
+
+**T-05** is the export's as-of: the day it ran, one to four business days
+after the month-end (`export_date`), or last month's end
+(`prior_month_end`), on every row. The rows are this month's. The reader
+takes the tape's own as-of when it carries one, so the observation is filed
+under it.
+
+**Two defects drawn for one month are merged.** Both are planted, each where
+it happens to a delivery (`stage`): the export writes the as-of and the
+headers, then a spreadsheet rewrites codes and dates. They rewrite different
+parts of the file, and a real delivery carries several at once: the
+spreadsheet that strips a ZIP code's zero also rewrites a date column. A
+symptom of a merged month belongs to each defect whose own plant shows it,
+and to the group when none does, as a twin's do. In the test, a renamed MBA
+status and an export-date as-of together make the reader call current loans
+delinquent, which neither does alone. T-01 is the exception, because it
+replaces the month's file whole:
+
+- a defect drawn at a rate for a month T-01 is in is skipped;
+- a T-01 drawn at a rate for a month another defect was asked for by name
+  is skipped;
+- two asked for by name, T-01 among them, are refused.
+
+Every skip is reported in `skipped`, with the reason. Skipping rather than
+redrawing keeps each defect's months its own draw: a second defect moves
+none of the first's.
 
 **Not covered yet:**
 
-- the other 45 defects, and a defect in any file but the final tape;
-- tape-stream defects T-01, T-02, T-04 and T-05;
+- the other 43 defects of the catalog, and a defect in any package file but
+  the final tape;
+- staff errors that need the contacts layer: a promise not tracked, a
+  complaint not logged;
 - bankruptcy, foreclosure, loss mitigation, forbearance and modification.
   Their tape fields are present and always empty;
 - returned payments and NSF fees. The file's returned share is read and not

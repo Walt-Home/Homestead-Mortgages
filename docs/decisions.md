@@ -7662,3 +7662,109 @@ first draws, 47 redrawn, 707 training draws reaching the fairness check,
 gives 1.1.0's, and the tape test's floor is 13,000 rows. Each suite's fingerprint names the life version it is drawn
 under, read from `LIFE_VERSION`, so a run record says which book it was
 graded on.
+
+## Two tape defects in one month are merged, and T-01 keeps its month alone
+
+**Decided 23 October 2026,** when the other four tape-stream defects were
+built beside T-03 (`src/life/tape-defects.ts`). Until then the planter
+refused a second defect for a month it had already drawn one for. With one
+defect that never happened; with five drawn at their rates over a 131-month
+stream, it would have thrown on an ordinary draw. A reviewer asked which it
+should be: skip, merge or redraw.
+
+**Merge, because a real delivery carries several at once.** The defects
+rewrite different parts of a file: the export writes the as-of date (T-05)
+and the headers (T-02), then a spreadsheet rewrites codes (T-03) and dates
+(T-04). The spreadsheet that strips a ZIP code's leading zero is the one
+that rewrites a date column, so a month with both is the realistic case,
+not a collision. Each is planted in the order it happens to a delivery
+(`stage`), and each finds its columns by position, so a renamed header does
+not hide a column from the next. The roots are each defect's own, exactly
+as planted alone, which a test holds.
+
+**A merged month's symptoms are told apart as a twin's are.** Each defect is
+also planted alone in the clean stream, and a symptom belongs to each defect
+whose own plant shows it, or to the group when none does. The test's
+four-defect month has one: with the MBA status's header renamed, the reader
+dates delinquency from the next due date to the as-of, and with the as-of
+set to the export's day, a current loan reads as delinquent. Neither defect
+does that alone.
+
+**T-01 is the exception.** It replaces the month's file whole (missing, or
+last month's sent again), so there is no file of the month's to plant
+anything else in. The rule:
+
+- a defect drawn at a rate for a month T-01 is in is skipped;
+- a T-01 drawn at a rate for a month another defect was asked for by name
+  is skipped: a name is a request, a rate a frequency;
+- two asked for by name, T-01 among them, are refused, as any request that
+  cannot be honored is.
+
+**Skip rather than redraw.** Moving a skipped defect to another month would
+make each defect's months depend on the others'. Skipped, a defect's months
+are its own draw, and adding a second defect to a request moves none of the
+first's (a test holds that). The cost is a rate a little under its stated
+value where T-01 is drawn too, about one month in 48. Every skip is in the
+result's `skipped`, with its reason, so nothing is dropped silently.
+
+**How each loads is stated, and held to the reader.** Each defect says, per
+form, whether a delivery carrying it loads as delivered, once corrected from
+the delivery itself, or not until the partner sends again. The test reads
+every form through `@hm/partner-book`. Two forms of T-04, two-digit years and
+Excel serial numbers, change no fact at all: the reader puts a two-digit
+year in the century nearest the day it reads it and converts a serial, so a
+delivery carrying either loads as delivered, and the defect is the export's
+form rather than a wrong value. A day-first date is read month first: wrong
+silently up to the 12th, and an `unreadable_cell` after.
+
+## Vendor and system errors are made on an event the clean history had
+
+**Decided 23 October 2026,** when four errors made after boarding joined the
+defect registry (`src/life/defects.ts`), from the plan's section 5: a tax bill
+a vendor reported wrong (V-01), a hazard renewal billed to the prior servicer
+(V-02), a payment drafted twice (D-28) and a payment posted to a neighboring
+loan number (D-25). Staff errors that need contacts are left for the
+contacts layer.
+
+**The error is made on an event, and the twin shares everything before it.**
+A boarding defect changes what boarding writes, and the twin runs from the
+same draws. A history error is a wrong act on one day, so it is placed on an
+event the clean history already had: the bill, the payment. Draws never read
+state, so the twin is the clean history until that event, byte for byte,
+and the engines' from there. The simulator takes the error as an override of
+that one event (`HistoryError`) and changes nothing else; a clean history is
+the same with or without the code, and the three suites drawn from the life
+generator still draw what they were pinned at.
+
+**Two choices kept the comparison honest.**
+
+- **Ids.** A receipt's id is its number in posting order. A payment one
+  history never sends, such as the borrower's own after a second draft paid
+  that installment, renumbered every receipt after it, and the first run
+  labeled each of them a symptom of one duplicate. The payments table is
+  now compared by day and kind of payment, with the id left out; the rows an
+  error adds are named off the row they come from, and a row it removes
+  keeps its id spent, so every other row keeps its own. The two boarding
+  defects' labels are unchanged in substance: their twins send the same
+  payments on the same days.
+- **Roots.** A history error's root is the record the error wrote: the
+  vendor's bill (`escrow_bills`), the carrier's mortgagee clause
+  (`insurance_policies`), the second draft, the payment on the wrong loan.
+  Where the comparison finds that row again, it is the root, not a symptom.
+
+**Choices the generator makes, and says so.**
+
+- V-01's wrong amount is the bill with its decimal point one place off: ten
+  times the county's. A smaller error, another parcel's bill, would show on
+  no tape; this one shows as an escrow account drained far past a year of
+  payments. The county returns the excess 45 to 120 days later.
+- V-02 is the first renewal after a transfer, sent on 30 to 75 days late.
+  Whether the policy lapsed is the carrier's, and not modeled.
+- D-25 lands only on a loan whose number is a keystroke from the payer's: one
+  digit different, or two neighbors swapped. A book draws its numbers at
+  random, so a scenario pins one (`LoanPins.servicer_loan_number`), which
+  moves no other draw. The catalog's reversal weeks later is not modeled,
+  because cashiering has no engine to reverse a posted payment.
+- A rate for a history error is per eligible event (each bill, each
+  payment), as the calibration's "per receipt" for D-25 reads; a boarding
+  defect's stays per loan.

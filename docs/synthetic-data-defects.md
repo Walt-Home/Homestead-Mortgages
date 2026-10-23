@@ -98,15 +98,32 @@ exactly, and planted warnings must be found while extra ones are allowed
 (`AS/src/domain/boarding/demo-batch.test.ts:80-86`). Where a ported engine
 exists, the engine grades the money.
 
-**What is planted so far.** Two of the ten below, in `DEFECTS`
-(`ENV/life/defects.ts`), the registry each later wave extends:
+**What is planted so far.** Four of the 47, in `DEFECTS`
+(`ENV/life/defects.ts`), the registry each later wave extends, and two
+vendor errors that are not among them:
 
 - D-03, a blank cap cell in the package;
-- D-42 on the escrow column, which boards the loan as D-31.
+- D-42 on the escrow column, which boards the loan as D-31;
+- D-28 as a system error: a borrower's payment drafted twice, the second
+  posted by the waterfall;
+- D-25 as a system error: a payment keyed to a loan number a keystroke away
+  and posted to that loan, labeled on both. The catalog's reversal weeks
+  later is not modeled, because cashiering has no engine for it;
+- V-01, a vendor's: a tax bill the tax service reported at ten times the
+  county's, paid from escrow, the excess returned later;
+- V-02, a vendor's: the first hazard renewal after a transfer billed to the
+  prior servicer, and paid late when it is sent on.
 
-Each is planted in the generator's twin and in the twin's transfer package
-(`ENV/life/transfer-package.ts`), where the package and its clean twin's
-differ only in that cell. Clean twins go beside them as negatives. A cap
+The last four are made in the ten-year history after boarding, on an event
+the clean history had, so each twin is the clean history until the error
+(docs/environments.md, "The life generator"). Staff errors that need the
+contacts layer, such as a promise not tracked or a complaint not logged, are
+not planted yet.
+
+D-03 and D-42 are each planted in the generator's twin and in the twin's
+transfer package (`ENV/life/transfer-package.ts`), where the package and its
+clean twin's differ only in that cell. Clean twins go beside them as
+negatives. A cap
 needs a column the layout lacks, so the writer adds `late_charge_max` after
 the layout's own columns. The prior servicer's periodic statements, in the
 correspondence file the writer adds, quote the capped fee. Together these

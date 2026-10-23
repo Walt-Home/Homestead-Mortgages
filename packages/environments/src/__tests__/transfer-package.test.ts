@@ -182,11 +182,17 @@ describe("the transfer package", () => {
 
 describe("the defect registry", () => {
   it("holds D-03 and D-42, each with its place in a package and what the gate does with it", () => {
-    expect(Object.keys(DEFECTS)).toEqual(["D-03", "D-42"]);
+    expect(Object.keys(DEFECTS)).toEqual(["D-03", "D-42", "V-01", "V-02", "D-28", "D-25"]);
+    // The two that enter at boarding sit in the package; the history errors are made after it, and sit in none.
     for (const d of Object.values(DEFECTS)) {
+      expect(d.history === null, d.id).toBe(d.package !== null);
+      if (d.history !== null) continue;
       expect(d.package?.file).toBe("boarding_tape.final.csv");
       expect(d.package?.gate).toMatch(/^Nothing\./);
     }
+    expect(() => writeTransferPackage([{ life: book.clean.loans[0]!, defects: ["V-01"] }])).toThrow(
+      /V-01 has no place in a transfer package/,
+    );
     expect(DEFECTS["D-42"]!.produces).toBe("D-31");
     expect(DEFECTS["D-42"]!.requires_transfer).toBe(true);
     expect(() =>

@@ -2157,6 +2157,54 @@ The policies keep refi-policy's lesson: no sentence ends on an "otherwise"
 that could attach to more than one condition. Run on the same tasks as the
 procedure, a score measures what the procedure was doing for the model.
 
+## Calibration
+
+`src/life/calibration.json` holds the rates the life generator is to draw
+loan histories from. The generator is separate work, and today nothing reads
+the file but its test. Each of its 28 keys carries a value, a unit, a kind, a
+source URL with the date it was fetched, the source's terms, and a note on
+what the figure is and where it stops. 18 are `public`. 10 are `design_choice`, with source `none`
+and the reason nothing public fits.
+
+`src/life/calibration-acceptance.json` is what a validation sample is held
+to: payment arrival day, late fees, short and returned receipts, missed
+months, delinquency stock and transitions, contacts by status, reason mix,
+note length, transactions per loan-year, defect rates and the book's
+distributions. Each test names the key it checks, how its target is read
+from that key, the smallest sample it means anything on, and a tolerance.
+Every tolerance is a design choice and says why. `calibration.test.ts` holds
+both files to the key list, a source and date on every public value, no NaN,
+distributions that sum to one, every derived figure (a mean, a ratio, an
+interpolated median, a share of counts) equal to what it is derived from,
+and the acceptance targets the calibration gives today.
+
+Version 2026-10-23, every source fetched that day:
+
+| Source                                                                       | Keys                                        | Terms                                                                                   |
+| ---------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------- |
+| MBA National Delinquency Survey, Q2 2026 press release (MBA's NewsLink copy) | the two delinquency stocks                  | The press release, quoted with attribution. The survey's tables are licensed; not used. |
+| New York Fed Household Debt and Credit Report, 2026Q2 data file              | the quarterly roll and cure                 | New York Fed Terms of Use; attribute "New York Fed Consumer Credit Panel / Equifax".    |
+| FHFA NMDB Aggregate Statistics (outstanding 2026Q2, originations 2025)       | ARM share, the three book distributions     | CC0 1.0.                                                                                |
+| Census ACS 1-year, 2021 to 2024, tables B25103 and B25141                    | tax and insurance medians, and their growth | U.S. Government work; cite the table.                                                   |
+| Freddie Mac PMMS, weekly 30-year, January 2016 to 22 October 2026            | `refi.pmms_30y_series`                      | Use with attribution; alteration strictly prohibited.                                   |
+| OpenFEMA DisasterDeclarationsSummaries v2                                    | declarations by month                       | OpenFEMA terms: the non-endorsement statement, the endpoint and the access date.        |
+| CFPB, Mortgage Servicing COVID-19 Pandemic Response Metrics (May 2022)       | contacts per loan-year, handle time         | U.S. Government work.                                                                   |
+| CFPB Consumer Complaint Database, 2025 mortgage complaints                   | reason mix                                  | CC0. Not a statistical sample, and a skewed proxy for why people call.                  |
+| U.S. Mortgage Insurers' 2024 report (MBA NewsLink summary), over NMDB        | `mi.share_of_loans`                         | Quoted with attribution.                                                                |
+
+- **Not used:** Fannie Mae and Freddie Mac loan-level performance data. Their
+  terms need counsel first. The keys they would measure (monthly rolls,
+  payment timing, curtailments, transfers) are design choices that say so.
+- **The PMMS series is copied as published.** A replay that shifts, rescales
+  or splices it uses altered content, and is a question for counsel before
+  any generator does it.
+- **The escrow share is open.** The ACS asks it, but only its microdata
+  answers. That needs the 251.5 MB PUMS housing file or a Census API key; the
+  API refused keyless requests on 23 October. Until then it is a design choice
+  of 0.8.
+- **HMDA was not read.** It covers originations only, and the NMDB covered
+  both the outstanding book and 2025's originations.
+
 ## The Supermortgage Gym
 
 Every environment also runs in a browser, for people without a checkout:

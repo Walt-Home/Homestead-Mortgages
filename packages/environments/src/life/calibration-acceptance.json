@@ -1,0 +1,309 @@
+{
+  "version": "2026-10-23",
+  "calibration_version": "2026-10-23",
+  "sample": "The validation sample: loan histories the life generator writes for this check, from a seed kept out of every training run and reported score. The same tests apply to a subservicer's own sample once one is in hand under terms counsel approves (docs/subservicer-data.md, What this means for synthetic data). Each test names the calibration key it checks, how the target is read from that key, and the smallest sample it means anything on.",
+  "tests": [
+    {
+      "id": "payment-arrival-day",
+      "measure": "Share of installments arriving in each of payment.day_of_month's bins, over installments due on loans current at the due date.",
+      "key": "payment.day_of_month",
+      "target": { "path": "arrival_share", "compare": "each bin" },
+      "sample_floor": { "count": 50000, "of": "installments" },
+      "tolerance": {
+        "value": 0.02,
+        "unit": "absolute, each bin",
+        "kind": "design_choice",
+        "reason": "At 50,000 installments a bin's sampling error is at most 0.0023, so 0.02 is wide of noise and narrow enough to catch a bin drawn from the wrong day range."
+      }
+    },
+    {
+      "id": "payment-within-grace",
+      "measure": "Share of installments, on loans current at the due date, received after the due day and by the last day of grace.",
+      "key": "payment.late_within_grace_share",
+      "target": { "path": "", "compare": "value" },
+      "sample_floor": { "count": 50000, "of": "installments" },
+      "tolerance": {
+        "value": 0.02,
+        "unit": "absolute",
+        "kind": "design_choice",
+        "reason": "The same reasoning as payment-arrival-day; this is three of its bins summed."
+      }
+    },
+    {
+      "id": "late-fees-per-loan-year",
+      "measure": "Late charges assessed per loan-year, counting loan-months that start current and leaving out months in which no late charge is owed (forbearance, bankruptcy, an SCRA waiver).",
+      "key": "payment.late_after_grace_share",
+      "target": {
+        "formula": "12 * payment.late_after_grace_share",
+        "expected": 0.504,
+        "compare": "value"
+      },
+      "sample_floor": { "count": 5000, "of": "loan-years" },
+      "tolerance": {
+        "value": 0.15,
+        "unit": "relative",
+        "kind": "design_choice",
+        "reason": "One late charge per installment not received by the end of grace. 5,000 loan-years give about 2,500 charges, a sampling error near 2%; 15% leaves room for the months left out."
+      }
+    },
+    {
+      "id": "partial-payments",
+      "measure": "Share of receipts short of the installment due.",
+      "key": "payment.partial_share",
+      "target": { "path": "partial_receipt_share", "compare": "value" },
+      "sample_floor": { "count": 50000, "of": "receipts" },
+      "tolerance": {
+        "value": 0.3,
+        "unit": "relative",
+        "kind": "design_choice",
+        "reason": "About 500 events at the floor, a sampling error near 4.5%. Wide because the rate is itself a design choice; the test catches a generator that ignores it, not a few tenths of a point."
+      }
+    },
+    {
+      "id": "returned-payments",
+      "measure": "Share of receipts reversed after posting (a returned bank debit or check).",
+      "key": "payment.partial_share",
+      "target": { "path": "returned_receipt_share", "compare": "value" },
+      "sample_floor": { "count": 100000, "of": "receipts" },
+      "tolerance": {
+        "value": 0.3,
+        "unit": "relative",
+        "kind": "design_choice",
+        "reason": "About 300 events at the floor, a sampling error near 6%; wide for the reason given under partial-payments."
+      }
+    },
+    {
+      "id": "missed-months",
+      "measure": "Share of loan-months, on loans current at the due date, with no installment received by month end.",
+      "key": "payment.missed_month_share",
+      "target": { "path": "", "compare": "value" },
+      "sample_floor": { "count": 50000, "of": "loan-months" },
+      "tolerance": {
+        "value": 0.2,
+        "unit": "relative",
+        "kind": "design_choice",
+        "reason": "About 600 events at the floor, a sampling error near 4%. The public bounds on this rate are tested through delinquency-stock and quarterly-transitions."
+      }
+    },
+    {
+      "id": "delinquency-stock",
+      "measure": "Share of all loans 30, 60 and 90 or more days delinquent and not in foreclosure, at each quarter end after the first year of history.",
+      "key": "delinquency.all_loans_30plus_share_sa",
+      "target": { "path": "by_bucket", "compare": "each bucket, averaged over quarter ends" },
+      "sample_floor": { "count": 10000, "of": "loans" },
+      "tolerance": {
+        "value": 0.005,
+        "unit": "absolute, each bucket; 0.01 on the total",
+        "kind": "design_choice",
+        "reason": "The public level the monthly design choices (missed months, cures, rolls) have to land on. Half a point is a tenth of the total: close enough to place a book among real ones, loose enough for a sample's mix of loan types."
+      }
+    },
+    {
+      "id": "conventional-delinquency",
+      "measure": "Share of conventional loans one payment or more past due and not in foreclosure, at each quarter end after the first year of history.",
+      "key": "delinquency.conventional_30plus_share",
+      "target": { "path": "", "compare": "average over quarter ends" },
+      "sample_floor": { "count": 10000, "of": "conventional loans" },
+      "tolerance": {
+        "value": 0.005,
+        "unit": "absolute",
+        "kind": "design_choice",
+        "reason": "As delinquency-stock. A book of only conventional loans should sit near 2.7%, not near the all-loans 4.4% that FHA lifts."
+      }
+    },
+    {
+      "id": "quarterly-transitions",
+      "measure": "Share of loans current at one quarter end that are 30-60 days late at the next, and share of loans 30-60 days late that are current at the next.",
+      "key": "delinquency.roll_current_to_30",
+      "reads": ["delinquency.cure_from_30"],
+      "target": {
+        "path": "trailing_8_quarter_mean.to_30_60_late",
+        "also": "delinquency.cure_from_30 trailing_8_quarter_mean.to_current",
+        "compare": "each rate"
+      },
+      "sample_floor": { "count": 10000, "of": "loans" },
+      "tolerance": {
+        "value": 0.3,
+        "unit": "relative on the roll from current; 0.08 absolute on the cure",
+        "kind": "design_choice",
+        "reason": "The New York Fed counts credit-report accounts, home equity installment loans among them, so a servicer's book need not match it closely; the test catches a monthly model whose quarterly arithmetic is off by a multiple."
+      }
+    },
+    {
+      "id": "contacts-per-loan-year-by-status",
+      "measure": "Inbound contacts per loan-year, over all loans and by the loan's delinquency status in the month of the contact.",
+      "key": "contacts.per_loan_year",
+      "target": {
+        "path": "inquiries_per_loan_year",
+        "compare": "all loans",
+        "by_status_per_loan_year": {
+          "current": 1.7,
+          "d30": 6,
+          "d60": 9,
+          "d90_plus": 10,
+          "foreclosure": 8
+        },
+        "by_status_kind": "design_choice",
+        "by_status_reason": "The CFPB gives no split by status. These rise with delinquency, as early-intervention calls and loss-mitigation follow-up would, and over a book at delinquency.all_loans_30plus_share_sa's buckets and foreclosure inventory they average 2.0 a loan-year, the public figure."
+      },
+      "sample_floor": { "count": 5000, "of": "loan-years" },
+      "tolerance": {
+        "value": 0.3,
+        "unit": "absolute per loan-year on all loans; 25% relative on each status; current below d30 below d60 at or below d90_plus",
+        "kind": "design_choice",
+        "reason": "The public figure is a 2021 pooled average across sixteen servicers that counted inquiries differently (1.9 to 2.08 by month), so 0.3 holds that spread and a little more."
+      }
+    },
+    {
+      "id": "contact-reason-mix",
+      "measure": "Share by reason of the inbound contacts the sample marks as complaints or notices of error, mapped onto the key's twelve reasons.",
+      "key": "contacts.inbound_reason_mix",
+      "target": { "path": "shares", "compare": "each reason" },
+      "sample_floor": { "count": 2000, "of": "complaint or error-notice contacts" },
+      "tolerance": {
+        "value": 0.03,
+        "unit": "absolute, each reason; the three largest reasons in the same order",
+        "kind": "design_choice",
+        "reason": "Complaints are compared with complaints: the database is a skewed proxy for all calls and is not a target for routine ones. 2,000 contacts give a sampling error of at most 0.011 on a share."
+      }
+    },
+    {
+      "id": "call-note-length",
+      "measure": "Handle time recorded on each call, averaged over each month's calls, and the length in characters of each call's note.",
+      "key": "contacts.handle_time_minutes",
+      "target": {
+        "path": "",
+        "compare": "each month's average handle time inside [min, max]",
+        "note_median_chars": { "min": 150, "max": 800 },
+        "note_length_rises_with_handle_time": "Spearman rank correlation above 0.3",
+        "notes_kind": "design_choice",
+        "notes_reason": "No public source gives the length of a servicer's call notes; only a subservicer's sample can (docs/subservicer-data.md, kind 3). The band is a few sentences to a short paragraph."
+      },
+      "sample_floor": { "count": 2000, "of": "calls" },
+      "tolerance": {
+        "value": 0.5,
+        "unit": "minutes a month's average may fall outside [min, max]",
+        "kind": "design_choice",
+        "reason": "The public range is of servicers' and call centers' monthly averages, so it bounds a month's average and not a single call: a two-minute call and a forty-minute one are both ordinary. Half a minute holds the noise in a month of a small sample."
+      }
+    },
+    {
+      "id": "transactions-per-loan-year",
+      "measure": "Ledger transactions per loan-year on loans current at every due date of the year: receipts, curtailments, short and returned receipts and their reversals, late charges, and escrow disbursements.",
+      "key": "payment.curtailment_share",
+      "reads": ["payment.partial_share", "payment.day_of_month", "escrow.share_of_loans"],
+      "target": {
+        "formula": "12 * (1 + payment.curtailment_share + partial_receipt_share + 2 * returned_receipt_share + arrival_share.days_17_to_month_end) + 3 * escrow.share_of_loans",
+        "expected": 15.312,
+        "compare": "value",
+        "late_charges": "A loan current at every due date misses no month, so its late charges are the installments received from day 17 to month end, not payment.late_after_grace_share, which counts the missed month too.",
+        "escrow_disbursements_per_year": 3,
+        "escrow_disbursements_kind": "design_choice",
+        "escrow_disbursements_reason": "Two property tax installments and one insurance premium; jurisdictions bill taxes once, twice or four times a year."
+      },
+      "sample_floor": { "count": 5000, "of": "loan-years" },
+      "tolerance": {
+        "value": 0.1,
+        "unit": "relative",
+        "kind": "design_choice",
+        "reason": "The twelve installments are most of the count, so a tenth catches a missing kind of transaction without failing on tax billing schedules."
+      }
+    },
+    {
+      "id": "defect-rates-by-field",
+      "measure": "Planted defects per eligible unit, by defect ID, read from the generator's manifest; and the share of planted defects the manifest labels.",
+      "key": "defects.field_error_rates",
+      "target": { "path": "", "compare": "each defect ID's rate" },
+      "sample_floor": { "count": 3000, "of": "loans" },
+      "tolerance": {
+        "value": 0.99,
+        "unit": "confidence of the two-sided binomial interval each observed count must fall in, given the sample's count of eligible units; every planted defect labeled, exactly",
+        "kind": "design_choice",
+        "reason": "The rates are design choices, so the test asks only that the generator plant what it says, at the rate it says, and label each one: an unlabeled defect cannot be graded."
+      }
+    },
+    {
+      "id": "note-rate-distribution",
+      "measure": "Share of loans by note rate bucket at the sample's as-of date.",
+      "key": "book.note_rate_distribution",
+      "target": { "path": "loans", "compare": "each bucket" },
+      "sample_floor": { "count": 5000, "of": "loans" },
+      "tolerance": {
+        "value": 0.02,
+        "unit": "absolute, each bucket",
+        "kind": "design_choice",
+        "reason": "At 5,000 loans a bucket's sampling error is at most 0.007; 0.02 is three of those."
+      }
+    },
+    {
+      "id": "ltv-distribution",
+      "measure": "Share of loans by mark-to-market LTV bucket at the sample's as-of date.",
+      "key": "book.ltv_distribution",
+      "target": { "path": "mark_to_market.loans", "compare": "each bucket" },
+      "sample_floor": { "count": 5000, "of": "loans" },
+      "tolerance": {
+        "value": 0.02,
+        "unit": "absolute, each bucket",
+        "kind": "design_choice",
+        "reason": "As note-rate-distribution."
+      }
+    },
+    {
+      "id": "loan-age-distribution",
+      "measure": "Share of loans by years since origination at the sample's as-of date.",
+      "key": "book.loan_age_distribution",
+      "target": { "path": "loans", "compare": "each bucket" },
+      "sample_floor": { "count": 5000, "of": "loans" },
+      "tolerance": {
+        "value": 0.02,
+        "unit": "absolute, each bucket",
+        "kind": "design_choice",
+        "reason": "As note-rate-distribution."
+      }
+    },
+    {
+      "id": "arm-share",
+      "measure": "Share of loans that are adjustable-rate at the sample's as-of date.",
+      "key": "arm.share_of_outstanding",
+      "target": { "path": "loans", "compare": "value" },
+      "sample_floor": { "count": 5000, "of": "loans" },
+      "tolerance": {
+        "value": 0.01,
+        "unit": "absolute",
+        "kind": "design_choice",
+        "reason": "At 4.3% and 5,000 loans the sampling error is 0.003; a point is three of those."
+      }
+    },
+    {
+      "id": "escrow-share",
+      "measure": "Share of loans with an escrow account for taxes at the sample's as-of date.",
+      "key": "escrow.share_of_loans",
+      "target": { "path": "", "compare": "value" },
+      "sample_floor": { "count": 5000, "of": "loans" },
+      "tolerance": {
+        "value": 0.03,
+        "unit": "absolute",
+        "kind": "design_choice",
+        "reason": "The target is itself a design choice until the ACS microdata share is computed; three points holds the generator to it without pretending to more."
+      }
+    },
+    {
+      "id": "escrow-medians",
+      "measure": "Median yearly property tax and hazard insurance disbursed per escrowed loan, in the sample's newest full year.",
+      "key": "escrow.tax_annual_median",
+      "reads": ["escrow.insurance_annual_median"],
+      "target": {
+        "path": "with_mortgage_usd",
+        "also": "escrow.insurance_annual_median with_mortgage_usd",
+        "compare": "each median"
+      },
+      "sample_floor": { "count": 2000, "of": "escrowed loans" },
+      "tolerance": {
+        "value": 0.1,
+        "unit": "relative",
+        "kind": "design_choice",
+        "reason": "The ACS medians are over all mortgaged owners in 2024 and the sample's year may differ, so a tenth; the growth keys say how far a later year should move."
+      }
+    }
+  ]
+}

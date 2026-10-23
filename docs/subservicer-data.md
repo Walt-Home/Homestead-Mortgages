@@ -415,16 +415,19 @@ own. The yearly escrow analysis and the ARM change are cycles with no runner
   the clocks it starts never arm (boarding-5), sets up no mortgage insurance
   policy, schedule or Homeowners Protection Act clock (pmi-15), links the
   borrower to no party, so no statement, Form 1098 or Metro 2 record reaches
-  them (boarding-2), and drops a joint loan's co-borrower (boarding-3). For
-  every loan it never stops late charges in forbearance or bankruptcy
-  (cashiering-18), takes a paid late charge again from later payments
-  (cashiering-19), leaves a waived or reversed charge on the ledger
-  (cashiering-20), never ends a forbearance plan at its term (lossmit-1),
-  leaves the loan out of every Metro 2 file (metro2-1), lets a paid
-  installment's early-intervention clocks breach (ei-1), misstates the
-  early-intervention windows (ei-2), quotes the borrower's own payoff requests
-  from the wrong inputs (payoff-19), and cannot post a payoff or a ledger line
-  over its HTTP tool routes (http-1). Each is in
+  them (boarding-2), drops a joint loan's co-borrower (boarding-3), and books
+  the tape's late charges on the ledger where the cash state cannot see them
+  (boarding-6). For every loan it never stops late charges in forbearance or
+  bankruptcy (cashiering-18), takes a paid late charge again from later
+  payments (cashiering-19), leaves a waived or reversed charge on the ledger
+  (cashiering-20), bills a charge its SCRA waiver removed (scra-1), never ends
+  a forbearance plan at its term (lossmit-1), leaves the loan out of every
+  Metro 2 file (metro2-1), lets a paid installment's early-intervention clocks
+  breach (ei-1), misstates the early-intervention windows (ei-2), lets each
+  window after a written notice breach for a notice not owed (ei-3), releases
+  no transfer goodbye notice (transfers-1), quotes the borrower's own payoff
+  requests from the wrong inputs (payoff-19), and cannot post a payoff or a
+  ledger line over its HTTP tool routes (http-1). Each is in
   docs/servicing-engine-defects.md.
 
 ## Sources

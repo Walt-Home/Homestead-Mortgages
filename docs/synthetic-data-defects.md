@@ -266,7 +266,8 @@ continuity. Later processes catch some of them, and each item says which.
    and the batch upload is portal-only
    (`AS/src/infra/integrations/legal.ts:52`). An SCRA case opens only on a
    loan made before the service began (`openScraCase`), so the injection
-   should plant one.
+   should plant one. Even then, the case's late-charge waiver moves the
+   ledger but not the fee record, so the charge is still billed (scra-1).
 7. **D-37, bankruptcy details present with the flag off.** It is 8.9% of the
    review's harm errors (IFR). The harm is a violation of the automatic stay.
    The decoder drops the details (`tape-codec.ts:248`), and boarding never

@@ -6958,3 +6958,32 @@ regz-price-tests 198 of 200 (99.0 %, 96.4 to 99.7; 196 on 1.1.0),
 regz-policy 197 (98.5 %; 197), regz-apr 170 (85.0 %, 79.4 to 89.3; 171), at
 0.5 to 0.8¢ a task. Every regz-apr miss but one is the APR again. The moves are
 within what a run moves, so the wording was not what the model was missing.
+
+## Production's homeowner-mail switch is production's own variable
+
+**Decided 23 October 2026.** Production deployed with homeowner mail on, on 21
+October, against the rule that no borrower is e-mailed until someone decides
+to (5 October). `deploy-production.yml` read `vars.HOMEOWNER_MAIL`, and GitHub
+resolves a `vars.` name from the deployment's environment first and then from
+the repository. The `production` environment never set it, and the
+repository's `HOMEOWNER_MAIL` is staging's switch, `on` since 8 October. So
+both 21 October promotions set `HOMEOWNER_MAIL=on`, and the deploy said so in
+a warning rather than failing. Production has a real mailer and, unlike
+staging, no fence to our own domains, so a tape-desk invitation (after its
+typed count) or an applicant's co-borrower invitation would have reached a
+person. Whether either happened between 21 and 23 October is a production
+question this entry does not answer.
+
+Turned off on 23 October: the `production` environment now sets
+`HOMEOWNER_MAIL=off`, and the running service was updated in place to
+`HOMEOWNER_MAIL=off` (revision `homestead-mortgages-production-00030-sx6`);
+`/api/health` reads `homeownerMail: off`. The workflow now reads
+`vars.PRODUCTION_HOMEOWNER_MAIL`, a name only production sets, and fails the
+promotion when the service reads `on` without it.
+`homeowner-mail-switch.test.ts` reads the file to hold both. Production
+inherits four more repository variables the same way, and they give it the
+same values as staging: `GOOGLE_CLIENT_ID`, `PLAID_CLIENT_ID`,
+`PROPERTY_RECORDS_PROVIDER` (`corelogic`) and `BILLING_WEBHOOK` (`on`, which
+mounts production's own webhook secret). Whether each should be production's
+own name is open. A fifth, `MAIL_ALLOWED_ADDRESSES`, is ignored there, because
+the mail fence applies only where sample sign-ins are on.

@@ -6999,6 +6999,30 @@ generator", says what it carries.
   to suspense or to fees. Metro 2 and the MI sweep read the cashiering
   ledger, which is the one the servicing app posts.
 
+**What review found, and what changed.**
+
+- **A paid-off loan aged after it closed.** The month-end was measured at
+  the month's end, so an installment still in grace at a payoff read 30
+  days late on a loan that no longer existed: 33 of 404 payoffs in a
+  thousand-loan book. A closing month is now measured on the day it closed,
+  and a loan paid in full has nothing past due. The Metro 2 record already
+  rated a closed loan at its closing date (`buildSnapshot`, rule 7).
+- **An early payment was counted twice.** The analysis added every deposit
+  due between its run date and the new year, but an early payer's could
+  already be in the balance: 223 of 8,690 analyses. A test now recomputes
+  every projected balance from the history.
+- **An installment was paid twice.** An early payer's next receipt could
+  arrive before a late one, find the late installment open and cure both.
+  The late receipt then paid a whole installment into suspense, where it
+  stayed for months: 73 receipts on 23 of a thousand loans. A receipt for an
+  installment already paid is no longer sent.
+- **The rate split missed one case.** When suspense alone paid the
+  installments at the earlier rate, the payment went through one call at
+  that rate, so the installments past the change were charged the old rate:
+  1 of 84,521 installments on 900 ARM loans missing four times as often as
+  the book. The first call now takes none of the payment, and the fees
+  still come after every installment.
+
 **Twins are labeled by difference.** A defect plants one value, and the
 twin runs the same loan from the same draws. No draw reads the loan's
 state: each installment, month and analysis has its own stream. So the

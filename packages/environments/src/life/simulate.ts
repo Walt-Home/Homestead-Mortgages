@@ -283,6 +283,7 @@ export interface BehaviorRow {
   readonly on: PlainDate;
   readonly kind:
     | "missed"
+    | "already_paid"
     | "deferred_to_promise"
     | "promise_made"
     | "promise_kept"
@@ -546,7 +547,7 @@ interface Ev {
   readonly byRefi?: boolean;
   readonly promise?: number;
   readonly plan?: number;
-  cancelled?: boolean;
+  canceled?: boolean;
 }
 const evLess = (a: Ev, b: Ev) =>
   a.on !== b.on
@@ -571,6 +572,11 @@ const clamp01 = (x: number, hi = 1) => (x < 0 ? 0 : x > hi ? hi : x);
  * suspense), the second the rest at the later one. The split happens only
  * when the pool covers an installment beyond the change, so neither call
  * takes the partial-payment path a single call would not have taken.
+ *
+ * The first call sees only the earlier rate's installments and no fees. When
+ * suspense alone pays those installments, it takes none of the payment, and
+ * what suspense holds beyond them stays in suspense for the second call, so
+ * the fees are paid after every installment, as one call would pay them.
  */
 export function allocateAtRates(
   s0: LoanCashState,
@@ -595,11 +601,12 @@ export function allocateAtRates(
         pool -= P;
         n++;
       }
+      // n > j means the pool pays installment j too, so what the earlier rate's installments need is under `amount`.
       if (n > j) {
         let need = 0n;
         for (let k = 0; k < j; k++) need += pOf(open[k]!);
         const c = need - s.suspense_unapplied_cents;
-        if (c > 0n && c < amount) carve = c;
+        carve = c > 0n ? c : 0n;
       }
     }
     const id = plans.length ? `${req.payment_id}.${plans.length}` : req.payment_id;
@@ -610,9 +617,25 @@ export function allocateAtRates(
     }
     const { curtailment_cents: _reserved, ...plain } = req;
     void _reserved;
-    const p = allocate(at, { ...plain, payment_id: id, amount_cents: carve });
+    const later = new Set(open.slice(j));
+    const p = allocate(
+      {
+        ...at,
+        installments: s.installments.filter((i) => !later.has(i)),
+        late_charges_due_cents: 0n,
+        nsf_fees_due_cents: 0n,
+        other_fees_due_cents: 0n,
+      },
+      { ...plain, payment_id: id, amount_cents: carve },
+    );
     plans.push(p);
-    s = p.next;
+    s = {
+      ...p.next,
+      installments: [...p.next.installments, ...later].sort(byDue),
+      late_charges_due_cents: s.late_charges_due_cents,
+      nsf_fees_due_cents: s.nsf_fees_due_cents,
+      other_fees_due_cents: s.other_fees_due_cents,
+    };
     amount -= carve;
   }
   throw new Error(`${req.payment_id}: the rate split did not converge`);
@@ -1026,7 +1049,9 @@ export function simulateLoan(
       suspense_used: plansMade[0]!.suspense_used_cents,
       upb_after: state.upb_cents,
     });
-    // INVENTED: the payoff by overshoot. A level payment's last installment overpays the balance by cents.
+    // INVENTED: the payoff by overshoot. A level payment's last installment overpays the balance, by cents on a loan
+    // that ran to schedule and by up to a month's principal on one its curtailments shortened. A drawn loan reaches it
+    // only in a run past the decade. The overage is noted and not refunded, and neither is the escrow balance.
     if (state.upb_cents <= 0n && !ended) {
       const over = -state.upb_cents;
       principalApplied -= over;
@@ -1055,6 +1080,10 @@ export function simulateLoan(
     const targetInst = state.installments.find((i) => i.due_date === target);
     const behind = oldest !== undefined && oldest.due_date < target;
     const plan = activePlan();
+    // An installment a cure or a promise already paid (a late receipt arriving after the next one's cure) is not paid
+    // twice: the borrower sends nothing for it.
+    if (!plan && targetInst && targetInst.status !== "due")
+      return void note(e.on, "already_paid", target);
     if (plan) {
       // Each plan payment is the month's own installment (none when it is one of the arrears) and a share of the arrears.
       plan.paid++;
@@ -1269,10 +1298,14 @@ export function simulateLoan(
       state_max_months: null,
     });
     // The projected actual balance as escrow/grader.ts's projectedActual reads it: the balance now, plus the deposits
-    // still due before the year (assumed paid), less what is still to be paid out.
+    // still due before the year (assumed paid), less what is still to be paid out. An installment due after the run
+    // date that an early payer has already paid is in the balance now, and is not counted twice.
     let pa = escrowBal;
-    for (let due = addMonths(ys, -3); due < ys; due = addMonths(due, 1))
-      if (due > asOf) pa += escrowFor(due);
+    for (let due = addMonths(ys, -3); due < ys; due = addMonths(due, 1)) {
+      if (due <= asOf) continue;
+      const inst = state.installments.find((i) => i.due_date === due);
+      if (!inst || inst.status === "due") pa += escrowFor(due);
+    }
     for (const l of lines)
       for (const b of l.bills)
         if (
@@ -1453,8 +1486,8 @@ export function simulateLoan(
     state.transfer_shield_until = addDays(e.on, 60);
     if (graceBefore !== boardedTerms.late_charge_grace_days)
       for (const [due, run] of runEvents)
-        if (run.on > e.on && !run.cancelled) {
-          run.cancelled = true;
+        if (run.on > e.on && !run.canceled) {
+          run.canceled = true;
           runEvents.set(due, push({ on: addDays(graceEndFor(state, due), 1), kind: "run", due }));
         }
     note(e.on, "boarded");
@@ -1489,6 +1522,8 @@ export function simulateLoan(
       other_fees_due_cents: 0n,
       suspense_unapplied_cents: 0n,
       // An installment not yet due never comes due; one already paid ahead stays paid (the quote credits its interest).
+      // One due and unpaid stays unpaid in the ledger: the payoff pays the loan, not the installment, as the metro2
+      // environment's ledgers hold it, and Metro 2 rates the closing from it.
       installments: state.installments.filter((i) => i.due_date <= e.on || i.status !== "due"),
     };
     const refund = escrowBal > 0n ? escrowBal : 0n;
@@ -1544,7 +1579,7 @@ export function simulateLoan(
     const evs = queue.get(key) ?? [];
     for (let i = 0; i < evs.length; i++) {
       const e = evs[i]!;
-      if (e.cancelled || ended) continue;
+      if (e.canceled || ended) continue;
       switch (e.kind) {
         case "receipt":
           onReceipt(e);
@@ -1710,7 +1745,22 @@ export function simulateLoan(
       record = renderBase(snap);
       prior = snap;
     }
-    const days = regxDaysDelinquent(ap, asOf);
+    // A loan that closed this month is measured on the day it closed, so an installment still in grace when it was
+    // paid off or transferred does not age to the month-end. The MBA count is of payments missed at a month-end, so the
+    // month's own installment is not one; a loan paid in full has nothing past due.
+    const at = ended ? ended.on : asOf;
+    const days = regxDaysDelinquent(ap, at);
+    const mba = ended
+      ? fnmaDelinquencyStatus(
+          ap.filter((i) => i.due_date < monthStart),
+          at,
+        )
+      : fnmaDelinquencyStatus(ap, asOf);
+    const pastDue = !ended
+      ? dq.amount_past_due_cents
+      : ended.kind === "paid_in_full"
+        ? 0n
+        : deriveDelinquency(ap, at).amount_past_due_cents;
     monthEnds.push({
       month: monthStart.slice(0, 7),
       as_of: asOf,
@@ -1728,8 +1778,8 @@ export function simulateLoan(
       last_payment_on: lastPaymentOn,
       paid_in_month: paidInMonth,
       days_delinquent: days,
-      mba_status: fnmaDelinquencyStatus(ap, asOf),
-      amount_past_due: dq.amount_past_due_cents,
+      mba_status: mba,
+      amount_past_due: pastDue,
       status: ended
         ? ended.kind === "paid_in_full"
           ? "paid_off"

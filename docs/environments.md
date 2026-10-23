@@ -2209,6 +2209,8 @@ A borrower who is behind does one of three things, by roll rate:
 - pays the oldest open installment's amount, which applies;
 - misses again.
 
+A receipt for an installment a cure or a promise already paid is not sent.
+
 Also invented: the index feed, the mortgage-rate path, names and addresses,
 and the terms the calibration does not cover. The design choices without a
 calibration key are named in `draw.ts` and `simulate.ts`. `calibrationCheck`
@@ -2235,7 +2237,9 @@ is the one defect so far (docs/synthetic-data-defects.md).
 `bookTape(book, month)` return what a partner's tape carries, under the m3-v1
 profile's keys: terms, balances, status and dates, a twelve-month pay
 string, the escrow balance, twelve months of cash flow, and the PMI,
-foreclosure and bankruptcy fields. A tape writer only lays them out.
+foreclosure and bankruptcy fields. A tape writer only lays them out. The
+month a loan pays off or transfers out is measured on the day it closed, so
+an installment still in grace at a payoff never ages to 30 days.
 
 **Not covered yet:**
 
@@ -2247,7 +2251,10 @@ foreclosure and bankruptcy fields. A tape writer only lays them out.
   analysis returns the surplus;
 - early-intervention outreach and a borrower's request to cancel MI;
 - `book.loan_age_distribution` is read only when a scenario boards a book by
-  transfer.
+  transfer;
+- a run longer than the decade. A scenario may ask for up to 360 months, but
+  a loan its curtailments pay to zero before maturity ends on a last payment
+  that overpays, and neither the overage nor the escrow balance is refunded.
 
 A thousand loan-decades run in about 3.5 seconds, and a test holds them
 under 15.

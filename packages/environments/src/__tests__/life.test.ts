@@ -8,13 +8,15 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { addMonths, type PlainDate } from "@hm/kernel/calendar";
+import { addMonths, daysBetween, type PlainDate } from "@hm/kernel/calendar";
 import { monthlyInterest, ratePercent } from "@hm/kernel/money";
 import { lateChargeAmount } from "../payments/ported/latecharges.js";
+import type { LoanCashState } from "../payments/ported/types.js";
 import { toJsonLine } from "../record.js";
 import {
   CALIBRATION_KEYS,
   DEFAULT_CALIBRATION,
+  allocateAtRates,
   bookTape,
   calibrationCheck,
   defaultCalibration,
@@ -97,6 +99,67 @@ describe("life generator", () => {
     expect(spanning).toBeGreaterThan(0);
   });
 
+  it("splits a payment at a rate change when suspense alone pays the earlier installment", () => {
+    // Suspense holds the September installment and $50 more; the payment is October's, at the new rate.
+    const due = (d: string, pi: bigint) => ({
+      due_date: d as PlainDate,
+      pi_cents: pi,
+      escrow_cents: 20_000n,
+      status: "due" as const,
+    });
+    const s: LoanCashState = {
+      loan_id: "LN-split",
+      instrument_date: "2026-01-15" as PlainDate,
+      lien: "first",
+      escrowed: true,
+      note_rate_pct: "6.000",
+      remittance_type: "A/A",
+      upb_cents: 30_000_000n,
+      lpi_date: "2031-08-01" as PlainDate,
+      installments: [due("2031-09-01", 180_000n), due("2031-10-01", 175_000n)],
+      late_charges_due_cents: 9_000n,
+      nsf_fees_due_cents: 0n,
+      other_fees_due_cents: 0n,
+      suspense_unapplied_cents: 205_000n,
+      holds: [],
+      trial_active: false,
+      plan_active: false,
+      partial_count_12m: 0,
+      opted_out_of_50_rule: false,
+      late_charge_pct: "5",
+      late_charge_grace_days: 15,
+      late_charge_cap_cents: null,
+      late_charge_basis: "pi",
+      fees: [],
+      overlays: [],
+      transfer_shield_until: null,
+    };
+    const plans = allocateAtRates(
+      s,
+      {
+        payment_id: "P",
+        amount_cents: 195_000n,
+        received_on: "2031-09-10" as PlainDate,
+        credited_as_of: "2031-09-10" as PlainDate,
+        designation: "unspecified",
+      },
+      (d) => (d < "2031-10-01" ? "6.000" : "5.500"),
+    );
+    const sept = monthlyInterest(30_000_000n, ratePercent("6.000"));
+    const oct = monthlyInterest(30_000_000n - (180_000n - sept), ratePercent("5.500"));
+    expect(plans.map((p) => p.installments.map((x) => [x.due_date, x.interest_cents]))).toEqual([
+      [["2031-09-01", sept]],
+      [["2031-10-01", oct]],
+    ]);
+    // The $50 beyond September waits in suspense for October and pays a fee only after it, as one call would.
+    const last = plans.at(-1)!;
+    expect(plans.reduce((t, p) => t + p.late_charge_cents, 0n)).toBe(5_000n);
+    expect([last.next.late_charges_due_cents, last.next.suspense_unapplied_cents]).toEqual([
+      4_000n,
+      0n,
+    ]);
+  });
+
   it("runs both ARM engines on every change, and they agree", () => {
     const arms = generate(
       12,
@@ -149,6 +212,72 @@ describe("life generator", () => {
     expect(escrowed.length).toBeGreaterThan(50);
     for (const l of escrowed)
       expect(l.analyses.map((a) => a.year)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+    // The projected balance, from the history: the balance at the run date, plus each deposit due before the year
+    // that was not yet paid then (an early payer's may be), less the bills still to pay.
+    const wrong: string[] = [];
+    let early = 0;
+    for (const l of escrowed) {
+      const stop = l.pmi.find((p) => p.status === "terminated");
+      for (const a of l.analyses) {
+        let pa = a.balance;
+        for (const i of l.installments) {
+          if (i.due <= a.as_of || i.due < addMonths(a.year_start, -3) || i.due >= a.year_start)
+            continue;
+          if (i.satisfied_on !== null && i.satisfied_on <= a.as_of) early++;
+          else pa += i.escrow;
+        }
+        for (const line of l.lines)
+          for (const b of line.bills)
+            if (
+              b.on > a.as_of &&
+              b.on < a.year_start &&
+              !(line.basis === "mi" && stop && stop.on <= a.as_of && b.on >= stop.effective_on!)
+            )
+              pa -= b.amount;
+        if (pa !== a.projected_actual)
+          wrong.push(`${l.loan_id} year ${a.year}: ${a.projected_actual} is not ${pa}`);
+      }
+    }
+    expect(wrong).toEqual([]);
+    expect(early).toBeGreaterThan(0);
+  });
+
+  it("measures the month a loan closes on the day it closed", () => {
+    const res = generate(
+      "close",
+      {
+        loans: 2,
+        cohort_months: 1,
+        random: false,
+        events: [
+          // Paid off nine days into the grace period, the month's installment unpaid.
+          { kind: "missed_payment", loan: 0, month: 20 },
+          { kind: "payoff", loan: 0, month: 20, day: 10 },
+          // Paid off a month and nine days behind.
+          { kind: "missed_payment", loan: 1, month: 19 },
+          { kind: "missed_payment", loan: 1, month: 20 },
+          { kind: "payoff", loan: 1, month: 20, day: 10 },
+        ],
+      },
+      { calibration: cal },
+    ).clean;
+    const [a, b] = [res.loans[0]!, res.loans[1]!];
+    const last = (l: LoanLife) => l.months.at(-1)!;
+    const fields = (l: LoanLife) => [
+      last(l).status,
+      last(l).days_delinquent,
+      last(l).mba_status,
+      last(l).amount_past_due,
+      last(l).metro2.record!["account_status"],
+      last(l).metro2.record!["payment_rating"],
+    ];
+    expect(fields(a)).toEqual(["paid_off", 9, "current", 0n, "13", "0"]);
+    const behind = daysBetween(addMonths(b.draw.first_due, 19), b.payoff!.on);
+    expect(fields(b)).toEqual(["paid_off", behind, "30", 0n, "13", "1"]);
+    const [ra, rb] = [a, b].map((l) => monthEndRow(l, last(l).month)!);
+    expect([ra!.pay_string.at(-1), rb!.pay_string.at(-1)]).toEqual(["0", "3"]);
+    expect([ra!.contact.contact_expected, rb!.contact.contact_expected]).toEqual([false, false]);
   });
 
   it("has a borrower who is behind pay to cure, and a cured borrower catch up", () => {
@@ -188,9 +317,13 @@ describe("life generator", () => {
         }
         if ((r.mode === "oldest" || r.mode === "cure") && r.installments.length === 0)
           unpaid.push(`${r.id}: ${r.mode} applied nothing`);
+        // A whole payment never lands in suspense: an installment a cure already paid is not paid again.
+        if (["regular", "cure", "oldest", "curtail"].includes(r.mode) && r.outcome === "unapplied")
+          unpaid.push(`${r.id}: ${r.mode} went to suspense`);
       }
     expect(cures).toBeGreaterThan(20);
     expect(unpaid).toEqual([]);
+    expect(book.loans.some((l) => l.behavior.some((b) => b.kind === "already_paid"))).toBe(true);
   });
 
   it("obeys the scenario's events", () => {
@@ -321,9 +454,16 @@ describe("life generator", () => {
       const labels = res.labels.filter((x) => x.loan === p.loan && !x.root_cause);
       expect(labels.length).toBeGreaterThan(0);
       expect(labels.filter((x) => x.on < p.on)).toEqual([]);
+      // Nothing differs before the first installment charged since boarding, the first value the missing cap reaches.
+      const c = res.clean.loans[p.index]!;
+      const reached = c.fees
+        .filter((f) => f.assessed_on >= p.on)
+        .map((f) => f.due)
+        .sort()[0]!;
+      expect(reached > p.on).toBe(true);
+      expect(labels.filter((x) => x.on < reached)).toEqual([]);
       for (const x of labels) expect(x.defect_id).toBe("D-03");
       // Each charge differs exactly as the cap says: capped in the clean history, the full percent in the twin.
-      const c = res.clean.loans[p.index]!;
       const fees = labels.filter((x) => x.file_or_table === "fees" && x.field === "amount_cents");
       expect(fees.length).toBeGreaterThan(0);
       for (const f of fees) {

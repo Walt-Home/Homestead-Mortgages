@@ -15,6 +15,10 @@
  * months ending with the as-of month (Month 01 the oldest, Month 12 the
  * as-of month), payoff funds included, null before the loan's first month.
  *
+ * A loan's last month-end, the month it paid off or transferred, is measured
+ * on the day it closed: its delinquency is what it owed then, and a loan paid
+ * in full has nothing past due (simulate.ts, `monthEnd`).
+ *
  * Foreclosure and bankruptcy are not generated yet, so those fields are
  * always empty; they are here so the tape writer's layout is complete.
  */
@@ -280,7 +284,10 @@ export function monthEndRow(loan: LoanLife, month: string): TapeRow | null {
       bk_discharged_date: null,
       bk_dismissed_date: null,
     },
-    contact: { last_contact_date: lastContact, contact_expected: m.days_delinquent >= 30 },
+    contact: {
+      last_contact_date: lastContact,
+      contact_expected: !ended && m.days_delinquent >= 30,
+    },
   };
 }
 

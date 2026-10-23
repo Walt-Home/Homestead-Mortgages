@@ -200,6 +200,75 @@ The held-out suite is seed 1, 200 tasks, pinned by hash.
 on, the spec's worked example and its three variants among them, to the
 cent.
 
+### The annual statement's explanation
+
+The statement the analysis goes out with says why the payment changed:
+the shortage, the bills that moved, and the cushion. The servicing app's
+statement engine writes the last two, and it is ported beside the analysis
+so a later grader can hold a borrower's "why did my payment go up?" call to
+it. escrow-analysis does not read it; its grading and its version are
+unchanged.
+
+**The port.** `src/escrow/ported/statement.ts` is
+`apps/servicing/src/domain/escrow/statement.ts` (§3.3) byte for byte but for
+its three kernel imports, held by `escrow-statement.test.ts` as analysis.ts
+is held. Its `lowPointExplanation` writes item (viii) of Reg X
+§1024.17(i)(1), the reasons the low balance last year's projection set was
+not reached:
+
+- each bill paid at another amount than projected;
+- each bill nobody projected;
+- the low balance against the projected one, which is the cushion.
+
+**The wrapper.** `statementExplanation(analysis, ledger, labels)` in
+`src/escrow/statement.ts` runs it over one computation year. It takes:
+
+- the analysis that set the year's payment, as the escrow port computed it:
+  the year's start and `project()`'s items and targets;
+- the year's ledger: the opening balance, the deposits, and the
+  disbursements by line;
+- optionally, the name the statement prints for each line type.
+
+The servicing app pairs the engine's input in its agent, not in code, so
+the pairing is ours:
+
+- a projected bill and a paid one are one line when they share a line type
+  and a month;
+- a bill that moved is two lines: paid $0.00 where it left, and "not
+  projected" where it arrived;
+- the actual low is the lowest month-end balance, as the servicing app's
+  statement assembly computes it (`buildHistory` and
+  `assembleAnnualStatement` in its escrow `ops.ts`); a test holds those
+  source lines;
+- the projected low is the projection's lowest target, its cushion.
+
+**Held to the spec.** A test recomputes §3.3's worked example from last
+year's projection and the year's bills. It gets the four lines the spec
+prints and the servicing app's own test asserts, read out of both files.
+3.3-T9's two lines are among them. The year ends at $700.00, the projected
+actual §3.2's worked example starts from, so the shortage ($406.68, $33.89
+a month) and the new payment ($172.22) that escrow-analysis grades are the
+ones these lines explain.
+
+**What the lines leave out.**
+
+- **A negative low.** The engine prints one wrongly: −$105.50 as $-105.-50,
+  and −$0.50 as $0.-50 (escrow-4 in `docs/servicing-engine-defects.md`). An
+  account overdrawn during the year has a negative low, so
+  `statementScopeIssues` names it and `statementExplanation` refuses it. In a
+  thousand-loan book from the life generator (1.0.0, seed 1), 81 of 6,827
+  computation years had one.
+- **The shortage sentence.** Items (vi) and (vii), the surplus or shortage
+  and the repayment plan, are `decisionText` and `planText` in the servicing
+  app's escrow `ops.ts`. That file is not ported, because it carries the
+  stateful operations layer around them. Their figures are the analysis's
+  own.
+- **Thousands separators.** The engine prints $1710.50 where the statement's
+  other items print $1,710.50.
+
+The life generator's analysis rows do not yet record the projection's items
+and targets, which the wrapper needs.
+
 ## regz-price-tests
 
 regz-price-tests 1.0.0 is the origination side's first environment:

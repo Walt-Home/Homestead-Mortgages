@@ -7225,3 +7225,68 @@ cadence's cessation on a promise to pay or a workout request (a conversation
 here carries no commitment, so the cadence runs on), the pre-sale stop, TCPA
 consent and quiet hours, Reg F's seven days after a conversation, and the
 notices' content.
+
+## The annual statement's explanation is the servicing app's engine, ported beside the analysis
+
+**Decided 23 October 2026.** The servicing app's §3.3 statement engine,
+`apps/servicing/src/domain/escrow/statement.ts`, is ported to
+`packages/environments/src/escrow/ported/statement.ts` beside the analysis
+engine, and `statementExplanation` in `src/escrow/statement.ts` runs it over
+an analysis the escrow port computed. Nothing grades with it yet.
+escrow-analysis's grading and its version (1.0.0) are unchanged.
+docs/environments.md, "The annual statement's explanation", says what it
+takes and gives.
+
+**Why port it now.** A borrower whose escrow payment went up calls to ask
+why. The statement mailed with that year's analysis already answers, in
+item (viii) of Reg X §1024.17(i)(1): each bill that came in other than
+projected, each bill nobody projected, and the low balance against the
+projected one, which is the cushion. A grader for that call should hold an
+answer to the engine's own lines, not to a restatement of them, so the
+engine comes first.
+
+**Ported as the others are.** The file is copied byte for byte but for its
+three kernel imports, and a test fails on any other difference. It imports
+nothing but the kernel, so nothing else comes with it. The sentences for
+the shortage and the plan, items (vi) and (vii), are `decisionText` and
+`planText` in the servicing app's escrow `ops.ts`. That file is not ported:
+it carries the stateful operations layer (the event store, the timer
+engine, the interest and disbursement modules) around them, and the
+figures they print are the analysis's, which escrow-analysis grades.
+
+**The pairing is ours, because the servicing app's is not code.** The
+engine takes history lines already paired, projected beside paid. The
+servicing app's escrow agent drafts them (§3.3, "AI agent design"), and its
+statement tool takes the lines as given. So the wrapper pairs:
+
+- by line type and calendar month, summed within a month;
+- a bill that moved is two lines, paid $0.00 where it left and "not
+  projected" where it arrived, the only way the engine's two templates can
+  say it;
+- the actual low is the lowest month-end balance, from the servicing app's
+  `buildHistory` and `assembleAnnualStatement`, whose source lines a test
+  holds;
+- the projected low is the projection's lowest target. §3.3's worked
+  example reads it there, and the spec names no other.
+
+**Held to the spec.** A test rebuilds §3.3's worked example from last
+year's projection and the year's bills. It gets exactly the four lines the
+servicing app's own test asserts, read out of that test, and the spec's
+prose, read out of the spec. 3.3-T9's lines are among them; in a year where
+only December's bill moved, the low is $200.00, not the $180.00 that T9's
+test borrows from the worked example. The year ends at $700.00, which is
+§3.2's projected actual, so the shortage and payment escrow-analysis
+grades on its first spec task are the ones these lines explain.
+
+**A defect found on the way, kept out.** The engine prints a figure as its
+quotient and remainder by 100, so a negative low reads $-105.-50, and
+−$0.50 reads $0.-50 (escrow-4 in docs/servicing-engine-defects.md). An
+account overdrawn during the year has one: 81 of 6,827 computation years in
+a thousand-loan book from the life generator (1.0.0, seed 1). The wrapper
+refuses such a year rather than hand a grader a garbled line, and
+`statementScopeIssues` names it for a caller that filters instead.
+
+**Not yet.** The life generator's analysis rows record the analysis's
+figures but not its projection's items and targets, which the wrapper
+needs to explain a generated year. It is a small addition to `src/life`,
+left for the work that builds the call.

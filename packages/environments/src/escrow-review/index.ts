@@ -8,6 +8,7 @@
  */
 
 import type { Environment } from "../episode.js";
+import { LIFE_VERSION } from "../life/generate.js";
 import { sha256 } from "../record.js";
 import { ESCROW_FINGERPRINT } from "../escrow/index.js";
 import { gradeReview, parseReviewSubmission, type EscrowReviewAnswer } from "./grader.js";
@@ -41,7 +42,7 @@ export const REVIEW_FINGERPRINT = {
   },
   grader: {
     rule_set_version: `${ESCROW_FINGERPRINT.grader.rule_set_version}; R10 with compareBillToPriorYear`,
-    port_version: `${ESCROW_FINGERPRINT.grader.port_version}; life 1.0.0`,
+    port_version: `${ESCROW_FINGERPRINT.grader.port_version}; life ${LIFE_VERSION}`,
   },
 } as const;
 

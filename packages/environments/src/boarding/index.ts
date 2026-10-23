@@ -8,6 +8,7 @@
  */
 
 import type { Environment } from "../episode.js";
+import { LIFE_VERSION } from "../life/generate.js";
 import { sha256 } from "../record.js";
 import { gradeTriage, parseTriageSubmission, type TriageAnswer } from "./grader.js";
 import { BOARDING_RULEBOOK } from "./rulebook.js";
@@ -40,8 +41,7 @@ export const BOARDING_FINGERPRINT = {
   },
   grader: {
     rule_set_version: "boarding.dq.v1 + the package's label manifest (D-03, D-42)",
-    port_version:
-      "apps/servicing@293261b3 src/domain/boarding/{tape-codec,rules,min}.ts + life generator 1.0.0",
+    port_version: `apps/servicing@293261b3 src/domain/boarding/{tape-codec,rules,min}.ts + life generator ${LIFE_VERSION}`,
   },
 } as const;
 

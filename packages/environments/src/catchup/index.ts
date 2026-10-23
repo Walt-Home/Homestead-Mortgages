@@ -8,6 +8,7 @@
  */
 
 import type { Environment } from "../episode.js";
+import { LIFE_VERSION } from "../life/generate.js";
 import { sha256 } from "../record.js";
 import { gradeCatchup, parseCatchupSubmission, type CatchupAnswer } from "./grader.js";
 import { CATCHUP_RULEBOOK } from "./rulebook.js";
@@ -41,8 +42,7 @@ export const CATCHUP_FINGERPRINT = {
   grader: {
     rule_set_version:
       "cashiering.allocation.v1 + lateChargeAmount (servicing §2.1, §2.7; D-03's correction)",
-    port_version:
-      "apps/servicing@293261b3 src/domain/cashiering/{types,biweekly,allocation,latecharges}.ts; life 1.0.0",
+    port_version: `apps/servicing@293261b3 src/domain/cashiering/{types,biweekly,allocation,latecharges}.ts; life ${LIFE_VERSION}`,
   },
 } as const;
 

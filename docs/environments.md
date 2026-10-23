@@ -2686,10 +2686,11 @@ package reads what came before it. Behavior is drawn from the calibration's
 typed defaults, so a new calibration file does not move the suite. A package
 is kept only when the gate's 35 rules, ported and run on the package as the
 decoder reads it, pass on every loan, and when the reference finds exactly
-the planted cells. On the held-out suite 59 of 200 first draws were redrawn,
-for one of four reasons: a hazard renewal within 30 days of the transfer
-(W-005), an analysis more than a year old (W-009), a payoff before the
-transfer, or a planted cap the note's P&I never reaches.
+the planted cells. A draw is redrawn for one of four reasons: a hazard
+renewal within 30 days of the transfer (W-005), an analysis more than a year
+old (W-009), a payoff before the transfer, or a planted cap the note's P&I
+never reaches. On the held-out suite 59 of 200 first draws were redrawn: 35
+for a payoff, 17 for W-005 and 7 for a cap.
 
 **The floors.** Submitting nothing passes 50 of the 200 held-out packages,
 the ones with nothing planted. Finding every escrow Yes and reading no
@@ -2830,6 +2831,18 @@ by field (`root_cause: false`).
 A loan may carry both. Its twin boards both, and each symptom is labeled
 for the defect whose own twin shows it, or for the pair when neither does
 alone.
+
+**Moments.** `generate(…, { observe })` shows an environment what each
+engine is about to be handed, as it stands, in the clean history and in the
+twin the book carries (`LifeMoment`): every receipt the waterfall posts,
+with the cash state it is posted against and the rate each installment is
+charged at (a payoff is quoted, not posted, and is not shown), and every
+annual analysis with the lines as the analyst has them, the CPI, the balance
+on the run date, what is still to post before the year and the payment it
+replaces. Each is a copy, and observing changes no draw. An environment
+built on the generator reads its task off one of these, so the task is the
+engine's own input at that moment and the history before it is the loan's.
+catchup-posting and escrow-review are the first two.
 
 **The transfer package.** `writeTransferPackage` writes, for loans boarded
 by transfer on one date, the twelve files of the servicing app's sample
@@ -3016,18 +3029,6 @@ in three months and holds the symptoms equal to what each root reaches.
   day and month swapped.
 - T-05 writes an as-of date that is not the month-end, such as the export
   date or last month's.
-
-**Moments.** `generate(…, { observe })` shows an environment what each engine
-is about to be handed, as it stands, in the clean history and in a twin
-(`LifeMoment`): every receipt the waterfall posts, with the cash state it is
-posted against and the rate each installment is charged at (a payoff is
-quoted, not posted, and is not shown), and every annual analysis with the
-lines as the analyst has them, the CPI, the balance on the run date, what is
-still to post before the year and the payment it replaces. Each is a copy,
-and observing changes no draw. An environment built on the generator reads
-its task off one of these, so the task is the engine's own input at that
-moment and the history before it is the loan's. catchup-posting and
-escrow-review are the first two.
 
 **Not covered yet:**
 

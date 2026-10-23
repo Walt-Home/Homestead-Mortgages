@@ -370,7 +370,7 @@ describe("catchup-posting", () => {
         expect(trusted.fields.find((f) => f.field === "late_charges")!.ok).toBe(false);
       } else expect(trusted.pass, t.id).toBe(true);
     }
-    // The three breached arms, and only they.
+    // The four breached arms, and only they.
     expect(breached).toBe(tasks.filter((t) => catchupArmOf(t.index).startsWith("breached")).length);
   }, 300_000);
 

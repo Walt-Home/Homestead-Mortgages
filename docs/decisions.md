@@ -7633,12 +7633,17 @@ up above the share its tests hold.
   200 held-out analyses, against 19, with the same 101 held and 99 not.
 - **boarding-triage 1.0.0** is re-pinned at `45ffd385…` with no version
   bump, because no model has run on it: 59 of its 200 first draws are
-  redrawn, against 47, for the same four reasons, most often a payoff before
-  the transfer.
+  redrawn, against 47. 35 paid off before the transfer, 17 met a hazard
+  renewal within 30 days of it (W-005) and 7 drew a cap the note's P&I never
+  reaches.
 
 Nothing older moved: every other environment's held-out suite, ei-clocks
 among them, draws as it did. The tape round trip is no suite, and its
 figures moved with the book: 13,478 rows rather than 15,997, as more loans
-pay off, 81 of the 200 rather than 63. "A partner's tape is written from the
-month-end projection" gives 1.0.0's figures, docs/environments.md gives
-1.1.0's, and the test's floor is 13,000 rows.
+pay off, 81 of the 200 rather than 63. The moments', the transfer
+package's and the tape writer's entries above give 1.0.0's figures (122
+first draws, 47 redrawn, 707 training draws reaching the fairness check,
+15,997 tape rows) and are left as they were measured; docs/environments.md
+gives 1.1.0's, and the tape test's floor is 13,000 rows. Each suite's fingerprint names the life version it is drawn
+under, read from `LIFE_VERSION`, so a run record says which book it was
+graded on.

@@ -2159,10 +2159,11 @@ procedure, a score measures what the procedure was doing for the model.
 
 ## Calibration
 
-The life generator draws loan histories from `src/life/calibration.json`.
-Each of its 28 keys carries a value, a unit, a kind, a source URL with the
-date it was fetched, the source's terms, and a note on what the figure is and
-where it stops. 18 are `public`. 10 are `design_choice`, with source `none`
+`src/life/calibration.json` holds the rates the life generator is to draw
+loan histories from. The generator is separate work, and today nothing reads
+the file but its test. Each of its 28 keys carries a value, a unit, a kind, a
+source URL with the date it was fetched, the source's terms, and a note on
+what the figure is and where it stops. 18 are `public`. 10 are `design_choice`, with source `none`
 and the reason nothing public fits.
 
 `src/life/calibration-acceptance.json` is what a validation sample is held
@@ -2173,8 +2174,9 @@ distributions. Each test names the key it checks, how its target is read
 from that key, the smallest sample it means anything on, and a tolerance.
 Every tolerance is a design choice and says why. `calibration.test.ts` holds
 both files to the key list, a source and date on every public value, no NaN,
-distributions that sum to one, and the acceptance targets the calibration
-gives today.
+distributions that sum to one, every derived figure (a mean, a ratio, an
+interpolated median, a share of counts) equal to what it is derived from,
+and the acceptance targets the calibration gives today.
 
 Version 2026-10-23, every source fetched that day:
 

@@ -235,7 +235,7 @@
       "source": "none",
       "fetched": null,
       "terms": "Ours; no outside terms apply.",
-      "note": "payment.day_of_month's not_in_month bin. Bounded by two public figures: the New York Fed's 0.84% of current accounts 30-60 days late a quarter later (delinquency.roll_current_to_30) is a floor once cures inside the quarter are counted, and MBA's 2.21% 30-day stock (delinquency.all_loans_30plus_share_sa), which also holds loans that stay one payment behind, is a ceiling. To be tested against both through delinquency.all_loans_30plus_share_sa's acceptance test."
+      "note": "payment.day_of_month's not_in_month bin. Bounded by two public figures. The New York Fed has 0.84% of current accounts 30-60 days late a quarter later (delinquency.roll_current_to_30); every one of them missed a month in that quarter, and loans that missed and cured inside it are not counted, so a third of it, 0.28% a month, is a floor. MBA's 2.21% 30-day stock (delinquency.all_loans_30plus_share_sa), which also holds loans that stay one payment behind, is a ceiling. To be tested against both through the delinquency-stock and quarterly-transitions acceptance tests."
     },
     "contacts.per_loan_year": {
       "value": {

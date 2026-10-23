@@ -169,11 +169,11 @@
     },
     {
       "id": "call-note-length",
-      "measure": "Handle time recorded on each call, and the length in characters of its note.",
+      "measure": "Handle time recorded on each call, averaged over each month's calls, and the length in characters of each call's note.",
       "key": "contacts.handle_time_minutes",
       "target": {
         "path": "",
-        "compare": "handle times inside [min, max]",
+        "compare": "each month's average handle time inside [min, max]",
         "note_median_chars": { "min": 150, "max": 800 },
         "note_length_rises_with_handle_time": "Spearman rank correlation above 0.3",
         "notes_kind": "design_choice",
@@ -181,21 +181,22 @@
       },
       "sample_floor": { "count": 2000, "of": "calls" },
       "tolerance": {
-        "value": 0.05,
-        "unit": "share of calls allowed outside [min, max]",
+        "value": 0.5,
+        "unit": "minutes a month's average may fall outside [min, max]",
         "kind": "design_choice",
-        "reason": "The public range is of servicers' monthly averages, so single calls fall outside it; a twentieth is allowed."
+        "reason": "The public range is of servicers' and call centers' monthly averages, so it bounds a month's average and not a single call: a two-minute call and a forty-minute one are both ordinary. Half a minute holds the noise in a month of a small sample."
       }
     },
     {
       "id": "transactions-per-loan-year",
-      "measure": "Ledger transactions per loan-year on loans current all year: receipts, curtailments, short and returned receipts and their reversals, late charges, and escrow disbursements.",
+      "measure": "Ledger transactions per loan-year on loans current at every due date of the year: receipts, curtailments, short and returned receipts and their reversals, late charges, and escrow disbursements.",
       "key": "payment.curtailment_share",
-      "reads": ["payment.partial_share", "payment.late_after_grace_share", "escrow.share_of_loans"],
+      "reads": ["payment.partial_share", "payment.day_of_month", "escrow.share_of_loans"],
       "target": {
-        "formula": "12 * (1 + payment.curtailment_share + partial_receipt_share + 2 * returned_receipt_share + payment.late_after_grace_share) + 3 * escrow.share_of_loans",
-        "expected": 15.456,
+        "formula": "12 * (1 + payment.curtailment_share + partial_receipt_share + 2 * returned_receipt_share + arrival_share.days_17_to_month_end) + 3 * escrow.share_of_loans",
+        "expected": 15.312,
         "compare": "value",
+        "late_charges": "A loan current at every due date misses no month, so its late charges are the installments received from day 17 to month end, not payment.late_after_grace_share, which counts the missed month too.",
         "escrow_disbursements_per_year": 3,
         "escrow_disbursements_kind": "design_choice",
         "escrow_disbursements_reason": "Two property tax installments and one insurance premium; jurisdictions bill taxes once, twice or four times a year."

@@ -220,6 +220,110 @@ describe("the calibration file", () => {
     expect(num(k, "by_type.conventional")).toBe(num("delinquency.conventional_30plus_share"));
   });
 
+  it("keeps every derived figure equal to what it is derived from", () => {
+    // The New York Fed's latest quarter and eight-quarter means are the rows
+    // beside them. Means are of the unrounded percents, so they may differ
+    // from a mean of the rounded rows by a rounding of each.
+    for (const [key, fields] of [
+      ["delinquency.roll_current_to_30", ["to_30_60_late", "to_90_plus_late"]],
+      ["delinquency.cure_from_30", ["to_current", "to_90_plus_late"]],
+    ] as const) {
+      const v = entry(key).value as {
+        latest: Record<string, Json>;
+        trailing_8_quarters: Record<string, Json>[];
+        trailing_8_quarter_mean: Record<string, number>;
+      };
+      expect(v.trailing_8_quarters.length, key).toBe(8);
+      expect(v.trailing_8_quarters.at(-1), key).toEqual(v.latest);
+      for (const f of fields) {
+        const mean = sum(v.trailing_8_quarters.map((q) => q[f] as number)) / 8;
+        expect(Math.abs(mean - v.trailing_8_quarter_mean[f]!), `${key} ${f}`).toBeLessThanOrEqual(
+          0.00001,
+        );
+      }
+    }
+
+    // MBA's 60-day bucket over its 30-day bucket.
+    const mba = "delinquency.all_loans_30plus_share_sa";
+    expect(num("delinquency.roll_30_to_60")).toBeCloseTo(
+      num(mba, "by_bucket.d60") / num(mba, "by_bucket.d30"),
+      2,
+    );
+
+    // The CFPB's inquiries over its loans, over eight months, made a year.
+    const c = "contacts.per_loan_year";
+    expect(num(c, "inquiries_per_loan_year")).toBeCloseTo(
+      (num(c, "inquiries_may_to_dec_2021") / num(c, "loans")) * (12 / 8),
+      2,
+    );
+
+    // The complaint shares are the counts over their total to four places,
+    // the largest taking what the rounding leaves.
+    const mix = entry("contacts.inbound_reason_mix").value as {
+      complaints: number;
+      counts: Record<string, number>;
+      shares: Record<string, number>;
+    };
+    const reasons = Object.keys(mix.counts);
+    expect(sum(Object.values(mix.counts))).toBe(mix.complaints);
+    expect(Object.keys(mix.shares).sort()).toEqual([...reasons].sort());
+    const largest = reasons.reduce((a, b) => (mix.counts[b]! > mix.counts[a]! ? b : a));
+    for (const reason of reasons)
+      expect(
+        Math.abs(mix.shares[reason]! - mix.counts[reason]! / mix.complaints),
+        reason,
+      ).toBeLessThanOrEqual(0.00005 * (reason === largest ? reasons.length : 1) + 1e-12);
+
+    // Tax growth is the ratio of the medians it lists, and the newest is the level.
+    const tax = entry("escrow.tax_growth_yoy").value as {
+      by_year: Record<string, number>;
+      annualized_2021_to_2024: number;
+      medians_with_mortgage_usd: Record<string, number>;
+    };
+    const tm = tax.medians_with_mortgage_usd;
+    for (const [year, growth] of Object.entries(tax.by_year))
+      expect(growth, year).toBeCloseTo(tm[year]! / tm[String(Number(year) - 1)]! - 1, 4);
+    expect(tax.annualized_2021_to_2024).toBeCloseTo((tm["2024"]! / tm["2021"]!) ** (1 / 3) - 1, 4);
+    expect(tm["2024"]).toBe(num("escrow.tax_annual_median", "with_mortgage_usd"));
+
+    // Insurance: the median is interpolated inside the bin holding the middle
+    // unit, and its growth is the ratio of two such medians.
+    const bins = at(entry("escrow.insurance_annual_median").value, "distribution") as {
+      from_usd: number;
+      to_usd: number | null;
+      share: number;
+    }[];
+    let below = 0;
+    const middle = bins.find((b) => {
+      if (below + b.share >= 0.5) return true;
+      below += b.share;
+      return false;
+    })!;
+    expect(middle.to_usd).not.toBeNull();
+    const median =
+      middle.from_usd + ((0.5 - below) / middle.share) * (middle.to_usd! + 1 - middle.from_usd);
+    const insuranceMedian = num("escrow.insurance_annual_median", "with_mortgage_usd");
+    expect(Math.abs(median - insuranceMedian)).toBeLessThan(2);
+    const ins = entry("escrow.insurance_growth_yoy").value as {
+      by_year: Record<string, number>;
+      medians_with_mortgage_usd: Record<string, number>;
+    };
+    const im = ins.medians_with_mortgage_usd;
+    expect(im["2024"]).toBe(insuranceMedian);
+    expect(ins.by_year["2024"]).toBeCloseTo(im["2024"]! / im["2023"]! - 1, 3);
+
+    // Enterprise originations over 80 CLTV are the bins above 80.
+    const cltv = "at_origination_enterprise_2025.cltv_loans";
+    expect(num("mi.share_of_loans", "enterprise_originations_2025_cltv_over_80")).toBeCloseTo(
+      sum(
+        ["80_to_90", "90_to_95", "95_to_97", "gt_97"].map((b) =>
+          num("book.ltv_distribution", `${cltv}.${b}`),
+        ),
+      ),
+      9,
+    );
+  });
+
   it("carries the 30-year PMMS series week by week from 2016, as published", () => {
     const v = entry("refi.pmms_30y_series").value as {
       columns: string[];
@@ -239,6 +343,10 @@ describe("the calibration file", () => {
     for (let i = 1; i < days.length; i++)
       expect([6, 7, 8], v.rows[i]![0]).toContain(days[i]! - days[i - 1]!);
     expect(v.rows.length).toBe((days.at(-1)! - days[0]!) / 7 + 1);
+    expect(
+      days.at(-1)! * 86_400_000,
+      "the last week, against the file's version",
+    ).toBeLessThanOrEqual(Date.parse(`${calibration.version}T00:00:00Z`));
     for (const [week, rate] of v.rows) expect(rate > 0 && rate < 20, week).toBe(true);
   });
 
@@ -247,6 +355,13 @@ describe("the calibration file", () => {
     const months = v.months as string[];
     expect(months[0]).toBe(v.first_month);
     expect(months.at(-1)).toBe(v.last_month);
+    // Complete months only, one after another.
+    expect(months.at(-1)! < calibration.version.slice(0, 7)).toBe(true);
+    for (let i = 1; i < months.length; i++) {
+      const [y, m] = months[i - 1]!.split("-").map(Number);
+      const next = m === 12 ? `${y! + 1}-01` : `${y}-${String(m! + 1).padStart(2, "0")}`;
+      expect(months[i], months[i - 1]).toBe(next);
+    }
     for (const series of [
       "major_disaster",
       "emergency",
@@ -318,13 +433,15 @@ describe("the acceptance tests", () => {
       12 * num("payment.late_after_grace_share"),
       9,
     );
+    // On a loan current at every due date no month is missed, so its late
+    // charges are the day-17-to-month-end bin alone.
     expect(test("transactions-per-loan-year").target.expected).toBeCloseTo(
       12 *
         (1 +
           num("payment.curtailment_share") +
           num("payment.partial_share", "partial_receipt_share") +
           2 * num("payment.partial_share", "returned_receipt_share") +
-          num("payment.late_after_grace_share")) +
+          num("payment.day_of_month", "arrival_share.days_17_to_month_end")) +
         3 * num("escrow.share_of_loans"),
       9,
     );

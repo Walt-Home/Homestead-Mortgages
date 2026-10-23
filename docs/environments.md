@@ -2157,6 +2157,108 @@ The policies keep refi-policy's lesson: no sentence ends on an "otherwise"
 that could attach to more than one condition. Run on the same tasks as the
 procedure, a score measures what the procedure was doing for the model.
 
+## The life generator
+
+`src/life/` is not an environment. It writes ten-year histories of loans for
+environments to draw tasks from. It is a module of this package and not a
+workspace of its own: it runs the environments' ports, and the environments
+built on it import it, so as two packages each would import the other.
+
+`generate(seed, scenario, { defects })` draws a book of Fannie Mae
+conventional loans and runs each one month by month for ten years. The
+loans are first liens on one-unit principal residences, 30 years, first
+payments from March 2026, fixed or SOFR ARMs (5/6, 7/6, 10/6), with
+borrower-paid MI above 80 % loan-to-value. The same seed and scenario give
+the same book byte for byte.
+
+**The engines decide every figure.** Receipts post through cashiering's
+`allocate` and late charges through `assessLateCharge`, run the day after
+grace as the servicing app's daily run does
+(`apps/servicing/src/domain/cashiering/ops-2-7.ts:110`). Each year's escrow
+analysis is composed the way escrow-analysis's grader composes it. Each ARM
+change is computed by engine A and checked by engine B. The MI trigger is
+swept by `automaticTermination`, a payoff is quoted by `quote`, and every
+month-end goes through `buildSnapshot`, `validateSnapshot` and `renderBase`.
+
+**What it carries that the engines do not:**
+
+- the borrower;
+- the escrow balance between analyses, and each year's bills;
+- the P&I and escrow schedule each analysis or ARM change writes;
+- the rate `allocate` reads. It charges one rate to every installment a
+  payment covers (`apps/servicing/src/domain/cashiering/allocation.ts:107`,
+  `:112`), so a payment across a rate change is posted in two calls;
+- the rolling twelve months of $50-rule partials. `allocate` only adds to
+  the count (`allocation.ts:157`);
+- which fee a payment collected, oldest first. `allocate` lowers the amount
+  due and names no fee (`allocation.ts:195`);
+- the ledger Metro 2 and the MI sweep read, which is the cashiering ledger
+  itself, never a FIFO replay of the receipts;
+- the index feed, a transferred loan's boarding, and the payoff.
+
+**What it invents.** The borrower's behavior, drawn from
+`src/life/calibration.json`: payment timing, partials, curtailments, misses,
+cures and repeat misses by roll rate, contacts, disaster months, payoffs and
+transfers out. Another builder writes that file. The generator reads it key
+by key, and any key missing or unreadable takes a typed default marked
+`design_choice`, with the reason in the result's warnings.
+
+A borrower who is behind does one of three things, by roll rate:
+
+- pays everything owed;
+- pays the oldest open installment's amount, which applies;
+- misses again.
+
+A receipt for an installment a cure or a promise already paid is not sent.
+
+Also invented: the index feed, the mortgage-rate path, names and addresses,
+and the terms the calibration does not cover. The design choices without a
+calibration key are named in `draw.ts` and `simulate.ts`. `calibrationCheck`
+reads a book against the calibration's 30+ share and missed-month share,
+which are targets, not draws.
+
+**Scenarios.** A scenario dates the events the borrower obeys: a transfer
+in, a missed payment, a promise to pay (kept or broken), a repayment plan, a
+tax reassessment, an insurance increase at renewal, bill pay sending the old
+amount once after a payment change, a payoff and a transfer out. On a
+transfer in, the prior servicer's months are generated in full and marked
+`prior`. Forwarded payments are credited as of the day the prior servicer
+had them, and the 60-day shield applies.
+
+**Twins.** With `defects`, each planted loan runs again from the same draws
+with the defect boarded. Every draw comes from a stream keyed by the loan and
+the installment, month or analysis, and none reads the loan's state, so the
+twin differs only where the defect reaches. The labels are the planted value
+(`root_cause: true`) and every difference between the two histories, field
+by field (`root_cause: false`). D-03, the note's late-fee cap never boarded,
+is the one defect so far (docs/synthetic-data-defects.md).
+
+**The month-end projection.** `monthEndRow(loan, month)` and
+`bookTape(book, month)` return what a partner's tape carries, under the m3-v1
+profile's keys: terms, balances, status and dates, a twelve-month pay
+string, the escrow balance, twelve months of cash flow, and the PMI,
+foreclosure and bankruptcy fields. A tape writer only lays them out. The
+month a loan pays off or transfers out is measured on the day it closed, so
+an installment still in grace at a payoff never ages to 30 days.
+
+**Not covered yet:**
+
+- the transfer package and the other 46 defects;
+- bankruptcy, foreclosure, loss mitigation, forbearance and modification.
+  Their tape fields are present and always empty;
+- returned payments and NSF fees;
+- the interim escrow analysis an MI termination calls for. The next annual
+  analysis returns the surplus;
+- early-intervention outreach and a borrower's request to cancel MI;
+- `book.loan_age_distribution` is read only when a scenario boards a book by
+  transfer;
+- a run longer than the decade. A scenario may ask for up to 360 months, but
+  a loan its curtailments pay to zero before maturity ends on a last payment
+  that overpays, and neither the overage nor the escrow balance is refunded.
+
+A thousand loan-decades run in about 3.5 seconds, and a test holds them
+under 15.
+
 ## Calibration
 
 `src/life/calibration.json` holds the rates the life generator is to draw

@@ -6987,3 +6987,84 @@ same values as staging: `GOOGLE_CLIENT_ID`, `PLAID_CLIENT_ID`,
 mounts production's own webhook secret). Whether each should be production's
 own name is open. A fifth, `MAIL_ALLOWED_ADDRESSES`, is ignored there, because
 the mail fence applies only where sample sign-ins are on.
+
+## The life generator is a module, and a borrower who is behind pays to cure
+
+**Decided 23 October 2026.** The ten-year loan-life generator is
+`packages/environments/src/life`, a module of `@hm/environments`, not a
+workspace. It runs the environments' ports, and the environments built on
+it import it; as a package of its own, the two would import each other. It
+is built from the generation-speed prototype measured on 22 October and
+from that prototype's independent check. docs/environments.md, "The life
+generator", says what it carries.
+
+**What the check found, and what changed.**
+
+- **A borrower who fell behind never caught up.** The prototype fixed each
+  payment's amount when the installment was added: the current
+  installment's amount, plus any payment missed. A borrower one payment
+  behind kept paying the current amount. Once an escrow analysis or an ARM
+  change moved it below the oldest open installment's, the payment went to
+  suspense, and the borrower stayed behind. In the check's trace of one
+  loan, a late charge was assessed in 76 of the 77 months from June 2020 to
+  October 2026. Now the amount is decided when the payment arrives, from the
+  open installments. By the roll rates, the borrower pays everything owed,
+  pays the oldest installment's amount (which applies), or misses again.
+- **The tenth escrow analysis never ran.** An analysis was scheduled only
+  for a computation year that began inside the window. The tenth year begins
+  just after it, though its analysis runs inside. Each analysis now
+  schedules the next while that one's run date is inside the window.
+- **A payment across a rate change was charged one rate.** `allocate` reads
+  one `note_rate_pct` for every installment a payment covers
+  (`apps/servicing/src/domain/cashiering/allocation.ts:107`). The check
+  counted 124 such payments in 122,896. They are now posted in two calls,
+  each at its installments' own rate, and a test recomputes every
+  installment's interest.
+- **Late-charge ids were random** (`latecharges.ts:87`, `randomUUID`), so
+  two runs of one seed differed. The generator names each charge by its
+  installment.
+- **The cashiering ledger and a FIFO replay of the receipts disagree.** The
+  check found them apart on 7,302 of 120,000 month-ends, wherever money went
+  to suspense or to fees. Metro 2 and the MI sweep read the cashiering
+  ledger, which is the one the servicing app posts.
+
+**What review found, and what changed.**
+
+- **A paid-off loan aged after it closed.** The month-end was measured at
+  the month's end, so an installment still in grace at a payoff read 30
+  days late on a loan that no longer existed: 33 of 404 payoffs in a
+  thousand-loan book. A closing month is now measured on the day it closed,
+  and a loan paid in full has nothing past due. The Metro 2 record already
+  rated a closed loan at its closing date (`buildSnapshot`, rule 7).
+- **An early payment was counted twice.** The analysis added every deposit
+  due between its run date and the new year, but an early payer's could
+  already be in the balance: 223 of 8,690 analyses. A test now recomputes
+  every projected balance from the history.
+- **An installment was paid twice.** An early payer's next receipt could
+  arrive before a late one, find the late installment open and cure both.
+  The late receipt then paid a whole installment into suspense, where it
+  stayed for months: 73 receipts on 23 of a thousand loans. A receipt for an
+  installment already paid is no longer sent.
+- **The rate split missed one case.** When suspense alone paid the
+  installments at the earlier rate, the payment went through one call at
+  that rate, so the installments past the change were charged the old rate:
+  1 of 84,521 installments on 900 ARM loans missing four times as often as
+  the book. The first call now takes none of the payment, and the fees
+  still come after every installment.
+
+**Twins are labeled by difference.** A defect plants one value, and the
+twin runs the same loan from the same draws. No draw reads the loan's
+state: each installment, month and analysis has its own stream. So the
+twin differs from the clean history only where the planted value reaches.
+Every difference is labeled a symptom, field by field. A new defect needs
+only its root cause and where it enters; D-03 is the first.
+
+**The calibration is another builder's file.** `calibration.json` is read
+key by key. Units are normalized, distributions may be bins or rows, and a
+missing or unreadable key takes a typed default marked `design_choice`,
+with a warning. The tests draw from the defaults, so they do not move when
+the file lands. One test runs whatever file is on disk.
+
+**Speed.** A thousand loan-decades take about 3.5 seconds with the
+machine's load average above 20. The prototype took 3.4, without the rate
+split, the contacts, the hazards and the month-end snapshots.

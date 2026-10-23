@@ -7611,3 +7611,34 @@ in the written files rather than the history, and its ids start with T.
 - The reader catches none of it. A ZIP code and a pay string are text
   columns, and it reads them as written.
 - T-01, T-02, T-04 and T-05 are named, and each is one more definition.
+
+## Life 1.1.0 moved the three suites drawn from it
+
+**Decided 23 October 2026,** when the calibration reader, the moments, the
+transfer package and the tape writer were merged. `LIFE_VERSION` 1.1.0
+changes what the life generator draws, and every stream hangs off the
+version, so every book moves, a book on the typed defaults too. The three
+environments drawn from it draw on those defaults, and each held-out suite
+moved. Each was re-pinned in place, with its version unchanged, because no
+model has run on any of the three and no score was measured on the old
+suite. For each, the reference still passes the held-out suite, its 300
+training tasks and its spec cases, and every verdict and outcome still turns
+up above the share its tests hold.
+
+- **catchup-posting 1.0.0** is re-pinned at `3ff8eccf…` with no version
+  bump, because no model has run on it: 117 of its 200 held-out tasks are
+  first draws, against 122, with the same 116 above the cap and 84 within.
+- **escrow-review 1.0.0** is re-pinned at `6a05284f…` with no version bump,
+  because no model has run on it: a bill over 20 % is flagged on 20 of its
+  200 held-out analyses, against 19, with the same 101 held and 99 not.
+- **boarding-triage 1.0.0** is re-pinned at `45ffd385…` with no version
+  bump, because no model has run on it: 59 of its 200 first draws are
+  redrawn, against 47, for the same four reasons, most often a payoff before
+  the transfer.
+
+Nothing older moved: every other environment's held-out suite, ei-clocks
+among them, draws as it did. The tape round trip is no suite, and its
+figures moved with the book: 13,478 rows rather than 15,997, as more loans
+pay off, 81 of the 200 rather than 63. "A partner's tape is written from the
+month-end projection" gives 1.0.0's figures, docs/environments.md gives
+1.1.0's, and the test's floor is 13,000 rows.

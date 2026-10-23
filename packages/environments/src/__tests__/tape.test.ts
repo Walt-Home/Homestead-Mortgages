@@ -338,7 +338,7 @@ describe("the tape writer", () => {
       });
     }
     expect(bad.slice(0, 20)).toEqual([]);
-    expect(records).toBeGreaterThan(15_000);
+    expect(records).toBeGreaterThan(13_000);
     // The book reaches every status the contract has for it, and the rows the formats are hardest on.
     expect([...seen.status].sort()).toEqual(["current", "delinquent", "paid_off", "transferred"]);
     expect([...seen.mba].sort()).toEqual(expect.arrayContaining(["30", "60", "90", "current"]));

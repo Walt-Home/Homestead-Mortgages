@@ -5,8 +5,9 @@ never sees. `packages/environments` holds them. The first, `refi-review`
 1.0.0, grades a model on the daily refinance review, using synthetic loans
 only and with the engine itself as the grader. `escrow-analysis` is the
 first on the servicing side, and `regz-price-tests` the first on the
-origination side. `boarding-triage` is the first drawn from the life
-generator's histories. The defects found in the servicing app's own engines
+origination side. `catchup-posting`, `escrow-review` and `boarding-triage`
+are the first drawn from the life generator's histories. The defects found
+in the servicing app's own engines
 are in `docs/servicing-engine-defects.md`.
 
 ## refi-review
@@ -2440,16 +2441,16 @@ verdict the runner tallies and two for the commonest, so every verdict is
   and paying only the oldest installment (on a note with no cap three times
   in ten).
 
-A draw that does not land on its arm is drawn again under the next key: 122
+A draw that does not land on its arm is drawn again under the next key: 117
 of the held-out suite's 200 are first draws. The suite holds:
 
 - 116 tasks above the cap, 58 of them current after posting and 58 still
   behind, and 84 within the note;
-- 58 tasks with a refund due (a median near $220), 58 that send something
-  to suspense, and 20 that prepay an installment;
-- 85 loans boarded by transfer, and 40 notes with no cap;
-- up to 23 charges on a loan (5.7 on average), and catch-ups of up to nine
-  installments, from January 2027 to November 2035.
+- 58 tasks with a refund due (a median near $190), 58 that send something
+  to suspense, and 34 that prepay an installment;
+- 85 loans boarded by transfer, and 41 notes with no cap;
+- up to 17 charges on a loan (5.0 on average), and catch-ups of up to six
+  installments, from May 2027 to August 2036.
 
 **Out of scope.** The receipts stay on the pay-in-full route, where every
 installment the money reaches is paid whole. They stay off the
@@ -2485,7 +2486,8 @@ example K:
 - September's installment alone, which leaves the loan behind.
 
 It agrees with the engine on every in-scope candidate among 600 first draws
-nothing filtered. Its longest task is 54 tool calls in 33 turns. Two tests
+nothing filtered. Its longest held-out task is 39 tool calls in 24 turns,
+and its longest training task 50 in 30. Two tests
 hold the moments to their histories:
 
 - each clean moment posts to the cent as the history posted it;
@@ -2565,8 +2567,8 @@ of the held-out suite's 200 are first draws. The suite holds:
 
 - 101 analyses held, 68 with a shortage and 33 with a refund;
 - 99 not held: 33 shortages, 33 refunds and 33 credits;
-- triggers: a payment change over $150 on 79, over 25 % on 67, a refund over
-  $2,500 on 29, and a bill over 20 % on 19.
+- triggers: a payment change over $150 on 81, over 25 % on 68, a refund over
+  $2,500 on 30, and a bill over 20 % on 20.
 
 Every shortage is spread over 12 months. The life generator runs no workout,
 so neither the 60 months of one nor a borrower's election appears, and
@@ -2592,15 +2594,18 @@ its three variants, with today's payment at the $130.00 the ledger deposits:
 - the refund's $138.33 and the credit's $136.11 are not.
 
 It agrees with the engine on every candidate among 600 first draws nothing
-filtered. Its longest task is 70 tool calls in 33 turns. An answer with the
-analysis right and no bill comparison passes 181 of the held-out suite's
-200, and one that says every flag stands passes 101.
+filtered. Its longest held-out task is 71 tool calls in 32 turns, and its
+longest training task 73 in 30. An answer with the analysis right and no
+bill comparison passes 180 of the held-out suite's 200, and one that says
+every flag stands passes 101.
 
 **Both environments draw from the calibration's typed defaults**
 (`defaultCalibration`), as the life generator's tests do. So a change to
 `calibration.json` does not move a pinned suite, and the browser, which
-reads no file, draws the task the command line does. The held-out suites are
-seed 1, 200 tasks each, pinned by hash.
+reads no file, draws the task the command line does. A change to how the
+generator draws does move them, as life 1.1.0 did (docs/decisions.md, "Life
+1.1.0 moved the three suites drawn from it"). The held-out suites are seed
+1, 200 tasks each, pinned by hash.
 
 ## boarding-triage
 
@@ -2675,13 +2680,13 @@ nothing.
 - three clean loans.
 
 The clean loans are drawn to look like the defects. Of the held-out suite's
-250 clean loans, 120 carry a cap their tape carries too, and 79 have no
+250 clean loans, 115 carry a cap their tape carries too, and 94 have no
 escrow; some are ARMs. Each history runs a year past the transfer, and the
 package reads what came before it. Behavior is drawn from the calibration's
 typed defaults, so a new calibration file does not move the suite. A package
 is kept only when the gate's 35 rules, ported and run on the package as the
 decoder reads it, pass on every loan, and when the reference finds exactly
-the planted cells. On the held-out suite 47 of 200 first draws were redrawn,
+the planted cells. On the held-out suite 59 of 200 first draws were redrawn,
 for one of four reasons: a hazard renewal within 30 days of the transfer
 (W-005), an analysis more than a year old (W-009), a payoff before the
 transfer, or a planted cap the note's P&I never reaches.
@@ -2694,7 +2699,7 @@ statement passes 100.
 200 packages, pinned by hash), 300 training tasks and four spec cases: the
 demo loan clean, with D-42, with D-03, and with both. It takes three turns
 and at most 18 tool calls. Of the first draws of 1,000 training tasks
-(train seed 11), 707 reached the fairness check (the rest were redrawn for
+(train seed 11), 693 reached the fairness check (the rest were redrawn for
 those reasons), and the reference missed nothing on any of them.
 
 **What the servicing app does with them.**
@@ -2893,8 +2898,8 @@ ledger runs one installment ahead of the month, so a borrower who paid next
 month's installment early has none open at the month-end, and the
 month-end's `next_due` is null. The projection takes the installment after
 the one interest is paid to, as `next_due` is on every other month-end, and
-counts the remaining term from it. The round trip below has 4,150 such
-rows out of 15,997.
+counts the remaining term from it. The round trip below has 2,832 such
+rows out of 13,478.
 
 **The tape writer.** `writeTape(book, month)` (`src/life/tape.ts`) writes a
 month's tape in the m3-v1 layout that `@hm/partner-book` reads:
@@ -2934,7 +2939,7 @@ A column the projection has nothing for is left empty: FICO, a BPO, the
 property's rooms, the investor's economics. The writer invents nothing.
 
 **The round trip.** `tape.test.ts` writes a 200-loan book over ten years,
-with transfers out on: 131 tapes and 15,997 rows. It reads each tape back
+with transfers out on: 131 tapes and 13,478 rows. It reads each tape back
 through `readBook`.
 
 - The reader raises no exception.
@@ -2955,7 +2960,7 @@ zero days, and a bucket is delinquent by its days. The projection's status
 follows the Regulation X count instead. At the end of a month shorter than
 31 days, a loan one payment behind is under 30 days by that count and 30 by
 the MBA's. So the contract says delinquent where the projection says current
-on 98 of the 15,997 rows.
+on 94 of the 13,478 rows.
 
 **Tape-stream defects** are what a delivery does to right values. The 47 in
 docs/synthetic-data-defects.md are wrong values in a servicer's records;
@@ -2993,7 +2998,7 @@ number and loses its leading zeros. On the m3 tape that hits two columns:
 - a ZIP code that starts with 0. Massachusetts and New Jersey are the
   generator's states with one;
 - every pay string whose oldest month was current, so "000000000000"
-  arrives as "0". That is 13,606 of the 15,997 rows.
+  arrives as "0". That is 11,081 of the 13,478 rows.
 
 The reader takes both as written. The record's postal code, the ZIP fact
 and the pay-string fact change, and nothing else does. The review reads

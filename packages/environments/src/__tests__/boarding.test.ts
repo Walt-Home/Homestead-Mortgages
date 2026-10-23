@@ -221,8 +221,8 @@ describe("boarding-triage", () => {
     }
     expect(planted).toBe(200);
     expect(clean).toBe(250);
-    expect(cappedClean).toBe(120);
-    expect(noEscrowClean).toBe(79);
+    expect(cappedClean).toBe(115);
+    expect(noEscrowClean).toBe(94);
   });
 
   it("is solved by the reference on the held-out suite, a training suite and the demo loan's packages", async () => {
@@ -383,7 +383,7 @@ describe("boarding-triage", () => {
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump BOARDING_ENVIRONMENT_VERSION, then the pin.
     expect(sha256(heldout.map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"04e61695598a4299f9e390fee80d0dc59462d8f4b33c33a781213397fb05a0fc"`,
+      `"45ffd385fe445d28c7f2b40cfbb76fff7c0ebc679e54eecb594c3dafa1866cec"`,
     );
   });
 

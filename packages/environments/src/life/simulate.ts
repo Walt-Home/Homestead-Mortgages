@@ -1966,9 +1966,9 @@ type LedgerRow = Pick<
   "due" | "pi" | "escrow" | "status" | "satisfied_on" | "credited_as_of"
 >;
 
-/** The cadence's first attempt, on the day the §1024.31 count reaches it (plan.ts:15, FIRST_ATTEMPT_DAY). */
+/** The cadence's first attempt, on the day the §1024.31 count reaches it (plan.ts:16, FIRST_ATTEMPT_DAY). */
 const OUTREACH_FIRST_DAY = 17;
-/** Each later attempt is due this many days after the last (plan.ts:16, CYCLE_DAYS). */
+/** Each later attempt is due this many days after the last (plan.ts:17, CYCLE_DAYS). */
 const OUTREACH_CYCLE_DAYS = 7;
 /** A promise to pay due within this many days ceases the cadence (FNMA_D2202_PTP_MAX_30). */
 const OUTREACH_PROMISE_MAX_DAYS = 30;
@@ -1978,8 +1978,8 @@ const OUTREACH_PROMISE_MAX_DAYS = 30;
  * (apps/servicing/src/domain/early-intervention/plan.ts) run over the ledger
  * after the fact, since no call changes what the borrower pays. The plan opens
  * the day the §1024.31 count reaches 17 and attempts that day (`openPlanIfDue`,
- * plan.ts:73-79); each later attempt is due 7 days after the last, moved to the
- * servicer's next business day (`recordAttempt`, plan.ts:97). A promise to pay
+ * plan.ts:70-76); each later attempt is due 7 days after the last, moved to the
+ * servicer's next business day (`recordAttempt`, plan.ts:95). A promise to pay
  * due within 30 days ceases it (`ceased{ptp_pending}`; FNMA_D2202_CESSATION_ON_QRPC
  * and FNMA_D2202_PTP_MAX_30 in spec/registry/timers.json), a broken one resumes
  * it on the day it was due (`promise_broken`), and the cure closes it.

@@ -229,8 +229,8 @@ describe("boarding-triage", () => {
     for (const tasks of [heldout, train, spec]) {
       const r = await solveAll(tasks);
       expect(r.misses).toEqual([]);
-      expect(r.turns).toBeLessThanOrEqual(4);
-      expect(r.calls).toBeLessThan(40);
+      expect(r.turns).toBeLessThanOrEqual(3);
+      expect(r.calls).toBeLessThanOrEqual(18);
     }
   });
 

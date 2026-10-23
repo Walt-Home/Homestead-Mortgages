@@ -1,0 +1,34 @@
+The servicing app's early-intervention windows engine, ported for the
+ei-clocks environment's grader.
+
+Source       apps/servicing/src/domain/early-intervention/windows.ts
+Vendored at  293261b371fe97d2b6b39e1f29ca60dd808ac8fb (apps/servicing/VENDORED_FROM)
+Ported       2026-10-23
+
+windows.ts here is its source byte for byte except its three import lines:
+the kernel's paths (../../kernel/calendar/{date,business,zoned}.ts) become
+@hm/kernel/calendar (the same bytes; packages/kernel/VENDORED_FROM). It
+imports no sibling, so nothing else came along. Nothing else may be edited:
+src/__tests__/ei.test.ts compares the file with its import lines removed,
+compares the import lines after that one rewrite, and fails on any
+difference. Lint and Prettier skip this directory for the reason they skip
+the vendored trees.
+
+windows.ts is §11.1's and §11.2's Regulation X §1024.39 windows: one per
+unpaid due date, with the live-contact leg due on day 36 and the written
+notice leg on day 45; the payment that cancels them, the contact that
+satisfies them, the sweep that breaches them; the bankruptcy, FDCPA-cease
+and discharge overlays; the 180- and 190-day notice cycle and its cycle-end
+review; and the once-per-case bankruptcy notice. It is pure: no clock, no
+randomness, no I/O.
+
+Not ported: ops.ts, ops-11-1.ts and plan.ts, which sit above it. The
+servicing app has no fold that runs this engine over a loan's history (the
+runtime's projectWindows does not call it: docs/servicing-engine-defects.md,
+ei-2), so src/ei/grader.ts folds it as §11.1's and §11.2's state machines
+say, and restates the rules outside it (the §1024.40 assignment, the
+D2-2-02 outbound cadence and Reg F's call cap) with the lines they come
+from; a test holds those lines to the servicing app's source.
+
+To take a change from the servicing app, copy the file again and rewrite
+the same three imports.

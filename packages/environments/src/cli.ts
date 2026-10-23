@@ -24,6 +24,7 @@
  *   npm run env:refi -w @hm/environments -- --env lossmit-retention --policy reference
  *   npm run env:refi -w @hm/environments -- --env metro2-furnishing --policy reference
  *   npm run env:refi -w @hm/environments -- --env aus-decision --policy reference
+ *   npm run env:refi -w @hm/environments -- --env ei-clocks --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -241,6 +242,19 @@ import {
   type AusAnswer,
   type AusTask,
 } from "./aus/index.js";
+import {
+  EI_FINGERPRINT,
+  EI_HELDOUT_SUITE,
+  EiReferencePolicy,
+  eiClocks,
+  eiSpecTasks,
+  eiTaskId,
+  eiVerdict,
+  generateEiSuite,
+  generateEiTask,
+  type EiAnswer,
+  type EiTask,
+} from "./ei/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -272,7 +286,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof INCOME_FINGERPRINT
     | typeof LOSSMIT_FINGERPRINT
     | typeof METRO2_FINGERPRINT
-    | typeof AUS_FINGERPRINT;
+    | typeof AUS_FINGERPRINT
+    | typeof EI_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -536,6 +551,18 @@ const BENCHES = {
     verdictOf: (t) => expectedAus(t).outcome,
     reference: () => new AusReferencePolicy(),
   } satisfies Bench<AusTask, AusAnswer>,
+  // One loan's early-intervention clocks on one day, graded by the servicing app's own windows engine.
+  "ei-clocks": {
+    env: eiClocks,
+    fingerprint: EI_FINGERPRINT,
+    heldout: EI_HELDOUT_SUITE,
+    suite: generateEiSuite,
+    one: generateEiTask,
+    taskId: eiTaskId,
+    spec: eiSpecTasks,
+    verdictOf: eiVerdict,
+    reference: () => new EiReferencePolicy(),
+  } satisfies Bench<EiTask, EiAnswer>,
 };
 
 const { values } = parseArgs({
@@ -726,6 +753,7 @@ async function main(): Promise<void> {
   if (values.env === "lossmit-retention") return run(BENCHES["lossmit-retention"]);
   if (values.env === "metro2-furnishing") return run(BENCHES["metro2-furnishing"]);
   if (values.env === "aus-decision") return run(BENCHES["aus-decision"]);
+  if (values.env === "ei-clocks") return run(BENCHES["ei-clocks"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

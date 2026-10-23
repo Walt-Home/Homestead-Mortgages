@@ -52,10 +52,11 @@ what that engine does and a test holds the two equal; before changing
 and its rulebook and reference are held to what the engine decides; and
 before re-vendoring `apps/servicing`, because escrow-analysis, flexmod-terms,
 payments-posting, arm-adjustment, payoff-statement, pmi-termination,
-qualifying-income, lossmit-retention and metro2-furnishing grade with ports of
-its escrow, Flex Modification, cashiering, ARM, payoff, mortgage-insurance,
-origination income, loss-mitigation retention and Metro 2 furnishing engines
-that tests hold byte-equal to it.
+qualifying-income, lossmit-retention, metro2-furnishing and ei-clocks grade
+with ports of its escrow, Flex Modification, cashiering, ARM, payoff,
+mortgage-insurance, origination income, loss-mitigation retention, Metro 2
+furnishing and early-intervention windows engines that tests hold byte-equal
+to it.
 
 ## The shape
 
@@ -71,7 +72,7 @@ packages/shared            domain types; LoanFile is the object everything reads
 packages/kernel            Doug's kernel, vendored: money, calendar, ledger, fsm, timers, events
 packages/partner-book      the tape reader: a servicer's book onto the partner-feed contract
 packages/refi-review       the daily refinance review: Doug's §33.2 over his §20.1, pure, over the kernel
-packages/environments      RL environments: refi review, escrow analysis, payment posting, Flex Mod, loss-mit retention, ARM adjustment, payoff statements, MI termination, Metro 2 furnishing, Reg Z price tests, qualifying income, the AUS decision; the engine as grader
+packages/environments      RL environments: refi review, escrow analysis, payment posting, Flex Mod, loss-mit retention, ARM adjustment, payoff statements, MI termination, Metro 2 furnishing, early-intervention clocks, Reg Z price tests, qualifying income, the AUS decision; the engine as grader
 packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5

@@ -6958,3 +6958,144 @@ regz-price-tests 198 of 200 (99.0 %, 96.4 to 99.7; 196 on 1.1.0),
 regz-policy 197 (98.5 %; 197), regz-apr 170 (85.0 %, 79.4 to 89.3; 171), at
 0.5 to 0.8¢ a task. Every regz-apr miss but one is the APR again. The moves are
 within what a run moves, so the wording was not what the model was missing.
+
+## Early intervention is graded by the windows engine, folded as its spec runs it
+
+**Built 23 October 2026,** as `ei-clocks` 1.0.0 in `packages/environments`.
+A task is one delinquent loan on one day: its installments and the days they
+were credited, every contact and attempt, the written notices, the
+assignments of personnel, any bankruptcy and any written FDCPA cease. The
+model says where every early-intervention clock stands: each missed
+installment's Regulation X windows (live contact by day 36, the written
+notice by day 45), each notice's 180-day cycle, the once-per-case
+bankruptcy notice, the §1024.40 assignment, Fannie Mae's D2-2-02 cadence and
+Regulation F's call cap.
+
+**Why this one.**
+
+- Early intervention is the first duty a delinquent borrower meets, and the
+  one with the most clocks: one window per missed payment, overlapping, each
+  with two legs, three overlays that move them, and a 180-day cycle that
+  covers some later windows and not others. A breach is a sev-1 `officer`
+  escalation in the servicing app's own timer table (11.1, 11.2).
+- The servicing app's runtime gets these clocks wrong today, three ways
+  (ei-1, ei-2 and ei-3 in docs/servicing-engine-defects.md), while its
+  domain engine, `windows.ts`, has every step the spec describes. An
+  environment graded by that engine, folded the spec's way, is the spec's
+  reading in executable form, held to the spec's own tests.
+- The work is reading dates against rules, in order: which windows a contact
+  falls inside, which a payment beats, which a notice covers, where a cycle
+  ends and what the count is that day. The arithmetic is date steps; the
+  reasoning is the state machines.
+
+**The grader is the engine, ported as the others are.** `windows.ts` from
+`apps/servicing/src/domain/early-intervention/` sits in `src/ei/ported/`,
+byte for byte but for its three kernel import lines, held by a test. It
+imports no sibling. `ops.ts`, `ops-11-1.ts` and `plan.ts` are not ported:
+they sit above it, and `ops.ts` imports the boarding, cashiering, plan, QRPC,
+FDCPA and imminent-default modules besides.
+
+**The fold is the grader's, from the spec.** The servicing app has no fold
+that runs this engine over a history: the runtime's `projectWindows` writes
+the windows table without calling it (ei-2). So the grader runs the days:
+the engine's `sweep` first each day, then the windows that open, then the
+day's event through the engine's own step for it. Each step names its line
+in `src/ei/grader.ts`. Three readings were decided on the way.
+
+- **A notice provided while several legs are open is the notice for the
+  oldest; the others are inside its cycle.** 11.2-T3 says the Dec 14 notice
+  makes the Dec 1 window `satisfied_by_prior_180`, citing the cycle. Its
+  test builds that window with the cycle in hand, but on the timeline the
+  Dec 1 window opens on Dec 2, before the notice, and the engine has no step
+  for an open leg a later notice covers: `noticeProvided` would mark it
+  `sent`. The grader marks the oldest open leg `sent` and every other open
+  leg `satisfied_by_prior_180`, the assignment `openWindow` makes for a
+  window opened inside a cycle (windows.ts:74), so 11.2-T3 comes out as the
+  spec says. Every breached leg, and every leg waiting on the bankruptcy
+  notice, takes the notice too, through `noticeProvided`'s own guard: a
+  breached leg as `sent` late.
+- **A live contact after a leg breached is the duty met late.** The engine's
+  leg stays `breached`; the timer engine marks the clock `satisfied_late`
+  (kernel/timers/engine.ts:172). The task asks met, late or breached, so a
+  breached leg carries `live_late`, and the notice leg the lateness
+  `noticeProvided` returns.
+- **A delinquency cured before a deadline owes nothing under it.** The
+  §1024.40 assignment is due by day 45 "of the borrower's delinquency", and
+  D2-2-02's attempts run "until … the delinquency is resolved", so a
+  delinquency that ends first is `not_due` for the assignment and closes its
+  cadence. 11.1-T3's rolling borrower is the case: four windows cancelled,
+  no deadline missed.
+
+The rules beside the engine are restated with their lines, each held by a
+test: the assignment (`assignmentTrigger`, servicing-requests/ops.ts:178-182),
+the cadence (plan.ts:16-17, :64, :95, :151-155, :179-181, :191) and the call
+cap (ops.ts:222-231, section11.ts:328, evaluator-kit.ts:24). A cadence
+deadline is missed when the cadence was still running at its end, the timer
+rows' reading. `fnmaCadenceBreaches`, the plan's own report, flags a gap
+between two attempts but never one between the last attempt and a cure
+(plan.ts:195 tests only an open episode), where the `FNMA_D2202_OUTBOUND_EVERY_7`
+clock breaches before the cure cancels it; the grader follows the clock.
+Every deadline is also held to its row in `spec/registry/timers.json`.
+
+**What reading the engine and its spec found.** Each was reproduced against
+the vendored engine on 23 October; each is held by a test, and v1 draws
+none of them.
+
+- _The FDCPA cycle is reviewed at day 190._ `cycleEndReview` reviews a cycle
+  on `cycle_end_at`, which for the fdcpa variant is day 190.
+  §1024.39(d)(3)(iii) and the registry's `REGX_1024_39D_FDCPA_NOTICE_190` row
+  ("at +180: if ≥45 days delinquent → due +190") test the delinquency at
+  day 180. Reproduced: on day 180 the engine answers `reviewed: false`, and
+  a loan caught up on day 185 to within 45 days is a repeat required by the
+  rule and not by the engine. Kept out unless both days agree; no generated
+  cycle reaches a review.
+- _A cease after a petition leaves the leg waiting._ `applyFdcpaCease` moves
+  only an open notice leg, and only when no option is available, so a leg
+  the petition made `bk_modified_required` stays so after a cease. Under
+  §1024.39(c)(1)(ii) and (d)(2) a servicer subject to the FDCPA with a cease
+  is exempt from (b) while a borrower is in bankruptcy. `openWindow` gets it
+  right in the other order (`exempt_bk_cease`, windows.ts:126). Kept out.
+- _A window in a case after its one notice waits on it again._ `openWindow`
+  with an active bankruptcy marks every new notice leg
+  `bk_modified_required` (windows.ts:71), though §1024.39(c)(1)(iii)(C)
+  allows one notice a case and it was provided. Kept out: the picture is
+  drawn before the next window opens after the case's notice.
+- _A cure inside a cycle._ 11.2's state machine closes a cycle when the
+  delinquency ends; §1024.39(b)(1) excuses a second notice "more than once
+  during any 180-day period" whatever came between. A window opened inside
+  a cycle after a cure is covered on one reading and owed on the other.
+  Kept out.
+- _A cycle reviewed in a case, or across a cease._ A case's notice is the
+  modified one, owed "regardless of" the 180 days, and 11.2's state machine
+  moves a running cycle to 190 days on a cease, which the engine is never
+  handed. Kept out.
+- _Day 1 on a payment the next day._ The 00:05 counter opens a window and
+  starts a delinquency on D + 1 (ops.ts:76, :79); an installment credited
+  later that day leaves §1024.31's end-of-day count, the one the ported
+  FIFO keeps, at 0. Kept out.
+- _A delinquency closed on its start deadline with no attempt._
+  `fnmaCadenceBreaches` counts it breached (`end >= startDue`, plan.ts:193);
+  the clock, due at the end of that day, does not. Kept out.
+
+ei-1, ei-2 and ei-3 are the runtime's, not the engine's, so nothing needs
+keeping out: a test gives each defect's own facts the spec's answer (the
+installment paid on day 14 cancels both legs; a payment on day 52 leaves
+both breached; one contact satisfies only the windows containing its day;
+a window opened inside the cycle is covered).
+
+**The tasks** aim at fourteen edges in turn, around an ordinary servicer
+(attempts every four to seven days, a conversation in most windows, a notice
+mailed by day 44, personnel assigned in time). The held-out suite, seed 1,
+200 loans pinned by hash, has 117 breached somewhere, 50 owing something not
+yet due and 33 clear. Nothing answered scores 0.013; every deadline right
+with every status read off the date alone scores 0.580 and passes 17. The
+reference passes the held-out suite, 300 training loans and nineteen spec
+cases, needs no redraw in 600, and agrees with the grader on every one of
+10,000 candidates nothing filtered; its longest loan is 51 tool calls in 4
+turns.
+
+Not in 1.0.0: the good-faith determination (11.1 rule 6's minimum reads
+numbers and dayparts no task carries), ongoing loss-mitigation contact, the
+transferee rule, a dismissal, a post-petition payment after a discharge, the
+pre-sale stop, TCPA consent and quiet hours, Reg F's seven days after a
+conversation, and the notices' content.

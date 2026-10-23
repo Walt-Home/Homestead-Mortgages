@@ -2157,6 +2157,208 @@ The policies keep refi-policy's lesson: no sentence ends on an "otherwise"
 that could attach to more than one condition. Run on the same tasks as the
 procedure, a score measures what the procedure was doing for the model.
 
+## ei-clocks
+
+ei-clocks 1.0.0 grades early intervention: where every clock on one
+delinquent loan stands on one day, the way the servicing app's windows
+engine keeps them (its spec §11.1 live contact and §11.2 written notice,
+Regulation X §1024.39), with the three duties that run beside them: the
+assigned contact under §1024.40 (§4.3), Fannie Mae's outbound cadence under
+D2-2-02 (§11.1) and, for a debt collector, Regulation F's call cap (§11.1
+rule 9).
+
+**The task.** It gives the loan as the early-intervention desk has it at the
+end of `as_of`:
+
+- whether it is the borrower's principal residence, and whether the servicer
+  is a debt collector for it;
+- the installments due on the 1st, each with the day it was credited in full
+  (payments go to the oldest first), or none;
+- every contact and attempt in order: the channel (AI or human voice, a
+  text, an email, a letter, the borrower calling in), the person (the
+  borrower or the co-borrower), the outcome, and whether the person asked
+  for the call;
+- the written early-intervention notices provided, each with its variant;
+- the days personnel were assigned;
+- a bankruptcy's petition and discharge, and a written FDCPA cease.
+
+The model opens a window for every installment unpaid the day after it fell
+due and says, for each, the live-contact deadline (day 36) and whether it was
+met, met late, breached, cancelled by payment or exempt, and the written
+notice's deadline (day 45) and whether it was sent (late or not), covered by
+a notice within 180 days, cancelled by payment, owed or exempt. Then each
+notice's cycle (superseded, running, or reviewed at day 180 with the repeat
+due then or moved to a window), the once-per-case bankruptcy notice, and for
+each delinquency its assigned-contact deadline, its outbound cadence's
+deadlines and the ones missed, and the Reg F call count.
+
+**The grade.** A pass is every field right. Each window is two fields, its
+live leg and its notice leg, each with its deadline, its status and whether
+it was met late. Each notice's cycle is one field, and so are the
+bankruptcy notice, Reg F and the day count. Each delinquency is two fields,
+its assignment and its cadence. The lists of windows and of delinquencies are
+a field each. A window, a cycle or a delinquency answered that the loan does
+not have is a field of its own, and a section neither the engine nor the
+answer has is not a field, so hedging is never cheaper than committing. The
+submission must hang together or it comes back as an error to correct: a
+late flag only on a breached live leg or a sent notice, a repeat only on a
+cycle that required one, an assignment deadline exactly when one is owed.
+
+On the held-out suite an answer that answers nothing scores 0.013. The
+floor to read the mean field score against is 0.580: every deadline right,
+the delinquencies and the cycles' ends right, and every status read off the
+date alone (breached once its deadline has passed, open before). It passes
+17 of 200, loans where nothing happened in time. A test holds both.
+
+**The grader is the servicing app's own engine.** `src/ei/ported/windows.ts`
+is `apps/servicing/src/domain/early-intervention/windows.ts` byte for byte
+but for its three kernel import lines, held by a test that rewrites the
+original's imports and compares. It imports no sibling.
+
+The servicing app has no fold that runs this engine over a loan's history.
+The runtime's counter projection writes the windows table without calling
+it, and its unit of work and counter job drop two of the engine's inputs;
+those are ei-1, ei-2 and ei-3 in `docs/servicing-engine-defects.md`. So the
+grader folds the engine day by day as §11.1's and §11.2's state machines run
+it, and grades the spec's reading:
+
+- each day starts with the engine's `sweep`, and window D opens on D + 1
+  before anything else that day, through `openWindow` with the overlays that
+  stand before it and the latest notice's cycle (11.1 rule 1, ops.ts:76);
+- an installment credited on or before a leg's deadline cancels it
+  (`installmentPaid`), later leaves the duty standing (11.1 rule 1);
+- a live contact satisfies only the open legs whose window contains its day
+  (`applyContact`, 11.1-T4);
+- a petition and a cease move what `applyBankruptcyPetition` and
+  `applyFdcpaCease` move, and a discharge decides how later windows open;
+- a notice provided is the notice for every leg breached or waiting on the
+  bankruptcy notice, and for the oldest open leg (`noticeProvided`); every
+  other open leg is inside the cycle it starts, `satisfied_by_prior_180`, as
+  `openWindow` marks a window opened inside a cycle (windows.ts:74). That is
+  11.2-T3's answer: the Dec 14 notice covers the Dec 1 window, which opened
+  on Dec 2;
+- each notice's cycle is `noticeCycle`, and one that runs to its end is
+  reviewed there by `cycleEndReview` with that day's §1024.31 count, from the
+  boarding FIFO pmi-termination already ports;
+- a breached live leg met by a later live contact is late, as the timer
+  engine marks the clock `satisfied_late` (kernel/timers/engine.ts:172).
+
+The duties beside the engine are restated in the grader with the lines they
+come from, and a test holds each line to the servicing app's source:
+
+- the assignment: by the day the first notice of the delinquency is
+  provided when that comes first, and in any event by day 45
+  (`assignmentTrigger`, servicing-requests/ops.ts:178-182;
+  `assignmentDue`, continuity.ts:4). A delinquency cured by then owes none;
+- the cadence: open from day 17 (plan.ts:16), a first attempt by day 36 and
+  then every 7 days, each deadline moved to the servicer's next open day
+  (plan.ts:17, :64, :95), every outbound attempt but a letter counting
+  (plan.ts:191), ended by the cure (plan.ts:151-155) and suspended for good
+  by a petition or a cease (plan.ts:179-181). A deadline is missed when the
+  cadence was still running at its end, the timer rows' reading;
+- the call cap: outbound voice calls that connected and that the person did
+  not ask for (ops.ts:222, section11.ts:328), per person, more than 7 in the
+  seven days ending on a call's day (ops.ts:224-231, evaluator-kit.ts:24).
+
+A further test holds every deadline the grader computes to its row in
+`apps/servicing/spec/registry/timers.json`: the live contact at +36, the
+notice at +45, the repeat at +180 and the FDCPA variant's at +190, the
+bankruptcy notice at +45 from the petition or the delinquency, the
+assignment at day-1 + 44, the cadence's day 36 and +7 on the next open day,
+and the cap of 7 in a trailing 7 days.
+
+**The tools.** refi's `date_add` and `days_between`, and payments-posting's
+`next_business_day` on the servicer's calendar. No tool opens a window,
+decides a leg, reviews a cycle, finds a delinquency or counts a call.
+
+**The tasks** cycle by index through fourteen edges, a hundred loans each in
+a suite of 1,400, each edge's arms in turn:
+
+- a live contact on day 36, day 37, early, or never;
+- one contact on the next due date (the older window only), on day 36 (both)
+  or day 37 (the newer one, the older late), 11.1-T4's overlap;
+- the installment credited on day 36, day 37 or early; on day 45 or day 46
+  with no notice;
+- the notice on day 45, day 46, day 30 (covering the next window) or never;
+- a window whose day 45 is the notice's day 180, or a day past it;
+- a cycle reviewed at 45 days or more with the repeat on its day, late or
+  missing, under 45 days with the duty moved to its window, and current;
+- a petition while delinquent with the bankruptcy notice on time, late or
+  missing; a petition while current, the notice owed from the first due date
+  missed, or not yet; a cease before it; a discharge after the notice;
+- a debt collector's cease mid-window and before the delinquency, and an
+  fdcpa notice's 190 days reaching a window's day 45 or a day short;
+- a property that is not the borrower's residence;
+- each installment paid on the next due date (11.1-T3) or before day 36;
+- personnel assigned on day 45 or 46, by a notice on day 30 or the day
+  after, never, and a cure on day 45 or 46;
+- a cadence gap of 7 days or 8, a deadline on a weekend or holiday met on
+  the next open day or the day after it, a first attempt on day 36 or 37;
+- seven counted calls in seven days, eight, nine, and eight over eight days,
+  among a dropped line, a text, the co-borrower's calls and a call asked
+  for.
+
+Around each edge sits an ordinary servicer: attempts every four to seven
+days from day 17 with a conversation in most windows, a notice mailed
+between day 38 and day 44, personnel assigned in time about nine times in
+ten. On
+the held-out suite 117 loans are breached somewhere, 50 owe something not yet
+due and 33 are clear; every status the grader can give turns up there but
+the bankruptcy notice not yet owed, which training has.
+
+**What v1 leaves out, and why.** Reading the engine and the runtime around
+it against the spec found places where an answer would turn on a reading
+the spec does not settle, or where the engine computes what the spec calls
+wrong. docs/decisions.md has each, reproduced. v1 does not draw them, and
+`eiScopeIssues` names each clause a loan breaks:
+
+- two of a credit, a live contact, a notice, the petition, the discharge
+  and the cease on one day, whose order would decide a leg; and a notice,
+  petition or discharge on a window's opening day;
+- an installment credited the day after it fell due. The counter opens its
+  window and starts a delinquency that day (ops.ts:76, :79), and the day's
+  end shows none;
+- a cease after the petition. The engine leaves the leg waiting on the
+  bankruptcy notice, where §1024.39(c)(1)(ii) and (d)(2) exempt it;
+- a window opened in a bankruptcy case after its one notice. `openWindow`
+  opens it waiting on the notice again (windows.ts:71), and the case's
+  notice is once per case;
+- a window opened inside a notice's cycle after a cure. 11.2's state machine
+  closes a cycle when the delinquency ends; §1024.39(b)(1) excuses a second
+  notice within 180 days whatever came between;
+- a cycle reviewed after a petition, after a cease inside it (11.2 moves the
+  running cycle to 190 days, which the engine is never handed), or with a
+  credit on its review day; and an fdcpa cycle that reviews differently at
+  day 180, where §1024.39(d)(3)(iii) tests the delinquency, and at day 190,
+  where `cycleEndReview` does. No generated cycle reaches either;
+- a delinquency that closes on its start deadline with no attempt, where the
+  timer and `fnmaCadenceBreaches`'s `end >= startDue` (plan.ts:193) part;
+- any contact after a petition or a cease, an outbound attempt outside a
+  cadence, a credit after a petition, and a discharge before the bankruptcy
+  notice was due;
+- on a debt collector's loan, a counted call in the seven days after a
+  conversation with that person (§1006.14(b)(2)(ii), 11.1-T14), which v1
+  does not grade.
+
+Not in 1.0.0: the good-faith determination (11.1 rule 6, whose policy
+minimum reads numbers and dayparts), ongoing loss-mitigation contact, the
+transferee rule and boarding, a dismissal and its resumed windows, a
+post-petition payment after a discharge, the pre-sale stop, TCPA, quiet
+hours, the post-conversation gate, and the content of a notice. On 10,000
+unfiltered training draws the guard rejects none, because the generator aims
+around all of it. It is a guard, not a filter.
+
+**The proof of fairness.** The reference passes the held-out suite, a
+300-task training suite and nineteen spec cases: 11.1 rules 3 and 10 and
+T1, T2, T3, T4, T8, T13, T15 and T22, 11.2 rules 3 and 5 and T2 to T7 and
+T13, and 4.3-T1 and T2, each held to the spec's own dates (12-07 and 12-16,
+2027-06-12, 07-16, 06-22, 03-06, 11-27, 10-16) and 11.1-T13's running counts
+of 1, 2, 2, 2, 3, 4 and 1. Every held-out loan is its index's first draw, none
+of 600 training draws is redrawn, and the reference agrees with the grader
+on 2,000 candidates nothing filtered (10,000 when last measured). Its longest
+loan is 51 tool calls, the submission included, in 4 turns across 5,000
+training draws, well inside the episode's 80 turns at one call a turn.
+
 ## The Supermortgage Gym
 
 Every environment also runs in a browser, for people without a checkout:
@@ -2198,6 +2400,7 @@ npm run env:refi -w @hm/environments -- --env qualifying-income --policy referen
 npm run env:refi -w @hm/environments -- --env lossmit-retention --policy reference
 npm run env:refi -w @hm/environments -- --env metro2-furnishing --policy reference
 npm run env:refi -w @hm/environments -- --env aus-decision --policy reference
+npm run env:refi -w @hm/environments -- --env ei-clocks --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

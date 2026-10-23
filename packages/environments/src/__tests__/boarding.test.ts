@@ -3,11 +3,12 @@
  * imports; the layout's code lists are the codec's; every package the
  * generator keeps passes the gate's own rules and has its defects found and
  * its clean loans passed by the reference through the tools, on the
- * held-out suite, a training suite and the demo loan's four packages; the
- * grader reads the label manifest as the servicing app's demo-batch test
- * reads the sample's designed outcomes; the servicing app's own boarding,
- * run in process by apps/servicing/scripts/board-life-package.mjs, catches
- * neither planted defect; and the held-out suite is pinned.
+ * held-out suite, a training suite and the demo loan's four packages; every
+ * one of the ten defects is drawn above its floor; the grader reads the label
+ * manifest as the servicing app's demo-batch test reads the sample's designed
+ * outcomes, and tells a defect's root from its symptoms; the servicing app's
+ * own boarding, run in process by apps/servicing/scripts/board-life-package.mjs,
+ * catches none of the ten; and the held-out suite is pinned.
  */
 
 import { spawnSync } from "node:child_process";
@@ -27,6 +28,7 @@ import {
   BoardingReferencePolicy,
   COLUMNS,
   EXTRA_FINDINGS_CAP,
+  FLOOD_ZONES,
   YES_NO_COLUMNS,
   boardingPayload,
   boardingPlanOf,
@@ -43,9 +45,19 @@ import {
   renderBoardingTask,
   type BoardingTask,
   type TriageAnswer,
+  type TriageFinding,
 } from "../boarding/index.js";
+import { oneOfEach } from "../boarding/one-of-each.js";
 import { encodeFinalTapeRow, parseCsv } from "../boarding/ported/tape-codec.js";
-import { defaultCalibration, demoLoan, PACKAGE_FILES } from "../life/index.js";
+import {
+  DEFECTS,
+  defaultCalibration,
+  demoLoan,
+  packageManifest,
+  PACKAGE_FILES,
+  type PackageFile,
+  type PackageManifest,
+} from "../life/index.js";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
@@ -65,6 +77,7 @@ const rewritten = (statement: string) =>
 let heldout: BoardingTask[] = [];
 let train: BoardingTask[] = [];
 let spec: BoardingTask[] = [];
+let each: { id: string; task: BoardingTask }[] = [];
 
 beforeAll(() => {
   heldout = generateBoardingSuite(
@@ -74,6 +87,7 @@ beforeAll(() => {
   );
   train = generateBoardingSuite("train", 7, 300);
   spec = boardingSpecTasks();
+  each = oneOfEach();
 }, 600_000);
 
 const solveAll = async (tasks: readonly BoardingTask[]) => {
@@ -94,6 +108,9 @@ const solveAll = async (tasks: readonly BoardingTask[]) => {
   }
   return { misses, turns, calls };
 };
+
+const roots = (t: BoardingTask) => t.labels.filter((l) => l.root_cause);
+const taskOf = (id: string) => each.find((x) => x.id === id)!.task;
 
 describe("boarding-triage", () => {
   it("ports the servicing app's codec, gate and MIN check but for their import statements", () => {
@@ -143,6 +160,7 @@ describe("boarding-triage", () => {
       interest_method: ["30_360", "actual_360", "actual_365", "daily_simple"],
       amortization: ["fixed", "arm", "step", "balloon", "interest_only", "buydown"],
       occupancy: ["owner_occupied", "second_home", "investment"],
+      flood_zone: [...FLOOD_ZONES],
     });
     for (const f of PACKAGE_FILES) {
       const header = spec[0]!.files[f].split("\n")[0]!.split(",");
@@ -193,40 +211,69 @@ describe("boarding-triage", () => {
   });
 
   it("keeps only packages the gate passes, each loan of them", () => {
-    for (const t of [...heldout, ...spec])
+    for (const t of [...heldout, ...spec, ...each.map((x) => x.task)])
       for (const [loan, failed] of gateFailures(t))
         expect([t.id, loan, failed]).toEqual([t.id, loan, []]);
   });
 
-  it("draws every plan in turn, with the clean loans drawn to look like the defects", () => {
+  it("draws every plan in turn, every defect above its floor, and clean loans that look like the defects", () => {
     const plans = new Map<string, number>();
     for (const t of heldout)
       plans.set(boardingPlanOf(t.index), (plans.get(boardingPlanOf(t.index)) ?? 0) + 1);
     expect([...plans.keys()].sort()).toEqual([...BOARDING_PLAN_NAMES].sort());
     for (const n of plans.values())
       expect(n).toBe(BOARDING_HELDOUT_SUITE.n / BOARDING_PLAN_NAMES.length);
-    let cappedClean = 0;
-    let noEscrowClean = 0;
-    let planted = 0;
+    // Each of the ten on at least 20 of the 200 packages: the floor every defect is drawn above.
+    const planted = new Map<string, number>();
+    for (const t of heldout)
+      for (const l of roots(t)) planted.set(l.defect_id, (planted.get(l.defect_id) ?? 0) + 1);
+    expect(Object.fromEntries([...planted].sort())).toEqual({
+      "D-01": 20,
+      "D-03": 40,
+      "D-12": 20,
+      "D-15": 20,
+      "D-18": 20,
+      "D-24": 30,
+      "D-25": 20,
+      "D-35": 30,
+      "D-37": 20,
+      "D-42": 40,
+    });
+    expect([...planted.keys()].sort()).toEqual(Object.keys(DEFECTS).sort());
+    for (const n of planted.values()) expect(n).toBeGreaterThanOrEqual(20);
+    // The clean loans are the negatives, drawn to look like the defects beside them.
+    const look = { cap: 0, no_escrow: 0, arm: 0, scra: 0, bk: 0, lm: 0, mi: 0, flood: 0 };
     let clean = 0;
     for (const t of heldout) {
       const defective = new Set(t.labels.map((l) => l.loan));
-      planted += t.labels.length;
       for (const row of parseCsv(t.files["boarding_tape.final.csv"])) {
         if (defective.has(row["transferor_loan_number"]!)) continue;
         clean++;
-        if (row["late_charge_max"]) cappedClean++;
-        if (row["escrowed"] === "N") noEscrowClean++;
+        if (row["late_charge_max"]) look.cap++;
+        if (row["escrowed"] === "N") look.no_escrow++;
+        if (row["amortization"] === "arm") look.arm++;
+        if (row["scra_active"] === "Y") look.scra++;
+        if (row["bk_active"] === "Y") look.bk++;
+        if (row["lm_in_process"] === "Y") look.lm++;
+        if (row["mi_flag"] === "Y") look.mi++;
+        if (row["flood_zone"] === "AE") look.flood++;
       }
     }
-    expect(planted).toBe(200);
-    expect(clean).toBe(250);
-    expect(cappedClean).toBe(115);
-    expect(noEscrowClean).toBe(94);
+    expect(clean).toBe(130);
+    expect(look).toEqual({
+      cap: 33,
+      no_escrow: 31,
+      arm: 22,
+      scra: 13,
+      bk: 9,
+      lm: 9,
+      mi: 49,
+      flood: 13,
+    });
   });
 
-  it("is solved by the reference on the held-out suite, a training suite and the demo loan's packages", async () => {
-    for (const tasks of [heldout, train, spec]) {
+  it("is solved by the reference on the held-out suite, a training suite, the demo loan's packages and one of each", async () => {
+    for (const tasks of [heldout, train, spec, each.map((x) => x.task)]) {
       const r = await solveAll(tasks);
       expect(r.misses).toEqual([]);
       expect(r.turns).toBeLessThanOrEqual(3);
@@ -248,6 +295,95 @@ describe("boarding-triage", () => {
         ["escrowed", "Yes", "Y", "correct"],
       ],
     ]);
+  });
+
+  it("labels each of the ten at its root, with what a reviewer should do and what follows from it", () => {
+    expect(
+      each.map(({ id, task }) => {
+        const r = roots(task);
+        expect(r.length).toBe(1);
+        const l = r[0]!;
+        return [id, l.file_or_table, l.field, l.handling];
+      }),
+    ).toEqual([
+      ["D-42", "boarding_tape.final.csv", "escrowed", "correct"],
+      ["D-35", "boarding_tape.final.csv", "lm_in_process", "correct"],
+      ["D-03", "boarding_tape.final.csv", "late_charge_max", "query"],
+      ["D-01", "boarding_tape.final.csv", "arm_initial_cap_bps", "query"],
+      ["D-12", "boarding_tape.final.csv", "scra_active", "correct"],
+      ["D-37", "boarding_tape.final.csv", "bk_active", "correct"],
+      ["D-18", "boarding_tape.final.csv", "mi_termination_date", "query"],
+      ["D-24", "payment_history.csv", "due_date", "hold"],
+      ["D-25", "payment_history.csv", "principal", "query"],
+      ["D-15", "boarding_tape.final.csv", "flood_zone", "correct"],
+    ]);
+    const symptoms = (id: string) => [
+      ...new Set(
+        taskOf(id)
+          .labels.filter((l) => !l.root_cause)
+          .map((l) => `${l.file_or_table} ${l.field}`),
+      ),
+    ];
+    // A flag left off beside its details, a cap, a zone, a date: the cell alone.
+    for (const id of ["D-42", "D-35", "D-03", "D-01", "D-37", "D-18", "D-15"])
+      expect(symptoms(id)).toEqual([]);
+    // What a reviewer's checks flag because of a root, though it holds what it should.
+    expect(symptoms("D-24")).toEqual(["boarding_tape.final.csv next_due_date"]);
+    expect(symptoms("D-12")).toEqual(["boarding_tape.final.csv pi_payment"]);
+    // A misapplied payment reaches the row beside it, every later split, and every balance the books feed.
+    expect(symptoms("D-25")).toEqual(
+      expect.arrayContaining([
+        "payment_history.csv escrow",
+        "boarding_tape.final.csv upb",
+        "trial_balance.csv upb_as_of_t_minus_1",
+        "fnma_position.csv upb",
+      ]),
+    );
+    // D-24's row is one the loan never had, before its first payment and the note.
+    const d24 = roots(taskOf("D-24"))[0]!;
+    const tape24 = parseCsv(taskOf("D-24").files["boarding_tape.final.csv"])[0]!;
+    expect(d24.true_value).toBeNull();
+    expect(d24.planted_value! < tape24["first_payment_date"]!).toBe(true);
+    expect(d24.planted_value! < tape24["origination_date"]!).toBe(true);
+    // D-25's root says what the statement's P&I owed the principal.
+    const d25 = roots(taskOf("D-25"))[0]!;
+    expect([d25.planted_value, Number(d25.true_value) > 0]).toEqual(["0.00", true]);
+  });
+
+  it("grades a root apart from its symptoms: a symptom alone earns part of the credit at most, the root covers them", () => {
+    for (const id of ["D-24", "D-12", "D-25"]) {
+      const t = taskOf(id);
+      const root = expectedTriage(t).findings;
+      const symptom = t.labels
+        .filter((l) => !l.root_cause)
+        .map((l): TriageFinding => ({
+          loan: l.loan,
+          file: l.file_or_table,
+          field: l.field,
+          row: l.file_or_table === "boarding_tape.final.csv" ? null : l.row,
+          says: l.planted_value,
+          truth: l.true_value,
+          handling: l.handling,
+        }))[0]!;
+      const grade = (findings: readonly TriageFinding[]) => gradeTriage(t, { findings });
+      const alone = grade([symptom]);
+      expect([id, alone.pass]).toEqual([id, false]);
+      expect(alone.score).toBeGreaterThan(grade([]).score);
+      expect(alone.fields.find((f) => f.field.endsWith(": traced"))?.ok).toBe(true);
+      expect(alone.fields.find((f) => f.field.endsWith(": found"))?.ok).toBe(false);
+      // The root covers its symptoms; named beside it, a symptom is neither required nor extra.
+      expect(grade(root).pass).toBe(true);
+      const both = grade([...root, symptom]);
+      expect(both.pass).toBe(true);
+      expect(both.fields.find((f) => f.field === "extra findings")?.got).toBe("0");
+    }
+    // A payment-history finding names its row; without one it is an error to correct, not a grade.
+    const r24 = expectedTriage(taskOf("D-24")).findings[0]!;
+    expect(parseTriageSubmission({ findings: [{ ...r24, row: null }] }).ok).toBe(false);
+    expect(parseTriageSubmission({ findings: [r24] }).ok).toBe(true);
+    // The wrong row is not the root.
+    const elsewhere = gradeTriage(taskOf("D-24"), { findings: [{ ...r24, row: "2031-01-01" }] });
+    expect(elsewhere.pass).toBe(false);
   });
 
   it("grades as the sample's test does: planted defects found, a clean loan passed, extra findings up to a cap", () => {
@@ -307,33 +443,53 @@ describe("boarding-triage", () => {
     expect(parseTriageSubmission({}).ok).toBe(false);
   });
 
-  it("gives floors to read a score against: nothing found, and every Y/N cell checked but no statement read", () => {
+  it("gives floors to read a score against: nothing found, the flags alone, and no history or statement read", () => {
     const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
     const empty = heldout.map((t) => gradeTriage(t, { findings: [] }));
-    expect(empty.filter((g) => g.pass).length).toBe(50);
-    expect(Number(mean(empty.map((g) => g.score)).toFixed(3))).toBeLessThan(0.5);
-    const codesOnly = heldout.map((t) =>
+    expect(empty.filter((g) => g.pass).length).toBe(20);
+    expect(Number(mean(empty.map((g) => g.score)).toFixed(3))).toBeLessThan(0.3);
+    // Every flag that is a code (checks 1 and 5), and nothing else.
+    const FLAGS = new Set(["escrowed", "lm_in_process", "bk_active", "scra_active"]);
+    const flags = heldout.map((t) =>
+      gradeTriage(t, { findings: expectedTriage(t).findings.filter((f) => FLAGS.has(f.field)) }),
+    );
+    expect(flags.filter((g) => g.pass).length).toBe(70);
+    // Every check that reads the tape and the short files alone (1, 2, 5 and 6), and no payment history or
+    // correspondence.
+    const shown = heldout.map((t) =>
       gradeTriage(t, {
-        findings: expectedTriage(t).findings.filter((f) => f.field === "escrowed"),
+        findings: expectedTriage(t).findings.filter(
+          (f) => FLAGS.has(f.field) || f.field.startsWith("arm_"),
+        ),
       }),
     );
-    expect(codesOnly.filter((g) => g.pass).length).toBe(100);
+    expect(shown.filter((g) => g.pass).length).toBe(80);
   });
 
-  it("is what the servicing app's own boarding does not catch, run in process on the demo's packages", () => {
+  it("is what the servicing app's own boarding does not catch, run in process on the demo's packages and one of each", () => {
     const out = mkdtempSync(join(tmpdir(), "boarding-triage-"));
-    const demo = demoLoan(defaultCalibration());
-    const dirs = Object.entries(demo.packages).map(([name, pkg]) => {
+    const write = (
+      name: string,
+      files: Readonly<Record<PackageFile, string>>,
+      manifest: PackageManifest,
+    ) => {
       const dir = join(out, name);
       mkdirSync(dir);
-      for (const f of PACKAGE_FILES) writeFileSync(join(dir, f), pkg.files[f]);
-      writeFileSync(join(dir, "manifest.json"), toJsonLine(pkg.manifest));
+      for (const f of PACKAGE_FILES) writeFileSync(join(dir, f), files[f]);
+      writeFileSync(join(dir, "manifest.json"), toJsonLine(manifest));
       return dir;
-    });
+    };
+    const demo = demoLoan(defaultCalibration());
+    const dirs = [
+      ...Object.entries(demo.packages).map(([name, pkg]) => write(name, pkg.files, pkg.manifest)),
+      ...each.map(({ id, task }) =>
+        write(`each-${id}`, task.files, packageManifest(task.batch, task.files, task.labels)),
+      ),
+    ];
     const r = spawnSync(
       process.execPath,
       [here("../../../../apps/servicing/scripts/board-life-package.mjs"), "--json", ...dirs],
-      { encoding: "utf8" },
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
     );
     expect(r.stderr).toBe("");
     const reports = JSON.parse(r.stdout) as {
@@ -346,8 +502,17 @@ describe("boarding-triage", () => {
         hard: string[];
         warnings: string[];
         boarded_escrowed: boolean;
+        boarded_lossmit_in_process: boolean;
+        boarded_bk_active: boolean;
+        boarded_scra_active: boolean;
+        boarded_regx_days_delinquent: number;
       }[];
-      labels: { defect_id: string; caught: boolean; boarded_as: string }[];
+      labels: {
+        defect_id: string;
+        root_cause: boolean;
+        caught: boolean;
+        boarded_as: string | null;
+      }[];
     }[];
     const by = Object.fromEntries(reports.map((x) => [x.package.split("/").at(-1)!, x]));
     for (const x of reports) {
@@ -363,6 +528,24 @@ describe("boarding-triage", () => {
       ["D-42", false],
     ]);
     expect(by["D-42"]!.labels[0]!.boarded_as).toBe("loan.boarded escrowed=false (D-31)");
+    // The gate catches none of the ten, at the root or beside it.
+    const planted = reports.flatMap((x) => x.labels);
+    expect(
+      [...new Set(planted.filter((l) => l.root_cause).map((l) => l.defect_id))].sort(),
+    ).toEqual(Object.keys(DEFECTS).sort());
+    expect(planted.filter((l) => l.caught)).toEqual([]);
+    // And boards each flag the package left off as off.
+    const loan = (id: string) => by[`each-${id}`]!.loans[0]!;
+    expect(loan("D-35").boarded_lossmit_in_process).toBe(false);
+    expect(loan("D-37").boarded_bk_active).toBe(false);
+    expect(loan("D-12").boarded_scra_active).toBe(false);
+    // D-24's phantom row boards a loan behind that the tape says is not.
+    const tape = parseCsv(taskOf("D-24").files["boarding_tape.final.csv"])[0]!;
+    expect(tape["next_due_date"]! > taskOf("D-24").batch.transfer_date).toBe(true);
+    expect(loan("D-24").boarded_regx_days_delinquent).toBeGreaterThan(0);
+    expect(by["each-D-24"]!.labels.find((l) => l.root_cause)!.boarded_as).toMatch(
+      /days delinquent/,
+    );
   });
 
   it("pins what a model is told", () => {
@@ -371,9 +554,9 @@ describe("boarding-triage", () => {
     expect(BOARDING_FINGERPRINT.environment).toMatchInlineSnapshot(`
       {
         "name": "boarding-triage",
-        "rulebook_sha256": "6562cd8248cfa478715482cd6a1486a624d557c2d3bdeb8f71fa29d8b5d5e6ba",
-        "tools_sha256": "75d39666542187afb706ae72f8121ba72d33c235d7f9a9798ff46ae36c01809e",
-        "version": "1.0.0",
+        "rulebook_sha256": "80f4b7aa5a15211692ec3d4ab88e9edf50bca37f2a1ef34ae65d410530bdff46",
+        "tools_sha256": "ebe3db070186cd12f5d6d18f9e6f607c3ae06e8d65d574429c1286f4ab4a101e",
+        "version": "1.1.0",
       }
     `);
     expect(renderBoardingTask(spec[3]!)).not.toMatch(/D-42|D-03|label|planted/);
@@ -383,7 +566,7 @@ describe("boarding-triage", () => {
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump BOARDING_ENVIRONMENT_VERSION, then the pin.
     expect(sha256(heldout.map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"45ffd385fe445d28c7f2b40cfbb76fff7c0ebc679e54eecb594c3dafa1866cec"`,
+      `"a2fc1478600307699e1e24f341b4887bcd2baa904afbbbd740c93b2ef3438d46"`,
     );
   });
 
@@ -393,6 +576,7 @@ describe("boarding-triage", () => {
     const held = new Set(heldout.map(fp));
     expect(train.filter((t) => held.has(fp(t)))).toEqual([]);
     expect(drawsHeldoutStream(heldout[0]!.id)).toBe(true);
+    expect(drawsHeldoutStream("boarding-triage/1.0.0/heldout/1/0")).toBe(true);
     const { attempts } = drawBoardingTask("train", 7, 3);
     expect(attempts).toBeGreaterThanOrEqual(1);
   });

@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 /**
  * Board a transfer package the life generator wrote through the servicing
- * app's own boarding, in process, and say for each planted defect whether
- * the gate caught it.
+ * app's own boarding, in process, and say for each label whether the gate
+ * caught it.
  *
- *   node scripts/board-life-package.mjs                 the demo loan's four packages
+ *   node scripts/board-life-package.mjs                 the demo loan's four packages and one for each defect
  *   node scripts/board-life-package.mjs DIR [DIR ...]   packages already written
  *   node scripts/board-life-package.mjs --json DIR      the report as JSON
  *
  * A package is a directory of the thirteen files and its manifest.json, as
  * `npm run env:transfer-package -w @hm/environments -- --out DIR` writes them.
- * With no directory this writes the demo loan's (clean, D-42, D-03 and the
- * defective one with both) to a temporary directory first.
+ * With no directory this writes, to a temporary directory first, the demo
+ * loan's (clean, D-42, D-03 and the defective one with both) and one
+ * training package for each defect in the life generator's registry, that
+ * defect alone on its loan (`--each`).
  *
  * Nothing here is reimplemented and no database is touched. The files go
  * through the servicing app's own `decodeTransferBatch`
@@ -22,14 +24,19 @@
  * position and MERS lookup, and boarded on the transfer date. The
  * correspondence file is ingested as the `correspondence` tape kind the
  * service accepts (service.ts:22) and, like any file the decoder does not
- * name, changes nothing that boards.
+ * name, changes nothing that boards; so do the columns the writer adds after
+ * the layout's own.
  *
- * A label is caught when the gate raised a hard failure or a warning on its
- * loan. For each one the report also says what boarded in the cell's place:
- * the `escrowed` flag `loan.boarded` carries, and the late-charge cap, which
- * no package can board because the decoder has no field for it. Today it
- * shows what docs/synthetic-data-defects.md says: the gate catches neither
- * D-42 nor D-03.
+ * Every label in the manifest is reported, the root of each defect and each
+ * symptom the writer found beside it. A label is caught when the gate raised
+ * a hard failure or a warning on its loan. For each root the report also says
+ * what boarded in the cell's place, read off `loan.boarded` and the staged
+ * loan: the escrow flag, the loss-mitigation, bankruptcy and servicemember
+ * flags, the ARM's caps, the delinquency boarding derived from the payment
+ * history and the balance; and, for the late-charge cap, the mortgage
+ * insurance's date and the flood zone, that no package can board one, because
+ * the decoder has no field for it. Today it shows what
+ * docs/synthetic-data-defects.md says: the gate catches none of the ten.
  *
  * The servicing app's source is TypeScript run as its Dockerfile runs it, with
  * Node's type stripping; on a Node that needs the flag this script re-runs
@@ -82,6 +89,30 @@ const KINDS = {
 /** The two external positions and the restricted file: read by the decoder, not ingested as tapes. */
 const POSITIONS = ["fnma_position.csv", "mers_lookup.csv", "fair_lending.csv"];
 
+/** What boarded in a root's place, read off loan.boarded and the staged loan; null for a symptom. */
+function boardedAs(l, x) {
+  if (l.root_cause === false) return null;
+  if (l.field === "escrowed")
+    return `loan.boarded escrowed=${x.boarded_escrowed}${l.produces ? ` (${l.produces})` : ""}`;
+  if (l.field === "late_charge_max")
+    return `no cap (the decoder reads none); the note's is ${l.true_value}`;
+  if (l.field === "lm_in_process")
+    return `loan.boarded lossmit_in_process=${x.boarded_lossmit_in_process}, so no case opens, though the details stage (${x.staged_lossmit.application_status}, received ${x.staged_lossmit.received_on})`;
+  if (l.field === "bk_active")
+    return `loan.boarded bk_active=${x.boarded_bk_active}, the case's details dropped (staged ${JSON.stringify(x.staged_bankruptcy)})`;
+  if (l.field === "scra_active") return `loan.boarded scra_active=${x.boarded_scra_active}`;
+  if (l.field === "arm_initial_cap_bps")
+    return `staged arm.initial_cap_bps=${x.staged_arm_initial_cap_bps}; the note's is ${l.true_value}`;
+  if (l.field === "mi_termination_date")
+    return "no MI date or value (the decoder reads neither, and loan.boarded carries no MI record)";
+  if (l.field === "flood_zone") return "no flood zone (the decoder reads none)";
+  if (l.file_or_table === "payment_history.csv" && l.field === "due_date")
+    return `loan.boarded ${x.boarded_regx_days_delinquent} days delinquent, the earliest unpaid ${x.boarded_earliest_unpaid}, where the tape's next due date is ${x.staged_next_due_date}`;
+  if (l.file_or_table === "payment_history.csv" && l.field === "principal")
+    return `the tape's balance, ${x.staged_upb} cents, which keeps the misapplied principal`;
+  return null;
+}
+
 function board(dir) {
   const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
   const files = Object.fromEntries(
@@ -133,36 +164,46 @@ function board(dir) {
         .filter((v) => v.severity === sev && v.result === "fail" && !v.waived)
         .map((v) => v.code);
     const boarded = boardedEvents.get(bl.id);
+    const at = (k) => (boarded ? boarded[k] : null);
     return {
       loan: n,
       status: bl.status,
       hard: fails("hard"),
       warnings: fails("warning"),
-      boarded_escrowed: boarded ? boarded.escrowed : null,
+      boarded_escrowed: at("escrowed"),
       // A staged loan has no late-charge cap field (domain/boarding/types.ts), so nothing a tape carries boards one.
       boarded_late_charge_cap: null,
+      // The flags and the 1.7 facts loan.boarded carries (service.ts:357-366).
+      boarded_lossmit_in_process: at("lossmit_in_process"),
+      boarded_bk_active: at("bk_active"),
+      boarded_scra_active: at("scra_active"),
+      // The delinquency boarding derives from the payment history, oldest first (service.ts:345-347).
+      boarded_regx_days_delinquent: at("regx_days_delinquent"),
+      boarded_earliest_unpaid: at("earliest_unpaid_due_date"),
+      // What stages from the cells boarding has a field for.
+      staged_next_due_date: bl.staged.next_due_date,
+      staged_upb: bl.staged.upb_cents,
+      staged_bankruptcy: bl.staged.bankruptcy,
+      staged_lossmit: bl.staged.lossmit,
+      staged_arm_initial_cap_bps: bl.staged.arm ? bl.staged.arm.initial_cap_bps : null,
     };
   });
   const byLoan = new Map(loans.map((l) => [l.loan, l]));
   const labels = manifest.labels.map((l) => {
     const x = byLoan.get(l.loan);
     const caught = x.hard.length > 0 || x.warnings.length > 0;
-    const boardedAs =
-      l.field === "escrowed"
-        ? `loan.boarded escrowed=${x.boarded_escrowed}${l.produces ? ` (${l.produces})` : ""}`
-        : l.field === "late_charge_max"
-          ? `no cap (the decoder reads none); the note's is ${l.true_value}`
-          : null;
     return {
       loan: l.loan,
       defect_id: l.defect_id,
+      root_cause: l.root_cause !== false,
       file: l.file_or_table,
       field: l.field,
+      row: l.row,
       package_says: l.planted_value,
       true_value: l.true_value,
       caught,
       by: [...x.hard, ...x.warnings],
-      boarded_as: boardedAs,
+      boarded_as: boardedAs(l, x),
     };
   });
   return {
@@ -187,7 +228,7 @@ const json = args.includes("--json");
 let dirs = args.filter((a) => a !== "--json");
 if (dirs.length === 0) {
   const out = mkdtempSync(join(tmpdir(), "life-packages-"));
-  const w = spawnSync("npx", ["tsx", "src/boarding/package-cli.ts", "--out", out], {
+  const w = spawnSync("npx", ["tsx", "src/boarding/package-cli.ts", "--out", out, "--each"], {
     cwd: join(repo, "packages/environments"),
     stdio: json ? "ignore" : "inherit",
   });
@@ -212,14 +253,22 @@ if (json) {
     console.log(`  boarded ${r.boarded} of ${r.loans.length}, refused ${r.refused}`);
     for (const l of r.loans)
       console.log(
-        `  ${l.loan}: ${l.status}; hard ${l.hard.join(",") || "none"}; warnings ${l.warnings.join(",") || "none"}; boarded escrowed=${l.boarded_escrowed}`,
+        `  ${l.loan}: ${l.status}; hard ${l.hard.join(",") || "none"}; warnings ${l.warnings.join(",") || "none"}; boarded escrowed=${l.boarded_escrowed}, ${l.boarded_regx_days_delinquent} days delinquent`,
       );
     if (r.labels.length === 0) console.log("  nothing planted: a clean twin");
-    for (const l of r.labels)
+    for (const l of r.labels.filter((x) => x.root_cause))
       console.log(
-        `  ${l.defect_id} ${l.loan} ${l.file} ${l.field}: the package says ${JSON.stringify(l.package_says)}, the truth is ${JSON.stringify(l.true_value)}; caught: ${l.caught ? `yes (${l.by.join(", ")})` : "no"}; boarded as ${l.boarded_as}`,
+        `  ${l.defect_id} ${l.loan} ${l.file} ${l.field}${l.file === "boarding_tape.final.csv" ? "" : ` ${l.row}`}: the package says ${JSON.stringify(l.package_says)}, the truth is ${JSON.stringify(l.true_value)}; caught: ${l.caught ? `yes (${l.by.join(", ")})` : "no"}; boarded as ${l.boarded_as}`,
+      );
+    const symptoms = r.labels.filter((x) => !x.root_cause);
+    if (symptoms.length)
+      console.log(
+        `  ${symptoms.length} ${symptoms.length === 1 ? "symptom" : "symptoms"} beside the root (${[...new Set(symptoms.map((x) => `${x.file} ${x.field}`))].join("; ")}); caught: ${symptoms.some((x) => x.caught) ? "yes" : "no"}`,
       );
   }
-  const all = reports.flatMap((r) => r.labels);
-  console.log(`\n${all.length} planted, ${all.filter((l) => l.caught).length} caught by the gate.`);
+  const roots = reports.flatMap((r) => r.labels.filter((l) => l.root_cause));
+  const ids = [...new Set(roots.map((l) => l.defect_id))].sort();
+  console.log(
+    `\n${roots.length} planted (${ids.join(", ")}), ${roots.filter((l) => l.caught).length} caught by the gate.`,
+  );
 }

@@ -4,12 +4,15 @@
  * (`apps/servicing/scripts/board-life-package.mjs`).
  *
  *   npm run env:transfer-package -w @hm/environments -- --out DIR
+ *   npm run env:transfer-package -w @hm/environments -- --out DIR --each
  *   npm run env:transfer-package -w @hm/environments -- --out DIR --seed 3 --index 12
  *
  * With no seed, the demo loan's four packages: DIR/clean, DIR/D-42, DIR/D-03
- * and DIR/defective. With a seed and an index, that boarding-triage training
- * task's package, as DIR/train-SEED-INDEX. The held-out suite is never
- * written: it is what every reported score is measured on.
+ * and DIR/defective. With --each, those four and one training package for
+ * each defect in the registry, that defect alone on its loan, as DIR/each-D-35
+ * and so on (`one-of-each.ts`). With a seed and an index, that boarding-triage
+ * training task's package, as DIR/train-SEED-INDEX. The held-out suite is
+ * never written: it is what every reported score is measured on.
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -25,12 +28,14 @@ import {
   type PackageManifest,
 } from "../life/transfer-package.js";
 import { boardingTaskId, generateBoardingTask } from "./generator.js";
+import { oneOfEach } from "./one-of-each.js";
 
 const { values } = parseArgs({
   options: {
     out: { type: "string" },
     seed: { type: "string" },
     index: { type: "string" },
+    each: { type: "boolean" },
   },
 });
 
@@ -42,8 +47,9 @@ function write(
   mkdirSync(dir, { recursive: true });
   for (const f of PACKAGE_FILES) writeFileSync(join(dir, f), files[f]);
   writeFileSync(join(dir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  const roots = manifest.labels.filter((l) => l.root_cause);
   console.log(
-    `${dir}: ${manifest.batch.loan_count} ${manifest.batch.loan_count === 1 ? "loan" : "loans"}, ${manifest.labels.length} planted (${manifest.labels.map((l) => `${l.loan} ${l.defect_id}`).join(", ") || "none"})`,
+    `${dir}: ${manifest.batch.loan_count} ${manifest.batch.loan_count === 1 ? "loan" : "loans"}, ${roots.length} planted (${roots.map((l) => `${l.loan} ${l.defect_id}`).join(", ") || "none"})`,
   );
 }
 
@@ -55,6 +61,13 @@ function main(): void {
     const demo = demoLoan(defaultCalibration());
     for (const [name, pkg] of Object.entries(demo.packages))
       write(join(out, name), pkg.files, pkg.manifest);
+    if (values.each)
+      for (const { id, task } of oneOfEach())
+        write(
+          join(out, `each-${id}`),
+          task.files,
+          packageManifest(task.batch, task.files, task.labels),
+        );
     return;
   }
   const seed = Number(values.seed);

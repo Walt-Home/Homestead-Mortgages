@@ -7662,3 +7662,140 @@ first draws, 47 redrawn, 707 training draws reaching the fairness check,
 gives 1.1.0's, and the tape test's floor is 13,000 rows. Each suite's fingerprint names the life version it is drawn
 under, read from `LIFE_VERSION`, so a run record says which book it was
 graded on.
+
+## boarding-triage 1.1.0 draws the first ten, and grades a root apart from its symptoms
+
+**Built 23 October 2026,** as the rest of the first ten defects in the life
+generator's registry and boarding-triage 1.1.0 over them. D-42, D-03 and the
+D-31 that D-42 boards were planted already. The other seven are D-35, D-01,
+D-12, D-37, D-18, D-24 with D-25, and D-15. Each is a labeled twin: the
+clean loan and the defective one from one seed, the root told from what
+follows from it. docs/environments.md, "boarding-triage" and "The life
+generator", says what each plants, what its twin does and how a package
+shows it.
+
+**Why now.** The plan for the Gym puts these ten first, because no gate rule
+sees them and the public record is mostly about them. Its phase 4 asks for
+labels graded with the root told apart from its symptoms. A misapplied
+payment moves every later balance, and a one-row label cannot say which row
+caused the rest.
+
+**The twins are the engines', where an engine exists.** Most of the ten
+enter at boarding, as a value boarding writes, and the engines run on it:
+
+- D-35's plan, D-37's petition and D-12's servicemember each suspend late
+  charges through the cashiering engine's own overlays (2.7 rule 3). A
+  boarding that leaves the flag off ends the overlay the day before the
+  transfer, so the charges are assessed. D-35's twin also waives nothing at
+  the plan's end and reports no plan. D-37's twin calls a borrower in
+  bankruptcy and reports no case on the tape;
+- D-01's twin reads the wrong cap at every rate change after boarding, and
+  D-18's MI sweep reads the wrong termination date;
+- D-24's boarding applies the package's history oldest first, as
+  `BoardingService` does, so the phantom row opens the last installment the
+  borrower paid, and cashiering applies every later payment to the one
+  before its own.
+
+D-25 enters before boarding, in the prior servicer's own books: a regular
+payment three to twelve months before the transfer posted with its principal
+to escrow. Its twin differs from that day.
+
+**What is invented, and marked so.** None of the ports has these, so the
+generator does:
+
+- the servicemember's payment, the balance re-amortized at 6 % over the
+  remaining term. The servicing app states no formula for it;
+- a bankruptcy with no plan, trustee or discharge;
+- the 78 % date computed from 95 % of the original value, for D-18's wrong
+  date;
+- a flood line meaning zone AE, and no line zone X.
+
+D-15's twin is its clean history, because flood-insurance tracking is not
+modeled. Its root is its only label, and docs/environments.md says so.
+
+**No book moves, so the life version stays.** The new facts are opt-in: two
+scenario events (`active_duty`, `bankruptcy`) and a pin (`flood`). They
+consume no draw a book without them makes. The new boarded values default to
+what the loan calls for. `LIFE_VERSION` stays 1.1.0, and the tests hold
+catchup-posting's and escrow-review's held-out suites at their pins.
+`LoanLife` gains keys only where a loan has the fact.
+
+**The package shows each one, as a real one would.** A defect a reviewer
+cannot see in the package teaches nothing, so each gets the evidence a real
+package carries:
+
+- the loss-mitigation row and the bankruptcy case stay in their files, as
+  the catalog's plants do;
+- the servicemember's cap reason stays on the tape, beside the prior
+  servicer's notice of the cap;
+- the lender's MI disclosure and the life-of-loan flood determination are in
+  the correspondence, as documents of record;
+- the payment history carries how each payment was split.
+
+The layout has no column for the MI's original value and termination date,
+or for the flood zone, so the writer adds them after its own, as it added
+the cap. The decoder reads none of them, so none boards.
+
+**Labels by difference, and by the checks.** The writer labels whatever
+differs between a defect's package and its clean twin's, cell by cell. The
+planted cell is the root, and every other differing cell is a symptom: D-25's
+reach from the row's escrow and every later split to Fannie Mae's position. A
+cell
+can also look wrong without differing: D-24's next due date and D-12's P&I
+are right, but the history no longer agrees with them. Those are labeled as
+symptoms too (`PackageDefect.flags`).
+
+**A root is graded; a symptom is credit for having seen the defect.** A
+root's four fields stand. A root with symptoms has a fifth, traced: a finding
+on the root, or failing that on one of its symptoms. So a finding that names
+only a symptom earns that field and fails the package. A finding on the root
+covers its symptoms, and a symptom named beside it is neither required nor
+extra. The cap on extra findings stays at two. A finding in a file of several
+rows per loan names its row, or it is returned to the model to correct.
+
+**Three handlings, each with its own reason.**
+
+- **Correct** a code or a flag the package settles: D-42, D-35, D-37, D-12
+  and D-15.
+- **Query** a term of the loan or a payment's split, which only the prior
+  servicer may correct (`service.ts:247-248`): D-03, D-01, D-18 and D-25.
+- **Hold** D-24's loan. Boarding derives its delinquency from the history, so
+  boarding it as delivered boards it behind; neither correcting nor querying
+  undoes that. This is the first time hold is ever the answer.
+
+**What the gate's own output says.** `board-life-package.mjs` now reports
+every label, root and symptom, with what boarded in the root's place. On the
+demo's four packages and one package of each defect alone, every tape is
+accepted, and every loan boards with no hard failure and no warning. That
+confirms the catalog: the gate catches none of the ten. The script also
+showed a harm the catalog left out. One D-24 package boards its loan 15 days
+delinquent, though its tape says the borrower is paid ahead. The catalog
+counted a pre-origination row as a receipt; an unpaid one is an installment
+boarding pays first. docs/synthetic-data-defects.md now says so.
+
+**The suite.** 1.1.0 takes twenty plans in turn. Each defect is planted on at
+least 20 of the 200 held-out packages (D-03 and D-42 on 40, D-35 and D-24 on
+30), 260 roots in all. The 130 clean loans are drawn to look like the
+defects, flagged servicemembers, bankruptcies and plans among them. The
+held-out suite is re-pinned at `a2fc1478…` (seed 1, 200 packages), and
+`boarding-triage/1.0.0` is retired in `HELDOUT_SUITES`, so no training draw
+reaches a package a 1.0.0 score was measured on.
+
+- **Redraws.** 51 of 200 first draws were redrawn: 21 paid off before the
+  transfer, 15 failed the gate (W-005, four with W-009), and 15 drew a defect
+  the loan could not carry.
+- **Floors.** Submitting nothing passes 20 packages. Correcting every flag
+  and nothing else passes 70. Every check the tape and the short files
+  settle, with no history or correspondence read, passes 80.
+- **The reference.** It passes the held-out suite, 300 training tasks, the
+  four spec cases and the ten packages of one defect each, in three turns
+  and at most 18 tool calls. Of the first draws of 1,000 training tasks
+  (train seed 11), 734 reached the fairness check, and it missed nothing.
+
+Not in 1.1.0:
+
+- the harder variants: D-35 with no row, only trial payments; D-37 with no
+  details; D-12 found only by the military-status lookup;
+- what the servicing app does after boarding: the military-status check, the
+  1.7 carryover verification, the PACER scrub;
+- the other 37 defects.

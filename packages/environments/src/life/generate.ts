@@ -181,10 +181,13 @@ export function generate(
   if (!opts.defects || opts.defects.length === 0)
     return { clean, defective: null, planted: [], labels: [] };
 
-  // Where each defect goes: the loans named, or each eligible loan at the defect's rate from its own stream.
+  // Where each defect goes: the loans named, or each eligible loan at the defect's rate from its own stream. A rate
+  // per unit (D-25's per receipt) is the chance that a loan of `units` such units carries one.
   const placed = new Map<number, string[]>();
-  const fits = (def: DefectDefinition, p: Prepared) =>
-    def.eligible(p.draw) && (!def.requires_transfer || p.transferIn !== null);
+  const fits = (def: DefectDefinition, p: Prepared, c: LoanLife) =>
+    def.eligible(p.draw) &&
+    (!def.requires_transfer || p.transferIn !== null) &&
+    (def.applies?.(c) ?? true);
   for (const req of opts.defects) {
     const r = typeof req === "string" ? { id: req } : req;
     const def = defectById(r.id);
@@ -196,9 +199,12 @@ export function generate(
       0;
     const targets =
       r.loans ??
-      prepared.flatMap((p, i) =>
-        fits(def, p) && rngFor(`${key}/defects/${def.id}/${i}`).next() < rate ? [i] : [],
-      );
+      prepared.flatMap((p, i) => {
+        if (!fits(def, p, loans[i]!)) return [];
+        const units = def.units?.(loans[i]!) ?? 1;
+        const chance = units === 1 ? rate : 1 - Math.pow(1 - rate, units);
+        return rngFor(`${key}/defects/${def.id}/${i}`).next() < chance ? [i] : [];
+      });
     for (const i of targets) {
       const p = prepared[i];
       if (!p) throw new RangeError(`${def.id}: loan ${i} is not in a book of ${sc.loans}`);
@@ -210,6 +216,10 @@ export function generate(
         throw new RangeError(
           `${def.id} cannot be planted on loan ${i}: it enters through a transfer package, and the loan was never transferred`,
         );
+      if (def.applies && !def.applies(loans[i]!))
+        throw new RangeError(
+          `${def.id} cannot be planted on loan ${i}: its history has nothing ${def.title.toLowerCase()} needs`,
+        );
       const already = placed.get(i) ?? [];
       if (!already.includes(def.id)) placed.set(i, [...already, def.id]);
     }
@@ -220,23 +230,36 @@ export function generate(
   // The observer sees the twin the book carries; the one-defect twins that only sort a pair's symptoms are not shown.
   const twinOf = (
     p: Prepared,
+    clean: LoanLife,
     defs: readonly DefectDefinition[],
     observe?: (m: LifeMoment) => void,
-  ) =>
-    simulateLoan(ctx, p.draw, p.lines, p.script, p.transferIn, {
-      boarded: (t) => defs.reduce((x, def) => def.boarded(x), t),
+  ) => {
+    const history = defs.flatMap((def) => (def.history ? [def.history(clean)] : []));
+    if (history.length > 1)
+      throw new RangeError(
+        `${clean.loan_id}: one change to the prior servicer's history at a time`,
+      );
+    return simulateLoan(ctx, p.draw, p.lines, p.script, p.transferIn, {
+      boarded: (t) => defs.reduce((x, def) => def.boarded(x, p.draw), t),
+      ...(history[0] ? { history: history[0] } : {}),
       ...(observe ? { observe } : {}),
     });
+  };
   for (const [i, ids] of [...placed].sort((a, b) => a[0] - b[0])) {
     const defs = [...ids].sort().map(defectById);
     const p = prepared[i]!;
     const observe = opts.observe;
-    const twin = twinOf(p, defs, observe ? (m) => observe(i, "twin", m) : undefined);
     const c = loans[i]!;
+    const twin = twinOf(p, c, defs, observe ? (m) => observe(i, "twin", m) : undefined);
     twins.set(c.loan_id, twin);
     for (const def of defs) {
-      planted.push({ loan: c.loan_id, index: i, defect_id: def.id, on: twin.boarded.on });
-      labels.push(rootLabel(twin, def));
+      planted.push({
+        loan: c.loan_id,
+        index: i,
+        defect_id: def.id,
+        on: rootLabel(twin, def, c).on,
+      });
+      labels.push(rootLabel(twin, def, c));
     }
     if (defs.length === 1) {
       labels.push(...symptomLabels(c, twin, defs[0]!));
@@ -246,7 +269,7 @@ export function generate(
     // neither does alone (the two meet: a fee on a payment that only the missing escrow made short).
     const alone = defs.map((def) => ({
       def,
-      at: new Set(differences(c, twinOf(p, [def])).map(placeOf)),
+      at: new Set(differences(c, twinOf(p, c, [def])).map(placeOf)),
     }));
     for (const x of differences(c, twin)) {
       const owners = alone.filter((a) => a.at.has(placeOf(x))).map((a) => a.def);

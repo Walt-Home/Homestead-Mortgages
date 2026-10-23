@@ -650,9 +650,14 @@ export function invoiceLines(statement: StatementWire): InvoiceLineInput[] {
     const cents = BigInt(l.cents);
     if (cents <= 0n) continue;
     const name = l.action.split(":")[0]!.trim();
+    // A yearly row's tokens are per loan-year and charged a twelfth each
+    // month; printing them "per loan-month" stated a rate twelve times the
+    // sheet's (the amount was right).
+    const per =
+      l.cadence === "loan_year" ? "per loan-year, a twelfth each month" : "per loan-month";
     const quantity =
       l.quantity.kind === "loan_months"
-        ? `${l.quantity.loanMonths} loan-months on ${dollars(l.quantity.balanceCents)} of unpaid principal across ${l.quantity.loans.toLocaleString("en-US")} loans, at ${l.tokensEach.toLocaleString("en-US")} tokens per $100,000 per loan-month`
+        ? `${l.quantity.loanMonths} loan-months on ${dollars(l.quantity.balanceCents)} of unpaid principal across ${l.quantity.loans.toLocaleString("en-US")} loans, at ${l.tokensEach.toLocaleString("en-US")} tokens per $100,000 ${per}`
         : `${l.quantity.count.toLocaleString("en-US")} at ${l.tokensEach.toLocaleString("en-US")} tokens each`;
     lines.push({
       description: `${name}: ${quantity}`,

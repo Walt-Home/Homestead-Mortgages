@@ -2068,7 +2068,10 @@ index date 2026-09-17).
 - **Smallest fix.** In `PgUnitOfWork.run`, call
   `attachEarlyInterventionTimerCancellations(timers, memEvents)` once the
   engine is built at unit-of-work.ts:118, as spec-harness.ts:40 does.
-- **Kept out by.** No environment grades an early-intervention clock.
+- **Kept out by.** Nothing needs to. ei-clocks ports windows.ts, not the unit
+  of work, and grades the spec's reading: an installment credited by day 36
+  cancels both legs (`installmentPaid`), and a test gives this defect's facts
+  that answer.
 
 ### ei-2. A late payment cancels a breached window, and one contact satisfies every later window 🟡
 
@@ -2132,7 +2135,10 @@ index date 2026-09-17).
   event's `on` and contact id) and `sweep`. Add `breached` at :68-69, run the
   fold for every loan with an open leg, not only a delinquent one, and take
   `cancelled_at` from the clock.
-- **Kept out by.** No environment grades early intervention.
+- **Kept out by.** Nothing needs to. ei-clocks grades windows.ts folded that
+  way, never `projectWindows`: a payment on day 52 leaves both legs
+  breached, and one contact satisfies only the windows containing its day. A
+  test gives Loan A's and Loan B's facts those answers.
 
 ### boarding-3. A transfer tape's co-borrower is dropped without a trace, so a joint loan boards with one borrower 🟡
 
@@ -2684,7 +2690,10 @@ index date 2026-09-17).
   windows.ts:74 already applies the `cycle_end_at >= notice_due_at` test.
   `projectWindows` already keeps the event's `satisfied_by_prior_180`
   (delinquency.ts:69, :79).
-- **Kept out by.** No environment grades early intervention.
+- **Kept out by.** Nothing needs to. ei-clocks hands `openWindow` the latest
+  notice's cycle, as `counterRun` can be handed it, so a window opened inside
+  the cycle is `satisfied_by_prior_180`; a test gives loan B's facts that
+  answer.
 
 ### transfers-1. The goodbye notice's address check reads parties no code writes, so no goodbye run is ever released 🟡
 

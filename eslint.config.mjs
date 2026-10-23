@@ -58,6 +58,7 @@ export default tseslint.config(
       "packages/environments/src/income/ported/**",
       "packages/environments/src/lossmit/ported/**",
       "packages/environments/src/metro2/ported/**",
+      "packages/environments/src/ei/ported/**",
       // His servicing runtime, vendored whole as apps/servicing; the commit is
       // in apps/servicing/VENDORED_FROM. Its scripts/ beside the tree is ours.
       "apps/servicing/src/**",

@@ -1,0 +1,502 @@
+/**
+ * The life generator: a book is a function of its seed; each history keeps
+ * the ledger's invariants; the ARM engines agree on every change; every month
+ * furnishes a valid Metro 2 record; a borrower who is behind pays to cure and
+ * catches up; the scenario's events happen; the D-03 twin differs from the
+ * clean history only downstream of its planted value; and a thousand
+ * loan-decades run in under fifteen seconds.
+ */
+
+import { describe, expect, it } from "vitest";
+import { addMonths, type PlainDate } from "@hm/kernel/calendar";
+import { monthlyInterest, ratePercent } from "@hm/kernel/money";
+import { lateChargeAmount } from "../payments/ported/latecharges.js";
+import { toJsonLine } from "../record.js";
+import {
+  CALIBRATION_KEYS,
+  DEFAULT_CALIBRATION,
+  bookTape,
+  calibrationCheck,
+  defaultCalibration,
+  generate,
+  loadCalibration,
+  monthEndRow,
+  type LoanLife,
+} from "../life/index.js";
+
+const cal = defaultCalibration();
+const book = generate(7, { loans: 200 }, { calibration: cal }).clean;
+const full = (l: LoanLife) => l.payoff === null && l.transfer_out_on === null;
+
+describe("life generator", () => {
+  it("is a function of its seed, and a loan does not depend on the loans beside it", () => {
+    const a = generate(7, { loans: 30 }, { calibration: cal }).clean;
+    const b = generate(7, { loans: 30 }, { calibration: cal }).clean;
+    expect(toJsonLine(a)).toBe(toJsonLine(b));
+    for (const i of [0, 12, 29]) expect(toJsonLine(a.loans[i])).toBe(toJsonLine(book.loans[i]));
+    const c = generate(8, { loans: 30 }, { calibration: cal }).clean;
+    expect(toJsonLine(c.loans[0])).not.toBe(toJsonLine(a.loans[0]));
+  });
+
+  it("keeps the ledger's invariants", () => {
+    const broken: string[] = [];
+    for (const l of book.loans) {
+      if (!l.invariants.ok) broken.push(`${l.loan_id}: ${l.invariants.notes.join("; ")}`);
+      const pi = new Map(l.installments.map((i) => [i.due, i.pi]));
+      for (const r of l.receipts)
+        for (const x of r.installments)
+          if (x.interest + x.principal !== pi.get(x.due))
+            broken.push(`${r.id}: ${x.due} interest + principal is not its P&I`);
+      const lc = l.receipts.reduce((s, r) => s + r.late_charge, 0n);
+      const collected = l.fees.reduce((s, f) => s + f.collected, 0n);
+      if (lc !== collected)
+        broken.push(`${l.loan_id}: late charges applied ${lc}, fees collected ${collected}`);
+      for (let k = 0; k < l.months.length; k++) {
+        const m = l.months[k]!;
+        if (m.suspense < 0n || m.late_charges_due < 0n)
+          broken.push(`${l.loan_id} ${m.month}: a negative balance`);
+        if (k > 0 && m.upb > l.months[k - 1]!.upb)
+          broken.push(`${l.loan_id} ${m.month}: the balance rose`);
+      }
+      for (const f of l.fees)
+        if (f.collected > f.amount) broken.push(`${f.id}: collected more than assessed`);
+    }
+    expect(broken).toEqual([]);
+  });
+
+  it("charges each installment interest at its own rate, across a rate change", () => {
+    const arms = generate(
+      11,
+      {
+        loans: 40,
+        pins: Object.fromEntries(
+          Array.from({ length: 40 }, (_, i) => [i, { arm: i % 3 === 0 ? "7/6" : "5/6" } as const]),
+        ),
+      },
+      { calibration: cal },
+    ).clean;
+    let checked = 0;
+    let spanning = 0;
+    const wrong: string[] = [];
+    for (const l of arms.loans)
+      for (const r of l.receipts) {
+        if (new Set(r.installments.map((x) => x.rate_pct)).size > 1) spanning++;
+        // The balance before the receipt: installments are applied first, the curtailment last.
+        let upb =
+          r.upb_after + r.curtailment + r.installments.reduce((s, x) => s + x.principal, 0n);
+        for (const x of r.installments) {
+          const expected = monthlyInterest(upb, ratePercent(x.rate_pct));
+          if (x.interest !== expected)
+            wrong.push(`${r.id} ${x.due}: ${x.interest} at ${x.rate_pct} is not ${expected}`);
+          upb -= x.principal;
+          checked++;
+        }
+      }
+    expect(wrong).toEqual([]);
+    expect(checked).toBeGreaterThan(2000);
+    expect(spanning).toBeGreaterThan(0);
+  });
+
+  it("runs both ARM engines on every change, and they agree", () => {
+    const arms = generate(
+      12,
+      {
+        loans: 60,
+        pins: Object.fromEntries(
+          Array.from({ length: 60 }, (_, i) => [
+            i,
+            { arm: (["5/6", "7/6", "10/6"] as const)[i % 3]! },
+          ]),
+        ),
+      },
+      { calibration: cal },
+    ).clean;
+    const changes = arms.loans.flatMap((l) => l.arm_changes.map((a) => ({ l, a })));
+    expect(changes.length).toBeGreaterThan(150);
+    expect(changes.filter(({ a }) => !a.engine_b_agrees)).toEqual([]);
+    for (const { l, a } of changes) {
+      const life = Number(l.draw.note_rate_pct) + Number(l.draw.arm!.lifetime_cap_pct);
+      expect(Number(a.new_rate_pct)).toBeLessThanOrEqual(life);
+      expect(Number(a.new_rate_pct)).toBeGreaterThanOrEqual(Number(l.draw.arm!.margin_pct));
+      // The new P&I is what every installment from the first new payment carries.
+      for (const i of l.installments)
+        if (
+          i.due >= a.first_new_payment &&
+          !l.arm_changes.some(
+            (b) => b.first_new_payment > a.first_new_payment && i.due >= b.first_new_payment,
+          )
+        )
+          expect(i.pi).toBe(a.new_pi);
+    }
+  });
+
+  it("furnishes a valid Metro 2 record every month, the closing one included", () => {
+    const missing: string[] = [];
+    for (const l of book.loans) {
+      if (full(l) && l.months.length !== 120)
+        missing.push(`${l.loan_id}: ${l.months.length} months`);
+      for (const m of l.months)
+        if (m.metro2.record === null || m.metro2.errors.length)
+          missing.push(`${l.loan_id} ${m.month}: ${m.metro2.errors.join(",")}`);
+      if (l.payoff) expect(l.months.at(-1)!.metro2.record!["account_status"]).toBe("13");
+    }
+    expect(missing).toEqual([]);
+    expect(book.loans.some((l) => l.payoff)).toBe(true);
+  });
+
+  it("schedules every year's escrow analysis, the tenth included", () => {
+    const escrowed = book.loans.filter((l) => l.draw.escrowed && full(l));
+    expect(escrowed.length).toBeGreaterThan(50);
+    for (const l of escrowed)
+      expect(l.analyses.map((a) => a.year)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+
+  it("has a borrower who is behind pay to cure, and a cured borrower catch up", () => {
+    // Scripted: a missed payment, then the next payment pays everything owed.
+    const s = generate(
+      "cure",
+      {
+        loans: 1,
+        random: false,
+        pins: { 0: { late_charge_cap_cents: null } },
+        events: [{ kind: "missed_payment", loan: 0, month: 6 }],
+      },
+      { calibration: cal },
+    ).clean.loans[0]!;
+    const missedDue = addMonths(s.draw.first_due, 6);
+    const cure = s.receipts.find((r) => r.mode === "cure")!;
+    expect(cure.installments.map((x) => x.due)).toEqual([missedDue, addMonths(missedDue, 1)]);
+    const fee = s.fees.find((f) => f.due === missedDue)!;
+    expect(cure.amount).toBe(
+      cure.installments.reduce((t, x) => t + x.interest + x.principal + x.escrow, 0n) + fee.amount,
+    );
+    expect(fee.state).toBe("collected");
+    const after = s.months.find((m) => m.month === cure.on.slice(0, 7))!;
+    expect([after.days_delinquent, after.suspense, after.late_charges_due]).toEqual([0, 0n, 0n]);
+    expect(s.months.filter((m) => m.days_delinquent >= 30).length).toBeLessThanOrEqual(1);
+
+    // Random: every cure leaves nothing due on or before its date unpaid, and a borrower who stays behind pays the oldest installment, which applies.
+    const unpaid: string[] = [];
+    let cures = 0;
+    for (const l of book.loans)
+      for (const r of l.receipts) {
+        if (r.mode === "cure") {
+          cures++;
+          for (const i of l.installments)
+            if (i.due <= r.on && (i.satisfied_on === null || i.satisfied_on > r.on))
+              unpaid.push(`${r.id}: ${i.due}`);
+        }
+        if ((r.mode === "oldest" || r.mode === "cure") && r.installments.length === 0)
+          unpaid.push(`${r.id}: ${r.mode} applied nothing`);
+      }
+    expect(cures).toBeGreaterThan(20);
+    expect(unpaid).toEqual([]);
+  });
+
+  it("obeys the scenario's events", () => {
+    const res = generate(
+      "script",
+      {
+        loans: 2,
+        cohort_months: 1,
+        random: false,
+        pins: { 0: { escrowed: true, arm: null }, 1: { escrowed: true, arm: null } },
+        events: [
+          { kind: "transfer_in", loan: 0, month: 18, misdirected_payments: 1 },
+          { kind: "missed_payment", loan: 0, month: 18 },
+          { kind: "missed_payment", loan: 0, month: 30 },
+          { kind: "promise_to_pay", loan: 0, month: 30, day: 20, pay_in_days: 15 },
+          { kind: "missed_payment", loan: 0, month: 40 },
+          { kind: "missed_payment", loan: 0, month: 41 },
+          { kind: "repayment_plan", loan: 0, month: 41, day: 20, months: 3 },
+          { kind: "tax_reassessment", loan: 1, month: 30, pct: 40 },
+          { kind: "insurance_increase", loan: 1, month: 30, pct: 30 },
+          { kind: "bill_pay_stale", loan: 1, month: 30 },
+          { kind: "payoff", loan: 1, month: 80, day: 12, by_refinance: true },
+        ],
+      },
+      { calibration: cal },
+    ).clean;
+    const [a, b] = [res.loans[0]!, res.loans[1]!];
+
+    // The transfer: everything before it is the prior servicer's, marked so; the shield keeps the first payment from being late.
+    const t = a.transfer_in_on!;
+    expect(t).toBe(addMonths(a.draw.first_due, 18));
+    for (const r of [
+      ...a.receipts,
+      ...a.disbursements,
+      ...a.analyses.map((x) => ({ ...x, on: x.as_of })),
+    ])
+      expect(r.servicer).toBe(r.on < t ? "prior" : "us");
+    expect(a.months.filter((m) => m.servicer === "prior").length).toBe(18);
+    expect(a.months.filter((m) => m.metro2.furnished_by === "prior").length).toBe(18);
+    const shielded = a.late_charge_runs.find((r) => r.due === t)!;
+    expect(shielded.reason).toContain("transfer_window_60");
+    expect(
+      a.receipts.some((r) => r.channel === "transferor_forward" && r.credited_as_of < r.on),
+    ).toBe(true);
+
+    // The promise is made and kept, and pays everything owed.
+    expect(a.behavior.map((x) => x.kind)).toEqual(
+      expect.arrayContaining(["promise_made", "promise_kept", "plan_started", "plan_completed"]),
+    );
+    const promise = a.receipts.find((r) => r.mode === "promise")!;
+    expect(a.months.find((m) => m.month === promise.on.slice(0, 7))!.days_delinquent).toBe(0);
+    // The plan spreads the arrears and ends caught up with nothing left in suspense.
+    const plan = a.receipts.filter((r) => r.mode === "plan");
+    expect(plan.length).toBe(3);
+    const end = a.months.find((m) => m.month === plan.at(-1)!.on.slice(0, 7))!;
+    expect([end.days_delinquent, end.suspense]).toEqual([0, 0n]);
+
+    // The reassessment and the premium increase reach the bills and the analysis after them.
+    const at = addMonths(b.draw.first_due, 30);
+    const tax = b.lines.find((l) => l.line_type === "tax_county")!.bills;
+    const before = tax.filter((x) => x.on < at).at(-1)!;
+    const after = tax.find((x) => x.on >= at)!;
+    expect(Number(after.amount) / Number(before.amount)).toBeGreaterThan(1.35);
+    const hazard = b.lines.find((l) => l.line_type === "hazard")!.bills;
+    expect(
+      Number(hazard.find((x) => x.on >= at)!.amount) /
+        Number(hazard.filter((x) => x.on < at).at(-1)!.amount),
+    ).toBeGreaterThan(1.25);
+    const next = b.analyses.find((x) => x.as_of > after.on)!;
+    expect(next.decision).toBe("shortage");
+    // Bill pay sends the old amount once after the payment changes, and the borrower is current again by the next month.
+    const stale = b.receipts.find((r) => r.mode === "stale_bill_pay")!;
+    const prev = b.receipts.filter((r) => r.on < stale.on && r.mode === "regular").at(-1)!;
+    expect(stale.amount).toBe(prev.amount);
+    const nextMonth = b.months.find(
+      (m) => m.month === addMonths(`${stale.on.slice(0, 7)}-01` as PlainDate, 1).slice(0, 7),
+    )!;
+    expect(nextMonth.days_delinquent).toBe(0);
+    // The payoff closes the history: the quote's funds, the escrow refunded, a final status 13.
+    expect(b.payoff!.by_refinance).toBe(true);
+    expect(b.months.at(-1)!.month).toBe(b.payoff!.on.slice(0, 7));
+    expect(b.months.at(-1)!.metro2.record!["special_comment"]).toBe("AS");
+    expect(b.disbursements.at(-1)!.kind).toBe("payoff_refund");
+    expect(b.disbursements.at(-1)!.balance_after).toBe(0n);
+  });
+
+  it("plants D-03, and its twin differs from the clean history only downstream of it", () => {
+    const scenario = {
+      loans: 4,
+      cohort_months: 1,
+      random: { delinquency: false },
+      pins: {
+        1: { late_charge_cap_cents: 1_500, arm: null },
+        2: { late_charge_cap_cents: 1_500, arm: null },
+      },
+      events: [
+        { kind: "missed_payment" as const, loan: 1, month: 9 },
+        { kind: "missed_payment" as const, loan: 1, month: 33 },
+        { kind: "missed_payment" as const, loan: 1, month: 34 },
+        { kind: "transfer_in" as const, loan: 2, month: 24 },
+        { kind: "missed_payment" as const, loan: 2, month: 12 },
+        { kind: "missed_payment" as const, loan: 2, month: 40 },
+      ],
+    };
+    const clean = generate("twin", scenario, { calibration: cal });
+    const res = generate("twin", scenario, {
+      calibration: cal,
+      defects: [{ id: "D-03", loans: [1, 2] }],
+    });
+    // The clean history is the same whether or not a defect was asked for.
+    expect(toJsonLine(res.clean)).toBe(toJsonLine(clean.clean));
+    const twin = res.defective!;
+    // Loans without the defect are the same loans.
+    for (const i of [0, 3]) expect(toJsonLine(twin.loans[i])).toBe(toJsonLine(res.clean.loans[i]));
+
+    expect(res.planted.map((p) => [p.index, p.defect_id])).toEqual([
+      [1, "D-03"],
+      [2, "D-03"],
+    ]);
+    const roots = res.labels.filter((x) => x.root_cause);
+    expect(roots.map((x) => [x.file_or_table, x.field, x.true_value, x.planted_value])).toEqual([
+      ["loan_terms", "late_charge_max_cents", "1500", null],
+      ["loan_terms", "late_charge_max_cents", "1500", null],
+    ]);
+    // Loan 2 was boarded at its transfer: the prior servicer had the cap right, so nothing before the transfer differs.
+    expect(roots[1]!.on).toBe(twin.loans[2]!.transfer_in_on);
+    for (const p of res.planted) {
+      const labels = res.labels.filter((x) => x.loan === p.loan && !x.root_cause);
+      expect(labels.length).toBeGreaterThan(0);
+      expect(labels.filter((x) => x.on < p.on)).toEqual([]);
+      for (const x of labels) expect(x.defect_id).toBe("D-03");
+      // Each charge differs exactly as the cap says: capped in the clean history, the full percent in the twin.
+      const c = res.clean.loans[p.index]!;
+      const fees = labels.filter((x) => x.file_or_table === "fees" && x.field === "amount_cents");
+      expect(fees.length).toBeGreaterThan(0);
+      for (const f of fees) {
+        const fee = c.fees.find((y) => y.id === f.row)!;
+        const pi = c.installments.find((i) => i.due === fee.due)!.pi;
+        expect(f.true_value).toBe(String(lateChargeAmount(pi, c.draw.late_charge.pct, 1_500n)));
+        expect(f.planted_value).toBe(String(lateChargeAmount(pi, c.draw.late_charge.pct, null)));
+      }
+    }
+    // The prior servicer's charge on loan 2 (before the transfer) is the same in both.
+    const priorFee = res.clean.loans[2]!.fees.find(
+      (f) => f.assessed_on < twin.loans[2]!.transfer_in_on!,
+    )!;
+    expect(twin.loans[2]!.fees.find((f) => f.id === priorFee.id)).toEqual(priorFee);
+    // A loan the defect cannot apply to is refused by name.
+    expect(() =>
+      generate("twin", scenario, { calibration: cal, defects: [{ id: "D-03", loans: [0] }] }),
+    ).toThrow(/D-03 cannot be planted on loan 0/);
+  });
+
+  it("projects a month-end onto a partner tape's fields", () => {
+    const month = "2031-06";
+    const rows = bookTape(book, month);
+    expect(rows.length).toBe(
+      book.loans.filter((l) => l.months.some((m) => m.month === month)).length,
+    );
+    for (const r of rows) {
+      const l = book.loans.find((x) => x.loan_id === r.loan_id)!;
+      const m = l.months.find((x) => x.month === month)!;
+      expect(r.pay_string).toMatch(/^[0369X]{12}$/);
+      expect(r.cash_flow.length).toBe(12);
+      const received = l.receipts
+        .filter((x) => x.on.slice(0, 7) === month)
+        .reduce((s, x) => s + x.amount, 0n);
+      expect(r.cash_flow[11]).toBe(received);
+      expect([
+        r.balance.upb_cents,
+        r.escrow.escrow_balance_cents,
+        r.status.delinquency_days,
+      ]).toEqual([m.upb, m.escrow_balance, m.days_delinquent]);
+      expect(r.pay_string.at(-1)).toBe(
+        { current: "0", "30": "3", "60": "6", "90": "9", "120+": "9" }[m.mba_status],
+      );
+      expect(r.pmi.pmi_flag).toBe(m.mi_active);
+      if (!l.draw.mi) expect(r.pmi.pmi_flag).toBe(false);
+      expect(r.foreclosure.fc_status).toBe(false);
+      expect(r.bankruptcy.bk_status).toBe(false);
+    }
+    const prior = generate(
+      "prior",
+      { loans: 1, random: false, events: [{ kind: "transfer_in", loan: 0, month: 12 }] },
+      { calibration: cal },
+    ).clean.loans[0]!;
+    const before = monthEndRow(prior, prior.months[3]!.month)!;
+    expect([before.servicer, before.servicer_loan_number]).toEqual([
+      "prior",
+      prior.draw.prior_servicer_loan_number,
+    ]);
+    expect(monthEndRow(prior, "2099-01")).toBeNull();
+  });
+
+  it("reads a calibration file key by key, and every default is a design choice", () => {
+    for (const k of CALIBRATION_KEYS) {
+      expect(DEFAULT_CALIBRATION.rates[k]?.kind).toBe("design_choice");
+      expect(DEFAULT_CALIBRATION.rates[k]?.source).toBe("none");
+    }
+    const none = loadCalibration({ path: "/nonexistent/calibration.json" });
+    expect(none.path).toBeNull();
+    expect(Object.values(none.entries).every((e) => e.used === "default")).toBe(true);
+    const entry = (value: unknown, unit: string) => ({
+      value,
+      unit,
+      kind: "public" as const,
+      source: "https://example.org",
+      fetched: "2026-10-01",
+      terms: "public",
+      note: "",
+    });
+    const read = loadCalibration({
+      file: {
+        version: "2026-10-23",
+        rates: {
+          "delinquency.cure_from_30": entry(45, "percent per month"),
+          "transfer.annual_rate": entry(0.004, "share per month"),
+          "book.ltv_distribution": entry(
+            [
+              { lo: 0.6, hi: 0.8, share: 3 },
+              { lo: 0.8, hi: 0.95, share: 1 },
+            ],
+            "ratio",
+          ),
+          "book.note_rate_distribution": entry(
+            { "<3": 10, "3 to 5": 30, "7+": 5 },
+            "percent of loans",
+          ),
+          "payment.day_of_month": entry(
+            { "1-5": 50, "6-10": 30, "11-31": 21 },
+            "percent of payments",
+          ),
+          "refi.pmms_30y_series": entry(
+            [
+              ["2025-09-04", 6.5],
+              ["2025-10-02", 6.3],
+            ],
+            "percent",
+          ),
+          "escrow.tax_annual_median": entry("about four thousand", "USD"),
+          "not.a.key": entry(1, ""),
+        },
+      },
+    });
+    expect(read.rates.delinquency.cure_from_30).toBeCloseTo(0.45);
+    expect(read.rates.transfer.annual_rate).toBeCloseTo(1 - Math.pow(0.996, 12));
+    expect(read.rates.book.ltv.map((b) => [b.lo, b.hi, b.weight])).toEqual([
+      [60, 80, 0.75],
+      [80, 95, 0.25],
+    ]);
+    expect(read.rates.book.note_rate.map((b) => [b.lo, b.hi])).toEqual([
+      [2.5, 3],
+      [3, 5],
+      [7, 7.5],
+    ]);
+    expect(read.rates.refi.pmms_30y.map((x) => x.rate)).toEqual([6.5, 6.3]);
+    // Days 2 to 5 hold a fifth of their bin's half each, days 6 to 10 a fifth of 30, days 11 to 16 a 21st of 21.
+    const days = read.rates.payment.day_of_month;
+    expect([days[0]! / days[4]!, days[4]! / days[9]!]).toEqual([
+      expect.closeTo(10 / 6, 9),
+      expect.closeTo(6 / 1, 9),
+    ]);
+    expect(read.entries["delinquency.cure_from_30"]).toMatchObject({
+      used: "file",
+      kind: "public",
+    });
+    expect(read.entries["escrow.tax_annual_median"].used).toBe("default");
+    expect(read.warnings.join("\n")).toMatch(/not\.a\.key/);
+    expect(read.warnings.join("\n")).toMatch(/escrow\.tax_annual_median: value/);
+    expect(read.warnings.join("\n")).toMatch(/payment\.partial_share: missing/);
+  });
+
+  it("comes out near the calibration's checks under the defaults", () => {
+    const rows = new Map(calibrationCheck(book, cal).map((r) => [r.key, r]));
+    const near = (key: Parameters<typeof rows.get>[0], lo: number, hi: number) => {
+      const r = rows.get(key)!;
+      expect(r.realized / r.target, `${key}: ${r.realized} against ${r.target}`).toBeGreaterThan(
+        lo,
+      );
+      expect(r.realized / r.target, `${key}: ${r.realized} against ${r.target}`).toBeLessThan(hi);
+    };
+    near("delinquency.conventional_30plus_share", 0.4, 2.5);
+    near("payment.missed_month_share", 0.5, 2);
+    near("escrow.share_of_loans", 0.85, 1.2);
+    near("contacts.per_loan_year", 0.7, 1.4);
+  });
+
+  it("runs on the calibration on disk, whatever it holds", () => {
+    const disk = loadCalibration();
+    const b = generate("disk", { loans: 40 }, { calibration: disk }).clean;
+    expect(b.calibration.warnings).toEqual(disk.warnings);
+    for (const l of b.loans) {
+      expect(l.invariants.notes.filter((x) => !x.startsWith("paid to zero"))).toEqual([]);
+      for (const m of l.months) expect(m.metro2.errors).toEqual([]);
+    }
+  });
+
+  it("runs a thousand loan-decades in under fifteen seconds", () => {
+    const t0 = performance.now();
+    const big = generate(
+      "speed",
+      { loans: 1000, random: { payoff: false } },
+      { calibration: cal },
+    ).clean;
+    const seconds = (performance.now() - t0) / 1000;
+    expect(big.loans.reduce((s, l) => s + l.months.length, 0)).toBe(120_000);
+    expect(seconds).toBeLessThan(15);
+  });
+});

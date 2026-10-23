@@ -173,6 +173,10 @@ const digits = (r: Rng, n: number): string => {
 const eighth = (pct: number): string => (Math.round(pct * 8) / 8).toFixed(3);
 const lognormalMeanOne = (r: Rng, sigma: number): number =>
   Math.exp(sigma * normal(r) - (sigma * sigma) / 2);
+/** The spread of a borrower's habits around the book's rates: lognormal, mean one (behavior.ts reads it). */
+export const HABIT_SIGMA = 0.8;
+/** Every note is due on the first, with fifteen days' grace before a late charge (the Uniform Note's 6(A)). */
+export const GRACE_DAYS = 15;
 
 /** States, weighted, with a city and a ZIP prefix each: invented addresses, real places. */
 const STATES: readonly (readonly [string, number, string, string])[] = [
@@ -266,7 +270,6 @@ const NOTE_CAPS_CENTS = [1_500n, 2_500n, 3_500n, 5_000n];
 const FLOOD_SHARE = 0.06;
 const SCHOOL_TAX_SHARE = 0.5;
 const COBORROWER_SHARE = 0.45;
-const EARLY_PERSONA_SHARE = 0.35;
 const VALUE_ANCHOR = 45_000_000; // cents: the home whose tax and premium are the medians
 
 export interface DrawContext {
@@ -340,9 +343,9 @@ export function drawLoan(
     schoolGrowth.push(Math.max(-0.05, R.escrow.tax_growth_yoy + 0.02 * normal(r)));
     floodGrowth.push(Math.max(0, 0.08 + 0.03 * normal(r)));
   }
-  const personaDraw: Persona = r.chance(EARLY_PERSONA_SHARE) ? "early" : "autopay";
-  const latenessDraw = lognormalMeanOne(r, 0.8);
-  const fragilityDraw = lognormalMeanOne(r, 0.8);
+  const personaDraw: Persona = r.chance(R.payment.early_share) ? "early" : "autopay";
+  const latenessDraw = lognormalMeanOne(r, HABIT_SIGMA);
+  const fragilityDraw = lognormalMeanOne(r, HABIT_SIGMA);
   const coborrower = r.chance(COBORROWER_SHARE);
   const b2SameAddress = r.chance(0.9);
   const names = [
@@ -371,7 +374,11 @@ export function drawLoan(
   );
   const miBorrowerPaid =
     ltv_pct > 80 && uMi < Math.min(1, R.mi.share_of_loans / Math.max(above80, 1e-9));
-  const escrowed = pins.escrowed ?? (miBorrowerPaid || uEscrow < R.escrow.share_of_loans);
+  // A loan with MI escrows it, so the others escrow at the share that brings the book to the calibration's.
+  const miShare = Math.min(R.mi.share_of_loans, above80);
+  const escrowWithoutMi =
+    miShare < 1 ? Math.min(1, Math.max(0, (R.escrow.share_of_loans - miShare) / (1 - miShare))) : 1;
+  const escrowed = pins.escrowed ?? (miBorrowerPaid || uEscrow < escrowWithoutMi);
   const armProduct =
     pins.arm !== undefined ? pins.arm : uArm < R.arm.share_of_outstanding ? product : null;
 
@@ -528,7 +535,12 @@ export function drawLoan(
     persona: pins.persona ?? personaDraw,
     lateness: pins.lateness ?? latenessDraw,
     fragility: pins.fragility ?? fragilityDraw,
-    late_charge: { pct: STATE_LATE_PCT[state[0]] ?? "5", grace_days: 15, cap_cents, basis: "pi" },
+    late_charge: {
+      pct: STATE_LATE_PCT[state[0]] ?? "5",
+      grace_days: GRACE_DAYS,
+      cap_cents,
+      basis: "pi",
+    },
     escrowed,
     line_specs,
     mi,

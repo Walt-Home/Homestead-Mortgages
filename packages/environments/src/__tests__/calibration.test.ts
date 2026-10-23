@@ -1,47 +1,35 @@
 /**
- * The calibration file the life generator reads, and the acceptance tests its
- * validation sample is held to: every key is there and nothing else, every
- * public figure says where it came from and when, every design choice says
- * so, and no number is NaN.
+ * The calibration file the life generator reads, the acceptance tests its
+ * validation sample is held to, and the generator's reading of it: every key
+ * is there and nothing else, every public figure says where it came from and
+ * when, every design choice says so, and no number is NaN; the reader takes
+ * every key as written, with no warning, and each figure it hands the
+ * generator is the derivation docs/environments.md states; and a book drawn
+ * from the file comes out at the file's figures where the generator draws them,
+ * and apart from a book drawn from the defaults wherever the file moves one.
  */
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import type { PlainDate } from "@hm/kernel/calendar";
 import { describe, expect, it } from "vitest";
+import {
+  CALIBRATION_KEYS,
+  COUNTIES,
+  arrivals,
+  calibrationCheck,
+  defaultCalibration,
+  generate,
+  loadCalibration,
+  type ArrivalRow,
+  type CalibrationFile,
+  type CalibrationKey,
+  type CheckRow,
+  type LifeBook,
+  withinGraceDay,
+} from "../life/index.js";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
-
-/** Both sides use exactly these: the file, and the generator that reads it. */
-const CALIBRATION_KEYS = [
-  "delinquency.conventional_30plus_share",
-  "delinquency.all_loans_30plus_share_sa",
-  "delinquency.roll_current_to_30",
-  "delinquency.cure_from_30",
-  "delinquency.roll_30_to_60",
-  "payment.day_of_month",
-  "payment.late_within_grace_share",
-  "payment.late_after_grace_share",
-  "payment.partial_share",
-  "payment.curtailment_share",
-  "payment.missed_month_share",
-  "contacts.per_loan_year",
-  "contacts.handle_time_minutes",
-  "contacts.inbound_reason_mix",
-  "escrow.share_of_loans",
-  "escrow.tax_annual_median",
-  "escrow.insurance_annual_median",
-  "escrow.tax_growth_yoy",
-  "escrow.insurance_growth_yoy",
-  "arm.share_of_outstanding",
-  "mi.share_of_loans",
-  "book.note_rate_distribution",
-  "book.ltv_distribution",
-  "book.loan_age_distribution",
-  "refi.pmms_30y_series",
-  "disaster.declarations_by_month",
-  "transfer.annual_rate",
-  "defects.field_error_rates",
-] as const;
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 type Entry = {
@@ -468,5 +456,455 @@ describe("the acceptance tests", () => {
     expect(
       rates.current! < rates.d30! && rates.d30! < rates.d60! && rates.d60! <= rates.d90_plus!,
     ).toBe(true);
+  });
+});
+
+describe("the generator's reading of the file", () => {
+  const read = loadCalibration();
+  const R = read.rates;
+
+  it("reads every key of the committed file as written, with no warning", () => {
+    expect(read.path).toBe(here("../life/calibration.json"));
+    expect(read.warnings).toEqual([]);
+    expect(read.version).toBe(calibration.version);
+    for (const key of CALIBRATION_KEYS) {
+      expect(read.entries[key].used, key).toBe("file");
+      expect(read.entries[key].kind, key).toBe(entry(key).kind);
+    }
+  });
+
+  it("converts the quarterly roll and cure to the monthly chain whose quarter they are", () => {
+    // The chain: current → behind at the roll, behind → current at the cure, one further behind at the roll from
+    // behind. Its three-month step, as docs/environments.md states it.
+    const quarter = (p: number, c: number, r2: number) => {
+      const reach = (1 - (1 - p - c) ** 3) / (p + c);
+      return { late: p * reach - p * r2 * r2, current: c * reach };
+    };
+    const r2 = num("delinquency.roll_30_to_60");
+    expect(R.delinquency.roll_30_to_60).toBe(r2);
+    const q = quarter(R.delinquency.roll_current_to_30, R.delinquency.cure_from_30, r2);
+    const mean = (key: string, f: string) => num(key, `trailing_8_quarter_mean.${f}`);
+    expect(q.late).toBeCloseTo(mean("delinquency.roll_current_to_30", "to_30_60_late"), 12);
+    expect(q.current).toBeCloseTo(mean("delinquency.cure_from_30", "to_current"), 12);
+    // A loan that falls behind and catches up inside a quarter is in neither count, so the monthly roll is more
+    // than a third of the quarter's (the file's own floor), and the monthly cure well under the quarter's.
+    expect(R.delinquency.roll_current_to_30).toBeGreaterThan(
+      mean("delinquency.roll_current_to_30", "to_30_60_late") / 3,
+    );
+    expect(R.delinquency.roll_current_to_30).toBeCloseTo(0.00357, 5);
+    expect(R.delinquency.cure_from_30).toBeCloseTo(0.1628, 4);
+  });
+
+  it("hands the generator each other figure as its derivation says", () => {
+    const k = (key: string, path = "") => num(key, path);
+    expect(R.delinquency.conventional_30plus_share).toBe(
+      k("delinquency.conventional_30plus_share"),
+    );
+    expect(R.delinquency.all_loans_30plus_share_sa).toBe(
+      k("delinquency.all_loans_30plus_share_sa", "total"),
+    );
+
+    // Arrival day: each bin's share spread over its days, days 2 to 16 normalized; the split around the due day.
+    const bin = (b: string) => k("payment.day_of_month", `arrival_share.${b}`);
+    const inGrace = bin("days_2_to_5") + bin("days_6_to_10") + bin("days_11_to_16");
+    const days = Array.from({ length: 15 }, (_, i) => i + 2).map(
+      (d) =>
+        (d <= 5
+          ? bin("days_2_to_5") / 4
+          : d <= 10
+            ? bin("days_6_to_10") / 5
+            : bin("days_11_to_16") / 6) / inGrace,
+    );
+    R.payment.day_of_month.forEach((w, i) => expect(w, `day ${i + 2}`).toBeCloseTo(days[i]!, 12));
+    // Each bin's run of days inside grace, kept so a payment drawn for a day off stays in its bin.
+    expect(R.payment.day_of_month_bins).toEqual([
+      [2, 5],
+      [6, 10],
+      [11, 16],
+    ]);
+    expect(R.payment.early_share).toBeCloseTo(
+      bin("before_due") / (bin("before_due") + bin("due_day")),
+      12,
+    );
+    expect(R.payment.late_within_grace_share).toBe(k("payment.late_within_grace_share"));
+    expect(R.payment.late_after_grace_share).toBe(k("payment.late_after_grace_share"));
+    expect(R.payment.missed_month_share).toBe(k("payment.missed_month_share"));
+    expect(R.payment.partial_share).toBe(k("payment.partial_share", "partial_receipt_share"));
+    expect(R.payment.returned_share).toBe(k("payment.partial_share", "returned_receipt_share"));
+    expect(R.payment.curtailment_share).toBe(k("payment.curtailment_share"));
+
+    // Contacts: the stated rate; the geometric midpoint of the range of averages; the complaint counts over their total.
+    expect(R.contacts.per_loan_year).toBe(k("contacts.per_loan_year", "inquiries_per_loan_year"));
+    expect(R.contacts.handle_time_minutes).toBeCloseTo(
+      Math.sqrt(
+        k("contacts.handle_time_minutes", "min") * k("contacts.handle_time_minutes", "max"),
+      ),
+      12,
+    );
+    const counts = at(entry("contacts.inbound_reason_mix").value, "counts") as Record<
+      string,
+      number
+    >;
+    const complaints = k("contacts.inbound_reason_mix", "complaints");
+    expect(R.contacts.inbound_reason_mix.map(([r]) => r)).toEqual(Object.keys(counts));
+    for (const [reason, w] of R.contacts.inbound_reason_mix)
+      expect(w, reason).toBeCloseTo(counts[reason]! / complaints, 12);
+
+    // Escrow: the medians for units with a mortgage, in cents; growth compounded between the oldest and newest medians.
+    expect(R.escrow.share_of_loans).toBe(k("escrow.share_of_loans"));
+    expect(R.escrow.tax_annual_median_cents).toBe(
+      k("escrow.tax_annual_median", "with_mortgage_usd") * 100,
+    );
+    expect(R.escrow.insurance_annual_median_cents).toBe(
+      k("escrow.insurance_annual_median", "with_mortgage_usd") * 100,
+    );
+    const tm = at(entry("escrow.tax_growth_yoy").value, "medians_with_mortgage_usd") as Record<
+      string,
+      number
+    >;
+    expect(R.escrow.tax_growth_yoy).toBeCloseTo((tm["2024"]! / tm["2021"]!) ** (1 / 3) - 1, 12);
+    expect(R.escrow.tax_growth_yoy).toBeCloseTo(
+      k("escrow.tax_growth_yoy", "annualized_2021_to_2024"),
+      4,
+    );
+    const im = at(
+      entry("escrow.insurance_growth_yoy").value,
+      "medians_with_mortgage_usd",
+    ) as Record<string, number>;
+    expect(R.escrow.insurance_growth_yoy).toBeCloseTo(im["2024"]! / im["2023"]! - 1, 12);
+
+    expect(R.arm.share_of_outstanding).toBe(k("arm.share_of_outstanding", "loans"));
+    expect(R.mi.share_of_loans).toBe(
+      k("mi.share_of_loans", "enterprise_originations_2025_cltv_over_80"),
+    );
+    expect(R.transfer.annual_rate).toBe(k("transfer.annual_rate"));
+    const defects = entry("defects.field_error_rates").value as Record<string, { rate: number }>;
+    expect(R.defects.field_error_rates).toEqual(
+      Object.fromEntries(Object.entries(defects).map(([id, d]) => [id, d.rate])),
+    );
+  });
+
+  it("closes each distribution's open bins by the rule docs/environments.md states", () => {
+    const mean = (bins: readonly { lo: number; hi: number; weight: number }[]) =>
+      bins.reduce((s, b) => s + b.weight * ((b.lo + b.hi) / 2), 0);
+    const weights = (key: string, path: string) => {
+      const v = Object.values(at(entry(key).value, path) as Record<string, number>);
+      return v.map((w) => w / sum(v));
+    };
+    // Note rates: both open bins a point wide, like their neighbors; the mean is the stated average to its rounding.
+    expect(R.book.note_rate.map((b) => [b.lo, b.hi])).toEqual([
+      [2, 3],
+      [3, 4],
+      [4, 5],
+      [5, 6],
+      [6, 7],
+    ]);
+    const rateWeights = weights("book.note_rate_distribution", "loans");
+    R.book.note_rate.forEach((b, i) => expect(b.weight).toBeCloseTo(rateWeights[i]!, 12));
+    expect(
+      Math.abs(mean(R.book.note_rate) - num("book.note_rate_distribution", "average_pct")),
+    ).toBeLessThan(0.05);
+    // LTV at origination: above 97 is a point at 97; the bin at or under 70 runs down to the stated average.
+    const ltv = R.book.ltv;
+    expect(ltv.map((b) => b.hi)).toEqual([70, 80, 90, 95, 97, 97]);
+    expect(ltv.slice(1).map((b) => b.lo)).toEqual([70, 80, 90, 95, 97]);
+    const ltvWeights = weights(
+      "book.ltv_distribution",
+      "at_origination_enterprise_2025.cltv_loans",
+    );
+    ltv.forEach((b, i) => expect(b.weight).toBeCloseTo(ltvWeights[i]!, 12));
+    expect(mean(ltv)).toBeCloseTo(
+      num("book.ltv_distribution", "at_origination_enterprise_2025.average_ltv_pct"),
+      9,
+    );
+    expect(ltv[0]!.lo).toBeCloseTo(39.7, 1);
+    // Loan age in months: an age starts at zero, and the bin over ten years runs up to the stated average.
+    const age = R.book.loan_age_months;
+    expect(age.map((b) => b.lo)).toEqual([0, 48, 84, 120]);
+    expect(age.slice(0, 3).map((b) => b.hi)).toEqual([48, 84, 120]);
+    expect(mean(age)).toBeCloseTo(num("book.loan_age_distribution", "average_months.loans"), 9);
+  });
+
+  it("reads the rate series as published, and the disaster series a county at a time", () => {
+    const rows = at(entry("refi.pmms_30y_series").value, "rows") as [string, number][];
+    expect(R.refi.pmms_30y.length).toBe(rows.length);
+    R.refi.pmms_30y.forEach((o, i) => {
+      const [m, d, y] = rows[i]![0].split("/");
+      expect(o.on).toBe(`${y}-${m!.padStart(2, "0")}-${d!.padStart(2, "0")}`);
+      expect(o.rate).toBe(rows[i]![1]);
+    });
+
+    const v = entry("disaster.declarations_by_month").value as Record<string, Json>;
+    const months = v.months as string[];
+    const areas = v.major_disaster_individual_assistance_areas as number[];
+    // The months left out are the nationwide ones, more than a fifth of the counties at once: COVID-19 in 2020.
+    expect(months.filter((_, i) => areas[i]! > COUNTIES / 5)).toEqual(["2020-03", "2020-04"]);
+    for (let m = 1; m <= 12; m++) {
+      const kept = months
+        .map((x, i) => [x, areas[i]!] as const)
+        .filter(([x, a]) => Number(x.slice(5)) === m && a <= COUNTIES / 5)
+        .map(([, a]) => a / COUNTIES);
+      expect(R.disaster.by_calendar_month[m - 1], `month ${m}`).toBeCloseTo(
+        sum(kept) / kept.length,
+        12,
+      );
+    }
+  });
+
+  it("places a payment drawn for a day off on a business day of its own bin", () => {
+    // 1 September 2026 is a Tuesday: the 5th is a Saturday, the 6th a Sunday and the 7th Labor Day.
+    const bins = R.payment.day_of_month_bins;
+    expect(withinGraceDay("2026-09-01" as PlainDate, 3, bins)).toBe("2026-09-03");
+    // The last day of days 2 to 5 falls back to the Friday rather than roll into days 6 to 10.
+    expect(withinGraceDay("2026-09-01" as PlainDate, 5, bins)).toBe("2026-09-04");
+    // The first of days 6 to 10 moves on past the weekend and the holiday, inside the bin.
+    expect(withinGraceDay("2026-09-01" as PlainDate, 6, bins)).toBe("2026-09-08");
+    // A bin of one day has no other day to move to, and the payment rolls forward as any does.
+    expect(withinGraceDay("2026-09-01" as PlainDate, 5, [[5, 5]])).toBe("2026-09-05");
+  });
+
+  it("refuses a value it cannot place on the generator's notes, by name", () => {
+    const copy = JSON.parse(raw) as CalibrationFile & { rates: Record<string, Entry> };
+    (copy.rates["payment.day_of_month"]!.value as { due_day: number }).due_day = 5;
+    const r = loadCalibration({ file: copy });
+    expect(r.warnings).toEqual([
+      expect.stringMatching(/^payment\.day_of_month: value .* could not be read/),
+    ]);
+    expect(r.entries["payment.day_of_month"].used).toBe("default");
+    expect(r.entries["payment.late_within_grace_share"].used).toBe("file");
+  });
+});
+
+describe("a book drawn from the file", () => {
+  // Four years of 1,500 loans: enough loan-months that each share sits within a few of its sampling errors.
+  const scenario = { loans: 1500, months: 48 };
+  const file = loadCalibration();
+  const defaults = defaultCalibration();
+  const fromFile = generate("calibration", scenario, { calibration: file }).clean;
+  const fromDefaults = generate("calibration", scenario, { calibration: defaults }).clean;
+  const fileRows = calibrationCheck(fromFile, file);
+  const defaultRows = calibrationCheck(fromDefaults, defaults);
+  const row = (
+    rows: readonly CheckRow[],
+    key: CalibrationKey,
+    use: CheckRow["use"] = "drawn",
+  ): CheckRow => {
+    const r = rows.find((x) => x.key === key && x.use === use);
+    if (!r) throw new Error(`no ${use} row for ${key}`);
+    return r;
+  };
+  const disasterMonths = (book: LifeBook) =>
+    book.loans.reduce((s, l) => s + l.behavior.filter((b) => b.kind === "disaster").length, 0);
+
+  it("carries the file's version and no warnings", () => {
+    expect(fromFile.calibration).toEqual({
+      version: calibration.version,
+      path: file.path,
+      warnings: [],
+    });
+  });
+
+  // Each tolerance is the acceptance test's where one reads the same measure, else a few sampling errors.
+  const DRAWN: readonly [CalibrationKey, number, "absolute" | "relative"][] = [
+    ["delinquency.roll_current_to_30", 0.15, "relative"],
+    ["delinquency.cure_from_30", 0.15, "relative"],
+    ["payment.late_within_grace_share", 0.02, "absolute"],
+    ["payment.late_after_grace_share", 0.15, "relative"],
+    ["payment.day_of_month", 0.03, "absolute"],
+    ["payment.partial_share", 0.3, "relative"],
+    ["payment.curtailment_share", 0.15, "relative"],
+    ["escrow.share_of_loans", 0.03, "absolute"],
+    ["arm.share_of_outstanding", 0.015, "absolute"],
+    ["mi.share_of_loans", 0.03, "absolute"],
+    ["contacts.per_loan_year", 0.3, "absolute"],
+    ["contacts.handle_time_minutes", 0.05, "relative"],
+  ];
+
+  it("comes out at the file's figures where the generator draws them", () => {
+    expect(
+      fileRows
+        .filter((r) => r.use === "drawn")
+        .map((r) => r.key)
+        .sort(),
+    ).toEqual(DRAWN.map(([k]) => k).sort());
+    for (const [key, tol, kind] of DRAWN) {
+      const r = row(fileRows, key);
+      const off =
+        kind === "absolute" ? Math.abs(r.realized - r.target) : Math.abs(r.realized / r.target - 1);
+      expect(off, `${key}: ${r.realized} against ${r.target}`).toBeLessThanOrEqual(tol);
+    }
+  });
+
+  it("lands every arrival bin within the acceptance test's tolerance, and the defaults' book does not", () => {
+    // Read on due dates that are a business day following one, as calibrationCheck reads the shares within grace and
+    // before the due day. A payment drawn for a weekend inside grace arrives on a business day of its own bin; rolled
+    // forward alone, days 2 to 5 came out near 0.21 against the file's 0.27.
+    const bins = at(entry("payment.day_of_month").value, "arrival_share") as Record<string, number>;
+    const tolerance = acceptance.tests.find((t) => t.id === "payment-arrival-day")!.tolerance.value;
+    const measure = (book: LifeBook): Record<string, number> => {
+      const rows = arrivals(book).filter((a) => a.clear);
+      const share = (f: (a: ArrivalRow) => boolean) => rows.filter(f).length / rows.length;
+      const inGrace = (lo: number, hi: number) => (a: ArrivalRow) => {
+        if (a.arrival !== "within_grace") return false;
+        const day = Number(a.on!.slice(8, 10));
+        return day >= lo && day <= hi;
+      };
+      return {
+        before_due: share((a) => a.arrival === "before_due"),
+        due_day: share((a) => a.arrival === "due_day"),
+        days_2_to_5: share(inGrace(2, 5)),
+        days_6_to_10: share(inGrace(6, 10)),
+        // Grace that ends on a day off runs to the next business day, and a payment then is still within it.
+        days_11_to_16: share(inGrace(11, 31)),
+        days_17_to_month_end: share((a) => a.arrival === "after_grace"),
+        not_in_month: share((a) => a.arrival === "not_in_month"),
+      };
+    };
+    const fromFileBins = measure(fromFile);
+    expect(Object.keys(fromFileBins).sort()).toEqual(Object.keys(bins).sort());
+    for (const [bin, target] of Object.entries(bins))
+      expect(
+        Math.abs(fromFileBins[bin]! - target),
+        `${bin}: ${fromFileBins[bin]} against ${target}`,
+      ).toBeLessThanOrEqual(tolerance);
+    const fromDefaultBins = measure(fromDefaults);
+    expect(
+      Math.max(
+        ...Object.entries(bins).map(([bin, target]) => Math.abs(fromDefaultBins[bin]! - target)),
+      ),
+    ).toBeGreaterThan(3 * tolerance);
+  });
+
+  it("moves away from the defaults' book wherever the file moves the figure", () => {
+    // Every drawn figure the file moves by more than one and a half times its tolerance moves the book at least half
+    // as far, the same way: late payment, delinquency, curtailments, contacts and mortgage insurance among them.
+    const moved: CalibrationKey[] = [];
+    for (const [key, tol, kind] of DRAWN) {
+      const f = row(fileRows, key);
+      const d = row(defaultRows, key);
+      const gap = f.target - d.target;
+      const scale = kind === "absolute" ? tol : tol * Math.max(f.target, d.target);
+      if (Math.abs(gap) <= 1.5 * scale) continue;
+      moved.push(key);
+      expect(
+        (f.realized - d.realized) / gap,
+        `${key}: ${f.realized} against ${d.realized}`,
+      ).toBeGreaterThan(0.5);
+    }
+    expect(moved).toEqual(
+      expect.arrayContaining([
+        "delinquency.roll_current_to_30",
+        "delinquency.cure_from_30",
+        "payment.late_within_grace_share",
+        "payment.curtailment_share",
+        "contacts.per_loan_year",
+        "contacts.handle_time_minutes",
+        "mi.share_of_loans",
+      ]),
+    );
+    // The missed-month share is a check the roll makes, not a draw: the file's roll leaves fewer months missed.
+    expect(row(fileRows, "payment.missed_month_share", "check").realized).toBeLessThan(
+      row(defaultRows, "payment.missed_month_share", "check").realized / 2,
+    );
+    // A late charge on every installment not in by the end of grace: the file's share is above the defaults'.
+    expect(row(fileRows, "payment.late_after_grace_share").realized).toBeGreaterThan(
+      row(defaultRows, "payment.late_after_grace_share").realized,
+    );
+    // Disaster months at the county rate, near twice the defaults'.
+    expect(disasterMonths(fromFile)).toBeGreaterThan(disasterMonths(fromDefaults) * 1.4);
+  });
+
+  it("lands near each quarter the file states, and the defaults' book does not", () => {
+    // A quarter's end also finds a loan behind that missed nothing (a partial payment's rest still to come), so the
+    // roll reads above the chain's, by about a fifth. The acceptance test allows 30 % on the roll and 0.08 on the
+    // cure over 10,000 loans; this book's quarter-ends find a few hundred loans behind, so the cure is held to 0.15
+    // and the roll to 40 %. The defaults' book misses both by a multiple.
+    const roll = row(fileRows, "delinquency.roll_current_to_30", "check");
+    const cure = row(fileRows, "delinquency.cure_from_30", "check");
+    expect(roll.target).toBeCloseTo(
+      num("delinquency.roll_current_to_30", "trailing_8_quarter_mean.to_30_60_late"),
+      12,
+    );
+    expect(cure.target).toBeCloseTo(
+      num("delinquency.cure_from_30", "trailing_8_quarter_mean.to_current"),
+      12,
+    );
+    expect(Math.abs(roll.realized / roll.target - 1)).toBeLessThanOrEqual(0.4);
+    expect(Math.abs(cure.realized - cure.target)).toBeLessThanOrEqual(0.15);
+    const defaultRoll = row(defaultRows, "delinquency.roll_current_to_30", "check");
+    const defaultCure = row(defaultRows, "delinquency.cure_from_30", "check");
+    expect(defaultRoll.realized / roll.target).toBeGreaterThan(1.5);
+    expect(defaultCure.realized - cure.target).toBeGreaterThan(0.2);
+  });
+
+  it("draws the partial share from the file, which happens to equal the default's", () => {
+    // The committed file's short-receipt share is the default's 1 %, so the two books cannot differ in it. A copy
+    // of the file with the share moved shows the draw follows the file.
+    expect(file.entries["payment.partial_share"].used).toBe("file");
+    expect(file.rates.payment.partial_share).toBe(defaults.rates.payment.partial_share);
+    const copy = JSON.parse(raw) as CalibrationFile & { rates: Record<string, Entry> };
+    const partial = copy.rates["payment.partial_share"]!.value as { partial_receipt_share: number };
+    partial.partial_receipt_share = 0.05;
+    const moved = loadCalibration({ file: copy });
+    expect(moved.warnings).toEqual([]);
+    const small = { loans: 400, months: 24 };
+    const share = (cal: typeof file) =>
+      row(
+        calibrationCheck(generate("partial", small, { calibration: cal }).clean, cal),
+        "payment.partial_share",
+      ).realized;
+    const at5 = share(moved);
+    expect(Math.abs(at5 / 0.05 - 1)).toBeLessThanOrEqual(0.3);
+    expect(at5 / share(file)).toBeGreaterThan(3);
+  });
+
+  it("draws contact reasons, note rates, loan-to-values, escrow bills, disasters and the market from the file", () => {
+    const loans = fromFile.loans;
+    // Contact reasons, against the complaint shares, each within the acceptance test's 0.03.
+    const reasons = loans.flatMap((l) => l.contacts.map((c) => c.reason));
+    for (const [reason, share] of file.rates.contacts.inbound_reason_mix)
+      expect(
+        Math.abs(reasons.filter((r) => r === reason).length / reasons.length - share),
+        reason,
+      ).toBeLessThan(0.03);
+    // Note rates by the file's buckets, within 0.03: the acceptance test's 0.02 and the sampling error at 1,500 loans.
+    const rates = loans.map((l) => Number(l.draw.note_rate_pct));
+    for (const b of file.rates.book.note_rate) {
+      const share = rates.filter((x) => x >= b.lo && x < b.hi).length / rates.length;
+      expect(Math.abs(share - b.weight), `${b.lo}-${b.hi}`).toBeLessThan(0.03);
+    }
+    // Loan-to-value above 80, where mortgage insurance starts.
+    const above80 = loans.filter((l) => l.draw.ltv_pct > 80).length / loans.length;
+    expect(
+      Math.abs(above80 - num("mi.share_of_loans", "enterprise_originations_2025_cltv_over_80")),
+    ).toBeLessThan(0.03);
+    // The first year's tax and premium per escrowed loan, within the acceptance test's tenth of the ACS medians.
+    const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
+    const escrowed = loans.filter((l) => l.draw.escrowed);
+    const firstYear = (l: LifeBook["loans"][number], basis: string) =>
+      l.draw.line_specs.filter((s) => s.basis === basis).reduce((s, x) => s + x.first_annual, 0);
+    const tax = median(escrowed.map((l) => firstYear(l, "tax")));
+    const hazard = median(escrowed.map((l) => firstYear(l, "hazard")));
+    expect(Math.abs(tax / file.rates.escrow.tax_annual_median_cents - 1)).toBeLessThan(0.1);
+    expect(Math.abs(hazard / file.rates.escrow.insurance_annual_median_cents - 1)).toBeLessThan(
+      0.1,
+    );
+    // Each year's growth is drawn around the file's.
+    const growth = (basis: string) => {
+      const g = escrowed.flatMap((l) =>
+        l.draw.line_specs.filter((s) => s.basis === basis).flatMap((s) => s.growth),
+      );
+      return sum(g) / g.length;
+    };
+    expect(Math.abs(growth("tax") - file.rates.escrow.tax_growth_yoy)).toBeLessThan(0.002);
+    expect(Math.abs(growth("hazard") - file.rates.escrow.insurance_growth_yoy)).toBeLessThan(0.003);
+    // Disaster months at the county rate, against what the book's own calendar months give.
+    const loanMonths = loans.flatMap((l) => l.months.map((m) => Number(m.month.slice(5)) - 1));
+    const expected = sum(loanMonths.map((m) => file.rates.disaster.by_calendar_month[m]!));
+    expect(Math.abs(disasterMonths(fromFile) / expected - 1)).toBeLessThan(0.15);
+    // The mortgage rate starts at the survey's newest print.
+    const rows = at(entry("refi.pmms_30y_series").value, "rows") as [string, number][];
+    expect(fromFile.market[0]!.rate).toBe(rows.at(-1)![1]);
+    expect(fromDefaults.market[0]!.rate).toBe(6.25);
   });
 });

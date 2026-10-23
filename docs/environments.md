@@ -2410,10 +2410,22 @@ month-end goes through `buildSnapshot`, `validateSnapshot` and `renderBase`.
 
 **What it invents.** The borrower's behavior, drawn from
 `src/life/calibration.json`: payment timing, partials, curtailments, misses,
-cures and repeat misses by roll rate, contacts, disaster months, payoffs and
-transfers out. Another builder writes that file. The generator reads it key
-by key, and any key missing or unreadable takes a typed default marked
-`design_choice`, with the reason in the result's warnings.
+cures and repeat misses by roll rate, contacts and their reasons, disaster
+months, payoffs and transfers out. The book's note rates, loan-to-values,
+escrow, ARM and MI shares, tax and insurance bills, and the mortgage rate's
+starting point come from it too. Another builder writes that file. The
+generator reads every key of it as written and converts each to the unit it
+draws in; "Calibration" below says how each value is used. A key missing or
+unreadable takes a typed default marked `design_choice`, with the reason in
+the result's warnings. The committed file gives no warning.
+
+**Habits.** Each borrower draws two habits, `lateness` (when they pay) and
+`fragility` (whether they miss), lognormal with mean one. Their own
+probabilities are a base times the habit, capped: a miss or a payment
+after grace at most half the time, on time at least one time in twenty. A
+cap cuts the largest habits off, so `behavior.ts` sets each base so that the
+mean over the habit's distribution, after the caps, is the file's share.
+Without that, the within-grace share of a half would come out at 0.43.
 
 A borrower who is behind does one of three things, by roll rate:
 
@@ -2425,9 +2437,13 @@ A receipt for an installment a cure or a promise already paid is not sent.
 
 Also invented: the index feed, the mortgage-rate path, names and addresses,
 and the terms the calibration does not cover. The design choices without a
-calibration key are named in `draw.ts` and `simulate.ts`. `calibrationCheck`
-reads a book against the calibration's 30+ share and missed-month share,
-which are targets, not draws.
+calibration key are named in `draw.ts`, `behavior.ts` and `simulate.ts`.
+`calibrationCheck` reads a book against the calibration. Some rows are draws:
+the payment shares, the monthly roll and cure, the escrow, ARM and MI shares,
+and contacts. Others are checks, figures the draws only make: the 30+ share,
+the missed-month share, and the quarter-ahead roll and cure the file states.
+The payment shares are read as the file states them, over installments on
+loans current at the due date.
 
 **Scenarios.** A scenario dates the events the borrower obeys: a transfer
 in, a missed payment, a promise to pay (kept or broken), a repayment plan, a
@@ -2458,7 +2474,8 @@ an installment still in grace at a payoff never ages to 30 days.
 - the transfer package and the other 46 defects;
 - bankruptcy, foreclosure, loss mitigation, forbearance and modification.
   Their tape fields are present and always empty;
-- returned payments and NSF fees;
+- returned payments and NSF fees. The file's returned share is read and not
+  drawn;
 - the interim escrow analysis an MI termination calls for. The next annual
   analysis returns the surplus;
 - early-intervention outreach and a borrower's request to cancel MI;
@@ -2473,12 +2490,13 @@ under 15.
 
 ## Calibration
 
-`src/life/calibration.json` holds the rates the life generator is to draw
-loan histories from. The generator is separate work, and today nothing reads
-the file but its test. Each of its 28 keys carries a value, a unit, a kind, a
-source URL with the date it was fetched, the source's terms, and a note on
-what the figure is and where it stops. 18 are `public`. 10 are `design_choice`, with source `none`
-and the reason nothing public fits.
+`src/life/calibration.json` holds the rates the life generator draws loan
+histories from. The generator reads every key of it as written: loading the
+committed file gives no warning, and a test holds that. Each of its 28 keys
+carries a value, a unit, a kind, a source URL with the date it was fetched,
+the source's terms, and a note on what the figure is and where it stops. 18
+are `public`. 10 are `design_choice`, with source `none` and the reason
+nothing public fits.
 
 `src/life/calibration-acceptance.json` is what a validation sample is held
 to: payment arrival day, late fees, short and returned receipts, missed
@@ -2487,10 +2505,12 @@ note length, transactions per loan-year, defect rates and the book's
 distributions. Each test names the key it checks, how its target is read
 from that key, the smallest sample it means anything on, and a tolerance.
 Every tolerance is a design choice and says why. `calibration.test.ts` holds
-both files to the key list, a source and date on every public value, no NaN,
-distributions that sum to one, every derived figure (a mean, a ratio, an
-interpolated median, a share of counts) equal to what it is derived from,
-and the acceptance targets the calibration gives today.
+both files to the generator's key list (`CALIBRATION_KEYS`, imported, not
+copied), a source and date on every public value, no NaN, distributions that
+sum to one, every derived figure (a mean, a ratio, an interpolated median, a
+share of counts) equal to what it is derived from, and the acceptance
+targets the calibration gives today. It also holds the reader to each
+conversion below, and a book drawn from the file to the file.
 
 Version 2026-10-23, every source fetched that day:
 
@@ -2511,13 +2531,159 @@ Version 2026-10-23, every source fetched that day:
   payment timing, curtailments, transfers) are design choices that say so.
 - **The PMMS series is copied as published.** A replay that shifts, rescales
   or splices it uses altered content, and is a question for counsel before
-  any generator does it.
+  any generator does it. The generator does not replay it (below).
 - **The escrow share is open.** The ACS asks it, but only its microdata
   answers. That needs the 251.5 MB PUMS housing file or a Census API key; the
   API refused keyless requests on 23 October. Until then it is a design choice
   of 0.8.
 - **HMDA was not read.** It covers originations only, and the NMDB covered
   both the outstanding book and 2025's originations.
+
+**How each key is read.** `src/life/calibration.ts` has a reader per key. It
+takes the part of the value the generator draws from and converts it to the
+generator's unit; each conversion is stated there and here. "Check" means
+the generator does not draw the figure: its draws make it, and
+`calibrationCheck` reads it off a book.
+
+| Key                                                          | Read                                                      | Used as                                                                                                       |
+| ------------------------------------------------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `delinquency.conventional_30plus_share`                      | the share, 2.72 %                                         | check: month-ends one payment or more past due                                                                |
+| `delinquency.all_loans_30plus_share_sa`                      | `total`, 4.37 %                                           | reported only                                                                                                 |
+| `delinquency.roll_current_to_30`, `delinquency.cure_from_30` | `trailing_8_quarter_mean`: `to_30_60_late`, `to_current`  | the monthly roll and cure whose quarter is the stated one: 0.357 % and 16.3 % a month (below)                 |
+| `delinquency.roll_30_to_60`                                  | the share, monthly, 0.33                                  | a behind borrower misses again                                                                                |
+| `payment.day_of_month`                                       | `arrival_share`; `due_day` 1 and `grace_days` 15 required | the day inside grace: each bin spread over its days, a day off moved within its bin; early payers, below      |
+| `payment.late_within_grace_share`                            | the share, 0.508                                          | within grace, for a borrower who pays: share / (1 − m)                                                        |
+| `payment.late_after_grace_share`                             | the share, 0.042                                          | after grace in the month: (share − m) / (1 − m), less late partials (below)                                   |
+| `payment.partial_share`                                      | `partial_receipt_share`, and `returned_receipt_share`     | short receipts, 1 %; the returned share is read, not drawn                                                    |
+| `payment.curtailment_share`                                  | the share, 0.03                                           | receipts carrying extra principal                                                                             |
+| `payment.missed_month_share`                                 | the share, 0.012                                          | check: installments on current loans not received by month end                                                |
+| `contacts.per_loan_year`                                     | `inquiries_per_loan_year`, 2.0                            | inbound contacts a loan-year; a borrower who is behind calls three times as often                             |
+| `contacts.handle_time_minutes`                               | `min` and `max`, 4.3 and 19.8                             | √(min · max) = 9.2 minutes, each call spread lognormally around it                                            |
+| `contacts.inbound_reason_mix`                                | `counts` over their total                                 | every inbound contact's reason                                                                                |
+| `escrow.share_of_loans`                                      | the share, 0.8                                            | loans without MI escrow at the rate that brings the book to it                                                |
+| `escrow.tax_annual_median`, `escrow.insurance_annual_median` | `with_mortgage_usd`, $3,580 and $1,450                    | the first year's bills, in cents, scaled by the home's value                                                  |
+| `escrow.tax_growth_yoy`, `escrow.insurance_growth_yoy`       | `medians_with_mortgage_usd`                               | (newest / oldest)^(1 / years) − 1: 5.0 % and 8.7 % a year                                                     |
+| `arm.share_of_outstanding`                                   | `loans`, 4.3 %                                            | the ARM share                                                                                                 |
+| `mi.share_of_loans`                                          | `enterprise_originations_2025_cltv_over_80`, 0.352        | MI on every loan above 80 % loan-to-value                                                                     |
+| `book.note_rate_distribution`                                | `loans`                                                   | note rates; each open bin a point wide, like its neighbor                                                     |
+| `book.ltv_distribution`                                      | `at_origination_enterprise_2025.cltv_loans`               | loan-to-value at origination; over 97 is 97; 70 and under runs down to 39.7, which gives the stated 73.3 mean |
+| `book.loan_age_distribution`                                 | `loans`, in years                                         | a boarded book's ages in months; 4 years and under from zero; over 10 to 19.5 years, which gives a mean of 80 |
+| `refi.pmms_30y_series`                                       | `rows`, weeks as M/D/YYYY                                 | the mortgage rate's start, pull and spread (below)                                                            |
+| `disaster.declarations_by_month`                             | `major_disaster_individual_assistance_areas`, by month    | a disaster in the loan's county, per loan-month by calendar month (below)                                     |
+| `transfer.annual_rate`                                       | the share, 0.04                                           | 1 − (1 − rate)^(1/12) a month, when a scenario turns transfers out on                                         |
+| `defects.field_error_rates`                                  | each defect's `rate`                                      | the rate a defect is planted at over its eligible units                                                       |
+
+m is the monthly miss from current. A share the file gives over installments
+on loans current at the due date counts the missed ones too, and the
+generator decides a miss first, so a borrower who pays is late within grace
+s / (1 − m) of the time.
+
+**The roll and cure.** The file's are the New York Fed's quarterly
+transitions: 0.864 % of accounts current at one quarter's end are 30 to 60
+days late at the next, and 41.2 % of those 30 to 60 days late are current.
+The eight-quarter means are read, not the latest quarter, because one quarter
+moves (0.69 % to 1.00 % for the roll) and the acceptance test holds a book to
+the mean. The generator draws monthly. Each month a current borrower misses
+with the roll p. A borrower who is behind cures with c, misses again with
+the roll from behind r, or pays the oldest installment and stays as far
+behind. Whether a loan is current or behind is then a two-state chain, and a
+quarter later:
+
+```
+behind → current     = c / (p + c) · (1 − (1 − p − c)³)
+current → 30 to 60   = p / (p + c) · (1 − (1 − p − c)³) − p · r²
+```
+
+Three payments behind means all three months were missed, p · r². The reader
+solves both equations for p and c by bisection, holding r at 0.33: 0.357 %
+and 16.3 % a month. Dividing by three would be wrong both ways. A loan that
+falls behind and catches up inside a quarter is in neither count, so the
+monthly roll is above a third of the quarter's (the file's own floor, 0.28 %).
+A cure that leaves 41 % current a quarter later is 16 % a month. The chain
+does not fit two figures the file gives beside these. It puts 0.04 % of
+current loans 90 days late a quarter later, against the file's 0.20 %. And
+it puts 20 % of loans one payment behind 90 days late a quarter later,
+against the file's 16 % of those 30 to 60 days late.
+
+**Payments.** The arrival bins give the shape inside grace and one split.
+Of the installments paid by the due day, 0.14 / (0.14 + 0.31) = 31 % are paid
+before it, and that is the share of borrowers drawn in the habit of paying
+early. An installment is also not in by the end of grace when a partial
+payment's rest comes after it. That route is the partial share times the
+chance the rest, 5 to 25 days after the first piece, lands past day 16. The
+after-grace draw is lowered by it, so a book's late charges are the file's
+4.2 % and not a tenth more. A payment drawn for a weekend or a holiday inside
+grace arrives on the next business day of its own bin, else the one before
+it in the bin. Rolled forward alone, a fifth of the payments drawn for days
+2 to 5 arrived on days 6 to 10, and the bin read 0.21 against the file's
+0.27. A payment after grace stays in its month; one never received in the
+month is a miss, drawn apart.
+
+**The mortgage rate.** The generator reads three figures from the PMMS
+series: its newest print (7.32 % on 22 October 2026), where the path starts;
+its mean over the last ten years of months, which the path is pulled toward;
+and the spread of its month-to-month changes, which sets each month's step.
+It walks a path of its own from them. Nothing replays, shifts, rescales or
+splices the series.
+
+**Disasters.** The hazard the generator draws is a declaration covering the
+loan, which is what opens disaster relief on a Fannie Mae loan: a major
+disaster with Individual Assistance in the loan's county. So the series read
+is the designated areas under those, and the others in the value are not.
+A county's chance of a designation in a month is that month's areas over the
+3,143 counties and county-equivalents of the fifty states and DC, averaged by
+calendar month over the years: 0.15 % in November to 1.7 % in September. It
+treats every county alike. A month that designated more than a fifth of the
+counties at once is nationwide, not a hazard to a house, and is left out:
+March and April 2020, the COVID-19 declarations.
+
+**Open bins.** A bin open at one end is closed by the quantity's own limit
+where it has one: an age starts at zero, and Fannie Mae lends to 97 %
+loan-to-value. When one bin is still open and the value states the
+distribution's mean, its free bound is the one that gives that mean. Any
+other open bin is as wide as the closed bin beside it. The note rates' two
+open bins are a point wide, and their mean, 4.39 %, is the stated 4.4 % to
+its rounding.
+
+**What a book shows.** Four years of 1,500 loans drawn from the file, against
+it: 49.7 % of installments within grace (50.8 %), late charges on 4.0 % (4.2 %),
+a borrower's monthly roll 0.38 % (0.357 %) and cure 16.0 % (16.3 %), 0.96 %
+short receipts (1 %), 31.3 % of on-time payers early (31.1 %), 2.09 contacts
+a loan-year (2.0). Every arrival bin lands within the acceptance test's 0.02
+of the file's: 26.2 % of installments on days 2 to 5 (27 %), 12.0 % on days
+6 to 10 (12 %), 11.3 % on days 11 to 16 (11.8 %). A book from the defaults
+differs in each the file moves, and a test holds both. The arrival shares,
+within grace and around the due day, are read on due dates that are a
+business day following one: around a weekend, a payment drawn for the day
+before or after the due date lands on the same business day as one drawn
+for it.
+
+**Where the file and the generator part:**
+
+- **The missed-month share is not drawn.** The public quarterly roll makes a
+  current borrower miss 0.36 % of months, and a book has 0.47 % of
+  installments not in by month end. The file's design choice is 1.2 %, which
+  its own note bounds below at 0.28 %. Drawing 1.2 % would put three times
+  the New York Fed's quarterly roll on the book. It stays a check, and reads
+  low.
+- **A quarter-end finds more loans behind than the chain.** The rest of a
+  partial payment can come after the month ends, and a disaster month makes a
+  miss likelier. So the quarterly roll reads about a fifth over the file's
+  0.864 %, inside the acceptance test's 30 %.
+- **The reason mix is of complaints.** Every inbound contact draws its reason
+  from it, so disputes (loss mitigation 23 %, foreclosure 7 %) are as common
+  among a current borrower's calls as among complaints. The file's own note
+  says the mix is a skewed proxy for why people call.
+- **Loan-to-value is drawn at origination.** The acceptance test reads the
+  mark-to-market bins, which describe a seasoned book after house prices
+  moved. The generator has no house-price path to meet them with.
+- **The ARM share is all loans', 4.3 %.** Enterprise loans alone are 1.1 %.
+  The acceptance test reads the all-loans figure, so the book follows it.
+- **The ACS medians are 2024's.** A book starting in 2026 bills its first
+  year at them, not grown to the book's start.
+- **The book's delinquency runs deep.** A monthly cure of 16 % against a roll
+  from behind of 33 % puts more of the behind loans past 90 days than MBA's
+  buckets show.
 
 ## The Supermortgage Gym
 

@@ -7225,3 +7225,74 @@ cadence's cessation on a promise to pay or a workout request (a conversation
 here carries no commitment, so the cadence runs on), the pre-sale stop, TCPA
 consent and quiet hours, Reg F's seven days after a conversation, and the
 notices' content.
+
+## The life generator reads the calibration as written
+
+**Decided 23 October 2026.** The calibration reader took the committed
+`calibration.json` key by key, and could not read most of it. 19 of its 28
+keys fell back to their defaults with a warning: MBA's all-loans total, the
+quarterly roll and cure, the arrival bins, the short and returned receipts,
+the three contact figures, the two medians and their growth, the ARM and MI
+shares, the three distributions, the PMMS series and the disaster counts.
+A book drawn "from the file" was mostly drawn from the defaults. Each key
+now has a reader that takes the file's own shape, and loading the file warns
+about nothing. The conversions are listed in docs/environments.md,
+"Calibration". What was decided on the way:
+
+- **A quarter's transition is solved for, not divided.** The roll and cure
+  are the New York Fed's, a quarter apart. The generator's monthly chain
+  gives a quarter's transitions in closed form, and the reader solves it for
+  the monthly roll and cure: 0.357 % and 16.3 %. A third of the quarter's
+  roll would miss every loan that fell behind and caught up inside it.
+- **The missed-month share stays a check.** The file's 1.2 % is a design
+  choice, and drawing it would put three times the public quarterly roll on
+  a book. The public figure is drawn. A book's missed months read 0.47 %,
+  inside the bounds the file's own note gives, and below its 1.2 %.
+- **A borrower's habit no longer pulls the book below the file.** Each
+  borrower's probability is the book's times a habit, capped. At a
+  within-grace share of a half, one habit in eight hits the cap, and the
+  book came out at 0.43. `behavior.ts` now sets each base so the capped
+  mean over the habit's distribution is the file's share.
+- **A late partial counts as a late charge.** The file's after-grace share
+  counts every installment not in by the end of grace. A partial payment
+  whose rest comes after grace is one of them, so the after-grace draw is
+  lowered by that route. Without it, late charges ran a tenth over.
+- **A payment after grace stays in its month.** Day 17 plus up to ten days,
+  with grace or the payment rolled past a weekend or a holiday, could reach
+  the next month and read as a miss at month end. A miss is drawn apart.
+- **A payment inside grace stays in its arrival bin.** One drawn for a
+  weekend or a holiday arrives on the next business day of its bin, else the
+  one before it in the bin. Rolled forward alone, a fifth of the payments
+  drawn for days 2 to 5 arrived on days 6 to 10, and the bin read 0.21
+  against the file's 0.27, outside the acceptance test's 0.02.
+- **The escrow share holds with MI.** A loan with MI always escrows. The
+  rest now escrow at the rate that brings the book to the file's share; the
+  book read 0.87 against 0.8.
+- **Early payers are the file's share.** They were 35 % of borrowers by a
+  fixed choice. Now they are the arrival bins' before_due over before_due
+  and due_day: 31 %.
+- **Where a value has several parts, the one the generator's book is.**
+  Loan-to-value is read at origination, because the generator draws it there
+  and has no house-price path. MI is on every loan above 80, the share of
+  2025 Enterprise originations over 80 CLTV. The ARM share is all loans', 4.3 %,
+  because the acceptance test reads it, though Enterprise loans alone are
+  1.1 %. Note rates and ages are by loan count, not balance.
+- **The PMMS series is read for three figures**: its newest print, its
+  ten-year mean and the spread of its monthly changes. The rate path is the
+  generator's own. Nothing replays, shifts, rescales or splices the series,
+  which the file's terms say would need counsel.
+- **Disasters are a county's.** The series read is the areas designated for
+  Individual Assistance, which opens disaster relief, over the country's
+  3,143 counties. The two nationwide COVID-19 months are left out.
+- **`LIFE_VERSION` is 1.1.0.** What the generator draws changed, and every
+  stream hangs off the version, so every book moves, the defaults' too. The
+  D-03 twin test's scenario now turns random payoffs off: the new streams
+  paid one of its loans off before the transfer the scenario scripts.
+
+`calibrationCheck` reads the payment shares as the file states them, over
+installments on loans current at the due date. It reads the roll and cure
+monthly, as drawn, and a quarter apart, as the file states them. The
+quarterly roll reads about a fifth over, because a partial payment's rest
+can still be due at a quarter's end. `calibration.test.ts` holds the reader
+to every conversion and a 1,500-loan book to the file, and it imports the
+generator's key list rather than keeping its own.

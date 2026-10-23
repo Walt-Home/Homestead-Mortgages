@@ -6958,3 +6958,60 @@ regz-price-tests 198 of 200 (99.0 %, 96.4 to 99.7; 196 on 1.1.0),
 regz-policy 197 (98.5 %; 197), regz-apr 170 (85.0 %, 79.4 to 89.3; 171), at
 0.5 to 0.8¢ a task. Every regz-apr miss but one is the APR again. The moves are
 within what a run moves, so the wording was not what the model was missing.
+
+## The life generator is a module, and a borrower who is behind pays to cure
+
+**Decided 23 October 2026.** The ten-year loan-life generator is
+`packages/environments/src/life`, a module of `@hm/environments`, not a
+workspace. It runs the environments' ports, and the environments built on
+it import it; as a package of its own, the two would import each other. It
+is built from the generation-speed prototype measured on 22 October and
+from that prototype's independent check. docs/environments.md, "The life
+generator", says what it carries.
+
+**What the check found, and what changed.**
+
+- **A borrower who fell behind never caught up.** The prototype fixed each
+  payment's amount when the installment was added: the current
+  installment's amount, plus any payment missed. A borrower one payment
+  behind kept paying the current amount. Once an escrow analysis or an ARM
+  change moved it below the oldest open installment's, the payment went to
+  suspense, and the borrower stayed behind. In the check's trace of one
+  loan, a late charge was assessed in 76 of the 77 months from June 2020 to
+  October 2026. Now the amount is decided when the payment arrives, from the
+  open installments. By the roll rates, the borrower pays everything owed,
+  pays the oldest installment's amount (which applies), or misses again.
+- **The tenth escrow analysis never ran.** An analysis was scheduled only
+  for a computation year that began inside the window. The tenth year begins
+  just after it, though its analysis runs inside. Each analysis now
+  schedules the next while that one's run date is inside the window.
+- **A payment across a rate change was charged one rate.** `allocate` reads
+  one `note_rate_pct` for every installment a payment covers
+  (`apps/servicing/src/domain/cashiering/allocation.ts:107`). The check
+  counted 124 such payments in 122,896. They are now posted in two calls,
+  each at its installments' own rate, and a test recomputes every
+  installment's interest.
+- **Late-charge ids were random** (`latecharges.ts:87`, `randomUUID`), so
+  two runs of one seed differed. The generator names each charge by its
+  installment.
+- **The cashiering ledger and a FIFO replay of the receipts disagree.** The
+  check found them apart on 7,302 of 120,000 month-ends, wherever money went
+  to suspense or to fees. Metro 2 and the MI sweep read the cashiering
+  ledger, which is the one the servicing app posts.
+
+**Twins are labeled by difference.** A defect plants one value, and the
+twin runs the same loan from the same draws. No draw reads the loan's
+state: each installment, month and analysis has its own stream. So the
+twin differs from the clean history only where the planted value reaches.
+Every difference is labeled a symptom, field by field. A new defect needs
+only its root cause and where it enters; D-03 is the first.
+
+**The calibration is another builder's file.** `calibration.json` is read
+key by key. Units are normalized, distributions may be bins or rows, and a
+missing or unreadable key takes a typed default marked `design_choice`,
+with a warning. The tests draw from the defaults, so they do not move when
+the file lands. One test runs whatever file is on disk.
+
+**Speed.** A thousand loan-decades take about 3.5 seconds with the
+machine's load average above 20. The prototype took 3.4, without the rate
+split, the contacts, the hazards and the month-end snapshots.

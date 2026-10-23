@@ -363,7 +363,7 @@ export function generate(
           loan: c.loan_id,
           defect_id: def.id,
           ...x,
-          expected_handling: def.symptomHandling(x.file_or_table, x.field),
+          expected_handling: def.symptomHandling(x.file_or_table, x.field, x.row),
           root_cause: false,
         });
       continue;
@@ -388,7 +388,7 @@ export function generate(
         labels.push({
           ...base,
           defect_id: def.id,
-          expected_handling: def.symptomHandling(x.file_or_table, x.field),
+          expected_handling: def.symptomHandling(x.file_or_table, x.field, x.row),
         });
     }
   }

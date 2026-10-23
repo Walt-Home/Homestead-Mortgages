@@ -11,7 +11,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { addMonths, parts, type PlainDate } from "@hm/kernel/calendar";
+import {
+  addBusinessDays,
+  addMonths,
+  parts,
+  servicer as servicerCalendar,
+  type PlainDate,
+} from "@hm/kernel/calendar";
 import { Decimal } from "@hm/kernel/money";
 import {
   M3_V1,
@@ -853,6 +859,22 @@ describe("tape-stream defects", () => {
     const t04 = a.placed.filter((x) => x.defect_id === "T-04");
     expect(new Set(t04.map((x) => x.variant)).size).toBe(3);
     expect(new Set(t04.map((x) => x.column)).size).toBeGreaterThan(3);
+    // A definition's own draws are not the month's: a month drawn at a low rate once read its draw under the rate, so
+    // every rename was a column's first and every export ran the first business day after the month-end.
+    const t02 = plantTapeDefects(book, stream, [{ id: "T-02", rate: 0.3, variant: "optional" }]);
+    const renames = t02.labels.map((l) => T02_RENAMES[l.field]!.indexOf(l.planted_value!));
+    expect(new Set(renames)).toEqual(new Set([0, 1]));
+    const t05 = plantTapeDefects(book, stream, [{ id: "T-05", rate: 0.3, variant: "export_date" }]);
+    const days = t05.placed.map((x) => {
+      const asOf = t05.labels.find((l) => l.tape === clean(x.month).filename)!.planted_value!;
+      const [m, d, y] = asOf.split("/").map(Number);
+      const end = clean(x.month).as_of;
+      return [1, 2, 3, 4].find(
+        (k) => addBusinessDays(end, k, servicerCalendar) === iso(y!, m!, d!),
+      );
+    });
+    expect(days).not.toContain(undefined);
+    expect(new Set(days).size).toBeGreaterThan(2);
     const none = plantTapeDefects(book, stream, [{ id: "T-03", rate: 0 }]);
     expect([none.placed, none.labels]).toEqual([[], []]);
     expect(none.planted).toBe(stream);

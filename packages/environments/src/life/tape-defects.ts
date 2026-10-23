@@ -93,8 +93,9 @@ export interface TapeDefectDefinition {
   /**
    * Plant the defect in the files of each month of `months`, in the form and
    * the column its entry names, drawing anything else it needs from streams
-   * under `key`. Every other file comes back as it was. The labels are the
-   * root causes.
+   * under `key` (`${key}/${month}` is the definition's own; the planter's
+   * draws are named beneath it). Every other file comes back as it was. The
+   * labels are the root causes.
    */
   plant(
     stream: readonly TapeFile[],
@@ -647,7 +648,10 @@ export function plantTapeDefects(
       );
     const rate = r.rate ?? def.default_rate;
     const named = r.months !== undefined;
-    const targets = r.months ?? months.filter((m) => rngFor(`${keyOf(def.id)}/${m}`).next() < rate);
+    // The planter's own draws hang off the month's key by name (`at`, `variant`, `column`), so a definition's draws
+    // under `${key}/${month}` are its own: one that shared the month's draw was always under the rate when it read it.
+    const targets =
+      r.months ?? months.filter((m) => rngFor(`${keyOf(def.id)}/${m}/at`).next() < rate);
     for (const m of targets) {
       if (!inStream.has(m)) throw new RangeError(`${def.id}: the stream has no tape for ${m}`);
       const list = drawn.get(m) ?? [];

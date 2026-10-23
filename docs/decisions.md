@@ -7744,9 +7744,15 @@ generator still draw what they were pinned at.
   labeled each of them a symptom of one duplicate. The payments table is
   now compared by day and kind of payment, with the id left out; the rows an
   error adds are named off the row they come from, and a row it removes
-  keeps its id spent, so every other row keeps its own. The two boarding
-  defects' labels are unchanged in substance: their twins send the same
-  payments on the same days.
+  keeps its id spent, so every other row keeps its own. Disbursements are
+  numbered the same way, and a refund one history makes and the other does
+  not (an analysis that found a surplus in one and a shortage in the other)
+  renumbered every later bill, so each was labeled with another bill's day,
+  line and amount. A bill is now compared as the next of its line's and
+  named by its line and due date, as V-01's root is; a refund, a return or a
+  payoff's refund by its kind and day. The two boarding defects' labels are
+  unchanged in substance: their twins send the same payments on the same
+  days, and pay the same bills or none.
 - **Roots.** A history error's root is the record the error wrote: the
   vendor's bill (`escrow_bills`), the carrier's mortgagee clause
   (`insurance_policies`), the second draft, the payment on the wrong loan.

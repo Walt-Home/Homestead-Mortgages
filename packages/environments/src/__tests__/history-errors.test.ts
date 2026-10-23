@@ -110,7 +110,9 @@ describe("history errors", () => {
             `${r.file_or_table}|${r.row}|${r.field}`,
           );
         for (const s of ss)
-          expect(s.expected_handling).toBe(DEFECTS[id]!.symptomHandling(s.file_or_table, s.field));
+          expect(s.expected_handling).toBe(
+            DEFECTS[id]!.symptomHandling(s.file_or_table, s.field, s.row),
+          );
       }
     }
     // Every label is one of the four's: no loan carries a second defect's, and no pair's.
@@ -143,11 +145,14 @@ describe("history errors", () => {
     expect(
       ss.find((s) => s.file_or_table === "disbursements" && s.field === "amount"),
     ).toMatchObject({
-      row: paid.id,
+      // The bill is named as its root is: its line and the day it was due.
+      row: r.row,
       true_value: r.true_value,
       planted_value: r.planted_value,
     });
-    expect(ss.some((s) => s.file_or_table === "disbursements" && s.row === returned.id)).toBe(true);
+    expect(
+      ss.find((s) => s.file_or_table === "disbursements" && s.row === `returned@${returned.on}`),
+    ).toMatchObject({ field: "*", true_value: null });
     for (const m of L(0).months.filter((x) => x.as_of >= due && x.as_of < returned.on)) {
       const t = T(0).months.find((y) => y.month === m.month)!;
       expect(m.escrow_balance - t.escrow_balance, m.month).toBe(paid.amount - billed.amount);
@@ -177,7 +182,7 @@ describe("history errors", () => {
     expect(daysBetween(due, t.on)).toBeLessThanOrEqual(75);
     expect(symptoms("V-02", L(1).loan_id).find((s) => s.field === "on")).toMatchObject({
       file_or_table: "disbursements",
-      row: c.id,
+      row: `hazard@${due}`,
       true_value: due,
       planted_value: t.on,
     });
@@ -297,6 +302,42 @@ describe("history errors", () => {
         (x) => x.kind === "bill" && x.line.startsWith("tax") && x.servicer === "us",
       ).length;
     expect(v01.planted.length).toBe(clean.clean.loans.reduce((s, l) => s + bills(l), 0));
+  });
+
+  it("names a disbursement by its line and due date, so a refund in one history moves no other row", () => {
+    // Every tax bill ten times over: the analyses that follow refund in one history and not the other, which once
+    // renumbered every later bill and labeled each with another bill's day, line and amount.
+    const v01 = generate("history-errors", scenario, {
+      calibration: cal,
+      defects: [{ id: "V-01", rate: 1 }],
+    });
+    const paid = v01.labels.filter((l) => l.file_or_table === "disbursements" && !l.root_cause);
+    const refunds = paid.filter((l) => /^(refund|payoff_refund)@/.test(l.row));
+    expect(refunds.length).toBeGreaterThan(0);
+    for (const l of refunds)
+      expect(l.expected_handling).toBe(
+        DEFECTS["V-01"]!.symptomHandling(l.file_or_table, l.field, l.row),
+      );
+    // A bill's day, line and kind never differ; its amount differs only on a bill paid at the vendor's figure.
+    expect(paid.filter((l) => ["on", "line", "kind"].includes(l.field))).toEqual([]);
+    const roots = new Set(v01.labels.filter((l) => l.root_cause).map((l) => `${l.loan}|${l.row}`));
+    for (const l of paid.filter(
+      (x) => x.field === "amount" && !/^(refund|payoff_refund)@/.test(x.row),
+    )) {
+      expect(roots.has(`${l.loan}|${l.row}`), l.row).toBe(true);
+      expect(BigInt(l.planted_value!)).toBe(BigInt(l.true_value!) * 10n);
+    }
+    // The same holds for the errors that move payments rather than bills.
+    for (const id of ["D-28", "D-25"]) {
+      const res = generate("history-errors", scenario, {
+        calibration: cal,
+        defects: [{ id, rate: id === "D-25" ? 1 : 0.2 }],
+      });
+      const moved = res.labels.filter(
+        (l) => l.file_or_table === "disbursements" && ["on", "line", "kind"].includes(l.field),
+      );
+      expect(moved, id).toEqual([]);
+    }
   });
 
   it("knows a keystroke from a different number, and a loan on our books from one that is not", () => {

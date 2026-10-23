@@ -3021,7 +3021,13 @@ is per loan. D-25 names the loan it lands on with `with`. A row an error adds
 is named off the row it comes from, and a row it removes keeps its id
 spent, so every other row keeps its id. The payments table is compared by
 day and kind of payment rather than by receipt number, because a payment one
-history never sends would renumber every receipt after it. Staff errors that
+history never sends would renumber every receipt after it. The
+disbursements table is compared the same way for the same reason: a bill as
+the next of its line's, named by its line and the day it was due
+(`tax_county@2028-01-01`), which a bill paid late or at the wrong amount
+still is; any other row by its kind and day (`refund@2028-07-18`). A refund
+one history makes and the other does not once renumbered every later bill,
+and labeled each with another bill's day, line and amount. Staff errors that
 need the contacts layer, such as a promise not tracked or a complaint not
 logged, are not planted here.
 
@@ -3189,7 +3195,11 @@ built, each in the forms a request may name (`variant`):
 A request names its months, or reaches each tape at a rate. The rate, the
 form and the column (for T-02 and T-04, which reach one) are drawn from
 streams keyed by the book, the defect and the month, so a defect's months
-move with nothing else.
+move with nothing else. A definition's own draws (T-02's new header, T-05's
+export day) are under the month's key, apart from the planter's: when they
+shared the stream that drew the month, a month drawn at a low rate always
+read a low number from it, and every rename was a column's first and every
+export ran the first business day after the month-end.
 
 - **Root causes.** Each definition gets the whole stream, so one that drops,
   repeats or renames a file has the stream to do it in. It returns each value

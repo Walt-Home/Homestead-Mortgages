@@ -112,8 +112,8 @@ export interface DefectDefinition {
   readonly history: HistoryErrorPlan | null;
   /** What a servicer should do about the root cause. */
   readonly handling: string;
-  /** What a servicer should do about a symptom in this table and field. */
-  symptomHandling(table: string, field: string): string;
+  /** What a servicer should do about a symptom in this table and field, on this row (as the comparison names it). */
+  symptomHandling(table: string, field: string, row: string): string;
 }
 
 /** One loan's share of a history error: what its twin is handed, and the root cause it carries. */
@@ -314,6 +314,9 @@ export function keystrokeApart(a: string, b: string): boolean {
   );
 }
 
+/** Whether a disbursements row, as the comparison names it, is a refund out of the account (an analysis's, or the payoff's). */
+const isRefundRow = (row: string) => row.startsWith("refund@") || row.startsWith("payoff_refund@");
+
 /** A vendor's figure that is the bill with its decimal point one place off: the design choice V-01 plants. */
 const DECIMAL_SHIFT = 10n;
 /** The days before a payee returns an overpayment, and before a prior servicer sends a bill on: design choices. */
@@ -378,11 +381,13 @@ export const V01: DefectDefinition = {
     },
   },
   handling: v01Handling,
-  symptomHandling: (table, field) => {
+  symptomHandling: (table, field, row) => {
+    if (table === "disbursements" && isRefundRow(row))
+      return "A refund from the escrow account that the drained balance moved: redo it from the account on the right balance.";
+    if (table === "disbursements" && row.startsWith("returned@"))
+      return "The county's return of the overpayment: book it to escrow.";
     if (table === "disbursements" && field === "amount")
       return "The bill was paid at the vendor's figure, ten times the county's: the county is owed nothing more, and the excess comes back to escrow.";
-    if (table === "disbursements" && field === "*")
-      return "The county's return of the overpayment: book it to escrow.";
     if (table === "disbursements")
       return "The escrow balance is short by the overpayment until the county returns it.";
     if (table === "escrow_analyses")
@@ -455,7 +460,9 @@ export const V02: DefectDefinition = {
     "Have the carrier move the mortgagee clause and the billing to the servicer the notice of transfer names, " +
     "confirm the policy did not lapse, and pay the renewal from escrow by its due date: a lapse or a charge the late " +
     "payment caused is the servicer's to make good.",
-  symptomHandling: (table, field) => {
+  symptomHandling: (table, field, row) => {
+    if (table === "disbursements" && isRefundRow(row))
+      return "A refund from the escrow account that the unpaid premium moved: redo it with the renewal paid.";
     if (table === "disbursements" && field === "on")
       return "The renewal was paid when the prior servicer sent the bill on, after it was due: confirm coverage stayed in force.";
     if (table === "disbursements" || table === "month_ends")
@@ -643,6 +650,12 @@ interface Table {
   readonly date: (r: Row) => PlainDate;
   /** Fields that are not compared: a number the history assigns in order, which says nothing about the row. */
   readonly ignore?: readonly string[];
+  /**
+   * The row as a label names it, when its key is not a name a reader would
+   * know it by: read off the clean history's row where there is one, and the
+   * twin's where there is not. `key` is the row's key, with its occurrence.
+   */
+  readonly rowName?: (r: Row, key: string) => string;
 }
 
 /** A value as a label carries it: scalars as they print, rows and lists as JSON, nothing as null. */
@@ -691,8 +704,15 @@ export const TABLES: readonly Table[] = [
   {
     name: "disbursements",
     rows: (l) => asRows(l.disbursements),
-    key: (r) => String(r["id"]),
+    // Not by the id, which is numbered as the row is written: a refund one history makes and the other does not
+    // (an analysis that found a surplus in one and a shortage in the other) would renumber every row after it. A bill
+    // is its line's next, which a bill paid late or at the wrong amount still is, and is named by the day it was
+    // paid in the clean history, its due date; any other row is named by its kind and its day.
+    key: (r) =>
+      r["kind"] === "bill" ? String(r["line"]) : `${String(r["kind"])}@${String(r["on"])}`,
+    rowName: (r, key) => (r["kind"] === "bill" ? `${String(r["line"])}@${String(r["on"])}` : key),
     date: (r) => r["on"] as PlainDate,
+    ignore: ["id"],
   },
   {
     name: "escrow_analyses",
@@ -783,7 +803,7 @@ export function symptomLabels(
     loan: clean.loan_id,
     defect_id: def.id,
     ...x,
-    expected_handling: def.symptomHandling(x.file_or_table, x.field),
+    expected_handling: def.symptomHandling(x.file_or_table, x.field, x.row),
     root_cause: false,
   }));
 }
@@ -802,6 +822,7 @@ export function differences(clean: LoanLife, twin: LoanLife): Difference[] {
     for (const k of keys) {
       const ra = A.get(k);
       const rb = B.get(k);
+      const row = t.rowName ? t.rowName((ra ?? rb)!, k) : k;
       const label = (
         field: string,
         tv: string | null,
@@ -810,7 +831,7 @@ export function differences(clean: LoanLife, twin: LoanLife): Difference[] {
       ): Difference => ({
         file_or_table: t.name,
         field,
-        row: k,
+        row,
         on,
         true_value: tv,
         planted_value: pv,

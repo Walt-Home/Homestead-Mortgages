@@ -3,7 +3,8 @@
  * the ledger's invariants; the ARM engines agree on every change; every month
  * furnishes a valid Metro 2 record; a borrower who is behind pays to cure and
  * catches up; the scenario's events happen; the D-03 twin differs from the
- * clean history only downstream of its planted value; and a thousand
+ * clean history only downstream of its planted value; an observer is shown
+ * every receipt and analysis without moving a draw; and a thousand
  * loan-decades run in under fifteen seconds.
  */
 
@@ -23,6 +24,7 @@ import {
   generate,
   loadCalibration,
   monthEndRow,
+  type LifeMoment,
   type LoanLife,
 } from "../life/index.js";
 
@@ -483,6 +485,49 @@ describe("life generator", () => {
     expect(() =>
       generate("twin", scenario, { calibration: cal, defects: [{ id: "D-03", loans: [0] }] }),
     ).toThrow(/D-03 cannot be planted on loan 0/);
+  });
+
+  it("hands an observer each receipt it posts and each analysis, and changes no draw", () => {
+    const scenario = {
+      loans: 4,
+      random: { payoff: false },
+      pins: { 1: { late_charge_cap_cents: 1_500, arm: null, escrowed: true } },
+      events: [
+        { kind: "missed_payment" as const, loan: 1, month: 9 },
+        { kind: "missed_payment" as const, loan: 1, month: 33 },
+      ],
+    };
+    const opts = { calibration: cal, defects: [{ id: "D-03", loans: [1] }] };
+    const seen = { clean: new Map<number, LifeMoment[]>(), twin: new Map<number, LifeMoment[]>() };
+    const watched = generate("observed", scenario, {
+      ...opts,
+      observe: (loan, history, m) =>
+        seen[history].set(loan, [...(seen[history].get(loan) ?? []), m]),
+    });
+    const unwatched = generate("observed", scenario, opts);
+    expect(toJsonLine(watched.clean)).toBe(toJsonLine(unwatched.clean));
+    expect(toJsonLine(watched.defective)).toBe(toJsonLine(unwatched.defective));
+    // One moment for every receipt the waterfall posts and every analysis, in order, in each history.
+    const moments = (history: "clean" | "twin", i: number, l: LoanLife) => {
+      const ms = seen[history].get(i) ?? [];
+      expect(ms.flatMap((m) => (m.kind === "receipt" ? [m.receipt_id] : []))).toEqual(
+        l.receipts.filter((r) => r.mode !== "payoff").map((r) => r.id),
+      );
+      expect(ms.flatMap((m) => (m.kind === "analysis" ? [m.year] : []))).toEqual(
+        l.analyses.map((a) => a.year),
+      );
+    };
+    unwatched.clean.loans.forEach((l, i) => moments("clean", i, l));
+    expect(seen.clean.get(1)!.length).toBeGreaterThan(100);
+    expect([...seen.twin.keys()]).toEqual([1]);
+    moments("twin", 1, unwatched.defective!.loans[1]!);
+    // A receipt's moment is the state it was posted against: the installments it paid are open in it.
+    for (const m of seen.clean.get(1)!) {
+      if (m.kind !== "receipt") continue;
+      const row = unwatched.clean.loans[1]!.receipts.find((r) => r.id === m.receipt_id)!;
+      for (const x of row.installments)
+        expect(m.state.installments.find((i) => i.due_date === x.due)?.status).toBe("due");
+    }
   });
 
   it("projects a month-end onto a partner tape's fields", () => {

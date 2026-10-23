@@ -25,6 +25,8 @@
  *   npm run env:refi -w @hm/environments -- --env metro2-furnishing --policy reference
  *   npm run env:refi -w @hm/environments -- --env aus-decision --policy reference
  *   npm run env:refi -w @hm/environments -- --env ei-clocks --policy reference
+ *   npm run env:refi -w @hm/environments -- --env catchup-posting --policy reference
+ *   npm run env:refi -w @hm/environments -- --env escrow-review --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -255,6 +257,32 @@ import {
   type EiAnswer,
   type EiTask,
 } from "./ei/index.js";
+import {
+  CATCHUP_FINGERPRINT,
+  CATCHUP_HELDOUT_SUITE,
+  CatchupReferencePolicy,
+  catchupPosting,
+  catchupSpecTasks,
+  catchupTaskId,
+  catchupVerdict,
+  generateCatchupSuite,
+  generateCatchupTask,
+  type CatchupAnswer,
+  type CatchupTask,
+} from "./catchup/index.js";
+import {
+  REVIEW_FINGERPRINT,
+  REVIEW_HELDOUT_SUITE,
+  ReviewReferencePolicy,
+  escrowReview,
+  generateReviewSuite,
+  generateReviewTask,
+  reviewSpecTasks,
+  reviewTaskId,
+  reviewVerdict,
+  type EscrowReviewAnswer,
+  type EscrowReviewTask,
+} from "./escrow-review/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -287,7 +315,9 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof LOSSMIT_FINGERPRINT
     | typeof METRO2_FINGERPRINT
     | typeof AUS_FINGERPRINT
-    | typeof EI_FINGERPRINT;
+    | typeof EI_FINGERPRINT
+    | typeof CATCHUP_FINGERPRINT
+    | typeof REVIEW_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -563,6 +593,30 @@ const BENCHES = {
     verdictOf: eiVerdict,
     reference: () => new EiReferencePolicy(),
   } satisfies Bench<EiTask, EiAnswer>,
+  // A catch-up receipt from a ten-year history, late charges held to the note, graded by the servicing app's cashiering.
+  "catchup-posting": {
+    env: catchupPosting,
+    fingerprint: CATCHUP_FINGERPRINT,
+    heldout: CATCHUP_HELDOUT_SUITE,
+    suite: generateCatchupSuite,
+    one: generateCatchupTask,
+    taskId: catchupTaskId,
+    spec: catchupSpecTasks,
+    verdictOf: catchupVerdict,
+    reference: () => new CatchupReferencePolicy(),
+  } satisfies Bench<CatchupTask, CatchupAnswer>,
+  // An annual escrow analysis from a ten-year history, reviewed for its flag, graded by the servicing app's escrow engine.
+  "escrow-review": {
+    env: escrowReview,
+    fingerprint: REVIEW_FINGERPRINT,
+    heldout: REVIEW_HELDOUT_SUITE,
+    suite: generateReviewSuite,
+    one: generateReviewTask,
+    taskId: reviewTaskId,
+    spec: reviewSpecTasks,
+    verdictOf: reviewVerdict,
+    reference: () => new ReviewReferencePolicy(),
+  } satisfies Bench<EscrowReviewTask, EscrowReviewAnswer>,
 };
 
 const { values } = parseArgs({
@@ -754,6 +808,8 @@ async function main(): Promise<void> {
   if (values.env === "metro2-furnishing") return run(BENCHES["metro2-furnishing"]);
   if (values.env === "aus-decision") return run(BENCHES["aus-decision"]);
   if (values.env === "ei-clocks") return run(BENCHES["ei-clocks"]);
+  if (values.env === "catchup-posting") return run(BENCHES["catchup-posting"]);
+  if (values.env === "escrow-review") return run(BENCHES["escrow-review"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

@@ -2369,6 +2369,238 @@ on 2,000 candidates nothing filtered (10,000 when last measured). Its longest
 loan is 51 tool calls, the submission included, in 4 turns across 5,000
 training draws, well inside the episode's 80 turns at one call a turn.
 
+## catchup-posting
+
+catchup-posting 1.0.0 is the first environment drawn from the life
+generator, and one of the first demo's graded moments. A borrower who missed
+an installment sends money to catch up. The note caps a late charge in
+dollars, and the servicing system may have boarded the loan without the cap
+(D-03, docs/synthetic-data-defects.md).
+
+**The task.** One receipt, and the loan as the system shows it on the day the
+receipt arrives, after that morning's late-charge run:
+
+- the note's late-charge terms (percent, grace, the dollar cap or none), and
+  beside them the terms the system boarded and charges with;
+- the cash state: the balance, the installment it is paid through, suspense,
+  the late charges the system says are due, and the installments of the last
+  two to three years and the next one;
+- every late charge since the first payment, with the P&I it was charged on
+  and what was collected on it;
+- the last twelve months of payments, each with where it went, and the last
+  twelve month-ends.
+
+The model holds every charge to the note, posts the receipt, states the
+refund due and says whether the loan is current after posting.
+
+**The rules.** Step 1 is D-03's correction. Each charge is held to
+`lateChargeAmount(P&I, the note's percent, the note's cap)`. What is still
+owed on it falls to that amount, and what was collected above it is owed
+back to the borrower: that sum is the refund due. Steps 2 to 5 are
+cashiering's waterfall on the corrected balance. The installments are paid
+whole, oldest first, at the rate in force; what is left goes to the late
+charges, and the rest to suspense. A twin's borrower sends what the system
+billed, so a catch-up there leaves exactly the excess of the open charges
+over the cap in suspense. It is held as the engine holds any remainder, and
+the refund due is what was already collected above the cap.
+
+**The grade.** A pass is every field right. There are nine fields:
+
+- the installments applied, each with its split (one list);
+- the late charge paid and what went to suspense;
+- every charge held to the note (one list), and the refund due;
+- the late charges still due, the balance, the installment the loan is paid
+  through, and whether it is current.
+
+The paid-through date is graded rather than the next due date. The history
+projects one installment ahead, and an early catch-up prepays it.
+
+**The grader is the servicing app's own engine.** `lateChargeAmount` and
+`allocate` are the ports payments-posting holds byte for byte
+(`src/payments/ported`). They run on the task's state with every charge
+held to the note: received and credited the same day, designation
+unspecified, no instruction.
+
+**The tasks** are drawn from a decade the life generator runs for one loan,
+and its D-03 twin where the arm calls for it. The moment is the first
+catch-up after a scripted missed installment, and the task is read off that
+moment (`LifeMoment`). The arm cycles by index through seven, one for each
+verdict the runner tallies and two for the commonest, so every verdict is
+14 % of a suite or more:
+
+- `breached`: the twin, meeting its first charge above the cap. The loan was
+  boarded by transfer three to ten months before the miss, so nothing was
+  collected above the cap before;
+- `breached_refund`: the twin, after charges already collected above it;
+- `breached_behind` and `breached_refund_behind`: the same two, the borrower
+  paying only the oldest installment;
+- `within_capped`, `within_uncapped` and `within_behind`: the clean history,
+  with the cap boarded and holding a charge down, with no cap that binds,
+  and paying only the oldest installment (on a note with no cap three times
+  in ten).
+
+A draw that does not land on its arm is drawn again under the next key: 122
+of the held-out suite's 200 are first draws. The suite holds:
+
+- 116 tasks above the cap, 58 of them current after posting and 58 still
+  behind, and 84 within the note;
+- 58 tasks with a refund due (a median near $220), 58 that send something
+  to suspense, and 20 that prepay an installment;
+- 85 loans boarded by transfer, and 40 notes with no cap;
+- up to 23 charges on a loan (5.7 on average), and catch-ups of up to nine
+  installments, from January 2027 to November 2035.
+
+**Out of scope.** The receipts stay on the pay-in-full route, where every
+installment the money reaches is paid whole. They stay off the
+partial-payment paths that carry logged engine defects
+(docs/servicing-engine-defects.md):
+
+- no receipt pools suspense (cashiering-4's balance, and cashiering-7's
+  accumulation);
+- none is short of the oldest installment (the $50 rule, cashiering-10, and
+  the partial hold);
+- none leaves money for late charges while an installment due is unpaid
+  (cashiering-7);
+- no loan carries a hold, a trial or a plan (cashiering-13).
+
+The history before the moment is held to the same. No receipt in it paid
+late charges ahead of the arrears or out of accumulated suspense, and no
+late-charge run in it excused an installment on suspense that another
+unpaid installment also had a claim on. No loan pays off, and every
+installment a receipt pays is charged one rate: a payment across an ARM
+change is posted in two calls.
+
+**The proof of fairness.** The reference passes the held-out suite, a
+300-task training suite and five spec cases on §2.1's fixture L-1 and §2.7's
+example K:
+
+- K caught up on 2026-10-05: September at example A's split, October at
+  $1,351.71 interest, and K's $79.01;
+- the same note under a $50.00 cap the system never boarded, which leaves
+  $29.01 in suspense;
+- the cap boarded;
+- K's $79.01 already collected above that cap and November missed, which
+  owes $29.01 back;
+- September's installment alone, which leaves the loan behind.
+
+It agrees with the engine on every in-scope candidate among 600 first draws
+nothing filtered. Its longest task is 54 tool calls in 33 turns. Two tests
+hold the moments to their histories:
+
+- each clean moment posts to the cent as the history posted it;
+- each twin's charges, held to the note, are the clean history's charges.
+
+An answer that trusts the system's charges passes every task within the note
+and none above it, with a mean score of 0.65 on those.
+
+## escrow-review
+
+escrow-review 1.0.0 is the first demo's other graded moment. It is an annual
+escrow analysis that the servicing app holds for anomaly review before
+approval, drawn from a decade the life generator runs. A hold follows a
+large change in the payment or in a bill (spec §3.2 R10, `anomalies`,
+`apps/servicing/src/domain/escrow/analysis.ts:101-107`). Half the analyses come
+from a history in which the county reassessed the property or the hazard
+premium rose at renewal; the other half are ordinary years, the negatives.
+
+**The task.** escrow-analysis's inputs exactly, read off the history at the
+analysis (`LifeMoment`):
+
+- the lines as the analyst has them: taxes estimated from last year with
+  CPI, hazard on a known renewal quote half the time and on last year's
+  premium otherwise, mortgage insurance on its contract;
+- the balance on the run date, and the escrow shares and bills still to post
+  before the year;
+- the delinquency, and the payment the new one replaces.
+
+Beside them is the account's history: the two analyses before this one, the
+disbursements of the last 24 months, and the last twelve month-ends. The
+model finds the shortage or surplus, the new payment, its effective date
+and the months a shortage is spread over, and says whether the flag stands.
+
+**The rules.** escrow-analysis's rulebook from its conventions through Step
+9, word for word (a test holds it), under a reviewer's opening. Step 10 is
+the app's triggers: a payment change over 25 % or over $150, a refund over
+$2,500, and a bill's variance against last year over 20 %. Step 11 is the
+flag, which stands when anything was flagged.
+
+**The grade.** Thirteen fields, a pass being every one right:
+
+- the annual total, base payment, target and projected actual balance;
+- the decision, and the surplus, or the shortage with its deficiency and its
+  months;
+- the new payment and its effective date;
+- the triggers, as a set, and whether the flag stands.
+
+**The grader is the servicing app's own engine.** The analysis is
+escrow-analysis's run of the port (`analyze`). The flag is the engine's
+`anomalies`, handed `bill_variance_gt_20` as the app's own
+`compareBillToPriorYear` computes it
+(`apps/servicing/src/app/tools/section03.ts:144`). That is the variance in
+hundredths of a percent, `(current − prior) × 10000 ÷ prior` in integer
+division, flagged above 20 %. The app compares two amounts its agent hands
+it; here they are a line's known bills for the coming year and its
+prior-year total, wherever both exist. A test holds both cited lines.
+
+**The tasks.** The arm cycles by index through six:
+
+- `reassessed_up`: a reassessment 25 to 80 % up, held with a shortage;
+- `premium_up`: a premium 20 to 80 % higher at renewal, held with a
+  shortage;
+- `reassessed_down`: a reassessment 30 to 60 % down on a loan of $400,000 to
+  $800,000, where the taxes are large enough to move the payment, held with
+  a surplus refunded;
+- `ordinary_shortage`, `ordinary_refund` and `ordinary_credit`: no event, an
+  analysis of the second year or later, not held.
+
+Each arm names the verdict it lands on, so each of the five verdicts the
+runner tallies is 16 % of a suite or more.
+
+After an event the generator tries the first three analyses whose coming
+year ends after the first bill the event changed. The first can see a
+renewal's increase among the coming year's bills; the next two see it in
+last year's. A draw that lands on no analysis of its arm is drawn again: 158
+of the held-out suite's 200 are first draws. The suite holds:
+
+- 101 analyses held, 68 with a shortage and 33 with a refund;
+- 99 not held: 33 shortages, 33 refunds and 33 credits;
+- triggers: a payment change over $150 on 79, over 25 % on 67, a refund over
+  $2,500 on 29, and a bill over 20 % on 19.
+
+Every shortage is spread over 12 months. The life generator runs no workout,
+so neither the 60 months of one nor a borrower's election appears, and
+neither does a retained or a balanced surplus.
+
+**What the histories showed.** The hazard renewal falls in the two months
+before the computation year: on the note's month, two months before the
+first payment. So last year's figure always carries the newest renewal, and
+a premium's increase reaches a bill compared only in the analysis whose
+coming year holds the first increased renewal, and only when its quote is
+known. Drawn as "the first analysis after the event", no bill was ever
+flagged, which is why the generator aims as it does. Taxes are estimated
+from last year with CPI and never carry a bill, so a reassessment is found
+in the payment, never in the bill comparison.
+
+**The proof of fairness.** Every one of the 400 analyses in forty decades,
+read off as a task, concludes what its history concluded. The reference passes
+the held-out suite, a 300-task training suite and §3.2's worked example and
+its three variants, with today's payment at the $130.00 the ledger deposits:
+
+- the example's $172.22 is a change of 32 %, held;
+- the deficiency variant's $243.05 is held too;
+- the refund's $138.33 and the credit's $136.11 are not.
+
+It agrees with the engine on every candidate among 600 first draws nothing
+filtered. Its longest task is 70 tool calls in 33 turns. An answer with the
+analysis right and no bill comparison passes 181 of the held-out suite's
+200, and one that says every flag stands passes 101.
+
+**Both environments draw from the calibration's typed defaults**
+(`defaultCalibration`), as the life generator's tests do. So a change to
+`calibration.json` does not move a pinned suite, and the browser, which
+reads no file, draws the task the command line does. The held-out suites are
+seed 1, 200 tasks each, pinned by hash.
+
 ## The life generator
 
 `src/life/` is not an environment. It writes ten-year histories of loans for
@@ -2468,6 +2700,18 @@ string, the escrow balance, twelve months of cash flow, and the PMI,
 foreclosure and bankruptcy fields. A tape writer only lays them out. The
 month a loan pays off or transfers out is measured on the day it closed, so
 an installment still in grace at a payoff never ages to 30 days.
+
+**Moments.** `generate(…, { observe })` shows an environment what each engine
+is about to be handed, as it stands, in the clean history and in a twin
+(`LifeMoment`): every receipt the waterfall posts, with the cash state it is
+posted against and the rate each installment is charged at (a payoff is
+quoted, not posted, and is not shown), and every annual analysis with the
+lines as the analyst has them, the CPI, the balance on the run date, what is
+still to post before the year and the payment it replaces. Each is a copy,
+and observing changes no draw. An environment built on the generator reads
+its task off one of these, so the task is the engine's own input at that
+moment and the history before it is the loan's. catchup-posting and
+escrow-review are the first two.
 
 **Not covered yet:**
 
@@ -2727,6 +2971,8 @@ npm run env:refi -w @hm/environments -- --env lossmit-retention --policy referen
 npm run env:refi -w @hm/environments -- --env metro2-furnishing --policy reference
 npm run env:refi -w @hm/environments -- --env aus-decision --policy reference
 npm run env:refi -w @hm/environments -- --env ei-clocks --policy reference
+npm run env:refi -w @hm/environments -- --env catchup-posting --policy reference
+npm run env:refi -w @hm/environments -- --env escrow-review --policy reference
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

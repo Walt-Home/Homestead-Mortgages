@@ -1291,7 +1291,9 @@ index date 2026-09-17).
   1.0.0 graded the engine's reading. What stays graded is 2.7-Q1's default,
   which the engine documents as its decision: suspense covering the basis
   counts toward one installment's test. So example C, with one installment
-  open, is not assessed, and a test holds that.
+  open, is not assessed, and a test holds that. catchup-posting holds no
+  suspense at its receipt, and `historyInScope` rejects a history in which a
+  run excused an installment on suspense while an earlier one was unpaid.
 
 ### cashiering-5. A payoff designation, or the curtailment gate, drops the funds from the cash state 🟡
 
@@ -1353,7 +1355,10 @@ index date 2026-09-17).
   borrower instructed otherwise.
 - **Kept out by.** payments-posting. `paymentsInScope` rejects a receipt that
   pays late charges while an installment due is open, or that spends
-  accumulated suspense.
+  accumulated suspense. catchup-posting keeps both out of its receipt
+  (`catchupInScope`), and out of the history before it any receipt that paid
+  a late charge with an installment open or out of accumulated suspense
+  (`historyInScope`).
 
 ### cashiering-8. Designated principal prepays future installments 🟡
 
@@ -1453,7 +1458,9 @@ index date 2026-09-17).
   `foreclosure_referred`, and `trial_active` as `trial_pending_waiver`.
 - **Kept out by.** payments-posting pairs every bankruptcy or foreclosure hold
   with its overlay and draws no trial. `paymentsInScope` rejects an assessed
-  charge under either hold.
+  charge under either hold. catchup-posting draws from life histories, which
+  write no hold or trial, and takes no receipt on a loan with a plan or an
+  overlay.
 
 ### cashiering-14. Trial payments are never applied on the posting path 🟡
 
@@ -1807,8 +1814,8 @@ index date 2026-09-17).
   x cycle_years months and let `project()`'s multi-year branch (:48) take its
   share and set the flag. `project()` must also carry the accumulated share
   across years (§3.4 rule 6), or the date fix alone holds too little.
-- **Kept out by.** escrow-analysis, escrow-history and escrow-policy draw only
-  monthly, semiannual and annual lines.
+- **Kept out by.** escrow-analysis, escrow-history, escrow-policy and
+  escrow-review draw only monthly, semiannual and annual lines.
 
 ### escrow-2. A biweekly projection drops a disbursement on the year's last day 🟡
 
@@ -1827,7 +1834,7 @@ index date 2026-09-17).
 - **Smallest fix.** In `project()` (analysis.ts:37), end the biweekly year at
   `addMonths(yearStart, 12)`, and clamp `periodIndex` (:17) to the 26th
   period.
-- **Kept out by.** escrow-analysis draws monthly notes only.
+- **Kept out by.** escrow-analysis and escrow-review draw monthly notes only.
 
 ### pmi-2. An odd-term midpoint terminates a month late 🟡
 
@@ -3025,7 +3032,8 @@ index date 2026-09-17).
   counter row that is C-1.1-02's evidence. The runtime path never writes that
   row at all and hard-codes `partial_count_12m` to 0, so the limit of three in
   twelve months is not enforced there. Fix: skip the relabel when the outcome
-  is `applied_with_50_rule`. Kept out by `paymentsInScope`.
+  is `applied_with_50_rule`. Kept out by `paymentsInScope`, and by
+  catchup-posting, whose receipt pays the oldest installment whole.
 - **cashiering-16.** A `noe_dispute` overlay ignores its start date
   (latecharges.ts:90), so a backdated re-run suppresses a charge from before
   the dispute existed. Fix: add `o.from <= i.run_on`. Kept out:
@@ -3146,7 +3154,8 @@ index date 2026-09-17).
   $700.00 where §3.4 rule 1 gives $400.00, or $0.00 under the hardship
   override. The §18.1 QC re-derivation and origination's `cushionParameter`
   copy the shortcut. Fix: treat the dollar figure as one more candidate and
-  take the least. Kept out: escrow-analysis states cushions in months only.
+  take the least. Kept out: escrow-analysis and escrow-review state cushions
+  in months only.
 - **pmi-4.** The 78% sweep's current test checks only installments due by the
   1st of the preceding month (termination.ts:15-19), so a loan due on the 15th
   that missed that month's payment is current and its MI ends while 30 days

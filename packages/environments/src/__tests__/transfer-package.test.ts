@@ -27,6 +27,7 @@ import {
   demoLoan,
   DEMO_TRANSFER_DATE,
   generate,
+  monthEndRow,
   writeTransferPackage,
   type LoanLife,
 } from "../life/index.js";
@@ -210,6 +211,12 @@ describe("the defect registry", () => {
     expect(t.disbursements.filter((x) => x.on >= on && x.kind === "bill")).toEqual([]);
     expect(t.analyses.filter((a) => a.as_of >= on)).toEqual([]);
     expect(c.analyses.filter((a) => a.as_of >= on).length).toBeGreaterThan(5);
+    // A partner's tape shows what the servicer's system holds: escrowed under the prior servicer, not once ours.
+    expect([
+      monthEndRow(t, "2027-11")!.escrow.escrowed,
+      monthEndRow(t, "2028-01")!.escrow.escrowed,
+    ]).toEqual([true, false]);
+    expect(monthEndRow(c, "2028-01")!.escrow.escrowed).toBe(true);
     // The prior servicer's months are the same in both.
     const before = (l: LoanLife) => canon(l.receipts.filter((r) => r.on < on));
     expect(before(t)).toBe(before(c));

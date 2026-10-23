@@ -2449,9 +2449,9 @@ typed defaults, so a new calibration file does not move the suite. A package
 is kept only when the gate's 35 rules, ported and run on the package as the
 decoder reads it, pass on every loan, and when the reference finds exactly
 the planted cells. On the held-out suite 47 of 200 first draws were redrawn,
-for one of three reasons: a hazard renewal within 30 days of the transfer
-(W-005), an analysis more than a year old (W-009), or a payoff before the
-transfer.
+for one of four reasons: a hazard renewal within 30 days of the transfer
+(W-005), an analysis more than a year old (W-009), a payoff before the
+transfer, or a planted cap the note's P&I never reaches.
 
 **The floors.** Submitting nothing passes 50 of the 200 held-out packages,
 the ones with nothing planted. Finding every escrow Yes and reading no
@@ -2461,8 +2461,8 @@ statement passes 100.
 200 packages, pinned by hash), 300 training tasks and four spec cases: the
 demo loan clean, with D-42, with D-03, and with both. It takes three turns
 and at most 18 tool calls. Of 1,000 training candidates, 707 reached the
-fairness check (the rest failed the gate or ended before the transfer), and
-the reference missed nothing on any of them.
+fairness check (the rest were redrawn for those reasons), and the reference
+missed nothing on any of them.
 
 **What the servicing app does with them.**
 `apps/servicing/scripts/board-life-package.mjs` boards packages through the
@@ -2479,8 +2479,8 @@ Not in 1.0.0:
   outcomes grade;
 - the preliminary tape and delta boarding;
 - the transfer's timers;
-- what a defect does after boarding. The manifest labels the twin's
-  symptoms for the environments that will grade them.
+- what a defect does after boarding. The generator labels the twin's
+  symptoms (`generate`'s labels) for the environments that will grade them.
 
 ## The life generator
 

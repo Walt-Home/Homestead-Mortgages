@@ -7375,5 +7375,5 @@ Not in 1.0.0:
 - the other 45 defects, and any defect outside the final tape;
 - a package the gate fails;
 - the preliminary tape, delta boarding and the transfer's timers;
-- what a defect does after boarding, which the manifest labels for the
-  environments that will grade it.
+- what a defect does after boarding, which the generator's twin labels for
+  the environments that will grade it.

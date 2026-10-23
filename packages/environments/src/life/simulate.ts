@@ -1014,6 +1014,8 @@ export function simulateLoan(
   if (script.transfer_out) push({ on: script.transfer_out, kind: "transfer_out" });
   // A history error's: another loan's receipt keyed to this one, posted on the day it came in.
   const errors = ov.errors ?? [];
+  /** The installments another loan's payment, posted here, paid (D-25). */
+  const paidByAnother = new Set<PlainDate>();
   for (const x of errors)
     if (x.kind === "receipt_from" && x.on <= windowEnd)
       push({
@@ -1283,8 +1285,12 @@ export function simulateLoan(
     const target = e.due!;
     const channel = e.channel ?? "borrower";
     const credited = e.credited ?? e.on;
-    if (e.mode === "misposted")
-      return post(e.on, credited, e.amount!, "misposted", channel, 0n, e.rowId);
+    if (e.mode === "misposted") {
+      post(e.on, credited, e.amount!, "misposted", channel, 0n, e.rowId);
+      for (const x of receipts.find((r) => r.id === e.rowId)?.installments ?? [])
+        paidByAnother.add(x.due);
+      return;
+    }
     if (e.mode === "partial_rest")
       return post(e.on, credited, e.amount!, "partial_rest", channel, 0n);
     if (e.scriptedMiss) return void note(e.on, "missed", target);
@@ -1296,8 +1302,9 @@ export function simulateLoan(
     const behind = oldest !== undefined && oldest.due_date < target;
     const plan = activePlan();
     // An installment a cure or a promise already paid (a late receipt arriving after the next one's cure) is not paid
-    // twice: the borrower sends nothing for it.
-    if (!plan && targetInst && targetInst.status !== "due")
+    // twice: the borrower sends nothing for it. One another borrower's payment paid (D-25) the borrower knows nothing
+    // of, and pays as billed.
+    if (!plan && targetInst && targetInst.status !== "due" && !paidByAnother.has(target))
       return void note(e.on, "already_paid", target);
     if (plan) {
       // Each plan payment is the month's own installment (none when it is one of the arrears) and a share of the arrears.
@@ -1331,7 +1338,11 @@ export function simulateLoan(
     }
     if (rnd.delinquency && md.uMiss < clamp01(pRoll * disaster, 0.9))
       return void note(e.on, "missed", target);
-    const statement = pOf(oldest ?? targetInst!);
+    // What the borrower was billed: the oldest installment open, or, for one another borrower's payment paid without
+    // their knowing (D-25), that installment itself.
+    const statement = pOf(
+      targetInst && paidByAnother.has(target) ? targetInst : (oldest ?? targetInst!),
+    );
     const stale =
       staleArmed.length > 0 &&
       staleArmed[0]! <= e.on &&

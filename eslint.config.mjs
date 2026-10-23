@@ -60,6 +60,8 @@ export default tseslint.config(
       "packages/environments/src/metro2/ported/**",
       "packages/environments/src/ei/ported/**",
       "packages/environments/src/boarding/ported/**",
+      // The partner-book reader's profile, ported for tape-intake the same way.
+      "packages/environments/src/tape-intake/ported/**",
       // His servicing runtime, vendored whole as apps/servicing; the commit is
       // in apps/servicing/VENDORED_FROM. Its scripts/ beside the tree is ours.
       "apps/servicing/src/**",

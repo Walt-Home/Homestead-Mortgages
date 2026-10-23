@@ -7764,7 +7764,97 @@ generator still draw what they were pinned at.
   digit different, or two neighbors swapped. A book draws its numbers at
   random, so a scenario pins one (`LoanPins.servicer_loan_number`), which
   moves no other draw. The catalog's reversal weeks later is not modeled,
-  because cashiering has no engine to reverse a posted payment.
+  because cashiering has no engine to reverse a posted payment. The other
+  loan's borrower knows nothing of the payment, so pays as billed: the
+  simulator's rule that a borrower does not pay an installment already paid
+  is for what they paid themselves. Without that, a misposted payment that
+  came first left its borrower paying nothing that month, then the next
+  installment's amount, and no tape could show what had happened.
 - A rate for a history error is per eligible event (each bill, each
   payment), as the calibration's "per receipt" for D-25 reads; a boarding
   defect's stays per loan.
+
+## A partner's monthly tape is reviewed at the desk, and graded by its labels
+
+**Built 23 October 2026,** as `tape-intake` 1.0.0 in `packages/environments`.
+A task is one month of a partner's tape stream as the tape desk receives it:
+the delivery, the last tape the desk loaded, and what the m3-v1 reader made
+of the delivery. The model names each defect, says whether the month can be
+loaded, and says what to ask the partner. docs/environments.md, "tape-intake",
+says what each holds.
+
+**Why this one.** The tape desk is where a partner's book enters ours, every
+month, and the reader is the only check it has. The reader is strict about
+structure (a required header missing, a cell it cannot read) and blind to
+everything a month does to right values, which is what the tape-stream
+defects are, and to anything wrong in the partner's own records. The two
+families are the plan's "choppy data" on the tape layer.
+
+**What the rulebook asks, against what the reader already does.** The reader
+was read for what it refuses and flags (`m3-v1.ts`, `tabular.ts`,
+`book.ts`): a file missing a required header is refused by name; a cell it
+cannot read is an exception naming the column; a loan number seen twice is a
+duplicate; a code, an as-of and a month are taken as written. So the task
+shows the desk's reading, the rulebook says what the reader does and does
+not do, and every refusal or exception is called a symptom whose cause the
+finding names. The rulebook never asks for something the reader refuses
+without saying that it does. The desk's reading is the profile's own,
+ported, and a test reads every delivery with `readBook` itself to hold it
+there.
+
+**The port is the profile, but for one import.** The `parse_date` tool and
+the desk's reading need the reader's parsers in the browser playground, whose
+bundle stops on `node:zlib`. The profile takes one function from the vendored
+workbook reader, which imports it, so that function is copied word for word
+beside the port (`src/tape-intake/ported/`), and a test holds both to their
+sources. `book.ts` is not ported: its hash and the feed contract's schema
+reach `node:crypto`.
+
+**The verdict is three-valued, and the partner's records load.** `hold` is a
+delivery that cannot load as it came: last month's tape again, or a required
+header renamed. `load_after_correction` is one the desk can correct from the
+delivery itself: an optional header mapped back, codes padded, a day-first
+column read day first, the as-of set to the month-end. `load` is the rest,
+and a history error is among it: the tape is a faithful copy of the partner's
+records, and what is wrong in them is the partner's to correct, which the
+finding's ask says. Two forms of T-04 load as delivered, because the reader
+reads two-digit years and Excel serials right (the life generator's tests
+hold that), and the finding is still made: the export's form drifted, and
+the partner is asked to put it back.
+
+**Three history errors show on a tape, and one does not.** V-01 drains an
+escrow account far past a year of payments; V-02 leaves the premium in the
+account in the policy's anniversary month; D-25 leaves one loan paid nothing
+and the loan a keystroke away paid twice. D-28, a payment drafted twice,
+shows as a month paid twice and the next paid ahead, which an ordinary early
+payer shows too. A rule that found it would flag them, so it is not drawn,
+and its twin waits for an environment that reads the payment history.
+
+**Every figure the history checks read is read as it can move.** The first
+draws missed D-25s and V-02s by cents: an escrow analysis between the two
+tapes moved a Total Due or a T&I payment, so a rule written on the last
+tape's figure alone failed. V-02 takes the lesser T&I of the two tapes, and
+D-25 tries each Total Due from either tape, in an order the rulebook states.
+The checks also read the delivery as the stream checks correct it: a
+day-first next due date once made a current loan look like a renewal never
+paid.
+
+**What it measures.**
+
+- **The floors.** Load with nothing found passes 25 of the 200 held-out
+  deliveries, the clean ones; finding only what the desk's reading shows
+  passes 38; every stream defect with no record read, 140; every finding
+  with the verdict always load, 82.
+- **The reference.** It passes the held-out suite, 300 training tasks and
+  13 spec cases in at most 5 turns and 30 tool calls. Of the first draws of
+  1,000 training tasks (train seed 11), 918 reached the fairness check, and
+  it missed one, a V-02 loan that paid two installments in the month at
+  escrow payments an analysis had set apart; a rule exact enough to catch it
+  would flag ordinary months.
+
+Not in 1.0.0:
+
+- the supplement beside the tape;
+- a defect in the last tape loaded;
+- D-28 and the history errors that show only in a payment history;
+- staff errors, which need the contacts layer.

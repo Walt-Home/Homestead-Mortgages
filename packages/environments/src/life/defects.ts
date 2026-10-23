@@ -531,9 +531,10 @@ export const D28: DefectDefinition = {
  * D-25, a system's form of it: a payment keyed to a loan number a keystroke
  * from the borrower's, and posted to the loan that has that number. The
  * borrower's loan never receives it, so the installment it paid is open and
- * runs late, and the other loan is paid ahead. Nothing in the history moves it
- * back: the catalog's reversal weeks later is a correction cashiering has no
- * engine for. Both loans carry a root cause.
+ * runs late. The other loan's borrower, who knows nothing of it, pays as
+ * billed, so that loan is paid ahead. Nothing in the history moves it back:
+ * the catalog's reversal weeks later is a correction cashiering has no engine
+ * for. Both loans carry a root cause.
  */
 export const D25: DefectDefinition = {
   id: "D-25",

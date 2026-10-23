@@ -118,7 +118,9 @@ The last four are made in the ten-year history after boarding, on an event
 the clean history had, so each twin is the clean history until the error
 (docs/environments.md, "The life generator"). Staff errors that need the
 contacts layer, such as a promise not tracked or a complaint not logged, are
-not planted yet.
+not planted yet. The tape-intake environment grades a reviewer on V-01, V-02
+and D-25, the three that show on a partner's monthly tape
+(docs/environments.md, "tape-intake").
 
 D-03 and D-42 are each planted in the generator's twin and in the twin's
 transfer package (`ENV/life/transfer-package.ts`), where the package and its

@@ -312,8 +312,6 @@ const T02_HANDLING: Readonly<Record<string, string>> = {
     "leaves the fact empty on every row. Ask the partner to export it under the layout's header.",
 };
 
-const headerOf = (i: number) => TAPE_COLUMNS[i]!.header;
-
 /**
  * T-02: the export writes one header in other words. A `required` header (the
  * profile marks it so) gets the file refused by name; any other leaves its

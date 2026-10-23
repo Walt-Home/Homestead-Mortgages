@@ -221,6 +221,16 @@ import {
   expectedTriage,
   generateBoardingTask,
 } from "../src/boarding/index.js";
+import {
+  INTAKE_SPEC_CASES,
+  IntakeReferencePolicy,
+  generateIntakeTask,
+  intakePayload,
+  intakeSpecTasks,
+  intakeTaskId,
+  intakeVerdict,
+  tapeIntake,
+} from "../src/tape-intake/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
 
@@ -912,6 +922,21 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     expected: expectedTriage,
     verdictOf: boardingVerdict,
     reference: () => new BoardingReferencePolicy(),
+  }),
+  playground({
+    env: tapeIntake,
+    title: "Tape intake",
+    side: "servicing",
+    summary:
+      "One partner's monthly loan tape as the tape desk receives it, beside the last one loaded: a month missing or sent again, a renamed column, codes without their leading zeros, a date column a spreadsheet mangled, an as-of that drifted, or the partner's own records wrong (a tax bill paid ten times over, a renewal billed to the prior servicer, a payment posted to the loan a keystroke away), or nothing at all. The model names each defect, what the tape says and what is true, whether the month can be loaded, and what to ask the partner. Graded against the delivery's labels.",
+    id: intakeTaskId,
+    one: generateIntakeTask,
+    spec: intakeSpecTasks,
+    specNames: INTAKE_SPEC_CASES.map((c) => c.name),
+    payload: intakePayload,
+    expected: (task) => task.expected,
+    verdictOf: intakeVerdict,
+    reference: () => new IntakeReferencePolicy(),
   }),
 ]);
 

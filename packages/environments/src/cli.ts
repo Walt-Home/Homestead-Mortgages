@@ -28,6 +28,7 @@
  *   npm run env:refi -w @hm/environments -- --env catchup-posting --policy reference
  *   npm run env:refi -w @hm/environments -- --env escrow-review --policy reference
  *   npm run env:refi -w @hm/environments -- --env boarding-triage --policy reference
+ *   npm run env:refi -w @hm/environments -- --env tape-intake --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -297,6 +298,19 @@ import {
   type BoardingTask,
   type TriageAnswer,
 } from "./boarding/index.js";
+import {
+  INTAKE_FINGERPRINT,
+  INTAKE_HELDOUT_SUITE,
+  IntakeReferencePolicy,
+  generateIntakeSuite,
+  generateIntakeTask,
+  intakeSpecTasks,
+  intakeTaskId,
+  intakeVerdict,
+  tapeIntake,
+  type IntakeAnswer,
+  type TapeIntakeTask,
+} from "./tape-intake/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -332,7 +346,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof EI_FINGERPRINT
     | typeof CATCHUP_FINGERPRINT
     | typeof REVIEW_FINGERPRINT
-    | typeof BOARDING_FINGERPRINT;
+    | typeof BOARDING_FINGERPRINT
+    | typeof INTAKE_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -644,6 +659,18 @@ const BENCHES = {
     verdictOf: boardingVerdict,
     reference: () => new BoardingReferencePolicy(),
   } satisfies Bench<BoardingTask, TriageAnswer>,
+  // One partner's monthly tape before the desk loads it, graded against the labels of what the delivery and the partner's records carry.
+  "tape-intake": {
+    env: tapeIntake,
+    fingerprint: INTAKE_FINGERPRINT,
+    heldout: INTAKE_HELDOUT_SUITE,
+    suite: generateIntakeSuite,
+    one: generateIntakeTask,
+    taskId: intakeTaskId,
+    spec: intakeSpecTasks,
+    verdictOf: intakeVerdict,
+    reference: () => new IntakeReferencePolicy(),
+  } satisfies Bench<TapeIntakeTask, IntakeAnswer>,
 };
 
 const { values } = parseArgs({
@@ -838,6 +865,7 @@ async function main(): Promise<void> {
   if (values.env === "catchup-posting") return run(BENCHES["catchup-posting"]);
   if (values.env === "escrow-review") return run(BENCHES["escrow-review"]);
   if (values.env === "boarding-triage") return run(BENCHES["boarding-triage"]);
+  if (values.env === "tape-intake") return run(BENCHES["tape-intake"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

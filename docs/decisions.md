@@ -7749,3 +7749,22 @@ review triggers compare the new payment with it. The page labels it as the
 old schedule's and shows the billed amount beside it; whether the triggers
 should read the billed payment is a question for escrow-review's next
 version.
+
+## DeepSeek's held-out baselines on catchup-posting and escrow-review
+
+**Measured 23 October 2026,** DeepSeek-V4.1-Flash on Vertex with thinking on,
+every task scored. catchup-posting 1.0.0: 198 of 200 (99.0 %, 95 % interval
+96.4 to 99.7), at 0.6¢ an episode. escrow-review 1.0.0: 188 of 200 (94.0 %,
+89.8 to 96.5), at 1.8¢ an episode. Both references pass all 200.
+
+The escrow-review figure measures a suite with 15 answers known to be wrong.
+The task's "payment today" is the life generator's old schedule after last
+year's shortage spread runs out, where the servicing app compares the new
+payment with the payment billed now: `loan_terms.escrow_payment_cents`
+carries the running spread, and the step-down is held apart
+(apps/servicing/src/domain/escrow/ops-3-6.ts:105-117; spec 3.6, worked
+example (a)), as Reg X's annual statement sets the new payment beside the
+past year's (12 CFR 1024.17(i)(1)). With the billed figure, 15 of the 200
+held-out answers change and 4 flip whether the flag stands. The fix is in
+the life generator and comes with escrow-review 1.1.0; this score stands as
+what 1.0.0 measured, and the baseline is rerun on 1.1.0.

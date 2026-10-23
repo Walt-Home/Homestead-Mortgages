@@ -7225,3 +7225,18 @@ cadence's cessation on a promise to pay or a workout request (a conversation
 here carries no commitment, so the cadence runs on), the pre-sale stop, TCPA
 consent and quiet hours, Reg F's seven days after a conversation, and the
 notices' content.
+
+## DeepSeek's held-out baseline on ei-clocks
+
+**Measured 23 October 2026.** DeepSeek-V4.1-Flash on Vertex, thinking on,
+passed 188 of the 200 held-out tasks of ei-clocks 1.0.0 (94.0 %, 95 % interval
+89.8 to 96.5), with a mean field score of 0.971, at 2.0¢ an episode
+(`runs/ei-clocks/heldout-vertex-deepseek-v4.1-flash-2026-10-23.jsonl`). By the
+answer the task turns on: 109 of 117 with a breached clock, 48 of 50 with a
+notice owed, 31 of 33 with every clock clear. Four of the twelve misses are
+not answers: two ran out of output tokens and two ended with no submission,
+all on loans with many windows open at once. The other eight each miss
+one to four windows' legs, the written-notice leg more often than the live
+one. Held-out transcripts are not read, so why is not known. The reference passes all 200. Like most of the older
+environments, the score sits above the 50 to 80 % band where a score
+separates models; the harder tasks are the long histories.

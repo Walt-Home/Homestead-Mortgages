@@ -244,11 +244,16 @@ export function scriptFor(
   const tinOn = tin
     ? inWindow("transfer_in", resolveWhen(tin, dates.first_due), addDays(dates.first_due, 1))
     : null;
+  const toutOn = tout
+    ? inWindow("transfer_out", resolveWhen(tout, dates.first_due), dates.first_due)
+    : null;
+  if (tinOn && toutOn && toutOn <= tinOn)
+    throw new RangeError(
+      `loan ${loan} is transferred out on ${toutOn}, before it reaches us on ${tinOn}`,
+    );
   return {
     transfer_in: tin && tinOn ? { on: tinOn, misdirected: tin.misdirected_payments ?? 0 } : null,
-    transfer_out: tout
-      ? inWindow("transfer_out", resolveWhen(tout, dates.first_due), dates.first_due)
-      : null,
+    transfer_out: toutOn,
     missed,
     promises: evs.flatMap((e) => {
       if (e.kind !== "promise_to_pay") return [];

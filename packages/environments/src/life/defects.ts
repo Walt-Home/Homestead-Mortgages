@@ -91,7 +91,7 @@ export const D03: DefectDefinition = {
     if (table === "payments")
       return "Late charges took more of this payment than the note allows: re-apply the excess as the capped history would have (to suspense or the next installment).";
     if (table === "metro2")
-      return "The furnished record moved because the payment application did: correct it and furnish the correction (8.1).";
+      return "The furnished record moved because the payment application did: correct it and furnish the correction.";
     return "Downstream of the uncapped late charges: corrects when they are recomputed.";
   },
 };

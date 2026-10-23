@@ -245,7 +245,11 @@ const SURNAMES = [
   "Young",
 ];
 
-/** The note's percent where the servicing app's state table caps it lower (docs/synthetic-data-defects.md, D-04). */
+/**
+ * The note's percent where the servicing app's state table caps it lower
+ * (apps/servicing/db/migrations/0143_servicing_config_seed.sql:22: 2 in New York, 4 in North Carolina, 5 elsewhere),
+ * so boarding never caps a note here (docs/synthetic-data-defects.md, D-04).
+ */
 const STATE_LATE_PCT: Readonly<Record<string, string>> = { NY: "2", NC: "4" };
 
 /** Fannie Mae's standard coverage for a 30-year loan, and an invented premium rate, by loan-to-value. */

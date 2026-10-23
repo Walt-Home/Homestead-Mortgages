@@ -718,7 +718,8 @@ export function simulateLoan(
   // INVENTED: the rolling twelve-month window behind partial_count_12m.
   const fiftyDates: PlainDate[] = [];
 
-  // Initial escrow: the first year's projection off its own bills, deposited at the settlement ceiling (3.1 rule 3).
+  // Initial escrow: the first year's projection off its own bills, deposited at the settlement ceiling
+  // (`settlementDepositCeiling`, apps/servicing/src/domain/escrow/analysis.ts:109).
   if (d.escrowed) {
     const y1 = addMonths(d.first_due, 12);
     const lines0: EscrowLineInput[] = lines.map((l) => {
@@ -1157,7 +1158,8 @@ export function simulateLoan(
       paid: 0,
       done: false,
     });
-    // Charges on the installments the plan covers, and on those due while it runs, accrue suspended until it ends (2.7 rule 3).
+    // Charges on the installments the plan covers, and on those due while it runs, accrue suspended until it ends
+    // (the overlay `assessLateCharge` reads, apps/servicing/src/domain/cashiering/latecharges.ts:88).
     const from = [...inArrears].sort()[0] ?? e.on;
     state.overlays = [
       ...(state.overlays ?? []),
@@ -1266,7 +1268,8 @@ export function simulateLoan(
       instrument_months: null,
       state_max_months: null,
     });
-    // R6: the balance now, plus the deposits still due before the year (assumed paid), less what is still to be paid out.
+    // The projected actual balance as escrow/grader.ts's projectedActual reads it: the balance now, plus the deposits
+    // still due before the year (assumed paid), less what is still to be paid out.
     let pa = escrowBal;
     for (let due = addMonths(ys, -3); due < ys; due = addMonths(due, 1))
       if (due > asOf) pa += escrowFor(due);
@@ -1632,7 +1635,8 @@ export function simulateLoan(
           push({ on, kind: "payoff", byRefi: md.uRefi * hazard < refi });
       }
     }
-    if (rnd.transfers_out && !script.transfer_out && k > 0) {
+    // Only a loan on our books can be transferred out of them.
+    if (rnd.transfers_out && !script.transfer_out && k > 0 && who(monthStart) === "us") {
       const monthly = 1 - Math.pow(1 - R.transfer.annual_rate, 1 / 12);
       if (md.uTransferOut < monthly)
         push({ on: ymd(y, m, Math.min(md.transferDay, dim)), kind: "transfer_out" });

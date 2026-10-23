@@ -42,6 +42,7 @@ import {
   addBusinessDays,
   addDays,
   addMonths,
+  daysBetween,
   daysInMonth,
   endOfMonth,
   parts,
@@ -275,10 +276,13 @@ export interface PmiRow {
 
 export interface ContactRow {
   readonly on: PlainDate;
-  readonly direction: "inbound";
+  /** Inbound: the borrower called. Outbound: the servicer's collection call (only with the scenario's `outreach`). */
+  readonly direction: "inbound" | "outbound";
   readonly reason: string;
   readonly minutes: number;
   readonly servicer: Servicer;
+  /** An outbound call's outcome; an inbound call has none. */
+  readonly outcome?: "no_answer" | "voicemail";
 }
 
 export interface BehaviorRow {
@@ -359,11 +363,33 @@ export interface PayoffRow {
   readonly servicer: Servicer;
 }
 
-/** The late-charge terms boarding writes onto the loan, which cashiering reads. */
+/** The terms boarding writes onto the loan (`loan_terms`), which cashiering and escrow read. */
 export interface BoardedTerms {
   readonly late_charge_pct: string;
   readonly late_charge_grace_days: number;
   readonly late_charge_cap_cents: Cents | null;
+  /** `loan_terms.escrowed`: false on an escrowed loan stops the escrow account at boarding (D-31). */
+  readonly escrowed: boolean;
+}
+
+/** The loan as it stood at the close of business before the transfer date: what the prior servicer hands over. */
+export interface TransferSnapshot {
+  /** The transfer date; every figure is as of the end of the day before it. */
+  readonly on: PlainDate;
+  readonly upb: Cents;
+  readonly suspense: Cents;
+  readonly late_charges_due: Cents;
+  readonly escrow_balance: Cents;
+  readonly lpi: PlainDate | null;
+  /** The oldest installment unpaid, and its rate, P&I and escrow. */
+  readonly next_due: PlainDate;
+  readonly rate_pct: string;
+  readonly pi: Cents;
+  readonly escrow_payment: Cents;
+  readonly last_payment_on: PlainDate | null;
+  readonly mi_active: boolean;
+  /** The installment ledger as it stood: every installment added so far, each with the day it was paid in full. */
+  readonly installments: readonly InstallmentRow[];
 }
 
 export interface LoanLife {
@@ -374,6 +400,8 @@ export interface LoanLife {
   readonly transfer_in_on: PlainDate | null;
   /** When our boarding wrote its terms (the transfer date, or the note date), and what it wrote. */
   readonly boarded: { readonly on: PlainDate; readonly terms: BoardedTerms };
+  /** What the prior servicer's books said at the transfer, or null when the loan was ours from its first payment. */
+  readonly at_transfer: TransferSnapshot | null;
   readonly receipts: readonly ReceiptRow[];
   readonly fees: readonly FeeRow[];
   readonly late_charge_runs: readonly LateChargeRunRow[];
@@ -398,6 +426,8 @@ export interface SimContext {
   readonly months: number;
   readonly feed: readonly IndexObs[];
   readonly market: readonly MarketMonth[];
+  /** The servicer's outbound collection calls (the scenario's `outreach`). */
+  readonly outreach?: boolean;
 }
 
 /**
@@ -638,6 +668,14 @@ const monthsBetween = (a: PlainDate, b: PlainDate) => {
   return (pb.y - pa.y) * 12 + (pb.m - pa.m);
 };
 const pOf = (i: { pi_cents: Cents; escrow_cents: Cents }) => i.pi_cents + i.escrow_cents;
+const ledgerRow = (i: InstallmentProjection): InstallmentRow => ({
+  due: i.due_date,
+  pi: i.pi_cents,
+  escrow: i.escrow_cents,
+  status: i.status,
+  satisfied_on: i.satisfied_on ?? null,
+  credited_as_of: i.credited_as_of ?? null,
+});
 const clamp01 = (x: number, hi = 1) => (x < 0 ? 0 : x > hi ? hi : x);
 
 /**
@@ -745,6 +783,7 @@ export function simulateLoan(
   const archived: InstallmentProjection[] = [];
   const notes: string[] = [];
   let payoff: PayoffRow | null = null;
+  let atTransfer: TransferSnapshot | null = null;
   let transferOutOn: PlainDate | null = null;
   let ended:
     | { kind: "paid_in_full"; on: PlainDate; by_refinance: boolean }
@@ -758,6 +797,7 @@ export function simulateLoan(
     late_charge_pct: d.late_charge.pct,
     late_charge_grace_days: d.late_charge.grace_days,
     late_charge_cap_cents: d.late_charge.cap_cents,
+    escrowed: d.escrowed,
   };
   const boardedTerms = ov.boarded ? ov.boarded(noteTerms) : noteTerms;
   const boardedOn = transferInOn ?? d.note_date;
@@ -776,13 +816,20 @@ export function simulateLoan(
 
   // INVENTED: the escrow payment by due date (each analysis writes the next 24), and the balance between analyses.
   const escrowSched = new Map<PlainDate, Cents>();
+  // INVENTED: what a loan boarded non-escrowed does with an escrow account it had (D-31). From the boarding date its
+  // installments carry no escrow, no bill is paid from the account and no analysis is run; the balance the prior
+  // servicer sent is held where boarding posted it (service.ts postOpeningEntries posts it whatever the flag says)
+  // and refunded at a payoff. The borrower pays what is billed, which is now the P&I.
+  let escrowOffFrom: PlainDate | null = null;
+  const escrowOn = (on: PlainDate) =>
+    d.escrowed && !(escrowOffFrom !== null && on >= escrowOffFrom);
   let escrowBal = 0n;
   let escrowDeposits = 0n;
   let escrowDisbursed = 0n;
   let escrowInitial = 0n;
   let lastEscrow = 0n;
   const escrowFor = (due: PlainDate): Cents =>
-    d.escrowed ? (escrowSched.get(due) ?? lastEscrow) : 0n;
+    escrowOn(due) ? (escrowSched.get(due) ?? lastEscrow) : 0n;
   let miTerminatedOn: PlainDate | null = null;
   let disbSeq = 0;
 
@@ -1238,7 +1285,7 @@ export function simulateLoan(
       });
       return post(e.on, credited, statement - short, "partial", channel, 0n);
     }
-    if (rnd.payments && d.escrowed && md.uFifty < FIFTY_SHORT_SHARE)
+    if (rnd.payments && state.escrowed && md.uFifty < FIFTY_SHORT_SHARE)
       return post(e.on, credited, statement - md.fiftyShort, "short_50", channel, 0n);
     if (rnd.payments && md.uCurtail < R.payment.curtailment_share) {
       const cap = state.upb_cents / CURTAILMENT_MAX_SHARE;
@@ -1333,11 +1380,13 @@ export function simulateLoan(
     });
   };
   const onDisburse = (e: Ev) => {
+    if (!escrowOn(e.on)) return;
     if (e.line === "mi_borrower_paid" && miTerminatedOn && e.on >= miTerminatedOn) return;
     disburse(e.on, e.line!, e.refund ? "refund" : "bill", e.amount!);
   };
 
   const onAnalysis = (e: Ev) => {
+    if (!escrowOn(e.on)) return;
     const y = e.year!;
     const ys = addMonths(d.first_due, 12 * y);
     const ye = addMonths(ys, 12);
@@ -1595,10 +1644,40 @@ export function simulateLoan(
   };
 
   const onBoard = (e: Ev) => {
+    // The prior servicer's books at the close of the day before: boarding is the first event of its day.
+    const o = open();
+    const lastDue = state.installments.reduce<PlainDate>(
+      (m, i) => (i.due_date > m ? i.due_date : m),
+      d.first_due,
+    );
+    const nextDue = o[0]?.due_date ?? addMonths(lastDue, 1);
+    const t = termsFor(nextDue);
+    atTransfer = {
+      on: e.on,
+      upb: state.upb_cents,
+      suspense: state.suspense_unapplied_cents,
+      late_charges_due: state.late_charges_due_cents,
+      escrow_balance: escrowBal,
+      lpi: state.lpi_date,
+      next_due: nextDue,
+      rate_pct: t.rate,
+      pi: t.pi,
+      escrow_payment: escrowFor(nextDue),
+      last_payment_on: lastPaymentOn,
+      mi_active: d.mi !== null && !(miTerminatedOn !== null && miTerminatedOn <= e.on),
+      installments: [...archived, ...state.installments].sort(byDue).map(ledgerRow),
+    };
     const graceBefore = state.late_charge_grace_days;
     state.late_charge_pct = boardedTerms.late_charge_pct;
     state.late_charge_grace_days = boardedTerms.late_charge_grace_days;
     state.late_charge_cap_cents = boardedTerms.late_charge_cap_cents;
+    if (d.escrowed && !boardedTerms.escrowed) {
+      escrowOffFrom = e.on;
+      state = { ...state, escrowed: false };
+      for (const i of state.installments)
+        if (i.status === "due" && i.due_date >= e.on)
+          (i as { escrow_cents: Cents }).escrow_cents = 0n;
+    }
     // §1024.33(c)(1): sixty days in which a payment sent to the prior servicer is not late.
     state.transfer_shield_until = addDays(e.on, 60);
     if (graceBefore !== boardedTerms.late_charge_grace_days)
@@ -1968,14 +2047,11 @@ export function simulateLoan(
     notes.push(`fees collected ${collected} != late charges allocated ${lateCollected}`);
   if (state.suspense_unapplied_cents < 0n) notes.push("suspense below zero");
   if (state.late_charges_due_cents < 0n) notes.push("late charges due below zero");
-  const ledger = [...archived, ...state.installments].sort(byDue).map((i) => ({
-    due: i.due_date,
-    pi: i.pi_cents,
-    escrow: i.escrow_cents,
-    status: i.status,
-    satisfied_on: i.satisfied_on ?? null,
-    credited_as_of: i.credited_as_of ?? null,
-  }));
+  const ledger = [...archived, ...state.installments].sort(byDue).map(ledgerRow);
+  if (ctx.outreach)
+    contacts.push(
+      ...outreachCalls(loanKey, ledger, script.promises, d.first_due, endOn ?? windowEnd, who),
+    );
   const invariantNotes = notes.filter((n) => !n.startsWith("paid to zero"));
   return {
     loan_id: d.loan_id,
@@ -1983,6 +2059,7 @@ export function simulateLoan(
     lines,
     transfer_in_on: transferInOn,
     boarded: { on: boardedOn, terms: boardedTerms },
+    at_transfer: atTransfer,
     receipts,
     fees: feeRows,
     late_charge_runs: runs,
@@ -1998,6 +2075,110 @@ export function simulateLoan(
     transfer_out_on: transferOutOn,
     invariants: { ok: invariantNotes.length === 0, notes },
   };
+}
+
+/** The ledger as the outreach reads it: each installment and the day it was paid in full. */
+type LedgerRow = Pick<
+  InstallmentRow,
+  "due" | "pi" | "escrow" | "status" | "satisfied_on" | "credited_as_of"
+>;
+
+/** The cadence's first attempt, on the day the §1024.31 count reaches it (plan.ts:16, FIRST_ATTEMPT_DAY). */
+const OUTREACH_FIRST_DAY = 17;
+/** Each later attempt is due this many days after the last (plan.ts:17, CYCLE_DAYS). */
+const OUTREACH_CYCLE_DAYS = 7;
+/** A promise to pay due within this many days ceases the cadence (FNMA_D2202_PTP_MAX_30). */
+const OUTREACH_PROMISE_MAX_DAYS = 30;
+
+/**
+ * The servicer's outbound collection calls: the servicing app's D2-2-02 plan
+ * (apps/servicing/src/domain/early-intervention/plan.ts) run over the ledger
+ * after the fact, since no call changes what the borrower pays. The plan opens
+ * the day the §1024.31 count reaches 17 and attempts that day (`openPlanIfDue`,
+ * plan.ts:70-76); each later attempt is due 7 days after the last, moved to the
+ * servicer's next business day (`recordAttempt`, plan.ts:95). A promise to pay
+ * due within 30 days ceases it (`ceased{ptp_pending}`; FNMA_D2202_CESSATION_ON_QRPC
+ * and FNMA_D2202_PTP_MAX_30 in spec/registry/timers.json), a broken one resumes
+ * it on the day it was due (`promise_broken`), and the cure closes it.
+ *
+ * INVENTED: each attempt's outcome, drawn from a stream of its own day (no
+ * attempt reaches the borrower; a conversation would be a contact with a
+ * reason, which the borrower's own calls carry), and its minutes.
+ */
+function outreachCalls(
+  loanKey: string,
+  ledger: readonly LedgerRow[],
+  promises: LoanScript["promises"],
+  firstDue: PlainDate,
+  end: PlainDate,
+  who: (on: PlainDate) => Servicer,
+): ContactRow[] {
+  const ap: AppliedInstallment[] = ledger.map((i) => {
+    const paid = i.status === "satisfied" || i.status === "prepaid";
+    return {
+      due_date: i.due,
+      amount_cents: i.pi + i.escrow,
+      satisfied_on: paid ? (i.credited_as_of ?? i.satisfied_on ?? null) : null,
+      paid_cents: paid ? i.pi + i.escrow : 0n,
+    };
+  });
+  const held = (on: PlainDate) =>
+    promises.some(
+      (p) =>
+        p.made_on <= on &&
+        on < p.pay_on &&
+        daysBetween(p.made_on, p.pay_on) <= OUTREACH_PROMISE_MAX_DAYS,
+    );
+  const out: ContactRow[] = [];
+  let status: "closed" | "active" | "ceased" = "closed";
+  let nextDue: PlainDate = firstDue;
+  for (let on = addDays(firstDue, OUTREACH_FIRST_DAY); on <= end;) {
+    const days = regxDaysDelinquent(ap, on);
+    if (days === 0) {
+      // Cured, or never late: the next plan can open no sooner than an installment due later reaches day 17.
+      status = "closed";
+      const next = ap.find(
+        (i) =>
+          i.due_date > on &&
+          (i.satisfied_on === null ||
+            daysBetween(i.due_date, i.satisfied_on) >= OUTREACH_FIRST_DAY),
+      );
+      if (!next) break;
+      on = addDays(next.due_date, OUTREACH_FIRST_DAY);
+      continue;
+    }
+    if (held(on)) {
+      if (status === "active") status = "ceased";
+      on = addDays(on, 1);
+      continue;
+    }
+    if (status === "ceased") {
+      status = "active";
+      nextDue = on;
+    }
+    if (status === "closed") {
+      if (days < OUTREACH_FIRST_DAY) {
+        on = addDays(on, OUTREACH_FIRST_DAY - days);
+        continue;
+      }
+      status = "active";
+      nextDue = on;
+    }
+    if (on >= nextDue) {
+      const outcome = rngFor(`${loanKey}/out/${on}`).next() < 0.6 ? "no_answer" : "voicemail";
+      out.push({
+        on,
+        direction: "outbound",
+        reason: "collection_call",
+        minutes: outcome === "voicemail" ? 1 : 0.5,
+        servicer: who(on),
+        outcome,
+      });
+      nextDue = rollForward(addDays(on, OUTREACH_CYCLE_DAYS), servicerCalendar);
+    }
+    on = addDays(on, 1);
+  }
+  return out;
 }
 
 /** The level payment at the note's own terms; exported for tests that check the schedule. */

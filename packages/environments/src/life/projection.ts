@@ -255,7 +255,8 @@ export function monthEndRow(loan: LoanLife, month: string): TapeRow | null {
     pay_string: pay,
     mba_pay_string: pay.replace(/0/g, "C"),
     escrow: {
-      escrowed: d.escrowed,
+      // What the servicer's system holds: a twin boarded non-escrowed (D-31) shows here once it is ours.
+      escrowed: m.servicer === "prior" ? d.escrowed : loan.boarded.terms.escrowed,
       escrow_balance_cents: m.escrow_balance,
       escrow_advances_cents: m.escrow_advance,
     },

@@ -146,6 +146,10 @@ export interface LoanPins {
   readonly note_rate_pct?: string;
   readonly orig_upb_cents?: Cents | number;
   readonly late_charge_cap_cents?: Cents | number | null;
+  /** Borrower-paid MI on a loan above 80 % loan-to-value (true), or none (false); drawn when unpinned. */
+  readonly mi?: boolean;
+  /** The property's state, one of the generator's sixteen; drawn when unpinned. */
+  readonly state?: string;
   readonly persona?: Persona;
   /** Pin both habit multipliers at 1, or at the values given. */
   readonly lateness?: number;
@@ -197,6 +201,8 @@ const STATES: readonly (readonly [string, number, string, string])[] = [
   ["MA", 2, "Worcester", "016"],
   ["CO", 3, "Denver", "802"],
 ];
+/** The states a drawn property can be in. */
+export const STATE_CODES: readonly string[] = STATES.map((s) => s[0]);
 const STREETS = [
   "Maple",
   "Oak",
@@ -356,7 +362,11 @@ export function drawLoan(
   ];
   const ages = [r.int(25, 65), r.int(25, 65)];
   const birthDays = [r.int(0, 364), r.int(0, 364)];
-  const state = r.weighted(STATES.map((s) => [s, s[1]] as const));
+  const stateDraw = r.weighted(STATES.map((s) => [s, s[1]] as const));
+  const pinnedState = pins.state === undefined ? null : STATES.find((s) => s[0] === pins.state);
+  if (pinnedState === undefined)
+    throw new RangeError(`state ${pins.state} is not one of ${STATES.map((s) => s[0]).join(", ")}`);
+  const state = pinnedState ?? stateDraw;
   const streetNo = r.int(100, 9899);
   const street = `${streetNo} ${r.pick(STREETS)} ${r.pick(SUFFIXES)}`;
   const zip = state[3] + digits(r, 2).padStart(2, "0");
@@ -373,7 +383,7 @@ export function drawLoan(
     0,
   );
   const miBorrowerPaid =
-    ltv_pct > 80 && uMi < Math.min(1, R.mi.share_of_loans / Math.max(above80, 1e-9));
+    ltv_pct > 80 && (pins.mi ?? uMi < Math.min(1, R.mi.share_of_loans / Math.max(above80, 1e-9)));
   // A loan with MI escrows it, so the others escrow at the share that brings the book to the calibration's.
   const miShare = Math.min(R.mi.share_of_loans, above80);
   const escrowWithoutMi =

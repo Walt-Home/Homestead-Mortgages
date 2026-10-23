@@ -27,6 +27,7 @@
  *   npm run env:refi -w @hm/environments -- --env ei-clocks --policy reference
  *   npm run env:refi -w @hm/environments -- --env catchup-posting --policy reference
  *   npm run env:refi -w @hm/environments -- --env escrow-review --policy reference
+ *   npm run env:refi -w @hm/environments -- --env boarding-triage --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -283,6 +284,19 @@ import {
   type EscrowReviewAnswer,
   type EscrowReviewTask,
 } from "./escrow-review/index.js";
+import {
+  BOARDING_FINGERPRINT,
+  BOARDING_HELDOUT_SUITE,
+  BoardingReferencePolicy,
+  boardingSpecTasks,
+  boardingTaskId,
+  boardingTriage,
+  boardingVerdict,
+  generateBoardingSuite,
+  generateBoardingTask,
+  type BoardingTask,
+  type TriageAnswer,
+} from "./boarding/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -317,7 +331,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof AUS_FINGERPRINT
     | typeof EI_FINGERPRINT
     | typeof CATCHUP_FINGERPRINT
-    | typeof REVIEW_FINGERPRINT;
+    | typeof REVIEW_FINGERPRINT
+    | typeof BOARDING_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -617,6 +632,18 @@ const BENCHES = {
     verdictOf: reviewVerdict,
     reference: () => new ReviewReferencePolicy(),
   } satisfies Bench<EscrowReviewTask, EscrowReviewAnswer>,
+  // One transfer package before it boards, graded against the label manifest of the defects planted in it.
+  "boarding-triage": {
+    env: boardingTriage,
+    fingerprint: BOARDING_FINGERPRINT,
+    heldout: BOARDING_HELDOUT_SUITE,
+    suite: generateBoardingSuite,
+    one: generateBoardingTask,
+    taskId: boardingTaskId,
+    spec: boardingSpecTasks,
+    verdictOf: boardingVerdict,
+    reference: () => new BoardingReferencePolicy(),
+  } satisfies Bench<BoardingTask, TriageAnswer>,
 };
 
 const { values } = parseArgs({
@@ -810,6 +837,7 @@ async function main(): Promise<void> {
   if (values.env === "ei-clocks") return run(BENCHES["ei-clocks"]);
   if (values.env === "catchup-posting") return run(BENCHES["catchup-posting"]);
   if (values.env === "escrow-review") return run(BENCHES["escrow-review"]);
+  if (values.env === "boarding-triage") return run(BENCHES["boarding-triage"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

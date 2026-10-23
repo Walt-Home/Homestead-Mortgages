@@ -125,6 +125,13 @@ export interface Scenario {
   /** "origination" (default): every loan is ours from its first payment. "book": each reaches us by transfer at an age drawn from book.loan_age_distribution. */
   readonly boarding?: "origination" | "book";
   readonly random?: boolean | Partial<RandomToggles>;
+  /**
+   * The servicer's outbound calls on a delinquent loan (default false): the
+   * servicing app's D2-2-02 cadence, a first attempt on day 17 and then one
+   * every 7 days, ceased by a promise to pay within 30 days and closed by the
+   * cure. Off, a history's contacts are the borrower's own calls only.
+   */
+  readonly outreach?: boolean;
   readonly events?: readonly ScenarioEvent[];
   /** Terms pinned per loan, by book index. */
   readonly pins?: Readonly<Record<number, LoanPins>>;
@@ -138,6 +145,7 @@ export interface NormalScenario {
   readonly months: number;
   readonly boarding: "origination" | "book";
   readonly random: RandomToggles;
+  readonly outreach: boolean;
   readonly events: readonly ScenarioEvent[];
   readonly pins: Readonly<Record<number, LoanPins>>;
 }
@@ -183,6 +191,7 @@ export function normalizeScenario(s: Scenario): NormalScenario {
     months,
     boarding: s.boarding ?? "origination",
     random,
+    outreach: s.outreach ?? false,
     events: s.events ?? [],
     pins: s.pins ?? {},
   };

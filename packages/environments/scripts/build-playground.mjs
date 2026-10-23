@@ -108,11 +108,13 @@ const result = await build({
   minify: true,
   charset: "utf8",
   legalComments: "none",
+  // The life generator's `loadCalibration` finds its file from import.meta.url, which an IIFE has none of, and
+  // only when handed no path. No environment in the page calls it so (they draw from the calibration's typed
+  // defaults), and its fileURLToPath is a shim that throws; this only keeps the bundle from warning about a value
+  // nothing reads.
+  define: { "import.meta.url": JSON.stringify("file:///playground/src/life/calibration.ts") },
   metafile: true,
   logLevel: "warning",
-  // The life generator's calibration reader takes import.meta.url to find its file beside it, which it does only
-  // when handed no path; the environments hand it the typed defaults, so an empty import.meta is never read.
-  logOverride: { "empty-import-meta": "silent" },
   plugins: [sources],
 });
 

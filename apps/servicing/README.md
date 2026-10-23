@@ -19,6 +19,17 @@ npm run seed-demo -w @hm/servicing  # 100 serviced loans, the entry demo, the 12
 npm run sweep -w @hm/servicing      # one pass of every scheduled job
 ```
 
+To board a transfer package the life generator wrote, no database needed:
+
+```bash
+npm run board:life-package -w @hm/servicing            # the demo loan's four packages
+npm run board:life-package -w @hm/servicing -- DIR ...  # packages from env:transfer-package
+```
+
+`scripts/board-life-package.mjs` runs each package through the servicing
+app's own decoder and boarding service in process, and says for each planted
+defect whether the gate caught it (docs/environments.md, "boarding-triage").
+
 Every `/v1` route wants `Authorization: Bearer $SERVICING_API_TOKEN`; unset
 outside production the token is `dev-token`, as in his own README. The
 variables `scripts/run.mjs` maps are listed at the top of that file; anything

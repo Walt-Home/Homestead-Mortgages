@@ -98,6 +98,25 @@ exactly, and planted warnings must be found while extra ones are allowed
 (`AS/src/domain/boarding/demo-batch.test.ts:80-86`). Where a ported engine
 exists, the engine grades the money.
 
+**What is planted so far.** Two of the ten below, in `DEFECTS`
+(`ENV/life/defects.ts`), the registry each later wave extends:
+
+- D-03, a blank cap cell in the package;
+- D-42 on the escrow column, which boards the loan as D-31.
+
+Each is planted in the generator's twin and in the twin's transfer package
+(`ENV/life/transfer-package.ts`), where the package and its clean twin's
+differ only in that cell. Clean twins go beside them as negatives. A cap
+needs a column the layout lacks, so the writer adds `late_charge_max` after
+the layout's own columns. The prior servicer's periodic statements, in the
+correspondence file the writer adds, quote the capped fee. Together these
+let a reviewer see D-03, though the gate cannot.
+`apps/servicing/scripts/board-life-package.mjs` boards written packages
+through the servicing app's own decoder and boarding service, in process. It
+reproduces what this page says: neither defect is caught. D-42's loan boards
+with `escrowed=false`, and no package, clean or not, boards a cap. The
+boarding-triage environment grades a reviewer on both (docs/environments.md).
+
 **Source keys**
 
 - **OCW:** CFPB v. Ocwen complaint, allegations only.

@@ -7382,3 +7382,155 @@ change, forwarded payments, and every partial path above. For the review: a
 workout's 60 months or a borrower's election (the life generator runs no
 workout), a retained or balanced surplus, and the stale-estimate and
 missing-termination triggers, which no line in the held-out suite raises.
+
+## A transfer package is reviewed for what the gate cannot see, and graded by its labels
+
+**Built 23 October 2026,** as `boarding-triage` 1.0.0 in
+`packages/environments`, with the life generator's transfer-package writer
+under it. A task is one servicing-transfer package: one to four loans the
+generator boarded by transfer, some with a defect planted in a cell, the rest
+clean twins. The model names each defect and says what to do about it, and
+passes the clean loans. docs/environments.md, "boarding-triage" and "The
+transfer package", says what each holds.
+
+**Why this one.**
+
+- Boarding is where a servicer's data enters ours. docs/synthetic-data-defects.md
+  found that the servicing app's gate catches none of the ten defects ranked
+  first, because they are values present and wrong, or flags off, and no rule
+  compares them.
+- An environment that grades only what the gate checks would teach a model to
+  replay the gate. This one keeps only packages the gate passes, so what is
+  left to find is what it misses.
+- The servicing app already grades its own sample this way: designed outcomes
+  in a manifest, and a test that holds the gate to them (`demo-batch.test.ts`).
+  The labels are the same idea, extended to defects no rule sees.
+
+**The package is the servicing app's layout, written by its own codec.** The
+writer builds each loan's `StagedLoan` from its history at the close of the
+day before the transfer (`at_transfer`, kept by the simulation as it boards),
+and encodes it with `encodeTransferBatch`. That function, the gate's rules and
+the MIN check are ported byte for byte but for their imports
+(`src/boarding/ported/`, held by a test). So a package reads back through the
+decoder the servicing app boards with, loan for loan, as its sample does. The
+vendored sample is never edited. Three things go beyond the sample:
+
+- **The life-of-loan payment history.** One row per installment with the day
+  it was paid in full, read off the cashiering ledger. F-1-11 asks for the life
+  of the loan, and the decoder's FIFO lands on the tape's next due date, as a
+  test holds.
+- **The correspondence file.** The spec names `correspondence_file` among the
+  inbound files (spec 1-1 :59), and the boarding service takes it as a tape
+  kind. The layout gives it no columns, so ours are the prior servicer's
+  statements, notices and calls. The decoder reads its twelve files by name,
+  so a thirteenth changes nothing that boards.
+- **The cap column.** D-03 is a defect in a package only if a clean package
+  carries the cap somewhere, and the layout has no column for it
+  (LAYOUT.md:65-66). So `late_charge_max` follows the layout's own columns,
+  blank when the note has none.
+
+The decoder never reads that column, so no loan boarded from a tape, clean or
+not, boards a cap. That is D-03 as the defects page describes it, and the
+script below shows it.
+
+**How D-03 shows itself.** Each periodic statement carries the late fee and
+the date it is imposed (12 CFR 1026.41(d)), as the prior servicer's system
+computed them from the note. The fee is cashiering's `lateChargeAmount` on
+the statement's P&I. On a note whose cap binds, the statement quotes less
+than the tape's percent gives, while the tape's cap cell is blank. That is
+the package contradicting itself, which a reviewer can see.
+
+**Correct or query.** The line is the boarding service's own guard:
+
+- a money field, which includes `late_charge_pct`, is never agent-corrected,
+  only corrected by the prior servicer or waived by an officer
+  (`MONEY_FIELDS`, service.ts:247-248, :264);
+- anything else is the agent's to correct with a recorded decision.
+
+So D-42's Yes, a code every other file settles, is corrected to Y. D-03's
+blank cap, a money term the package conflicts with itself on, is queried.
+Querying earns credit only where the package conflicts with itself: on D-42
+it does not, and a query there is graded wrong. Hold is offered and is never
+the answer in 1.0.0.
+
+**D-42's twin boards the loan non-escrowed.** `loan_terms.escrowed` is
+written false at the transfer. From then on the installments carry no
+escrow, no bill is paid from the account, and no analysis runs. Some of
+that is the generator's own invention, and marked so in `simulate.ts`:
+
+- the balance the prior servicer sent stays where boarding posts it
+  (`postOpeningEntries` posts it whatever the flag says), and is refunded at
+  a payoff;
+- the borrower pays the P&I billed, rather than a bill pay still sending
+  the old amount;
+- the unpaid taxes and the lapsed insurance are not modeled further. The
+  missing disbursements are labeled as symptoms, and a tax sale or a
+  force-placed policy is later work.
+
+**Two defects on one loan.** The demo carries both, so `generate` now plants
+more than one per loan. The twin boards them together. Each defect's own
+twin is run too, and a symptom of the pair is labeled for each defect whose
+own twin shows it, or for the pair when neither does alone. In the demo, the
+March 2028 charge is D-03's alone. The escrow differences are D-42's.
+
+**The tools needed the task.** Reading a file of the package is a function
+of the task, and every tool before this one was a function of its input.
+`Environment.execute` now takes the task as a third argument, which the
+episode loop passes and every other environment ignores. The playground
+takes a task too, and the page passes the one it shows.
+
+**The servicer's calls are the servicing app's plan, and opt-in.** The
+scenario's `outreach` runs the D2-2-02 plan from `early-intervention/plan.ts`
+over the ledger after the fact, since no call changes a payment:
+
+- the first attempt on day 17, and each later one 7 days after the last,
+  moved to a business day;
+- ceased by a promise due within 30 days (`ceased{ptp_pending}`,
+  FNMA_D2202_PTP_MAX_30), resumed when the promise is broken, closed by the
+  cure.
+
+It is off by default, so no existing book changes.
+
+**The demo departs from the plan twice, and the engines decide both.**
+
+- **The transfer is on 16 December 2027, not at the turn of the year.** The
+  cashiering engine shields every installment due within 60 days of a
+  transfer, paid or not (cashiering-11). A January transfer would have spared
+  March's late charge.
+- **Year 4's short payment draws no late charge.** Bill pay's old amount
+  goes to suspense, and cashiering counts suspense toward the installment's
+  P&I basis, the borrower-favorable reading decision 2.7-Q1 chose
+  (latecharges.ts:58-66). The old amount covers the P&I, so the run says
+  "paid within grace". The installment is late all the same: the calls come
+  on days 17 and 24, and the April payment catches up on 29 March.
+
+**Suites are drawn from the calibration's defaults.** The behavior comes
+from `defaultCalibration()`, not the file on disk. Another builder writes
+that file, and the held-out suite is pinned by hash; drawing from the file
+would let any edit to it move every reported score. Each task's history also
+runs only a year past the transfer, which halved the time to draw a suite.
+The package reads nothing after the transfer, and a twin's first symptoms
+fall in that year. The demo runs its whole decade.
+
+**What it measures.**
+
+- **The gate.** On the held-out suite every loan passes all 35 rules,
+  planted or clean. `apps/servicing/scripts/board-life-package.mjs` boards
+  the demo's four packages through the servicing app's own decoder and
+  `BoardingService`. Every tape is accepted, every loan boards with no hard
+  failure and no warning, D-42's with `escrowed=false`, and neither defect
+  is caught.
+- **The floors.** On the held-out suite, submitting nothing passes 50 of 200
+  packages, and finding every escrow Yes while reading no statement passes 100.
+- **The reference.** It passes the held-out suite, 300 training tasks and
+  the four spec packages, in three turns and at most 18 tool calls. Of the
+  first draws of 1,000 training tasks (train seed 11), 707 reached the
+  fairness check, and it missed nothing on any of them.
+
+Not in 1.0.0:
+
+- the other 45 defects, and any defect outside the final tape;
+- a package the gate fails;
+- the preliminary tape, delta boarding and the transfer's timers;
+- what a defect does after boarding, which the generator's twin labels for
+  the environments that will grade it.

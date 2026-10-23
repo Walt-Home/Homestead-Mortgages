@@ -5,7 +5,9 @@
  * history (`simulateLoan`), and, when defects are asked for, runs each planted
  * loan again from the same draws with the defect boarded. The twin book is
  * the clean book with those loans replaced; the labels name the root cause
- * and every symptom. Nothing reads a clock: the same seed, scenario and
+ * and every symptom. A loan may carry two defects: its twin boards both, and
+ * a symptom is labeled for each defect whose own twin shows it, or for the
+ * pair when neither does alone. Nothing reads a clock: the same seed, scenario and
  * calibration give the same book, byte for byte, run to run and machine to
  * machine (the draws use only the rng streams and V8's own Math functions).
  *
@@ -17,7 +19,15 @@ import { addMonths, endOfMonth, parts, type PlainDate } from "@hm/kernel/calenda
 import type { IndexObs } from "../arm/ported/arm.js";
 import { hash32, rngFor } from "../rng.js";
 import { loadCalibration, type Calibration } from "./calibration.js";
-import { defectById, rootLabel, symptomLabels, type DefectLabel } from "./defects.js";
+import {
+  defectById,
+  differences,
+  rootLabel,
+  symptomLabels,
+  type DefectDefinition,
+  type DefectLabel,
+  type Difference,
+} from "./defects.js";
 import { buildLines, drawLoan, type BillChange, type LoanDraw } from "./draw.js";
 import { indexFeed, marketPath, type MarketMonth } from "./feeds.js";
 import { normalizeScenario, scriptFor, type NormalScenario, type Scenario } from "./scenario.js";
@@ -74,6 +84,9 @@ interface Prepared {
   readonly transferIn: PlainDate | null;
 }
 
+/** Where a difference sits: its table, row and field. */
+const placeOf = (x: Difference) => `${x.file_or_table}|${x.row}|${x.field}`;
+
 const monthsFrom = (a: PlainDate, b: PlainDate) => {
   const pa = parts(a);
   const pb = parts(b);
@@ -100,6 +113,7 @@ export function generate(
     months: sc.months,
     feed,
     market,
+    outreach: sc.outreach,
   };
   const drawCtx = {
     rates: cal.rates,
@@ -168,7 +182,9 @@ export function generate(
     return { clean, defective: null, planted: [], labels: [] };
 
   // Where each defect goes: the loans named, or each eligible loan at the defect's rate from its own stream.
-  const placed = new Map<number, string>();
+  const placed = new Map<number, string[]>();
+  const fits = (def: DefectDefinition, p: Prepared) =>
+    def.eligible(p.draw) && (!def.requires_transfer || p.transferIn !== null);
   for (const req of opts.defects) {
     const r = typeof req === "string" ? { id: req } : req;
     const def = defectById(r.id);
@@ -181,7 +197,7 @@ export function generate(
     const targets =
       r.loans ??
       prepared.flatMap((p, i) =>
-        def.eligible(p.draw) && rngFor(`${key}/defects/${def.id}/${i}`).next() < rate ? [i] : [],
+        fits(def, p) && rngFor(`${key}/defects/${def.id}/${i}`).next() < rate ? [i] : [],
       );
     for (const i of targets) {
       const p = prepared[i];
@@ -190,29 +206,64 @@ export function generate(
         throw new RangeError(
           `${def.id} cannot be planted on loan ${i}: ${def.title.toLowerCase()} needs a note it applies to`,
         );
-      const already = placed.get(i);
-      if (already && already !== def.id)
+      if (def.requires_transfer && p.transferIn === null)
         throw new RangeError(
-          `loan ${i} already carries ${already}; this wave plants one defect per loan`,
+          `${def.id} cannot be planted on loan ${i}: it enters through a transfer package, and the loan was never transferred`,
         );
-      placed.set(i, def.id);
+      const already = placed.get(i) ?? [];
+      if (!already.includes(def.id)) placed.set(i, [...already, def.id]);
     }
   }
   const planted: Planted[] = [];
   const labels: DefectLabel[] = [];
   const twins = new Map<string, LoanLife>();
-  for (const [i, id] of [...placed].sort((a, b) => a[0] - b[0])) {
-    const def = defectById(id);
+  // The observer sees the twin the book carries; the one-defect twins that only sort a pair's symptoms are not shown.
+  const twinOf = (
+    p: Prepared,
+    defs: readonly DefectDefinition[],
+    observe?: (m: LifeMoment) => void,
+  ) =>
+    simulateLoan(ctx, p.draw, p.lines, p.script, p.transferIn, {
+      boarded: (t) => defs.reduce((x, def) => def.boarded(x), t),
+      ...(observe ? { observe } : {}),
+    });
+  for (const [i, ids] of [...placed].sort((a, b) => a[0] - b[0])) {
+    const defs = [...ids].sort().map(defectById);
     const p = prepared[i]!;
     const observe = opts.observe;
-    const twin = simulateLoan(ctx, p.draw, p.lines, p.script, p.transferIn, {
-      boarded: def.boarded,
-      ...(observe ? { observe: (m: LifeMoment) => observe(i, "twin", m) } : {}),
-    });
+    const twin = twinOf(p, defs, observe ? (m) => observe(i, "twin", m) : undefined);
     const c = loans[i]!;
     twins.set(c.loan_id, twin);
-    planted.push({ loan: c.loan_id, index: i, defect_id: id, on: twin.boarded.on });
-    labels.push(rootLabel(twin, def), ...symptomLabels(c, twin, def));
+    for (const def of defs) {
+      planted.push({ loan: c.loan_id, index: i, defect_id: def.id, on: twin.boarded.on });
+      labels.push(rootLabel(twin, def));
+    }
+    if (defs.length === 1) {
+      labels.push(...symptomLabels(c, twin, defs[0]!));
+      continue;
+    }
+    // Two defects on one loan: a symptom belongs to each defect whose own twin shows it, and to the pair when
+    // neither does alone (the two meet: a fee on a payment that only the missing escrow made short).
+    const alone = defs.map((def) => ({
+      def,
+      at: new Set(differences(c, twinOf(p, [def])).map(placeOf)),
+    }));
+    for (const x of differences(c, twin)) {
+      const owners = alone.filter((a) => a.at.has(placeOf(x))).map((a) => a.def);
+      const base = { loan: c.loan_id, ...x, root_cause: false };
+      if (owners.length === 0)
+        labels.push({
+          ...base,
+          defect_id: defs.map((d) => d.id).join("+"),
+          expected_handling: `Downstream of ${defs.map((d) => d.id).join(" and ")} together: corrects when both are.`,
+        });
+      for (const def of owners)
+        labels.push({
+          ...base,
+          defect_id: def.id,
+          expected_handling: def.symptomHandling(x.file_or_table, x.field),
+        });
+    }
   }
   const defective: LifeBook = { ...clean, loans: loans.map((l) => twins.get(l.loan_id) ?? l) };
   return { clean, defective, planted, labels };

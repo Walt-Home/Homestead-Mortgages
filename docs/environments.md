@@ -5,7 +5,8 @@ never sees. `packages/environments` holds them. The first, `refi-review`
 1.0.0, grades a model on the daily refinance review, using synthetic loans
 only and with the engine itself as the grader. `escrow-analysis` is the
 first on the servicing side, and `regz-price-tests` the first on the
-origination side. The defects found in the servicing app's own engines
+origination side. `boarding-triage` is the first drawn from the life
+generator's histories. The defects found in the servicing app's own engines
 are in `docs/servicing-engine-defects.md`.
 
 ## refi-review
@@ -2371,8 +2372,8 @@ training draws, well inside the episode's 80 turns at one call a turn.
 
 ## catchup-posting
 
-catchup-posting 1.0.0 is the first environment drawn from the life
-generator, and one of the first demo's graded moments. A borrower who missed
+catchup-posting 1.0.0 is drawn from the life generator, and is one of the
+first demo's graded moments. A borrower who missed
 an installment sends money to catch up. The note caps a late charge in
 dollars, and the servicing system may have boarded the loan without the cap
 (D-03, docs/synthetic-data-defects.md).
@@ -2601,6 +2602,119 @@ analysis right and no bill comparison passes 181 of the held-out suite's
 reads no file, draws the task the command line does. The held-out suites are
 seed 1, 200 tasks each, pinned by hash.
 
+## boarding-triage
+
+boarding-triage 1.0.0 grades the review a servicing-transfer package gets
+before its loans board: the defects the servicing app's gate cannot see. It
+is built on the life generator, and reads a package where the two above
+read a moment.
+
+**The task.** One package from the life generator's writer (below, "The
+transfer package"). It holds one to four loans that reach us by transfer on
+one date, each with its prior servicer's months generated in full. Some
+loans carry a planted defect, and the rest are clean twins. The model is
+shown:
+
+- the final tape, loan by loan;
+- the short detail files in full, and the images manifest without its
+  hashes.
+
+It reads the payment history and the correspondence with a tool. The
+fair-lending file is restricted, and a reviewer does not read it. For each
+defect it names the loan, file and column, what the cell says, and what is
+true (null when the package cannot say). It also gives a handling: board as
+is, correct, hold, or query the prior servicer. A loan with no finding is
+passed.
+
+**The rulebook** (`src/boarding/rulebook.ts`) is four checks on every loan:
+
+1. every Y/N or coded cell holds one of its column's codes, because the
+   decoder reads anything but a literal Y as N (`tape-codec.ts:49`);
+2. the escrow cells agree with the escrow files;
+3. the tape's late-charge terms give the fee on the latest periodic
+   statement: `round(pi × pct / 100, 2)`, capped at `late_charge_max`;
+4. the next due date and the payment agree with the payment history.
+
+In 1.0.0 only the first and third can fail. Correct a cell that is not a
+money term and that every other file settles. Query a money term, or a
+conflict the package does not settle, because the servicing app lets only
+the prior servicer correct a money field (`service.ts:247-248`). So D-42's
+Yes is corrected to Y, and D-03's blank cap is queried, with the
+statements' fee as what is true.
+
+**The tools.** Primitives only:
+
+- `read_file`: one file, or one loan's rows of it;
+- `code_list`: the layout's code lists, read from the ported codec's column
+  dictionary;
+- refi's `calculate`.
+
+No tool compares cells or decides. The file reader is the first tool that
+needs the task, so the episode loop now hands `execute` the task, and the
+playground hands it the page's. Every other environment's tools ignore it.
+
+**The grader** is the package's label manifest. It reads the manifest the
+way the servicing app's demo-batch test reads the sample's designed outcomes
+(`demo-batch.test.ts:77-87`):
+
+- each planted cell is four fields: found, what it says, what is true, and a
+  handling the label accepts;
+- each clean loan is one field: passed, meaning neither held nor corrected;
+- extra findings, a second finding on a cell among them, are one field: at
+  most two.
+
+Money is compared in cents, and a blank as "", null, blank or empty. An
+empty submission passes a package with nothing planted; no submission passes
+nothing.
+
+**The tasks** take eight plans in turn:
+
+- one loan: clean, with D-42, with D-03, or with both (the demo's shape);
+- three loans, one with D-42 or one with D-03, the rest clean;
+- four loans, one with each and two clean;
+- three clean loans.
+
+The clean loans are drawn to look like the defects. Of the held-out suite's
+250 clean loans, 120 carry a cap their tape carries too, and 79 have no
+escrow; some are ARMs. Each history runs a year past the transfer, and the
+package reads what came before it. Behavior is drawn from the calibration's
+typed defaults, so a new calibration file does not move the suite. A package
+is kept only when the gate's 35 rules, ported and run on the package as the
+decoder reads it, pass on every loan, and when the reference finds exactly
+the planted cells. On the held-out suite 47 of 200 first draws were redrawn,
+for one of four reasons: a hazard renewal within 30 days of the transfer
+(W-005), an analysis more than a year old (W-009), a payoff before the
+transfer, or a planted cap the note's P&I never reaches.
+
+**The floors.** Submitting nothing passes 50 of the 200 held-out packages,
+the ones with nothing planted. Finding every escrow Yes and reading no
+statement passes 100.
+
+**The proof of fairness.** The reference passes the held-out suite (seed 1,
+200 packages, pinned by hash), 300 training tasks and four spec cases: the
+demo loan clean, with D-42, with D-03, and with both. It takes three turns
+and at most 18 tool calls. Of the first draws of 1,000 training tasks
+(train seed 11), 707 reached the fairness check (the rest were redrawn for
+those reasons), and the reference missed nothing on any of them.
+
+**What the servicing app does with them.**
+`apps/servicing/scripts/board-life-package.mjs` boards packages through the
+servicing app's own `decodeTransferBatch` and `BoardingService`, in process,
+with no database. With no argument it writes and boards the demo's four. On
+every one, every tape is accepted and every loan boards with no hard failure
+and no warning. The gate catches neither defect: D-42's loan boards with
+`escrowed=false`, and no package boards a cap. A test runs it.
+
+Not in 1.0.0:
+
+- the other 45 defects, and any defect outside the final tape;
+- a package the gate already fails, which is what the sample's designed
+  outcomes grade;
+- the preliminary tape and delta boarding;
+- the transfer's timers;
+- what a defect does after boarding. The generator labels the twin's
+  symptoms (`generate`'s labels) for the environments that will grade them.
+
 ## The life generator
 
 `src/life/` is not an environment. It writes ten-year histories of loans for
@@ -2682,16 +2796,89 @@ in, a missed payment, a promise to pay (kept or broken), a repayment plan, a
 tax reassessment, an insurance increase at renewal, bill pay sending the old
 amount once after a payment change, a payoff and a transfer out. On a
 transfer in, the prior servicer's months are generated in full and marked
-`prior`. Forwarded payments are credited as of the day the prior servicer
-had them, and the 60-day shield applies.
+`prior`, and the prior servicer's books at the close of the day before are
+kept (`at_transfer`). Forwarded payments are credited as of the day the
+prior servicer had them, and the 60-day shield applies. With `outreach` on
+(it is off by default), the servicer calls a delinquent borrower as the
+servicing app's D2-2-02 plan does: on day 17, then 7 days after each attempt
+moved to a business day, ceased by a promise to pay within 30 days and
+closed by the cure (`early-intervention/plan.ts`).
 
 **Twins.** With `defects`, each planted loan runs again from the same draws
 with the defect boarded. Every draw comes from a stream keyed by the loan and
 the installment, month or analysis, and none reads the loan's state, so the
 twin differs only where the defect reaches. The labels are the planted value
 (`root_cause: true`) and every difference between the two histories, field
-by field (`root_cause: false`). D-03, the note's late-fee cap never boarded,
-is the one defect so far (docs/synthetic-data-defects.md).
+by field (`root_cause: false`).
+
+`DEFECTS` in `defects.ts` is the registry each wave extends. It holds two
+(docs/synthetic-data-defects.md):
+
+- D-03, the note's late-fee cap never boarded, so cashiering charges the
+  full percent;
+- D-42, a Yes on the tape's escrow column, which the servicing app's decoder
+  reads as No, so the loan boards non-escrowed (D-31). From the transfer the
+  twin's installments carry no escrow, no tax or insurance bill is paid from
+  its account, no analysis is run, and the borrower pays the P&I billed. It
+  enters only through a transfer.
+
+A loan may carry both. Its twin boards both, and each symptom is labeled
+for the defect whose own twin shows it, or for the pair when neither does
+alone.
+
+**The transfer package.** `writeTransferPackage` writes, for loans boarded
+by transfer on one date, the twelve files of the servicing app's sample
+layout (`apps/servicing/fixtures/transfer-batch-demo/LAYOUT.md`), encoded by
+its own codec, ported in `src/boarding/ported/`. So a package reads back
+through the decoder the servicing app boards with, as the sample does. The
+vendored sample is never edited. Three things go beyond the sample:
+
+- the payment history is the loan's life, not 24 months: one row per
+  installment with the day it was paid in full, off the cashiering ledger;
+- `correspondence_file.csv`, the file the sample lacks. It holds the prior
+  servicer's periodic statements, each with the late fee its system charges
+  (cashiering's `lateChargeAmount` on the note's terms), its late-charge
+  notices, escrow analysis statements, ARM notices, calls, and the notice of
+  transfer. The spec names the file (spec 1-1 :59), the boarding service
+  takes it as a tape kind, and the decoder reads its twelve files by name, so
+  it changes nothing that boards;
+- `late_charge_max`, the note's dollar cap, after the layout's columns. The
+  layout has no cap column, so no package boards a cap.
+
+A planted defect is a cell: the clean package and its twin's differ there
+and nowhere else. The manifest is shaped like the sample's: each file's
+hash, size and rows, and `designed_outcomes` with the gate's hard failures
+and warnings (none planted), the defects planted for the gate not to see,
+the clean twins, and a label per planted cell. `npm run env:transfer-package`
+writes packages to disk, and `apps/servicing/scripts/board-life-package.mjs`
+boards them through the servicing app's own boarding (see boarding-triage).
+
+**The demo loan.** `demoLoan()` (`demo.ts`) is the plan's first demo as a
+scenario. It is a 30-year fixed Fannie Mae loan at 90 % with borrower-paid
+MI and escrow, paid by bill pay. The first payment is due on 1 March 2026.
+
+- **The transfer.** Another servicer's until 16 December 2027, then ours,
+  with the Yes escrow cell and no cap on the tape.
+- **Year 3.** March is missed. The $50 capped late charge is assessed on day
+  16, the call comes on day 17, a promise on day 22 ceases the calls, and
+  the borrower catches up on 5 April.
+- **Year 4.** A tax reassessment and a renewal increase make the analysis
+  for March 2030 a flagged shortage, and bill pay sends the old amount for
+  March to suspense.
+- **Years 5 to 10.** The MI ends at its 78 % date on 1 March 2035, and the
+  loan is paid off in September.
+
+It comes with its clean twin, a twin for each defect, the defective one with
+both, and their four packages.
+
+Two places it departs from the plan, each the engines' doing:
+
+- The transfer is in December, not January. The cashiering engine shields
+  every installment due within 60 days of a transfer (cashiering-11), which
+  would have spared March's charge.
+- Year 4's short payment draws no late charge. Cashiering counts suspense
+  toward the P&I basis (decision 2.7-Q1, latecharges.ts:58-66), and the old
+  amount covers the P&I. The calls come all the same.
 
 **The month-end projection.** `monthEndRow(loan, month)` and
 `bookTape(book, month)` return what a partner's tape carries, under the m3-v1
@@ -2715,14 +2902,18 @@ escrow-review are the first two.
 
 **Not covered yet:**
 
-- the transfer package and the other 46 defects;
+- the other 45 defects, and a defect in any file but the final tape;
 - bankruptcy, foreclosure, loss mitigation, forbearance and modification.
   Their tape fields are present and always empty;
 - returned payments and NSF fees. The file's returned share is read and not
   drawn;
 - the interim escrow analysis an MI termination calls for. The next annual
   analysis returns the surplus;
-- early-intervention outreach and a borrower's request to cancel MI;
+- early-intervention notices, a call that reaches the borrower, and a
+  borrower's request to cancel MI;
+- what follows a loan boarded non-escrowed: its taxes go unpaid and its
+  insurance lapses, and nothing here models the tax sale or the force-placed
+  policy;
 - `book.loan_age_distribution` is read only when a scenario boards a book by
   transfer;
 - a run longer than the decade. A scenario may ask for up to 360 months, but
@@ -2973,6 +3164,9 @@ npm run env:refi -w @hm/environments -- --env aus-decision --policy reference
 npm run env:refi -w @hm/environments -- --env ei-clocks --policy reference
 npm run env:refi -w @hm/environments -- --env catchup-posting --policy reference
 npm run env:refi -w @hm/environments -- --env escrow-review --policy reference
+npm run env:refi -w @hm/environments -- --env boarding-triage --policy reference
+npm run env:transfer-package -w @hm/environments -- --out /tmp/packages   # the demo loan's four packages
+npm run board:life-package -w @hm/servicing -- /tmp/packages/defective     # boarded by the servicing app's own boarding
 npm run env:compare -w @hm/environments -- --a runs/refi-review/a.jsonl --b runs/refi-review/b.jsonl
 npm run env:audit -w @hm/environments -- runs/refi-review/a.jsonl [--read INDEX ...]
 npm run env:archive -w @hm/environments

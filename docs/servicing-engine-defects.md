@@ -6,13 +6,14 @@ reproduced again on 21 October 2026 against the commit
 `apps/servicing/VENDORED_FROM` names (`293261b`, committed 17 September 2026).
 One more, boarding-1, was found and reproduced on 22 October 2026 while
 cataloguing defects for synthetic data (docs/synthetic-data-defects.md).
-Thirteen more are in the runtime that wires the engines together rather than
-in an engine: cashiering-18, cashiering-19, arm-15, payoff-19, pmi-15,
-statements-1, boarding-2, boarding-3, metro2-1, ei-1, ei-2, http-1 and
-lossmit-1. They came from running the servicing app's runtime for 397
-simulated days on a scratch database on 22 October 2026, and from reproducing
-what that run found; each was reproduced in isolation the same day, with none
-of that run's own choices, and upheld by two independent checks.
+Sixteen more are in the runtime that wires the engines together rather than in
+an engine: cashiering-18, cashiering-19, cashiering-20, arm-15, payoff-19,
+pmi-15, statements-1, boarding-2, boarding-3, boarding-4, boarding-5,
+metro2-1, ei-1, ei-2, http-1 and lossmit-1. They came from running the
+servicing app's runtime for 397 simulated days on a scratch database on 22
+October 2026, and from reproducing what that run found; each was reproduced in
+isolation the same day, with none of that run's own choices, and upheld by two
+independent checks.
 The environments keep all but one out of grading. pmi-9 is graded, because
 the spec states the engine's reading as its own rule. Four more
 (cashiering-4, cashiering-9, flexmod-1, flexmod-2) were graded at the
@@ -36,6 +37,8 @@ decided", says why each went the way it did.
 | boarding-2    | boarding   | A transfer-boarded borrower never gets a party, so no statement, 1098 or bureau record reaches them  | 1026.41(a); §7.1 rule 11; C-4.1-01     | 🔴     | `runtime/transfers.ts:190`; read at `runtime/servicing-parties.ts:16-22`                        |
 | cashiering-19 | cashiering | A paid late charge stays `assessed` on its fee row, so each later remainder pays it again            | §2.7 states, rules 6, 8; §2.1 rule 5   | 🔴     | `app/tools/section2-1.ts:77`; `domain/operations-runtime/cashiering-cycle.ts:144-145`           |
 | pmi-15        | pmi        | A boarded MI loan gets no policy, schedule or HPA clock, and `mi_changes` finds nothing to do        | §10.2, §10.3; 12 U.S.C. 4902(b), (c)   | 🔴     | `domain/boarding/service.ts:357-366`; `domain/operations-runtime/cycles.ts:250`                 |
+| cashiering-20 | cashiering | A waived or reversed late charge stays on the ledger, and a refinance's payoff collects it           | §2.7 rules 5, 6; §35.10 rule 3         | 🔴     | `app/tools/section02.ts:259`, `:273`                                                            |
+| boarding-4    | boarding   | A transfer-boarded loan gets no P&I or T&I custodial account, so no payment on it ever posts         | §35.1-T10; §6.1 outputs; §2.1 timers   | 🔴     | `runtime/transfers.ts:114`; `app/tools/section01.ts:86`                                         |
 | cashiering-2  | cashiering | The $50 rule can book negative escrow                                                                | §2.2 rule 2                            | 🟡     | `domain/cashiering/allocation.ts:114`                                                           |
 | cashiering-3  | cashiering | Named extra principal is credited to escrow, or parked, when the rest is short of a payment          | §2.4 rules 1-2; §2.5 example I         | 🟡     | `domain/cashiering/allocation.ts:137-158`                                                       |
 | cashiering-4  | cashiering | One suspense balance shields several installments from late charges                                  | §2.7 rule 1; 2.7-Q1                    | 🟡     | `domain/cashiering/latecharges.ts:65-66`                                                        |
@@ -81,6 +84,7 @@ decided", says why each went the way it did.
 | boarding-3    | boarding   | A transfer tape's co-borrower is dropped without a trace, so a joint loan boards with one borrower   | §1.1 mapping rule; §8.1 rule 5         | 🟡     | `domain/boarding/tape-codec.ts:99`, `:252`; `runtime/transfers.ts:190-191`                      |
 | http-1        | http       | A payoff's buckets and a ledger line's amounts cannot cross the HTTP tool routes                     | §16.2 agent design; §35.1; §2.1        | 🟡     | `runtime/server.ts:140-150`; `app/tools/section16-2.ts:253`; `app/tools.ts:189-193`             |
 | lossmit-1     | lossmit    | A forbearance plan is never ended at its term end, so it reads active, and "Paused", for good        | §35.9 rule 2(c); §12.4; D2-3.2-01      | 🟡     | `domain/operations-runtime/default-35-9/daily.ts:45`, `:58`                                     |
+| boarding-5    | boarding   | A boarded transfer batch never cuts over, so the hello-notice clock never arms or escalates          | §1.3 timers, 1.3-T2; 1024.33(b)(3)(i)  | 🟡     | `runtime/transfers.ts:128`, `:179`; `app/tools/section01.ts:144-147`                            |
 | cashiering-10 | cashiering | A $50-rule payment before its due date is labeled prepaid, and its counter row is skipped            | §2.2 rule 2                            | 🟢     | `domain/cashiering/allocation.ts:203`                                                           |
 | cashiering-16 | cashiering | A dispute overlay ignores its start date                                                             | §2.7 rule 3(viii)                      | 🟢     | `domain/cashiering/latecharges.ts:90`                                                           |
 | cashiering-17 | cashiering | Instruction text is matched by keyword                                                               | §2.1 rule 6                            | 🟢     | `domain/cashiering/allocation.ts:81`, `:170`                                                    |
@@ -112,7 +116,7 @@ decided", says why each went the way it did.
 | pmi-12        | pmi        | New York's appraisal sets the federal thresholds                                                     | §10.1 R2; 12 U.S.C. 4901(12)           | 🟢     | `domain/pmi/cancellation.ts:15`                                                                 |
 | pmi-13        | pmi        | An ARM reset inside an interest-only period amortizes at once                                        | §10.2 R2                               | 🟢     | `domain/pmi/schedule.ts:69-74`                                                                  |
 
-🔴 high (12) · 🟡 medium (45) · 🟢 low (30). ei is Reg X early intervention.
+🔴 high (14) · 🟡 medium (46) · 🟢 low (30). ei is Reg X early intervention.
 Section numbers are the servicing app's spec; paths are under
 `apps/servicing/src/`; amounts ending in c are cents. docs/decisions.md tells
 the longer story of most of these, in the entry for the environment that found
@@ -700,6 +704,238 @@ index date 2026-09-17).
   writes, and add "unhandled" to the selector.
 - **Kept out by.** No environment boards a loan or runs the cycle planner;
   pmi-termination builds its schedule from the task's terms.
+
+### cashiering-20. A waived or reversed late charge stays on the ledger, and a refinance's payoff collects it 🔴
+
+- **Spec says.** §2.7 rule 5: waived charges are `fee.waived` events "and
+  reduce `late_charges` (Dr `late_charge_income`-contra / Cr `late_charges`)".
+  Rule 6: when a payment is re-dated on time, "an assessed charge becomes
+  `reversed` (Dr `late_charge_income` / Cr `late_charges`, or refund if
+  collected — `fee.reversed`)", and 2.7-T12 refunds what was collected. 2.7's
+  note (c) says the fee ledger is "the `fees` table plus `late_charges` ledger
+  account". §35.10 rule 3: the refinance close takes "late charges and fees
+  from the ledger". §16.1 rule 6 and Reg Z 1026.36(c)(3): the payoff states
+  what is owed, accurately. Reg X 1024.35(b)(5): a fee the servicer lacks a
+  reasonable basis to impose is an error.
+- **Engine does.** The cashiering unit books each assessment, Dr loan
+  `late_charges` / Cr `late_charge_income`
+  (domain/operations-runtime/cashiering-cycle.ts:272). Nothing books it back.
+  - 2.7's `fees.waive` (app/tools/section02.ts:253-266) and `fees.reverse`
+    (:267-275) write the fee row (:259, :273) and post no ledger lines, on the
+    engine path or the record path (:255, :270).
+  - Their engines move only the in-memory state: `waiveLateCharge` and
+    `reverseOnRedate` (domain/cashiering/latecharges.ts:106-113, :131-138),
+    `CashieringOps.waive` (domain/cashiering/ops.ts:370) and
+    `LateChargeOps.redate` (domain/cashiering/ops-2-7.ts:243).
+  - `fee.reversed` names a posting that was never made,
+    `ledger: "Dr late_charge_income / Cr late_charges"` (ops-2-7.ts:252), and
+    `fee.refund.due` (:253) has no consumer.
+  - 2.6's conversion waiver posts nothing either (app/tools/section2-6.ts:51,
+    :54); 2.6's agent does hold a generic `ledger.apply_via_cashiering`
+    (section02.ts:112, :170) it could post the set with by hand, but rule 5
+    puts the posting on the waiver itself, though its header says the
+    receivable moves with the state (:6-8).
+
+  The tools that do post the reversal set are 4.1's `fee.reverse` and
+  `late_charge.waive` (app/tools/section04.ts:344-355), and they need a case
+  of one of four kinds, an NoE, a complaint, an information request or an SII,
+  that has been opened (:113, :190-192). A courtesy waiver, a lockbox date
+  error, a transferor's forwarded payment and a trial conversion have none.
+  2.7's tool list has no `ledger.post`, and 2.1's refuses an agent outside the
+  payment commands (section02.ts:28, :98).
+
+  So the row reads `waived` or `reversed` while the ledger still holds the
+  receivable and the income, and the readers split:
+  - The fee rows feed the cash state (cashiering-cycle.ts:145), the 35.8
+    payoff quote (domain/operations-runtime/derivers-35-8.ts:117) and the
+    statement (runtime/servicing.ts:105). All three show nothing due.
+  - The ledger feeds 35.10's quote
+    (domain/operations-runtime/closeout-35-10/derive.ts:62,
+    app/tools/section35-10.ts:236), its payoff bucket (:408) and the console's
+    loan page (console/pg-store.ts:59). All three still carry the charge.
+
+- **Reproduction.** A scratch database with the app's migrations. Five copies
+  of L-1 were boarded through the transfer path on 2026-08-20, with the daily
+  unit run every day. Each was assessed 7,901c on 09-17, booked Dr
+  `late_charges` / Cr `late_charge_income`.
+  - Loan R: a 219,257c payment on 09-20 paid the installment, with 0c to late
+    charges. On 09-21, 2.7 `fees.reverse` re-dated the 09-01 installment to
+    09-10. The row read `reversed` with refund 0c, and `fee.reversed` claimed
+    the Dr/Cr. The ledger was unchanged: `late_charges` Dr 7,901c and
+    `late_charge_income` Cr 7,901c.
+  - Loan W: a courtesy waiver through `fees.waive` on 09-18. The row read
+    `waived` 7,901c and LC-WAIVER-CONFIRM-v1 was queued. The ledger was
+    unchanged.
+  - The record path (`error_correction`) and 2.6's `trial_conversion` waiver
+    did the same.
+
+  Each loan's derived state then read 0c due, and its console page listed
+  `late_charges` 7,901c. Quotes run on 09-28, good through 10-15:
+  - The 35.8 quote: R 25,154,664c and W 25,312,861c, with 0c late charges.
+  - 35.10's record facts carried 7,901c, and 16.1 on them gave 25,162,565c and
+    25,320,762c. The second is the untouched control's figure.
+
+  The statement for 10-01 asked W 438,514c with 0c late charges, against the
+  control's 446,415c. (W, paid off on 10-15 on buckets the script built from
+  the 35.8 quote, went `paid_off` with `late_charges` still Dr 7,901c, but
+  other accounts were left over too, so that run does not isolate this
+  defect.)
+
+  End to end through 35.10: two copies of the harness's AZ-1 loan were boarded
+  on 2026-09-20 and assessed 9,481c on 10-17. One was waived on 10-18 as a
+  courtesy. Each was refinanced by this platform (serviced_same_servicer) as
+  35.10-T1/T2 set it up, consummating 11-09, and only `Runtime.sweep` quoted
+  and settled them. The waived loan's quote carried 9,481c in late charges,
+  28,472,060c in all, the same as the control's. Its settlement on 11-13
+  recorded `fees_collected {late_charges: 9481}` and paid the loan off, while
+  its fee row still read `waived` 9,481c. Two independent checks reproduced it
+  on their own databases, one sending the waiver and the reversal over the
+  hosted `/v1` route and running every job through month-end. The 397-day
+  simulation waived and reversed nothing (150 fee rows, all `assessed`), so it
+  could not show this.
+
+- **Smallest fix.**
+  - In `fees.waive` and `fees.reverse` (section02.ts:259, :273) and 2.6's
+    waiver (section2-6.ts:51, :54), post in the same command what rules 5 and
+    6 name: the open amount, Cr loan `late_charges` / Dr `late_charge_income`.
+    `feeReversalSet` (domain/servicing-requests/cases.ts:106) does it with a
+    2.7 rule_ref. On the record path, take the amount from the fee row, not
+    the caller.
+  - For a collected charge, which cashiering-19's fix makes reachable, book
+    the refund and give `fee.refund.due` a consumer.
+  - Have 4.1's `fee.reverse` and `late_charge.waive` write the fee row too, so
+    that one act moves both.
+- **Kept out by.** No environment waives or reverses a charge, or keeps a
+  ledger. payments-posting ports `waiveLateCharge` and `reverseOnRedate`
+  (packages/environments/src/payments/ported/latecharges.ts:106, :131) but
+  calls neither. Not cashiering-19: there a paid charge's row is stale and the
+  ledger is right. Here an unpaid charge's ledger is stale and the row is
+  right.
+
+### boarding-4. A transfer-boarded loan gets no P&I or T&I custodial account, so no payment on it ever posts 🔴
+
+- **Spec says.** §35.1 rule 10: `1.1 boardLoan` on the bus writes the same set
+  the transfer route writes, and `custodial_accounts` is part of that set
+  (35-1-persistence-seam-and-the-typed-record.md:89). 35.1-T10 spells out what
+  the set holds: "`custodial_accounts` (P&I and T&I, found-or-inserted)"
+  (:136). §6.1 and §6.2 put the accounts in that table, `account_kind` ∈ {pi,
+  ti, clearing, …} with a status
+  (6-1-establish-p-i-custodial-account-form-1013.md:65, outputs at :110;
+  6-2-establish-t-i-custodial-account-form-1014.md:55, :92). §1.6 needs
+  Supermortgage's P&I and T&I accounts "before cutover"
+  (1-6-escrow-suspense-upb-reconciliation.md:38), because Fannie Mae's A2-1-07
+  makes the subservicer establish custodial accounts for every loan it
+  subservices (01-boarding-servicing-transfer-in/README.md:9; Servicing Guide
+  A4-1). §35.5 rule 5 reads the posting accounts from that table by
+  `partner_party_id`
+  (35-5-the-installment-schedule-and-the-daily-cashiering-cycle.md:89).
+  §35.3's selectors read typed rows and never `entity_records`
+  (35-3-cycles-jobs-and-receipts.md:71). §2.1 holds the posting to one
+  business day as an internal SLA
+  (`REGZ_1026_36C1_CREDIT_AS_OF_RECEIPT_POST_1BD`; the legal test, Reg Z
+  1026.36(c)(1), is crediting as of receipt) and the deposit to a custodial
+  account to 24 hours (`FNMA_C1101_DEPOSIT_CUSTODIAL_24H`, C-1.1-01)
+  (2-1-accept-post-periodic-payment-p-i-escrow.md:103-104). The spec is not
+  wholly consistent: rule 10 says the bus writes "exactly the set" the route
+  writes, and the route writes `clearing`; T10 is the explicit one, and the
+  app's own comment agrees with it (runtime/lifecycle.test.ts:67).
+- **Engine does.** Both boarding writers find or insert one account for the
+  servicer party, and it is `clearing`: runtime/transfers.ts:114 on the seed
+  route and app/tools/section01.ts:86 on the bus, through `custodialAccount`
+  (runtime/transfers.ts:216-221). 35.1-T10's own test checks only that
+  (domain/operations-runtime/35-1.spec.test.ts:536). The app's comments
+  contradict each other on this: "only `clearing` is created by a transfer
+  board" (domain/operations-runtime/harness-35-5.ts:118) against "1.1 seeds
+  them for a transfer" (runtime/lifecycle.test.ts:67). The officer's path,
+  §6.1's tools, writes `custodial_accounts` only as JSONB entity versions
+  (app/tools/section6-1.ts:73, :81, :137). Their ids look like `ARR:PI:AA`,
+  they name no partner party, and no projector maps that kind to the table
+  (domain/operations-runtime/projectors/index.ts:14 registers sections 2, 16
+  and 21 only). The table's only other writers are origination's
+  `ti_prepurchase` and `origination_funding_clearing` rows
+  (runtime/origination.ts:174-175), the lockbox's clearing account
+  (domain/operations-runtime/lockbox.ts:175) and test fixtures.
+
+  The cashiering unit needs all three kinds
+  (domain/operations-runtime/cashiering-cycle.ts:109-111). It refuses any loan
+  holding a received payment without them as `CUSTODIAL_REQUIRED` (:237), a
+  refusal no spec section names. The refusal rolls back the whole unit, so the
+  payment stays `received`: it is neither posted nor parked in suspense. The
+  loan's 2.7 run and 2.3 check for that day never run either. §35.3 retries
+  the unit twice, marks it dead and escalates to `officer` with two choices,
+  requeue or abandon (35.3 rule 7). Requeue dies the same way. Abandon lets
+  the run close, and the delinquency counters then count the borrower who paid
+  as delinquent. Until one or the other, the day's `cashiering_daily` run
+  stays `running` and every `delinquency_counters` job that depends on it is
+  `blocked` (domain/operations-runtime/cycles.ts:282).
+
+  The officer cannot post the payment by hand either: the 35.8 payment-post
+  screen refuses `NO_CUSTODIAL_ACCOUNTS`
+  (domain/operations-runtime/derivers-35-8.ts:69, :83). And one dead unit
+  holds back more than its own loan: the day's `cashiering_daily` run, and
+  every job in the book that waits on it, stays blocked until the officer
+  chooses.
+
+  Two related effects, read from the code and not run: postPayoff's default
+  ids `C-PI` and `C-TI` (app/tools/section16-2.ts:44) map to uuids with no row
+  (infra/db/ledger.ts:19-23, FK at db/migrations/0001_baseline.sql:340), and
+  the 35.10 closeout waits on `custodial_accounts` for such a loan
+  (app/tools/section35-10.ts:364).
+
+- **Reproduction.** A scratch database with the app's 177 migrations. One
+  clean tape loan, harness-35-5's T-7 (P&I $1,896.20, escrow $412.30, next due
+  2026-11-01), was boarded on 2026-10-16 through `1.1 boardLoan{batch, files}`
+  on the bus, the production writer. It boarded with its schedule and its
+  configuration row, and the servicer party held one custodial account,
+  `clearing`. The 6.1 path then planned the arrangement's accounts and took
+  the P&I and T&I accounts to `active`. That wrote three entity versions, and
+  the table still held only `clearing`. A full installment of $2,308.50 was
+  received on 2026-11-03 through the cash-rows port, the same write
+  lockbox.ts:296 and ach.ts:213 make. `Runtime.sweep` then ran three times a
+  day from 2026-11-03 to 2026-12-08, with nothing inserted by hand. Over those
+  36 days:
+  - 36 dead `cashiering_daily` units, one a day, each `CUSTODIAL_REQUIRED`
+    after three attempts;
+  - zero `payment.posted`: the payment stayed `received` and the 2026-11-01
+    installment stayed `due`;
+  - 71 sev 3 officer escalations, from the dead unit and its `SM_JOB_DEAD_2H`
+    breach;
+  - one breach each of `REGZ_1026_36C1_CREDIT_AS_OF_RECEIPT_POST_1BD` (to
+    cashiering) and `FNMA_C1101_DEPOSIT_CUSTODIAL_24H` (to custodial-recon);
+  - 36 `delinquency_counters` runs planned and never run.
+
+  On 2026-12-09 a requeue died the same way. Abandoning the dead units let the
+  counters run. The loan was then 38 days delinquent on the installment it had
+  paid. A Reg X window opened for it, `REGX_1024_39A_LIVE_CONTACT_36`
+  breached, the 45-day written notice came due on 2026-12-16 and
+  `REGX_1024_41F1_120_DAY_GATE` was armed, all with the payment still
+  unposted.
+
+  As a control, a copy of the database at 2026-12-08 was given the `pi` and
+  `ti` rows the app's tests insert by hand (harness-35-5.ts:118-125), and one
+  dead unit was requeued. The payment posted as interest $1,519.15, principal
+  $377.05 and escrow $412.30, credited as of 2026-11-03, and the installment
+  was satisfied. The 397-day simulation shows the same thing: its first
+  payment was refused `CUSTODIAL_REQUIRED` on 2026-11-23, and `pi` and `ti`
+  were inserted by hand about a minute later, before a requeue posted it. Two
+  independent checks reproduced it by other paths: the seed route
+  (`node scripts/run.mjs seed-demo`), a payment through a fake lockbox file
+  and `lockbox.ingest`, and the unit run both by hand and through the hosted
+  whole-book run. The harm is the unposted cash and the delinquency counters
+  running meanwhile, not a wrong credit date: once the accounts exist, the
+  payment is credited as of its receipt. Found and reproduced on 22 October 2026.
+
+- **Smallest fix.** In both boarding writers, find or insert `pi` and `ti`
+  beside `clearing`, as 35.1-T10 says
+  (`custodialAccount(q, partnerParty, "pi")` and `"ti"` at
+  runtime/transfers.ts:114 and app/tools/section01.ts:86), and make
+  35-1.spec.test.ts:536 check all three. That makes the posting accounts
+  exist. Making them the real accounts §6.1 and §6.2 open needs a 35.1 row
+  projector for `custodial_accounts`: one that writes those accounts to the
+  table under the servicer party, with their status.
+- **Kept out by.** No environment runs the hosted cashiering cycle.
+  payments-posting grades the ported allocation engine, which takes its
+  custodial accounts as given.
 
 ## Medium
 
@@ -1873,6 +2109,98 @@ index date 2026-09-17).
   lifecycle. lossmit-retention ports only the term calculators in plans.ts
   (packages/environments/src/lossmit/ported/plans.ts).
 
+### boarding-5. A boarded transfer batch never cuts over, so the hello-notice deadline never arms and its miss reaches nobody 🟡
+
+- **Spec says.** §1.3 starts the hello run on the batch's cutover
+  ("`transfer.batch.cutover_completed` → hello notice run",
+  1-3-respa-transfer-notices-goodbye-hello.md:50). It watches the run with
+  `REGX_1024_33B3_HELLO_15`, armed by that event, due on
+  `respa_effective_date` plus 15 calendar days, breach "sev 1 → `officer`"
+  (:70; spec/registry/timers.json:212). 1.3-T2: a notice mailed on day 16 is
+  "breached with `officer` escalation" (:114). Reg X 1024.33(b)(3)(i) requires
+  the transferee's notice "not more than 15 days after the effective date".
+  §1.2 moves the batch to `cutover` on the transfer date
+  (1-2-servicing-transfer-approval-from-fannie-mae.md:62). The run itself
+  belongs to the `transfer` agent (1-3-…md:99), so it is not this defect. The
+  clock that holds the agent to the date belongs to the runtime.
+- **Engine does.** Transfer boarding boards a past-dated batch "as of its
+  transfer date (the cutover)" (runtime/transfers.ts:94-95) and writes the
+  batch row with status `cutover` (:179). It calls only `svc.board` (:128),
+  never `BoardingService.completeCutover`
+  (domain/boarding/service.ts:118-130), and that is the only emitter of the
+  event a tool can reach for a transfer-in. Its `BoardingService` is an
+  in-memory one that is thrown away (transfers.ts:116-120), so the bus's
+  `boarding` service never holds the batch, and
+  `1.1 boardLoan{batch_id, complete_cutover}` (app/tools/section01.ts:144-148)
+  refuses with `no batch` (service.ts:98). That route is the seed's and the
+  demo's: `boardTransferBatch` throws `SEED_ONLY` when
+  `ENVIRONMENT=production` (transfers.ts:87). The other emitter,
+  `TransferBatchService.transition(…, "cutover")`
+  (domain/transfers/inbound.ts:204), has no caller: the 1.2 tools only move a
+  batch to `approved` (section01.ts:180). The bus form
+  `1.1 boardLoan{batch, files}` (section01.ts:54-123) boards the same way and
+  returns before it reads `complete_cutover` (:144, :147). The plain form can
+  cut over afterwards, but only when no loan is left in `exception`
+  (service.ts:122-124), and `BoardingService` has no act for the `reject` or
+  `withdraw` edges the machine defines (domain/boarding/machine.ts:34, :38).
+  The bus has no waiver act either: `boarding.proposeWaiver` is in
+  app/catalog.ts but not in `listTools`, so a loan leaves `exception` only by
+  a data correction, and a failure no honest correction cures, such as the
+  demo tape's unlicensed state (HF-020), blocks the cutover for good. So in
+  production the defect is narrower but still there: the batch form drops
+  `complete_cutover` without a word, and one incurable loan holds the whole
+  batch. So for a transfer-boarded book `REGX_1024_33B3_HELLO_15` never arms,
+  and neither do the other transfer-in clocks keyed on the cutover: 1.1's
+  180-day monitoring report, 1.4's custodian notices, 1.5's MERS check, 1.6's
+  reconciliation and final accounting, and the short-year statements. The
+  60-day late-fee window is among them, but no late charge depends on it,
+  because the cashiering cycle reads overlays, not the clock
+  (domain/operations-runtime/cashiering-cycle.ts:154; cashiering-11,
+  cashiering-18).
+- **Reproduction.** On a fresh database, the demo transfer batch was boarded
+  through `boardTransferBatch` as `main.ts seed-demo` does it (94 loans
+  boarded, 6 held in `exception`). The demo clock then walked 10 days from 10
+  September 2026, with the runtime wired as `main.ts` wires it. Result:
+  - zero `transfer.batch.cutover_completed` events;
+  - none of the 26 clocks the registry keys on that event armed;
+  - no MS-2 notice, no `transfer_notice_runs` row and no escalation for the
+    hello deadline, while 58 sev-1 `officer` escalations opened for other
+    breaches;
+  - `1.1 boardLoan{batch_id, complete_cutover}` refused with `no batch`.
+
+  As a control, the 94 clean loans were boarded on a second database through
+  `1.1 boardLoan{batch, files, complete_cutover: true}`, and there was still
+  no cutover. A second call in the plain form emitted it, and 13 clocks armed,
+  `REGX_1024_33B3_HELLO_15` among them, due 16 September. No hello was mailed,
+  so the clock breached on 17 September and opened a sev-1 `officer`
+  escalation through `breach_actions`, though none of the 94 borrowers had a
+  party.
+
+  That control separates this defect from boarding-2. On the first database,
+  1.3's own `renderNotice` for the hello template, addressed through
+  `servicingParties`, was held "no recipients" for SM-TR-0000001. It rendered
+  for SM-TR-0000002 once that borrower was linked to a party, and the hello
+  clock was still unarmed for both.
+
+  In the 397-day runtime simulation the batch stayed at `cutover` from 1
+  September 2026, with no cutover event, no 1.3 clock, no MS-2 notice and no
+  notice run. Found on 22 October 2026 and reproduced the same day. Two
+  independent checks reproduced it through the real `scripts/run.mjs` entry
+  points and over HTTP, one keeping the tape's six hard failures on the bus
+  write; there the plain cutover was refused, "6 loan(s) … are still
+  exception". A cutover sent this late arms a clock that is already overdue.
+
+- **Smallest fix.** In `boardTransferBatch`, once `svc.board` leaves no loan
+  staged, validated or in exception, call
+  `svc.completeCutover(uuid, { respa_effective_date })` before the events are
+  persisted (transfers.ts:151). The batch's own timer engine then arms the
+  cutover clocks in the same transaction. Do the same in `boardBatchOnBus`
+  after section01.ts:96. Give `BoardingService` the `reject` and `withdraw`
+  acts the machine already defines, so that a batch holding a loan that cannot
+  be cured can still cut over.
+- **Kept out by.** No environment grades a transfer notice, the cutover or any
+  clock the cutover arms.
+
 ## Low
 
 - **cashiering-10.** A $50-rule payment received before its due date is
@@ -2037,7 +2365,7 @@ index date 2026-09-17).
   Kept out: pmi-termination keeps out a rate change inside an interest-only
   period or after the 78% row.
 
-88 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+91 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

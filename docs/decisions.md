@@ -7229,14 +7229,15 @@ notices' content.
 ## The life generator reads the calibration as written
 
 **Decided 23 October 2026.** The calibration reader took the committed
-`calibration.json` key by key, and could not read most of it. The quarterly
-transitions, the arrival bins, the short and returned receipts, the three
-contact figures, the medians, the growth and every distribution each fell
-back to its default with a warning, so a book drawn "from the file" was
-mostly drawn from the defaults. Each key now has a reader that takes the
-file's own shape, and loading the file warns about nothing. The conversions
-are listed in docs/environments.md, "Calibration". What was decided on the
-way:
+`calibration.json` key by key, and could not read most of it. 19 of its 28
+keys fell back to their defaults with a warning: MBA's all-loans total, the
+quarterly roll and cure, the arrival bins, the short and returned receipts,
+the three contact figures, the two medians and their growth, the ARM and MI
+shares, the three distributions, the PMMS series and the disaster counts.
+A book drawn "from the file" was mostly drawn from the defaults. Each key
+now has a reader that takes the file's own shape, and loading the file warns
+about nothing. The conversions are listed in docs/environments.md,
+"Calibration". What was decided on the way:
 
 - **A quarter's transition is solved for, not divided.** The roll and cure
   are the New York Fed's, a quarter apart. The generator's monthly chain
@@ -7256,9 +7257,14 @@ way:
   counts every installment not in by the end of grace. A partial payment
   whose rest comes after grace is one of them, so the after-grace draw is
   lowered by that route. Without it, late charges ran a tenth over.
-- **A payment after grace stays in its month.** In a short month, day 17
-  plus up to ten days could reach the next month and read as a miss at
-  month end. A miss is drawn apart.
+- **A payment after grace stays in its month.** Day 17 plus up to ten days,
+  with grace or the payment rolled past a weekend or a holiday, could reach
+  the next month and read as a miss at month end. A miss is drawn apart.
+- **A payment inside grace stays in its arrival bin.** One drawn for a
+  weekend or a holiday arrives on the next business day of its bin, else the
+  one before it in the bin. Rolled forward alone, a fifth of the payments
+  drawn for days 2 to 5 arrived on days 6 to 10, and the bin read 0.21
+  against the file's 0.27, outside the acceptance test's 0.02.
 - **The escrow share holds with MI.** A loan with MI always escrows. The
   rest now escrow at the rate that brings the book to the file's share; the
   book read 0.87 against 0.8.

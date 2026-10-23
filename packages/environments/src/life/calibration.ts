@@ -98,6 +98,11 @@ export interface Rates {
   readonly payment: {
     /** Weights over days 2 to 16 of the due month, for a payment made inside the grace period. */
     readonly day_of_month: readonly number[];
+    /**
+     * The runs of days, first and last, that `day_of_month` spreads each of the file's bins over, clipped to days 2
+     * to 16: a payment drawn for a day off moves to a business day of its own bin (simulate.ts).
+     */
+    readonly day_of_month_bins: readonly (readonly [number, number])[];
     /** Of installments paid by the due day, the share paid before it: the share of borrowers who pay early. */
     readonly early_share: number;
     /** Share of installments, on loans current at the due date, received after the due day and within grace. */
@@ -735,21 +740,42 @@ function declarationAreas(v: unknown): number[] | null {
   return sums.map((s, k) => s / counts[k]!);
 }
 
-/** Weights over the days 2 to 16 of the due month (index 0 = day 2), from bins of whole days ("1-5"). */
-function dayWeights(v: unknown): number[] | null {
-  const raw = rawBins(v);
-  if (!raw || raw.some((b) => b.lo === null || b.hi === null)) return null;
+/** The days inside grace, as `payment.day_of_month` reads them: each bin's share and its run of days. */
+interface WithinGrace {
+  /** Weights over the days 2 to 16 of the due month (index 0 = day 2). */
+  readonly within: number[];
+  /** Each bin's run of days, clipped to days 2 to 16, in order. */
+  readonly bins: (readonly [number, number])[];
+}
+
+/**
+ * Days 2 to 16 from bins of whole days, each `[first, last, share]`. A bin
+ * holds each of its days, and its share is spread evenly over all of them;
+ * only days 2 to 16 are kept, normalized to one, and each bin's run inside
+ * them is kept beside the weights.
+ */
+function withinGrace(days: readonly (readonly [number, number, number])[]): WithinGrace | null {
   const w = new Array<number>(15).fill(0);
-  // A bin of whole days holds each of its days; its weight is spread over all of them, and only days 2 to 16 are kept.
-  for (const b of raw) {
-    const first = Math.ceil(b.lo!);
-    const last = Math.floor(b.hi!);
+  const bins: [number, number][] = [];
+  for (const [first, last, share] of days) {
     if (last < first) continue;
-    const per = b.weight / (last - first + 1);
-    for (let d = Math.max(2, first); d <= Math.min(16, last); d++) w[d - 2]! += per;
+    const per = share / (last - first + 1);
+    const a = Math.max(2, first);
+    const b = Math.min(16, last);
+    for (let d = a; d <= b; d++) w[d - 2]! += per;
+    if (a <= b) bins.push([a, b]);
   }
   const total = w.reduce((s, x) => s + x, 0);
-  return total > 0 ? w.map((x) => x / total) : null;
+  if (!(total > 0)) return null;
+  bins.sort((x, y) => x[0] - y[0]);
+  return { within: w.map((x) => x / total), bins };
+}
+
+/** Days 2 to 16 from bins of plain days ("1-5", "6-10"). */
+function dayWeights(v: unknown): WithinGrace | null {
+  const raw = rawBins(v);
+  if (!raw || raw.some((b) => b.lo === null || b.hi === null)) return null;
+  return withinGrace(raw.map((b) => [Math.ceil(b.lo!), Math.floor(b.hi!), b.weight] as const));
 }
 
 /** Where a named arrival bin falls: before the due day, on it, a run of days of the due month, or not in it. */
@@ -770,8 +796,7 @@ function arrivalBin(
   return null;
 }
 
-interface DayOfMonth {
-  readonly within: number[];
+interface DayOfMonth extends WithinGrace {
   readonly early_share: number | null;
 }
 
@@ -780,7 +805,9 @@ interface DayOfMonth {
  * `{ due_day, grace_days, arrival_share: { before_due, due_day, days_2_to_5, …, not_in_month } }`:
  * the share of installments arriving in each bin. The generator reads two
  * things from it. The shape inside grace: each bin's share spread evenly over
- * its days, and days 2 to 16 normalized to one. And the split around the due
+ * its days, and days 2 to 16 normalized to one, with each bin's run of days
+ * kept so a payment drawn for a day off arrives on a business day of the
+ * same bin and the book's bins stay the file's. And the split around the due
  * day: of the installments paid by it, the share paid before it,
  * before_due / (before_due + due_day), which is the share of borrowers drawn
  * in the habit of paying early. The bins from day 17 on, and the month
@@ -794,12 +821,12 @@ function dayOfMonth(v: unknown): DayOfMonth | null {
   const o = record(v);
   const bins = o ? record(o["arrival_share"]) : null;
   if (!o || !bins) {
-    const within = dayWeights(v);
-    return within ? { within, early_share: null } : null;
+    const plain = dayWeights(v);
+    return plain ? { ...plain, early_share: null } : null;
   }
   if (o["due_day"] !== undefined && toNumber(o["due_day"]) !== DUE_DAY) return null;
   if (o["grace_days"] !== undefined && toNumber(o["grace_days"]) !== GRACE_DAYS) return null;
-  const w = new Array<number>(15).fill(0);
+  const days: [number, number, number][] = [];
   let before: number | null = null;
   let due: number | null = null;
   for (const [k, x] of Object.entries(bins)) {
@@ -808,16 +835,13 @@ function dayOfMonth(v: unknown): DayOfMonth | null {
     if (!b || n === null || n < 0) return null;
     if (b.kind === "before") before = n;
     else if (b.kind === "due") due = n;
-    else if (b.kind === "days") {
-      const per = n / (b.last - b.first + 1);
-      for (let d = Math.max(2, b.first); d <= Math.min(16, b.last); d++) w[d - 2]! += per;
-    }
+    else if (b.kind === "days") days.push([b.first, b.last, n]);
   }
-  const total = w.reduce((s, x) => s + x, 0);
-  if (!(total > 0)) return null;
+  const grace = withinGrace(days);
+  if (!grace) return null;
   const early =
     before !== null && due !== null && before + due > 0 ? before / (before + due) : null;
-  return { within: w.map((x) => x / total), early_share: early };
+  return { ...grace, early_share: early };
 }
 
 /** A mix of reasons and their shares, normalized to one. */
@@ -910,8 +934,9 @@ function bisect(f: (x: number) => number, lo: number, hi: number): number | null
  * Dividing by three would be wrong: a loan that falls behind and catches up
  * inside the quarter is in neither quarter-end count, so the monthly roll is
  * more than a third of the quarterly one, and the monthly cure that leaves
- * 41 % current a quarter later is near 16 %, not 41 %. With both quarterly,
- * each is solved holding the other, by bisection, until neither moves.
+ * 41 % current a quarter later is near 16 %, more than a third of 41 %. With
+ * both quarterly, each is solved holding the other, by bisection, until
+ * neither moves.
  */
 export function monthlyChain(
   roll: Stated,
@@ -1168,6 +1193,7 @@ export function loadCalibration(o: LoadOptions = {}): Calibration {
     },
     payment: {
       day_of_month: day.within,
+      day_of_month_bins: day.bins,
       early_share: day.early_share ?? DEFAULT_EARLY_SHARE,
       late_within_grace_share: read("payment.late_within_grace_share", shareIn01),
       late_after_grace_share: read("payment.late_after_grace_share", shareIn01),
@@ -1304,7 +1330,7 @@ function growthOf(v: unknown, unit: string): number | null {
  * loan-to-value needs mortgage insurance at origination, so the file's figure
  * for that is the share of the newest year's Enterprise originations over 80
  * CLTV, `enterprise_originations_<year>_cltv_over_80`. Its other figures are
- * of seasoned books by balance, whose insurance has partly been cancelled; the
+ * of seasoned books by balance, whose insurance has partly been canceled; the
  * generator's own termination sweep does that over a loan's life.
  */
 function miShare(v: unknown, unit: string): number | null {

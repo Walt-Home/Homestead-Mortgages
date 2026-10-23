@@ -11,18 +11,22 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import type { PlainDate } from "@hm/kernel/calendar";
 import { describe, expect, it } from "vitest";
 import {
   CALIBRATION_KEYS,
   COUNTIES,
+  arrivals,
   calibrationCheck,
   defaultCalibration,
   generate,
   loadCalibration,
+  type ArrivalRow,
   type CalibrationFile,
   type CalibrationKey,
   type CheckRow,
   type LifeBook,
+  withinGraceDay,
 } from "../life/index.js";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
@@ -512,6 +516,12 @@ describe("the generator's reading of the file", () => {
             : bin("days_11_to_16") / 6) / inGrace,
     );
     R.payment.day_of_month.forEach((w, i) => expect(w, `day ${i + 2}`).toBeCloseTo(days[i]!, 12));
+    // Each bin's run of days inside grace, kept so a payment drawn for a day off stays in its bin.
+    expect(R.payment.day_of_month_bins).toEqual([
+      [2, 5],
+      [6, 10],
+      [11, 16],
+    ]);
     expect(R.payment.early_share).toBeCloseTo(
       bin("before_due") / (bin("before_due") + bin("due_day")),
       12,
@@ -641,6 +651,18 @@ describe("the generator's reading of the file", () => {
     }
   });
 
+  it("places a payment drawn for a day off on a business day of its own bin", () => {
+    // 1 September 2026 is a Tuesday: the 5th is a Saturday, the 6th a Sunday and the 7th Labor Day.
+    const bins = R.payment.day_of_month_bins;
+    expect(withinGraceDay("2026-09-01" as PlainDate, 3, bins)).toBe("2026-09-03");
+    // The last day of days 2 to 5 falls back to the Friday rather than roll into days 6 to 10.
+    expect(withinGraceDay("2026-09-01" as PlainDate, 5, bins)).toBe("2026-09-04");
+    // The first of days 6 to 10 moves on past the weekend and the holiday, inside the bin.
+    expect(withinGraceDay("2026-09-01" as PlainDate, 6, bins)).toBe("2026-09-08");
+    // A bin of one day has no other day to move to, and the payment rolls forward as any does.
+    expect(withinGraceDay("2026-09-01" as PlainDate, 5, [[5, 5]])).toBe("2026-09-05");
+  });
+
   it("refuses a value it cannot place on the generator's notes, by name", () => {
     const copy = JSON.parse(raw) as CalibrationFile & { rates: Record<string, Entry> };
     (copy.rates["payment.day_of_month"]!.value as { due_day: number }).due_day = 5;
@@ -711,6 +733,46 @@ describe("a book drawn from the file", () => {
         kind === "absolute" ? Math.abs(r.realized - r.target) : Math.abs(r.realized / r.target - 1);
       expect(off, `${key}: ${r.realized} against ${r.target}`).toBeLessThanOrEqual(tol);
     }
+  });
+
+  it("lands every arrival bin within the acceptance test's tolerance, and the defaults' book does not", () => {
+    // Read on due dates that are a business day following one, as calibrationCheck reads the shares within grace and
+    // before the due day. A payment drawn for a weekend inside grace arrives on a business day of its own bin; rolled
+    // forward alone, days 2 to 5 came out near 0.21 against the file's 0.27.
+    const bins = at(entry("payment.day_of_month").value, "arrival_share") as Record<string, number>;
+    const tolerance = acceptance.tests.find((t) => t.id === "payment-arrival-day")!.tolerance.value;
+    const measure = (book: LifeBook): Record<string, number> => {
+      const rows = arrivals(book).filter((a) => a.clear);
+      const share = (f: (a: ArrivalRow) => boolean) => rows.filter(f).length / rows.length;
+      const inGrace = (lo: number, hi: number) => (a: ArrivalRow) => {
+        if (a.arrival !== "within_grace") return false;
+        const day = Number(a.on!.slice(8, 10));
+        return day >= lo && day <= hi;
+      };
+      return {
+        before_due: share((a) => a.arrival === "before_due"),
+        due_day: share((a) => a.arrival === "due_day"),
+        days_2_to_5: share(inGrace(2, 5)),
+        days_6_to_10: share(inGrace(6, 10)),
+        // Grace that ends on a day off runs to the next business day, and a payment then is still within it.
+        days_11_to_16: share(inGrace(11, 31)),
+        days_17_to_month_end: share((a) => a.arrival === "after_grace"),
+        not_in_month: share((a) => a.arrival === "not_in_month"),
+      };
+    };
+    const fromFileBins = measure(fromFile);
+    expect(Object.keys(fromFileBins).sort()).toEqual(Object.keys(bins).sort());
+    for (const [bin, target] of Object.entries(bins))
+      expect(
+        Math.abs(fromFileBins[bin]! - target),
+        `${bin}: ${fromFileBins[bin]} against ${target}`,
+      ).toBeLessThanOrEqual(tolerance);
+    const fromDefaultBins = measure(fromDefaults);
+    expect(
+      Math.max(
+        ...Object.entries(bins).map(([bin, target]) => Math.abs(fromDefaultBins[bin]! - target)),
+      ),
+    ).toBeGreaterThan(3 * tolerance);
   });
 
   it("moves away from the defaults' book wherever the file moves the figure", () => {

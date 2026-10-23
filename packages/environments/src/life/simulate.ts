@@ -503,6 +503,34 @@ function poissonUpTo3(u: number, lambda: number): number {
   return 3;
 }
 
+/**
+ * The day a payment drawn for `day` of the due month inside grace arrives.
+ * Payments arrive on business days. A day off moves to the next business day
+ * of the same arrival bin, else the one before it in the bin, so the book's
+ * share in each bin is the calibration's; rolling forward alone would carry a
+ * bin's last days into the next (a fifth of days 2 to 5 into 6 to 10). A bin
+ * with no business day in it rolls forward as any payment does.
+ */
+export function withinGraceDay(
+  due: PlainDate,
+  day: number,
+  bins: readonly (readonly [number, number])[],
+): PlainDate {
+  const on = addDays(due, day - 1);
+  if (servicerCalendar.isBusinessDay(on)) return on;
+  const bin = bins.find(([first, last]) => first <= day && day <= last);
+  if (!bin) return on;
+  for (let d = day + 1; d <= bin[1]; d++) {
+    const x = addDays(due, d - 1);
+    if (servicerCalendar.isBusinessDay(x)) return x;
+  }
+  for (let d = day - 1; d >= bin[0]; d--) {
+    const x = addDays(due, d - 1);
+    if (servicerCalendar.isBusinessDay(x)) return x;
+  }
+  return on;
+}
+
 /* ── the loan ────────────────────────────────────────────────────────────── */
 
 type EvKind =
@@ -899,7 +927,8 @@ export function simulateLoan(
       on = addDays(runDay, md.afterDays);
       const last = rollBack(endOfMonth(due), servicerCalendar);
       if (on > last) on = last < runDay ? runDay : last;
-    } else if (rnd.payments && md.uTiming < pAfter + pWithin) on = addDays(due, md.withinDay - 1);
+    } else if (rnd.payments && md.uTiming < pAfter + pWithin)
+      on = withinGraceDay(due, md.withinDay, R.payment.day_of_month_bins);
     else on = d.persona === "early" ? addDays(due, -(rnd.payments ? md.earlyDays : 3)) : due;
     on = rollForward(on, servicerCalendar);
     const credited = on;

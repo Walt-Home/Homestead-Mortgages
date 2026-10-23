@@ -53,6 +53,8 @@ export interface ArrivalRow {
   readonly loan: string;
   readonly due: PlainDate;
   readonly arrival: Arrival;
+  /** When it was credited in full, or null when it never was. */
+  readonly on: PlainDate | null;
   /** The borrower's draw missed it (a `missed` behavior row), not merely paid it late or in pieces. */
   readonly missed: boolean;
   /** The due date is a business day and so is the day before: an arrival around it says when the borrower paid. */
@@ -92,6 +94,7 @@ export function arrivals(book: LifeBook): ArrivalRow[] {
           loan: l.loan_id,
           due: i.due,
           arrival,
+          on: credited,
           missed: missed.has(i.due),
           clear: servicer.isBusinessDay(i.due) && servicer.isBusinessDay(addDays(i.due, -1)),
         });

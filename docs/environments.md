@@ -2421,7 +2421,7 @@ the result's warnings. The committed file gives no warning.
 
 **Habits.** Each borrower draws two habits, `lateness` (when they pay) and
 `fragility` (whether they miss), lognormal with mean one. Their own
-probabilities are the book's times the habit, capped: a miss or a payment
+probabilities are a base times the habit, capped: a miss or a payment
 after grace at most half the time, on time at least one time in twenty. A
 cap cuts the largest habits off, so `behavior.ts` sets each base so that the
 mean over the habit's distribution, after the caps, is the file's share.
@@ -2551,7 +2551,7 @@ the generator does not draw the figure: its draws make it, and
 | `delinquency.all_loans_30plus_share_sa`                      | `total`, 4.37 %                                           | reported only                                                                                                 |
 | `delinquency.roll_current_to_30`, `delinquency.cure_from_30` | `trailing_8_quarter_mean`: `to_30_60_late`, `to_current`  | the monthly roll and cure whose quarter is the stated one: 0.357 % and 16.3 % a month (below)                 |
 | `delinquency.roll_30_to_60`                                  | the share, monthly, 0.33                                  | a behind borrower misses again                                                                                |
-| `payment.day_of_month`                                       | `arrival_share`; `due_day` 1 and `grace_days` 15 required | the day inside grace: each bin spread over its days, days 2 to 16 normalized; early payers, below             |
+| `payment.day_of_month`                                       | `arrival_share`; `due_day` 1 and `grace_days` 15 required | the day inside grace: each bin spread over its days, a day off moved within its bin; early payers, below      |
 | `payment.late_within_grace_share`                            | the share, 0.508                                          | within grace, for a borrower who pays: share / (1 − m)                                                        |
 | `payment.late_after_grace_share`                             | the share, 0.042                                          | after grace in the month: (share − m) / (1 − m), less late partials (below)                                   |
 | `payment.partial_share`                                      | `partial_receipt_share`, and `returned_receipt_share`     | short receipts, 1 %; the returned share is read, not drawn                                                    |
@@ -2567,7 +2567,7 @@ the generator does not draw the figure: its draws make it, and
 | `mi.share_of_loans`                                          | `enterprise_originations_2025_cltv_over_80`, 0.352        | MI on every loan above 80 % loan-to-value                                                                     |
 | `book.note_rate_distribution`                                | `loans`                                                   | note rates; each open bin a point wide, like its neighbor                                                     |
 | `book.ltv_distribution`                                      | `at_origination_enterprise_2025.cltv_loans`               | loan-to-value at origination; over 97 is 97; 70 and under runs down to 39.7, which gives the stated 73.3 mean |
-| `book.loan_age_distribution`                                 | `loans`, in years                                         | ages in months; 4 years and under from zero; over 10 runs up to 19.5 years, which gives the stated 80 months  |
+| `book.loan_age_distribution`                                 | `loans`, in years                                         | a boarded book's ages in months; 4 years and under from zero; over 10 to 19.5 years, which gives a mean of 80 |
 | `refi.pmms_30y_series`                                       | `rows`, weeks as M/D/YYYY                                 | the mortgage rate's start, pull and spread (below)                                                            |
 | `disaster.declarations_by_month`                             | `major_disaster_individual_assistance_areas`, by month    | a disaster in the loan's county, per loan-month by calendar month (below)                                     |
 | `transfer.annual_rate`                                       | the share, 0.04                                           | 1 − (1 − rate)^(1/12) a month, when a scenario turns transfers out on                                         |
@@ -2612,8 +2612,12 @@ early. An installment is also not in by the end of grace when a partial
 payment's rest comes after it. That route is the partial share times the
 chance the rest, 5 to 25 days after the first piece, lands past day 16. The
 after-grace draw is lowered by it, so a book's late charges are the file's
-4.2 % and not a tenth more. A payment after grace stays in its month; one
-never received in the month is a miss, drawn apart.
+4.2 % and not a tenth more. A payment drawn for a weekend or a holiday inside
+grace arrives on the next business day of its own bin, else the one before
+it in the bin. Rolled forward alone, a fifth of the payments drawn for days
+2 to 5 arrived on days 6 to 10, and the bin read 0.21 against the file's
+0.27. A payment after grace stays in its month; one never received in the
+month is a miss, drawn apart.
 
 **The mortgage rate.** The generator reads three figures from the PMMS
 series: its newest print (7.32 % on 22 October 2026), where the path starts;
@@ -2645,11 +2649,14 @@ its rounding.
 it: 49.7 % of installments within grace (50.8 %), late charges on 4.0 % (4.2 %),
 a borrower's monthly roll 0.38 % (0.357 %) and cure 16.0 % (16.3 %), 0.96 %
 short receipts (1 %), 31.3 % of on-time payers early (31.1 %), 2.09 contacts
-a loan-year (2.0). A book from the defaults differs in each the file moves,
-and a test holds both. The within-grace and early shares are read on due
-dates that are a business day following one: around a weekend, a payment
-drawn for the day before or after the due date lands on the same business
-day as one drawn for it.
+a loan-year (2.0). Every arrival bin lands within the acceptance test's 0.02
+of the file's: 26.2 % of installments on days 2 to 5 (27 %), 12.0 % on days
+6 to 10 (12 %), 11.3 % on days 11 to 16 (11.8 %). A book from the defaults
+differs in each the file moves, and a test holds both. The arrival shares,
+within grace and around the due day, are read on due dates that are a
+business day following one: around a weekend, a payment drawn for the day
+before or after the due date lands on the same business day as one drawn
+for it.
 
 **Where the file and the generator part:**
 

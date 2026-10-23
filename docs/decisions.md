@@ -7261,6 +7261,11 @@ three. So:
   reader reports a supplement row for a loan that is not on the tape beside
   it as an orphan. With one supplement for the book, the first run raised
   10,203 of them across 131 tapes.
+- **A loan number twice on one tape stops the writer.** The reader drops
+  the second row as a duplicate, which is a tape-stream defect (T-01), not
+  a clean tape. Loan numbers are drawn at random from a hundred million, so
+  a book of thousands can draw a pair; making them unique by construction
+  changes what the generator draws, which is a new generator version.
 
 **What the round trip found.** The reader and the projection agree on all
 15,997 rows, except where the contract means something else:
@@ -7273,6 +7278,16 @@ three. So:
   decides on it.
 - **What the layout lacks.** The co-borrower, a mailing address and the
   loan's purpose have no m3 column.
+
+**A live loan always has a next due date.** The first tapes carried an empty
+"Next Due Date" on 4,150 of the 15,997 rows, every one a loan still being
+paid. The ledger runs one installment ahead of the month, so a borrower who
+paid next month's installment early has none open at the month-end, and the
+month-end's next due date is null. The projection now takes the installment
+after the one interest is paid to, which is the next due date on every other
+month-end, and counts the remaining term from it; the round trip holds both.
+The month-end itself is unchanged, because changing how a history is
+computed is a new generator version and moves every book.
 
 **Tape-stream defects are a family of their own.** The 47 in
 docs/synthetic-data-defects.md are wrong values in a servicer's records. A

@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { addMonths, parts } from "@hm/kernel/calendar";
 import { Decimal } from "@hm/kernel/money";
 import {
   M3_V1,
@@ -286,6 +287,7 @@ describe("the tape writer", () => {
       coborrower: 0,
       negativeEscrow: 0,
       mbaAhead: 0,
+      paidAhead: 0,
     };
     let records = 0;
     for (const f of stream) {
@@ -312,6 +314,24 @@ describe("the tape writer", () => {
         if (p.property.property_zip.startsWith("0")) seen.zeroZip++;
         if (p.borrower.parties.length > 1) seen.coborrower++;
         if (p.escrow.escrow_balance_cents < 0n) seen.negativeEscrow++;
+        // A loan still being paid has a next due date, the installment after the one interest is paid to, and its
+        // remaining term counts from it: on a borrower who paid next month's installment early too.
+        const st = p.status.servicing_status;
+        if (st === "current" || st === "delinquent") {
+          const next = p.status.next_due_date;
+          const ipd = p.status.interest_paid_to_date;
+          if (next === null || ipd === null || next !== addMonths(ipd, 1))
+            bad.push(`${f.month} ${p.loan_id} next due ${next}, interest paid to ${ipd}`);
+          else {
+            const [n, mat] = [parts(next), parts(p.terms.maturity_date)];
+            const left = (mat.y - n.y) * 12 + mat.m - n.m + 1;
+            if (p.terms.remaining_term_months !== left)
+              bad.push(
+                `${f.month} ${p.loan_id} ${p.terms.remaining_term_months} months, not ${left}`,
+              );
+          }
+          if (ipd !== null && ipd > p.as_of_date) seen.paidAhead++;
+        }
         if (p.status.servicing_status === "current" && x.record.servicing.status === "delinquent")
           seen.mbaAhead++;
         records++;
@@ -331,6 +351,8 @@ describe("the tape writer", () => {
     // Regulation X's count, which the projection's status follows, and 30 by the MBA's, which the
     // tape carries and the contract reads.
     expect(seen.mbaAhead).toBeGreaterThan(0);
+    // Paid next month's installment before the month-end: the ledger holds nothing open for it.
+    expect(seen.paidAhead).toBeGreaterThan(1_000);
   });
 
   it("reads the same tape the same from a workbook", () => {
@@ -384,6 +406,32 @@ describe("the tape writer", () => {
     expect(() => TAPE_COLUMNS.map((c) => c.cell(odd))).toThrow(
       /no notation for occupancy "vacant"/,
     );
+  });
+
+  it("writes the same bytes from the same seed, and other bytes from another", () => {
+    const text = (seed: string) => {
+      const b = generate(seed, { loans: 30 }, { calibration: cal }).clean;
+      return tapeStream(b).map((f) => toCsvText(f) + toCsvText(writeSupplement(b, f.month)));
+    };
+    const a = text("tape-again");
+    expect(text("tape-again")).toEqual(a);
+    expect(text("tape-other")).not.toEqual(a);
+  });
+
+  it("refuses two loans with one loan number on a tape rather than write a duplicate", () => {
+    const two = generate("tape-dup", { loans: 2, random: false }, { calibration: cal }).clean;
+    const a = two.loans[0]!;
+    const b = two.loans[1]!;
+    const month = a.months[3]!.month;
+    expect(writeTape(two, month).rows.length).toBe(2);
+    const dup = {
+      ...two,
+      loans: [a, { ...b, draw: { ...b.draw, servicer_loan_number: a.draw.servicer_loan_number } }],
+    };
+    expect(() => writeTape(dup, month)).toThrow(
+      new RegExp(`${a.loan_id} and ${b.loan_id} both carry loan number`),
+    );
+    expect(() => writeSupplement(dup, month)).toThrow(/a clean tape carries each loan once/);
   });
 });
 

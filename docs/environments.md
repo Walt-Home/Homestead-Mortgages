@@ -2453,6 +2453,14 @@ foreclosure and bankruptcy fields. The tape writer lays them out. The month
 a loan pays off or transfers out is measured on the day it closed, so an
 installment still in grace at a payoff never ages to 30 days.
 
+A loan still being paid always has a next due date on the projection. The
+ledger runs one installment ahead of the month, so a borrower who paid next
+month's installment early has none open at the month-end, and the
+month-end's `next_due` is null. The projection takes the installment after
+the one interest is paid to, as `next_due` is on every other month-end, and
+counts the remaining term from it. The round trip below has 4,150 such
+rows out of 15,997.
+
 **The tape writer.** `writeTape(book, month)` (`src/life/tape.ts`) writes a
 month's tape in the m3-v1 layout that `@hm/partner-book` reads:
 
@@ -2480,6 +2488,11 @@ Each cell is the projection's value, in the form a partner's export gives:
   uses the sample partner's notation where it has one, and "Current
   Occupancy" fills both of its columns. A code with no notation stops the
   writer.
+- **Loan numbers.** A loan number on two rows of one tape stops the writer
+  too. The reader would keep the first row and drop the second as a
+  duplicate, which is T-01's damage and not a clean tape's. The generator
+  draws loan numbers at random from a hundred million, so a book of
+  thousands of loans can draw a pair.
 - **Pay strings** are written as the projection writes them.
 
 A column the projection has nothing for is left empty: FICO, a BPO, the
@@ -2492,6 +2505,9 @@ through `readBook`.
 - The reader raises no exception.
 - Every fact it keeps equals the projection's, and so does every field of
   the `ImportedLoanRecord` it makes.
+- Every loan still being paid has a next due date, the month after the
+  interest paid-to date, with the remaining term counted from it.
+- The same seed writes the same bytes.
 - A test holds the writer's columns equal to the profile's, and a workbook
   of the same rows reads the same as the CSV.
 

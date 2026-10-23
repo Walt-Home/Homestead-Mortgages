@@ -19,6 +19,14 @@
  * on the day it closed: its delinquency is what it owed then, and a loan paid
  * in full has nothing past due (simulate.ts, `monthEnd`).
  *
+ * A loan still being paid always has a next due date here. The ledger runs
+ * one installment ahead of the month, so a borrower who paid next month's
+ * installment early leaves none open at the month-end, and the month-end's
+ * `next_due` is null; a partner's tape never leaves the column empty on a
+ * live loan. The projection takes the installment after the one interest is
+ * paid to, which is what `next_due` is on every other month-end, and counts
+ * the remaining term from it rather than from the installment already paid.
+ *
  * Foreclosure and bankruptcy are not generated yet, so those fields are
  * always empty; they are here so the tape writer's layout is complete.
  */
@@ -174,6 +182,9 @@ export function monthEndRow(loan: LoanLife, month: string): TapeRow | null {
   }
   const b1 = d.parties[0]!;
   const ended = m.status === "paid_off" || m.status === "transferred";
+  // Paid ahead: next month's installment paid early, so none is open (see the header).
+  const after = !ended && m.next_due === null && m.lpi !== null ? addMonths(m.lpi, 1) : null;
+  const paidAhead = after !== null && after <= d.maturity;
   return {
     loan_id: loan.loan_id,
     as_of_date: m.as_of,
@@ -208,7 +219,9 @@ export function monthEndRow(loan: LoanLife, month: string): TapeRow | null {
       ti_cents: m.escrow_payment,
       total_due_cents: m.pi + m.escrow_payment,
       original_term_months: d.term_months,
-      remaining_term_months: m.remaining_term_months,
+      remaining_term_months: paidAhead
+        ? Math.max(0, m.remaining_term_months - 1)
+        : m.remaining_term_months,
       maturity_date: d.maturity,
       first_payment_date: d.first_due,
       origination_date: d.note_date,
@@ -246,7 +259,7 @@ export function monthEndRow(loan: LoanLife, month: string): TapeRow | null {
       servicing_status: m.status,
       delinquency_days: m.days_delinquent,
       mba_delinquency_status: m.mba_status,
-      next_due_date: m.next_due,
+      next_due_date: paidAhead ? after : m.next_due,
       interest_paid_to_date: m.lpi,
       last_payment_date: m.last_payment_on,
       metro2_account_status: m.metro2.account_status,

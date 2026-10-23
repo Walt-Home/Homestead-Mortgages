@@ -293,11 +293,19 @@ export interface TapeOptions {
   readonly servicer?: Servicer;
 }
 
-/** The projection rows a month's tape carries: every loan with a month-end that month on the servicer's books, in book order. */
+/**
+ * The projection rows a month's tape carries: every loan with a month-end that
+ * month on the servicer's books, in book order. Two loans with one loan number
+ * stop the writer: the reader keeps the first and drops the second as a
+ * duplicate, which is T-01's damage and never a clean tape's. The generator
+ * draws loan numbers at random from a hundred million, so a book of thousands
+ * can draw a pair.
+ */
 export function tapeProjection(book: LifeBook, month: string, opts: TapeOptions = {}): TapeRow[] {
   const servicer = opts.servicer ?? "us";
   const asOf = lastDay(month);
   const rows: TapeRow[] = [];
+  const byNumber = new Map<string, string>();
   for (const l of book.loans) {
     const r = monthEndRow(l, month);
     if (!r || r.servicer !== servicer) continue;
@@ -305,6 +313,12 @@ export function tapeProjection(book: LifeBook, month: string, opts: TapeOptions 
       throw new RangeError(
         `${l.loan_id} ${month}: measured on ${r.as_of_date}, not on the tape's as-of ${asOf}`,
       );
+    const other = byNumber.get(r.servicer_loan_number);
+    if (other !== undefined)
+      throw new RangeError(
+        `${month}: ${other} and ${l.loan_id} both carry loan number ${r.servicer_loan_number}; a clean tape carries each loan once`,
+      );
+    byNumber.set(r.servicer_loan_number, l.loan_id);
     rows.push(r);
   }
   return rows;

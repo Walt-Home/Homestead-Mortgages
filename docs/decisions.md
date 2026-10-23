@@ -7225,3 +7225,80 @@ cadence's cessation on a promise to pay or a workout request (a conversation
 here carries no commitment, so the cadence runs on), the pre-sale stop, TCPA
 consent and quiet hours, Reg F's seven days after a conversation, and the
 notices' content.
+
+## The demo's catch-up and escrow review are moments read off a loan's history
+
+**Built 23 October 2026,** as `catchup-posting` 1.0.0 and `escrow-review`
+1.0.0 in `packages/environments`, the first environments drawn from the life
+generator. One is a catch-up receipt on a loan whose note caps the late
+charge, where the D-03 twin charged above the cap. The other is an annual
+escrow analysis the servicing app holds for review after a reassessment or a
+premium increase. docs/environments.md has both.
+
+**A task is the engine's own input at the moment, not a reconstruction.**
+The life generator keeps no state an environment can read after the fact.
+Rebuilding the cash state from the history's rows would have been a second
+cashiering, and rebuilding an analysis's lines would have repeated the
+generator's own draws. So `generate` takes an `observe` callback and hands
+over each receipt and each analysis just before the engine runs, as copies
+(`LifeMoment`). The task is read off that. Two tests hold it to the history:
+each clean catch-up posts to the cent as the history posted it, and every
+one of 400 analyses in forty decades concludes what the history did.
+Observing changes no draw.
+
+**The refund due is what was already collected above the cap.** D-03's
+handling (docs/synthetic-data-defects.md) recomputes every charge with
+`lateChargeAmount`, reduces what is owed to the capped amount, and refunds
+what was collected above it. At the catch-up that makes three figures:
+
+- each charge held to the note;
+- the refund: charges collected above the note before this receipt;
+- this receipt's own excess. The twin's borrower paid what the system
+  billed, so the posting has the excess of the open charges over the cap
+  left over, and the engine holds it in suspense as it holds any remainder.
+
+Calling that suspense a refund would have stated a policy the engine does
+not have.
+
+**The paid-through date is graded, not the next due.** The life generator
+projects one installment ahead, so an early catch-up prepays the last one
+projected and leaves none open. "Next due" would then be a date the task
+does not carry, and requiring one still open left every prepaid catch-up
+out (none in 300 training tasks).
+
+**The catch-ups stay on the pay-in-full route.** The receipt pays at least
+the oldest installment whole, pools no suspense, and leaves nothing for late
+charges while an installment due is unpaid. The loan carries no hold, trial
+or plan. That keeps out cashiering-4, -7, -10 and -13
+(docs/servicing-engine-defects.md). The history before the moment is held
+to the same, so no charge the task lists was collected, or left uncharged,
+on a path the spec calls wrong. One rate covers every installment a receipt
+pays.
+
+**The bill comparison is the app's own, over a line's bills against last
+year.** R10's "bill amount variance > 20 % vs. prior year" reaches the
+engine as a flag the agent sets from `compareBillToPriorYear`
+(`apps/servicing/src/app/tools/section03.ts:144`), which takes any two
+amounts. The review compares a line's known bills for the coming year with
+its prior-year total, in the tool's own integer arithmetic.
+
+**What the histories showed about it.** The hazard renewal falls on the
+note's month, two months before the computation year, so last year's figure
+always carries the newest renewal. Drawn as "the first analysis after the
+event", no bill was flagged in fifty tasks. A premium's increase reaches a
+bill compared only in the analysis whose coming year holds the first
+increased renewal, and only when the quote is known, so the generator tries
+that analysis and the two after it. Taxes are estimated from last year with
+CPI, so a reassessment is found in the payment and never in a bill.
+
+**Both draw from the calibration's typed defaults.** The life generator's
+own tests do the same. A pinned suite does not move when `calibration.json`
+changes, and the browser playground, which reads no file, draws the same
+task the command line does. The playground needed a `node:url` shim for the
+calibration reader's import, which nothing then calls.
+
+**Not drawn in 1.0.0.** For the catch-up: a payoff, a payment across an ARM
+change, forwarded payments, and every partial path above. For the review: a
+workout's 60 months or a borrower's election (the life generator runs no
+workout), a retained or balanced surplus, and the stale-estimate and
+missing-termination triggers, which no line in the held-out suite raises.

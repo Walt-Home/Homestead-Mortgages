@@ -512,7 +512,7 @@ const EDGES: Record<EiEdge, { arms: number; build: Build }> = {
     arms: 2,
     build: (r, arm, d) => {
       // Paid on the next due date (11.1-T3), or between day 20 and day 36: every window
-      // cancelled. The picture is drawn on the last due date now and then, the borrower current.
+      // canceled. The picture is drawn on the last due date now and then, the borrower current.
       const months = r.int(2, 4);
       const d0 = monthIn(r, 1, MONTHS_DRAWN - 6);
       const onTime = r.int(0, 1);
@@ -845,6 +845,10 @@ const sameDayReview = (task: EiTask, end: PlainDate) =>
  *     inside it (11.2's state machine moves the running cycle to 190 days,
  *     which the engine is never handed), or with an installment credited on
  *     its review day. No cease falls inside a running standard cycle.
+ *   - No installment is credited after a review that moved the duty to a
+ *     window. 11.2 rule 3 recomputes that date each night as installments
+ *     are paid, and 11.2's state machine closes the cycle when the
+ *     delinquency ends; the answer reads the date on the review day.
  *   - An fdcpa cycle reviewed gives the same answer at day 180, where
  *     §1024.39(d)(3)(iii) tests the delinquency, as at day 190, where
  *     `cycleEndReview` tests it.
@@ -1016,6 +1020,13 @@ export function eiScopeIssues(task: EiTask): string[] {
     if (!cy || (cy.outcome !== "repeat_required" && cy.outcome !== "not_required")) return;
     if (bk && bk.petition_on <= c.cycle_end_at) out.push("a cycle reviewed after a petition");
     if (sameDayReview(task, c.cycle_end_at)) out.push("an installment credited on a review day");
+    // 11.2 rule 3: a moved duty's date is recomputed each night as installments are paid.
+    if (
+      cy.outcome === "not_required" &&
+      cy.next_required_by !== null &&
+      task.installments.some((i) => i.credited_as_of !== null && i.credited_as_of > c.cycle_end_at)
+    )
+      out.push("a credit after a review that moved the duty to a window");
     if (n.variant === "fdcpa") {
       const day180 = addDays(n.provided_on, 180);
       const days = regxDaysOn(task, day180);
@@ -1337,7 +1348,7 @@ export const EI_SPEC_CASES: readonly { readonly name: string; readonly loan: Spe
     },
   },
   {
-    name: "11.1-T8 / 11.2-T7: a Chapter 7 discharge 2027-04-15 with no payment after the petition: the next window exempt_discharge",
+    name: "11.1-T8 / 11.2-T7: a Chapter 7 discharge 2027-04-15 with no payment after the petition: the legs waiting on the case's notice and the next window exempt_discharge",
     loan: {
       as_of: D("2027-05-20"),
       loan: LOAN,

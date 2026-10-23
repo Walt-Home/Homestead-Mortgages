@@ -241,6 +241,15 @@ export function* eiSteps(p: Json, _call: Call): Step<Json> {
         for (const l of live.values()) if (l.status === "open") l.status = "exempt_fdcpa_cease";
       },
     });
+  if (bk && bk.discharged_on !== null)
+    events.push({
+      on: bk.discharged_on,
+      rank: 1,
+      act: () => {
+        for (const n of notice.values())
+          if (n.status === "bk_modified_required") n.status = "exempt_discharge";
+      },
+    });
   for (const c of contacts)
     if (isLive(c))
       events.push({

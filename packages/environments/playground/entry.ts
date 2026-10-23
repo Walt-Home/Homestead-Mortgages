@@ -821,7 +821,7 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     title: "Early-intervention clocks",
     side: "servicing",
     summary:
-      "One loan's delinquency on one day: each missed installment's Regulation X windows (live contact by day 36, the written notice by day 45, met, late, breached, cancelled by payment, covered by a notice's 180 days or exempt), each notice's cycle and its review, the bankruptcy notice, the assigned-contact deadline, Fannie Mae's outbound cadence and Reg F's call cap. Graded by the servicing app's own windows engine.",
+      "One loan's delinquency on one day: each missed installment's Regulation X windows (live contact by day 36, the written notice by day 45, met, late, breached, canceled by payment, covered by a notice's 180 days or exempt), each notice's cycle and its review, the bankruptcy notice, the assigned-contact deadline, Fannie Mae's outbound cadence and Reg F's call cap. Graded by the servicing app's own windows engine.",
     id: eiTaskId,
     one: generateEiTask,
     spec: eiSpecTasks,

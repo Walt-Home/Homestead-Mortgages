@@ -7000,7 +7000,7 @@ that runs this engine over a history: the runtime's `projectWindows` writes
 the windows table without calling it (ei-2). So the grader runs the days:
 the engine's `sweep` first each day, then the windows that open, then the
 day's event through the engine's own step for it. Each step names its line
-in `src/ei/grader.ts`. Three readings were decided on the way.
+in `src/ei/grader.ts`. Four readings were decided on the way.
 
 - **A notice provided while several legs are open is the notice for the
   oldest; the others are inside its cycle.** 11.2-T3 says the Dec 14 notice
@@ -7023,8 +7023,16 @@ in `src/ei/grader.ts`. Three readings were decided on the way.
   §1024.40 assignment is due by day 45 "of the borrower's delinquency", and
   D2-2-02's attempts run "until … the delinquency is resolved", so a
   delinquency that ends first is `not_due` for the assignment and closes its
-  cadence. 11.1-T3's rolling borrower is the case: four windows cancelled,
+  cadence. 11.1-T3's rolling borrower is the case: four windows canceled,
   no deadline missed.
+- **A discharge exempts a leg still waiting on the case's notice.** The
+  engine has no step for a discharge; `openWindow` makes a window opened
+  after one `exempt_discharge` (windows.ts:72) and leaves the legs the
+  petition left `bk_modified_required` as they are. 11.2's state machine
+  moves them to `exempt_discharge` at the discharge, and 11.2-T7 says that
+  after a Chapter 7 discharge with no payment since the petition "no notice
+  is ever due", so the grader does the same. A case's notice due before the
+  discharge and never provided stays breached.
 
 The rules beside the engine are restated with their lines, each held by a
 test: the assignment (`assignmentTrigger`, servicing-requests/ops.ts:178-182),
@@ -7076,6 +7084,12 @@ none of them.
 - _A delinquency closed on its start deadline with no attempt._
   `fnmaCadenceBreaches` counts it breached (`end >= startDue`, plan.ts:193);
   the clock, due at the end of that day, does not. Kept out.
+- _A credit after a review that moved the duty to a window._ 11.2 rule 3
+  recomputes that date "each night as installments are paid", and 11.2's
+  state machine closes the cycle when the delinquency ends; the answer reads
+  the date on the review day. A loan whose earliest unpaid installment is
+  paid after the review is graded on a date the spec has moved. Kept out;
+  the generator never draws one.
 
 ei-1, ei-2 and ei-3 are the runtime's, not the engine's, so nothing needs
 keeping out: a test gives each defect's own facts the spec's answer (the
@@ -7097,5 +7111,7 @@ turns.
 Not in 1.0.0: the good-faith determination (11.1 rule 6's minimum reads
 numbers and dayparts no task carries), ongoing loss-mitigation contact, the
 transferee rule, a dismissal, a post-petition payment after a discharge, the
-pre-sale stop, TCPA consent and quiet hours, Reg F's seven days after a
-conversation, and the notices' content.
+cadence's cessation on a promise to pay or a workout request (a conversation
+here carries no commitment, so the cadence runs on), the pre-sale stop, TCPA
+consent and quiet hours, Reg F's seven days after a conversation, and the
+notices' content.

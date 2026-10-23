@@ -25,7 +25,9 @@
  *     day (11.1 rule 1, 11.1-T4; windows.ts `applyContact`);
  *   - a petition, a cease and a discharge move what they move
  *     (windows.ts `applyBankruptcyPetition`, `applyFdcpaCease`, and
- *     `openWindow`'s `bankruptcy` option);
+ *     `openWindow`'s `bankruptcy` option); the engine has no step for the
+ *     discharge itself, so a leg still waiting on the case's notice is made
+ *     `exempt_discharge` there, as 11.2's state machine and 11.2-T7 say;
  *   - a notice provided is the notice for every leg that is breached or
  *     waiting on the bankruptcy notice, and for the oldest open leg; every
  *     other open leg is inside the cycle it starts, so it is
@@ -296,6 +298,12 @@ export function foldWindows(task: EiTask): Folded[] {
         options_available: true,
       });
     if (cease === t) applyFdcpaCease(windows, { options_available: true });
+    // 11.2's state machine: on discharge a leg still waiting on the case's notice is
+    // exempt_discharge (11.2-T7: "no notice is ever due"), the status `openWindow` gives a window
+    // opened after it (windows.ts:72). The engine has no step of its own for the discharge.
+    if (bk && bk.discharged_on === t)
+      for (const w of windows)
+        if (w.notice === "bk_modified_required") w.notice = "exempt_discharge";
     for (const c of task.contacts)
       if (c.on === t && isLiveContact(c)) applyContact(windows, t, "live", c.direction);
     task.notices.forEach((n, k) => {

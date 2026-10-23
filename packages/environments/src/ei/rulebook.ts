@@ -52,7 +52,7 @@ Each day, first: every leg still open whose deadline is before today becomes bre
 - A live contact on day t: every live leg still open becomes satisfied_live. A window that opens after the contact is not touched by it.
 - The petition on day t: every live leg still open becomes exempt_bk; every notice leg still open becomes exempt_bk_cease when a cease was received before, and bk_modified_required otherwise.
 - A cease on day t: every live leg still open becomes exempt_fdcpa_cease. Notice legs do not change.
-- The discharge changes no leg; it decides how later windows open.
+- The discharge on day t: every notice leg still bk_modified_required becomes exempt_discharge. It also decides how later windows open.
 - A notice provided on day t is, in this order:
   (a) the notice for every notice leg that is breached (it becomes sent, and notice_late is true) or bk_modified_required (sent, notice_late false);
   (b) the notice for the oldest window whose notice leg is still open (sent, notice_late false);

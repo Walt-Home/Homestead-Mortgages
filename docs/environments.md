@@ -2184,9 +2184,9 @@ end of `as_of`:
 
 The model opens a window for every installment unpaid the day after it fell
 due and says, for each, the live-contact deadline (day 36) and whether it was
-met, met late, breached, cancelled by payment or exempt, and the written
+met, met late, breached, canceled by payment or exempt, and the written
 notice's deadline (day 45) and whether it was sent (late or not), covered by
-a notice within 180 days, cancelled by payment, owed or exempt. Then each
+a notice within 180 days, canceled by payment, owed or exempt. Then each
 notice's cycle (superseded, running, or reviewed at day 180 with the repeat
 due then or moved to a window), the once-per-case bankruptcy notice, and for
 each delinquency its assigned-contact deadline, its outbound cadence's
@@ -2230,7 +2230,11 @@ it, and grades the spec's reading:
 - a live contact satisfies only the open legs whose window contains its day
   (`applyContact`, 11.1-T4);
 - a petition and a cease move what `applyBankruptcyPetition` and
-  `applyFdcpaCease` move, and a discharge decides how later windows open;
+  `applyFdcpaCease` move. The engine has no step for a discharge, so the
+  grader makes every leg still waiting on the case's notice
+  `exempt_discharge` there, as 11.2's state machine does and 11.2-T7 ("no
+  notice is ever due") requires, and the discharge decides how later
+  windows open;
 - a notice provided is the notice for every leg breached or waiting on the
   bankruptcy notice, and for the oldest open leg (`noticeProvided`); every
   other open leg is inside the cycle it starts, `satisfied_by_prior_180`, as
@@ -2301,10 +2305,9 @@ a suite of 1,400, each edge's arms in turn:
 Around each edge sits an ordinary servicer: attempts every four to seven
 days from day 17 with a conversation in most windows, a notice mailed
 between day 38 and day 44, personnel assigned in time about nine times in
-ten. On
-the held-out suite 117 loans are breached somewhere, 50 owe something not yet
-due and 33 are clear; every status the grader can give turns up there but
-the bankruptcy notice not yet owed, which training has.
+ten. On the held-out suite 117 loans are breached somewhere, 50 owe something
+not yet due and 33 are clear; every status the grader can give turns up there
+but the bankruptcy notice not yet owed, which training has.
 
 **What v1 leaves out, and why.** Reading the engine and the runtime around
 it against the spec found places where an answer would turn on a reading
@@ -2326,6 +2329,10 @@ wrong. docs/decisions.md has each, reproduced. v1 does not draw them, and
 - a window opened inside a notice's cycle after a cure. 11.2's state machine
   closes a cycle when the delinquency ends; §1024.39(b)(1) excuses a second
   notice within 180 days whatever came between;
+- an installment credited after a review that moved the duty to a window.
+  11.2 rule 3 recomputes that date each night as installments are paid, and
+  11.2's state machine closes the cycle when the delinquency ends; the
+  answer reads it on the review day;
 - a cycle reviewed after a petition, after a cease inside it (11.2 moves the
   running cycle to 190 days, which the engine is never handed), or with a
   credit on its review day; and an fdcpa cycle that reviews differently at
@@ -2343,10 +2350,13 @@ wrong. docs/decisions.md has each, reproduced. v1 does not draw them, and
 Not in 1.0.0: the good-faith determination (11.1 rule 6, whose policy
 minimum reads numbers and dayparts), ongoing loss-mitigation contact, the
 transferee rule and boarding, a dismissal and its resumed windows, a
-post-petition payment after a discharge, the pre-sale stop, TCPA, quiet
-hours, the post-conversation gate, and the content of a notice. On 10,000
-unfiltered training draws the guard rejects none, because the generator aims
-around all of it. It is a guard, not a filter.
+post-petition payment after a discharge, the cadence's cessation on a
+promise to pay or a workout request (`FNMA_D2202_CESSATION_ON_QRPC`; a
+conversation here carries no commitment, so the cadence runs on), the
+pre-sale stop, TCPA, quiet hours, the post-conversation gate, and the
+content of a notice. On 10,000 unfiltered training draws the guard rejects
+none, because the generator aims around all of it. It is a guard, not a
+filter.
 
 **The proof of fairness.** The reference passes the held-out suite, a
 300-task training suite and nineteen spec cases: 11.1 rules 3 and 10 and

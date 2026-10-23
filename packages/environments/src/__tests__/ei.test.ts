@@ -310,6 +310,11 @@ describe("ei-clocks", () => {
     );
     lineHas(
       "domain/early-intervention/windows.ts",
+      72,
+      'if (o.bankruptcy === "discharged") { w.live = "exempt_discharge"; w.notice = "exempt_discharge";',
+    );
+    lineHas(
+      "domain/early-intervention/windows.ts",
       74,
       "o.active_cycle.cycle_end_at >= w.notice_due_at",
     );
@@ -400,7 +405,7 @@ describe("ei-clocks", () => {
     expect(EI_FINGERPRINT.environment).toMatchInlineSnapshot(`
       {
         "name": "ei-clocks",
-        "rulebook_sha256": "5b83f12afc2b923a88b541658bbd673c4c18932ba3a357fb979979c64d2c35c2",
+        "rulebook_sha256": "dcfd03dad794e6e67bb8013df805da2d369046c99557ea0d0f2cc73e359ac67d",
         "tools_sha256": "df152b6424884c1cd68b358adedbb7fc94777986ff3cda2e8a1f4b9b49c65aa8",
         "version": "1.0.0",
       }
@@ -425,6 +430,7 @@ describe("ei-clocks", () => {
       "A live contact on day t: every live leg still open becomes satisfied_live. A window that opens after the contact is not touched by it.",
       "The petition on day t: every live leg still open becomes exempt_bk; every notice leg still open becomes exempt_bk_cease when a cease was received before, and bk_modified_required otherwise.",
       "A cease on day t: every live leg still open becomes exempt_fdcpa_cease. Notice legs do not change.",
+      "The discharge on day t: every notice leg still bk_modified_required becomes exempt_discharge.",
       "(a) the notice for every notice leg that is breached (it becomes sent, and notice_late is true) or bk_modified_required (sent, notice_late false);",
       "(b) the notice for the oldest window whose notice leg is still open (sent, notice_late false);",
       "(c) and every other notice leg still open becomes satisfied_by_prior_180: it is inside the cycle this notice starts.",
@@ -590,16 +596,29 @@ describe("ei-clocks", () => {
       expect(sent.cycles.map((c) => c.outcome)).toEqual(["superseded", "running"]);
     });
 
-    it("11.1-T8 and 11.2-T7: after a Chapter 7 discharge, a new window is exempt on both legs", () => {
-      const a = expectedEi(specTask("11.1-T8"));
-      expect(windowOf(a, "2027-04-01")).toMatchObject({
-        live: "exempt_bk",
-        notice: "bk_modified_required",
-      });
+    it("11.1-T8 and 11.2-T7: after a Chapter 7 discharge no notice is ever due, and a new window is exempt on both legs", () => {
+      const t = specTask("11.1-T8");
+      const a = expectedEi(t);
+      // The legs the petition left waiting on the case's notice are exempt from the discharge on.
+      expect(["2027-02-01", "2027-03-01", "2027-04-01"].map((d) => windowOf(a, d))).toMatchObject([
+        { live: "exempt_bk", notice: "exempt_discharge" },
+        { live: "exempt_bk", notice: "exempt_discharge" },
+        { live: "exempt_bk", notice: "exempt_discharge" },
+      ]);
       expect(windowOf(a, "2027-05-01")).toMatchObject({
         live: "exempt_discharge",
         notice: "exempt_discharge",
       });
+      expect(
+        a.windows.some((w) => w.notice === "bk_modified_required" || w.notice === "open"),
+      ).toBe(false);
+      // The case's notice was due before the discharge and never provided: that breach stands.
+      expect(a.bk_notice).toEqual({ due: "2027-03-06", status: "breached" });
+      // The day before the discharge, the same legs still wait on it.
+      const before = expectedEi({ ...t, as_of: D("2027-04-14") });
+      expect(
+        before.windows.filter((w) => w.notice === "bk_modified_required").map((w) => w.due_date),
+      ).toEqual(["2027-02-01", "2027-03-01", "2027-04-01"]);
     });
 
     it("11.1-T15: the deadline after Thursday 2026-11-19 is Friday 11-27, Thanksgiving closed", () => {
@@ -1103,6 +1122,27 @@ describe("ei-clocks", () => {
       );
     });
 
+    it("a credit after a review that moved the duty to a window: 11.2 rule 3 recomputes that date each night", () => {
+      // 11.2-T4's loan: June 1 the earliest unpaid on the 2027-06-12 review, the duty moved to 07-16.
+      const t4 = specTask("11.2-T4: June 1");
+      expect(eiScopeIssues(t4)).toEqual([]);
+      // June 1 credited on 06-25 and July 1 missed: recomputed nightly, the date is no longer 07-16.
+      const later = {
+        ...t4,
+        as_of: D("2027-07-20"),
+        installments: [
+          ...t4.installments.slice(0, 7),
+          { due_date: D("2027-06-01"), credited_as_of: D("2027-06-25") },
+          ...unpaid("2027-07-01"),
+        ],
+      };
+      expect(expectedEi(later).cycles[0]).toMatchObject({
+        outcome: "not_required",
+        next_required_by: "2027-07-16",
+      });
+      flags(later, /a credit after a review that moved the duty to a window/);
+    });
+
     it("a delinquency closed on its start deadline with no attempt, where the timer row and fnmaCadenceBreaches's end >= startDue part", () => {
       flags(
         loan({
@@ -1346,7 +1386,7 @@ describe("ei-clocks", () => {
     });
 
     it("rolling, investment and continuity", () => {
-      // Every window whose installment has been paid was cancelled by it; the newest may still be running.
+      // Every window whose installment has been paid was canceled by it; the newest may still be running.
       for (const x of of("rolling"))
         for (const w of x.a.windows) {
           const paid = x.t.installments.find((i) => i.due_date === w.due_date)?.credited_as_of;

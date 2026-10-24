@@ -8617,7 +8617,9 @@ measured.
 
 **escrow-review is 1.1.0.** Its task now states, and its grader grades
 against, the payment billed today, so its stated rule changed: Step 10
-names it, and `escrow-review/1.0.0` is retired in `HELDOUT_SUITES`. Measured
+names it (the escrow share of the first installment due after `as_of`, paid
+or not, which on a delinquent loan is not the oldest unpaid one), and
+`escrow-review/1.0.0` is retired in `HELDOUT_SUITES`. Measured
 from the generator, never from a run's transcripts, on 1.0.0's 200 held-out
 tasks under life 1.1.0: the billed payment differs from the task's on 154,
 and 15 graded answers change, 4 of them whether the flag stands, the
@@ -8626,7 +8628,12 @@ figures the baseline entry above gave. DeepSeek's 188 of 200 stands as what
 
 **The pins.** A suite whose stated rule did not change keeps its version
 and is re-pinned, as life 1.1.0's were; each fingerprint names the life
-version it is drawn under.
+version it is drawn under. Life 1.1.0's were re-pinned in place because no
+model had run on them, and one of these now has a score: DeepSeek's 198 of
+200 on catchup-posting 1.0.0 (above) was measured on the life 1.1.0 suite,
+`3ff8eccf…`, and its records' fingerprint names life 1.1.0. It stands as
+what that suite measured, and the baseline is to be rerun on `9291c1f2…`.
+No model has run on boarding-triage 1.1.0, tape-intake or call-qa.
 
 | Suite           | Version       | Held-out pin              | Reference, held-out | Spec cases |
 | --------------- | ------------- | ------------------------- | ------------------- | ---------- |

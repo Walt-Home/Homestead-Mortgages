@@ -25,7 +25,7 @@ export const ANALYSIS_STEPS = ESCROW_RULEBOOK.slice(
 
 export const REVIEW_STEPS = `## Step 10. Anomalies
 
-Besides the line anomalies of Step 1, compare new_payment with current_escrow_payment_cents, the escrow payment billed today: the escrow share of the next installment due, with any shortage or credit from last year's analysis still in it. The change is the difference either way:
+Besides the line anomalies of Step 1, compare new_payment with current_escrow_payment_cents, the escrow payment billed today: the escrow share of the first installment due after as_of, paid or not, with any shortage or credit from last year's analysis still in it. The change is the difference either way:
 - payment_change_gt_25pct: current_escrow_payment_cents is above 0 and the change × 100 is more than current_escrow_payment_cents × 25.
 - payment_change_gt_150: the change is more than 15000.
 - surplus_gt_2500: the decision is "refund" and the surplus is more than 250000.

@@ -637,12 +637,26 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
   /** A promise window: from the call to the day it is due, when the cadence is ceased (ptp_pending). */
   const promiseWindows: { from: PlainDate; to: PlainDate }[] = [];
   const pending = (on: PlainDate) => promiseWindows.find((w) => w.from <= on && on <= w.to);
+  /**
+   * A promise nobody recorded (S-01's twin), from the call and the minute it was made. It ceases nothing, and no
+   * later call knows of it; a call made before it still draws as the clean history's did, which the promise kept
+   * from taking one of its own, so the twin is the clean history until the call.
+   */
+  const unrecordedWindows: { from: PlainDate; minute: number; to: PlainDate }[] = [];
+  const earlier = (on: PlainDate, minute: number, w: { from: PlainDate; minute: number }) =>
+    on < w.from || (on === w.from && minute < w.minute);
 
   /** A promise drawn from what the borrower then did: the next receipt within three weeks keeps it; otherwise it may be made and broken. */
-  const drawPromise = (r: Rng, on: PlainDate, f: RecordFacts): Draft["promise"] => {
+  const drawPromise = (r: Rng, on: PlainDate, f: RecordFacts, minute = 0): Draft["promise"] => {
     const uBroken = r.next();
     const lagBroken = r.int(7, 14);
     if (promiseWindows.some((w) => w.from <= addDays(on, 21) && w.to >= on)) return null;
+    if (
+      unrecordedWindows.some(
+        (w) => w.from <= addDays(on, 21) && w.to >= on && earlier(on, minute, w),
+      )
+    )
+      return null;
     const next = life.receipts.find((x) => x.on > on && x.mode !== "payoff");
     if (next && daysBetween(on, next.on) <= 21) {
       return {
@@ -895,7 +909,7 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       !barred(on) &&
       !o.again &&
       (reason === "payment_arrangement" || reason === "hardship" || o.scriptedPromise)
-        ? (o.scriptedPromise ?? drawPromise(promiseR, on, f))
+        ? (o.scriptedPromise ?? drawPromise(promiseR, on, f, minute))
         : null;
     // A staff error on this call: the promise said and never recorded (S-01), the complaint never logged (S-02).
     const key = draftKey({
@@ -911,6 +925,8 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     const unlogged = o.again === true || (complaint && ctx.staff?.unlogged_complaint === key);
     const promise = unrecorded ? null : drawn;
     if (promise) promiseWindows.push({ from: promise.made_on, to: promise.pay_by });
+    if (unrecorded)
+      unrecordedWindows.push({ from: unrecorded.made_on, minute, to: unrecorded.pay_by });
     const resolution: Resolution = !live
       ? "unresolved"
       : promise
@@ -1333,6 +1349,11 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
           a.unrecorded = a.promise;
           a.promise = null;
           a.resolution = "information_provided";
+          unrecordedWindows.push({
+            from: a.unrecorded.made_on,
+            minute: a.minute,
+            to: a.unrecorded.pay_by,
+          });
         }
         drafts.push(a);
         dialed.push(dd);
@@ -1432,7 +1453,7 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     const f = rec(on);
     const conv = outcome === "conversation";
     const person = coB && conv ? b2! : b1;
-    const promise = conv ? drawPromise(promiseR, on, f) : null;
+    const promise = conv ? drawPromise(promiseR, on, f, minute) : null;
     const voice =
       outcome === "conversation" ||
       outcome === "answered_unverified" ||

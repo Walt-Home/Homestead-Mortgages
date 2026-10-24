@@ -333,7 +333,10 @@ function twinLoan(
 ): { loan: LoanContacts; labels: StaffLabel[]; c04: string[] } | { gone: string } {
   // The clean history again, to hold the pins to the center's and to read its keys.
   const again = deriveLoan(life, base);
-  if (toJsonLine(again.contacts) !== toJsonLine(clean.contacts))
+  if (
+    toJsonLine(again.contacts) !== toJsonLine(clean.contacts) ||
+    toJsonLine(again.profile) !== toJsonLine(clean.profile)
+  )
     throw new RangeError(
       `${clean.loan_id}: the center was drawn with other pins than those given; pass the center's own`,
     );

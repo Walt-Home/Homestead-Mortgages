@@ -80,6 +80,9 @@ export const AUDIT_PINS: ProfilePins = {
 /** How far apart the promise call and the complaint call may be. */
 export const ANCHOR_SPAN_DAYS = 120;
 
+/** The scenario a key's draw runs, read off the key's stream before anything else is. */
+export const auditScenario = (key: string): Scenario => scenarioFor(rngFor(key));
+
 function scenarioFor(r: Rng): Scenario {
   const events: ScenarioEvent[] = [];
   let k = r.int(3, 8);
@@ -196,8 +199,15 @@ export function drawContactAuditCandidate(
     ? plantStaffErrors(center, book, requests, { pins: { 0: pins } })
     : null;
   const used = res?.defective ?? center;
-  const labels = (res?.labels ?? []).filter((l) => l.root_cause || l.symptom !== null);
-  const m = materialsOf(used, book, 0, window);
+  const { ids, ...m } = materialsOf(used, book, 0, window);
+  // The graded labels, with the desk's ids for the center's.
+  const labels = (res?.labels ?? [])
+    .filter((l) => l.root_cause || l.symptom !== null)
+    .map((l) => ({
+      ...l,
+      row: ids.get(l.row) ?? l.row,
+      contact: l.contact === null ? null : (ids.get(l.contact) ?? l.contact),
+    }));
   const task: ContactAuditTask = {
     id: contactAuditTaskId(split, suiteSeed, index),
     split,
@@ -217,13 +227,25 @@ export function drawContactAuditCandidate(
     },
   };
   const issues: string[] = [];
-  const ids = new Set(m.contacts.map((x) => x.id));
+  const shown = new Set(m.contacts.map((x) => x.id));
   for (const l of labels)
-    if (!l.contact || !ids.has(l.contact))
+    if (!l.contact || !shown.has(l.contact))
       issues.push(`${l.defect_id} ${l.symptom ?? "root"} on ${l.contact} is outside the window`);
   if (res?.skipped.length) issues.push(`the planter skipped ${JSON.stringify(res.skipped)}`);
   issues.push(...judgeContactAudit(task));
   return { task, issues };
+}
+
+/** Why a draw was turned away, by kind: each a filter on the suite, which docs/environments.md names. */
+export function turnedAwayBecause(issues: readonly string[]): string {
+  const all = issues.join("\n");
+  if (/does not make this call/.test(all))
+    return "S-01's twin does not make the call S-02 was asked for";
+  if (/misses S-02 root/.test(all)) return "the recognizer hid the complaint";
+  if (/misses S-02 raised_again/.test(all)) return "the recognizer hid the complaint raised again";
+  if (/(kept_not_marked|broken_not_followed_up)/.test(all))
+    return "the payments read otherwise than the promise log";
+  return `other: ${all}`;
 }
 
 /** Draws from the task's own stream, and again from `${id}#n`, until a draw is fair to grade. */
@@ -243,7 +265,7 @@ export function drawContactAuditTask(
       continue;
     }
     if (got.issues.length === 0) return { task: got.task, attempts: a + 1, turned_away: turned };
-    turned.push(got.issues.join("; "));
+    turned.push(turnedAwayBecause(got.issues));
   }
   throw new Error(`${id}: no fair ${auditPlanOf(index)} window in ${AUDIT_MAX_ATTEMPTS} draws`);
 }

@@ -233,6 +233,17 @@ import {
   generateCallQaTask,
 } from "../src/call-qa/index.js";
 import {
+  CONTACT_AUDIT_SPEC_CASES,
+  ContactAuditReferencePolicy,
+  contactAudit,
+  contactAuditPayload,
+  contactAuditSpecTasks,
+  contactAuditTaskId,
+  contactAuditVerdict,
+  expectedContactAudit,
+  generateContactAuditTask,
+} from "../src/contact-audit/index.js";
+import {
   INTAKE_SPEC_CASES,
   IntakeReferencePolicy,
   generateIntakeTask,
@@ -297,7 +308,8 @@ export interface PlaygroundEnvironment {
   payload(task: TaskRef): Record<string, Json>;
   /**
    * Runs a tool other than the submit tool; throws on bad input, as the episode loop's tools do. A tool that
-   * reads the task (boarding-triage's file reader, tape-intake's tape readers, call-qa's transcript search)
+   * reads the task (boarding-triage's file reader, tape-intake's tape readers, call-qa's transcript search,
+   * contact-audit's logs)
    * reads the one passed.
    */
   execute(name: string, input: unknown, task?: TaskRef): string;
@@ -949,6 +961,21 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     expected: expectedCallQa,
     verdictOf: callQaVerdict,
     reference: () => new CallQaReferencePolicy(),
+  }),
+  playground({
+    env: contactAudit,
+    title: "Contact audit",
+    side: "servicing",
+    summary:
+      "One loan's contact history over a few months, as a quality-control desk audits a contact center for staff errors: the contact log with every call, letter and dialer attempt, the comment log, each call's transcript as the recognizer wrote it, the promise log, the complaint log and the payments. Find a promise the borrower made and the agent noted but nobody recorded (and the dialer calls inside its window, the kept promise never marked or the broken one never followed up), and a complaint voiced on a call and never logged (no acknowledgment, no written response, the borrower raising it again). Report each at its root with the symptoms it caused, or nothing for a clean window. Graded against the twin's labels, which tell a root from its symptoms.",
+    id: contactAuditTaskId,
+    one: generateContactAuditTask,
+    spec: contactAuditSpecTasks,
+    specNames: CONTACT_AUDIT_SPEC_CASES.map((c) => c.name),
+    payload: contactAuditPayload,
+    expected: expectedContactAudit,
+    verdictOf: contactAuditVerdict,
+    reference: () => new ContactAuditReferencePolicy(),
   }),
   playground({
     env: tapeIntake,

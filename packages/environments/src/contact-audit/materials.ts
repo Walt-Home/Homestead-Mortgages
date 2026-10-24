@@ -5,6 +5,13 @@
  * window's end, and the payments. Everything is read off one contact center
  * (the clean one or a twin with a staff error) and the loan's history, and
  * nothing the reviewer reads says which.
+ *
+ * So the ids are the desk's own: a twin names a row it added off its root
+ * (`<root>-S01-1`, `<root>-S02`) and a note it added off its contact, which
+ * would point a reviewer straight at the error. Every contact on the loan is
+ * numbered in its log's order (`<loan>-K0001`, …) and every note in the
+ * comment log's, the promise and the complaint case after the call that made
+ * them, and `ids` says how the center's ids read on the desk.
  */
 
 import type { LifeBook } from "../life/generate.js";
@@ -42,19 +49,27 @@ type Materials = Pick<
   "loan" | "window" | "contacts" | "notes" | "transcripts" | "promises" | "complaints" | "payments"
 >;
 
-/** Everything the reviewer may read, for one loan of a center over the window. */
+/** Everything the reviewer may read, for one loan of a center over the window, and the desk's ids for the center's. */
 export function materialsOf(
   center: ContactCenter,
   book: LifeBook,
   index: number,
   w: Window,
-): Materials {
+): Materials & { readonly ids: ReadonlyMap<string, string> } {
   const life: LoanLife = book.loans[index]!;
   const loan: LoanContacts = center.loans[index]!;
   const d = life.draw;
+  const ids = new Map<string, string>();
+  loan.contacts.forEach((c, i) =>
+    ids.set(c.id, `${loan.loan_id}-K${String(i + 1).padStart(4, "0")}`),
+  );
+  loan.notes.forEach((n, i) => ids.set(n.id, `${loan.loan_id}-N${String(i + 1).padStart(5, "0")}`));
+  const id = (x: string) => ids.get(x)!;
+  for (const p of [...loan.promises, ...(loan.unrecorded_promises ?? [])])
+    ids.set(p.id, `${id(p.contact_id)}-P`);
   const rows = loan.contacts.filter((c) => inWindow(c.on, w));
   const contacts: AuditContact[] = rows.map((c) => ({
-    id: c.id,
+    id: id(c.id),
     on: c.on,
     at: c.at,
     direction: c.direction,
@@ -67,14 +82,14 @@ export function materialsOf(
     issue: c.issue,
     agent: c.human_agent,
     duration_s: c.duration_s,
-    promise_id: c.promise_id,
+    promise_id: c.promise_id ? id(c.promise_id) : null,
     complaint_logged: c.complaint_logged,
     transcript: kindOf(c) !== null,
   }));
   const transcripts: Record<string, AuditLine[]> = {};
   for (const c of rows) {
     if (kindOf(c) === null) continue;
-    transcripts[c.id] = transcriptOf(center, book, c.id).turns.map((t, k) => ({
+    transcripts[id(c.id)] = transcriptOf(center, book, c.id).turns.map((t, k) => ({
       line: k + 1,
       at: clock(t.start_s),
       speaker: t.label,
@@ -84,31 +99,33 @@ export function materialsOf(
   const notes: AuditNote[] = loan.notes
     .filter((n) => inWindow(n.on, w))
     .map((n) => ({
-      id: n.id,
+      id: id(n.id),
       on: n.on,
       at: n.at,
       user: n.user,
       area: n.area,
       text: n.text,
-      contact: n.contact_id,
+      contact: n.contact_id ? id(n.contact_id) : null,
     }));
   const promises: AuditPromise[] = loan.promises
     .filter((p) => inWindow(p.made_on, w))
     .map((p) => ({
-      id: p.id,
-      contact: p.contact_id,
+      id: id(p.id),
+      contact: id(p.contact_id),
       made_on: p.made_on,
       pay_by: p.pay_by,
       amount: money(p.amount),
       status: p.pay_by <= w.to ? p.status : "pending",
     }));
-  const complaints: AuditComplaint[] = complaintLog(loan, center.key)
+  const cases = complaintLog(loan, center.key);
+  for (const x of cases) ids.set(x.id, `${id(x.contact_id)}-C`);
+  const complaints: AuditComplaint[] = cases
     .filter((x) => inWindow(x.received_on, w))
     .map((x) => {
       const sent = x.responded_on <= w.to;
       return {
-        id: x.id,
-        contact: x.contact_id,
+        id: id(x.id),
+        contact: id(x.contact_id),
         received_on: x.received_on,
         channel: x.channel,
         category: x.category,
@@ -142,5 +159,6 @@ export function materialsOf(
     promises,
     complaints,
     payments,
+    ids,
   };
 }

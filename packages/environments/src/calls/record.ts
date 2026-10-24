@@ -161,6 +161,38 @@ export interface RecordView {
     readonly taxes_prior_12_months: Dollars;
     readonly hazard_last_12_months: Dollars;
     readonly hazard_prior_12_months: Dollars;
+    /** How the shortage, deficiency or surplus is handled: the level installments and their months, a refund's date, a credit's monthly amount. */
+    readonly shortage_installment: Dollars | null;
+    readonly spread_months: number | null;
+    readonly deficiency: Dollars | null;
+    readonly deficiency_installment: Dollars | null;
+    readonly refund_by: string | null;
+    readonly credit_monthly: Dollars | null;
+  } | null;
+  /**
+   * The annual escrow statement mailed with that analysis, when one was: the computation year it explains, the run
+   * date it was read through (what follows is the analysis's own assumptions), and its item (viii) as the servicing
+   * app's engine writes it, each line with the engine's sentence beside its figures.
+   */
+  readonly annual_statement: {
+    readonly year_start: string;
+    readonly year_end: string;
+    readonly through: string;
+    readonly lines: readonly {
+      readonly month: string;
+      readonly line: string;
+      readonly paid: Dollars;
+      readonly projected: Dollars | null;
+      readonly anticipated: boolean;
+      readonly text: string;
+    }[];
+    readonly low_balance: {
+      readonly actual: Dollars;
+      readonly projected: Dollars;
+      readonly text: string;
+    } | null;
+    /** The account was overdrawn during the year, and the statement carries no low-balance comparison. */
+    readonly overdrawn: boolean;
   } | null;
   readonly arm_change: {
     readonly change: string;

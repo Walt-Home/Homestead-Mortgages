@@ -232,3 +232,108 @@ export function statementExplanation(
   if (issues.length > 0) throw new RangeError(issues.join("; "));
   return lowPointExplanation(h.lines, h.actual_low_cents, h.projected_low_cents);
 }
+
+/** One of item (viii)'s bill lines, read back out of the engine's text. */
+export interface StatementBillLine {
+  /** `not_projected`: "a … bill of $X was paid MM/YYYY (not projected)"; `differs`: "… paid MM/YYYY was $X vs $Y projected". */
+  readonly kind: "not_projected" | "differs";
+  /** The first of the month the engine names. */
+  readonly month: PlainDate;
+  /** The line as the statement prints it: its label, or its line type when it has none. */
+  readonly label: string;
+  readonly actual_cents: Cents;
+  /** Null on a bill nobody projected. */
+  readonly projected_cents: Cents | null;
+  /** The engine's own sentence. */
+  readonly text: string;
+}
+
+/** Item (viii) for one computation year, as a reader of the statement needs it. */
+export interface StatementReading {
+  readonly history: StatementHistory;
+  /** What the engine writes, in its order: the bill lines, then the low line unless it is left out. */
+  readonly engine: readonly string[];
+  readonly bills: readonly StatementBillLine[];
+  /** The low-point line, or null when the low was the projected low or the engine cannot print it. */
+  readonly low: {
+    readonly actual_cents: Cents;
+    readonly projected_cents: Cents;
+    readonly text: string;
+  } | null;
+  /** Why the low-point line is left out (escrow-4); [] when it is not. */
+  readonly refused: readonly string[];
+}
+
+const DOLLARS = String.raw`\$(\d+)\.(\d{2})`;
+const NOT_PROJECTED = new RegExp(
+  String.raw`^a (.+) bill of ${DOLLARS} was paid (\d{2})\/(\d{4}) \(not projected\)$`,
+);
+const DIFFERS = new RegExp(
+  String.raw`^(.+) paid (\d{2})\/(\d{4}) was ${DOLLARS} vs ${DOLLARS} projected$`,
+);
+const LOW = new RegExp(String.raw`^low balance ${DOLLARS} vs ${DOLLARS} projected$`);
+const centsOf = (dollars: string, cents: string): Cents => BigInt(dollars) * 100n + BigInt(cents);
+
+/**
+ * Item (viii) for one computation year, read off the engine's own lines: the
+ * engine writes them, and every figure here is parsed back out of its text, so
+ * a reader that says these figures says the engine's.
+ *
+ * A year the engine cannot print whole (`statementScopeIssues`: an account
+ * overdrawn during the year, escrow-4) keeps its bill lines and loses the low
+ * line alone. The engine writes no low line when the two lows it is handed are
+ * equal, so it is handed the same low twice for the bills, and `refused` says
+ * why the low is missing. A line in a shape none of the engine's three
+ * templates writes throws.
+ */
+export function statementReading(
+  analysis: StatementAnalysis,
+  ledger: StatementLedger,
+  labels: Readonly<Record<string, string>> = {},
+): StatementReading {
+  const h = statementHistory(analysis, ledger, labels);
+  const refused = statementScopeIssues(h);
+  const engine =
+    refused.length > 0
+      ? lowPointExplanation(h.lines, 0n, 0n)
+      : lowPointExplanation(h.lines, h.actual_low_cents, h.projected_low_cents);
+  const bills: StatementBillLine[] = [];
+  let low: StatementReading["low"] = null;
+  for (const text of engine) {
+    const np = NOT_PROJECTED.exec(text);
+    const df = DIFFERS.exec(text);
+    const lo = LOW.exec(text);
+    if (np)
+      bills.push({
+        kind: "not_projected",
+        month: `${np[5]}-${np[4]}-01` as PlainDate,
+        label: np[1]!,
+        actual_cents: centsOf(np[2]!, np[3]!),
+        projected_cents: null,
+        text,
+      });
+    else if (df)
+      bills.push({
+        kind: "differs",
+        month: `${df[3]}-${df[2]}-01` as PlainDate,
+        label: df[1]!,
+        actual_cents: centsOf(df[4]!, df[5]!),
+        projected_cents: centsOf(df[6]!, df[7]!),
+        text,
+      });
+    else if (lo && low === null && bills.length + 1 === engine.length)
+      low = {
+        actual_cents: centsOf(lo[1]!, lo[2]!),
+        projected_cents: centsOf(lo[3]!, lo[4]!),
+        text,
+      };
+    else throw new RangeError(`the engine wrote a line in no shape of its own: ${text}`);
+  }
+  // The figures read back are the history's: a parse that drifted from the engine is a bug, not a reading.
+  if (
+    low &&
+    (low.actual_cents !== h.actual_low_cents || low.projected_cents !== h.projected_low_cents)
+  )
+    throw new RangeError(`the low line reads ${low.text}, not the history's lows`);
+  return { history: h, engine, bills, low, refused };
+}

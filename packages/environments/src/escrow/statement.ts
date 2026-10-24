@@ -330,7 +330,10 @@ export function statementReading(
     else throw new RangeError(`the engine wrote a line in no shape of its own: ${text}`);
   }
   // The figures read back are the history's: a parse that drifted from the engine is a bug, not a reading.
-  if (low && (low.actual_cents !== h.actual_low_cents || low.projected_cents !== h.projected_low_cents))
+  if (
+    low &&
+    (low.actual_cents !== h.actual_low_cents || low.projected_cents !== h.projected_low_cents)
+  )
     throw new RangeError(`the low line reads ${low.text}, not the history's lows`);
   return { history: h, engine, bills, low, refused };
 }

@@ -156,7 +156,9 @@ function statementYearOrWhy(
   const start = addMonths(end, -12);
   const row = loan.analyses.find((a) => a.year_start === start);
   if (!row)
-    return { why: "the year's payment was set by no analysis the history holds: nothing to hold it to" };
+    return {
+      why: "the year's payment was set by no analysis the history holds: nothing to hold it to",
+    };
   const byMonth = new Map(loan.months.map((m) => [m.month, m]));
   const before = byMonth.get(addMonths(start, -1).slice(0, 7));
   if (!before) return { why: "the history has no month-end before the year" };

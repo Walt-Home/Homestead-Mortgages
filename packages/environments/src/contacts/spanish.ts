@@ -143,7 +143,8 @@ const AGENT_ES: Record<string, string> = {
   // The annual statement's call (writer.ts, `statementCall`).
   "quote:analysis_compare":
     "Dice que la parte del depósito de su pago es ahora {old_escrow}, y que a partir del pago del {effective_es} será {new_escrow}.",
-  "quote:analysis_first": "Dice que el primer mes, por el crédito, la parte del depósito es {first_escrow}.",
+  "quote:analysis_first":
+    "Dice que el primer mes, por el crédito, la parte del depósito es {first_escrow}.",
   "quote:analysis_total": "Dice que su pago total será {new_total}.",
   "quote:shortage_plan":
     "Dice que el análisis encontró un faltante de {shortage}, que se reparte en {plan_months} meses: {shortage_installment} al mes a partir del pago del {effective_es}.",
@@ -161,7 +162,8 @@ const AGENT_ES: Record<string, string> = {
     "Dice que se pagó una factura de {label_es} de {actual} en {month_es}, que no estaba proyectada.",
   stmt_anticipated:
     "Dice que esa factura vence después del análisis, así que es el monto que esperan pagar.",
-  "quote:stmt_low": "Dice que el saldo más bajo fue {low_actual} frente a {low_projected} proyectados.",
+  "quote:stmt_low":
+    "Dice que el saldo más bajo fue {low_actual} frente a {low_projected} proyectados.",
   stmt_overdrawn:
     "Le dice claramente que la cuenta quedó sobregirada durante el año, así que el estado de cuenta no compara el saldo más bajo con el proyectado.",
   stmt_as_projected: "Dice que todo en el estado de cuenta salió como se proyectó.",
@@ -176,7 +178,8 @@ const indexed = (base: string, slots: Slots): { frame: string; slots: Slots } | 
   if (!m || AGENT_ES[m[1]!] === undefined) return null;
   const own: Record<string, string> = { ...slots };
   const prefix = `st${m[2]}_`;
-  for (const [k, v] of Object.entries(slots)) if (k.startsWith(prefix)) own[k.slice(prefix.length)] = v;
+  for (const [k, v] of Object.entries(slots))
+    if (k.startsWith(prefix)) own[k.slice(prefix.length)] = v;
   return { frame: AGENT_ES[m[1]!]!, slots: own };
 };
 

@@ -1642,27 +1642,46 @@ const durationOf = (s: number) => `${Math.floor(s / 60)} min ${s % 60} s`;
 function rowFacts(c: ContactRecord, agentName: string): PageFact[] {
   return [
     { label: "Direction and channel", value: `${c.direction} ${c.mode}` },
-    { label: "With", value: `${c.party.replace(/_/g, " ")}${c.party_name ? `, ${c.party_name}` : ""}` },
+    {
+      label: "With",
+      value: `${c.party.replace(/_/g, " ")}${c.party_name ? `, ${c.party_name}` : ""}`,
+    },
     {
       label: "Language",
-      value: c.interpreter ? "Spanish, through an interpreter" : c.language === "es" ? "Spanish" : "English",
+      value: c.interpreter
+        ? "Spanish, through an interpreter"
+        : c.language === "es"
+          ? "Spanish"
+          : "English",
     },
     { label: "Agent", value: `${agentName} (${c.human_agent})` },
-    { label: "Outcome and resolution", value: `${c.outcome.replace(/_/g, " ")}, ${c.resolution.replace(/_/g, " ")}` },
+    {
+      label: "Outcome and resolution",
+      value: `${c.outcome.replace(/_/g, " ")}, ${c.resolution.replace(/_/g, " ")}`,
+    },
     { label: "Duration", value: durationOf(c.duration_s) },
   ];
 }
 
 /** Every number a call said is the record's that day, and every number its note wrote; the build stops otherwise. */
-function heldToRecord(center: ContactCenter, book: LifeBook, c: ContactRecord, note: NoteRecord | undefined) {
+function heldToRecord(
+  center: ContactCenter,
+  book: LifeBook,
+  c: ContactRecord,
+  note: NoteRecord | undefined,
+) {
   const plan = callPlan(center, book, c.id);
   const nums = factNumbers(plan.facts);
   const t = transcriptOf(center, book, c.id);
   const said = checkTranscript(t, nums).filter((e) => e.where === "said");
-  if (said.length) fail(`${c.id} says ${said.map((e) => e.token).join(", ")}, which the record does not hold`);
+  if (said.length)
+    fail(`${c.id} says ${said.map((e) => e.token).join(", ")}, which the record does not hold`);
   if (note) {
     const bad = unexplained(note.text, nums);
-    if (bad.length) fail(`${c.id}'s note writes ${bad.map((b) => b.raw).join(", ")}, which the record does not hold`);
+    if (bad.length)
+      fail(
+        `${c.id}'s note writes ${bad.map((b) => b.raw).join(", ")}, which the record does not hold`,
+      );
   }
   return { plan, t };
 }
@@ -1697,10 +1716,14 @@ function promiseCall(
   };
   quoted("quote:past_due", f.past_due.total);
   quoted("quote:promise", p.amount);
-  if (note && !moneyIn(note.text).includes(p.amount)) fail("the agent's note does not write the promise");
-  const episode = loan.cadence.find((e) => e.start <= c.on && (e.cured_on === null || e.cured_on > c.on));
+  if (note && !moneyIn(note.text).includes(p.amount))
+    fail("the agent's note does not write the promise");
+  const episode = loan.cadence.find(
+    (e) => e.start <= c.on && (e.cured_on === null || e.cured_on > c.on),
+  );
   const before = loan.contacts.filter(
-    (x) => episode !== undefined && x.on >= episode.start && x.on < c.on && x.direction === "outbound",
+    (x) =>
+      episode !== undefined && x.on >= episode.start && x.on < c.on && x.direction === "outbound",
   );
   const sysNotes = loan.notes.filter(
     (n) =>
@@ -1777,14 +1800,16 @@ function escrowCall(
   const recorded = [...s.lines.map((l) => l.text), ...(s.low ? [s.low.text] : [])];
   if (JSON.stringify(recorded) !== JSON.stringify(reading.engine))
     fail("the record's statement lines are not the engine's");
-  if (s.overdrawn !== reading.refused.length > 0) fail("the record's overdrawn flag is not the engine's");
+  if (s.overdrawn !== reading.refused.length > 0)
+    fail("the record's overdrawn flag is not the engine's");
   // The payment today is escrow-review 1.1.0's, the one the moment above poses; the new one is the analysis's.
   if (a.old_escrow !== flagged.old_payment || a.old_escrow !== escrowToday(life, flagged).terms)
     fail("the call's payment today is not the one on the loan's terms");
   if (a.new_escrow !== flagged.new_payment) fail("the call's new payment is not the analysis's");
   const d = analysisDecision(flagged);
   const turns = turnsOf(t);
-  const said = (tag: string): PageTurn => turns.find((x) => x.tag === tag) ?? fail(`the call has no ${tag} line`);
+  const said = (tag: string): PageTurn =>
+    turns.find((x) => x.tag === tag) ?? fail(`the call has no ${tag} line`);
   const same = (tag: string, want: readonly Cents[]) => {
     const got = moneyIn(said(tag).said);
     if (JSON.stringify(got.map(String)) !== JSON.stringify(want.map(String)))
@@ -1795,19 +1820,26 @@ function escrowCall(
     same(
       "quote:shortage_plan",
       d.deficiency_cents > 0n
-        ? [d.deficiency_cents, d.shortage_cents, d.installment_cents, d.deficiency_installment_cents]
+        ? [
+            d.deficiency_cents,
+            d.shortage_cents,
+            d.installment_cents,
+            d.deficiency_installment_cents,
+          ]
         : [d.shortage_cents, d.installment_cents],
     );
   const lines = s.lines.map((l, i) => {
     const tag = `quote:stmt_${l.kind === "differs" ? "moved" : "unprojected"}:${i + 1}`;
     same(tag, l.projected === null ? [l.actual] : [l.actual, l.projected]);
-    if (!said(tag).said.includes(monthYear(l.month))) fail(`the call's ${tag} does not name ${monthYear(l.month)}`);
+    if (!said(tag).said.includes(monthYear(l.month)))
+      fail(`the call's ${tag} does not name ${monthYear(l.month)}`);
     return { text: l.text, anticipated: l.anticipated, line: said(tag).line };
   });
   let low: { text: string; line: number } | null = null;
   let overdrawnLine: number | null = null;
   if (s.overdrawn) {
-    if (turns.some((x) => x.tag === "quote:stmt_low")) fail("an overdrawn year's call reads a low line");
+    if (turns.some((x) => x.tag === "quote:stmt_low"))
+      fail("an overdrawn year's call reads a low line");
     overdrawnLine = said("stmt_overdrawn").line;
   } else if (s.low) {
     same("quote:stmt_low", [s.low.actual, s.low.projected]);
@@ -1840,7 +1872,10 @@ function escrowCall(
       { label: "Total payment from then", value: usd(a.new_total) },
       ...(d.kind === "shortage"
         ? [
-            { label: "Shortage", value: `${usd(d.shortage_cents)}, ${usd(d.installment_cents)} a month for ${d.months} months` },
+            {
+              label: "Shortage",
+              value: `${usd(d.shortage_cents)}, ${usd(d.installment_cents)} a month for ${d.months} months`,
+            },
             ...(d.deficiency_cents > 0n
               ? [
                   {

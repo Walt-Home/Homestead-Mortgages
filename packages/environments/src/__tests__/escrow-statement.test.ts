@@ -512,7 +512,9 @@ describe("the annual escrow statement's explanation", () => {
       ].filter((k) => why.has(k)),
     );
     expect(why.get("the year is on two servicers' books") ?? 0).toBeGreaterThan(0);
-    expect(why.get("the year's payment was set by no analysis the history holds: nothing to hold it to")).toBeGreaterThan(0);
+    expect(
+      why.get("the year's payment was set by no analysis the history holds: nothing to hold it to"),
+    ).toBeGreaterThan(0);
     expect(why.get("exempt …: no annual statement goes out") ?? 0).toBeGreaterThan(0);
   });
 });

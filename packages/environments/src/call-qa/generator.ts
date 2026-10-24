@@ -166,13 +166,7 @@ export const CALL_QA_DEFECTS: Readonly<Record<string, string>> = {
 /* ── the loan a call is drawn from ──────────────────────────────────────── */
 
 type Loan =
-  | "performing"
-  | "delinquent"
-  | "debt_collector"
-  | "bankruptcy"
-  | "spouse"
-  | "long"
-  | "escrow";
+  "performing" | "delinquent" | "debt_collector" | "bankruptcy" | "spouse" | "long" | "escrow";
 
 /** One loan, two and a half years from its first payment, behind the way the edge needs. */
 export const HISTORY_MONTHS = 30;
@@ -549,9 +543,7 @@ export const EDGES: Readonly<Record<CallQaEdge, EdgeSpec>> = {
     arms: 3,
     loan: (arm) => (arm === 0 ? "performing" : arm === 1 ? "delinquent" : "escrow"),
     fits: (c, k, x) =>
-      x.arm === 2
-        ? statementCall(c, k, x)
-        : k === "inbound" && c.purpose === "borrower_inquiry",
+      x.arm === 2 ? statementCall(c, k, x) : k === "inbound" && c.purpose === "borrower_inquiry",
     build: (x) => ({ base: baseMat(x), planted: null }),
   },
   clean_unverified: {

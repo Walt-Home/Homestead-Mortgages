@@ -1048,7 +1048,10 @@ function statementCall(x: Script) {
       "quote:refund_plan",
     );
     if (f.refund && f.refund.amount === a.surplus)
-      x.agent(["[That refund went out on {refund_on}.|We mailed it on {refund_on}.]"], "quote:refund_sent");
+      x.agent(
+        ["[That refund went out on {refund_on}.|We mailed it on {refund_on}.]"],
+        "quote:refund_sent",
+      );
   } else if (a.decision === "credit")
     x.agent(
       [

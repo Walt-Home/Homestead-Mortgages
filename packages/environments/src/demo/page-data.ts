@@ -680,9 +680,9 @@ function twinView(
       text: `Annual escrow analysis for the year from ${monthName(a.year_start)}: ${result}`,
       amount: null,
       detail: [
-        // `old_payment` is what the old schedule charges from the effective date, once last year's shortage or
-        // credit has run out; it is what the engine's review triggers compare with, not the payment billed today.
-        `New escrow payment ${usd(a.new_payment)} from ${dayName(a.effective)}, against ${usd(a.old_payment)} on the old schedule from that date; statement sent ${dayName(a.sent_on)}`,
+        // `old_payment` is the escrow payment billed when the analysis ran, on the next installment, last year's
+        // shortage or credit still in it: what the engine's review triggers compare with (life 1.2.0).
+        `New escrow payment ${usd(a.new_payment)} from ${dayName(a.effective)}, against ${usd(a.old_payment)} billed now; statement sent ${dayName(a.sent_on)}`,
         a.anomalies.length > 0
           ? `Held for review: ${a.anomalies.map(anomalyName).join(", ")}`
           : "Not held for review",
@@ -1287,6 +1287,11 @@ function catchupPosed(task: CatchupTask, why: string): PagePosed {
 
 function escrowPosed(task: EscrowReviewTask, why: string, billedCents: Cents): PagePosed {
   const env = escrowReview;
+  // escrow-review 1.1.0's payment today is the one billed on the next installment (life 1.2.0); the build stops if not.
+  if (billedCents !== task.current_escrow_payment_cents)
+    throw new Error(
+      `escrow-review: the payment today, ${task.current_escrow_payment_cents}, is not the ${billedCents} billed on the next installment`,
+    );
   const { raw, calls } = reference(escrowReviewSteps, reviewPayload(task), executeReviewTool);
   const parsed = env.parseAnswer(raw);
   if (!parsed.ok)
@@ -1334,10 +1339,11 @@ function escrowPosed(task: EscrowReviewTask, why: string, billedCents: Cents): P
             value: usd(task.ledger.disbursements.reduce((s, d) => s + d.amount_cents, 0n)),
           },
           {
-            // The task's "payment today" is the old schedule's from the effective date, which is what the review
-            // triggers compare with; the installment billed now still carries last year's shortage or credit.
-            label: "Escrow payment today (the old schedule's, from the effective date)",
-            value: `${usd(task.current_escrow_payment_cents)}${billedCents !== task.current_escrow_payment_cents ? `; ${usd(billedCents)} is billed on the next installment, last year's shortage or credit included` : ""}`,
+            // The task's "payment today" is the one billed on the next installment, last year's shortage or credit in
+            // it, which is what the review triggers compare with.
+            label:
+              "Escrow payment billed today (the next installment's, last year's spread included)",
+            value: usd(task.current_escrow_payment_cents),
           },
           { label: "Days delinquent", value: String(task.regx_days_delinquent) },
           {

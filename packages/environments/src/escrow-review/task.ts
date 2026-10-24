@@ -11,7 +11,8 @@
  * property or the hazard premium rose at renewal; the rest are ordinary
  * years. The model gets escrow-analysis's inputs exactly (the lines, the
  * ledger's balance and what is still scheduled, the cushion, the delinquency
- * and today's escrow payment) and the account's recent history beside them:
+ * and the escrow payment billed today, any shortage or credit from last year
+ * still in it) and the account's recent history beside them:
  * the analyses before this one, the disbursements of the last two years and
  * the last twelve month-ends. It works out the shortage or surplus, the new
  * payment, its effective date and the months a shortage is spread over, and
@@ -25,7 +26,7 @@ import type { EscrowTask } from "../escrow/task.js";
 
 export const REVIEW_ENVIRONMENT_NAME = "escrow-review";
 /** Bump on any change to the rulebook, the tools, the rendering or the generator, to anything escrow-analysis's version covers, or to the life generator's draws. */
-export const REVIEW_ENVIRONMENT_VERSION = "1.0.0";
+export const REVIEW_ENVIRONMENT_VERSION = "1.1.0";
 
 export interface PastAnalysis {
   readonly as_of: PlainDate;

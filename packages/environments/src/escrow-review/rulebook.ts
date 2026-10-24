@@ -7,7 +7,11 @@
  * apps/servicing/src/domain/escrow/analysis.ts:101-107) with the bill's
  * variance against last year added as the app's own
  * `compareBillToPriorYear` computes it (apps/servicing/src/app/tools/section03.ts:144),
- * and Step 11, whether the flag stands. Change this text and the
+ * and Step 11, whether the flag stands. The payment the new one is compared
+ * with is the one billed today, the running shortage or credit spread in it,
+ * as the servicing app compares it (`loan_terms.escrow_payment_cents`,
+ * apps/servicing/src/domain/escrow/ops-3-6.ts:105-117); 1.0.0 handed the old
+ * schedule's payment after the spread ran out. Change this text and the
  * environment's version changes with it.
  */
 
@@ -21,7 +25,7 @@ export const ANALYSIS_STEPS = ESCROW_RULEBOOK.slice(
 
 export const REVIEW_STEPS = `## Step 10. Anomalies
 
-Besides the line anomalies of Step 1, compare new_payment with current_escrow_payment_cents (the payment today); the change is the difference either way:
+Besides the line anomalies of Step 1, compare new_payment with current_escrow_payment_cents, the escrow payment billed today: the escrow share of the next installment due, with any shortage or credit from last year's analysis still in it. The change is the difference either way:
 - payment_change_gt_25pct: current_escrow_payment_cents is above 0 and the change × 100 is more than current_escrow_payment_cents × 25.
 - payment_change_gt_150: the change is more than 15000.
 - surplus_gt_2500: the decision is "refund" and the surplus is more than 250000.

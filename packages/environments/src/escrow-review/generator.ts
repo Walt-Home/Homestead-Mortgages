@@ -9,8 +9,10 @@
  * (`generate`), and every annual analysis in it is seen as the life
  * generator hands it to the engine (`LifeMoment`): the lines as the analyst
  * has them, the CPI, the balance on the run date and what is still to post,
- * the delinquency and the payment it replaces. The task is one of those
- * analyses, with the account's recent history beside it.
+ * the delinquency and the payment it replaces, which is the escrow share
+ * billed on the first installment due after the run date (since 1.1.0, on
+ * life 1.2.0; 1.0.0's was the old schedule's after last year's spread). The
+ * task is one of those analyses, with the account's recent history beside it.
  *
  * The arm cycles by index through six, so any six tasks hold each, and each
  * names the verdict it lands on, so every verdict the runner tallies is at

@@ -192,6 +192,10 @@ describe("escrow-review", () => {
         expect(agreesWithHistory(reviewTaskAt(coords, life, m), row), `${s} ${row.year}`).toBe(
           true,
         );
+        // The payment the new one replaces is the one billed on the first installment due after the run date, last
+        // year's shortage or credit still in it: what the servicing app compares with (ops-3-6.ts:105-117).
+        const billed = life.installments.find((i) => i.due > row.as_of)!;
+        expect(m.old_payment, `${s} ${row.year}`).toBe(billed.escrow);
         analyses++;
       }
     }

@@ -264,6 +264,7 @@ export interface AnalysisRow {
   readonly surplus: Cents | null;
   readonly shortage: Cents | null;
   readonly deficiency: Cents | null;
+  /** The escrow payment billed when the analysis ran (the first installment due after it), which the new one replaces. */
   readonly old_payment: Cents;
   readonly new_payment: Cents;
   readonly first_month_payment: Cents;
@@ -547,7 +548,7 @@ export type LifeMoment =
         readonly amount: Cents;
       }[];
       readonly regx_days_delinquent: number;
-      /** The escrow payment the new one replaces. */
+      /** The escrow payment the new one replaces: the escrow share billed on the first installment due after the run date. */
       readonly old_payment: Cents;
     };
 
@@ -1806,7 +1807,16 @@ export function simulateLoan(
     const pay = escrowNewPayment(projection, decision);
     const sent = addDays(asOf, sentAfter);
     const eff = effectiveDate(ys, sent);
-    const oldPayment = escrowFor(eff);
+    // The payment the new one replaces is the one billed when the analysis runs: the escrow share of the first
+    // installment due after the run date, last year's shortage or credit spread still in it. That is what the
+    // servicing app compares the new payment with (`loan_terms.escrow_payment_cents` carries the running spread and
+    // the step-down is held apart, apps/servicing/src/domain/escrow/ops-3-6.ts:105-117; spec 3.6, worked example
+    // (a)), and what Reg X's annual statement sets the new payment beside (12 CFR 1024.17(i)(1)). Until life 1.2.0
+    // it was the old schedule's from the new one's effective date, after the spread had run out.
+    let billedDue = addMonths(d.first_due, monthsBetween(d.first_due, asOf));
+    if (billedDue <= asOf) billedDue = addMonths(billedDue, 1);
+    const billed = state.installments.find((i) => i.due_date === billedDue);
+    const oldPayment = billed ? billed.escrow_cents : escrowFor(billedDue);
     if (ov.observe)
       ov.observe({
         kind: "analysis",

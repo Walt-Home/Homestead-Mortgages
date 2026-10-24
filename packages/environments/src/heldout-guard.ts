@@ -111,6 +111,7 @@ export const HELDOUT_SUITES: readonly HeldoutSuite[] = Object.freeze([
   { namespace: "payments-posting/1.0.0", ...PAYMENTS_HELDOUT_SUITE },
   { namespace: "pmi-termination/1.0.0", ...PMI_HELDOUT_SUITE },
   { namespace: "boarding-triage/1.0.0", ...BOARDING_HELDOUT_SUITE },
+  { namespace: "escrow-review/1.0.0", ...REVIEW_HELDOUT_SUITE },
 ]);
 
 /** Redraw keys after the first, `${id}#1` to `${id}#60`: past every generator's attempts. */

@@ -616,7 +616,8 @@ function twinLoan(
   if (s02) {
     c04.push(s02.id);
     if (contacts.some((x) => x.id === `${s02.id}-S02`)) c04.push(`${s02.id}-S02`);
-    const bad = buildTranscript(planCall(life, loan, s02, center.key), { writer, defect: "C-04" });
+    const row = contacts.find((x) => x.id === s02.id)!;
+    const bad = buildTranscript(planCall(life, loan, row, center.key), { writer, defect: "C-04" });
     if (!bad?.plant) throw new Error(`${s02.id}: the call has no acknowledgment to leave out`);
     labels.push(
       label(

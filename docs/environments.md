@@ -4182,10 +4182,11 @@ rules from there:
 
 - **S-01, a promise not tracked.** The borrower promises a payment on a
   call, and the call's words and the agent's note carry it, word for word
-  the clean call's. No record is written: the row's `promise_id` is null and
-  dispositioned "information provided" (the disposition of a call that
-  records nothing, which leaves the words as they were), and the promise log
-  holds nothing (`unrecorded_promises` keeps the promise, for the writer).
+  the clean call's. No record is written: the row's `promise_id` is null,
+  the call is dispositioned "information provided" (the disposition of a
+  call that records nothing, which leaves the words as they were), and the
+  promise log holds nothing (`unrecorded_promises` keeps the promise, for
+  the writer).
   What the rules then do: nothing ceases the dialer, so it calls inside the
   window, about twice a root in the held-out suite; no "PTP SET" line, and a
   kept promise is never marked kept, a broken one never marked broken or
@@ -4238,8 +4239,9 @@ A clean center is byte for byte what it was. The override and
 `unrecorded_promises` are absent from every clean history, and
 `complaintLog` stores nothing, so neither `CONTACTS_VERSION` nor
 `LIFE_VERSION` moved, and call-qa's held-out pin (`d675547e…`) passes as it
-was. The suite's pins add two opt-in profile pins, `style` and
-`complaint_multiplier`, which take no draw a center without them makes.
+was. contact-audit's books set two new profile pins, `style` and
+`complaint_multiplier`, which change no draw on a center that does not set
+them.
 
 **Not covered yet:**
 
@@ -4516,8 +4518,8 @@ to 45 days before the first to past the promise's date and five weeks past
 the complaint. Four plans in turn make nothing (the control), S-01 on the
 promise, S-02 on the complaint, or both, so the held-out suite (seed 1, 200
 windows, pinned by hash) holds 50 of each. It has 100 roots of each error,
-195 attempts in a window, 50 promises kept and 50 broken, and 100 calls
-again. A window averages 115 days (39 to 202), 18.7 contacts, 9.2 recorded
+195 dialer attempts inside a promise's window, 50 promises kept and 50
+broken, and 100 calls raising a complaint again. A window averages 115 days (39 to 202), 18.7 contacts, 9.2 recorded
 calls, 2.2 calls with a promise and 1.8 with a complaint.
 
 **A draw is kept only when it is fair to grade, and this is a filter.** The
@@ -4540,8 +4542,8 @@ root, with its promise, passes 46 (0.560): the S-01 windows with two other
 promises or fewer. Reporting every call that voices a complaint as an S-02
 root passes 51 (0.553): every S-02 window, none holding more than two other
 complaints, and a clean one whose logged complaint the recognizer hid. Both
-together pass 55. Each floor passes only the plan it reports, so it is the
-plan's quarter of the suite at most.
+together pass 55. Each floor passes little beyond the windows of the one
+error it reports, a quarter of the suite.
 
 **The proof of fairness.** The reference passes the held-out suite, 300
 training tasks (seed 11) and ten hand-built histories in at most three
@@ -4562,9 +4564,9 @@ Not in 1.0.0:
   callback promised and not made, a third party's authorization taken and
   not recorded);
 - interpreted calls: the borrower is English-speaking, as in call-qa;
-- the written channels' complaints: a complaint by letter or e-mail is a
-  notice of error's question (§1024.35), and the contact center draws
-  complaints on calls only;
+- the written channels' complaints: a complaint by letter or e-mail may be
+  a notice of error (§1024.35), with clocks of its own, and the contact
+  center draws complaints on calls only;
 - a promise or a complaint the recognizer hid from the reviewer, which only
   the label could tell, and a scripted broken promise its payments met.
 

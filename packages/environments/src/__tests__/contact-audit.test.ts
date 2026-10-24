@@ -33,7 +33,6 @@ import type { LifeBook } from "../life/generate.js";
 import {
   ACK_PHRASES,
   AUDIT_EXTRA_FINDINGS_CAP,
-  AUDIT_PINS,
   AUDIT_PLANS,
   CONTACT_AUDIT_FINGERPRINT,
   CONTACT_AUDIT_HELDOUT_SUITE,

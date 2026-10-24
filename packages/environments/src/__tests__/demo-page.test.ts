@@ -24,6 +24,7 @@ import {
   demoLoan,
   generate,
   loadCalibration,
+  statementYearOf,
   writeTape,
   type CalibrationFile,
   type LifeMoment,
@@ -34,6 +35,14 @@ import { boardingSpecTasks, expectedTriage, gradeTriage } from "../boarding/inde
 import { catchupTaskAt, expectedCatchup, gradeCatchup } from "../catchup/index.js";
 import { expectedEscrowReview, gradeReview, reviewTaskAt } from "../escrow-review/index.js";
 import { demoPageData, type DemoPageData, type PagePosed } from "../demo/page-data.js";
+import { STATEMENT_LABELS, contactCenter, money, transcriptOf } from "../contacts/index.js";
+import {
+  statementExplanation,
+  statementHistory,
+  statementReading,
+  statementScopeIssues,
+} from "../escrow/statement.js";
+import { lowPointExplanation } from "../escrow/ported/statement.js";
 import { bookPanel, type AcceptanceFile } from "../demo/book-panel.js";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
@@ -271,6 +280,68 @@ describe("the demo page", () => {
     expect(want.flag_stands).toBe(true);
     expect(page.moments.find((x) => x.id === "escrow")!.twins.defective.posed).toBe(false);
     expect(res.defective!.loans[0]!.analyses.filter((a) => a.servicer === "us")).toEqual([]);
+  });
+
+  it("shows the contact center's two calls as it writes them, the escrow call's statement lines the engine's", () => {
+    const { res } = demoRun();
+    for (const twin of ["clean", "defective"] as const) {
+      const book = twin === "clean" ? res.clean : res.defective!;
+      const life = book.loans[0]!;
+      const center = contactCenter(book, {
+        calibration: defaultCalibration(),
+        pins: { 0: { escrow_call: true } },
+      });
+      const loan = center.loans[0]!;
+      const shown = page.contacts.twins[twin];
+      // Year 3: the scenario's promise, made on day 22 and kept by the receipt on its day.
+      const c = loan.contacts.find((x) => x.id === shown.promise.id)!;
+      const promise = loan.promises.find((x) => x.id === c.promise_id)!;
+      expect([c.on, promise.pay_by, promise.status]).toEqual(["2028-03-23", "2028-04-05", "kept"]);
+      expect(life.receipts.find((r) => r.id === promise.receipt_id)!.amount).toBe(promise.amount);
+      expect(shown.promise.transcript.map((t) => t.text)).toEqual(
+        transcriptOf(center, book, c.id).turns.map((t) => t.text),
+      );
+      expect(shown.promise.note!.text).toBe(
+        loan.notes.find((n) => n.kind === "agent" && n.contact_id === c.id)!.text,
+      );
+      expect(shown.counts.contacts).toBe(loan.contacts.length);
+    }
+    // Year 4: the call after the flagged analysis, and the engine's item (viii) over the year its statement explains.
+    const life = res.clean.loans[0]!;
+    const flagged = life.analyses.find((a) => a.anomalies.length > 0 && a.servicer === "us")!;
+    const y = statementYearOf(life, flagged)!;
+    const h = statementHistory(y.analysis, y.ledger, STATEMENT_LABELS);
+    const refused = statementScopeIssues(h).length > 0;
+    const engine = refused
+      ? lowPointExplanation(h.lines, 0n, 0n)
+      : statementExplanation(y.analysis, y.ledger, STATEMENT_LABELS);
+    const e = page.contacts.twins.clean.escrow;
+    if (!("id" in e) || !e.statement) throw new Error("no escrow call on the clean history");
+    expect([
+      ...e.statement.lines.map((l) => l.text),
+      ...(e.statement.low ? [e.statement.low.text] : []),
+    ]).toEqual(engine);
+    // The demo's year was overdrawn in January, so the engine's low line is left out and the call says so.
+    expect(refused).toBe(true);
+    expect(e.statement.overdrawn_line).not.toBeNull();
+    expect(e.transcript[e.statement.overdrawn_line! - 1]!.tag).toBe("stmt_overdrawn");
+    // Each line is read on the transcript line the page names, with the engine's figures.
+    const lines = statementReading(y.analysis, y.ledger, STATEMENT_LABELS).bills;
+    e.statement.lines.forEach((l, k) => {
+      const said = e.transcript[l.line - 1]!.said;
+      expect(said).toContain(money(lines[k]!.actual_cents));
+      expect(said).toContain(money(lines[k]!.projected_cents!));
+    });
+    // The payment today is the one escrow-review 1.1.0 poses, and the call quotes it beside the new one.
+    const compare = e.transcript.find((t) => t.tag === "quote:analysis_compare")!.said;
+    expect(compare).toContain(money(flagged.old_payment));
+    expect(compare).toContain(money(flagged.new_payment));
+    expect(
+      posed("escrow", "clean").shown[1]!.facts.find((f) => f.label.startsWith("Escrow payment on"))!
+        .value,
+    ).toContain(money(flagged.old_payment));
+    // The twin ran no analysis, so nobody called about one.
+    expect("missing" in page.contacts.twins.defective.escrow).toBe(true);
   });
 
   it("prices the missed defects with the engines' own figures", () => {

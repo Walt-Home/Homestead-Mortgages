@@ -89,10 +89,35 @@ import {
   type EscrowReviewAnswer,
   type EscrowReviewTask,
 } from "../escrow-review/index.js";
+import {
+  AGENTS,
+  CONTACTS_VERSION,
+  STATEMENT_LABELS,
+  callPlan,
+  checkTranscript,
+  contactCenter,
+  factNumbers,
+  numberTokens,
+  transcriptOf,
+  unexplained,
+  type ContactCenter,
+  type ContactRecord,
+  type NoteRecord,
+  type ProfilePins,
+  type Transcript,
+} from "../contacts/index.js";
+import { clock, monthYear } from "../contacts/format.js";
+import { statementReading } from "../escrow/statement.js";
+import { analysisDecision, statementYearOf } from "../life/escrow-year.js";
 import { bookPanel, type AcceptanceFile, type PageBook } from "./book-panel.js";
 
-/** Bump on any change to what the page shows or how it is computed. */
-export const DEMO_PAGE_VERSION = "1.0.0";
+/**
+ * Bump on any change to what the page shows or how it is computed.
+ *
+ * 1.1.0 (24 October 2026): the contact center's two calls, the year-3 promise and the year-4 call about the
+ * escrow analysis, with the statement lines it read, their transcripts and the notes they left.
+ */
+export const DEMO_PAGE_VERSION = "1.1.0";
 
 /* ── the shapes ───────────────────────────────────────────────────────────── */
 
@@ -282,6 +307,82 @@ export interface PageHarm {
   };
 }
 
+/** A transcript line as the page shows it: the recorder's label and the recognizer's text, beside what was said. */
+export interface PageTurn {
+  readonly line: number;
+  readonly at: string;
+  readonly speaker: string;
+  readonly text: string;
+  readonly said: string;
+  readonly tag: string;
+}
+
+export interface PageNote {
+  readonly on: string;
+  readonly at: string;
+  readonly user: string;
+  readonly area: string;
+  readonly text: string;
+}
+
+/** One of the contact center's calls, with what its record held, its transcript and the notes it left. */
+export interface PageCall {
+  readonly id: string;
+  readonly year: number;
+  readonly on: string;
+  readonly at: string;
+  readonly title: string;
+  readonly why: string;
+  readonly row: readonly PageFact[];
+  /** What the record held that day that the call read from. */
+  readonly record: readonly PageFact[];
+  /** The annual statement the call read from, line by line, with the transcript line that read each. */
+  readonly statement: {
+    readonly sent_on: string;
+    readonly year_start: string;
+    readonly year_end: string;
+    readonly through: string;
+    readonly lines: readonly {
+      readonly text: string;
+      readonly anticipated: boolean;
+      readonly line: number;
+    }[];
+    readonly low: { readonly text: string; readonly line: number } | null;
+    /** The line where the agent says the year was overdrawn, so the statement has no low line (escrow-4). */
+    readonly overdrawn_line: number | null;
+  } | null;
+  /** The lines that carry the call's figures, with the interpreter's relay of each. */
+  readonly excerpt: readonly PageTurn[];
+  readonly transcript: readonly PageTurn[];
+  readonly duration_s: number;
+  readonly note: PageNote | null;
+  /** The system's notes the call wrote, and the notes of the history's own events around it. */
+  readonly system_notes: readonly PageNote[];
+  /** The contact center's attempts and messages on the issue before the call. */
+  readonly before: readonly { readonly on: string; readonly at: string; readonly text: string }[];
+}
+
+export interface PageContactsTwin {
+  /** The borrower's language, as the contact center drew it. */
+  readonly language: "en" | "es";
+  readonly promise: PageCall;
+  readonly escrow: PageCall | { readonly missing: string };
+  readonly counts: {
+    readonly contacts: number;
+    readonly calls: number;
+    readonly conversations: number;
+    readonly agent_notes: number;
+    readonly system_notes: number;
+  };
+}
+
+export interface PageContacts {
+  readonly version: string;
+  /** What the page pins in the contact center, and why. */
+  readonly pins: string;
+  readonly twins: Readonly<Record<TwinName, PageContactsTwin>>;
+}
+
 export interface DemoPageData {
   readonly page_version: string;
   readonly life_version: string;
@@ -327,6 +428,7 @@ export interface DemoPageData {
   readonly tape_lane: readonly number[];
   readonly twins: Readonly<Record<TwinName, PageTwin>>;
   readonly moments: readonly PageMoment[];
+  readonly contacts: PageContacts;
   readonly harm: PageHarm;
   readonly book: PageBook;
 }
@@ -1497,6 +1599,321 @@ function harmOf(clean: LoanLife, twin: LoanLife): PageHarm {
   };
 }
 
+/* ── the contact center's calls ─────────────────────────────────────────── */
+
+/**
+ * The contact center's pins for the demo loan: the borrower calls about each analysis an annual statement explains,
+ * as the scenario scripts the promise. Unpinned, the center draws the year-4 call as a payment change.
+ */
+const CALL_PINS: Readonly<Record<number, ProfilePins>> = { 0: { escrow_call: true } };
+
+const turnsOf = (t: Transcript): PageTurn[] =>
+  t.turns.map((x, i) => ({
+    line: i + 1,
+    at: clock(x.start_s),
+    speaker: x.label,
+    text: x.text,
+    said: x.said,
+    tag: x.tag,
+  }));
+
+/** The lines whose tags carry the call's figures, each with the interpreter's relay after it. */
+const excerptOf = (turns: readonly PageTurn[], keep: (tag: string) => boolean): PageTurn[] =>
+  turns.filter((t) => keep(t.tag.replace(/:relay$/, "")));
+
+const noteOf = (n: NoteRecord): PageNote => ({
+  on: n.on,
+  at: n.at,
+  user: n.user,
+  area: n.area,
+  text: n.text,
+});
+
+/** The money a text says, in order, as cents: what the checks below hold the said turns to. */
+const moneyIn = (text: string): Cents[] =>
+  numberTokens(text).flatMap((t) => (t.kind === "money" ? [BigInt(t.cents)] : []));
+
+const fail = (what: string): never => {
+  throw new Error(`the demo's calls: ${what}`);
+};
+
+const durationOf = (s: number) => `${Math.floor(s / 60)} min ${s % 60} s`;
+
+function rowFacts(c: ContactRecord, agentName: string): PageFact[] {
+  return [
+    { label: "Direction and channel", value: `${c.direction} ${c.mode}` },
+    { label: "With", value: `${c.party.replace(/_/g, " ")}${c.party_name ? `, ${c.party_name}` : ""}` },
+    {
+      label: "Language",
+      value: c.interpreter ? "Spanish, through an interpreter" : c.language === "es" ? "Spanish" : "English",
+    },
+    { label: "Agent", value: `${agentName} (${c.human_agent})` },
+    { label: "Outcome and resolution", value: `${c.outcome.replace(/_/g, " ")}, ${c.resolution.replace(/_/g, " ")}` },
+    { label: "Duration", value: durationOf(c.duration_s) },
+  ];
+}
+
+/** Every number a call said is the record's that day, and every number its note wrote; the build stops otherwise. */
+function heldToRecord(center: ContactCenter, book: LifeBook, c: ContactRecord, note: NoteRecord | undefined) {
+  const plan = callPlan(center, book, c.id);
+  const nums = factNumbers(plan.facts);
+  const t = transcriptOf(center, book, c.id);
+  const said = checkTranscript(t, nums).filter((e) => e.where === "said");
+  if (said.length) fail(`${c.id} says ${said.map((e) => e.token).join(", ")}, which the record does not hold`);
+  if (note) {
+    const bad = unexplained(note.text, nums);
+    if (bad.length) fail(`${c.id}'s note writes ${bad.map((b) => b.raw).join(", ")}, which the record does not hold`);
+  }
+  return { plan, t };
+}
+
+function promiseCall(
+  center: ContactCenter,
+  book: LifeBook,
+  life: LoanLife,
+  promise: { made: string; pay_on: string },
+): PageCall {
+  const loan = center.loans[0]!;
+  const c = loan.contacts.find((x) => x.purpose === "promise_to_pay" && x.on === promise.made);
+  if (!c) return fail(`no promise call on ${promise.made}`);
+  const p = loan.promises.find((x) => x.id === c.promise_id);
+  if (!p || p.pay_by !== promise.pay_on || p.status !== "kept" || !p.scripted)
+    return fail(`the call on ${promise.made} records no kept promise to pay by ${promise.pay_on}`);
+  const receipt = life.receipts.find((r) => r.id === p.receipt_id);
+  if (!receipt || receipt.on !== p.pay_by || receipt.amount !== p.amount)
+    return fail(`the promise of ${p.amount} is not the receipt the history posts on ${p.pay_by}`);
+  const note = loan.notes.find((n) => n.kind === "agent" && n.contact_id === c.id);
+  const { plan, t } = heldToRecord(center, book, c, note);
+  const f = plan.facts;
+  if (!f.past_due) return fail("the promise call's record has nothing past due");
+  const fee = life.fees.find((x) => x.due === f.past_due!.oldest_due);
+  if (!fee || fee.amount !== f.past_due.late_charges)
+    return fail("the record's late charges are not the history's charge on the missed installment");
+  const turns = turnsOf(t);
+  const quoted = (tag: string, cents: Cents) => {
+    const turn = turns.find((x) => x.tag === tag);
+    if (!turn || !moneyIn(turn.said).includes(cents))
+      fail(`the call's ${tag} does not say ${usd(cents)}`);
+  };
+  quoted("quote:past_due", f.past_due.total);
+  quoted("quote:promise", p.amount);
+  if (note && !moneyIn(note.text).includes(p.amount)) fail("the agent's note does not write the promise");
+  const episode = loan.cadence.find((e) => e.start <= c.on && (e.cured_on === null || e.cured_on > c.on));
+  const before = loan.contacts.filter(
+    (x) => episode !== undefined && x.on >= episode.start && x.on < c.on && x.direction === "outbound",
+  );
+  const sysNotes = loan.notes.filter(
+    (n) =>
+      n.kind === "system" &&
+      n.on >= (episode?.start ?? c.on) &&
+      n.on <= p.pay_by &&
+      (n.contact_id === null || n.contact_id === c.id || before.some((b) => b.id === n.contact_id)),
+  );
+  const agent = AGENTS[c.servicer].find((a) => a.id === c.human_agent)?.name ?? c.human_agent ?? "";
+  return {
+    id: c.id,
+    year: 3,
+    on: c.on,
+    at: c.at,
+    title: "The missed March and the promise to pay",
+    why: `March's installment was missed, the late charge assessed on day 16 and the dialer's attempts began on day 17. On day 22 the borrower calls, is told what is past due, and promises to pay everything by ${dayName(p.pay_by)}. The promise ceases the calls, and the payment on that day keeps it.`,
+    row: rowFacts(c, agent),
+    record: [
+      { label: "Days past due", value: String(f.past_due.days) },
+      { label: "Oldest unpaid installment", value: dayName(f.past_due.oldest_due) },
+      { label: "Past due, the late charge included", value: usd(f.past_due.total) },
+      { label: "Late charges outstanding", value: usd(f.past_due.late_charges) },
+      { label: "The promise", value: `${usd(p.amount)} by ${dayName(p.pay_by)}` },
+      { label: "Kept by", value: `the ${usd(receipt.amount)} received ${dayName(receipt.on)}` },
+    ],
+    statement: null,
+    excerpt: excerptOf(
+      turns,
+      (tag) =>
+        tag.startsWith("reason:") ||
+        tag === "mini_miranda" ||
+        tag === "quote:past_due" ||
+        tag === "promise_stated" ||
+        tag === "quote:promise",
+    ),
+    transcript: turns,
+    duration_s: c.duration_s,
+    note: note ? noteOf(note) : null,
+    system_notes: sysNotes.map(noteOf),
+    before: before.map((b) => ({
+      on: b.on,
+      at: b.at,
+      text: `${b.mode === "call" ? "Dialer call" : b.mode === "sms" ? "Text reminder" : b.mode}: ${b.outcome.replace(/_/g, " ")}`,
+    })),
+  };
+}
+
+function escrowCall(
+  center: ContactCenter,
+  book: LifeBook,
+  life: LoanLife,
+  flagged: AnalysisRow,
+): PageCall {
+  const loan = center.loans[0]!;
+  const c = loan.contacts.find(
+    (x) =>
+      x.reason === "escrow_analysis" &&
+      x.direction === "inbound" &&
+      x.outcome === "conversation" &&
+      x.on > flagged.sent_on &&
+      callPlan(center, book, x.id).facts.analysis?.as_of === flagged.as_of,
+  );
+  if (!c) return fail("no call about the flagged analysis");
+  const note = loan.notes.find((n) => n.kind === "agent" && n.contact_id === c.id);
+  const { plan, t } = heldToRecord(center, book, c, note);
+  const f = plan.facts;
+  const a = f.analysis!;
+  const s = f.statement;
+  if (!s) return fail("the call about the flagged analysis has no statement");
+  // The statement is the engine's, over the year the flagged analysis's statement explains.
+  const y = statementYearOf(life, flagged);
+  if (!y) return fail("the flagged analysis has no statement year");
+  const reading = statementReading(y.analysis, y.ledger, STATEMENT_LABELS);
+  const recorded = [...s.lines.map((l) => l.text), ...(s.low ? [s.low.text] : [])];
+  if (JSON.stringify(recorded) !== JSON.stringify(reading.engine))
+    fail("the record's statement lines are not the engine's");
+  if (s.overdrawn !== reading.refused.length > 0) fail("the record's overdrawn flag is not the engine's");
+  // The payment today is escrow-review 1.1.0's, the one the moment above poses; the new one is the analysis's.
+  if (a.old_escrow !== flagged.old_payment || a.old_escrow !== escrowToday(life, flagged).terms)
+    fail("the call's payment today is not the one on the loan's terms");
+  if (a.new_escrow !== flagged.new_payment) fail("the call's new payment is not the analysis's");
+  const d = analysisDecision(flagged);
+  const turns = turnsOf(t);
+  const said = (tag: string): PageTurn => turns.find((x) => x.tag === tag) ?? fail(`the call has no ${tag} line`);
+  const same = (tag: string, want: readonly Cents[]) => {
+    const got = moneyIn(said(tag).said);
+    if (JSON.stringify(got.map(String)) !== JSON.stringify(want.map(String)))
+      fail(`the call's ${tag} says ${got.map(usd).join(", ")}, not ${want.map(usd).join(", ")}`);
+  };
+  same("quote:analysis_compare", [flagged.old_payment, flagged.new_payment]);
+  if (d.kind === "shortage")
+    same(
+      "quote:shortage_plan",
+      d.deficiency_cents > 0n
+        ? [d.deficiency_cents, d.shortage_cents, d.installment_cents, d.deficiency_installment_cents]
+        : [d.shortage_cents, d.installment_cents],
+    );
+  const lines = s.lines.map((l, i) => {
+    const tag = `quote:stmt_${l.kind === "differs" ? "moved" : "unprojected"}:${i + 1}`;
+    same(tag, l.projected === null ? [l.actual] : [l.actual, l.projected]);
+    if (!said(tag).said.includes(monthYear(l.month))) fail(`the call's ${tag} does not name ${monthYear(l.month)}`);
+    return { text: l.text, anticipated: l.anticipated, line: said(tag).line };
+  });
+  let low: { text: string; line: number } | null = null;
+  let overdrawnLine: number | null = null;
+  if (s.overdrawn) {
+    if (turns.some((x) => x.tag === "quote:stmt_low")) fail("an overdrawn year's call reads a low line");
+    overdrawnLine = said("stmt_overdrawn").line;
+  } else if (s.low) {
+    same("quote:stmt_low", [s.low.actual, s.low.projected]);
+    low = { text: s.low.text, line: said("quote:stmt_low").line };
+  }
+  if (note)
+    for (const l of s.lines)
+      if (!moneyIn(note.text).includes(l.actual)) fail(`the agent's note leaves out ${l.text}`);
+  const agent = AGENTS[c.servicer].find((x) => x.id === c.human_agent)?.name ?? c.human_agent ?? "";
+  const sysNotes = loan.notes.filter(
+    (n) =>
+      n.kind === "system" &&
+      ((n.area === "ESC" && n.on === flagged.as_of) ||
+        (n.area === "LTR" && n.on === flagged.sent_on) ||
+        n.contact_id === c.id),
+  );
+  return {
+    id: c.id,
+    year: 4,
+    on: c.on,
+    at: c.at,
+    title: "Why did my escrow payment go up?",
+    why: `The borrower calls about the analysis of ${dayName(flagged.as_of)} and the annual statement mailed with it on ${dayName(flagged.sent_on)}. The agent sets the new payment beside the one on the loan's terms today, says what the shortage is and how it is spread, and reads the statement's reasons out line by line, as the servicing app's statement engine writes them.${s.overdrawn ? " The account was overdrawn during the year, so the engine cannot print the low balance (escrow-4): the statement leaves that line out, and the agent says so." : ""}`,
+    row: rowFacts(c, agent),
+    record: [
+      {
+        label: "Escrow payment on the loan's terms today, and the new one",
+        value: `${usd(a.old_escrow)} → ${usd(a.new_escrow)} from ${dayName(a.effective)}`,
+      },
+      { label: "Total payment from then", value: usd(a.new_total) },
+      ...(d.kind === "shortage"
+        ? [
+            { label: "Shortage", value: `${usd(d.shortage_cents)}, ${usd(d.installment_cents)} a month for ${d.months} months` },
+            ...(d.deficiency_cents > 0n
+              ? [
+                  {
+                    label: "Deficiency",
+                    value: `${usd(d.deficiency_cents)}, ${usd(d.deficiency_installment_cents)} a month for 12 months`,
+                  },
+                ]
+              : []),
+          ]
+        : []),
+      { label: "Statement sent", value: dayName(a.sent_on) },
+    ],
+    statement: {
+      sent_on: a.sent_on,
+      year_start: s.year_start,
+      year_end: s.year_end,
+      through: s.through,
+      lines,
+      low,
+      overdrawn_line: overdrawnLine,
+    },
+    excerpt: excerptOf(
+      turns,
+      (tag) =>
+        tag.startsWith("reason:") ||
+        tag.startsWith("quote:analysis") ||
+        tag === "quote:shortage_plan" ||
+        tag === "quote:refund_plan" ||
+        tag === "quote:credit_plan" ||
+        tag.startsWith("stmt_") ||
+        tag.startsWith("quote:stmt_"),
+    ),
+    transcript: turns,
+    duration_s: c.duration_s,
+    note: note ? noteOf(note) : null,
+    system_notes: sysNotes.map(noteOf),
+    before: [],
+  };
+}
+
+function contactsOf(
+  name: TwinName,
+  book: LifeBook,
+  life: LoanLife,
+  flagged: AnalysisRow,
+  promise: { made: string; pay_on: string },
+): PageContactsTwin {
+  const center = contactCenter(book, { calibration: defaultCalibration(), pins: CALL_PINS });
+  const loan = center.loans[0]!;
+  const notes = loan.notes;
+  return {
+    language: loan.profile.language,
+    promise: promiseCall(center, book, life, promise),
+    escrow:
+      name === "clean"
+        ? escrowCall(center, book, life, flagged)
+        : life.analyses.some((x) => x.year === flagged.year)
+          ? fail("the defective twin ran the flagged analysis")
+          : {
+              missing:
+                "No call. The loan boarded non-escrowed (D-42 read as D-31), so no analysis ran, no statement went out, and the payment never rose.",
+            },
+    counts: {
+      contacts: loan.contacts.length,
+      calls: loan.contacts.filter((c) => c.mode === "call").length,
+      conversations: loan.contacts.filter((c) => c.mode === "call" && c.outcome === "conversation")
+        .length,
+      agent_notes: notes.filter((x) => x.kind === "agent").length,
+      system_notes: notes.filter((x) => x.kind === "system").length,
+    },
+  };
+}
+
 /* ── the page ────────────────────────────────────────────────────────────── */
 
 const LANE_KEYS = [
@@ -1668,6 +2085,17 @@ export function demoPageData(o: DemoPageOptions): DemoPageData {
 
   const harm = harmOf(clean, twin);
 
+  /* The contact center's calls: the year-3 promise and the year-4 call about the flagged analysis. */
+  if (!promise) throw new Error("the demo scenario scripts no promise to pay");
+  const contacts: PageContacts = {
+    version: CONTACTS_VERSION,
+    pins: "The contact center draws the demo loan's calls from its own streams, as it draws any loan's, with one pin: the borrower calls about each analysis an annual statement explains (escrow_call), as the scenario scripts the promise. Unpinned, the year-4 call comes as a question about the payment change.",
+    twins: {
+      clean: contactsOf("clean", res.clean, clean, flagged, promise),
+      defective: contactsOf("defective", res.defective!, twin, flagged, promise),
+    },
+  };
+
   /* The book. */
   const bookCal = loadCalibration({ file: o.calibrationFile });
   if (bookCal.warnings.length > 0)
@@ -1720,8 +2148,22 @@ export function demoPageData(o: DemoPageOptions): DemoPageData {
       { on: d.first_due, text: "First payment, to another servicer", moment: null },
       { on: DEMO_TRANSFER_DATE, text: "Servicing transfers to us", moment: "triage" },
       { on: missed, text: "March's payment is missed", moment: null },
+      {
+        on: contacts.twins.clean.promise.on,
+        text: "The borrower calls and promises to pay",
+        moment: null,
+      },
       { on: catchup.on, text: "The borrower catches up", moment: "catchup" },
       { on: flagged.as_of, text: "The escrow analysis is flagged", moment: "escrow" },
+      ...("id" in contacts.twins.clean.escrow
+        ? [
+            {
+              on: contacts.twins.clean.escrow.on,
+              text: "The borrower calls to ask why",
+              moment: null,
+            },
+          ]
+        : []),
       { on: analysisRise.effective, text: "The payment rises", moment: null },
       ...(mi ? [{ on: mi.on, text: "Mortgage insurance ends", moment: null }] : []),
       ...(clean.payoff ? [{ on: clean.payoff.on, text: "Paid off", moment: null }] : []),
@@ -1730,6 +2172,7 @@ export function demoPageData(o: DemoPageOptions): DemoPageData {
     tape_lane: LANE_KEYS.map(tapeColumnIndex),
     twins,
     moments: [triage, catchup, escrow],
+    contacts,
     harm,
     book,
   };

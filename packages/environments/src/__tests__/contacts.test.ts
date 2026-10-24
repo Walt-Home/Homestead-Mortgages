@@ -17,15 +17,19 @@ import { toJsonLine } from "../record.js";
 import { rngFor } from "../rng.js";
 import { recognize } from "../contacts/noise.js";
 import {
+  analysisDecision,
   defaultCalibration,
   generate,
   loadCalibration,
+  statementYearOf,
   type Calibration,
   type LifeBook,
   type LoanLife,
 } from "../life/index.js";
+import { statementReading } from "../escrow/statement.js";
 import {
   CONTACT_DEFECTS,
+  STATEMENT_LABELS,
   buildTranscript,
   callPlan,
   callsOf,
@@ -986,6 +990,178 @@ describe("contact center", () => {
     );
     expect(loan.notes.some((n) => n.on === "2028-04-05" && n.text === "PTP KEPT")).toBe(true);
     expect(lastContactOn(loan, "2028-03-31" as PlainDate)).toBe("2028-03-22");
+  });
+
+  it("answers a call about the escrow analysis from the analysis and the statement mailed with it, in the engine's own figures", () => {
+    // Every borrower on the seed-7 book calls about every analysis an annual statement explains (the pin), so the
+    // sample is every such analysis the book holds.
+    const pinned = contactCenter(book, {
+      calibration: cal,
+      pins: Object.fromEntries(book.loans.map((_, i) => [i, { escrow_call: true }])),
+    });
+    const MONTH =
+      /\b(January|February|March|April|May|June|July|August|September|October|November|December) (\d{4})\b/;
+    const MESES_RE =
+      /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre) de (\d{4})\b/;
+    const cents = (text: string) =>
+      numberTokens(text).flatMap((t) => (t.kind === "money" ? [BigInt(t.cents)] : []));
+    const sameCents = (a: readonly bigint[], b: readonly bigint[]) =>
+      a.length === b.length && a.every((x, i) => x === b[i]);
+    const dollars = (c: bigint) => `$${c / 100n}.${String(c % 100n).padStart(2, "0")}`;
+    const seen = {
+      calls: 0,
+      lines: 0,
+      low: 0,
+      overdrawn: 0,
+      anticipated: 0,
+      interpreted: 0,
+      analysisOnly: 0,
+    };
+    const problems: string[] = [];
+    for (const loan of pinned.loans) {
+      const life = lifeOf(loan);
+      for (const c of loan.contacts) {
+        if (c.reason !== "escrow_analysis" || c.mode !== "call" || c.outcome !== "conversation")
+          continue;
+        const plan = callPlan(pinned, book, c.id);
+        const f = plan.facts;
+        const t = transcriptOf(pinned, book, c.id);
+        const tags = t.turns.map((x) => x.tag);
+        if (!f.analysis) continue;
+        // The analysis the record holds: the latest sent, the statement mailed with it.
+        const row = [...life.analyses].reverse().find((a) => a.sent_on <= c.on)!;
+        const y = statementYearOf(life, row);
+        if (!y) {
+          // No statement: the first analysis, a borrower behind at it, a year on two servicers' books. The call is
+          // answered from the analysis alone, as before.
+          seen.analysisOnly++;
+          expect(f.statement, c.id).toBeNull();
+          expect(
+            tags.some((x) => x.includes("stmt_")),
+            c.id,
+          ).toBe(false);
+          continue;
+        }
+        seen.calls++;
+        if (c.interpreter) seen.interpreted++;
+        // The engine's lines, over the year the statement explains, read by the statement's labels.
+        const reading = statementReading(y.analysis, y.ledger, STATEMENT_LABELS);
+        const agentSays = (tag: string) =>
+          t.turns.find((x) => x.tag === tag && x.speaker === "AGENT");
+        // The payment today is escrow-review 1.1.0's, the one on the loan's terms for the next installment; beside it
+        // the analysis's new payment.
+        const compare = agentSays("quote:analysis_compare");
+        if (!compare || !sameCents(cents(compare.said), [row.old_payment, row.new_payment]))
+          problems.push(
+            `${c.id}: the payments said are not ${row.old_payment} and ${row.new_payment}`,
+          );
+        const d = analysisDecision(row);
+        const plan$ =
+          d.kind === "shortage"
+            ? ([
+                "quote:shortage_plan",
+                d.deficiency_cents > 0n
+                  ? [
+                      d.deficiency_cents,
+                      d.shortage_cents,
+                      d.installment_cents,
+                      d.deficiency_installment_cents,
+                    ]
+                  : [d.shortage_cents, d.installment_cents],
+              ] as const)
+            : d.kind === "refund"
+              ? (["quote:refund_plan", [d.surplus_cents]] as const)
+              : d.kind === "credit"
+                ? (["quote:credit_plan", [d.surplus_cents, d.credit_monthly_cents]] as const)
+                : null;
+        if (plan$) {
+          const turn = agentSays(plan$[0]);
+          if (!turn || !sameCents(cents(turn.said), plan$[1]))
+            problems.push(`${c.id}: ${plan$[0]} does not say the engine's ${plan$[1].join(", ")}`);
+        }
+        // Item (viii), line by line: what the agent says, put back in the engine's template, is the engine's line.
+        const heard: string[] = [];
+        for (const turn of t.turns) {
+          if (turn.speaker !== "AGENT") continue;
+          const m = /^quote:stmt_(moved|unprojected):(\d+)$/.exec(turn.tag);
+          const money = cents(turn.said);
+          if (m) {
+            const month = MONTH.exec(turn.said);
+            const label =
+              m[1] === "moved"
+                ? // The line's name follows the last "the" or "your" before "paid in".
+                  /^.*\b(?:[Tt]he|[Yy]our) (.+?) paid in /.exec(turn.said)?.[1]
+                : /^.*\b[Aa] (.+?) bill of /.exec(turn.said)?.[1];
+            if (!month || !label) {
+              problems.push(`${c.id}: ${turn.tag} names no month or line: ${turn.said}`);
+              continue;
+            }
+            const mm = String(
+              [
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+              ].indexOf(month[1]!) + 1,
+            ).padStart(2, "0");
+            heard.push(
+              m[1] === "moved"
+                ? `${label} paid ${mm}/${month[2]} was ${dollars(money[0]!)} vs ${dollars(money[1]!)} projected`
+                : `a ${label} bill of ${dollars(money[0]!)} was paid ${mm}/${month[2]} (not projected)`,
+            );
+            seen.lines++;
+          }
+          if (turn.tag === "quote:stmt_low") {
+            heard.push(`low balance ${dollars(money[0]!)} vs ${dollars(money[1]!)} projected`);
+            seen.low++;
+          }
+          if (turn.tag === "stmt_anticipated") seen.anticipated++;
+        }
+        expect(heard, c.id).toEqual(reading.engine);
+        // A year the engine cannot print the low of is explained without it, and the call says so.
+        if (reading.refused.length > 0) {
+          seen.overdrawn++;
+          expect(tags.includes("stmt_overdrawn"), c.id).toBe(true);
+          expect(tags.includes("quote:stmt_low"), c.id).toBe(false);
+        } else expect(tags.includes("stmt_overdrawn"), c.id).toBe(false);
+        // The interpreter relays each line with the same figures and month.
+        if (c.interpreter)
+          t.turns.forEach((turn, k) => {
+            if (!/^quote:stmt_/.test(turn.tag) || turn.speaker !== "AGENT") return;
+            const relay = t.turns[k + 1]!;
+            expect(relay.tag, c.id).toBe(`${turn.tag}:relay`);
+            expect(cents(relay.said), c.id).toEqual(cents(turn.said));
+            const es = MESES_RE.exec(relay.said);
+            if (turn.tag !== "quote:stmt_low")
+              expect(es?.[2], c.id).toBe(MONTH.exec(turn.said)?.[2]);
+          });
+        // Every number said is the record's; the note is the escrow desk's and records what was explained.
+        expect(checkTranscript(t, factNumbers(f)), c.id).toEqual([]);
+        const note = loan.notes.find((n) => n.kind === "agent" && n.contact_id === c.id)!;
+        expect(note.area, c.id).toBe("ESC");
+        const written = cents(note.text);
+        for (const l of f.statement!.lines)
+          expect(written, `${c.id} ${l.text}`).toContain(l.actual);
+        expect(written, c.id).toContain(row.old_payment);
+        expect(written, c.id).toContain(row.new_payment);
+      }
+    }
+    expect(problems.slice(0, 10)).toEqual([]);
+    expect(seen.calls).toBeGreaterThan(1_000);
+    expect(seen.lines).toBeGreaterThan(3 * seen.calls);
+    for (const k of ["low", "overdrawn", "anticipated", "interpreted", "analysisOnly"] as const)
+      expect(seen[k], k).toBeGreaterThan(0);
+    // No note reads an interpreter's relay as a question of its own.
+    for (const l of pinned.loans)
+      for (const n of l.notes) expect(/undefined/i.test(n.text), n.text).toBe(false);
   });
 
   it("holds a model writer to the record: the seam refuses a figure nobody computed", () => {

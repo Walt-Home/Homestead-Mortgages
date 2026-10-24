@@ -41,7 +41,8 @@ import { templateWriter, type ContactTextWriter } from "./writer.js";
  * 1.2.0 (24 October 2026): the record holds the annual escrow statement mailed with an analysis and the analysis's
  * plan; a call about the escrow analysis is answered from them, the statement's item (viii) read line by line, and
  * its note records what was explained; C-05 and C-08 plant a wrong figure in that explanation; no statement is
- * mailed to a borrower more than 30 days behind at the analysis; and a pin draws the borrower's call about each one.
+ * mailed to a borrower more than 30 days behind at the analysis; a pin draws the borrower's call about each one;
+ * and an interpreted call's note no longer reads the interpreter's relay of the question as a second question.
  */
 export const CONTACTS_VERSION = "1.2.0";
 

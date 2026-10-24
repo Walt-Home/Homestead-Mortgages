@@ -23,7 +23,18 @@ import {
 } from "../escrow/index.js";
 import { project, type ProjectedItem } from "../escrow/ported/analysis.js";
 import { lowPointExplanation } from "../escrow/ported/statement.js";
-import { defaultCalibration, escrowYears, generate } from "../life/index.js";
+import { statementReading } from "../escrow/statement.js";
+import {
+  analysisDecision,
+  defaultCalibration,
+  demoLoan,
+  escrowYears,
+  generate,
+  noStatementWhy,
+  statementYearOf,
+  type LifeBook,
+  type LoanLife,
+} from "../life/index.js";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const imports = (text: string) => text.split("\n").filter((l) => l.startsWith("import "));
@@ -393,5 +404,115 @@ describe("the annual escrow statement's explanation", () => {
     for (const k of ["moved", "unprojected", "low"] as const) expect(seen[k], k).toBeGreaterThan(0);
     expect(seen.overdrawn).toBeGreaterThan(0);
     expect(seen.overdrawn).toBeLessThan(seen.years / 20);
+  });
+
+  it("reads the year an analysis's statement explains: the history through its run date, then what it counted on, ending at its projected actual", () => {
+    // Books of every kind the generator writes: a 300-loan decade, loans transferred in with vendor and system
+    // errors made on their bills and payments (the clean book and its twins), and the demo loan's four.
+    const cal = defaultCalibration();
+    const errors = generate(
+      "statement-years",
+      {
+        loans: 120,
+        events: Array.from({ length: 40 }, (_, i) => ({
+          kind: "transfer_in" as const,
+          loan: 3 * i,
+          month: 8 + (i % 30),
+        })),
+      },
+      {
+        calibration: cal,
+        defects: [
+          { id: "V-01", rate: 0.05 },
+          { id: "V-02", rate: 1 },
+          { id: "D-28", rate: 0.01 },
+        ],
+      },
+    );
+    const demo = demoLoan(cal);
+    const books: LifeBook[] = [
+      generate(1, { loans: 300 }, { calibration: cal }).clean,
+      errors.clean,
+      errors.defective!,
+    ];
+    const loans: LoanLife[] = [
+      ...books.flatMap((b) => b.loans),
+      demo.clean,
+      demo.twins["D-42"],
+      demo.twins["D-03"],
+      demo.twins.defective,
+    ];
+    const why = new Map<string, number>();
+    const seen = { analyses: 0, years: 0, whole: 0, assumed: 0, refused: 0, lines: 0 };
+    for (const loan of loans) {
+      const whole = new Map(escrowYears(loan).map((y) => [y.analysis.year_start, y]));
+      for (const a of loan.analyses) {
+        seen.analyses++;
+        // The row's decision is the escrow port's, decided again from its figures.
+        expect(analysisDecision(a).kind).toBe(a.decision);
+        const y = statementYearOf(loan, a);
+        const reason = noStatementWhy(loan, a);
+        expect(y === null, `${loan.loan_id} ${a.as_of}`).toBe(reason !== null);
+        if (!y) {
+          const k = reason!.replace(/\(.*\)|\d{4}-\d{2}/g, "…");
+          why.set(k, (why.get(k) ?? 0) + 1);
+          continue;
+        }
+        seen.years++;
+        expect(y.analysis.year_start).toBe(addMonths(a.year_start, -12));
+        expect(y.row.year_start).toBe(y.analysis.year_start);
+        const h = statementHistory(y.analysis, y.ledger);
+        expect(h.ending_balance_cents, `${loan.loan_id} ${a.as_of}`).toBe(a.projected_actual);
+        // After the run date, only what the analysis counted on, inside the year.
+        for (const p of [...y.assumed.deposits, ...y.assumed.disbursements]) {
+          expect(p.on > y.through).toBe(true);
+          expect(p.on < a.year_start).toBe(true);
+        }
+        seen.assumed += y.assumed.deposits.length + y.assumed.disbursements.length;
+        // Through the run date the postings are the history's: escrowYears' own, where it holds the year whole.
+        const ey = whole.get(y.analysis.year_start);
+        if (ey) {
+          seen.whole++;
+          const upTo = <T extends { on: PlainDate }>(xs: readonly T[]) =>
+            xs.filter((p) => p.on <= y.through);
+          expect(y.ledger.opening_balance_cents).toBe(ey.ledger.opening_balance_cents);
+          expect(upTo(y.ledger.deposits)).toEqual(upTo(ey.ledger.deposits));
+          expect(upTo(y.ledger.disbursements)).toEqual(upTo(ey.ledger.disbursements));
+          const before = h.months.filter((m) => addMonths(m.month, 1) <= y.through);
+          expect(before.map((m) => m.balance_cents)).toEqual(
+            ey.month_end_balances.slice(0, before.length),
+          );
+        }
+        // Item (viii) is the engine's: whole, or without the low line it cannot print.
+        const r = statementReading(y.analysis, y.ledger);
+        seen.lines += r.engine.length;
+        if (r.refused.length) {
+          seen.refused++;
+          expect(r.low).toBeNull();
+          expect(r.engine).toEqual(lowPointExplanation(h.lines, 0n, 0n));
+          expect(() => statementExplanation(y.analysis, y.ledger)).toThrow(/^escrow-4: /);
+        } else expect(r.engine).toEqual(statementExplanation(y.analysis, y.ledger));
+        expect([...r.bills.map((b) => b.text), ...(r.low ? [r.low.text] : [])]).toEqual(r.engine);
+      }
+    }
+    expect(seen.years).toBeGreaterThan(2_000);
+    expect(seen.whole).toBeGreaterThan(seen.years * 0.9);
+    expect(seen.assumed).toBeGreaterThan(seen.years);
+    expect(seen.refused).toBeGreaterThan(0);
+    // Why an analysis has no statement year: the first one, a borrower more than 30 days behind, a year on two
+    // servicers' books or with a transfer in it, a history that ends before an installment the analysis counted on.
+    expect([...why.keys()].sort()).toEqual(
+      [
+        "a transfer inside the year",
+        "exempt …: no annual statement goes out",
+        "the analysis is another servicer's than the year's",
+        "the history ends before an installment the analysis counted on",
+        "the year is on two servicers' books",
+        "the year's payment was set by no analysis the history holds: nothing to hold it to",
+      ].filter((k) => why.has(k)),
+    );
+    expect(why.get("the year is on two servicers' books") ?? 0).toBeGreaterThan(0);
+    expect(why.get("the year's payment was set by no analysis the history holds: nothing to hold it to")).toBeGreaterThan(0);
+    expect(why.get("exempt …: no annual statement goes out") ?? 0).toBeGreaterThan(0);
   });
 });

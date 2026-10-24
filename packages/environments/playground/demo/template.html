@@ -135,6 +135,19 @@ summary span { font-weight: 400; color: var(--muted) }
 .graded td:nth-child(2) { font-size: .78rem; overflow-wrap: anywhere; white-space: normal }
 .ok { color: var(--ok) } .bad { color: var(--d60) }
 .harm { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 18px }
+.calls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 18px; align-items: start }
+.tx { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; font-size: .82rem }
+.tx li { display: grid; grid-template-columns: 56px 92px minmax(0, 1fr); gap: 6px; margin: 0; padding: 3px 0 3px 6px; border-left: 2px solid transparent }
+.tx li .d { font: .72rem var(--mono); color: var(--muted) }
+.tx li .s { font: 600 .66rem var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; overflow-wrap: anywhere }
+.tx li .t { overflow-wrap: anywhere }
+.tx li.relay { color: var(--muted); font-size: .78rem }
+.tx li.figure { border-left-color: var(--accent); background: linear-gradient(90deg, var(--accent-soft), transparent 70%) }
+.notebox { font: .78rem/1.45 var(--mono); background: var(--raised); padding: 8px 10px; border-radius: 4px; overflow-wrap: anywhere; margin: 0 }
+.stmt td:first-child { font-family: var(--mono); font-size: .76rem; white-space: normal; overflow-wrap: anywhere }
+.stmt td.n { white-space: nowrap }
+.stmt td.plain { font-family: var(--sans); font-size: .8rem }
+@media (max-width: 520px) { .tx li { grid-template-columns: 56px minmax(0, 1fr) } .tx li .t { grid-column: 1 / -1 } }
 .big { font: 1.6rem/1.1 var(--serif) }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px 22px }
 .stat { display: grid; gap: 2px } .stat .v { font: 1.45rem/1.1 var(--serif) } .stat .l { color: var(--muted); font-size: .82rem }
@@ -165,6 +178,8 @@ button { -webkit-tap-highlight-color: transparent }
     <section class="lane" id="lane-tape" aria-labelledby="h-tape"></section>
     <section class="lane" id="lane-moments" aria-labelledby="h-moments"></section>
   </div>
+
+  <section id="calls" aria-labelledby="h-calls"></section>
 
   <section class="col" id="harm" aria-labelledby="h-harm"></section>
 
@@ -268,7 +283,8 @@ button { -webkit-tap-highlight-color: transparent }
       ['Computed by the engines', [
         'Every payment split, late charge, escrow analysis and disbursement, the mortgage insurance ending and the payoff: the servicing engines we port, run month by month.',
         'The tape: the m3-v1 writer, in the layout a partner’s tape uses, read back by our tape reader in its tests.',
-        'Each moment: the environment’s own task, its reference policy working through its tools, and its grader.'
+        'Each moment: the environment’s own task, its reference policy working through its tools, and its grader.',
+        'The calls: the contact center’s, written from the record on the day. The escrow call reads the annual statement line by line as the servicing app’s statement engine writes it.'
       ]],
       ['Invented', [
         'The borrower, the house and every name and number on them.',
@@ -276,7 +292,7 @@ button { -webkit-tap-highlight-color: transparent }
         'The rates. The book of 1,000 draws from calibration.json: public figures where one exists, design choices, marked, where none does. The demo loan draws from the calibration’s typed defaults, as the environments do.'
       ]],
       ['Not yet', [
-        'Contacts beyond the collection calls and the borrower’s call, and every call note and transcript: a later wave.',
+        'The rest of the contact center’s log: two calls are shown whole, with their transcripts and notes; the other calls, texts and letters are counted, and lane 1 keeps the life generator’s own calls, which the tape’s last-contact date reads.',
         'Our letters and notices: periodic statements, the transfer letters, 1098s. Only the prior servicer’s, in the transfer package, are written.',
         'Returned payments, loss mitigation, bankruptcy, foreclosure and a tax penalty.',
         'FHA and VA loans. Everything here is Fannie Mae conventional.'
@@ -489,6 +505,67 @@ button { -webkit-tap-highlight-color: transparent }
     renderSystem(document.getElementById('lane-system'));
     renderTape(document.getElementById('lane-tape'));
     renderMoments(document.getElementById('lane-moments'));
+    renderCalls();
+  }
+
+  /* ── the contact center's calls ──────────────────────────────────────── */
+
+  var FIGURE_TAGS = /^(quote:|promise_stated$)/;
+  function txList(turns) {
+    var ol = el('ol', { class: 'tx' });
+    turns.forEach(function (t) {
+      var relay = /:relay$/.test(t.tag);
+      var figure = !relay && FIGURE_TAGS.test(t.tag);
+      ol.append(el('li', { class: [relay ? 'relay' : '', figure ? 'figure' : ''].join(' ').trim() || null, title: t.said !== t.text ? 'Said: ' + t.said : null },
+        el('span', { class: 'd', text: t.at }), el('span', { class: 's', text: t.speaker || 'recorder' }), el('span', { class: 't', text: t.text })));
+    });
+    return ol;
+  }
+  function noteList(notes) {
+    return el('ul', { class: 'small' }, notes.map(function (n) { return el('li', null, el('span', { class: 'num', text: shortDay(n.on) + ' ' + n.at + ' ' + n.user + ' ' + n.area + ' ' }), n.text); }));
+  }
+  function statementTable(c) {
+    var S = c.statement;
+    var t = el('table', { class: 'stmt' });
+    t.append(el('thead', null, el('tr', null, el('th', { text: 'Item (viii), as the statement engine writes it' }), el('th', { class: 'n', text: 'Read at' }))));
+    var tb = el('tbody');
+    S.lines.forEach(function (l) { tb.append(el('tr', null, el('td', { text: l.text + (l.anticipated ? '   (after the run date: what the analysis expected to pay)' : '') }), el('td', { class: 'n num', text: c.transcript[l.line - 1].at }))); });
+    if (S.low) tb.append(el('tr', null, el('td', { text: S.low.text }), el('td', { class: 'n num', text: c.transcript[S.low.line - 1].at })));
+    if (S.overdrawn_line !== null) tb.append(el('tr', null, el('td', { class: 'muted plain', text: 'No low-balance line. The account was overdrawn during the year, and the engine prints a negative low wrongly (escrow-4), so the statement leaves the line out and the agent says so.' }), el('td', { class: 'n num', text: c.transcript[S.overdrawn_line - 1].at })));
+    t.append(tb);
+    return el('div', { class: 'facts' },
+      el('h5', { text: 'The annual statement it read from' }),
+      el('p', { class: 'small muted', text: 'Mailed ' + dayName(S.sent_on) + ' with the analysis, for the computation year ' + monthName(S.year_start) + ' to ' + monthName(S.year_end) + ': the history through the run date of ' + dayName(S.through) + ', and after it what the analysis counted on.' }),
+      el('div', { class: 'tablewrap' }, t));
+  }
+  function callCard(c) {
+    var card = el('article', { class: 'card posed' });
+    card.append(el('div', { class: 'meta', text: 'Year ' + c.year + ' · ' + dayName(c.on) + ' ' + c.at + ' · ' + c.id }));
+    card.append(el('h3', { text: c.title }));
+    card.append(el('p', { class: 'small', text: c.why }));
+    card.append(factList([{ heading: 'The call', facts: c.row }, { heading: 'What the record held that day', facts: c.record }]));
+    if (c.before.length) card.append(el('div', { class: 'facts' }, el('h5', { text: 'Before it, on the same delinquency' }),
+      c.before.map(function (b) { return el('div', { class: 'fact' }, el('span', { class: 'k', text: shortDay(b.on) + ' ' + b.at }), el('span', { class: 'v', text: b.text })); })));
+    if (c.statement) card.append(statementTable(c));
+    card.append(el('div', { class: 'facts' }, el('h5', { text: 'From the transcript, as the recorder wrote it' }), txList(c.excerpt),
+      el('p', { class: 'small muted', text: 'Marked lines say a figure from the record. Hover a line the recognizer misheard to read what was said.' })));
+    card.append(el('details', null, el('summary', null, 'The whole transcript ', el('span', { text: '(' + c.transcript.length + ' lines, ' + Math.floor(c.duration_s / 60) + ' min ' + (c.duration_s % 60) + ' s from the answer)' })), txList(c.transcript)));
+    if (c.note) card.append(el('div', { class: 'facts' }, el('h5', { text: 'The agent’s note (' + c.note.user + ', ' + c.note.area + ', ' + c.note.at + ')' }), el('p', { class: 'notebox', text: c.note.text })));
+    if (c.system_notes.length) card.append(el('details', null, el('summary', null, 'The system’s notes around it ', el('span', { text: '(' + c.system_notes.length + ')' })), noteList(c.system_notes)));
+    return card;
+  }
+  function renderCalls() {
+    var C = DATA.contacts, T = C.twins[state.twin], box = document.getElementById('calls');
+    box.replaceChildren();
+    box.append(el('div', { class: 'col' },
+      el('h2', { id: 'h-calls', text: 'What the contact center holds' }),
+      el('p', { text: 'Two of the loan’s calls, as the contact center writes them for this history: the row, what the record held that day, the transcript as the recorder wrote it, and the notes the call left. Every figure an agent says or writes is one the record held that day; the page refuses to build if one is not, or if the statement lines are not the engine’s.' }),
+      el('p', { class: 'small muted', text: TWIN_NAME[state.twin] + ': ' + T.counts.contacts.toLocaleString('en-US') + ' contacts over the ten years, ' + T.counts.calls + ' of them calls and ' + T.counts.conversations + ' conversations; ' + T.counts.agent_notes + ' agent notes and ' + T.counts.system_notes + ' system notes. The borrower speaks ' + (T.language === 'es' ? 'Spanish, so every call runs through an interpreter.' : 'English.') + ' ' + C.pins })));
+    var g = el('div', { class: 'calls' });
+    g.append(callCard(T.promise));
+    if ('id' in T.escrow) g.append(callCard(T.escrow));
+    else g.append(el('article', { class: 'card' }, el('div', { class: 'meta', text: 'Year 4 · the escrow call' }), el('h3', { text: 'Why did my escrow payment go up?' }), el('p', { class: 'note', text: T.escrow.missing })));
+    box.append(g);
   }
 
   /* ── what missing the defects costs ──────────────────────────────────── */
@@ -561,7 +638,7 @@ button { -webkit-tap-highlight-color: transparent }
 
   function renderFooter() {
     var f = document.getElementById('footer'), B = DATA.book;
-    f.append(el('div', null, 'Built by ', el('code', { text: 'npm run env:demo -w @hm/environments' }), ' from the code on disk: life generator ' + DATA.life_version + ', tape writer ' + DATA.tape.profile + ' ' + DATA.tape.version + ', ' + DATA.envs.map(function (e) { return e.name + ' ' + e.version; }).join(', ') + '. Page ' + DATA.page_version + '.'));
+    f.append(el('div', null, 'Built by ', el('code', { text: 'npm run env:demo -w @hm/environments' }), ' from the code on disk: life generator ' + DATA.life_version + ', tape writer ' + DATA.tape.profile + ' ' + DATA.tape.version + ', contact center ' + DATA.contacts.version + ', ' + DATA.envs.map(function (e) { return e.name + ' ' + e.version; }).join(', ') + '. Page ' + DATA.page_version + '.'));
     f.append(el('div', { text: 'The demo loan draws from the calibration’s typed defaults (version ' + DATA.demo_calibration.version + '), as the three environments draw their tasks, so the page shows the tasks they pose. The book draws from calibration.json (version ' + B.calibration_version + ', seed ' + B.seed + ') and is read against calibration-acceptance.json (version ' + B.acceptance_version + ').' }));
     f.append(el('div', { text: 'Synthetic data only: no borrower’s or partner’s data. Amounts are dollars; dates are the story’s, from 2026 forward.' }));
   }

@@ -25,6 +25,7 @@ import {
   callsOf,
   contactCenter,
   plantContactDefects,
+  transcriptOf,
   type ContactDefectId,
 } from "../contacts/index.js";
 import {
@@ -42,7 +43,9 @@ import {
   THREAT_PHRASES,
   THREAT_WORDS,
   failedPreDialChecks,
+  figureRuns,
   normalizeLine,
+  recordNumbers,
   reviewCall,
   says,
   threatens,
@@ -77,6 +80,7 @@ import {
   phraseList,
   rebuild,
   recordFor,
+  recordView,
   reviewContactCall,
   type CallQaAnswer,
   type CallQaTask,
@@ -374,6 +378,87 @@ describe("the call rubric", () => {
       expect(found / total, id).toBeGreaterThan(0.8);
     }
   }, 120_000);
+
+  it("catches a wrong figure planted in the annual statement's explanation, and a note that records it wrong", () => {
+    // Every borrower calls about each analysis an annual statement explains; C-05 and C-08 are planted on every
+    // such call the desk reviews.
+    const pinned = contactCenter(book, {
+      calibration: cal,
+      pins: Object.fromEntries(
+        book.loans.map((_, i) => [i, { language: "en" as const, escrow_call: true }]),
+      ),
+    });
+    const escrowCalls = pinned.loans.flatMap((l) =>
+      callsOf(l).filter(
+        (c) =>
+          c.reason === "escrow_analysis" &&
+          c.outcome === "conversation" &&
+          reviewable(c, pinned) &&
+          callPlan(pinned, book, c.id).facts.statement !== null,
+      ),
+    );
+    expect(escrowCalls.length).toBeGreaterThan(100);
+    const ids = escrowCalls.map((c) => c.id);
+    for (const id of ["C-05", "C-08"] as const) {
+      const res = plantContactDefects(pinned, book, [{ id, contacts: ids }]);
+      let found = 0;
+      let total = 0;
+      let inRecord = 0;
+      const problems: string[] = [];
+      for (const l of res.labels.filter((x) => x.root_cause)) {
+        const cid =
+          id === "C-08"
+            ? res.defective.loans.flatMap((x) => x.notes).find((x) => x.id === l.row)!.contact_id!
+            : l.row;
+        const plan = callPlan(res.defective, book, cid);
+        const s = plan.facts.statement!;
+        const figures = new Set(
+          [
+            ...s.lines.flatMap((x) => [x.actual, ...(x.projected === null ? [] : [x.projected])]),
+            ...(s.low ? [s.low.actual, s.low.projected] : []),
+          ].map(String),
+        );
+        // The plant is in the explanation: a statement line's turn, or a statement figure in the note.
+        if (id === "C-05") {
+          const turn = transcriptOf(res.defective, book, cid).turns[l.turn!]!;
+          if (!/^quote:stmt_/.test(turn.tag)) problems.push(`${cid}: planted on ${turn.tag}`);
+        } else {
+          const cents = String(BigInt(l.true_value!.replace(/[$,.]/g, "")));
+          if (!figures.has(cents))
+            problems.push(`${cid}: the note's ${l.true_value} is no statement figure`);
+        }
+        total++;
+        const r = reviewContactCall(res.defective, book, cid).said;
+        const ok =
+          id === "C-08"
+            ? r.note !== null && !r.note.matches && r.note.contradictions.includes(l.planted_value!)
+            : r.findings.some((f) => f.item === "wrong_amount" && f.line === l.turn! + 1) &&
+              r.fails_outright;
+        if (ok) found++;
+        else {
+          // What the rubric cannot see: a figure whose digit-runs are the record's already (call-qa draws around it).
+          const k = res.defective.loans.findIndex((x) => x.contacts.some((c) => c.id === cid));
+          const call = res.defective.loans[k]!.contacts.find((c) => c.id === cid)!;
+          const record = recordView(book.loans[k]!, res.defective.loans[k]!, call.on);
+          const runs = new Set(figureRuns(record));
+          const planted = l.planted_value!;
+          if (id === "C-05" && (planted.match(/\d+/g) ?? []).every((x) => runs.has(x))) inRecord++;
+          else if (
+            id === "C-08" &&
+            recordNumbers(record).money.has(String(BigInt(planted.replace(/[$,.]/g, ""))))
+          )
+            inRecord++;
+          else problems.push(`${cid}: ${planted} not found`);
+        }
+        for (const f of r.findings)
+          if (f.item !== "wrong_amount") problems.push(`${cid}: ${f.item}@${f.line ?? "-"}`);
+      }
+      expect(problems.slice(0, 10), id).toEqual([]);
+      expect(total, id).toBeGreaterThan(100);
+      expect(found + inRecord, id).toBe(total);
+      expect(found / total, id).toBeGreaterThan(0.9);
+    }
+  }, 300_000);
 
   it("reads the dialer's facts as the servicing app's gates do, on their edges", () => {
     const base: PreDialFacts = {

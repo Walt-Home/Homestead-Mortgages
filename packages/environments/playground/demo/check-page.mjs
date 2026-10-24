@@ -120,7 +120,8 @@ export function smokeDemoPage(html) {
   const data = JSON.parse(json);
 
   let views = 0;
-  const lanes = ["lane-system", "lane-tape", "lane-moments"];
+  // The three lanes, and the contact center's calls below them, which follow the history chosen.
+  const lanes = ["lane-system", "lane-tape", "lane-moments", "calls"];
   const rendered = () => {
     views += 1;
     for (const id of lanes)
@@ -139,6 +140,24 @@ export function smokeDemoPage(html) {
   for (const quiet of [true, false]) {
     page.go({ quiet });
     rendered();
+  }
+
+  // The calls show what their data holds: every statement line the escrow call read, and each call's note.
+  for (const twin of page.twins) {
+    page.go({ twin });
+    const shown = document.getElementById("calls").textContent;
+    const c = data.contacts.twins[twin];
+    const wanted = [c.promise, c.escrow].flatMap((x) =>
+      "id" in x
+        ? [
+            ...(x.note ? [x.note.text] : []),
+            ...(x.statement ? x.statement.lines.map((l) => l.text) : []),
+            ...(x.statement?.low ? [x.statement.low.text] : []),
+          ]
+        : [x.missing],
+    );
+    for (const w of wanted)
+      if (!shown.includes(w)) throw new Error(`the ${twin} calls do not show: ${w}`);
   }
 
   // Every button and link of the first view, pressed once, then the view put back.

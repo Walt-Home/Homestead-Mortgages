@@ -2822,8 +2822,10 @@ function noteClauses(p: CallPlan, turns: readonly DraftTurn[]): string[] {
     out.push("[WARM XFER TO LM|XFERRED TO LOSS MIT|TRANSFERRED TO HOMEOWNER ASSIST].");
   // What else the call took up, read off its turns: a longer call leaves a longer note.
   const tags = new Set(turns.map((t) => t.tag));
+  // The questions the caller asked, the interpreter's relays of them aside: until contacts 1.2.0 a relay read as a
+  // second question, and every interpreted call's note asked about "undefined".
   const asked = turns
-    .filter((t) => t.tag.startsWith("reason:"))
+    .filter((t) => t.tag.startsWith("reason:") && !t.tag.endsWith(":relay"))
     .slice(1)
     .map((t) => t.tag.slice("reason:".length) as InquiryReason);
   for (const a of asked) out.push(`[ALSO|ADDL] [ASKED|INQ] ABT ${REASON_CODE[a]}.`);

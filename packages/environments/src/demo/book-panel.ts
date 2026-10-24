@@ -558,13 +558,13 @@ export function bookPanel(o: BookPanelOptions): PageBook {
         const band = at(t.target, "note_median_chars") as { min: number; max: number };
         parts.push({
           label: "median note length (design choice)",
-          ours: "no notes yet",
+          ours: "not read on this book",
           target: `${num(band.min, "note_median_chars.min")} to ${num(band.max, "note_median_chars.max")} characters`,
           tolerance: "inside the band",
           pass: null,
         });
         note =
-          "Half measured: call notes and transcripts arrive in a later wave, with the contacts layer. The handle time is the public part.";
+          "Half measured: the contact center writes call notes and transcripts, and two of the demo loan's calls are shown above, but this book is the life generator's alone and its note length is not read here. The handle time is the public part.";
         break;
       }
       case "transactions-per-loan-year": {

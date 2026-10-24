@@ -1818,7 +1818,7 @@ function escrowCall(
   same("quote:analysis_compare", [flagged.old_payment, flagged.new_payment]);
   if (d.kind === "shortage")
     same(
-      "quote:shortage_plan",
+      d.deficiency_cents > 0n ? "quote:deficiency_plan" : "quote:shortage_plan",
       d.deficiency_cents > 0n
         ? [
             d.deficiency_cents,
@@ -1903,6 +1903,7 @@ function escrowCall(
         tag.startsWith("reason:") ||
         tag.startsWith("quote:analysis") ||
         tag === "quote:shortage_plan" ||
+        tag === "quote:deficiency_plan" ||
         tag === "quote:refund_plan" ||
         tag === "quote:credit_plan" ||
         tag.startsWith("stmt_") ||

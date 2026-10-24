@@ -4232,7 +4232,8 @@ the call pinned: 1,853 calls and 5,724 lines, 1,536 of them after the run
 date, 10 overdrawn years and 118 calls through an interpreter. Drawn, the
 book holds 314 conversations about the escrow analysis, 257 of them with a
 statement. A call about an analysis no statement explains (the first one, a
-borrower behind at it, a year on two servicers' books), and a call about
+borrower behind at it, a year on two servicers' books, the prior servicer's
+after a transfer), and a call about
 the payment change, are answered from the analysis alone, with its tax and
 premium totals of the last two years, as before.
 

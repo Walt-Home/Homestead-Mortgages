@@ -8792,7 +8792,8 @@ analysis gets none (§1024.17(i)(2), the ported `exemption`), and the
 analysis's system note now says so, or that the shortage notice went out.
 The first analysis has none here, because the projection its year was held
 to was made at closing and the history keeps no row for it. A year that
-runs across two servicers' books has none either. Each such call, and a
+runs across two servicers' books has none either, and a transferee's
+record holds no statement the prior servicer mailed. Each such call, and a
 call about the payment change, is answered from the analysis alone, as
 before. In seed 1's thousand loans, 4,906 of 5,741 analyses have a
 statement year: 745 are first analyses, 65 exempt and 25 end early.

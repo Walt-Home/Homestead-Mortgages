@@ -465,7 +465,8 @@ export function recordOn(life: LoanLife, on: PlainDate, ctx: RecordContext): Rec
         plan: planOf(an),
       }
     : null;
-  const statement = an ? statementOf(life, an) : null;
+  // The statement is the servicer's that mailed it: a transferee's record does not hold the prior servicer's.
+  const statement = an && an.servicer === servicer ? statementOf(life, an) : null;
 
   const ac = last(
     life.arm_changes,

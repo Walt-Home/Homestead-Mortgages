@@ -1059,7 +1059,7 @@ describe("contact center", () => {
         const plan$ =
           d.kind === "shortage"
             ? ([
-                "quote:shortage_plan",
+                d.deficiency_cents > 0n ? "quote:deficiency_plan" : "quote:shortage_plan",
                 d.deficiency_cents > 0n
                   ? [
                       d.deficiency_cents,

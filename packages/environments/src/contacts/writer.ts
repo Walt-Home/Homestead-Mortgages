@@ -1031,7 +1031,7 @@ function statementCall(x: Script) {
       [
         "The analysis found a deficiency of {deficiency} and a shortage of {shortage}. [Each is spread over|We spread both over] {plan_months} months: {shortage_installment} a month for the shortage and {deficiency_installment} a month for the deficiency, beginning with the {effective} payment.",
       ],
-      "quote:shortage_plan",
+      "quote:deficiency_plan",
     );
   else if (a.decision === "shortage")
     x.agent(

@@ -148,6 +148,8 @@ const AGENT_ES: Record<string, string> = {
   "quote:analysis_total": "Dice que su pago total será {new_total}.",
   "quote:shortage_plan":
     "Dice que el análisis encontró un faltante de {shortage}, que se reparte en {plan_months} meses: {shortage_installment} al mes a partir del pago del {effective_es}.",
+  "quote:deficiency_plan":
+    "Dice que el análisis encontró una deficiencia de {deficiency} y un faltante de {shortage}, que se reparten en {plan_months} meses: {shortage_installment} al mes por el faltante y {deficiency_installment} al mes por la deficiencia, a partir del pago del {effective_es}.",
   "quote:refund_plan":
     "Dice que el análisis encontró un sobrante de {surplus}, y que se lo reembolsan a más tardar el {refund_by_es}.",
   "quote:refund_sent": "Dice que el reembolso se envió el {refund_on_es}.",

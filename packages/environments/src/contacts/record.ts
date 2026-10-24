@@ -287,6 +287,17 @@ export function piOn(life: LoanLife, due: PlainDate): Cents {
 
 const planOf = (a: AnalysisRow): NonNullable<RecordFacts["analysis"]>["plan"] => {
   const d = analysisDecision(a);
+  // The agent says a deficiency and a shortage are spread over the same months (writer.ts, quote:deficiency_plan):
+  // the port's deficiency installments must add up over the shortage's months.
+  if (
+    d.kind === "shortage" &&
+    d.deficiency_cents > 0n &&
+    d.deficiency_installment_cents * BigInt(d.months - 1) + d.deficiency_final_cents !==
+      d.deficiency_cents
+  )
+    throw new RangeError(
+      `the analysis of ${a.as_of} spreads its deficiency over other months than its shortage's ${d.months}`,
+    );
   return {
     months: d.kind === "shortage" ? d.months : null,
     shortage_installment: d.kind === "shortage" ? d.installment_cents : null,
@@ -298,11 +309,13 @@ const planOf = (a: AnalysisRow): NonNullable<RecordFacts["analysis"]>["plan"] =>
   };
 };
 
-const statements = new WeakMap<AnalysisRow, RecordFacts["statement"]>();
+const statements = new WeakMap<LoanLife, WeakMap<AnalysisRow, RecordFacts["statement"]>>();
 
-/** The statement mailed with an analysis, as the record holds it: read once per analysis row. */
+/** The statement mailed with an analysis, as the record holds it: read once per loan and analysis row. */
 function statementOf(life: LoanLife, a: AnalysisRow): RecordFacts["statement"] {
-  if (statements.has(a)) return statements.get(a)!;
+  let byRow = statements.get(life);
+  if (!byRow) statements.set(life, (byRow = new WeakMap()));
+  if (byRow.has(a)) return byRow.get(a)!;
   const y = statementYearOf(life, a);
   let out: RecordFacts["statement"] = null;
   if (y) {
@@ -348,7 +361,7 @@ function statementOf(life: LoanLife, a: AnalysisRow): RecordFacts["statement"] {
       overdrawn: reading.refused.length > 0,
     };
   }
-  statements.set(a, out);
+  byRow.set(a, out);
   return out;
 }
 

@@ -8803,9 +8803,9 @@ negative low, which the engine prints as $-105.-50. `statementReading`
 hands the engine the same low twice for such a year, which prints the bill
 lines whole and no low line, and says in `refused` why. The agent then says
 the account was overdrawn, so the statement does not compare the low
-balance with the projected one. 27 of the 4,906 years are such. The demo's
-is one: the January 2030 renewal of $4,031.43 takes the account to
-−$969.42 at January's end.
+balance with the projected one, and its opening promised no low point to
+begin with. 27 of the 4,906 years are such. The demo's is one: the January
+2030 renewal of $4,031.43 takes the account to −$969.42 at January's end.
 
 **No new defect.** A wrong figure in the explanation is a wrong amount
 (C-05) in the call and a contradiction (C-08) in its note. On a call that
@@ -8882,7 +8882,9 @@ history:
 - the promise and the receipt that kept it;
 - a number said or written that the record does not hold;
 - statement lines that are not the engine's over `statementYearOf`;
-- a payment today that is not the one escrow-review poses.
+- a payment today that is not the one escrow-review poses;
+- the days the promise card counts, and a promise that is not everything
+  owed by its day.
 
 `check-page.mjs` now renders the calls for both histories and holds the
 rendered text to each note and statement line. The first build of the

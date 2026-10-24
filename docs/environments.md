@@ -3738,7 +3738,10 @@ history:
 - a number said or written that the record does not hold that day;
 - statement lines that are not the engine's over `statementYearOf`;
 - a payment today that is not the one escrow-review poses;
-- a plan's figures that are not `analysisDecision`'s.
+- a plan's figures that are not `analysisDecision`'s;
+- a day the promise card counts (the late charge's, the dialer's first
+  attempt, the call's) that is not the history's, a promise that is not
+  everything owed by its day, or a dialer call while it was open.
 
 `check-page.mjs` renders the calls for both histories and holds the
 rendered text to each note and statement line.
@@ -4222,7 +4225,8 @@ analysis and the statement:
 - for a year the engine cannot print the low of (escrow-4, an account
   overdrawn during the year), the bill lines without the low line, and the
   agent says plainly that the account was overdrawn, so the statement does
-  not compare the low balance with the projected one;
+  not compare the low balance with the projected one. The agent's opening
+  promises the low point only on a year whose statement compares it;
 - the shortage question and the cushion, as before.
 
 The interpreter relays each line with the same figures and month ("en mayo

@@ -167,7 +167,10 @@ export function slotsOf(p: CallPlan): Record<string, string> {
     f.statement.lines.forEach((l, i) => {
       const k = i + 1;
       s[`st${k}_label`] = l.label;
-      s[`st${k}_label_es`] = STATEMENT_LABEL_ES[l.line_type] ?? l.label;
+      const es = STATEMENT_LABEL_ES[l.line_type] ?? l.label;
+      s[`st${k}_label_es`] = es;
+      // "una factura del impuesto del condado": "de el" contracts to "del".
+      s[`st${k}_label_del`] = es.startsWith("el ") ? `del ${es.slice(3)}` : `de ${es}`;
       s[`st${k}_month`] = monthYear(l.month);
       s[`st${k}_month_es`] = mesYear(l.month);
       m(`st${k}_actual`, l.actual);
@@ -1060,12 +1063,22 @@ function statementCall(x: Script) {
       "quote:credit_plan",
     );
   else x.agent(["The analysis found no surplus, shortage or deficiency."], "analysis_balanced");
-  x.agent(
-    [
-      "[The annual statement shows why|Your annual statement explains it]: [what came in differently from last year's projection|the bills that came in other than we projected], and [the low point of the account|where the balance bottomed out].",
-    ],
-    "stmt_intro",
-  );
+  // The low point is promised only where the statement compares it: an overdrawn year has no low line (escrow-4), nor
+  // does a year whose low was the projected one.
+  if (s.low !== null || s.lines.length === 0)
+    x.agent(
+      [
+        "[The annual statement shows why|Your annual statement explains it]: [what came in differently from last year's projection|the bills that came in other than we projected], and [the low point of the account|where the balance bottomed out].",
+      ],
+      "stmt_intro",
+    );
+  else
+    x.agent(
+      [
+        "[The annual statement shows why|Your annual statement explains it]: [what came in differently from last year's projection|the bills that came in other than we projected].",
+      ],
+      "stmt_intro_bills",
+    );
   s.lines.forEach((l, i) => {
     const sub = (t: string) => t.replace(/\{st_/g, `{st${i + 1}_`);
     if (l.kind === "differs")

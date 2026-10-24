@@ -235,14 +235,17 @@ function statementYearOrWhy(
   };
 }
 
-const years = new WeakMap<AnalysisRow, StatementYear | null>();
+/** Memoized by the loan and then the row: a year is read off the whole loan, not the row alone. */
+const years = new WeakMap<LoanLife, WeakMap<AnalysisRow, StatementYear | null>>();
 
 /** The year the statement mailed with `analysis` explains, or null when no statement explains one. */
 export function statementYearOf(loan: LoanLife, analysis: AnalysisRow): StatementYear | null {
-  if (years.has(analysis)) return years.get(analysis)!;
+  let byRow = years.get(loan);
+  if (!byRow) years.set(loan, (byRow = new WeakMap()));
+  if (byRow.has(analysis)) return byRow.get(analysis)!;
   const got = statementYearOrWhy(loan, analysis);
   const y = "year" in got ? got.year : null;
-  years.set(analysis, y);
+  byRow.set(analysis, y);
   return y;
 }
 

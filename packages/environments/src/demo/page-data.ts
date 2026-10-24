@@ -109,7 +109,8 @@ import {
   type ProfilePins,
   type Transcript,
 } from "../contacts/index.js";
-import { clock, monthYear } from "../contacts/format.js";
+import { clock, monthName as monthAlone, monthYear } from "../contacts/format.js";
+import type { Decision } from "../escrow/ported/analysis.js";
 import { statementReading } from "../escrow/statement.js";
 import { analysisDecision, statementYearOf } from "../life/escrow-year.js";
 import { bookPanel, type AcceptanceFile, type PageBook } from "./book-panel.js";
@@ -1735,14 +1736,30 @@ function promiseCall(
       n.on <= p.pay_by &&
       (n.contact_id === null || n.contact_id === c.id || before.some((b) => b.id === n.contact_id)),
   );
+  // The story the card tells, each day of it counted from the missed installment's due date, as the history has it.
+  const due = f.past_due.oldest_due;
+  const dayOf = (on: string) => daysBetween(due, on as PlainDate);
+  const dial = before.find((b) => b.mode === "call");
+  if (!dial) return fail("no dialer attempt before the promise");
+  if (dayOf(c.on) !== f.past_due.days)
+    fail(`the call is on day ${dayOf(c.on)}, and its record says ${f.past_due.days} days past due`);
+  const owed = f.past_due.total + (f.next && f.next.due <= p.pay_by ? f.next.amount : 0n);
+  if (p.amount !== owed)
+    fail(`the promise of ${usd(p.amount)} is not everything owed by its day, ${usd(owed)}`);
+  if (
+    loan.contacts.some(
+      (x) => x.direction === "outbound" && x.mode === "call" && x.on > c.on && x.on <= p.pay_by,
+    )
+  )
+    fail("the dialer called while the promise was open");
   const agent = AGENTS[c.servicer].find((a) => a.id === c.human_agent)?.name ?? c.human_agent ?? "";
   return {
     id: c.id,
     year: 3,
     on: c.on,
     at: c.at,
-    title: "The missed March and the promise to pay",
-    why: `March's installment was missed, the late charge assessed on day 16 and the dialer's attempts began on day 17. On day 22 the borrower calls, is told what is past due, and promises to pay everything by ${dayName(p.pay_by)}. The promise ceases the calls, and the payment on that day keeps it.`,
+    title: `The missed ${monthAlone(due)} and the promise to pay`,
+    why: `${monthAlone(due)}'s installment was missed, the late charge assessed on day ${dayOf(fee.assessed_on)} and the dialer's attempts began on day ${dayOf(dial.on)}. On day ${dayOf(c.on)} the borrower calls, is told what is past due, and promises to pay everything by ${dayName(p.pay_by)}. The promise ceases the calls, and the payment on that day keeps it.`,
     row: rowFacts(c, agent),
     record: [
       { label: "Days past due", value: String(f.past_due.days) },
@@ -1773,6 +1790,15 @@ function promiseCall(
     })),
   };
 }
+
+/** What the escrow call's card says the agent told of the analysis's decision, by its kind. */
+const HANDLED: Readonly<Record<Decision["kind"], string>> = {
+  shortage: "says what the shortage is and how it is spread",
+  refund: "says what the surplus is and when it is refunded",
+  credit: "says what the surplus is and how it is credited",
+  retain: "says what the surplus is and why it is kept",
+  balanced: "says the analysis found nothing to spread or refund",
+};
 
 function escrowCall(
   center: ContactCenter,
@@ -1851,6 +1877,16 @@ function escrowCall(
   if (note)
     for (const l of s.lines)
       if (!moneyIn(note.text).includes(l.actual)) fail(`the agent's note leaves out ${l.text}`);
+  // The card's title says the payment went up, and the call says the deficiency is spread over the shortage's months.
+  if (a.new_escrow <= a.old_escrow)
+    fail("the escrow payment did not go up, as the card's title says");
+  if (
+    d.kind === "shortage" &&
+    d.deficiency_cents > 0n &&
+    d.deficiency_installment_cents * BigInt(d.months - 1) + d.deficiency_final_cents !==
+      d.deficiency_cents
+  )
+    fail(`the deficiency is not spread over the shortage's ${d.months} months`);
   const agent = AGENTS[c.servicer].find((x) => x.id === c.human_agent)?.name ?? c.human_agent ?? "";
   const sysNotes = loan.notes.filter(
     (n) =>
@@ -1865,7 +1901,7 @@ function escrowCall(
     on: c.on,
     at: c.at,
     title: "Why did my escrow payment go up?",
-    why: `The borrower calls about the analysis of ${dayName(flagged.as_of)} and the annual statement mailed with it on ${dayName(flagged.sent_on)}. The agent sets the new payment beside the one on the loan's terms today, says what the shortage is and how it is spread, and reads the statement's reasons out line by line, as the servicing app's statement engine writes them.${s.overdrawn ? " The account was overdrawn during the year, so the engine cannot print the low balance (escrow-4): the statement leaves that line out, and the agent says so." : ""}`,
+    why: `The borrower calls about the analysis of ${dayName(flagged.as_of)} and the annual statement mailed with it on ${dayName(flagged.sent_on)}. The agent sets the new payment beside the one on the loan's terms today, ${HANDLED[d.kind]}, and reads the statement's reasons out line by line, as the servicing app's statement engine writes them.${s.overdrawn ? " The account was overdrawn during the year, so the engine cannot print the low balance (escrow-4): the statement leaves that line out, and the agent says so." : ""}`,
     row: rowFacts(c, agent),
     record: [
       {
@@ -1883,7 +1919,7 @@ function escrowCall(
               ? [
                   {
                     label: "Deficiency",
-                    value: `${usd(d.deficiency_cents)}, ${usd(d.deficiency_installment_cents)} a month for 12 months`,
+                    value: `${usd(d.deficiency_cents)}, ${usd(d.deficiency_installment_cents)} a month for ${d.months} months`,
                   },
                 ]
               : []),

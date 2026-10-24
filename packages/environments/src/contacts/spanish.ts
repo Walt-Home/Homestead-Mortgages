@@ -158,10 +158,12 @@ const AGENT_ES: Record<string, string> = {
   analysis_balanced: "Dice que el análisis no encontró sobrante, faltante ni deficiencia.",
   stmt_intro:
     "Dice que el estado de cuenta anual explica por qué: las facturas que llegaron distintas de lo proyectado y el saldo más bajo de la cuenta.",
+  stmt_intro_bills:
+    "Dice que el estado de cuenta anual explica por qué: las facturas que llegaron distintas de lo proyectado.",
   "quote:stmt_moved":
     "Dice que {label_es}, pagado en {month_es}, fue {actual} frente a {projected} proyectados.",
   "quote:stmt_unprojected":
-    "Dice que se pagó una factura de {label_es} de {actual} en {month_es}, que no estaba proyectada.",
+    "Dice que se pagó una factura {label_del} de {actual} en {month_es}, que no estaba proyectada.",
   stmt_anticipated:
     "Dice que esa factura vence después del análisis, así que es el monto que esperan pagar.",
   "quote:stmt_low":

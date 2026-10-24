@@ -8760,7 +8760,7 @@ dialer not ceased for the promise, a kept promise never marked, a broken one
 never followed up, no case, no acknowledgment and no written answer for the
 complaint, and the borrower calling about it again.
 
-**What the first build got wrong, and the twin keeps now.**
+**Three things the first build got wrong.**
 
 - The contact center keeps a call from taking a promise when one is pending
   within three weeks, and it decides that in the order calls are drawn, not

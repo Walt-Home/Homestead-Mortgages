@@ -580,6 +580,10 @@ describe("contact-audit", () => {
     expect(floor(() => [])).toEqual({ passed: 50, mean: 0.438 });
     expect(floor(everyPromise)).toEqual({ passed: 46, mean: 0.56 });
     expect(floor(everyComplaint)).toEqual({ passed: 51, mean: 0.553 });
+    expect(floor((t) => [...everyPromise(t), ...everyComplaint(t)])).toEqual({
+      passed: 55,
+      mean: 0.665,
+    });
   }, 120_000);
 
   it("can be audited from the rulebook and the tools: the reference passes the held-out suite and a training suite", async () => {
@@ -588,7 +592,7 @@ describe("contact-audit", () => {
       expect(r.misses).toEqual([]);
       // One turn of reading, one to add up a window's payments, one to submit.
       expect(r.turns).toBeLessThanOrEqual(3);
-      expect(r.calls).toBeLessThanOrEqual(8);
+      expect(r.calls).toBeLessThanOrEqual(7);
     }
     expect(Math.max(...heldout().map((x) => x.attempts))).toBeLessThan(30);
   }, 600_000);

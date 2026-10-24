@@ -103,8 +103,9 @@ exactly, and planted warnings must be found while extra ones are allowed
 exists, the engine grades the money.
 
 **What is planted so far.** Eleven of the 47, in `DEFECTS`
-(`ENV/life/defects.ts`), the registry each later wave extends, and two
-vendor errors that are not among them. All ten of the first ten below are
+(`ENV/life/defects.ts`), the registry each later wave extends, two vendor
+errors that are not among them, and two staff errors the contact center
+plants (`ENV/contacts/staff.ts`, below). All ten of the first ten below are
 planted in the generator's twin and in the twin's transfer package
 (`ENV/life/transfer-package.ts`), and labeled: the planted value is the root,
 and every difference it makes, in the history, on the month-end tape and in
@@ -161,10 +162,28 @@ generator"):
 - V-02, a vendor's: the first hazard renewal after a transfer billed to the
   prior servicer, and paid late when it is sent on.
 
-Staff errors that need the contacts layer, such as a promise not tracked or
-a complaint not logged, are not planted yet. The tape-intake environment
-grades a reviewer on V-01, V-02 and D-25's wrong loan, the three that show
-on a partner's monthly tape (docs/environments.md, "tape-intake").
+The tape-intake environment grades a reviewer on V-01, V-02 and D-25's wrong
+loan, the three that show on a partner's monthly tape (docs/environments.md,
+"tape-intake").
+
+Two staff errors, which need the contacts layer, are planted by the contact
+center (`ENV/contacts/staff.ts`) the way the history errors are: on a call
+the clean history has, so the twin is the clean history until the call and
+the contact center's own rules from there, with the call's missing record as
+the root and what followed as symptoms. Their ids, S-01 and S-02, are apart
+from the 47 and from the call defects C-01 to C-08. The contact-audit
+environment grades a reviewer on both (docs/environments.md, "contact-audit").
+
+| ID   | The error                                                                                         | What real data shows                                                                                                                                                                                                                                                                                                                                                                                                                                    | The root, and what follows                                                                                                                                                                                                                                                                                                                       |
+| ---- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S-01 | A promise to pay made on a call, said and noted, and never recorded                               | No mortgage-servicing finding was found. In auto servicing, FR22 (supervision's findings): servicers repossessed cars from consumers who had "made promises to pay where the date had not passed", or had made and kept them, which "should have prevented" the repossession; among the recurring causes, representatives "failed to cancel repossession orders" already sent on                                                                        | The call's row carries no promise_id and the promise log no promise. Nothing ceases the dialer for it, so it calls inside the promise's window; a kept promise is never marked kept, and a broken one never marked broken or followed up                                                                                                         |
+| S-02 | A complaint voiced on a call and never logged (C-04's error at the call, and everything after it) | OCWPR (alleged): Ocwen's call center had "difficulty … recognizing and escalating complaints", and after an April 2015 policy change "borrowers still have to complain at least five times in nine days" before a complaint is escalated. SH8PR, in debt collection: at least one collector "did not record, categorize, or process complaints and inquires", and at others complaints sat "in an electronic queue that never got reviewed or resolved" | The call's row has complaint_logged false: no CMPL line, no case in the complaint log (spec 4.5's), no acknowledgment on the call and no written response by the fifteenth day (`SM_COMPLAINT_ACK_1BD`, `SM_COMPLAINT_RESOLVE_15`). The borrower calls about it again 16 to 35 days later, on the same issue, and that call is not logged either |
+
+The passages quoted for S-01 and S-02 were read on 24 October 2026 in the
+fetched pages. A call is not a written notice of error, so §1024.35 does not
+reach S-02's complaint; §1024.38(b)(5) has a borrower unsatisfied with an
+oral complaint told how to send one, and spec 4.5 checks every complaint for
+a notice of error's substance (comment 35(a)-2).
 
 **Source keys**
 
@@ -214,6 +233,12 @@ on a partner's monthly tape (docs/environments.md, "tape-intake").
   https://www.consumerfinance.gov/archive/newsroom/cfpb-and-federal-trade-commission-take-action-against-green-tree-servicing-for-mistreating-borrowers-trying-to-save-their-homes/
 - **RX33:** Regulation X, 12 CFR 1024.33.
   https://www.consumerfinance.gov/rules-policy/regulations/1024/33/
+- **FR22:** CFPB Bulletin 2022-04, "Mitigating Harm From Repossession of
+  Automobiles", 87 Fed. Reg. 42 (3 March 2022); auto servicing.
+  https://www.govinfo.gov/content/pkg/FR-2022-03-03/html/2022-04508.htm
+- **SH8PR:** the CFPB's press release on the eighth Supervisory Highlights
+  (23 June 2015); debt collection.
+  https://www.consumerfinance.gov/about-us/newsroom/cfpb-identifies-illegal-practices-uncovered-through-supervision
 
 ## The defects
 

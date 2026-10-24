@@ -8736,3 +8736,80 @@ book's figure, and two defects:
 has not been rerun. Its two generator bugs and the generator's half of
 cashiering-11 are fixed here, and the harness's notes say so; its MIN repair
 and its cashiering-11 class find nothing on the books it draws.
+
+## Staff errors are made on a call the clean history has, and contact-audit grades them
+
+**Built 24 October 2026,** as the staff errors in the contact center
+(`packages/environments/src/contacts/staff.ts`) and `contact-audit` 1.0.0
+over them: phase 4's last piece. S-01 is a promise to pay an agent heard,
+noted and never recorded; S-02 a complaint an agent heard and never logged.
+docs/environments.md, "The contact center" and "contact-audit", says what
+each plants and how a window is graded; docs/synthetic-data-defects.md has
+what real data shows of each.
+
+**Made on a call, as the history errors are made on an event.** A staff
+error is a wrong act on one call, so it is placed on a call the clean
+history has, and the twin is derived again from the same draws with the act
+made there (`StaffOverride`): the clean history until the call, and the
+contact center's own rules from there. That is the life generator's choice
+for a vendor's or a system's error, for the same reason: a twin whose
+differences are the error's alone can be labeled by difference, root apart
+from symptoms. The root is the call's missing record (the row's
+`promise_id`, its `complaint_logged`); the symptoms the rules make are a
+dialer not ceased for the promise, a kept promise never marked, a broken one
+never followed up, no case, no acknowledgment and no written answer for the
+complaint, and the borrower calling about it again.
+
+**What the first build got wrong, and the twin keeps now.**
+
+- The contact center keeps a call from taking a promise when one is pending
+  within three weeks, and it decides that in the order calls are drawn, not
+  the order they happen. So an unrecorded promise let a call five days before
+  it take a promise of its own, and the twin moved before its root. A
+  promise nobody recorded still stops a call made before it, which is what
+  the clean history did, and stops nothing after it.
+- The twin named what it added off the root (`<root>-S01-1`), which is right
+  for labels and would have told a reviewer where to look. The desk numbers
+  every contact and note in its log's order instead.
+- A hardship call the day after the promise call took a promise of its own
+  once the first was unrecorded, so it was no longer escalated, and the
+  follow-up S-02 was asked for was never made. S-02 is not made there, and
+  the planter says why.
+
+**The complaint log is a view, so no clean center moved.** Spec 4.5 puts
+complaints in a case-management system beside the contact log, acknowledged
+on the call (`SM_COMPLAINT_ACK_1BD`) and answered in writing within 15 days
+(`SM_COMPLAINT_RESOLVE_15`). The contact center logged a complaint but held
+no case and wrote no answer. Writing the answer as a contact row would have
+renumbered every later contact, redrawn their words and moved call-qa;
+`complaintLog` reads the cases off the logged complaints instead, a
+function of the center that stores nothing. The override and
+`unrecorded_promises` are absent from every clean history, and the two new
+profile pins (`style`, `complaint_multiplier`) take no draw. So neither
+`CONTACTS_VERSION` nor `LIFE_VERSION` moved, call-qa 1.0.0's held-out pin
+(`d675547e…`) passes as it was, and so does every other suite's.
+
+**The grader is boarding-triage's.** A root must be found, an S-01 root
+with the promise its note gives; a symptom alone earns the root's traced
+field, and beside it is neither required nor extra; extra findings are
+allowed up to two; a clean window is a control that passes only with no
+finding. The rules a reviewer applies are narrow, as call-qa's are: a
+promise is the note's "<amount> BY <date>", a complaint one of the rubric's
+complaint phrases on any line, whoever the recognizer labeled.
+
+**The suite, and what it measures.** Four plans in turn (clean, S-01, S-02,
+both), 50 of each in the held-out suite (seed 1, 200 windows), pinned at
+`4b8245f7…`. A draw is kept only when the reference finds exactly the
+labels; 103 of 200 held-out windows are first draws, the redraws mostly
+books with no promise and complaint within 120 days of each other, and 8
+where the recognizer hid a complaint. The floors: nothing passes the 50
+clean windows (0.438); every promise as a root, 46 (0.560); every complaint
+as a root, 51 (0.553); both, 55. The reference passes the held-out suite,
+300 training tasks and ten hand-built histories in three turns and at most
+seven tool calls. No model has run on it.
+
+**Not in 1.0.0:** other staff errors; interpreted calls; a complaint by
+letter or e-mail; a promise or complaint the recognizer hid, which only the
+label could tell; and a scripted broken promise the borrower's own payment
+met on its date, which the contact center marks broken (one in 512 training
+first draws).

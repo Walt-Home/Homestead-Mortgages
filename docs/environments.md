@@ -7,8 +7,9 @@ only and with the engine itself as the grader. `escrow-analysis` is the
 first on the servicing side, and `regz-price-tests` the first on the
 origination side. `catchup-posting`, `escrow-review` and `boarding-triage`
 are the first drawn from the life generator's histories, `call-qa` draws
-from them through the contact center, and `tape-intake` is the first drawn
-from its tape stream. The defects found in the servicing app's own engines
+from them through the contact center, `contact-audit` reads a loan's whole
+contact history for the staff errors the contact center plants, and
+`tape-intake` is the first drawn from its tape stream. The defects found in the servicing app's own engines
 are in `docs/servicing-engine-defects.md`.
 
 ## refi-review
@@ -3086,7 +3087,8 @@ Not in 1.0.0:
 - a stream defect in the last tape loaded, which was reviewed when it came;
 - D-28, which a monthly tape cannot tell from a borrower paying early, and
   the history errors that show only in a payment history;
-- staff errors, which need the contacts layer.
+- staff errors, which a monthly tape does not show; contact-audit grades two
+  from the contact history.
 
 ## The life generator
 
@@ -3298,9 +3300,9 @@ the next of its line's, named by its line and the day it was due
 (`tax_county@2028-01-01`), which a bill paid late or at the wrong amount
 still is; any other row by its kind and day (`refund@2028-07-18`). A refund
 one history makes and the other does not once renumbered every later bill,
-and labeled each with another bill's day, line and amount. Staff errors that
-need the contacts layer, such as a promise not tracked or a complaint not
-logged, are not planted here.
+and labeled each with another bill's day, line and amount. Staff errors,
+which need the contacts layer, are planted by the contact center the same
+way (below, "The contact center", "Staff errors").
 
 **Moments.** `generate(…, { observe })` shows an environment what each
 engine is about to be handed, as it stands, in the clean history and in the
@@ -3586,8 +3588,6 @@ none of the first's.
 **Not covered yet:**
 
 - the other 36 defects of the catalog;
-- staff errors that need the contacts layer: a promise not tracked, a
-  complaint not logged;
 - foreclosure, forbearance, trial plans and modification, whose tape fields
   are present and always empty; a bankruptcy's plan, trustee, discharge and
   dismissal; loss mitigation beyond a repayment plan; the end of a
@@ -4171,6 +4171,76 @@ because each turn's noise has a stream of its own. At the default rate, 2%
 of the contacts each defect fits, the 300-loan book carries 153 defects in
 all on life 1.2.0 and contacts 1.1.0.
 
+**Staff errors.** Two errors an agent makes by not recording something,
+`plantStaffErrors(center, book, requests, { pins })` (`staff.ts`), numbered
+S-01 and S-02 apart from the catalog's and the call defects. Each is planted
+the way the life generator plants a vendor's or a system's error: on one
+contact the clean history has, with the twin derived again from the same
+draws and the error made on that contact (`StaffOverride`, `derive.ts`). So
+the twin is the clean history until the call, and the contact center's own
+rules from there:
+
+- **S-01, a promise not tracked.** The borrower promises a payment on a
+  call, and the call's words and the agent's note carry it, word for word
+  the clean call's. No record is written: the row's `promise_id` is null and
+  dispositioned "information provided" (the disposition of a call that
+  records nothing, which leaves the words as they were), and the promise log
+  holds nothing (`unrecorded_promises` keeps the promise, for the writer).
+  What the rules then do: nothing ceases the dialer, so it calls inside the
+  window, about twice a root in the held-out suite; no "PTP SET" line, and a
+  kept promise is never marked kept, a broken one never marked broken or
+  the dialer resumed for it. A later call may take a promise of its own,
+  which the first would have stopped. A call made before the promise is
+  still the clean one's: the promise keeps it from taking one of its own,
+  as it did.
+- **S-02, a complaint not logged.** C-04's error at the call (the row's
+  flag, the agent's acknowledgment, the note, the CMPL line), and
+  everything after it: the complaint system opens no case (below), so
+  nothing acknowledges it and nobody answers it in writing. Nothing having
+  come of it, the borrower calls about it again 16 to 35 days later
+  (`RAISED_AGAIN_AFTER`, a design choice: past the 15 days a response
+  takes), on the same issue, a call that voices the complaint and is not
+  logged either.
+
+The complaint system is the servicing app's spec 4.5, "Complaint handling /
+UDAAP", whose blueprint names a complaint log in a case-management system
+(`AS/spec/sections/04-customer-service-borrower-communications/4-5-complaint-handling-udaap.md`).
+`complaintLog(loan, key)` (`complaints.ts`) reads it off the contact log:
+every complaint an agent logged on a call opens a case, received on the
+call's day (an oral complaint is a complaint, 4.5 "Inputs and triggers"),
+acknowledged on the call (`SM_COMPLAINT_ACK_1BD`: any channel), and answered
+by the response letter `NTC_COMPLAINT_RESPONSE` within 15 calendar days
+(`SM_COMPLAINT_RESOLVE_15`), three to eleven days after the call moved to a
+servicer business day. It is a view, so no clean center holds anything new.
+§1024.35's notice-of-error procedures reach a written notice, and a call is
+not one; §1024.38(b)(5) has a borrower unsatisfied with an oral complaint
+told how to send one.
+
+Rows the two histories share keep the clean ids (`contactKey`: the day and
+time, direction, mode, purpose, reason and issue), so every stream a
+contact id keys draws the same; a row the twin adds is named off the root
+(`<root>-S01-1`, the borrower's call again `<root>-S02`), and a row it drops
+keeps its id spent. The labels are the life generator's, with the contact a
+finding names and, for a symptom a reviewer's rule names, which: the root
+is the call's missing record (`contacts.promise_id`, with the promise the
+record should have held, or `contacts.complaint_logged`); every other
+difference between the two histories, field by field, is a symptom (the
+contact log but for its `related` lists, the promise log, the comment log,
+the complaint log, the transcripts, the dialer's pauses); and the named ones
+are `dialed_in_window`, `kept_not_marked`, `broken_not_followed_up`,
+`no_acknowledgment`, `no_response` and `raised_again`. A loan takes one of
+each. Where S-01's twin does not make the call S-02 was asked for (a
+hardship call a day after the promise call takes a promise of its own, so
+it is no longer escalated, and its follow-up is never made), S-02 is not
+made, and the planter says so.
+
+A clean center is byte for byte what it was. The override and
+`unrecorded_promises` are absent from every clean history, and
+`complaintLog` stores nothing, so neither `CONTACTS_VERSION` nor
+`LIFE_VERSION` moved, and call-qa's held-out pin (`d675547e…`) passes as it
+was. The suite's pins add two opt-in profile pins, `style` and
+`complaint_multiplier`, which take no draw a center without them makes.
+
 **Not covered yet:**
 
 - the §1024.40 assignment and the good-faith determination;
@@ -4379,6 +4449,127 @@ in this section is the suite drawn on life 1.2.0 and contacts 1.1.0.
 
 Generating the held-out suite takes about six seconds.
 
+## contact-audit
+
+contact-audit 1.0.0 grades a quality-control desk's audit of a contact
+center for staff errors: one loan's contact history over a window, read for
+a promise an agent heard and did not record (S-01) and a complaint an agent
+heard and did not log (S-02), each reported at its root with the symptoms it
+caused. It is built on the contact center's staff errors (above, "The
+contact center", "Staff errors").
+
+**The task.** The loan (its number, borrowers, state and servicer), the
+window, and the contact log for the window in the task itself: every call,
+phone-menu session, portal login, text, e-mail, letter and dialer attempt,
+each with its disposition, issue, agent, the promise it recorded and whether
+a complaint was logged. The ids are the desk's own: every contact and note
+is numbered in its log's order, because a twin names what it added off its
+root. The rest it reads with the tools.
+
+**The rulebook** says first what the servicer's systems do: a promise is
+written in the note ("PTP $1,234.56 BY 03/28/27") and recorded, ceases the
+dialer through its date, and is marked kept or broken; a complaint is
+acknowledged on the call, logged, and answered in writing within 15
+calendar days (spec 4.5). Then the two errors:
+
+- **S-01.** A call made a promise when its note's own part (before a
+  copied-forward "| PREV:") says an amount, BY and a date. Such a call with
+  no promise in the log is a root, reported with the promise as the note
+  gives it. Its symptoms: each outbound collection attempt after the call
+  through the pay-by date (`dialed_in_window`), and `kept_not_marked` when
+  the payments after the call's day through the pay-by date add up to the
+  amount (with the calculator), `broken_not_followed_up` otherwise.
+- **S-02.** A call voiced a complaint when any line of its transcript says
+  one of the call rubric's complaint phrases (`COMPLAINT_PHRASES`), whoever
+  the recognizer labeled. Such a call with `complaint_logged` false is a
+  root, unless an earlier one on the same issue was too. Its symptoms: no
+  line acknowledging it (`ACK_PHRASES`, the contact center's three
+  wordings), no case in the complaint log, and each later call on the same
+  issue that voiced one and was not logged (`raised_again`).
+
+**The tools.** Primitives only: `read_notes` (by contact or by days),
+`read_transcript`, `search_transcripts` (every recorded call in the window,
+read as call-qa's search reads a line), `read_promises`, `read_complaints`
+(each as it stood at the window's end), `read_payments` and refi's
+`calculate`. No tool compares two records or names an error.
+
+**The grader** is the twin's labels, read the way boarding-triage 1.1.0
+reads its manifest:
+
+- each root is found when a finding names its error, kind "root" and its
+  call; an S-01 root also has its promise, the amount in cents and the date;
+- a root with symptoms has a third field, traced: a finding names the root,
+  or failing that one of its symptoms. A symptom alone earns that field and
+  fails the window; beside the root it is neither required nor extra;
+- a clean window is a control, one field: passed, no finding at all;
+- extra findings, a second finding on one among them, are one field: at
+  most two.
+
+**The tasks.** Each is a life book of one loan, run 30 months: two or three
+delinquencies, each with the scenario's promise (kept or broken) beside the
+ones the contact center draws from the receipts, and a borrower the contact
+center's pins make irritated and four times as likely to complain (about
+three in ten calls an agent handles). The task takes two anchors from the
+clean center, in turn by index a promise the borrower kept and one broken,
+and a complaint call, within 120 days of each other; the window runs from 10
+to 45 days before the first to past the promise's date and five weeks past
+the complaint. Four plans in turn make nothing (the control), S-01 on the
+promise, S-02 on the complaint, or both, so the held-out suite (seed 1, 200
+windows, pinned by hash) holds 50 of each. It has 100 roots of each error,
+195 attempts in a window, 50 promises kept and 50 broken, and 100 calls
+again. A window averages 115 days (39 to 202), 18.7 contacts, 9.2 recorded
+calls, 2.2 calls with a promise and 1.8 with a complaint.
+
+**A draw is kept only when it is fair to grade, and this is a filter.** The
+reference, reading the window as rendered, must find exactly the labels'
+roots and the symptoms a rule names, and nothing more (nothing at all in a
+clean window). On the held-out suite 103 of 200 windows are first draws;
+the redraws are 195 books with no pair of anchors, 6 where the recognizer
+hid the complaint raised again (a misheard or dropped word in the phrase)
+and 2 where it hid the root's own. Of the first draws of 1,000 training
+tasks (train seed 11), 512 had a pair of anchors and reached the check, and
+20 were turned away: 10 because the recognizer hid the complaint, 9 the
+complaint raised again, and one because the payments read otherwise than
+the promise log: a scripted promise the scenario breaks, which the
+borrower's own payment met on its date, is marked broken. The same filters
+are v1's limits.
+
+**The floors.** Submitting nothing passes the 50 clean windows, with a mean
+score of 0.438. Reporting every call whose note states a promise as an S-01
+root, with its promise, passes 46 (0.560): the S-01 windows with two other
+promises or fewer. Reporting every call that voices a complaint as an S-02
+root passes 51 (0.553): every S-02 window, none holding more than two other
+complaints, and a clean one whose logged complaint the recognizer hid. Both
+together pass 55. Each floor passes only the plan it reports, so it is the
+plan's quarter of the suite at most.
+
+**The proof of fairness.** The reference passes the held-out suite, 300
+training tasks (seed 11) and ten hand-built histories in at most three
+turns and seven tool calls: one turn reads the logs and searches the
+transcripts, one adds up a window's payments, one submits. The histories
+hold each rule on its edge: a promise recorded and kept; one not recorded
+with two attempts in its window; the window's pay-by date in and the day
+after out, and a payment a cent short; an attempt earlier on the promise
+call's day out and one later in; two payments after the call's day adding
+up to the promise, beside one on the call's day that does not count; a
+copied-forward note's promise; a complaint logged and answered on day 9;
+one not logged and raised again; a later complaint on another issue, logged;
+and both on one loan.
+
+Not in 1.0.0:
+
+- other staff errors (a payment taken over the phone and not posted, a
+  callback promised and not made, a third party's authorization taken and
+  not recorded);
+- interpreted calls: the borrower is English-speaking, as in call-qa;
+- the written channels' complaints: a complaint by letter or e-mail is a
+  notice of error's question (§1024.35), and the contact center draws
+  complaints on calls only;
+- a promise or a complaint the recognizer hid from the reviewer, which only
+  the label could tell, and a scripted broken promise its payments met.
+
+Generating the held-out suite takes about eleven seconds on an idle machine.
+
 ## The Supermortgage Gym
 
 Every environment also runs in a browser, for people without a checkout:
@@ -4425,6 +4616,7 @@ npm run env:refi -w @hm/environments -- --env catchup-posting --policy reference
 npm run env:refi -w @hm/environments -- --env escrow-review --policy reference
 npm run env:refi -w @hm/environments -- --env boarding-triage --policy reference
 npm run env:refi -w @hm/environments -- --env call-qa --policy reference
+npm run env:refi -w @hm/environments -- --env contact-audit --policy reference
 npm run env:refi -w @hm/environments -- --env tape-intake --policy reference
 npm run env:transfer-package -w @hm/environments -- --out /tmp/packages   # the demo loan's four packages
 npm run env:transfer-package -w @hm/environments -- --out /tmp/packages --each   # and one of each defect alone

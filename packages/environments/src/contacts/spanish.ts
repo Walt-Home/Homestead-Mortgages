@@ -126,7 +126,7 @@ const AGENT_ES: Record<string, string> = {
   "quote:transfer_first_due":
     "Dice que el primer pago para ellos es el que vence el {first_due_us_es}.",
   "quote:shield":
-    "Dice que durante {shield_days} días después de la transferencia, un pago que el administrador anterior reciba a tiempo no se considera tarde.",
+    "Dice que durante los {shield_days} días a partir de la fecha de la transferencia, hasta el {shield_until_es}, un pago que el administrador anterior reciba a tiempo no se considera tarde.",
   "quote:loan4": "Dice que su nuevo número de préstamo termina en {loan4}.",
   "quote:mi_terminated":
     "Dice que el seguro hipotecario se canceló a partir del {mi_terminated_on_es}.",

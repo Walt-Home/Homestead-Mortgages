@@ -61,6 +61,8 @@ const CONFUSIONS: Readonly<Record<string, readonly string[]>> = {
 };
 const FILLERS = new Set(["um,", "uh,", "um", "uh", "like,", "you know,"]);
 const DATE_WORD = new RegExp(`^(${[...MONTHS, ...MESES].join("|")})$`, "i");
+/** The words that make a rate of a number ("percent", "por ciento"): without them the rate reads as a count. */
+const RATE_WORD = /^(percent|ciento)$/i;
 const TEENS: Readonly<Record<string, string>> = {
   "13": "30",
   "14": "40",
@@ -142,13 +144,13 @@ export function recognize(
     const u = r.next();
     const core = w.replace(/[.,?!;:]+$/, "");
     const tail = w.slice(core.length);
-    // A figure, markup, the words that make a date of a number ("March", "de"), and the phone menu's
-    // "press" before its key are written as said: a misheard figure is logged above, not made here.
+    // A figure, markup, the words that make a date or a rate of a number ("March", "de", "percent"), and the
+    // phone menu's "press" before its key are written as said: a misheard figure is logged above, not made here.
     const nearDigit = [i - 2, i - 1, i + 1].some((k) => /\d/.test(words[k] ?? ""));
     if (
       /\d|\[|\]|\$/.test(w) ||
       /^(press|oprima)$/i.test(core) ||
-      (nearDigit && (DATE_WORD.test(core) || core.length <= 3))
+      (nearDigit && (DATE_WORD.test(core) || RATE_WORD.test(core) || core.length <= 3))
     ) {
       out.push(w);
       continue;

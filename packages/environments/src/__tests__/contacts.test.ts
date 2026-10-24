@@ -14,6 +14,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { addDays, daysBetween, parts, type PlainDate } from "@hm/kernel/calendar";
 import { toJsonLine } from "../record.js";
+import { rngFor } from "../rng.js";
+import { recognize } from "../contacts/noise.js";
 import {
   defaultCalibration,
   generate,
@@ -715,6 +717,23 @@ describe("contact center", () => {
     expect(redacted).toBeGreaterThan(100);
   });
 
+  it("keeps the word that makes a number a rate, as it keeps a date's month", () => {
+    // Dropping "percent" turned the 78 of the MI rule into a count no record holds (contacts 1.1.0's seed-7 book).
+    const kinds = (text: string) => numberTokens(text).map((t) => t.kind);
+    let dropped = 0;
+    for (const said of [
+      "You can request cancellation once the balance reaches 80 percent of the original value, and it ends automatically at 78 percent.",
+      "Dice que puede pedir la cancelación cuando el saldo llegue al 80 por ciento del valor original, y que se cancela sola al 78 por ciento.",
+    ])
+      for (let k = 0; k < 4000; k++) {
+        const heard = recognize(rngFor(`rate-word/${k}`), said, [], k % 2 === 1);
+        dropped += heard.noise.filter((x) => x.kind === "dropped_word").length;
+        if (heard.noise.some((x) => x.kind === "misheard_number")) continue;
+        expect(kinds(heard.text), heard.text).toEqual(kinds(said));
+      }
+    expect(dropped).toBeGreaterThan(100);
+  });
+
   it("varies its words: no stock template pasted whole", () => {
     const greetings = new Set<string>();
     const quotes = new Map<string, number>();
@@ -797,7 +816,7 @@ describe("contact center", () => {
     const ids = Object.keys(CONTACT_DEFECTS) as ContactDefectId[];
     const bkCall = pinned.loans[i]!.contacts.find((c) => CONTACT_DEFECTS["C-02"].eligible(c))!;
     // A complaint is a call few loans make, so C-04 is planted by name too: at 3 % of the few it fits, a book can
-    // draw none (life 1.2.0's seed-7 book does).
+    // draw none (life 1.2.0's seed-7 book did under contacts 1.0.0).
     const complaint = pinned.loans
       .flatMap((l) => l.contacts)
       .find((c) => CONTACT_DEFECTS["C-04"].eligible(c))!;

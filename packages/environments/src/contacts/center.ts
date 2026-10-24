@@ -30,8 +30,15 @@ import { buildTranscript, type BuiltTranscript } from "./transcript.js";
 import type { ContactRecord, LoanContacts, NoteRecord, ProfilePins, Transcript } from "./types.js";
 import { templateWriter, type ContactTextWriter } from "./writer.js";
 
-/** Bump on any change to what the contact center draws or writes. */
-export const CONTACTS_VERSION = "1.0.0";
+/**
+ * Bump on any change to what the contact center draws or writes. Every stream hangs off it (`contacts/<version>/<book
+ * seed>`), so a bump draws every center again.
+ *
+ * 1.1.0 (24 October 2026): a petition the life scenario dates is the contact center's case; a complaint is said with
+ * no filler inside it; the recognizer keeps the word that makes a number a rate; the transfer shield runs the 60 days
+ * beginning on the transfer date, through day 59, as the record dates it and the agents say it.
+ */
+export const CONTACTS_VERSION = "1.1.0";
 
 export interface ContactCenter {
   readonly version: string;

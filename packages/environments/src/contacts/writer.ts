@@ -803,7 +803,7 @@ const st = {
       );
     x.agent(
       [
-        "[And for {shield_days} days after the transfer, a payment your previous servicer gets by the end of the grace period won't be considered late.|If the old servicer gets it on time within {shield_days} days of the transfer, it won't be late.]",
+        "[And for the {shield_days} days starting on the transfer date, through {shield_until}, a payment your previous servicer gets by the end of the grace period won't be considered late.|If the old servicer gets it on time by {shield_until}, the last of the {shield_days} days starting on the transfer date, it won't be late.]",
       ],
       "quote:shield",
     );

@@ -30,7 +30,11 @@ export const SERVICER = {
   phone: "1-800-555-0187",
   hours_open: 8,
   hours_close: 9,
-  /** §1024.33(c)(1): for 60 days after a transfer, a payment the prior servicer receives on time is not late. */
+  /**
+   * §1024.33(c)(1): during the 60-day period beginning on the transfer's effective date, a payment the prior servicer
+   * receives on time is not late. The transfer date is its first day (spec §2.7, example L: effective 2026-09-01,
+   * window through 2026-10-30), as the life generator reads it (`TRANSFER_WINDOW_DAYS`).
+   */
   transfer_shield_days: 60,
   /** Regulation Z §1026.36(c)(3): a payoff statement within 7 business days. */
   payoff_statement_business_days: 7,
@@ -153,6 +157,7 @@ export interface RecordFacts {
   readonly mi: { readonly active: boolean; readonly terminated_on: PlainDate | null };
   readonly transfer: {
     readonly on: PlainDate;
+    /** The last day of §1024.33(c)(1)'s 60, the transfer date being the first: the transfer date + 59. */
     readonly shield_until: PlainDate;
     readonly first_due: PlainDate | null;
   } | null;
@@ -385,7 +390,8 @@ export function recordOn(life: LoanLife, on: PlainDate, ctx: RecordContext): Rec
     tin && tin <= on && on <= addDays(tin, 150)
       ? {
           on: tin,
-          shield_until: addDays(tin, SERVICER.transfer_shield_days),
+          // The last day of the 60, the transfer date being the first.
+          shield_until: addDays(tin, SERVICER.transfer_shield_days - 1),
           first_due: life.installments.find((i) => i.due >= tin)?.due ?? null,
         }
       : null;

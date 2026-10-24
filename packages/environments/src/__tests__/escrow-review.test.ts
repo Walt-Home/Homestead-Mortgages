@@ -159,6 +159,7 @@ describe("escrow-review", () => {
   it("concludes what the history did, for every analysis a decade runs", () => {
     // Every annual analysis in forty decades, read off as a task: the grader's run is the history's.
     let analyses = 0;
+    let finalInstallments = 0;
     for (let s = 0; s < 40; s++) {
       const moments: Extract<LifeMoment, { kind: "analysis" }>[] = [];
       const res = generate(
@@ -192,15 +193,35 @@ describe("escrow-review", () => {
         expect(agreesWithHistory(reviewTaskAt(coords, life, m), row), `${s} ${row.year}`).toBe(
           true,
         );
-        // The payment the new one replaces is the one billed on the first installment due after the run date, last
-        // year's shortage or credit still in it: what the servicing app compares with (ops-3-6.ts:105-117).
+        // The payment the new one replaces is the one on the loan's terms for the first installment due after the
+        // run date: last year's spread at its level payment through its last month, the base after it
+        // (`loan_terms.escrow_payment_cents`, ops-3-6.ts:105-117; spec 3.6, worked examples (a) and (b)). That is the
+        // escrow billed on that installment except on a spread's final one, which carries the spread's rounding.
         const billed = life.installments.find((i) => i.due > row.as_of)!;
-        expect(m.old_payment, `${s} ${row.year}`).toBe(billed.escrow);
+        const prior = life.analyses
+          .filter((a) => a.as_of < row.as_of && a.effective <= billed.due)
+          .at(-1);
+        const terms = !prior
+          ? billed.escrow
+          : billed.due < addMonths(prior.effective, 12)
+            ? prior.new_payment
+            : prior.base_payment;
+        expect(m.old_payment, `${s} ${row.year}`).toBe(terms);
+        if (billed.escrow !== terms) {
+          // Only a spread's final installment is billed off its terms, and by its rounding alone.
+          expect(billed.due, `${s} ${row.year}`).toBe(addMonths(prior!.effective, 11));
+          expect(prior!.decision, `${s} ${row.year}`).toBe("shortage");
+          const off = billed.escrow - terms;
+          expect(off > -12n && off < 12n, `${s} ${row.year}: ${off}`).toBe(true);
+          finalInstallments++;
+        }
         analyses++;
       }
     }
     // Ten a decade: the tenth runs inside the window, for the year that begins just after it.
     expect(analyses).toBe(400);
+    // About a third run when the next installment is the last of a spread whose rounding moves its cents (126).
+    expect(finalInstallments).toBeGreaterThan(100);
   }, 300_000);
 
   describe("reviews the spec's worked example and its variants as the spec reads them", () => {

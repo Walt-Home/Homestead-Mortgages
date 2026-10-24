@@ -264,7 +264,10 @@ export interface AnalysisRow {
   readonly surplus: Cents | null;
   readonly shortage: Cents | null;
   readonly deficiency: Cents | null;
-  /** The escrow payment billed when the analysis ran (the first installment due after it), which the new one replaces. */
+  /**
+   * The escrow payment on the loan's terms when the analysis ran, which the new one replaces: the one `loan_terms`
+   * carries for the first installment due after it, a running spread at its level payment (not its final rounding).
+   */
   readonly old_payment: Cents;
   readonly new_payment: Cents;
   readonly first_month_payment: Cents;
@@ -548,7 +551,10 @@ export type LifeMoment =
         readonly amount: Cents;
       }[];
       readonly regx_days_delinquent: number;
-      /** The escrow payment the new one replaces: the escrow share billed on the first installment due after the run date. */
+      /**
+       * The escrow payment the new one replaces: the one on the loan's terms for the first installment due after the
+       * run date, a running spread at its level payment (`AnalysisRow.old_payment`).
+       */
       readonly old_payment: Cents;
     };
 
@@ -964,6 +970,13 @@ export function simulateLoan(
 
   // INVENTED: the escrow payment by due date (each analysis writes the next 24), and the balance between analyses.
   const escrowSched = new Map<PlainDate, Cents>();
+  // The escrow payment on the loan's terms by due date, as the servicing app reads it for an installment
+  // (`escrowPortionOn`, apps/servicing/src/domain/operations-runtime/installments.ts:57-61, over the `loan_terms` version
+  // 3.6 writes, apps/servicing/src/domain/escrow/ops-3-6.ts:105-117): a spread's level payment through its last month,
+  // and the base after it. The first and final months' rounding (a credit's residual cents, a shortage's last
+  // installment) is billed (`escrowSched`) and is not on the terms: spec 3.6, worked example (b), "payment $243.05,
+  // final $243.09".
+  const escrowTerms = new Map<PlainDate, Cents>();
   // INVENTED: what a loan boarded non-escrowed does with an escrow account it had (D-31). From the boarding date its
   // installments carry no escrow, no bill is paid from the account and no analysis is run; the balance the prior
   // servicer sent is held where boarding posted it (service.ts postOpeningEntries posts it whatever the flag says)
@@ -1032,7 +1045,10 @@ export function simulateLoan(
     const pr = project(projectLines(lines0, d.first_due).items, d.first_due, { policy_months: 2 });
     escrowBal = settlementDepositCeiling(pr);
     escrowInitial = escrowBal;
-    for (let k = 0; k < 24; k++) escrowSched.set(addMonths(d.first_due, k), pr.base_payment_cents);
+    for (let k = 0; k < 24; k++) {
+      escrowSched.set(addMonths(d.first_due, k), pr.base_payment_cents);
+      escrowTerms.set(addMonths(d.first_due, k), pr.base_payment_cents);
+    }
     lastEscrow = pr.base_payment_cents;
   }
 
@@ -1807,16 +1823,18 @@ export function simulateLoan(
     const pay = escrowNewPayment(projection, decision);
     const sent = addDays(asOf, sentAfter);
     const eff = effectiveDate(ys, sent);
-    // The payment the new one replaces is the one billed when the analysis runs: the escrow share of the first
-    // installment due after the run date, last year's shortage or credit spread still in it. That is what the
-    // servicing app compares the new payment with (`loan_terms.escrow_payment_cents` carries the running spread and
-    // the step-down is held apart, apps/servicing/src/domain/escrow/ops-3-6.ts:105-117; spec 3.6, worked example
-    // (a)), and what Reg X's annual statement sets the new payment beside (12 CFR 1024.17(i)(1)). Until life 1.2.0
-    // it was the old schedule's from the new one's effective date, after the spread had run out.
+    // The payment the new one replaces is the escrow payment on the loan's terms when the analysis runs: the one
+    // `loan_terms` carries for the first installment due after the run date, last year's shortage or credit spread
+    // still in it at its level payment, never the final installment's rounding. That is what the servicing app
+    // compares the new payment with (`loan_terms.escrow_payment_cents` carries the running spread and the step-down
+    // is held apart, apps/servicing/src/domain/escrow/ops-3-6.ts:105-117; spec 3.6, worked examples (a) and (b)), and
+    // what Reg X's annual statement sets the new payment beside (12 CFR 1024.17(i)(1)). Until life 1.2.0 it was the
+    // old schedule's from the new one's effective date, after the spread had run out.
     let billedDue = addMonths(d.first_due, monthsBetween(d.first_due, asOf));
     if (billedDue <= asOf) billedDue = addMonths(billedDue, 1);
     const billed = state.installments.find((i) => i.due_date === billedDue);
-    const oldPayment = billed ? billed.escrow_cents : escrowFor(billedDue);
+    const oldPayment =
+      escrowTerms.get(billedDue) ?? (billed ? billed.escrow_cents : escrowFor(billedDue));
     if (ov.observe)
       ov.observe({
         kind: "analysis",
@@ -1835,6 +1853,7 @@ export function simulateLoan(
     const flags = [...pl.anomalies, ...escrowAnomalies(oldPayment, pay.payment_cents, decision)];
     for (let k = 0; k < 24; k++) {
       const due = addMonths(eff, k);
+      escrowTerms.set(due, k < 12 ? pay.payment_cents : projection.base_payment_cents);
       escrowSched.set(
         due,
         k === 0

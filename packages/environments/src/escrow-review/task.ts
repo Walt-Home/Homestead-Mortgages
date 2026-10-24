@@ -11,12 +11,12 @@
  * property or the hazard premium rose at renewal; the rest are ordinary
  * years. The model gets escrow-analysis's inputs exactly (the lines, the
  * ledger's balance and what is still scheduled, the cushion, the delinquency
- * and the escrow payment billed today, any shortage or credit from last year
- * still in it) and the account's recent history beside them:
- * the analyses before this one, the disbursements of the last two years and
- * the last twelve month-ends. It works out the shortage or surplus, the new
- * payment, its effective date and the months a shortage is spread over, and
- * says whether the flag stands.
+ * and the escrow payment on the loan's terms today, any shortage or credit
+ * spread from last year still in it at its level amount) and the account's
+ * recent history beside them: the analyses before this one, the
+ * disbursements of the last two years and the last twelve month-ends. It
+ * works out the shortage or surplus, the new payment, its effective date and
+ * the months a shortage is spread over, and says whether the flag stands.
  */
 
 import type { Cents } from "@hm/kernel/money";

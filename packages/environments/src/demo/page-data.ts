@@ -39,7 +39,7 @@ import {
 } from "../life/demo.js";
 import type { DefectLabel } from "../life/defects.js";
 import { generate, LIFE_VERSION, type LifeBook } from "../life/generate.js";
-import type { LifeMoment, LoanLife } from "../life/simulate.js";
+import type { AnalysisRow, LifeMoment, LoanLife } from "../life/simulate.js";
 import {
   TAPE_HEADERS,
   TAPE_PROFILE,
@@ -680,9 +680,10 @@ function twinView(
       text: `Annual escrow analysis for the year from ${monthName(a.year_start)}: ${result}`,
       amount: null,
       detail: [
-        // `old_payment` is the escrow payment billed when the analysis ran, on the next installment, last year's
-        // shortage or credit still in it: what the engine's review triggers compare with (life 1.2.0).
-        `New escrow payment ${usd(a.new_payment)} from ${dayName(a.effective)}, against ${usd(a.old_payment)} billed now; statement sent ${dayName(a.sent_on)}`,
+        // `old_payment` is the escrow payment on the loan's terms when the analysis ran, for the next installment, last
+        // year's shortage or credit still in it at its level amount: what the engine's review triggers compare with
+        // (life 1.2.0).
+        `New escrow payment ${usd(a.new_payment)} from ${dayName(a.effective)}, against ${usd(a.old_payment)} on the loan's terms now; statement sent ${dayName(a.sent_on)}`,
         a.anomalies.length > 0
           ? `Held for review: ${a.anomalies.map(anomalyName).join(", ")}`
           : "Not held for review",
@@ -1285,12 +1286,33 @@ function catchupPosed(task: CatchupTask, why: string): PagePosed {
   };
 }
 
-function escrowPosed(task: EscrowReviewTask, why: string, billedCents: Cents): PagePosed {
+/**
+ * The escrow payment on the loan's terms for the first installment due after an analysis, read off the history's own
+ * rows rather than the moment, and what that installment bills: last year's analysis's payment through the twelve
+ * months it sets, its base after them, or the first year's base before any analysis.
+ */
+function escrowToday(life: LoanLife, a: AnalysisRow): { terms: Cents; billed: Cents } {
+  const next = life.installments.find((i) => i.due > a.as_of)!;
+  const prior = life.analyses.filter((x) => x.as_of < a.as_of && x.effective <= next.due).at(-1);
+  const terms = !prior
+    ? next.escrow
+    : next.due < addMonths(prior.effective, 12)
+      ? prior.new_payment
+      : prior.base_payment;
+  return { terms, billed: next.escrow };
+}
+
+function escrowPosed(
+  task: EscrowReviewTask,
+  why: string,
+  today: { readonly terms: Cents; readonly billed: Cents },
+): PagePosed {
   const env = escrowReview;
-  // escrow-review 1.1.0's payment today is the one billed on the next installment (life 1.2.0); the build stops if not.
-  if (billedCents !== task.current_escrow_payment_cents)
+  // escrow-review 1.1.0's payment today is the one on the loan's terms for the next installment, a running spread at
+  // its level amount (life 1.2.0); the build stops if not.
+  if (today.terms !== task.current_escrow_payment_cents)
     throw new Error(
-      `escrow-review: the payment today, ${task.current_escrow_payment_cents}, is not the ${billedCents} billed on the next installment`,
+      `escrow-review: the payment today, ${task.current_escrow_payment_cents}, is not the ${today.terms} on the loan's terms for the next installment`,
     );
   const { raw, calls } = reference(escrowReviewSteps, reviewPayload(task), executeReviewTool);
   const parsed = env.parseAnswer(raw);
@@ -1339,11 +1361,12 @@ function escrowPosed(task: EscrowReviewTask, why: string, billedCents: Cents): P
             value: usd(task.ledger.disbursements.reduce((s, d) => s + d.amount_cents, 0n)),
           },
           {
-            // The task's "payment today" is the one billed on the next installment, last year's shortage or credit in
-            // it, which is what the review triggers compare with.
+            // The task's "payment today" is the one on the loan's terms for the next installment, last year's shortage
+            // or credit in it at its level amount, which is what the review triggers compare with. A spread's final
+            // installment bills its rounding beside it.
             label:
-              "Escrow payment billed today (the next installment's, last year's spread included)",
-            value: usd(task.current_escrow_payment_cents),
+              "Escrow payment on the loan's terms today (the next installment's, last year's spread included)",
+            value: `${usd(task.current_escrow_payment_cents)}${today.billed !== today.terms ? `; the installment bills ${usd(today.billed)}, the spread's final rounding` : ""}`,
           },
           { label: "Days delinquent", value: String(task.regx_days_delinquent) },
           {
@@ -1634,7 +1657,7 @@ export function demoPageData(o: DemoPageOptions): DemoPageData {
       clean: escrowPosed(
         reviewTask,
         `The payment rises by more than a quarter and by more than $150, so the hold stands. On the tape the new payment appears in the row for ${fullMonth(addMonths(flagged.effective, -1))}, when ${MONTH[Number(flagged.effective.slice(5, 7)) - 1]}'s installment is next due, with no reason given.`,
-        clean.installments.find((i) => i.due > flagged.as_of)!.escrow,
+        escrowToday(clean, flagged),
       ),
       defective: {
         posed: false,

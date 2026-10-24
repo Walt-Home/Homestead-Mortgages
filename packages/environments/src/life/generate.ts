@@ -42,9 +42,10 @@ import {
 /**
  * Bump on any change to what the generator draws or how a history is computed.
  *
- * 1.2.0 (24 October 2026): an analysis's old payment is the one billed when it runs; a MIN carries its Mod-10 check
- * digit; a month-end paid ahead has a next due date; the 60-day transfer shield protects only a payment the prior
- * servicer received on time; an analysis row carries its projection's bills and targets.
+ * 1.2.0 (24 October 2026): an analysis's old payment is the escrow payment on the loan's terms when it runs, a running
+ * spread at its level payment; a MIN carries its Mod-10 check digit; a month-end paid ahead has a next due date; the
+ * 60-day transfer shield protects only a payment the prior servicer received on time; an analysis row carries its
+ * projection's bills and targets.
  */
 export const LIFE_VERSION = "1.2.0";
 

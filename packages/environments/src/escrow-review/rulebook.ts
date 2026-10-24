@@ -8,11 +8,13 @@
  * variance against last year added as the app's own
  * `compareBillToPriorYear` computes it (apps/servicing/src/app/tools/section03.ts:144),
  * and Step 11, whether the flag stands. The payment the new one is compared
- * with is the one billed today, the running shortage or credit spread in it,
- * as the servicing app compares it (`loan_terms.escrow_payment_cents`,
- * apps/servicing/src/domain/escrow/ops-3-6.ts:105-117); 1.0.0 handed the old
- * schedule's payment after the spread ran out. Change this text and the
- * environment's version changes with it.
+ * with is the one on the loan's terms today, the running shortage or credit
+ * spread in it at its level amount, as the servicing app compares it
+ * (`loan_terms.escrow_payment_cents`,
+ * apps/servicing/src/domain/escrow/ops-3-6.ts:105-117; spec 3.6, worked
+ * examples (a) and (b)), never the final installment's rounding; 1.0.0
+ * handed the old schedule's payment after the spread ran out. Change this
+ * text and the environment's version changes with it.
  */
 
 import { ESCROW_RULEBOOK } from "../escrow/rulebook.js";
@@ -25,7 +27,7 @@ export const ANALYSIS_STEPS = ESCROW_RULEBOOK.slice(
 
 export const REVIEW_STEPS = `## Step 10. Anomalies
 
-Besides the line anomalies of Step 1, compare new_payment with current_escrow_payment_cents, the escrow payment billed today: the escrow share of the first installment due after as_of, paid or not, with any shortage or credit from last year's analysis still in it. The change is the difference either way:
+Besides the line anomalies of Step 1, compare new_payment with current_escrow_payment_cents, the escrow payment on the loan's terms today: the one the terms carry for the first installment due after as_of, paid or not, with any shortage or credit spread from last year's analysis still in it at its level monthly amount, never the few cents of rounding a spread's final installment carries. The change is the difference either way:
 - payment_change_gt_25pct: current_escrow_payment_cents is above 0 and the change × 100 is more than current_escrow_payment_cents × 25.
 - payment_change_gt_150: the change is more than 15000.
 - surplus_gt_2500: the decision is "refund" and the surplus is more than 250000.

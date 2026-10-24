@@ -1164,6 +1164,49 @@ describe("contact center", () => {
       for (const n of l.notes) expect(/undefined/i.test(n.text), n.text).toBe(false);
   });
 
+  it("holds the statement the servicer of the day mailed, and none to a borrower behind at the analysis", () => {
+    // Loans transferred in at every month of the year, so some transfers fall between an analysis and its calls.
+    const moved = generate(
+      "statement-servicer",
+      {
+        loans: 60,
+        events: Array.from({ length: 60 }, (_, i) => ({
+          kind: "transfer_in" as const,
+          loan: i,
+          month: 9 + (i % 24),
+        })),
+      },
+      { calibration: cal },
+    ).clean;
+    const ctx = { profile: center.loans[0]!.profile, bankruptcy: null };
+    let prior = 0;
+    let ours = 0;
+    for (const life of moved.loans)
+      for (const a of life.analyses) {
+        const on = addDays(a.sent_on, 20);
+        const f = recordOn(life, on, ctx);
+        if (!f.analysis || f.analysis.as_of !== a.as_of) continue;
+        if (a.servicer !== f.servicer) {
+          prior++;
+          expect(f.statement, `${life.loan_id} ${a.as_of}`).toBeNull();
+        } else if (statementYearOf(life, a)) {
+          ours++;
+          expect(f.statement, `${life.loan_id} ${a.as_of}`).not.toBeNull();
+        }
+      }
+    expect(prior).toBeGreaterThan(0);
+    expect(ours).toBeGreaterThan(0);
+    // §1024.17(i)(2): an analysis run with the borrower more than 30 days behind mails no statement, and says so.
+    for (const loan of center.loans)
+      for (const a of lifeOf(loan).analyses) {
+        const note = loan.notes.find((n) => n.on === a.sent_on && n.area === "LTR")!;
+        if (a.regx_days_delinquent > 30) {
+          expect(note.text, a.as_of).toMatch(/EXEMPT/);
+          expect(statementYearOf(lifeOf(loan), a)).toBeNull();
+        } else expect(note.text).toBe("LTR MAILED: ANNUAL ESCROW ACCOUNT DISCLOSURE STMT");
+      }
+  });
+
   it("holds a model writer to the record: the seam refuses a figure nobody computed", () => {
     const c = calls(20).find((x) => x.outcome === "conversation" && x.direction === "inbound")!;
     const plan = callPlan(center, book, c.id);

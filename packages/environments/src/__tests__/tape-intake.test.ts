@@ -433,7 +433,7 @@ describe("tape-intake", () => {
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump INTAKE_ENVIRONMENT_VERSION, then the pin.
     expect(sha256(heldout.map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"09804de6524ba06a7fd9bb0402b61c8b76ffda548abc48c5a0c83d24aa6e0c2e"`,
+      `"04fc34346c99ff1e6448ef2c9be543eb1cb8ccfef6a88b2b19b5333501e5ee86"`,
     );
   });
 

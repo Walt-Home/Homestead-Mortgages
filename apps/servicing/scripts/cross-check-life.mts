@@ -261,7 +261,8 @@ async function run(): Promise<void> {
     const lastAnalysis = l.analyses.filter((a) => a.as_of < t.board).at(-1)?.as_of ?? null;
     const p0 = d.parties[0]!;
     const n = `${l.loan_id}`;
-    // The generator draws the MIN's check digit at random (draw.ts, `min`); boarding refuses one that fails Mod-10 (HF-008).
+    // Boarding refuses a MIN that fails Mod-10 (HF-008). Life 1.0.0 drew the check digit at random; since life 1.2.0 the
+    // generator computes it (draw.ts, `mersMin`), and this repairs nothing.
     const min = isValidMin(d.min) ? d.min : makeMin(d.min.slice(0, 7), d.min.slice(7, 17));
     if (min !== d.min) t.minRepaired = true;
     const loan: StagedLoan = {
@@ -723,7 +724,7 @@ async function run(): Promise<void> {
       "no runner (cycles.ts:285): each analysis's new escrow payment written onto the due rows on its date",
     "HF-020":
       "MI, VA and MA passed on the batch's licensed_states; the shop's default license list leaves them out",
-    "HF-008": `the MIN's check digit repaired before boarding on ${tracks.filter((t) => t.minRepaired).length} loan(s); the generator draws it at random`,
+    "HF-008": `the MIN's check digit repaired before boarding on ${tracks.filter((t) => t.minRepaired).length} loan(s); life 1.0.0 drew it at random, and life 1.2.0 computes it`,
   };
   result.metro2_runs = metro2Runs;
   result.loans = loans;
@@ -1254,7 +1255,9 @@ function triageLoan(
       break;
     }
   }
-  // cashiering-11: a charge the generator's shield spared and the servicing app assessed.
+  // cashiering-11: a charge the generator's shield spared and the servicing app assessed. Life 1.0.0 shielded every
+  // installment due in the window; since life 1.2.0 the generator shields only a payment the prior servicer received
+  // on time, which these books never send, so the class is empty unless a scenario forwards one.
   for (const r of life.late_charge_runs)
     if (
       r.reason?.includes("transfer_window_60") &&
@@ -1405,7 +1408,7 @@ async function report(): Promise<void> {
       events: r.events !== "none",
     });
     const lives = new Map(life.clean.loans.map((x) => [x.loan_id, x]));
-    // Two generator findings the harness had to work around, counted over the whole book.
+    // Two generator findings the harness had to work around, counted over the whole book (both none since life 1.2.0).
     for (const x of life.clean.loans) {
       gen.loans++;
       if (!isValidMin(x.draw.min)) gen.min_fails_mod10++;

@@ -183,7 +183,7 @@ describe("the demo page", () => {
     // The year-4 payment rises on the tape with no reason given.
     const ti = TAPE_HEADERS.indexOf("Current T&I Payment Amt");
     const feb = page.twins.clean.months.find((m) => m.month === "2030-02")!;
-    expect(feb.tape![ti]).toBe("1377.04");
+    expect(feb.tape![ti]).toBe("1130.68");
     expect(feb.hidden.some((h) => h.startsWith("Why the T&I payment changed"))).toBe(true);
   });
 

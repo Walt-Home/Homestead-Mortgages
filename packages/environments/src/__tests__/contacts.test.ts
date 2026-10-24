@@ -796,9 +796,15 @@ describe("contact center", () => {
     const pinned = contactCenter(book, { calibration: cal, pins: { [i]: { bankruptcy: true } } });
     const ids = Object.keys(CONTACT_DEFECTS) as ContactDefectId[];
     const bkCall = pinned.loans[i]!.contacts.find((c) => CONTACT_DEFECTS["C-02"].eligible(c))!;
+    // A complaint is a call few loans make, so C-04 is planted by name too: at 3 % of the few it fits, a book can
+    // draw none (life 1.2.0's seed-7 book does).
+    const complaint = pinned.loans
+      .flatMap((l) => l.contacts)
+      .find((c) => CONTACT_DEFECTS["C-04"].eligible(c))!;
     const res = plantContactDefects(pinned, book, [
       { id: "C-02", contacts: [bkCall.id] },
-      ...ids.filter((x) => x !== "C-02").map((id) => ({ id, rate: 0.03 })),
+      { id: "C-04", contacts: [complaint.id] },
+      ...ids.filter((x) => x !== "C-02" && x !== "C-04").map((id) => ({ id, rate: 0.03 })),
     ]);
     const roots = res.labels.filter((x) => x.root_cause);
     for (const id of ids)

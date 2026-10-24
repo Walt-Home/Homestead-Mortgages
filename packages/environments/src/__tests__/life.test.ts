@@ -396,7 +396,14 @@ describe("life generator", () => {
       }
     expect(cures).toBeGreaterThan(20);
     expect(unpaid).toEqual([]);
-    expect(book.loans.some((l) => l.behavior.some((b) => b.kind === "already_paid"))).toBe(true);
+    // A receipt for an installment a cure already paid is not sent. It is rare, none to four in 200 loan-decades, so a
+    // second book is read beside the first (life 1.2.0's seed-7 book has none).
+    const second = generate(8, { loans: 200 }, { calibration: cal }).clean;
+    expect(
+      [...book.loans, ...second.loans].some((l) =>
+        l.behavior.some((b) => b.kind === "already_paid"),
+      ),
+    ).toBe(true);
   });
 
   it("obeys the scenario's events", () => {

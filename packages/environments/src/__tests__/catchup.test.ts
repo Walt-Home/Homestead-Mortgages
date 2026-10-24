@@ -398,7 +398,7 @@ describe("catchup-posting", () => {
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump CATCHUP_ENVIRONMENT_VERSION, then the pin.
     expect(sha256(heldoutSuite().map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"3ff8eccf695689132f4fb8bf83c3821efad8998ba6f8aa6231112c9c0a010dca"`,
+      `"9291c1f29db451ef92a92896e67d1d4935e22b0c1d76c9b7d4b38b403b150a78"`,
     );
   }, 300_000);
 

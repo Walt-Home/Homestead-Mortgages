@@ -333,13 +333,13 @@ describe("escrow-review", () => {
       if (flagged) billed++;
       expect(gradeReviewAgainst(want, without).pass, t.id).toBe(!flagged);
     }
-    expect(billed).toBe(20);
+    expect(billed).toBe(16);
   }, 300_000);
 
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump REVIEW_ENVIRONMENT_VERSION, then the pin.
     expect(sha256(heldoutSuite().map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"6a05284f701c73d6d25d20da1cd51377b49264cceeb8a7027c68d7e3f8c4fc41"`,
+      `"b00408409c1f2abcf3e2c82bce19587878d8e990af5eb31c19d13a50e8ea5baf"`,
     );
   }, 300_000);
 

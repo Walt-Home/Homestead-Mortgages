@@ -263,14 +263,14 @@ describe("boarding-triage", () => {
     }
     expect(clean).toBe(130);
     expect(look).toEqual({
-      cap: 33,
-      no_escrow: 31,
-      arm: 22,
-      scra: 13,
+      cap: 52,
+      no_escrow: 30,
+      arm: 15,
+      scra: 5,
       bk: 9,
-      lm: 9,
-      mi: 49,
-      flood: 13,
+      lm: 10,
+      mi: 41,
+      flood: 19,
     });
   });
 
@@ -568,7 +568,7 @@ describe("boarding-triage", () => {
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump BOARDING_ENVIRONMENT_VERSION, then the pin.
     expect(sha256(heldout.map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"a2fc1478600307699e1e24f341b4887bcd2baa904afbbbd740c93b2ef3438d46"`,
+      `"eb9db31d2f2b733769b7105d5de98c15266e1c5ac68d092b9412b1a1ba9d18bb"`,
     );
   });
 

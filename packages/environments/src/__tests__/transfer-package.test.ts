@@ -398,13 +398,14 @@ describe("the first ten's twins", () => {
       expect([id, roots.map((l) => l.defect_id)]).toEqual([id, [id]]);
       const root = roots[0]!;
       // A label is dated by its row. A row older than the root is one the prior servicer wrote that the root changed
-      // later: a charge it suspended, which the clean history waives at the plan's end and D-35's twin never does,
-      // and the installment D-24's phantom row opens again at the boarding.
+      // later: a charge it suspended, which the clean history waives at the plan's end and D-35's twin never does;
+      // a charge it assessed and boarding carried, which D-24's twin, behind by its phantom row, collects on another
+      // day; and the installment D-24's phantom row opens again at the boarding.
       for (const l of labels.filter((x) => x.on < root.on))
         expect([id, `${l.file_or_table} ${l.field}`]).toEqual([
           id,
           expect.stringMatching(
-            /^(fees state|loan_installments (satisfied_on|credited_as_of|status))$/,
+            /^(fees (state|collected_on)|loan_installments (satisfied_on|credited_as_of|status))$/,
           ),
         ]);
       if (id === "D-25") expect(root.on < TEN_T).toBe(true);
@@ -542,14 +543,18 @@ describe("the first ten's twins", () => {
     expect(() => writeTransferPackage([{ life: t, defects: ["D-25"] }])).toThrow(
       /clean twin's history/,
     );
-    // The history's own columns, the ones the decoder reads, are the clean twin's: a split misapplied leaves every
-    // date and amount as it was, so boarding derives the same delinquency, and only the balance is wrong.
-    const decoded = (files: Readonly<Record<string, string>>) =>
-      parseCsv(files["payment_history.csv"]!).map((row) =>
-        PAYMENT_HISTORY_HEADER.map((col) => row[col]),
-      );
+    // The history's dates, which the decoder's oldest-first application lands on, are the clean twin's: a split
+    // misapplied moves no payment's day, so boarding derives the same delinquency, and the balance is wrong. An
+    // analysis the prior servicer ran after the misapplication read the escrow it inflated, so the installments it
+    // reset can carry another escrow payment, each paid in full as billed in either history.
+    const decoded = (files: Readonly<Record<string, string>>, cols: readonly string[]) =>
+      parseCsv(files["payment_history.csv"]!).map((row) => cols.map((col) => row[col]));
     const cleanPkg = writeTransferPackage([{ life: c }]);
-    expect(decoded(pkg.files)).toEqual(decoded(cleanPkg.files));
+    const dates = PAYMENT_HISTORY_HEADER.filter((col) => !col.endsWith("_amount"));
+    expect(decoded(pkg.files, dates)).toEqual(decoded(cleanPkg.files, dates));
+    for (const files of [pkg.files, cleanPkg.files])
+      for (const [, , scheduled, received, amount] of decoded(files, PAYMENT_HISTORY_HEADER))
+        if (received) expect(amount).toBe(scheduled);
     expect(pkg.files["payment_history.csv"]).not.toBe(cleanPkg.files["payment_history.csv"]);
   });
 

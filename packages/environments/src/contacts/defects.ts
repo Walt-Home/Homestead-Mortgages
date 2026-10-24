@@ -186,6 +186,10 @@ export function wrongAmount(r: Rng, cents: bigint, plan: CallPlan): bigint {
   return r.pick(options);
 }
 
+/** A turn that reads out one of the annual statement's item (viii) lines (writer.ts, `statementCall`). */
+export const isStatementQuote = (tag: string): boolean =>
+  /^quote:stmt_(moved|unprojected):\d+$/.test(tag) || tag === "quote:stmt_low";
+
 const relayOf = (turns: readonly DraftTurn[], i: number): number =>
   turns[i + 1] &&
   turns[i + 1]!.speaker === "INTERPRETER" &&
@@ -220,11 +224,15 @@ export function plantInTurns(
   const f = plan.facts;
   if (id === "C-05") {
     const nums = factNumbers(f);
+    // On a call that reads out the annual statement, the wrong amount is in the explanation: the first of its
+    // lines (a bill that moved, a bill nobody projected, the low balance). Elsewhere, the first quote.
+    const explains = t.some((x) => isStatementQuote(x.tag));
     for (let i = 0; i < t.length; i++) {
       const turn = t[i]!;
       if (
         (turn.speaker !== "AGENT" && turn.speaker !== "AGENT_2") ||
-        !turn.tag.startsWith("quote:")
+        !turn.tag.startsWith("quote:") ||
+        (explains && !isStatementQuote(turn.tag))
       )
         continue;
       const tok = numberTokens(turn.said).find(
@@ -312,7 +320,19 @@ export function plantInNote(
   plan: CallPlan,
 ): { text: string; true_value: string; planted_value: string } {
   const toks = numberTokens(text);
-  const m = toks.find((t) => t.kind === "money");
+  // A note on a call that explained the annual statement records the explanation wrong: one of its lines' figures.
+  const s = plan.reason === "escrow_analysis" ? plan.facts.statement : null;
+  const explained = new Set(
+    s
+      ? [
+          ...s.lines.flatMap((l) => [l.actual, ...(l.projected === null ? [] : [l.projected])]),
+          ...(s.low ? [s.low.actual, s.low.projected] : []),
+        ].map(String)
+      : [],
+  );
+  const m =
+    toks.find((t) => t.kind === "money" && explained.has(t.cents)) ??
+    toks.find((t) => t.kind === "money");
   if (m && m.kind === "money") {
     const wrong = wrongAmount(r, BigInt(m.cents), plan);
     // Written the way the note wrote the true figure: with or without the dollar sign and the commas.

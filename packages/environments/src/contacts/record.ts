@@ -15,9 +15,19 @@
  * as a statement shows it.
  */
 
-import { addDays, addMonths, daysBetween, parts, type PlainDate } from "@hm/kernel/calendar";
+import {
+  addDays,
+  addMonths,
+  daysBetween,
+  parts,
+  startOfMonth,
+  type PlainDate,
+} from "@hm/kernel/calendar";
 import type { Cents } from "@hm/kernel/money";
-import type { LoanLife, Servicer } from "../life/simulate.js";
+import { project } from "../escrow/ported/analysis.js";
+import { statementReading } from "../escrow/statement.js";
+import { analysisDecision, statementYearOf } from "../life/escrow-year.js";
+import type { AnalysisRow, LoanLife, Servicer } from "../life/simulate.js";
 import type { BankruptcyCase, ContactProfile } from "./types.js";
 
 /**
@@ -57,6 +67,17 @@ export const SERVICER = {
 
 /** The servicer before a transfer: an invented name, and a number in the same fictional block. */
 export const PRIOR_SERVICER = { name: "Bramblewood Servicing", phone: "1-800-555-0142" } as const;
+
+/** What the annual statement prints for each escrow line (ours: the servicing app's statement takes its labels from its caller). */
+export const STATEMENT_LABELS: Readonly<Record<string, string>> = {
+  tax_county: "county tax",
+  tax_school: "school tax",
+  hazard: "homeowners insurance",
+  flood: "flood insurance",
+  mi_borrower_paid: "mortgage insurance",
+  refund: "surplus refund",
+};
+const LINE_OF_LABEL = new Map(Object.entries(STATEMENT_LABELS).map(([k, v]) => [v, k]));
 
 export interface PartyFacts {
   readonly role: "borrower" | "co_borrower";
@@ -129,6 +150,43 @@ export interface RecordFacts {
     readonly tax_prior_12m: Cents;
     readonly hazard_12m: Cents;
     readonly hazard_prior_12m: Cents;
+    /**
+     * How the shortage, deficiency or surplus is handled, the decision decided again by the escrow port
+     * (`analysisDecision`): a shortage's and a deficiency's level installments over their months from the effective
+     * date, a refund's date, a credit's monthly amount. The statement's items (vi) and (vii) say these.
+     */
+    readonly plan: {
+      readonly months: number | null;
+      readonly shortage_installment: Cents | null;
+      readonly deficiency: Cents | null;
+      readonly deficiency_installment: Cents | null;
+      readonly refund_by: PlainDate | null;
+      readonly credit_monthly: Cents | null;
+    };
+  } | null;
+  /**
+   * The annual escrow statement mailed with that analysis, when one was (`statementYearOf`): its item (viii), each
+   * bill that came in other than last year's projection and the low balance against the projected low, as the
+   * servicing app's engine writes them (`statementReading`). Null with no analysis, or when no statement explains a
+   * year (the first analysis, a borrower more than 30 days behind at it, a year on two servicers' books).
+   */
+  readonly statement: {
+    /** The computation year it explains, first and last day. */
+    readonly year_start: PlainDate;
+    readonly year_end: PlainDate;
+    /** The analysis's run date: the year is the history through it, and the analysis's own assumptions after it. */
+    readonly through: PlainDate;
+    readonly lines: readonly StatementLineFacts[];
+    /** The low-point line, or null when the low was the projected one or the engine cannot print it. */
+    readonly low: {
+      readonly actual: Cents;
+      readonly projected: Cents;
+      /** The projected low is the cushion, as it is unless the trial balance never falls to zero in the year. */
+      readonly is_cushion: boolean;
+      readonly text: string;
+    } | null;
+    /** escrow-4: the account was overdrawn during the year, so the engine's low-point line is left out. */
+    readonly overdrawn: boolean;
   } | null;
   readonly arm: {
     readonly change: PlainDate;
@@ -187,6 +245,22 @@ export interface RecordFacts {
   readonly authorization_on: PlainDate | null;
 }
 
+/** One of the statement's bill lines, as the engine wrote it. */
+export interface StatementLineFacts {
+  readonly kind: "not_projected" | "differs";
+  /** The first of the month the line names. */
+  readonly month: PlainDate;
+  /** The escrow line it is, and the label the statement prints. */
+  readonly line_type: string;
+  readonly label: string;
+  readonly actual: Cents;
+  readonly projected: Cents | null;
+  /** The month runs past the run date: the statement shows what the analysis expected to pay. */
+  readonly anticipated: boolean;
+  /** The engine's own sentence. */
+  readonly text: string;
+}
+
 export interface RecordContext {
   readonly profile: ContactProfile;
   readonly bankruptcy: BankruptcyCase | null;
@@ -208,6 +282,73 @@ const sum = (xs: Iterable<Cents>): Cents => {
 export function piOn(life: LoanLife, due: PlainDate): Cents {
   const c = last(life.arm_changes, (a) => a.first_new_payment <= due);
   return c ? c.new_pi : life.draw.initial_pi_cents;
+}
+
+const planOf = (a: AnalysisRow): NonNullable<RecordFacts["analysis"]>["plan"] => {
+  const d = analysisDecision(a);
+  return {
+    months: d.kind === "shortage" ? d.months : null,
+    shortage_installment: d.kind === "shortage" ? d.installment_cents : null,
+    deficiency: d.kind === "shortage" && d.deficiency_cents > 0n ? d.deficiency_cents : null,
+    deficiency_installment:
+      d.kind === "shortage" && d.deficiency_cents > 0n ? d.deficiency_installment_cents : null,
+    refund_by: d.kind === "refund" ? d.due_on : null,
+    credit_monthly: d.kind === "credit" ? d.credit_monthly_cents : null,
+  };
+};
+
+const statements = new WeakMap<AnalysisRow, RecordFacts["statement"]>();
+
+/** The statement mailed with an analysis, as the record holds it: read once per analysis row. */
+function statementOf(life: LoanLife, a: AnalysisRow): RecordFacts["statement"] {
+  if (statements.has(a)) return statements.get(a)!;
+  const y = statementYearOf(life, a);
+  let out: RecordFacts["statement"] = null;
+  if (y) {
+    const reading = statementReading(y.analysis, y.ledger, STATEMENT_LABELS);
+    const lastMonth = startOfMonth(y.through);
+    const lines = reading.bills.map((b): StatementLineFacts => {
+      const line_type = LINE_OF_LABEL.get(b.label) ?? b.label;
+      const assumed = y.assumed.disbursements.some(
+        (d) => d.line_type === line_type && startOfMonth(d.on) === b.month,
+      );
+      return {
+        kind: b.kind,
+        month: b.month,
+        line_type,
+        label: b.label,
+        actual: b.actual_cents,
+        projected: b.projected_cents,
+        anticipated: b.month > lastMonth || assumed,
+        text: b.text,
+      };
+    });
+    // The cushion, from the projection's own bills on the life generator's policy (two months, simulate.ts), when
+    // re-projecting them gives the projection's targets.
+    const again = project(y.analysis.projection.items, y.analysis.year_start, {
+      policy_months: 2,
+      instrument_months: null,
+      state_max_months: null,
+    });
+    const same = again.targets.every((t, k) => t === y.analysis.projection.targets[k]);
+    out = {
+      year_start: y.analysis.year_start,
+      year_end: addDays(addMonths(y.analysis.year_start, 12), -1),
+      through: y.through,
+      lines,
+      low: reading.low
+        ? {
+            actual: reading.low.actual_cents,
+            projected: reading.low.projected_cents,
+            is_cushion: same && reading.low.projected_cents === again.cushion_cents,
+            text: reading.low.text,
+          }
+        : null,
+      overdrawn: reading.refused.length > 0,
+    };
+  }
+  statements.set(a, out);
+  return out;
 }
 
 /** Whether an installment was paid by the end of `on`. */
@@ -321,8 +462,10 @@ export function recordOn(life: LoanLife, on: PlainDate, ctx: RecordContext): Rec
         tax_prior_12m: window12(addMonths(an.as_of, -24), addMonths(an.as_of, -12), isTax),
         hazard_12m: window12(addMonths(an.as_of, -12), an.as_of, isHaz),
         hazard_prior_12m: window12(addMonths(an.as_of, -24), addMonths(an.as_of, -12), isHaz),
+        plan: planOf(an),
       }
     : null;
+  const statement = an ? statementOf(life, an) : null;
 
   const ac = last(
     life.arm_changes,
@@ -450,6 +593,7 @@ export function recordOn(life: LoanLife, on: PlainDate, ctx: RecordContext): Rec
     last_payment: lastPayment,
     escrow_statement: stmt ? { as_of: stmt.as_of, balance: stmt.escrow_balance } : null,
     analysis,
+    statement,
     arm: armFacts,
     tax_paid: tax ? { on: tax.on, amount: tax.amount } : null,
     hazard_paid: haz ? { on: haz.on, amount: haz.amount } : null,
@@ -560,8 +704,30 @@ export function factNumbers(f: RecordFacts): FactNumbers {
       a.tax_prior_12m,
       a.hazard_12m,
       a.hazard_prior_12m,
+      a.plan.shortage_installment,
+      a.plan.deficiency,
+      a.plan.deficiency_installment,
+      a.plan.credit_monthly,
     ])
       m(x);
+    n(a.plan.months);
+    dt(a.plan.refund_by);
+  }
+  if (f.statement) {
+    const s = f.statement;
+    dt(s.year_start);
+    dt(s.year_end);
+    // A line's month is said with its year ("in January 2030"), which reads as the year alone.
+    for (const l of s.lines) {
+      dt(l.month);
+      n(parts(l.month).y);
+      m(l.actual);
+      m(l.projected);
+    }
+    if (s.low) {
+      m(s.low.actual);
+      m(s.low.projected);
+    }
   }
   if (f.arm) {
     for (const x of [f.arm.change, f.arm.first_new_payment, f.arm.notice_on]) dt(x);

@@ -87,6 +87,12 @@ export function noteDate(d: PlainDate, style: 0 | 1 | 2): string {
 
 export const monthName = (d: PlainDate): string => MONTHS[parts(d).m - 1]!;
 
+/** A month and its year as said: "January 2030", the engine's "01/2030" read aloud. */
+export const monthYear = (d: PlainDate): string => `${monthName(d)} ${parts(d).y}`;
+
+/** The same in Spanish: "enero de 2030". */
+export const mesYear = (d: PlainDate): string => `${MESES[parts(d).m - 1]} de ${parts(d).y}`;
+
 /** A rate as said: "6.375 percent", without trailing zeros past the eighth. */
 export function pct(p: string): string {
   const n = Number(p);

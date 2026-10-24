@@ -83,6 +83,7 @@ export const SPEC_RECORD: RecordView = {
   },
   escrow_statement: { as_of: "2026-11-30", balance: "$1,412.60" },
   escrow_analysis: null,
+  annual_statement: null,
   arm_change: null,
   tax_paid: null,
   hazard_paid: null,

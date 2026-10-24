@@ -11,13 +11,17 @@
  * aimed, in turn by index, at one edge, and within an edge its arms are taken
  * in turn too:
  *
- *   - eight clean calls, the negatives: an inbound conversation, an outbound
- *     collection call, a caller nobody verified (three ways), a voicemail, an
- *     AI voice call (a consenting mobile, or a landline under its cap), an
- *     active-duty servicemember told of the protections, a call during a
- *     bankruptcy case, and a debt collector's call;
+ *   - eight clean calls, the negatives: an inbound conversation (one arm in
+ *     three a borrower's call about the escrow analysis, answered from the
+ *     annual statement mailed with it), an outbound collection call, a
+ *     caller nobody verified (three ways), a voicemail, an AI voice call (a
+ *     consenting mobile, or a landline under its cap), an active-duty
+ *     servicemember told of the protections, a call during a bankruptcy
+ *     case, and a debt collector's call;
  *   - the contact center's eight call and note defects, C-01 to C-08,
- *     planted by `plantContactDefects`;
+ *     planted by `plantContactDefects`; C-05's wrong amount and C-08's note
+ *     take every other draw on a call explaining the statement, the plant in
+ *     the explanation;
  *   - fourteen of ours, Q-01 to Q-14: an AI voice that does not say it is
  *     automated; a dial that fails consent, the landline cap, the time zone
  *     (early and late), the call count (a debt collector's 7 and the
@@ -161,7 +165,14 @@ export const CALL_QA_DEFECTS: Readonly<Record<string, string>> = {
 
 /* ── the loan a call is drawn from ──────────────────────────────────────── */
 
-type Loan = "performing" | "delinquent" | "debt_collector" | "bankruptcy" | "spouse" | "long";
+type Loan =
+  | "performing"
+  | "delinquent"
+  | "debt_collector"
+  | "bankruptcy"
+  | "spouse"
+  | "long"
+  | "escrow";
 
 /** One loan, two and a half years from its first payment, behind the way the edge needs. */
 export const HISTORY_MONTHS = 30;
@@ -170,15 +181,27 @@ export const LONG_HISTORY_MONTHS = 60;
 
 /** A book of `n` such loans, each behind in its own months, and the contact center's pins for each. */
 function scenarioFor(r: Rng, loan: Loan, n: number): { scenario: Scenario; pins: ProfilePins } {
-  // A spouse not on the note, not authorized: the caller a desk most often cannot verify.
+  // A spouse not on the note, not authorized: the caller a desk most often cannot verify. A borrower on an escrowed
+  // loan who calls about each analysis its annual statement explains.
   const pins: ProfilePins =
     loan === "bankruptcy"
       ? { language: "en", bankruptcy: true }
       : loan === "spouse"
         ? { language: "en", spouse: { name: "Jordan Ellis", authorized: false } }
-        : { language: "en" };
+        : loan === "escrow"
+          ? { language: "en", escrow_call: true }
+          : { language: "en" };
   const long = loan === "long";
   const events: ScenarioEvent[] = [];
+  if (loan === "escrow")
+    return {
+      scenario: {
+        loans: n,
+        months: HISTORY_MONTHS,
+        pins: Object.fromEntries(Array.from({ length: n }, (_, i) => [i, { escrowed: true }])),
+      },
+      pins,
+    };
   for (let i = 0; i < n; i++) {
     if (loan === "performing") continue;
     if (loan === "debt_collector") {
@@ -484,6 +507,20 @@ const delinquent = () => "delinquent" as const;
 const outboundConversation: EdgeSpec["fits"] = (c, k) =>
   k === "outbound" && c.purpose === "collection";
 const anyConversation: EdgeSpec["fits"] = (_c, k) => conversation(k);
+/** A borrower's call about the escrow analysis, answered from the annual statement mailed with it. */
+const statementCall: EdgeSpec["fits"] = (c, k, x) =>
+  k === "inbound" && c.reason === "escrow_analysis" && x.plan.facts.statement !== null;
+
+/** A contact-center defect with a second arm: the same plant on a call explaining the annual statement. */
+function cEdgeWithStatement(id: ContactDefectId, fits: EdgeSpec["fits"]): EdgeSpec {
+  const inner = cEdge(id, "delinquent", fits);
+  return {
+    ...inner,
+    arms: 2,
+    loan: (arm) => (arm === 0 ? "delinquent" : "escrow"),
+    fits: (c, k, x) => (x.arm === 0 ? fits(c, k, x) : statementCall(c, k, x)),
+  };
+}
 
 /** A synthetic bankruptcy case, noticed before the call: what Q-07's dialer ignored. */
 function bankruptcyBefore(x: Ctx): BankruptcyCase {
@@ -509,9 +546,12 @@ export const EDGES: Readonly<Record<CallQaEdge, EdgeSpec>> = {
     build: (x) => ({ base: baseMat(x), planted: null }),
   },
   clean_inbound: {
-    arms: 2,
-    loan: (arm) => (arm === 0 ? "performing" : "delinquent"),
-    fits: (c, k) => k === "inbound" && c.purpose === "borrower_inquiry",
+    arms: 3,
+    loan: (arm) => (arm === 0 ? "performing" : arm === 1 ? "delinquent" : "escrow"),
+    fits: (c, k, x) =>
+      x.arm === 2
+        ? statementCall(c, k, x)
+        : k === "inbound" && c.purpose === "borrower_inquiry",
     build: (x) => ({ base: baseMat(x), planted: null }),
   },
   clean_unverified: {
@@ -592,10 +632,11 @@ export const EDGES: Readonly<Record<CallQaEdge, EdgeSpec>> = {
     (_c, k, x) => conversation(k) && x.plan.needs.credit_question,
   ),
   "C-04": { ...cEdge("C-04", "long", (c, k) => conversation(k) && c.complaint_voiced), loans: 4 },
-  "C-05": cEdge("C-05", "delinquent", anyConversation),
+  // The wrong amount and the note's contradiction, on a delinquent loan's call or in the escrow statement's explanation.
+  "C-05": cEdgeWithStatement("C-05", anyConversation),
   "C-06": cEdge("C-06", "delinquent", (c, k) => conversation(k) && c.disclosures_marked.fdcpa),
   "C-07": cEdge("C-07", "delinquent", (_c, k) => k === "outbound"),
-  "C-08": cEdge("C-08", "delinquent", (c, k) => k !== "voicemail" && c.human_agent !== null),
+  "C-08": cEdgeWithStatement("C-08", (c, k) => k !== "voicemail" && c.human_agent !== null),
 
   /* ── ours ── */
   "Q-01": {

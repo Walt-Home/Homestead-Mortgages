@@ -25,10 +25,20 @@
 import { addDays, daysBetween, type PlainDate } from "@hm/kernel/calendar";
 import type { Cents } from "@hm/kernel/money";
 import { rngFor, type Rng } from "../rng.js";
-import { fecha, money, monthName, pct, pctEs, spokenDate } from "./format.js";
+import { fecha, mesYear, money, monthName, monthYear, pct, pctEs, spokenDate } from "./format.js";
 import { expand, say, type Slots } from "./grammar.js";
 import type { CallPlan, Topic } from "./plan.js";
 import { PRIOR_SERVICER, SERVICER } from "./record.js";
+
+/** The statement's lines as the interpreter names them. */
+const STATEMENT_LABEL_ES: Readonly<Record<string, string>> = {
+  tax_county: "el impuesto del condado",
+  tax_school: "el impuesto escolar",
+  hazard: "el seguro de la casa",
+  flood: "el seguro contra inundaciones",
+  mi_borrower_paid: "el seguro hipotecario",
+  refund: "el reembolso del sobrante",
+};
 import { hardshipEs, interpret } from "./spanish.js";
 import type { InquiryReason, Speaker } from "./types.js";
 
@@ -145,6 +155,28 @@ export function slotsOf(p: CallPlan): Record<string, string> {
     m("tax_prior_12m", a.tax_prior_12m);
     m("haz_12m", a.hazard_12m);
     m("haz_prior_12m", a.hazard_prior_12m);
+    m("shortage_installment", a.plan.shortage_installment);
+    m("deficiency", a.plan.deficiency);
+    m("deficiency_installment", a.plan.deficiency_installment);
+    m("credit_monthly", a.plan.credit_monthly);
+    dt("refund_by", a.plan.refund_by);
+    if (a.plan.months !== null) s.plan_months = String(a.plan.months);
+  }
+  if (f.statement) {
+    // Each of the statement's lines by its place: `st1_label`, `st1_month`, `st1_actual`, …
+    f.statement.lines.forEach((l, i) => {
+      const k = i + 1;
+      s[`st${k}_label`] = l.label;
+      s[`st${k}_label_es`] = STATEMENT_LABEL_ES[l.line_type] ?? l.label;
+      s[`st${k}_month`] = monthYear(l.month);
+      s[`st${k}_month_es`] = mesYear(l.month);
+      m(`st${k}_actual`, l.actual);
+      m(`st${k}_projected`, l.projected);
+    });
+    if (f.statement.low) {
+      m("low_actual", f.statement.low.actual);
+      m("low_projected", f.statement.low.projected);
+    }
   }
   if (f.arm) {
     s.prior_rate = pct(f.arm.prior_rate);
@@ -955,6 +987,154 @@ const HARDSHIP_LINE: Record<string, readonly string[]> = {
   overtime: ["I lost my overtime[ at work|]"],
 };
 
+/**
+ * Why the escrow payment changed, answered from the analysis and the annual statement mailed with it: the new
+ * payment beside the one on the loan's terms today (the payment the servicing app compares it with), the shortage
+ * or surplus and how it is spread or refunded (the statement's items (vi) and (vii), in the words of the servicing
+ * app's `decisionText` and `planText`), then item (viii) line by line as its engine writes it, a month's "01/2030"
+ * read aloud as "January 2030". A year the engine cannot print the low of (escrow-4) is explained without it, and
+ * the agent says so.
+ */
+function statementCall(x: Script) {
+  const f = x.p.facts;
+  const a = f.analysis!;
+  const s = f.statement!;
+  x.agent(
+    [
+      "[That's the annual escrow analysis we sent on {sent_on}, with your annual escrow statement.|We sent the analysis and the annual statement together on {sent_on}.|That's your yearly escrow analysis. It went out on {sent_on}, with the annual statement.]",
+    ],
+    "quote:analysis_sent",
+  );
+  x.agent(
+    [
+      "[Right now|Today] the escrow part of your payment is {old_escrow}. [Starting with the {effective} payment it will be|From the {effective} payment on, it's] {new_escrow}.",
+      "The analysis [sets|changes] your escrow payment from {old_escrow} to {new_escrow}, starting with the {effective} payment.",
+    ],
+    "quote:analysis_compare",
+  );
+  if (a.first_month_escrow !== a.new_escrow)
+    x.agent(
+      [
+        "[That first month it's|The first payment at the new amount carries] {first_escrow}[ of escrow|], because of the credit.",
+      ],
+      "quote:analysis_first",
+    );
+  x.agent(
+    [
+      "[So your total payment|With principal and interest, your payment] [will be|comes to] {new_total}[ that month|].",
+    ],
+    "quote:analysis_total",
+  );
+  x.back(0.5);
+  if (a.decision === "shortage" && a.plan.deficiency !== null)
+    x.agent(
+      [
+        "The analysis found a deficiency of {deficiency} and a shortage of {shortage}. [Each is spread over|We spread both over] {plan_months} months: {shortage_installment} a month for the shortage and {deficiency_installment} a month for the deficiency, beginning with the {effective} payment.",
+      ],
+      "quote:shortage_plan",
+    );
+  else if (a.decision === "shortage")
+    x.agent(
+      [
+        "[The analysis found|There's] a shortage of {shortage}. [That's spread over|We spread that over] {plan_months} months, {shortage_installment} a month for {plan_months} months beginning with the {effective} payment.",
+      ],
+      "quote:shortage_plan",
+    );
+  else if (a.decision === "refund") {
+    x.agent(
+      [
+        "[The analysis found|There's] a surplus of {surplus}, [and it's being refunded to you by|which we're refunding to you by] {refund_by}.",
+      ],
+      "quote:refund_plan",
+    );
+    if (f.refund && f.refund.amount === a.surplus)
+      x.agent(["[That refund went out on {refund_on}.|We mailed it on {refund_on}.]"], "quote:refund_sent");
+  } else if (a.decision === "credit")
+    x.agent(
+      [
+        "[The analysis found|There's] a surplus of {surplus}. [It's credited against next year's payments at|It comes off next year's payments at] {credit_monthly} a month.",
+      ],
+      "quote:credit_plan",
+    );
+  else x.agent(["The analysis found no surplus, shortage or deficiency."], "analysis_balanced");
+  x.agent(
+    [
+      "[The annual statement shows why|Your annual statement explains it]: [what came in differently from last year's projection|the bills that came in other than we projected], and [the low point of the account|where the balance bottomed out].",
+    ],
+    "stmt_intro",
+  );
+  s.lines.forEach((l, i) => {
+    const sub = (t: string) => t.replace(/\{st_/g, `{st${i + 1}_`);
+    if (l.kind === "differs")
+      x.agent(
+        [
+          "[The|Your] {st_label} paid in {st_month} was {st_actual} versus {st_projected} projected.",
+          "[On the statement,|The statement shows] the {st_label} paid in {st_month} was {st_actual}, against {st_projected} projected.",
+        ].map(sub),
+        `quote:stmt_moved:${i + 1}`,
+      );
+    else
+      x.agent(
+        [
+          "[There's also|And there was] a {st_label} bill of {st_actual} paid in {st_month}[, which wasn't projected| that wasn't projected].",
+          "A {st_label} bill of {st_actual} was paid in {st_month}, and that one wasn't projected at all.",
+        ].map(sub),
+        `quote:stmt_unprojected:${i + 1}`,
+      );
+    if (l.anticipated)
+      x.agent(
+        [
+          "[That one comes due after the analysis ran, so it's the amount we expect to pay.|That bill comes after the analysis date, so the statement shows what we have scheduled.]",
+        ],
+        "stmt_anticipated",
+      );
+    x.back(0.4);
+  });
+  if (s.overdrawn)
+    x.agent(
+      [
+        "[I'll be straight with you:|One thing I should tell you plainly:] the account was overdrawn during the year, so the statement doesn't compare your low balance with the projected one.",
+      ],
+      "stmt_overdrawn",
+    );
+  else if (s.low)
+    x.agent(
+      [
+        s.low.is_cushion
+          ? "[And|So] the low balance was {low_actual} versus {low_projected} projected[. The projected low is the cushion.|, and that projected low is the cushion we keep.]"
+          : "[And|So] the low balance was {low_actual} versus {low_projected} projected.",
+      ],
+      "quote:stmt_low",
+    );
+  else if (!s.lines.length)
+    x.agent(
+      [
+        "[Everything on the statement came in as projected.|The year went as projected: no bill came in differently.]",
+      ],
+      "stmt_as_projected",
+    );
+  if (a.decision === "shortage") {
+    x.caller(
+      [
+        "[Can I pay the shortage now instead?|So if I pay the shortage, my payment goes down?|What if I pay that off?]",
+      ],
+      "ask",
+    );
+    x.agent(
+      [
+        "[Yes,|You can,] if you pay the shortage in full, [we'll recalculate|the payment would be recalculated] without it[, and it would just be the new base escrow|].",
+      ],
+      "explain",
+    );
+  }
+  x.agent(
+    [
+      "[We also keep a cushion of up to two months of escrow payments, which the law allows.|Part of it is the cushion, which is up to two months of escrow.]",
+    ],
+    "explain",
+  );
+}
+
 function body(x: Script, reason: InquiryReason, primary: boolean) {
   const f = x.p.facts;
   const prefix = primary
@@ -1064,7 +1244,8 @@ function body(x: Script, reason: InquiryReason, primary: boolean) {
       break;
     case "payment_change":
     case "escrow_analysis":
-      if (f.analysis) {
+      if (reason === "escrow_analysis" && f.analysis && f.statement) statementCall(x);
+      else if (f.analysis) {
         if (reason === "escrow_analysis" && x.r.chance(0.5))
           x.agent(
             [
@@ -2488,6 +2669,16 @@ const REASON_CODE: Record<InquiryReason, string> = {
   bankruptcy: "BK",
 };
 
+/** A statement line, as an agent's note abbreviates it. */
+const NOTE_LINE: Readonly<Record<string, string>> = {
+  tax_county: "CNTY TAX",
+  tax_school: "SCHL TAX",
+  hazard: "HAZ INS",
+  flood: "FLOOD INS",
+  mi_borrower_paid: "MI",
+  refund: "SURPLUS REFUND",
+};
+
 /** The figures a note repeats from its call, in the note's own shorthand: `⟨money:key⟩` and `⟨date:key⟩` are filled by notes.ts. */
 function noteClauses(p: CallPlan, turns: readonly DraftTurn[]): string[] {
   const f = p.facts;
@@ -2546,7 +2737,32 @@ function noteClauses(p: CallPlan, turns: readonly DraftTurn[]): string[] {
   const r = reason;
   if (r === "payment_received" && f.last_payment && daysBetween(f.last_payment.on, f.on) <= 40)
     out.push("[ADV|ADVISED] PMT RCVD ⟨date:last_on⟩ ⟨money:last_amount⟩.");
-  if ((r === "payment_change" || r === "escrow_analysis") && f.analysis) {
+  if (r === "escrow_analysis" && f.analysis && f.statement) {
+    // What the call explained, from the analysis and the statement: the payment, the decision, the bills that moved.
+    const a = f.analysis;
+    out.push(
+      "[EXPLAINED|REVIEWED] ESC ANALYSIS: ESC PMT ⟨money:old_escrow⟩ TO ⟨money:new_escrow⟩ EFF ⟨date:effective⟩.",
+    );
+    if (a.decision === "shortage")
+      out.push(
+        a.plan.deficiency !== null
+          ? "DEFICIENCY ⟨money:deficiency⟩, SHTG ⟨money:shortage⟩ [SPREAD|OVER] ⟨int:plan_months⟩ MOS."
+          : "[SHORTAGE|SHTG] ⟨money:shortage⟩ [SPREAD|OVER] ⟨int:plan_months⟩ MOS @ ⟨money:shortage_installment⟩.",
+      );
+    else if (a.decision === "refund")
+      out.push("SURPLUS ⟨money:surplus⟩ [REFUND BY|REFUNDED BY] ⟨date:refund_by⟩.");
+    else if (a.decision === "credit")
+      out.push("SURPLUS ⟨money:surplus⟩ CREDITED ⟨money:credit_monthly⟩ A MO.");
+    const lines = f.statement.lines.map((l, i) =>
+      l.kind === "differs"
+        ? `${NOTE_LINE[l.line_type] ?? l.label.toUpperCase()} ⟨money:st${i + 1}_actual⟩ VS ⟨money:st${i + 1}_projected⟩ PROJ`
+        : `${NOTE_LINE[l.line_type] ?? l.label.toUpperCase()} ⟨money:st${i + 1}_actual⟩ NOT PROJ`,
+    );
+    if (lines.length) out.push(`[ANNUAL STMT|STMT]: ${lines.join("; ")}.`);
+    if (f.statement.overdrawn)
+      out.push("ACCT OVERDRAWN IN YR, STMT HAS NO LOW BAL COMPARISON - ADV BWR.");
+    else if (f.statement.low) out.push("LOW BAL ⟨money:low_actual⟩ VS ⟨money:low_projected⟩ PROJ.");
+  } else if ((r === "payment_change" || r === "escrow_analysis") && f.analysis) {
     out.push("[ADV|EXPLAINED] ESC ANALYSIS, NEW PMT ⟨money:new_total⟩ EFF ⟨date:effective⟩.");
     if (f.analysis.shortage !== null && f.analysis.shortage > 0n)
       out.push("[SHORTAGE|SHTG] ⟨money:shortage⟩ [SPREAD 12 MOS|OVER 12 MOS].");

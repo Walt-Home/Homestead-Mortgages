@@ -37,8 +37,13 @@ import { templateWriter, type ContactTextWriter } from "./writer.js";
  * 1.1.0 (24 October 2026): a petition the life scenario dates is the contact center's case; a complaint is said with
  * no filler inside it; the recognizer keeps the word that makes a number a rate; the transfer shield runs the 60 days
  * beginning on the transfer date, through day 59, as the record dates it and the agents say it.
+ *
+ * 1.2.0 (24 October 2026): the record holds the annual escrow statement mailed with an analysis and the analysis's
+ * plan; a call about the escrow analysis is answered from them, the statement's item (viii) read line by line, and
+ * its note records what was explained; C-05 and C-08 plant a wrong figure in that explanation; no statement is
+ * mailed to a borrower more than 30 days behind at the analysis; and a pin draws the borrower's call about each one.
  */
-export const CONTACTS_VERSION = "1.1.0";
+export const CONTACTS_VERSION = "1.2.0";
 
 export interface ContactCenter {
   readonly version: string;

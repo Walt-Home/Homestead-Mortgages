@@ -140,6 +140,44 @@ const AGENT_ES: Record<string, string> = {
   "quote:reset":
     "Dice que le va a enviar un enlace para cambiar la contraseña, que dura {reset_minutes} minutos.",
   "quote:no_payment": "Dice que no ve ningún pago registrado después del {last_on_es}.",
+  // The annual statement's call (writer.ts, `statementCall`).
+  "quote:analysis_compare":
+    "Dice que la parte del depósito de su pago es ahora {old_escrow}, y que a partir del pago del {effective_es} será {new_escrow}.",
+  "quote:analysis_first": "Dice que el primer mes, por el crédito, la parte del depósito es {first_escrow}.",
+  "quote:analysis_total": "Dice que su pago total será {new_total}.",
+  "quote:shortage_plan":
+    "Dice que el análisis encontró un faltante de {shortage}, que se reparte en {plan_months} meses: {shortage_installment} al mes a partir del pago del {effective_es}.",
+  "quote:refund_plan":
+    "Dice que el análisis encontró un sobrante de {surplus}, y que se lo reembolsan a más tardar el {refund_by_es}.",
+  "quote:refund_sent": "Dice que el reembolso se envió el {refund_on_es}.",
+  "quote:credit_plan":
+    "Dice que el análisis encontró un sobrante de {surplus}, que se acredita a los pagos del próximo año, {credit_monthly} al mes.",
+  analysis_balanced: "Dice que el análisis no encontró sobrante, faltante ni deficiencia.",
+  stmt_intro:
+    "Dice que el estado de cuenta anual explica por qué: las facturas que llegaron distintas de lo proyectado y el saldo más bajo de la cuenta.",
+  "quote:stmt_moved":
+    "Dice que {label_es}, pagado en {month_es}, fue {actual} frente a {projected} proyectados.",
+  "quote:stmt_unprojected":
+    "Dice que se pagó una factura de {label_es} de {actual} en {month_es}, que no estaba proyectada.",
+  stmt_anticipated:
+    "Dice que esa factura vence después del análisis, así que es el monto que esperan pagar.",
+  "quote:stmt_low": "Dice que el saldo más bajo fue {low_actual} frente a {low_projected} proyectados.",
+  stmt_overdrawn:
+    "Le dice claramente que la cuenta quedó sobregirada durante el año, así que el estado de cuenta no compara el saldo más bajo con el proyectado.",
+  stmt_as_projected: "Dice que todo en el estado de cuenta salió como se proyectó.",
+};
+
+/**
+ * A statement line's turn is tagged with its place (`quote:stmt_moved:2`), and its figures are that line's slots
+ * (`st2_actual`): the frame is the tag's without the place, read with the line's slots under their plain names.
+ */
+const indexed = (base: string, slots: Slots): { frame: string; slots: Slots } | null => {
+  const m = /^(.*):(\d+)$/.exec(base);
+  if (!m || AGENT_ES[m[1]!] === undefined) return null;
+  const own: Record<string, string> = { ...slots };
+  const prefix = `st${m[2]}_`;
+  for (const [k, v] of Object.entries(slots)) if (k.startsWith(prefix)) own[k.slice(prefix.length)] = v;
+  return { frame: AGENT_ES[m[1]!]!, slots: own };
 };
 
 const CALLER_ES: Record<string, readonly string[]> = {
@@ -168,10 +206,11 @@ const CALLER_ES: Record<string, readonly string[]> = {
 /** The interpreter's Spanish for an agent turn; a turn with figures and no frame is relayed with its figures. */
 export function agentEs(r: Rng, t: DraftTurn, slots: Slots): string {
   const base = t.tag.replace(/:relay$/, "");
-  const frame = AGENT_ES[base];
+  const line = indexed(base, slots);
+  const frame = line ? line.frame : AGENT_ES[base];
   if (frame !== undefined) {
     try {
-      return expand(r, frame, slots);
+      return expand(r, frame, line ? line.slots : slots);
     } catch {
       // A frame that names a figure this call lacks falls through to the figures it said.
     }

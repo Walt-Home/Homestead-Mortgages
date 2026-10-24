@@ -45,6 +45,7 @@ import {
   type PlainDate,
 } from "@hm/kernel/calendar";
 import type { Cents } from "@hm/kernel/money";
+import { statementYearOf } from "../life/escrow-year.js";
 import type { LoanLife } from "../life/simulate.js";
 import { rngFor, type Rng } from "../rng.js";
 import { drawProfile } from "./profile.js";
@@ -646,6 +647,8 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     readonly purpose?: ContactPurpose;
     readonly scriptedPromise?: Draft["promise"];
     readonly followUp?: boolean;
+    /** The call reaches an agent: the phone menu serves nothing on it. */
+    readonly answered?: boolean;
   }
   const inbound = (
     r: Rng,
@@ -752,7 +755,13 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       };
     }
     // The phone: the menu first.
-    if (!o.scriptedPromise && !o.followUp && reason !== "bankruptcy" && channel === "call") {
+    if (
+      !o.scriptedPromise &&
+      !o.followUp &&
+      !o.answered &&
+      reason !== "bankruptcy" &&
+      channel === "call"
+    ) {
       const self = IVR_SELF_SERVE[reason] ?? 0.03;
       if (uIvr < IVR_ABANDON)
         return {
@@ -1023,6 +1032,20 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       changed ? { escrow_analysis: 0.55, payment_change: 0.45 } : { escrow_analysis: 1 },
       `escrow:${a.year}`,
     );
+    // A pinned borrower who calls about every analysis a statement explains: a stream of its own, so nothing else moves.
+    if (ctx.pins?.escrow_call && statementYearOf(life, a)) {
+      const r = rngFor(`${lk}/ev/analysis/${a.year}/pinned`);
+      let on = addDays(a.sent_on, r.int(4, 40));
+      if (dayOfWeek(on) === 0) on = addDays(on, 1);
+      push(
+        inbound(rngFor(`${lk}/ev/analysis/${a.year}/pinned/call`), on, "escrow_analysis", {
+          issue: `escrow:${a.year}`,
+          party: "borrower",
+          forceChannel: "call",
+          answered: true,
+        }),
+      );
+    }
   }
   for (const a of life.arm_changes)
     spike(

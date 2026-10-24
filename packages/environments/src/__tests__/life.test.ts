@@ -242,6 +242,44 @@ describe("life generator", () => {
       for (const m of l.months) expect(m.metro2.errors).not.toContain("MIN_CHECK_DIGIT");
   });
 
+  it("gives every month-end of a loan still being paid a next due date, paid ahead too", () => {
+    const bad: string[] = [];
+    let live = 0;
+    let ahead = 0;
+    for (const l of book.loans)
+      for (const m of l.months) {
+        if (m.status !== "current" && m.status !== "delinquent") {
+          if (m.next_due !== null)
+            bad.push(`${l.loan_id} ${m.month}: closed, next due ${m.next_due}`);
+          continue;
+        }
+        live++;
+        if (m.next_due === null || m.lpi === null) {
+          bad.push(`${l.loan_id} ${m.month}: no next due date`);
+          continue;
+        }
+        // The oldest open installment, or, when the borrower paid next month's early, the one after interest's.
+        if (m.lpi >= m.as_of) {
+          ahead++;
+          if (m.next_due !== addMonths(m.lpi, 1))
+            bad.push(`${l.loan_id} ${m.month}: paid to ${m.lpi}, next due ${m.next_due}`);
+        }
+        const [n, mat] = [m.next_due, l.draw.maturity].map((x) => x.split("-").map(Number));
+        const left = (mat![0]! - n![0]!) * 12 + mat![1]! - n![1]! + 1;
+        if (m.remaining_term_months !== left)
+          bad.push(`${l.loan_id} ${m.month}: ${m.remaining_term_months} months left, not ${left}`);
+        // The tape row has carried the same next due date and remaining term since life 1.1.0.
+        const row = monthEndRow(l, m.month)!;
+        if (
+          row.status.next_due_date !== m.next_due ||
+          row.terms.remaining_term_months !== m.remaining_term_months
+        )
+          bad.push(`${l.loan_id} ${m.month}: the tape row says otherwise`);
+      }
+    expect(bad.slice(0, 20)).toEqual([]);
+    expect(ahead).toBeGreaterThan(live / 20);
+  });
+
   it("schedules every year's escrow analysis, the tenth included", () => {
     const escrowed = book.loans.filter((l) => l.draw.escrowed && full(l));
     expect(escrowed.length).toBeGreaterThan(50);

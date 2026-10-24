@@ -2262,8 +2262,15 @@ export function simulateLoan(
     const asOf = endOfMonth(monthStart);
     const ap = applied();
     const o = open();
-    const nextDue = o[0]?.due_date ?? null;
-    const ref = nextDue ?? addMonths(monthStart, 1);
+    // The ledger runs one installment ahead of the month, so a borrower who paid next month's installment early has
+    // none open at the month-end. The next due is then the installment after the one interest is paid to, which is
+    // what the oldest open one is on every other month-end, and the remaining term counts from it, as the tape row
+    // has since life 1.1.0. The payment is still read from next month's installment, the one just paid.
+    const afterLpi = state.lpi_date !== null ? addMonths(state.lpi_date, 1) : null;
+    const ahead =
+      !ended && o.length === 0 && afterLpi !== null && afterLpi <= d.maturity ? afterLpi : null;
+    const nextDue = o[0]?.due_date ?? ahead;
+    const ref = o[0]?.due_date ?? addMonths(monthStart, 1);
     const t = termsFor(ref);
     const dq = deriveDelinquency(ap, asOf);
     // What the servicer furnishes and reports is the plan it knows of (a boarding that dropped it knows none).
@@ -2281,7 +2288,7 @@ export function simulateLoan(
           }
         : { kind: "none" };
     const pm = parts(d.maturity);
-    const pn = parts(ref);
+    const pn = parts(ahead ?? ref);
     const remaining = Math.max(0, (pm.y - pn.y) * 12 + pm.m - pn.m + 1);
     const cs: CreditLoanState = {
       loan_id: d.loan_id,

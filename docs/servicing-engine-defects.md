@@ -17,7 +17,11 @@ from reproducing what that run found; each was reproduced in isolation the
 same day, with none of that run's own choices, and upheld by two independent
 checks. Five more, ei-4 to ei-8, are in the early-intervention engine itself,
 found while building the ei-clocks environment on 23 October 2026, reproduced
-with the vendored engine and upheld the same way.
+with the vendored engine and upheld the same way. Six more in the runtime,
+escrow-5, ei-9, perf-1, metro2-2, metro2-3 and metro2-4, were found on 23
+October 2026, the three Metro 2 ones by the cross-check of the life generator
+against the servicing app (docs/cross-check.md); each was reproduced in
+isolation the same day and upheld by an independent check.
 The environments keep all but one out of grading. pmi-9 is graded, because
 the spec states the engine's reading as its own rule. Four more
 (cashiering-4, cashiering-9, flexmod-1, flexmod-2) were graded at the
@@ -45,6 +49,7 @@ decided", says why each went the way it did.
 | boarding-4    | boarding   | A transfer-boarded loan gets no P&I or T&I custodial account, so no payment on it ever posts         | §35.1-T10; §6.1 outputs; §2.1 timers   | 🔴     | `runtime/transfers.ts:114`; `app/tools/section01.ts:86`                                         |
 | scra-1        | scra       | 13.8's SCRA waiver moves the ledger, not the fee row, so the waived charge is billed and collected   | §13.8 rule 8; §2.7 rule 5; D2-3.4-01   | 🔴     | `app/tools/section13.ts:655`; read at `domain/operations-runtime/cashiering-cycle.ts:144-145`   |
 | lossmit-3     | lossmit    | A plan's foreclosure hold is never written, so a borrower performing under forbearance is referred   | §12.4-T9; E-3.2-01; 1024.41(c)(2)(iii) | 🔴     | `app/tools/section12.ts:189-192`; `domain/lossmit/ops.ts:211`                                   |
+| metro2-2      | metro2     | The monthly cycle never hands 8.1 last month's record, so the PHP never fills and the DOFD re-ages   | §8.1 rules 3, 4; 8.1-T14; 1681c(c)(1)  | 🔴     | `domain/operations-runtime/runners.ts:144-145`; `domain/credit-reporting/metro2.ts:65`, `:105`  |
 | cashiering-2  | cashiering | The $50 rule can book negative escrow                                                                | §2.2 rule 2                            | 🟡     | `domain/cashiering/allocation.ts:114`                                                           |
 | cashiering-3  | cashiering | Named extra principal is credited to escrow, or parked, when the rest is short of a payment          | §2.4 rules 1-2; §2.5 example I         | 🟡     | `domain/cashiering/allocation.ts:137-158`                                                       |
 | cashiering-4  | cashiering | One suspense balance shields several installments from late charges                                  | §2.7 rule 1; 2.7-Q1                    | 🟡     | `domain/cashiering/latecharges.ts:65-66`                                                        |
@@ -96,6 +101,9 @@ decided", says why each went the way it did.
 | transfers-1   | transfers  | The goodbye notice's address check reads parties no code writes, so no goodbye run is released       | §17.2 recipients; 1024.33(b)(3)(i)     | 🟡     | `app/tools/section17-2.ts:109-110`; `domain/transfers/ops-17-2.ts:142-145`                      |
 | ei-5          | ei         | A cease after a bankruptcy petition leaves the case's notice owed, and its clock breaches            | §11.2 rule 1; Reg X 1024.39(d)(2)      | 🟡     | `domain/early-intervention/windows.ts:135`; `domain/early-intervention/timers.ts:205-225`       |
 | ei-6          | ei         | A bankruptcy case's notice does not cover its later windows, so a new delinquency re-arms its clock  | §11.2 timers; 1024.39(c)(1)(iii)(C)    | 🟡     | `domain/early-intervention/windows.ts:71`; `domain/early-intervention/ops.ts:81`                |
+| escrow-5      | escrow     | The work screen's escrow analysis gets none of 3.1's inputs, so it is $0, balanced and never held    | §35.8 rule 2; §3.2 R6, R10; 3.2-T15    | 🟡     | `domain/operations-runtime/derivers-35-8.ts:300-301`; `app/tools/section03.ts:106-113`          |
+| perf-1        | perf       | Two book-wide reads in each daily unit make a 14,000-loan cashiering run outgrow its day             | §35.5 rule 6; §35.3; §35.1 rule 6      | 🟡     | `domain/operations-runtime/cashiering-cycle.ts:301`, `seam/hydration.ts:42`, `:47`              |
+| metro2-3      | metro2     | A receipt held in suspense is reported as no payment, and the date of last payment skips it          | §8.1 rules 2, 3; Reg V 1022.41(a)      | 🟡     | `domain/operations-runtime/runners.ts:137-139`; `app/tools/section2-1.ts:99`                    |
 | cashiering-10 | cashiering | A $50-rule payment before its due date is labeled prepaid, and its counter row is skipped            | §2.2 rule 2                            | 🟢     | `domain/cashiering/allocation.ts:203`                                                           |
 | cashiering-16 | cashiering | A dispute overlay ignores its start date                                                             | §2.7 rule 3(viii)                      | 🟢     | `domain/cashiering/latecharges.ts:90`                                                           |
 | cashiering-17 | cashiering | Instruction text is matched by keyword                                                               | §2.1 rule 6                            | 🟢     | `domain/cashiering/allocation.ts:81`, `:170`                                                    |
@@ -131,8 +139,10 @@ decided", says why each went the way it did.
 | ei-4          | ei         | An fdcpa cycle is reviewed on day 190, not 180, so a catch-up between them drops the repeat          | §11.2 timer table; 1024.39(d)(3)(iii)  | 🟢     | `domain/early-intervention/windows.ts:235`, `:214`                                              |
 | ei-7          | ei         | The plan's D2-2-02 report never flags a gap that ends in a cure, though the 7-day clock breaches     | §11.1 timer table; D2-2-02             | 🟢     | `domain/early-intervention/plan.ts:194-195`                                                     |
 | ei-8          | ei         | A delinquency cured on its start deadline with no attempt is reported as a missed start              | §11.1 timer table; D2-2-02             | 🟢     | `domain/early-intervention/plan.ts:192-193`                                                     |
+| ei-9          | ei         | A case's bk notice is refused a second time only at 11.2's render, so four paths send a second one   | §11.2 guardrails, gate row; 11.2-T6    | 🟢     | `app/tools/section11.ts:131-132`, `:163`, `:167-168`; `app/tools/section14-1.ts:43`, `:361`     |
+| metro2-4      | metro2     | A transferred loan's date of last payment is zero-filled until the servicing app posts a receipt     | §8.1 rule 3; Reg V 1022.41(a)          | 🟢     | `domain/operations-runtime/runners.ts:137-139`; `domain/boarding/service.ts:166`, `:367-371`    |
 
-🔴 high (16) · 🟡 medium (51) · 🟢 low (35). ei is Reg X early intervention.
+🔴 high (17) · 🟡 medium (54) · 🟢 low (37). ei is Reg X early intervention, and perf is performance.
 Section numbers are the servicing app's spec; paths are under
 `apps/servicing/src/`; amounts ending in c are cents. docs/decisions.md tells
 the longer story of most of these, in the entry for the environment that found
@@ -1224,6 +1234,99 @@ index date 2026-09-17).
 - **Kept out by.** No environment runs 12.4's lifecycle, 13.1's gates or
   35.9's referral. lossmit-retention ports only the plan term calculators
   (packages/environments/src/lossmit/ported/plans.ts).
+
+### metro2-2. The monthly Metro 2 cycle never hands 8.1 last month's record, so the payment history never fills and a borrower who stays behind is re-aged every month 🔴
+
+- **Spec says.** §8.1 rule 3: the date of first delinquency (DOFD) is the due
+  date of the earliest unpaid installment "in the _current_ continuous
+  delinquency", "**never moved later** while the same delinquency continues
+  (re-aging is an Appendix E failure), and reset only when a _new_
+  delinquency begins after a cure" (8-1-furnish-tradeline-metro-2.md:113).
+  Rule 4: the 24-character payment history profile (PHP) is "_carried_ from
+  `metro2_snapshots` history plus the boarding hand-off; it is never
+  recomputed from today's ledger", and `B` means no history before this
+  month (:114). In 8.1-T1 a loan current for the 22 months since its first
+  payment reports `0000000000000000000000BB` (:201), and in 8.1-T9 the month
+  after a record is left out carries `D` for it (:209). Rule 9 holds the
+  cycle for an officer when a DOFD moves later (:140); 8.1-T14 refuses such
+  a move without evidence (:214), and a retro-correction may move the date
+  later only when the earlier one "was itself an error with evidence"
+  (:198). The spec quotes §1681c(c)(1), which starts the seven years 180
+  days after "the commencement of the delinquency", and §1681s-2(a)(5), and
+  notes that the bureaus purge from the furnished DOFD (:32). The one later
+  DOFD the spec shows is a correction: a deposit misposted inside the grace
+  period, with lockbox evidence (8-2-dispute-handling-e-oscar-acdv.md:129).
+- **Engine does.** 8.1's engine keeps the rule when it is handed last month's
+  record. `deriveDofd` keeps an earlier date "while the same delinquency
+  continues" only from that prior (domain/credit-reporting/metro2.ts:97-107,
+  :105), and `carryPhp` shifts the prior status onto the prior profile, or
+  returns 24 B's when there is none (:63-68, :65). The runtime's
+  `metro2_monthly` unit builds each loan's state in
+  `metro2RecordsFromTypedRows` with `prior: null`
+  (domain/operations-runtime/runners.ts:144) and hands the cycle
+  `prior_status: null, prior_dofd: null` (:145). Its docblock calls this "the
+  boarding hand-off (24 × B) until 8.1's prior-cycle snapshot lands as a
+  typed row" (:123). No code writes or reads `metro2_snapshots`
+  (db/migrations/0010_credit_reporting.sql:55), though each transmission's
+  `metro2.loan.furnished` records the status and DOFD it furnished
+  (domain/credit-reporting/ops.ts:253). So, for every loan, every month:
+  - the PHP is 24 B's;
+  - the DOFD is the oldest installment unpaid at the month-end, so a borrower
+    who pays one installment a month while staying behind gets a date one
+    month later each month;
+  - the anomaly gate cannot see the move, because `dofd_moved_later` needs
+    `prior_dofd` (ops.ts:172; metro2.ts:300), so the cycle validates and
+    transmits;
+  - a record left out for a hard error is never followed by `D`, because the
+    next month starts from nothing again.
+- **Reproduction.** A scratch database. One loan boarded through the transfer
+  route on 2026-10-15 (T-7's note: P&I 189,620c, escrow 41,230c, next due
+  2026-11-01), with the P&I and T&I custodial accounts (boarding-4) and a
+  borrower party (boarding-2) inserted by hand, and the tape's late charge at
+  0.000% so that no late charge could take a receipt (cashiering-7, -19). The
+  borrower paid November, missed December and January, then paid exactly one
+  installment on the 5th of each month from February to July. The hosted
+  cashiering unit ran each day at noon Eastern and applied each receipt to the
+  oldest unpaid installment. On each 1st, `metro2RecordsFromTypedRows` built
+  the month that ended, and 8.1's `CreditCycleRunner` built and transmitted it
+  inside a command, as the unit does (runners.ts:150-164). The one change was
+  the record's `k3.min`, set from `loans.min` in the script's own process to
+  see past metro2-1.
+  - The loan was 30 to 61 days past due (71 or 78) at every month-end from
+    December to July, and never current.
+  - The DOFDs on `metro2.loan.furnished`: 2026-12-01 for December and January,
+    then 2027-01-01, 02-01, 03-01, 04-01, 05-01 and 06-01 for February to
+    July. 8.1's engine, handed each month's record as its prior, gives
+    2026-12-01 for all eight months.
+  - The PHP was 24 B's in all ten cycles. The same engine with the prior gives
+    `222112100` and fifteen B's at 07-31.
+  - All ten cycles validated and transmitted, and no `credit.cycle.held` was
+    written. Given the last furnished status and DOFD, the same build holds
+    for "DOFD moved later" in every month from February, and 8.1-T14's own
+    guard, `correctDofd`, refuses each of the six moves as
+    `DOFD_REAGE_BLOCKED`.
+  - `metro2_snapshots` held no rows.
+
+  The cross-check of the life generator saw the same on 178 loans: the PHP
+  disagreed in 3,407 of 3,503 month-ends (the 96 that agreed were first
+  month-ends with no history yet), and the DOFD in 109 month-ends whose
+  account status agreed. On b1 LN-4ee506e5-00025, behind from 2028-12-01 and
+  rising from 30 to 120 days, the servicing app moved the date to 1 January,
+  1 March and 1 April 2029 (docs/cross-check.md, "New defects"). Today
+  metro2-1 leaves every record out, so nothing has reached a bureau; its
+  one-line fix is what turns this on. Found on 23 October 2026 and reproduced
+  the same day.
+
+- **Smallest fix.** Write a `metro2_snapshots` row per loan per consumer per
+  cycle, as rule 4 and the table say, marked `omitted` for a record left out.
+  In `metro2RecordsFromTypedRows`, read the loan's base row from the last
+  cycle as `prior` (`{php, status, dofd, omitted}`), and pass its status and
+  DOFD as `prior_status` and `prior_dofd`; in the first cycle after boarding,
+  use the transferor's hand-off (rule 14). Land it with metro2-1's fix, not
+  after it.
+- **Kept out by.** Nothing needs to. metro2-furnishing ports metro2.ts, not the
+  runtime's typed-row builder, and its grader hands each month's snapshot to
+  the next as its prior (packages/environments/src/metro2/grader.ts:267-289).
 
 ## Medium
 
@@ -3027,6 +3130,345 @@ index date 2026-09-17).
   (packages/environments/src/ei/generator.ts:1050-1061). A test holds both
   (src/**tests**/ei.test.ts:1011-1023, :1184).
 
+### escrow-5. The work screen's escrow analysis gets none of the inputs 3.1 reads, so every annual analysis is $0 and balanced, and none is held for review 🟡
+
+- **Spec says.** §35.8 rule 2: the person supplies a decision and the
+  deriver supplies the state (35-8-operator-work-screens.md:73).
+  `escrow_analysis.run` is 3.1's `runEscrowAnalysis` "over the escrow ledger,
+  the disbursement schedule and the tax/insurance bills from the record"
+  (:80). §3.2 R6 takes the projected actual from the ledger escrow balance,
+  plus scheduled deposits and less scheduled disbursements
+  (3-2-annual-escrow-analysis.md:91). R10 holds for review a payment change
+  over 25% or over $150 a month (:114), and 3.2-T15 expects a 40% change to
+  read `anomaly_review` before approval (:168). Reg X 1024.17(c)(3) requires
+  the annual analysis, and (f)(2) and (f)(3) act on the surplus or shortage
+  it finds.
+- **Engine does.** `deriveEscrowRun` passes `disbursements`, `bills`,
+  `balances.escrow_cents` and `cushion.months`
+  (domain/operations-runtime/derivers-35-8.ts:300-301). `runEscrowAnalysis`
+  reads none of them. It projects `items`, decides on
+  `projected_actual_cents` and compares the new payment with
+  `old_payment_cents` (app/tools/section03.ts:106, :107, :110). The screen
+  hands it the derived input unchanged
+  (domain/operations-runtime/work-35-8/act.ts:256), and a person who tries
+  to add the three is refused `NO_CLIENT_STATE` (act.ts:82-88). A missing
+  figure reads as 0 (app/tools.ts:163). So the projection is empty: a $0
+  base payment, a $0 target, a `balanced` decision and a $0 new payment, on
+  any loan. With no prior payment, the tool compares the new payment with
+  itself (section03.ts:113), so R10's payment-change triggers
+  (domain/escrow/analysis.ts:101-103) cannot fire. That holds for any caller
+  that leaves the figure out. No
+  runtime caller passes it. The deriver also fixes `regx_days_delinquent` at
+  0 and starts the computation year in January (derivers-35-8.ts:301), and
+  no code writes the two entity kinds it reads. The `escrow_analysis_annual`
+  cycle has no runner (domain/operations-runtime/cycles.ts:285), so this
+  screen is the running app's only annual analysis. An officer can approve
+  the $0 analysis with no review (section03.ts:125). The approval arms the
+  1024.17(i) annual statement clock and the next year's analysis clock. From
+  reading the code, not running it: a balanced decision opens no 3.6 plan,
+  and only a plan versions `loan_terms` (domain/escrow/ops-3-6.ts:127), so
+  the billed payment stays as it was. What is lost is the analysis itself.
+  A surplus owed under (f)(2) is never found, a shortage is never spread,
+  and the R10 hold cannot catch either.
+- **Reproduction.** A scratch database with the app's 177 migrations and
+  `seed-demo`. Demo loan SM-TR-0000004 is escrowed, with
+  `loan_terms.escrow_payment_cents` 237,383c and a ledger escrow balance of
+  1,191,925c. On 2026-11-02 an `ops_analyst` runs `work.screen.act` on
+  `escrow_analysis.run` with `analysis_year` 2027. The derived input carries
+  no `items`, `projected_actual_cents` or `old_payment_cents`. 3.1 executes
+  and stores the analysis with base 0, target 0, `balanced`, payment 0,
+  anomalies [] and status `computed`. Next, two `escrow_bills` and two
+  `escrow_disbursements` rows are saved for the loan, $31,500.00 for the
+  year against $28,485.96 billed. This is instrumented: no code writes
+  either kind. The input then carries them as `bills` and `disbursements`,
+  and the analysis is the same. An officer's `approve` executes with no
+  review. It appends `escrow.analysis.approved{balanced}` and arms
+  REGX_1024_17I_ANNUAL_STMT_30 for 2027-01-30. Last, 3.1 is called on the bus
+  with §3.2's worked-example items (base $138.33, projected actual $700.00,
+  new payment $172.22). Without `old_payment_cents` it gives anomalies [] and
+  `computed`, and `approveAnalysis` approves. With `old_payment_cents`
+  13,000c, the example's $130.00 prior payment and a 32.5% change, it gives
+  `payment_change_gt_25pct` and `anomaly_review`. Then `approveAnalysis`
+  without `reviewed` is refused. Found and reproduced on 23 October 2026.
+- **Smallest fix.** In `deriveEscrowRun`, build what 3.1 reads from the
+  record:
+  - `items` from the loan's escrow lines and bills through `projectLines`
+    (domain/escrow/analysis.ts:168);
+  - `projected_actual_cents` as R6 states it;
+  - `old_payment_cents` as the escrow payment billed on the effective date,
+    `escrowPortionOn(facts.terms, effective_on)`. That is
+    `loan_terms.escrow_payment_cents`, or 3.6's running spread
+    (domain/operations-runtime/installments.ts:57-61;
+    domain/escrow/ops-3-6.ts:113-117);
+  - the computation year from the escrow account, and the days delinquent
+    from the loan's counters.
+
+  In `runEscrowAnalysis`, refuse an annual analysis that has no prior
+  payment, rather than compare the payment with itself (section03.ts:113).
+
+- **Kept out by.** Nothing needs to. escrow-analysis and escrow-review call
+  the ported engine's `anomalies` with the task's current escrow payment and
+  their own items (packages/environments/src/escrow/grader.ts:89;
+  packages/environments/src/escrow-review/grader.ts:65). No environment runs
+  the 35.8 work screen.
+
+### perf-1. Two book-wide reads in each daily unit make a 14,000-loan cashiering run outgrow its day 🟡
+
+- **Spec says.** 35.5's key deadline is that "every active loan's
+  cashiering unit runs once per calendar day"
+  (35-5-the-installment-schedule-and-the-daily-cashiering-cycle.md:10), over
+  the whole book (rule 6, :90). `SM_CASHIERING_DAILY_RECEIPT_1D` breaches to
+  the officer when no whole-book run completes for a calendar day (:73). 35.3
+  says "a planned run completes within 1 calendar day of opening"
+  (35-3-cycles-jobs-and-receipts.md:10; `SM_CYCLE_RUN_STALLED_1D`, :63). The
+  registry expects `cashiering_daily` by 23:59 ET the same day
+  (domain/operations-runtime/cycles.ts:281). Three cycles wait on the whole
+  run's receipt (`dependencyMet` reads `cycle_receipts`, cycles.ts:195):
+  - `delinquency_counters` (:282).
+  - `ach_file_build`, due by 14:00 ET (:307). Its clock,
+    `SM_ACH_FILE_BUILD_1BD`, says "tomorrow's drafts will miss their
+    settlement date and C-1.1-03's penalty-free window".
+  - Through the counters, `default_case_daily`, expected by 06:30 ET (:318).
+
+  The registry table says the same at
+  35-3-cycles-jobs-and-receipts.md:75-76, :95 and :104. 35.1 rule 6 bounds
+  the number of a command's entity queries "whatever the history"
+  (35-1-persistence-seam-and-the-typed-record.md:85), and the blueprint row it
+  answers says loading every version meant "latency grows with history"
+  (:14). The spec's own data model defines `entity_latest_scoped` as the view
+  below (35-1-persistence-seam-and-the-typed-record.md:59), so the engine
+  follows the spec's wording here; it is the spec's data model
+  that cannot meet the spec's schedules at a partner's size.
+
+- **Engine does.** Each `cashiering_daily` unit is a hosted command
+  (`runClaimed` → `executeDef(cycles.run_unit)`,
+  domain/operations-runtime/service.ts:670), and units run two at a time
+  (kernel/concurrency.ts:14; service.ts:775). Two of its reads cost in
+  proportion to the whole book, not the loan.
+  - **Hydration.** The scope's latest versions come from
+    `entity_latest_scoped` (domain/operations-runtime/seam/hydration.ts:42,
+    called from runtime/app.ts:370). That view is a
+    `DISTINCT ON (kind, id, scope_key)` over all of `entity_records`
+    (db/migrations/0150_persistence_seam.sql:148-151). Postgres cannot push
+    `loan_id = $1` below a DISTINCT ON whose key lacks it. So every call
+    reads and sorts every non-history version in the book, then filters.
+    The 90-day plan shows it: an index scan of all 1,260,472 rows, an
+    incremental sort and `Unique`, then `Filter: loan_id` removing 14,188
+    of 14,190.
+  - **The global read.** At :47 the read also scans the whole table,
+    because no index leads with `scope_key` (the primary key ends with it).
+  - **The runner path already avoids this.** The in-process runner skips
+    the view for exactly this reason: "its DISTINCT ON re-sorts every record
+    for each read, which a whole-book pass … cannot afford"
+    (domain/operations-runtime/in-process.ts:56-57). The cycle path the
+    sweep runs does not.
+  - **The decision lookup.** The deferred write finds the unit's own
+    decision with `SELECT id FROM agent_decisions WHERE subject_kind = 'cashiering_unit_run' AND subject_id = $1 ORDER BY created_at DESC LIMIT 1` (domain/operations-runtime/cashiering-cycle.ts:301).
+    `agent_decisions` has only its primary key and `(loan_id, created_at)`
+    (db/migrations/0001_baseline.sql:385; none of the 177 migrations adds
+    another index). So every call scans a table that grows by at least two
+    rows a loan-day.
+
+  A book of N loans adds about 3N rows a day to the two tables, and each of
+  its N units reads all of them. A day's run therefore costs in proportion
+  to N² × the book's age. Every other hosted command on a loan
+  (`Runtime.execute`, runtime/app.ts:324) pays the same hydration.
+
+- **Reproduction.** The setup was a scratch database from the app's own
+  `db-setup`, with the demo transfer batch boarded in-process
+  (`boardTransferBatch`, 94 loans). 35.3's cycles pass (`cyclesSweepPass`,
+  the executor at its own concurrency) ran one day at a time, and each
+  statement of the two reads was timed in the process. No payment was
+  posted, so boarding-4 does not arise and no custodial account was added.
+
+  `agent_decisions` and `entity_records` were then grown to what a
+  14,000-loan book writes, by copying rows the cycles had just written:
+  - 2.25 decisions a loan-day: `cashiering_daily` and `cashiering_unit_run`
+    every day, and `delinquency_counters` one day in four.
+  - One 560-byte `loans` version a loan-day. That is lighter than the
+    397-day runtime simulation, which wrote 1.1 versions a loan-day at
+    about 1 KB.
+
+  One day of `cashiering_daily` for the 94 real loans, through the
+  executor, on a 2 GB Postgres 16 container:
+
+  | Book age | agent_decisions | entity_records | :301 lookup | :42 hydration | Wall per unit | 14,000 units |
+  | -------- | --------------- | -------------- | ----------- | ------------- | ------------- | ------------ |
+  | Fresh    | 879             | 472            | 1.6 ms      | 2.4 ms        | 42 ms         | 10 min       |
+  | 30 days  | 946,068         | 420,472        | 142 ms      | 1,026 ms      | 682 ms        | 2 h 39 min   |
+  | 90 days  | 2,836,257       | 1,260,472      | 2,976 ms    | 17,040 ms     | 10.3 s        | 40 h         |
+
+  The last column assumes the executor never pauses. The sweep gives it
+  less: 240 s a pass under one lease (domain/operations-runtime/jobs.ts:21).
+
+  At 90 days the run takes 40 hours for a 24-hour day, so it falls further
+  behind every day:
+  - `cashiering_daily` misses 23:59 ET, and `SM_CYCLE_RUN_STALLED_1D` and
+    the receipt clock breach.
+  - The ACH build waits past 14:00 ET.
+  - The counters and the default run, which wait behind it, miss 06:30 ET.
+
+  Between 30 and 90 days the run passes 06:30 ET, then 14:00 ET, then the
+  whole day. The 30-day tables still fit in memory. Scaled linearly from
+  there, a year after boarding is about 8 s a unit and 32 hours a run.
+
+  EXPLAIN ANALYZE on the same database, one statement at a time:
+  - At 30 days: 77 ms for the lookup and 1,041 ms for the :42 read.
+  - At 90 days: 1,045 ms, 10,269 to 11,051 ms, and 162 to 265 ms for :47.
+  - Forcing a seq scan and a whole-table sort instead of the index scan
+    makes the :42 read 17,483 ms.
+
+  Reproduced on 23 October 2026.
+
+- **Smallest fix.** Each step was tried on the 90-day database.
+  1. A migration adding an index on
+     `agent_decisions (subject_kind, subject_id, created_at DESC)`. The
+     lookup goes from 1,045 ms to 0.4 ms.
+  2. Make hydration.ts:42 a scoped query:
+     - take the scope's `(kind, id, scope_key)` groups through the loan and
+       application indexes;
+     - take each group's latest version by the primary key
+       (`CROSS JOIN LATERAL … ORDER BY version DESC LIMIT 1`);
+     - apply the same filter to that version.
+
+     This gives the view's answer row for row: 10,151 rows across 207
+     scopes on three other scratch databases matched exactly (none of them
+     holds an application-scoped row). It takes 1.7 ms instead of
+     11,051 ms.
+
+  3. A partial index on
+     `entity_records (kind, id, version DESC) WHERE scope_key = ''`, which
+     the view uses unchanged for :47. It takes 0.05 ms instead of 162 ms.
+
+  With all three, the 90-day day ran at 42 ms of wall a unit, as the fresh
+  database did. The :42 statement was swapped in the measuring process,
+  with nothing under src/ edited.
+
+- **Kept out by.** Nothing needs to. No environment runs the hosted cycles,
+  the executor or the 35.1 seam. The cashiering environments grade with
+  ported engines over state they build in memory.
+
+### metro2-3. A receipt held in suspense is reported as no payment, and the date of last payment skips it 🟡
+
+- **Spec says.** §8.1 reads `payments` for the "last payment date/amount in
+  the period" (8-1-furnish-tradeline-metro-2.md:57).
+  - Rule 2: `actual_payment_amount` is "total borrower payments posted with
+    effective dates in the month" (:112).
+  - Rule 3: `date_of_last_payment` is the "effective date of the last
+    borrower payment" (:113).
+  - §2.1's payment states define `held` as funds placed in
+    `suspense_unapplied` where "posting still happens — cash is always
+    posted the day it is received", and a held row goes "later `posted` via
+    `suspense.applied`"
+    (2-1-accept-post-periodic-payment-p-i-escrow.md:85).
+  - A partial payment held in suspense is posted in that sense. §2.2 rule 7
+    names the hold's entries as its postings, "Dr `clearing_cash` … / Cr
+    `suspense_unapplied`"
+    (2-2-partial-payment-suspense-handling.md:86). Rule 6 makes only
+    returned funds "not 'received' for any purpose" (:85).
+  - §8.1's Trial Period Plan row reports the "trial amount … as Actual
+    Payment" (:125). C-1.1-02 has the servicer "accept and hold (as unapplied
+    funds …) trial period payments" short of a full payment
+    (2-6-payment-during-modification-pending-trial-period.md:28, rule 2 at
+    :75).
+  - The repayment-plan row reports a borrower "paying under a partial
+    payment agreement" (:124).
+  - Reg V 1022.41, as §8.1 quotes it, defines accurate information as what
+    "reflects the consumer's performance and other conduct with respect to
+    the account", and integrity as information "substantiated by the
+    furnisher's records" (:34).
+  - FCRA 623(a)(1)(A) bars furnishing what the furnisher has reasonable
+    cause to believe is inaccurate (:32).
+  - The spec does not quote the CRRG's own definitions of these two fields,
+    and this entry does not rest on them.
+- **Engine does.** `metro2RecordsFromTypedRows` reads the loan's payments
+  through `loanCashState` and keeps only `d.status === "posted"`
+  (domain/operations-runtime/runners.ts:137).
+  - It sums that month's rows for the actual payment (:138, :143). It takes
+    the latest `received_on` among them for the date of last payment (:139,
+    :143).
+  - `buildSnapshot` copies both (domain/credit-reporting/metro2.ts:217,
+    :219), and `renderBase` prints them (:235, :241). The state's own
+    comment asks for "borrower payments with effective dates in the month"
+    (domain/credit-reporting/types.ts:88).
+  - 2.1's posting run posts every payment's receipt set on its effective
+    date (app/tools/section2-1.ts:57, :66). A payment that applies an
+    installment is written `posted` (:86).
+  - A partial takes 2.2's hold, and its row is written `held` (:99), though
+    the money sits on the loan's `suspense_unapplied`. So the borrower's
+    receipt is in the ledger and in the store, and the builder skips it.
+  - When a later payment pools the suspense and satisfies the installment,
+    the earlier row stays `held`: the only write of `held` is :99, and no
+    code moves a row from `held` to `posted`, though §2.1 says
+    `suspense.applied` does. That receipt is never counted in any month's
+    actual payment.
+  - From reading, not running: under cashiering-12 a reduced forbearance plan
+    payment is held as a 2.2 partial, and under cashiering-14 a trial
+    payment short of an installment is too. Each is reported as no payment.
+    Once §2.6 is wired, trial receipts are still held (`held_trial`,
+    domain/cashiering/allocation.ts:99), against the Trial Period Plan row.
+  - The status, the date of first delinquency and the amount past due come
+    from the installments and are right. Only these two fields are wrong.
+- **Reproduction.** The setup:
+  - Scratch database: run.mjs db-setup.
+  - Three copies of L-1, boarded through `boardTransferBatch` on
+    2026-08-20.
+  - boarding-4: the P&I and T&I custodial accounts were inserted by hand
+    (harness-35-5 `seedCustodial`).
+  - boarding-2: a borrower party was linked by hand (`linkBorrowerParty`).
+  - The daily cashiering unit ran every day.
+  - Each loan paid 219,257c on 09-02, posted.
+  - F (control) paid 219,257c on 10-10, posted.
+  - P paid 100,000c on 10-10. The run returned `unapplied`, the row reads
+    `held`, the suspense item `contact_pending`, and the loan ledger shows
+    the −100,000c receipt line effective 10-10.
+  - S paid the same 100,000c on 10-10, then 119,257c on 10-20. That payment
+    pooled the suspense and satisfied 10-01 (posted, installments
+    [2026-10-01]), and the 10-10 row stayed `held`.
+
+  The 2026-10-31 records were built at 00:05 ET on 11-01, with `k3.min` taken
+  from `loans.min` in the process only (metro2-1). 8.1's `CreditCycleRunner`
+  validated four files with no exception:
+  - F: status 11, Actual Payment 000002192, Date of Last Payment 10102026.
+  - P: status 71, DOFD 10012026, Amount Past Due 000002192, Actual Payment
+    000000000, Date of Last Payment 09022026.
+  - S: status 11, Actual Payment 000001192, Date of Last Payment 10202026.
+
+  Counting held receipts gives P 000001000 and 10102026, and S 000002192
+  and 10202026.
+
+  P sent another 100,000c on 11-10, also held. The November record reads 78,
+  Amount Past Due 000004385, Actual Payment 000000000 and Date of Last
+  Payment 09022026, against 000001000 and 11102026. A borrower who sent
+  $2,000 over two months is reported as having paid nothing since 2
+  September.
+
+  A second check took other paths, on its own database:
+  - The AZ tape, boarded through the bus command `1.1 boardLoan`.
+  - Payments written and posted on the bus with
+    `2.1 payments.read/write{op=write}` and then `{op=post}`, with no state.
+  - Q paid 230,850c on 10-03, then 150,000c on 11-12 (held).
+  - All four November files read status 11, Amount Past Due 000002308,
+    Actual Payment 000000000 and Date of Last Payment 10032026.
+  - The control R, which paid in full on 11-12, reads 000002308 and 11122026.
+
+  The cross-check of the life generator found it first: 74 fields in 48
+  month-ends on 39 loans. o1 LN-6e9cb854-00005's $599.86 plan payment on 10
+  May 2027 was held, and May reported $0 and a last payment in February.
+  Masked today: metro2-1 drops every record, and boarding-2 omits every
+  transfer-boarded loan as `no_consumer`. Found on 23 October 2026 and
+  reproduced the same day.
+
+- **Smallest fix.** At runners.ts:137, read every receipt the servicer took
+  and kept: `posted` or `held`, never `reversed`, `returned` or `refunded`
+  (§2.2 rule 6). Bound them by `as_of`, sum the month's for the actual
+  payment, and take the latest for the date of last payment.
+- **Kept out by.** Nothing needs to. metro2-furnishing's grader sums every
+  receipt received in the month and takes the latest receipt as of the
+  month-end, held or not (packages/environments/src/metro2/grader.ts:159-166).
+  Its generator draws partial and trial patterns
+  (packages/environments/src/metro2/generator.ts:432-438, :659-681).
+
 ## Low
 
 - **cashiering-10.** A $50-rule payment received before its due date is
@@ -3296,8 +3738,100 @@ index date 2026-09-17).
   `end > startDue`. Kept out by `eiScopeIssues`
   (packages/environments/src/ei/generator.ts:969-976): no delinquency closes
   on its start deadline with no attempt.
+- **ei-9.** A case's bankruptcy notice is refused a second time at one door
+  only. 11.2's guardrails say "never send a second bk notice in the same
+  case"; the timer table's REGX_1024_39C_ONCE_PER_CASE_GATE refuses one until
+  the case is dismissed, closed or discharged, reopened cases included
+  (comment 39(c)(2)-1); 11.2-T6 refuses it
+  (11-2-written-early-intervention-notice.md:125, :82, :149, :34). The data
+  model keeps `bk_case_id` on `ei_notice_cycles` "for once-per-case" (:67),
+  and 14.1's projection names the mode `bk_modified_once`
+  (14-1-bankruptcy-monitoring-proof-of-claim.md:62). Reg X does not require the
+  modified notice more than once a case (1024.39(c)(1)(iii)(C)); the spec
+  is what refuses a second. The engine checks only in 11.2's
+  `notice.render`, against the store's bk `ei_notice_cycles` row for the case
+  the render names (app/tools/section11.ts:131-132). Only 11.2's
+  `print.request` writes that row, after the send, with the case id its own
+  caller passes, or null (:163). No send reads it. `print.request` carries
+  only the caller's checklist flag and the solicitation gate (:167-168), and
+  sends a notice the registry never rendered straight to the print port with
+  `notice.sent` (:155-156). 14.1's `notice.send` has the bk template on its
+  allowlist (app/tools/section14-1.ts:43, :361-362) and renders and sends it
+  through `noticeOps` (app/tools.ts:206), with no check and no row. The gate's
+  evaluator, `11.2.onceBkNoticePerCase` (app/evaluators.ts:280), is called by
+  its spec test alone. Each bk `notice.sent` arms another gate timer, which
+  keeps the evaluator only as a note (kernel/timers/engine.ts:198). So a
+  second bk notice in one case goes out four ways:
+  - `print.request` of a notice never rendered, even with
+    `bk_notice_sent_for_case: true`;
+  - the 11.2 pipeline: render naming the case, then `print.request` naming
+    the notice, which does not require the case id. The row is stored with
+    `bk_case_id` null, and the next render naming the case passes;
+  - two renders before either print;
+  - 14.1 sends it, then 11.2 renders and prints it again.
 
-103 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+  ei-6 names the first as the only way to meet its re-armed clock. The other
+  three need no clock, and each follows the tools' own pipeline. Reproduced
+  on 23 October 2026 over the servicing app's HTTP tool route
+  (`run.mjs serve` on a scratch database with the 177 migrations, the demo batch boarded
+  through `POST /v1/transfers/batches/demo`). Four delinquent loans (two 31
+  days and two 62 days past due at boarding) each had a Chapter 13 case written through 14.1's `bk.case.read/write`, and
+  a party linked by hand to separate boarding-2. No payment was posted, so no
+  custodial accounts were added.
+  - On SM-TR-0000020, a render and a print sent the case's notice, and the
+    control render for the same case was refused `BK_ONCE_PER_CASE`. Two
+    `print.request`s of unrendered bk notices were then sent: three
+    `notice.sent{NTC_REGX_39C_EARLY_INTERVENTION_BK}` and three cycle rows in
+    one case.
+  - SM-TR-0000022 (the pipeline) and -31 (two renders) sent two each; -36
+    (14.1, then 11.2, then 14.1) sent three.
+  - No send was refused, and every one armed another
+    REGX_1024_39C_ONCE_PER_CASE_GATE. On -22, a render naming no case was
+    still refused by the null row.
+
+  The extra notice asks for no payment and moves no money. Fix: check at the
+  send, not the render. One helper reads the loan's bk `ei_notice_cycles` row
+  for the case, taking the case from the loan's open `bankruptcy_cases` row
+  rather than the caller. `print.request` and 14.1's `notice.send` refuse
+  `BK_ONCE_PER_CASE` on a match, and on a send write the row with that case
+  id. Kept out: no environment runs 11.2's or 14.1's notice tools. ei-clocks
+  grades the windows engine, whose rulebook owes one notice per case
+  (packages/environments/src/ei/rulebook.ts:77).
+
+- **metro2-4.** A transfer-boarded loan's date of last payment is zero-filled
+  until the servicing app posts a receipt of its own. The tape's
+  `payment_history.csv` carries every `received_on`
+  (domain/boarding/tape-codec.ts:127, :234), and boarding reads them only to
+  seed the inherited delinquency by FIFO (domain/boarding/service.ts:166,
+  :345-347, :367-371). Through `boardTransferBatch` no payment row, event or
+  tape row keeps them, and the tape itself is kept only as a hash and a row
+  count (:104-114); through the bus's `1.1 boardLoan` they survive only
+  inside one `service.state.changed` event holding the boarding service's
+  state, which nothing reads back. The monthly
+  builder takes the date from the app's own posted payments alone
+  (domain/operations-runtime/runners.ts:137-139, :143). 8.1's hand-off type
+  has no field for it (domain/credit-reporting/types.ts:98-103), so landing
+  the `prior` that runners.ts:123 defers would not fill it. §8.1 rule 3
+  defines the date as the "effective date of the last borrower payment"
+  (8-1-furnish-tradeline-metro-2.md:113), and the boarding data contract asks
+  for the transferor's last Base segment, which carries it (:51, :76).
+  Reproduced on 23 October 2026 with the 35.5 harness's tape, boarded through
+  `boardTransferBatch` on 2026-10-05. A borrower party and the P&I and T&I
+  accounts were inserted by hand (boarding-2, boarding-4), and the MIN was
+  supplied in the process (metro2-1). A current loan last paid on 2026-10-04,
+  to the transferor, read `00000000` at 2026-10-31 in all four files. The
+  app's own 15th rule says October is the servicing app's to report
+  (`boardingMonthReporter`). The same loan read `11032026` once its own
+  receipt of 2026-11-03 posted. A loan two installments behind at transfer,
+  last paid on 2026-08-04, read `00000000` at 78, 80 and 82 through December,
+  and will for as long as it pays nothing. Masked today by metro2-1. Fix:
+  board the tape's newest `received_on`, and have the builder take the later
+  of it and the last posted receipt. Kept out: metro2-furnishing hands the
+  engine `last_payment_on` from the task's own receipts, which begin months
+  before the window (packages/environments/src/metro2/grader.ts:165-166,
+  :185), and does not run the runtime's builder.
+
+109 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

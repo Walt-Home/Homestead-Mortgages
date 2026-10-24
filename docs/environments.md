@@ -6,9 +6,9 @@ never sees. `packages/environments` holds them. The first, `refi-review`
 only and with the engine itself as the grader. `escrow-analysis` is the
 first on the servicing side, and `regz-price-tests` the first on the
 origination side. `catchup-posting`, `escrow-review` and `boarding-triage`
-are the first drawn from the life generator's histories. The defects found
-in the servicing app's own engines
-are in `docs/servicing-engine-defects.md`.
+are the first drawn from the life generator's histories, and `tape-intake`
+the first drawn from its tape stream. The defects found in the servicing
+app's own engines are in `docs/servicing-engine-defects.md`.
 
 ## refi-review
 
@@ -2806,6 +2806,159 @@ Not in 1.1.0:
 - what a defect does after boarding. The generator labels the twin's
   symptoms (`generate`'s labels) for the environments that will grade them.
 
+## tape-intake
+
+tape-intake 1.0.0 grades the review a partner's monthly tape gets at the tape
+desk before it is loaded. It is drawn from the life generator, and reads a
+month of a partner's tape stream where boarding-triage reads a transfer
+package.
+
+**The task.** One delivery, as the desk receives it, beside the last tape the
+desk loaded. The partner is a servicer whose book we watch, and its tape is
+the tape writer's m3-v1 file for a book of 8 to 14 loans the generator ran
+for five years. The model is shown:
+
+- the delivery: the month the partner says it is for, the day it came, its
+  name, its row count, and its header row exactly as written;
+- the last tape loaded: its month, name and rows;
+- the desk's reading: what the m3-v1 reader made of the delivery, its
+  refusal and its exceptions by row, loan and column (`desk.ts`).
+
+It reads the cells with the tools. For each defect it names which, the
+month, the loan and column (or none, for the file as a whole), what the tape
+says and what is true (null when the delivery cannot say), and what to ask
+the partner. It also gives the delivery's verdict: `load`,
+`load_after_correction` or `hold`.
+
+**What a delivery can carry.** The five tape-stream defects, in their forms,
+and the three history errors that show on one month's tape:
+
+| Defect | How the tape shows it                                                                              | Verdict                                 |
+| ------ | -------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| T-01   | the last tape is two months back; or every row is last month's again                               | loads; or hold                          |
+| T-02   | a header that is not the layout's for its column                                                   | hold if required; else after correction |
+| T-03   | a ZIP under five digits, a pay string under twelve                                                 | after correction                        |
+| T-04   | a date column with two-digit years, serial numbers, or the day first                               | loads; day first after correction       |
+| T-05   | an As of Date that is not the month's last day                                                     | after correction                        |
+| V-01   | an escrow balance fallen by more than twelve months of T&I                                         | loads                                   |
+| V-02   | in the policy's anniversary month, an escrow balance that rose by the escrow paid in               | loads                                   |
+| D-25   | a loan paid nothing, and the loan a keystroke away was paid its own Total Due and the first loan's | loads                                   |
+
+A history error loads because the tape carries the partner's records as they
+are: what is wrong is theirs to correct, and the finding says what to ask.
+D-28, a payment drafted twice, is not drawn. On a monthly tape it is a month
+paid twice and the next paid ahead, which a borrower who pays the next
+installment early in the same month shows too.
+
+**The rulebook** (`src/tape-intake/rulebook.ts`) is eight checks in order:
+the month (T-01), the headers, the codes, the dates, the as-of, then the
+partner's records on each loan Active on both tapes (V-01, V-02, D-25), read
+as the first five correct the tape. It says first what the reader already
+does, from the m3-v1 profile and `parseBook`:
+
+- it refuses a file missing a required header, by name, and keeps the cells
+  of a header it does not know;
+- it reads a date month first, a two-digit year in the century nearest the
+  day it reads it, and an Excel serial; any other cell is `unreadable_cell`;
+- it never pads a code, takes the tape's own as-of, and compares nothing
+  across months.
+
+So a refusal or an exception in the desk's reading is a symptom, and the
+finding names its cause. In the held-out suite the reader refuses 13
+deliveries, each for a required header renamed, and raises exceptions on
+one, a day-first closing date past the 12th. It says nothing of any other
+defect there.
+
+**The tools.** Primitives only:
+
+- `read_rows`: rows of either tape, cells as written, by loan and by column
+  letter or the file's own header;
+- `compare_months`: the two tapes column by column, which headers and cells
+  differ and which loans are on one and not the other;
+- `parse_date`: what the reader reads a date cell as, on a day (the reader's
+  own `parseDateIso`, ported);
+- `lookup_layout`: each column's letter, header, type, whether it is
+  required, its export form, and the rules its dates keep;
+- refi's `calculate`.
+
+No tool checks a rule or decides. The reader's profile is ported byte for
+byte but for one import (`src/tape-intake/ported/`): the profile takes its
+serial-date function from the vendored workbook reader, which imports
+`node:zlib`, so the function is copied word for word beside it. A test holds
+both to their sources, and reads every task's delivery with `readBook`
+itself to hold the desk's reading to it.
+
+**The grader** is the delivery's labels, read as boarding-triage reads its
+manifest:
+
+- each expected finding is found (its defect, month, loan and column), says,
+  truth and ask; T-01, which names a file, is found and ask;
+- the verdict is one field;
+- extra findings, a second finding on one among them, are one field: at most
+  two.
+
+Money is compared in cents, a date as its date, a header as the reader
+compares one, a column by its letter or any header the layout gives it. A
+stream defect is one finding per column, with its first row's cell; a history
+error is one per loan. The labels are the generator's root causes: the tape
+defects' cells, and each history error's loan as the delivery shows it, with
+the clean history's cell as what is true for D-25. A clean delivery is load
+with nothing found.
+
+**The tasks** take 16 arms in turn: clean twice; T-01 missing, sent again
+and relabeled; T-02 required and not; T-03; T-04 and T-05 in drawn forms; a
+spreadsheet's T-03 and T-04 together; V-01; V-02; D-25; D-25 under a T-05
+as-of; V-02 under a renamed header. A history error is made in the delivery's
+month on an event the clean history had there: a tax bill; the first hazard
+renewal after a transfer, on a loan with no mortgage insurance and no other
+bill that month; or a borrower's payment, with a loan paying one installment
+that month for it to land on, whose number the scenario pins a keystroke
+from the payer's. A third of each book's loans reach the partner by transfer.
+The held-out suite (seed 1, 200 tasks, pinned by hash) holds:
+
+- 82 deliveries to load, 80 to load after correction and 38 to hold;
+- 25 clean, and findings of every defect: T-01 38, T-02 38, T-03 37 (a ZIP
+  and a pay string on most), T-04 25 (9 two-digit years, 7 serials, 9 day
+  first, over all six date columns), T-05 25, V-01 12, V-02 24 and D-25 48
+  (24 payments, two loans each);
+- deliveries of 5 to 14 loans, 8.7 on average, from June 2027 to March 2032.
+
+185 of the 200 are first draws. 15 were redrawn: 10 books had no first
+renewal after a transfer in range for V-02, and 5 had a tape with fewer than
+five loans.
+
+**The floors.** Submitting load with nothing found passes 25 of the 200
+held-out deliveries, the clean ones. Finding only what the desk's reading
+shows passes 38. Every stream defect found, with no record read, passes 140;
+every finding with the verdict always load passes 82.
+
+**The proof of fairness.** The reference passes the held-out suite, 300
+training tasks and 13 spec cases, one per defect in a named form, in at most
+5 turns and 30 tool calls. A delivery is kept only when
+it finds exactly the labels, nothing extra, and the verdict. Of the first
+draws of 1,000 training tasks (train seed 11), 918 reached that check, and
+the reference missed one: a V-02 loan that paid two installments in the
+month at escrow payments an analysis had set apart.
+
+**What the first draws taught the generator.** A D-25 payment that came
+before the receiving borrower's own once left that borrower paying nothing,
+because a borrower does not pay an installment already paid, and then paying
+the next installment's amount. A borrower knows only what they paid
+themselves, so an installment another loan's payment paid is paid again, as
+billed. V-02's and D-25's rules read a T&I payment and a Total Due from
+either tape, because an escrow analysis can move them between the two, and
+the record checks read the tape with its dates corrected, because a
+day-first next due date once made a current loan look like an unpaid
+renewal.
+
+Not in 1.0.0:
+
+- the supplement beside the tape, and a supplement's own defects;
+- a stream defect in the last tape loaded, which was reviewed when it came;
+- D-28, which a monthly tape cannot tell from a borrower paying early, and
+  the history errors that show only in a payment history;
+- staff errors, which need the contacts layer.
+
 ## The life generator
 
 `src/life/` is not an environment. It writes ten-year histories of loans for
@@ -2925,7 +3078,8 @@ compared, so what the servicer reports, such as a cap, a plan or a
 bankruptcy it no longer knows of, is labeled too.
 
 `DEFECTS` in `defects.ts` is the registry each wave extends. It holds the
-first ten of docs/synthetic-data-defects.md, each with what it needs, what
+first ten of docs/synthetic-data-defects.md, which enter at boarding or, for
+D-25, in the prior servicer's books before it, each with what it needs, what
 it plants and what its twin does:
 
 | ID   | Needs                                                        | Planted                                                     | The twin                                                                                                                       |
@@ -2941,12 +3095,68 @@ it plants and what its twin does:
 | D-25 | escrow, a regular payment 3 to 12 months before the transfer | that payment's principal posted to escrow                   | the balance keeps the principal: every later split, analysis, month-end and payoff on it                                       |
 | D-15 | a flood line                                                 | zone X where the determination says AE                      | the history is the clean one: flood tracking is not modeled, so the root is its only label                                     |
 
-Every defect but D-03 enters only through a transfer. A loan may carry two
-that enter at boarding. Its twin boards both, and each symptom is labeled
+Of the ten, every defect but D-03 enters only through a transfer. A loan
+may carry two defects. Its twin carries both, and each symptom is labeled
 for the defect whose own twin shows it, or for the pair when neither does
-alone. A symptom is dated by its row, so a row the prior servicer wrote that
-the root changed later is dated before the root: a charge it suspended that
-D-35's twin never waives, and the installment D-24's row opens again.
+alone. A symptom is dated by its row, so a row the prior servicer wrote
+that the root changed later is dated before the root: a charge it suspended
+that D-35's twin never waives, and the installment D-24's row opens again.
+
+Four are errors made in the history after boarding, by a vendor or a system
+the servicer depends on. The catalog's D-25 has two forms, and the registry
+plants them apart: the prior servicer's split above is `D-25`, and the
+system's wrong loan below is `D-25/wrong-loan`. Both label D-25, and draw
+from D-25's streams and its calibration rate; a request names the form by
+its key.
+
+| ID   | Whose  | The error                                                                                      | Its root cause                                    |
+| ---- | ------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| V-01 | vendor | the tax service reports a bill ten times the county's, and it is paid from escrow as reported  | `escrow_bills.amount_cents`                       |
+| V-02 | vendor | the first hazard renewal after a transfer is billed to the prior servicer, and paid late       | `insurance_policies.mortgagee_clause`             |
+| D-28 | system | a borrower's payment drafted twice, the same amount on the same day                            | the second draft, a `payments` row                |
+| D-25 | system | a payment keyed to a loan number a keystroke away, and posted to the loan that has that number | a `payments` row on each loan: missing, and extra |
+
+A history error is made on one event the clean history had: a bill, or a
+borrower's own payment on our books. It is read off that history, so the
+twin is the clean history until that event, and the engines' from there:
+
+- **V-01.** The county returns the excess 45 to 120 days later, into
+  escrow. Until then the account is short by nine times the bill, and an
+  analysis that runs in between finds a shortage the borrower is billed for.
+  The analyst still projects from the county's bill.
+- **V-02.** The renewal reaches the servicer 30 to 75 days late, when the
+  prior servicer sends it on, and is paid then. Until then the account holds
+  the premium. Whether the policy lapsed is the carrier's, and not modeled.
+- **D-28.** The waterfall posts the second draft as it posts any payment:
+  to the next installment, paid ahead, and the borrower's own payment for it
+  then finds it paid. An early payer's second draft, with nothing billed yet,
+  sits in suspense. Nothing in the history returns it.
+- **D-25.** The payer's installment stays open and runs late, with a late
+  charge. The other loan's borrower, who knows nothing of it, pays as billed,
+  so that loan is paid ahead (the borrower's own rule, that an installment
+  already paid is not paid again, is for what they paid themselves). Nothing
+  in the history moves it back: the catalog's reversal weeks later is a correction cashiering has no
+  engine for. A book draws its loan numbers at random from a hundred
+  million, so no two are a keystroke apart unless a scenario pins one
+  (`LoanPins.servicer_loan_number`). D-25 lands only there.
+
+A request names the loans and the date to make it from (`at`), or a rate
+per eligible event: per bill or per payment, where a boarding defect's rate
+is per loan (the prior servicer's D-25 reads its "per receipt" as the
+chance that a loan with that many payments it could misapply carries one).
+`D-25/wrong-loan` names the loan it lands on with `with`. A row an error adds
+is named off the row it comes from, and a row it removes keeps its id
+spent, so every other row keeps its id. The payments table is compared by
+day and kind of payment rather than by receipt number, because a payment one
+history never sends would renumber every receipt after it. The
+disbursements table is compared the same way for the same reason: a bill as
+the next of its line's, named by its line and the day it was due
+(`tax_county@2028-01-01`), which a bill paid late or at the wrong amount
+still is; any other row by its kind and day (`refund@2028-07-18`). A refund
+one history makes and the other does not once renumbered every later bill,
+and labeled each with another bill's day, line and amount. Staff errors that
+need the contacts layer, such as a promise not tracked or a complaint not
+logged, are not planted here.
 
 **Moments.** `generate(…, { observe })` shows an environment what each
 engine is about to be handed, as it stands, in the clean history and in the
@@ -3114,20 +3324,26 @@ on 94 of the 13,478 rows.
 
 **Tape-stream defects** are what a delivery does to right values. The 47 in
 docs/synthetic-data-defects.md are wrong values in a servicer's records;
-these are their own family, in `src/life/tape-defects.ts`:
+these are their own family, in `src/life/tape-defects.ts`. All five are
+built, each in the forms a request may name (`variant`):
 
-| ID   | Defect                                              | Built |
-| ---- | --------------------------------------------------- | ----- |
-| T-01 | a month missing from the stream, or delivered twice | no    |
-| T-02 | a renamed column                                    | no    |
-| T-03 | leading zeros stripped from a column of codes       | yes   |
-| T-04 | dates mangled by a spreadsheet                      | no    |
-| T-05 | an as-of date that drifts from the month-end        | no    |
+| ID   | Defect                                        | Forms                                   | Loads                                    |
+| ---- | --------------------------------------------- | --------------------------------------- | ---------------------------------------- |
+| T-01 | a month missing, or last month's sent again   | `missing`, `resent`, `relabeled`        | not until the partner sends it           |
+| T-02 | a renamed column                              | `required`, `optional`                  | refused by name; or read, the fact empty |
+| T-03 | leading zeros stripped from a column of codes | `stripped`                              | once the codes are padded back           |
+| T-04 | a column of dates mangled by a spreadsheet    | `two_digit_year`, `serial`, `day_first` | as delivered; day first once re-read     |
+| T-05 | an as-of date that drifts from the month-end  | `export_date`, `prior_month_end`        | once the as-of is the month-end          |
 
 `plantTapeDefects(book, stream, requests)` plants them in a written stream.
-A request names its months, or reaches each tape at a rate. The rate is
-drawn from a stream keyed by the book, the defect and the month. A month
-carries one tape defect.
+A request names its months, or reaches each tape at a rate. The rate, the
+form and the column (for T-02 and T-04, which reach one) are drawn from
+streams keyed by the book, the defect and the month, so a defect's months
+move with nothing else. A definition's own draws (T-02's new header, T-05's
+export day) are under the month's key, apart from the planter's: when they
+shared the stream that drew the month, a month drawn at a low rate always
+read a low number from it, and every rename was a column's first and every
+export ran the first business day after the month-end.
 
 - **Root causes.** Each definition gets the whole stream, so one that drops,
   repeats or renames a file has the stream to do it in. It returns each value
@@ -3136,11 +3352,30 @@ carries one tape defect.
 - **Symptoms.** `tapeSymptomLabels(planted, read)` finds them by difference,
   as a twin's are found. It reads each planted month's clean and planted
   files with the reader it is handed. Every difference in the records, the
-  facts, the exceptions or the refusal is a label.
+  facts, the cells kept under `raw`, the exceptions or the refusal is a
+  label.
+- **How each loads** (`loading`) is stated per form, and a test holds it to
+  the reader: a form that loads as delivered has no symptom at all, one
+  loaded once corrected has symptoms and is not refused, and one the partner
+  must send again is refused or is not the month's tape.
 - **Why the reader is handed in.** The life generator cannot import
   `@hm/partner-book`, because its profile reaches `node:zlib` through the
   vendored workbook reader. The tests hand it `readBook`, a dev dependency
   here as it is in refi-review.
+
+**T-01** is the stream. A month's file never comes (`missing`), or last
+month's comes in its place, under its own name (`resent`) or under this
+month's (`relabeled`). The planted file's `month` is the month it was
+delivered for; its rows and as-of are last month's. Missing, every row of the
+month is read from one stream and not the other. Sent again, every row
+reads as last month's.
+
+**T-02** is the export's configuration. One header is written in other words
+(`T02_RENAMES`, none of which reads as another of the profile's headers). A
+`required` one gets the file refused by name, and every row is lost. Any
+other is read, with that column's fact empty on every row and its cells kept
+under `raw`: a renamed "MBA Delinquency Status" leaves the reader to date
+delinquency from the next due date to the as-of.
 
 **T-03** is a file opened in a spreadsheet. A column of digits is read as a
 number and loses its leading zeros. On the m3 tape that hits two columns:
@@ -3152,25 +3387,52 @@ number and loses its leading zeros. On the m3 tape that hits two columns:
 
 The reader takes both as written. The record's postal code, the ZIP fact
 and the pay-string fact change, and nothing else does. The review reads
-only the pay string's last character, which survives. The test plants T-03
-in three months and holds the symptoms equal to what each root reaches.
+only the pay string's last character, which survives. Text columns are
+found by position, so a renamed header does not hide one.
 
-**Still to build.** Each is one more `TapeDefectDefinition`:
+**T-04** is a spreadsheet's date format, on one of six date columns that
+carry a date on every live loan (`T04_COLUMNS`; the as-of is T-05's):
 
-- T-01 drops a month's file, or sends one twice: the same file again, or a
-  month's rows under the next month's name. Its symptoms are rows read from
-  one stream and not the other.
-- T-02 renames a header. A required one gets the file rejected by name. Any
-  other leaves its fact empty and keeps the cell under `raw`.
-- T-04 rewrites dates as a spreadsheet does: two-digit years, serial numbers,
-  day and month swapped.
-- T-05 writes an as-of date that is not the month-end, such as the export
-  date or last month's.
+- `two_digit_year`, "5/1/57". The reader puts a two-digit year in the
+  century nearest the day it reads it, which is right for every date here
+  read near its month: no symptom.
+- `serial`, Excel's day number, "57100". The reader converts it: no symptom.
+- `day_first`, "1/5/2057" for 1 May. The reader takes a date month first,
+  so a day of 12 or less reads as the month, silently, and a day over 12 is
+  an `unreadable_cell` exception. A day the same as the month reads right,
+  and is not changed.
+
+**T-05** is the export's as-of: the day it ran, one to four business days
+after the month-end (`export_date`), or last month's end
+(`prior_month_end`), on every row. The rows are this month's. The reader
+takes the tape's own as-of when it carries one, so the observation is filed
+under it.
+
+**Two defects drawn for one month are merged.** Both are planted, each where
+it happens to a delivery (`stage`): the export writes the as-of and the
+headers, then a spreadsheet rewrites codes and dates. They rewrite different
+parts of the file, and a real delivery carries several at once: the
+spreadsheet that strips a ZIP code's zero also rewrites a date column. A
+symptom of a merged month belongs to each defect whose own plant shows it,
+and to the group when none does, as a twin's do. In the test, a renamed MBA
+status and an export-date as-of together make the reader call current loans
+delinquent, which neither does alone. T-01 is the exception, because it
+replaces the month's file whole:
+
+- a defect drawn at a rate for a month T-01 is in is skipped;
+- a T-01 drawn at a rate for a month another defect was asked for by name
+  is skipped;
+- two asked for by name, T-01 among them, are refused.
+
+Every skip is reported in `skipped`, with the reason. Skipping rather than
+redrawing keeps each defect's months its own draw: a second defect moves
+none of the first's.
 
 **Not covered yet:**
 
-- the other 37 defects;
-- tape-stream defects T-01, T-02, T-04 and T-05;
+- the other 36 defects of the catalog;
+- staff errors that need the contacts layer: a promise not tracked, a
+  complaint not logged;
 - foreclosure, forbearance, trial plans and modification, whose tape fields
   are present and always empty; a bankruptcy's plan, trustee, discharge and
   dismissal; loss mitigation beyond a repayment plan; the end of a
@@ -3505,6 +3767,7 @@ npm run env:refi -w @hm/environments -- --env ei-clocks --policy reference
 npm run env:refi -w @hm/environments -- --env catchup-posting --policy reference
 npm run env:refi -w @hm/environments -- --env escrow-review --policy reference
 npm run env:refi -w @hm/environments -- --env boarding-triage --policy reference
+npm run env:refi -w @hm/environments -- --env tape-intake --policy reference
 npm run env:transfer-package -w @hm/environments -- --out /tmp/packages   # the demo loan's four packages
 npm run env:transfer-package -w @hm/environments -- --out /tmp/packages --each   # and one of each defect alone
 npm run env:demo -w @hm/environments                                      # the first demo's page, playground/dist/demo.html

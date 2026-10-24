@@ -110,6 +110,8 @@ const solveAll = async (tasks: readonly BoardingTask[]) => {
 };
 
 const roots = (t: BoardingTask) => t.labels.filter((l) => l.root_cause);
+/** The registry's defects that sit in a transfer package: the first ten, not the errors made in the history after boarding. */
+const inPackages = Object.keys(DEFECTS).filter((k) => DEFECTS[k]!.package !== null);
 const taskOf = (id: string) => each.find((x) => x.id === id)!.task;
 
 describe("boarding-triage", () => {
@@ -239,7 +241,7 @@ describe("boarding-triage", () => {
       "D-37": 20,
       "D-42": 40,
     });
-    expect([...planted.keys()].sort()).toEqual(Object.keys(DEFECTS).sort());
+    expect([...planted.keys()].sort()).toEqual(inPackages.sort());
     for (const n of planted.values()) expect(n).toBeGreaterThanOrEqual(20);
     // The clean loans are the negatives, drawn to look like the defects beside them.
     const look = { cap: 0, no_escrow: 0, arm: 0, scra: 0, bk: 0, lm: 0, mi: 0, flood: 0 };
@@ -532,7 +534,7 @@ describe("boarding-triage", () => {
     const planted = reports.flatMap((x) => x.labels);
     expect(
       [...new Set(planted.filter((l) => l.root_cause).map((l) => l.defect_id))].sort(),
-    ).toEqual(Object.keys(DEFECTS).sort());
+    ).toEqual(inPackages.sort());
     expect(planted.filter((l) => l.caught)).toEqual([]);
     // And boards each flag the package left off as off.
     const loan = (id: string) => by[`each-${id}`]!.loans[0]!;

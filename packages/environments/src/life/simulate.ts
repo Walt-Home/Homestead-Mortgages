@@ -174,7 +174,11 @@ export type ReceiptMode =
   | "short_50"
   | "curtail"
   | "stale_bill_pay"
-  | "payoff";
+  | "payoff"
+  /** A history error's: the same draft taken twice (D-28). */
+  | "duplicate"
+  /** A history error's: another borrower's payment, keyed to this loan (D-25). */
+  | "misposted";
 
 export interface ReceiptRow {
   readonly id: string;
@@ -182,7 +186,7 @@ export interface ReceiptRow {
   readonly credited_as_of: PlainDate;
   readonly amount: Cents;
   readonly mode: ReceiptMode;
-  readonly channel: "borrower" | "transferor_forward";
+  readonly channel: "borrower" | "transferor_forward" | "misposted";
   readonly servicer: Servicer;
   readonly outcome: AllocationOutcome | "payoff";
   readonly installments: readonly {
@@ -225,7 +229,8 @@ export interface DisbursementRow {
   readonly id: string;
   readonly on: PlainDate;
   readonly line: string;
-  readonly kind: "bill" | "refund" | "payoff_refund";
+  /** `returned`: money a payee sent back into the account, written as a negative amount (a history error's, V-01). */
+  readonly kind: "bill" | "refund" | "payoff_refund" | "returned";
   readonly amount: Cents;
   readonly balance_after: Cents;
   readonly servicer: Servicer;
@@ -532,6 +537,43 @@ export type LifeMoment =
       readonly old_payment: Cents;
     };
 
+/**
+ * An error made in the history after boarding, by a vendor or a system the
+ * servicer depends on (defects.ts, the history errors). Each changes one
+ * event before the engines are handed it; everything after is the engines'.
+ * A row an error adds is named off the row it comes from, and a row it
+ * removes keeps its id spent, so every other row of the twin keeps the id it
+ * has in the clean history and the two compare row by row.
+ */
+export type HistoryError =
+  /** A bill paid from escrow at the amount a vendor reported, not the bill's; the payee returns the excess on `returned_on`. */
+  | {
+      readonly kind: "bill_amount";
+      readonly line: EscrowLine["line_type"];
+      readonly due: PlainDate;
+      readonly paid: Cents;
+      readonly returned_on: PlainDate | null;
+    }
+  /** A bill that went to someone else and reached the servicer late: paid on `paid_on`, not on its due date. */
+  | {
+      readonly kind: "bill_late";
+      readonly line: EscrowLine["line_type"];
+      readonly due: PlainDate;
+      readonly paid_on: PlainDate;
+    }
+  /** The receipt `receipt` drafted twice: posted again the same day, as `${receipt}-DUP`. */
+  | { readonly kind: "receipt_twice"; readonly receipt: string }
+  /** The receipt `receipt` keyed to another loan, `to`: never posted here. */
+  | { readonly kind: "receipt_elsewhere"; readonly receipt: string; readonly to: string }
+  /** Another loan's receipt keyed to this one: posted here as `id`. */
+  | {
+      readonly kind: "receipt_from";
+      readonly id: string;
+      readonly on: PlainDate;
+      readonly amount: Cents;
+      readonly from: string;
+    };
+
 export interface SimOverrides {
   /** What boarding writes, given the note's terms. The clean history boards the note as it is. */
   readonly boarded?: (note: BoardedTerms) => BoardedTerms;
@@ -539,6 +581,8 @@ export interface SimOverrides {
   readonly history?: HistoryPlant;
   /** Shown each receipt before the waterfall posts it (a payoff is quoted, not posted), and each analysis before it is decided. */
   readonly observe?: (moment: LifeMoment) => void;
+  /** Errors made in the history. The clean history has none. */
+  readonly errors?: readonly HistoryError[];
 }
 
 /* ── the draws ───────────────────────────────────────────────────────────── */
@@ -708,6 +752,9 @@ interface Ev {
   readonly amount?: Cents;
   readonly line?: string;
   readonly refund?: boolean;
+  /** A history error's: the id its row keeps (a bill paid late, an excess returned, a receipt keyed here from another loan). */
+  readonly rowId?: string;
+  readonly returned?: boolean;
   readonly mode?: ReceiptMode;
   readonly credited?: PlainDate;
   readonly channel?: ReceiptRow["channel"];
@@ -1055,6 +1102,22 @@ export function simulateLoan(
   if (script.payoff)
     push({ on: script.payoff.on, kind: "payoff", byRefi: script.payoff.by_refinance });
   if (script.transfer_out) push({ on: script.transfer_out, kind: "transfer_out" });
+  // A history error's: another loan's receipt keyed to this one, posted on the day it came in.
+  const errors = ov.errors ?? [];
+  /** The installments another loan's payment, posted here, paid (D-25). */
+  const paidByAnother = new Set<PlainDate>();
+  for (const x of errors)
+    if (x.kind === "receipt_from" && x.on <= windowEnd)
+      push({
+        on: x.on,
+        kind: "receipt",
+        due: x.on,
+        mode: "misposted",
+        amount: x.amount,
+        credited: x.on,
+        channel: "misposted",
+        rowId: x.id,
+      });
 
   /* ── the behavior layer ────────────────────────────────────────────────── */
 
@@ -1216,11 +1279,15 @@ export function simulateLoan(
     mode: ReceiptMode,
     channel: ReceiptRow["channel"],
     curtail: Cents,
-  ) => {
+    fixedId?: string,
+  ): void => {
+    // A history error's row is named off another's (HistoryError), and spends no id of the loan's own.
+    const id = fixedId ?? `${d.loan_id}-R${++receiptSeq}`;
+    // A receipt keyed to another loan never reaches this one; its id stays spent.
+    if (errors.some((x) => x.kind === "receipt_elsewhere" && x.receipt === id)) return;
     const cutoff = addDays(on, -365);
     while (fiftyDates.length && fiftyDates[0]! < cutoff) fiftyDates.shift();
     state.partial_count_12m = fiftyDates.length;
-    const id = `${d.loan_id}-R${++receiptSeq}`;
     if (ov.observe)
       ov.observe({
         kind: "receipt",
@@ -1333,12 +1400,21 @@ export function simulateLoan(
       ended = { kind: "paid_in_full", on, by_refinance: false };
       note(on, "payoff");
     }
+    // A draft taken twice: the same amount, the same day, posted again by the waterfall.
+    if (!ended && errors.some((x) => x.kind === "receipt_twice" && x.receipt === id))
+      post(on, credited, amount, "duplicate", channel, 0n, `${id}-DUP`);
   };
 
   const onReceipt = (e: Ev) => {
     const target = e.due!;
     const channel = e.channel ?? "borrower";
     const credited = e.credited ?? e.on;
+    if (e.mode === "misposted") {
+      post(e.on, credited, e.amount!, "misposted", channel, 0n, e.rowId);
+      for (const x of receipts.find((r) => r.id === e.rowId)?.installments ?? [])
+        paidByAnother.add(x.due);
+      return;
+    }
     if (e.mode === "partial_rest")
       return post(e.on, credited, e.amount!, "partial_rest", channel, 0n);
     if (e.scriptedMiss) return void note(e.on, "missed", target);
@@ -1350,8 +1426,9 @@ export function simulateLoan(
     const behind = oldest !== undefined && oldest.due_date < target;
     const plan = activePlan();
     // An installment a cure or a promise already paid (a late receipt arriving after the next one's cure) is not paid
-    // twice: the borrower sends nothing for it.
-    if (!plan && targetInst && targetInst.status !== "due")
+    // twice: the borrower sends nothing for it. One another borrower's payment paid (D-25) the borrower knows nothing
+    // of, and pays as billed.
+    if (!plan && targetInst && targetInst.status !== "due" && !paidByAnother.has(target))
       return void note(e.on, "already_paid", target);
     if (plan) {
       // Each plan payment is the month's own installment (none when it is one of the arrears) and a share of the arrears.
@@ -1388,7 +1465,11 @@ export function simulateLoan(
     }
     if (rnd.delinquency && md.uMiss < clamp01(pRoll * disaster, 0.9))
       return void note(e.on, "missed", target);
-    const statement = pOf(oldest ?? targetInst!);
+    // What the borrower was billed: the oldest installment open, or, for one another borrower's payment paid without
+    // their knowing (D-25), that installment itself.
+    const statement = pOf(
+      targetInst && paidByAnother.has(target) ? targetInst : (oldest ?? targetInst!),
+    );
     const stale =
       staleArmed.length > 0 &&
       staleArmed[0]! <= e.on &&
@@ -1494,11 +1575,18 @@ export function simulateLoan(
     });
   };
 
-  const disburse = (on: PlainDate, line: string, kind: DisbursementRow["kind"], amount: Cents) => {
+  const disburse = (
+    on: PlainDate,
+    line: string,
+    kind: DisbursementRow["kind"],
+    amount: Cents,
+    fixedId?: string,
+  ): string => {
+    const id = fixedId ?? `${d.loan_id}-D${++disbSeq}`;
     escrowBal -= amount;
     escrowDisbursed += amount;
     disbursements.push({
-      id: `${d.loan_id}-D${++disbSeq}`,
+      id,
       on,
       line,
       kind,
@@ -1506,10 +1594,43 @@ export function simulateLoan(
       balance_after: escrowBal,
       servicer: who(on),
     });
+    return id;
   };
   const onDisburse = (e: Ev) => {
     if (!escrowOn(e.on)) return;
     if (e.line === "mi_borrower_paid" && miTerminatedOn && e.on >= miTerminatedOn) return;
+    if (e.returned) return void disburse(e.on, e.line!, "returned", e.amount!, e.rowId);
+    if (e.rowId) return void disburse(e.on, e.line!, "bill", e.amount!, e.rowId);
+    const err = e.refund
+      ? undefined
+      : errors.find(
+          (x) =>
+            (x.kind === "bill_amount" || x.kind === "bill_late") &&
+            x.line === e.line &&
+            x.due === e.on,
+        );
+    if (err?.kind === "bill_late") {
+      // The bill went to someone else; it is paid when it reaches the servicer, under the id it would have had.
+      const id = `${d.loan_id}-D${++disbSeq}`;
+      if (err.paid_on <= windowEnd)
+        push({ on: err.paid_on, kind: "disburse", amount: e.amount!, line: e.line!, rowId: id });
+      return;
+    }
+    if (err?.kind === "bill_amount") {
+      // Paid as the vendor reported it; the payee returns what it was paid over the bill.
+      const id = disburse(e.on, e.line!, "bill", err.paid);
+      const excess = err.paid - e.amount!;
+      if (err.returned_on !== null && err.returned_on <= windowEnd && excess !== 0n)
+        push({
+          on: err.returned_on,
+          kind: "disburse",
+          amount: -excess,
+          line: e.line!,
+          returned: true,
+          rowId: `${id}-RET`,
+        });
+      return;
+    }
     disburse(e.on, e.line!, e.refund ? "refund" : "bill", e.amount!);
   };
 

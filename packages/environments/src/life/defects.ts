@@ -25,18 +25,42 @@
  * `DEFECTS` is the registry, and each wave extends it: a new defect is one
  * more `DefectDefinition`. It holds the first ten of docs/synthetic-data-defects.md:
  * D-42 (which boards D-31), D-35, D-03, D-01, D-12, D-37, D-18, D-24, D-25
- * and D-15.
+ * and D-15. And it holds four errors made in the history after boarding by
+ * someone the servicer depends on (`history`):
+ *
+ *   V-01  a vendor's: a tax bill the tax service reported wrong, paid as reported;
+ *   V-02  a vendor's: a hazard renewal billed to the prior servicer, paid late;
+ *   D-28  a system's: a borrower's payment drafted twice;
+ *   D-25  a system's: a payment keyed to a neighboring loan number and posted there.
+ *
+ * A history error is made on one event the clean history had (a bill, a
+ * receipt), read off it, so the twin is the clean history until that event
+ * and the engines' from there. Its root cause is the record the error wrote
+ * (the vendor's bill, the carrier's mortgagee clause, the second draft, the
+ * payment on the wrong loan), and D-25's reaches two loans, each with a root.
+ * Staff errors that need the contacts layer (a promise not tracked, a
+ * complaint not logged) are not here.
+ *
+ * The catalog gives D-25 two forms, a split that puts a payment's principal
+ * into escrow and a receipt posted to the wrong loan, and the registry plants
+ * them apart: the split, which the prior servicer makes before the transfer,
+ * is `D-25`; the wrong loan, which a system makes on our books, is
+ * `D-25/wrong-loan`. A definition's `id` is the catalog's, which its labels
+ * and its draws carry; `form` is the key the registry holds it under where
+ * that is not the id (`defectKey`).
  */
 
-import { addMonths, type PlainDate } from "@hm/kernel/calendar";
+import { addDays, addMonths, daysBetween, type PlainDate } from "@hm/kernel/calendar";
 import { formatCents, type Cents } from "@hm/kernel/money";
 import { lateChargeAmount } from "../payments/ported/latecharges.js";
 import { toJsonLine } from "../record.js";
+import type { Rng } from "../rng.js";
 import { floodZoneOf, type LoanDraw } from "./draw.js";
 import { monthEndRow } from "./projection.js";
 import {
   miTerminationDate,
   type BoardedTerms,
+  type HistoryError,
   type HistoryPlant,
   type LoanLife,
   type ReceiptRow,
@@ -98,11 +122,17 @@ export interface PackageDefect {
 }
 
 export interface DefectDefinition {
+  /** The catalog's id (docs/synthetic-data-defects.md), which every label of it carries. */
   readonly id: string;
+  /** The key the registry holds it under, where the catalog's id has two forms planted apart (D-25's); the id when absent. */
+  readonly form?: string;
   readonly title: string;
   /** Another defect in docs/synthetic-data-defects.md this one produces once boarded (D-42 boards D-31). */
   readonly produces: string | null;
-  /** Whether it can only enter through a transfer (a cell in the prior servicer's package, or its books). */
+  /**
+   * Whether it can only enter through a transfer (a cell in the prior servicer's package, or its books, or a bill
+   * still addressed to the prior servicer).
+   */
   readonly requires_transfer: boolean;
   readonly package: PackageDefect | null;
   /** Where the root cause lives. */
@@ -114,18 +144,58 @@ export interface DefectDefinition {
   applies?(clean: LoanLife): boolean;
   /** How many of the calibration rate's units the loan has (D-25's rate is per receipt); one when absent. */
   units?(clean: LoanLife): number;
-  /** What boarding writes instead of what the note and the loan call for. */
+  /** What boarding writes instead of what the note and the loan call for. A history error boards the note as it is. */
   boarded(note: BoardedTerms, d: LoanDraw): BoardedTerms;
   /** A change to the prior servicer's own history, read off the clean one (D-25); none for a defect that enters at boarding. */
-  history?(clean: LoanLife): HistoryPlant;
+  priorHistory?(clean: LoanLife): HistoryPlant;
+  /** The root cause's values, for a defect that enters at boarding or before it; a history error's are its placements'. */
   trueValue(d: LoanDraw, clean: LoanLife): string | null;
   plantedValue(d: LoanDraw, clean: LoanLife): string | null;
   /** The root's row and date when it is not the loan at boarding (D-25's: the misapplied receipt). */
   rootRow?(clean: LoanLife): { readonly row: string; readonly on: PlainDate };
+  /**
+   * For an error made in the history after boarding (a vendor's or a
+   * system's), where it can be made and what it changes; null for a defect
+   * that enters at boarding or before it.
+   */
+  readonly history: HistoryErrorPlan | null;
   /** What a servicer should do about the root cause. */
   readonly handling: string;
-  /** What a servicer should do about a symptom in this table and field. */
-  symptomHandling(table: string, field: string): string;
+  /** What a servicer should do about a symptom in this table and field, on this row (as the comparison names it). */
+  symptomHandling(table: string, field: string, row: string): string;
+}
+
+/** One loan's share of a history error: what its twin is handed, and the root cause it carries. */
+export interface HistoryPlacement {
+  /** The loan, by book index. */
+  readonly index: number;
+  readonly error: HistoryError;
+  readonly root: Difference;
+}
+
+/**
+ * Where a history error can be made, and what it changes. The events are
+ * read off the clean history, which is the twin's until the error, so the
+ * twin is handed exactly the event the clean history had.
+ */
+export interface HistoryErrorPlan {
+  /** Whether the error moves money from one loan to another, which then carries it too (D-25). */
+  readonly partnered: boolean;
+  /** The events on a loan the error can be made on, oldest first, each keyed by its row so a draw for it is its own. */
+  candidates(life: LoanLife): readonly { readonly key: string; readonly on: PlainDate }[];
+  /**
+   * The error made on one of them: each loan it reaches, with what that
+   * loan's twin is handed and the root cause it carries. `partner` is the
+   * loan a partnered error lands on, or null to take the next loan in the
+   * book on our books that day. Null when it cannot be made there.
+   */
+  make(args: {
+    readonly loans: readonly LoanLife[];
+    readonly index: number;
+    readonly key: string;
+    readonly partner: number | null;
+    readonly r: Rng;
+  }): readonly HistoryPlacement[] | null;
 }
 
 /* ── shared readings ─────────────────────────────────────────────────────── */
@@ -224,6 +294,7 @@ export const D03: DefectDefinition = {
   boarded: (t) => ({ ...t, late_charge_cap_cents: null }),
   trueValue: (d) => (d.late_charge.cap_cents === null ? null : String(d.late_charge.cap_cents)),
   plantedValue: () => null,
+  history: null,
   handling:
     "Board the note's dollar cap. Recompute every late charge assessed since boarding with the cap " +
     "(lateChargeAmount(basis, pct, cap), latecharges.ts:40-43), refund what was collected above it, and " +
@@ -282,6 +353,7 @@ export const D42: DefectDefinition = {
   boarded: (t) => ({ ...t, escrowed: false }),
   trueValue: () => "true",
   plantedValue: () => "false",
+  history: null,
   handling:
     "Board the loan escrowed (loan_terms.escrowed = true), as the note and the prior servicer's escrow file say. " +
     "Pay every tax and insurance bill that fell due since boarding from the escrow account, advancing what it " +
@@ -347,6 +419,7 @@ export const D35: DefectDefinition = {
   boarded: (t) => ({ ...t, lossmit_carried: false }),
   trueValue: () => "true",
   plantedValue: () => "false",
+  history: null,
   handling:
     "Board the plan as the prior servicer had it: lm_in_process Y, and the case opened from the loss-mitigation " +
     "file (1.7). Suspend every late charge on an installment the plan covers and waive them when it completes " +
@@ -403,6 +476,7 @@ export const D01: DefectDefinition = {
   }),
   trueValue: (d) => d.arm!.initial_cap_pct,
   plantedValue: (d) => d.arm!.periodic_cap_pct,
+  history: null,
   handling:
     "Board the note's first-change cap. Recompute the first rate change on the note's terms (computeArmAdjustment " +
     "and its verifier), re-bill from it, refund any interest charged above the note's rate, and send the corrected " +
@@ -459,6 +533,7 @@ export const D12: DefectDefinition = {
   boarded: (t) => ({ ...t, scra_carried: false }),
   trueValue: () => "true",
   plantedValue: () => "false",
+  history: null,
   handling:
     "Board the protection: scra_active Y, and the 6 % cap from the first installment after the call to duty. Bill " +
     "the capped payment, refund the interest above 6 % charged since boarding, and waive every late charge " +
@@ -518,6 +593,7 @@ export const D37: DefectDefinition = {
   boarded: (t) => ({ ...t, bankruptcy_carried: false }),
   trueValue: () => "true",
   plantedValue: () => "false",
+  history: null,
   handling:
     "Board the case: bk_active Y with its chapter, number and filing date, and honor the stay. Stop collection: no " +
     "call, and no charge on a post-petition installment but one that accrues suspended (2.7 rule 3(iv)); reverse " +
@@ -582,6 +658,7 @@ export const D18: DefectDefinition = {
   boarded: (t, d) => ({ ...t, mi_termination_date: plantedMiDate(d) }),
   trueValue: (d) => miTerminationDate(d),
   plantedValue: (d) => plantedMiDate(d),
+  history: null,
   handling:
     "Board the date the initial amortization schedule gives on the original value (12 U.S.C. 4902(b)). End the " +
     "insurance on it if the borrower is current, stop the premium, and refund every premium collected after it " +
@@ -643,6 +720,7 @@ export const D24: DefectDefinition = {
   boarded: (t, d) => ({ ...t, phantom_installment: addMonths(d.first_due, -2) }),
   trueValue: () => null,
   plantedValue: (d) => addMonths(d.first_due, -2),
+  history: null,
   handling:
     "Hold the loan and ask the prior servicer for the history without the row; board from the corrected one. On a " +
     "loan already boarded, apply every receipt to its own installment again, reverse the late charges the shift " +
@@ -699,10 +777,11 @@ export const D25: DefectDefinition = {
   applies: (c) => misapplicable(c).length > 0,
   units: (c) => misapplicable(c).length,
   boarded: (t) => t,
-  history: (c) => ({ misapplied: misapplied(c).installments[0]!.due }),
+  priorHistory: (c) => ({ misapplied: misapplied(c).installments[0]!.due }),
   trueValue: (_d, c) => String(misapplied(c).installments[0]!.principal),
   plantedValue: () => "0",
   rootRow: (c) => ({ row: misapplied(c).id, on: misapplied(c).on }),
+  history: null,
   handling:
     "Ask the prior servicer to reverse the misapplication: apply the principal, take it out of escrow, and correct " +
     "the balance on the tape, the trial balance and the investor's position. Recompute every later split, analysis " +
@@ -759,25 +838,383 @@ export const D15: DefectDefinition = {
   boarded: (t) => ({ ...t, flood_zone: "X" }),
   trueValue: (d) => floodZoneOf(d),
   plantedValue: () => "X",
+  history: null,
   handling:
     "Board the determination's zone, AE. Track the flood policy as required coverage from boarding: notify the " +
     "borrower and force-place if it lapses (12 CFR 1024.37; 42 U.S.C. 4012a(e)).",
   symptomHandling: () => "Downstream of the wrong zone: corrects when the zone is boarded.",
 };
 
-/** The registry, in the order docs/synthetic-data-defects.md ranks the first ten. */
-export const DEFECTS: Readonly<Record<string, DefectDefinition>> = {
-  "D-42": D42,
-  "D-35": D35,
-  "D-03": D03,
-  "D-01": D01,
-  "D-12": D12,
-  "D-37": D37,
-  "D-18": D18,
-  "D-24": D24,
-  "D-25": D25,
-  "D-15": D15,
+/* ── the history errors ──────────────────────────────────────────────────── */
+
+const TAX_LINES: ReadonlySet<string> = new Set(["tax_county", "tax_school"]);
+const FOREVER = "9999-12-31";
+
+/** Whether the loan is on our books and still being paid on `on`. */
+export function onOurBooks(life: LoanLife, on: PlainDate): boolean {
+  return (
+    (life.transfer_in_on === null || life.transfer_in_on <= on) &&
+    (life.payoff?.on ?? FOREVER) > on &&
+    (life.transfer_out_on ?? FOREVER) > on &&
+    life.months.some((m) => m.month === on.slice(0, 7) && m.servicer === "us")
+  );
+}
+
+/** A borrower's own payment on our books, posted as billed: the receipts a system error can be made on. */
+const drafts = (life: LoanLife) =>
+  life.receipts.filter(
+    (x) => x.servicer === "us" && x.mode === "regular" && x.channel === "borrower",
+  );
+
+/** A receipt's row as the comparison keys the payments table (`TABLES`): its day and kind, and which of that day's. */
+function paymentRow(life: LoanLife, x: { readonly on: PlainDate; readonly mode: string }): string {
+  const k = life.receipts.indexOf(x as LoanLife["receipts"][number]);
+  const before = (k < 0 ? life.receipts : life.receipts.slice(0, k)).filter(
+    (y) => y.on === x.on && y.mode === x.mode,
+  ).length;
+  return before === 0 ? `${x.on}:${x.mode}` : `${x.on}:${x.mode}#${before}`;
+}
+
+/**
+ * Two loan numbers a keystroke apart: the same length, and one digit
+ * different or two neighbors swapped. A book draws its numbers at random from
+ * a hundred million, so no two are, unless a scenario pins one
+ * (`LoanPins.servicer_loan_number`).
+ */
+export function keystrokeApart(a: string, b: string): boolean {
+  if (a.length !== b.length || a === b) return false;
+  const at = [...a].flatMap((c, i) => (c === b[i] ? [] : [i]));
+  if (at.length === 1) return true;
+  return (
+    at.length === 2 && at[1] === at[0]! + 1 && a[at[0]!] === b[at[1]!] && a[at[1]!] === b[at[0]!]
+  );
+}
+
+/** Whether a disbursements row, as the comparison names it, is a refund out of the account (an analysis's, or the payoff's). */
+const isRefundRow = (row: string) => row.startsWith("refund@") || row.startsWith("payoff_refund@");
+
+/** A vendor's figure that is the bill with its decimal point one place off: the design choice V-01 plants. */
+const DECIMAL_SHIFT = 10n;
+/** The days before a payee returns an overpayment, and before a prior servicer sends a bill on: design choices. */
+const RETURNED_AFTER_DAYS: readonly [number, number] = [45, 120];
+const SENT_ON_AFTER_DAYS: readonly [number, number] = [30, 75];
+
+const v01Handling =
+  "Ask the tax service for the bill of record: the county billed a tenth of what was paid. Book the county's " +
+  "return of the overpayment to escrow when it comes, and run the escrow account again on the right amount: the " +
+  "balance, any analysis run in between and the payment it set (12 CFR 1024.17).";
+
+/**
+ * V-01: the tax service reports a bill ten times what the county billed (its
+ * decimal point one place off), and the servicer pays it from escrow as
+ * reported. The county returns the excess 45 to 120 days later. Until then
+ * the escrow account is short by it, and an analysis that runs in between
+ * finds a shortage the borrower is billed for. The bill itself, which the
+ * analyst projects from, is the county's.
+ */
+export const V01: DefectDefinition = {
+  id: "V-01",
+  title: "A tax bill the tax service reported wrong, paid from escrow as reported",
+  produces: null,
+  requires_transfer: false,
+  package: null,
+  table: "escrow_bills",
+  field: "amount_cents",
+  eligible: (d) => d.escrowed && d.line_specs.some((l) => l.basis === "tax"),
+  boarded: (t) => t,
+  trueValue: () => null,
+  plantedValue: () => null,
+  history: {
+    partnered: false,
+    candidates: (life) =>
+      life.disbursements
+        .filter((x) => x.kind === "bill" && TAX_LINES.has(x.line) && x.servicer === "us")
+        .map((x) => ({ key: x.id, on: x.on })),
+    make: ({ loans, index, key, r }) => {
+      const x = loans[index]!.disbursements.find((y) => y.id === key);
+      if (!x) return null;
+      const paid = x.amount * DECIMAL_SHIFT;
+      return [
+        {
+          index,
+          error: {
+            kind: "bill_amount",
+            line: x.line as HistoryBillLine,
+            due: x.on,
+            paid,
+            returned_on: addDays(x.on, r.int(...RETURNED_AFTER_DAYS)),
+          },
+          root: {
+            file_or_table: "escrow_bills",
+            field: "amount_cents",
+            row: `${x.line}@${x.on}`,
+            on: x.on,
+            true_value: String(x.amount),
+            planted_value: String(paid),
+          },
+        },
+      ];
+    },
+  },
+  handling: v01Handling,
+  symptomHandling: (table, field, row) => {
+    if (table === "disbursements" && isRefundRow(row))
+      return "A refund from the escrow account that the drained balance moved: redo it from the account on the right balance.";
+    if (table === "disbursements" && row.startsWith("returned@"))
+      return "The county's return of the overpayment: book it to escrow.";
+    if (table === "disbursements" && field === "amount")
+      return "The bill was paid at the vendor's figure, ten times the county's: the county is owed nothing more, and the excess comes back to escrow.";
+    if (table === "disbursements")
+      return "The escrow balance is short by the overpayment until the county returns it.";
+    if (table === "escrow_analyses")
+      return "The analysis ran on a balance the overpayment drained: run it again on the right balance, and refund or re-spread the difference.";
+    if (table === "loan_installments")
+      return "Billed at the escrow payment the drained analysis set: rebill from the corrected analysis.";
+    if (table === "payments")
+      return "The payment was applied at the escrow payment the drained analysis set: re-apply it as the corrected one would.";
+    if (table === "metro2")
+      return "The furnished record moved because the payment did: correct it and furnish the correction.";
+    return "Downstream of the vendor's wrong tax amount: corrects when the bill is paid at the county's figure.";
+  },
 };
+
+/**
+ * V-02: the first hazard renewal after a transfer is billed to the prior
+ * servicer, the mortgagee the carrier still has on the policy, and reaches
+ * the servicer 30 to 75 days late, when the prior servicer sends it on. It is
+ * paid then. Until then the escrow account holds the premium, and an analysis
+ * that runs in between finds it there. Whether the policy lapsed in the gap is
+ * the carrier's, and is not modeled.
+ */
+export const V02: DefectDefinition = {
+  id: "V-02",
+  title: "A hazard renewal billed to the prior servicer, and paid late when it is sent on",
+  produces: null,
+  requires_transfer: true,
+  package: null,
+  table: "insurance_policies",
+  field: "mortgagee_clause",
+  eligible: (d) => d.escrowed && d.line_specs.some((l) => l.basis === "hazard"),
+  boarded: (t) => t,
+  trueValue: () => null,
+  plantedValue: () => null,
+  history: {
+    partnered: false,
+    candidates: (life) => {
+      const t = life.transfer_in_on;
+      if (t === null) return [];
+      const first = life.disbursements.find(
+        (x) => x.kind === "bill" && x.line === "hazard" && x.servicer === "us" && x.on >= t,
+      );
+      return first && daysBetween(t, first.on) <= 366 ? [{ key: first.id, on: first.on }] : [];
+    },
+    make: ({ loans, index, key, r }) => {
+      const x = loans[index]!.disbursements.find((y) => y.id === key);
+      if (!x) return null;
+      return [
+        {
+          index,
+          error: {
+            kind: "bill_late",
+            line: "hazard",
+            due: x.on,
+            paid_on: addDays(x.on, r.int(...SENT_ON_AFTER_DAYS)),
+          },
+          root: {
+            file_or_table: "insurance_policies",
+            field: "mortgagee_clause",
+            row: `hazard@${x.on}`,
+            on: x.on,
+            true_value: "servicer",
+            planted_value: "prior_servicer",
+          },
+        },
+      ];
+    },
+  },
+  handling:
+    "Have the carrier move the mortgagee clause and the billing to the servicer the notice of transfer names, " +
+    "confirm the policy did not lapse, and pay the renewal from escrow by its due date: a lapse or a charge the late " +
+    "payment caused is the servicer's to make good.",
+  symptomHandling: (table, field, row) => {
+    if (table === "disbursements" && isRefundRow(row))
+      return "A refund from the escrow account that the unpaid premium moved: redo it with the renewal paid.";
+    if (table === "disbursements" && field === "on")
+      return "The renewal was paid when the prior servicer sent the bill on, after it was due: confirm coverage stayed in force.";
+    if (table === "disbursements" || table === "month_ends" || table === "tape")
+      return "The escrow account held the premium while the renewal went unpaid.";
+    if (table === "escrow_analyses")
+      return "The analysis counted a premium that was due and not yet paid as money in the account: run it again with the renewal paid.";
+    if (table === "loan_installments" || table === "payments")
+      return "Billed or applied at the escrow payment that analysis set: rebill from the corrected one.";
+    if (table === "metro2")
+      return "The furnished record moved because the payment did: correct it and furnish the correction.";
+    return "Downstream of the renewal billed to the prior servicer: corrects when it is paid on time.";
+  },
+};
+
+/**
+ * D-28, a system's form of it: a borrower's payment drafted twice, the same
+ * amount on the same day, and the second posted by the waterfall as any
+ * payment is: to the next installment, paid ahead. Nothing in the history
+ * returns it.
+ */
+export const D28: DefectDefinition = {
+  id: "D-28",
+  title: "A borrower's payment drafted twice",
+  produces: null,
+  requires_transfer: false,
+  package: null,
+  table: "payments",
+  field: "*",
+  eligible: () => true,
+  boarded: (t) => t,
+  trueValue: () => null,
+  plantedValue: () => null,
+  history: {
+    partnered: false,
+    candidates: (life) => drafts(life).map((x) => ({ key: x.id, on: x.on })),
+    make: ({ loans, index, key }) => {
+      const x = loans[index]!.receipts.find((y) => y.id === key);
+      if (!x) return null;
+      const id = `${x.id}-DUP`;
+      return [
+        {
+          index,
+          error: { kind: "receipt_twice", receipt: x.id },
+          root: {
+            file_or_table: "payments",
+            field: "*",
+            row: paymentRow(loans[index]!, { on: x.on, mode: "duplicate" }),
+            on: x.on,
+            true_value: null,
+            planted_value: toJsonLine({ id, on: x.on, amount: x.amount, duplicate_of: x.id }),
+          },
+        },
+      ];
+    },
+  },
+  handling:
+    "Return the second draft to the borrower at once: they authorized one. Reverse its posting, so the installment " +
+    "it paid ahead is due again as the borrower expects, and correct what it moved.",
+  symptomHandling: (table) => {
+    if (table === "loan_installments")
+      return "Paid ahead by the second draft: due again once it is returned.";
+    if (table === "payments")
+      return "Applied around the second draft: re-apply as if it had never been taken.";
+    if (table === "borrower_events")
+      return "The borrower's own payment found its installment already paid by the second draft.";
+    if (table === "metro2")
+      return "The furnished record moved because the second draft did: correct it and furnish the correction.";
+    return "Downstream of the second draft: corrects when it is returned.";
+  },
+};
+
+/**
+ * D-25, a system's form of it, registered as `D-25/wrong-loan` beside the
+ * prior servicer's split: a payment keyed to a loan number a keystroke
+ * from the borrower's, and posted to the loan that has that number. The
+ * borrower's loan never receives it, so the installment it paid is open and
+ * runs late. The other loan's borrower, who knows nothing of it, pays as
+ * billed, so that loan is paid ahead. Nothing in the history moves it back:
+ * the catalog's reversal weeks later is a correction cashiering has no engine
+ * for. Both loans carry a root cause.
+ */
+export const D25_WRONG_LOAN: DefectDefinition = {
+  id: "D-25",
+  form: "D-25/wrong-loan",
+  title: "A payment posted to a neighboring loan number",
+  produces: null,
+  requires_transfer: false,
+  package: null,
+  table: "payments",
+  field: "*",
+  eligible: () => true,
+  boarded: (t) => t,
+  trueValue: () => null,
+  plantedValue: () => null,
+  history: {
+    partnered: true,
+    candidates: (life) => drafts(life).map((x) => ({ key: x.id, on: x.on })),
+    make: ({ loans, index, key, partner }) => {
+      const a = loans[index]!;
+      const x = a.receipts.find((y) => y.id === key);
+      if (!x) return null;
+      const number = a.draw.servicer_loan_number;
+      const lands = (j: number) =>
+        j !== index &&
+        keystrokeApart(number, loans[j]!.draw.servicer_loan_number) &&
+        onOurBooks(loans[j]!, x.on);
+      const j =
+        partner !== null
+          ? lands(partner)
+            ? partner
+            : null
+          : (loans.map((_, k) => (index + 1 + k) % loans.length).find(lands) ?? null);
+      if (j === null) return null;
+      const b = loans[j]!;
+      const id = `${x.id}-MIS`;
+      return [
+        {
+          index,
+          error: { kind: "receipt_elsewhere", receipt: x.id, to: b.loan_id },
+          root: {
+            file_or_table: "payments",
+            field: "*",
+            row: paymentRow(a, x),
+            on: x.on,
+            true_value: toJsonLine({ id: x.id, on: x.on, amount: x.amount, loan: number }),
+            planted_value: null,
+          },
+        },
+        {
+          index: j,
+          error: { kind: "receipt_from", id, on: x.on, amount: x.amount, from: a.loan_id },
+          root: {
+            file_or_table: "payments",
+            field: "*",
+            row: paymentRow(b, { on: x.on, mode: "misposted" }),
+            on: x.on,
+            true_value: null,
+            planted_value: toJsonLine({ id, on: x.on, amount: x.amount, keyed_from: number }),
+          },
+        },
+      ];
+    },
+  },
+  handling:
+    "Move the payment to the loan it was for, as of the day it was received: reverse it on the loan it was posted " +
+    "to, and whatever it paid there; post it to the borrower who sent it, with no late charge for the days it was " +
+    "missing; and correct what both loans furnished to the credit bureaus.",
+  symptomHandling: (table) => {
+    if (table === "fees" || table === "late_charge_runs")
+      return "A late charge on a payment that was made and posted elsewhere: waive it.";
+    if (table === "loan_installments")
+      return "Open, or paid ahead, because the payment sat on the wrong loan: as of the day it was received, the installment it was for is paid.";
+    if (table === "payments")
+      return "Applied around the payment on the wrong loan: re-apply once it is moved.";
+    if (table === "month_ends" || table === "tape" || table === "metro2")
+      return "Reported late, or paid ahead, because the payment sat on the wrong loan: correct it and furnish the correction.";
+    return "Downstream of the payment posted to the wrong loan: corrects when it is moved.";
+  },
+};
+
+/** The bill lines a history error names. */
+type HistoryBillLine = Extract<HistoryError, { kind: "bill_amount" }>["line"];
+
+/** The key the registry holds a definition under: its form where it has one, its id otherwise. */
+export const defectKey = (def: Pick<DefectDefinition, "id" | "form">): string => def.form ?? def.id;
+
+/**
+ * The registry: the first ten in the order docs/synthetic-data-defects.md ranks them, then the errors made in the
+ * history after boarding.
+ */
+export const DEFECTS: Readonly<Record<string, DefectDefinition>> = Object.fromEntries(
+  [D42, D35, D03, D01, D12, D37, D18, D24, D25, D15, V01, V02, D28, D25_WRONG_LOAN].map((def) => [
+    defectKey(def),
+    def,
+  ]),
+);
 
 export function defectById(id: string): DefectDefinition {
   const def = DEFECTS[id];
@@ -785,6 +1222,7 @@ export function defectById(id: string): DefectDefinition {
     throw new RangeError(`no defect ${id}; the registry plants ${Object.keys(DEFECTS).join(", ")}`);
   return def;
 }
+
 /* ── the comparison ──────────────────────────────────────────────────────── */
 
 type Row = Readonly<Record<string, unknown>>;
@@ -793,6 +1231,14 @@ interface Table {
   readonly rows: (l: LoanLife) => readonly Row[];
   readonly key: (r: Row) => string;
   readonly date: (r: Row) => PlainDate;
+  /** Fields that are not compared: a number the history assigns in order, which says nothing about the row. */
+  readonly ignore?: readonly string[];
+  /**
+   * The row as a label names it, when its key is not a name a reader would
+   * know it by: read off the clean history's row where there is one, and the
+   * twin's where there is not. `key` is the row's key, with its occurrence.
+   */
+  readonly rowName?: (r: Row, key: string) => string;
 }
 
 /** A value as a label carries it: scalars as they print, rows and lists as JSON, nothing as null. */
@@ -820,8 +1266,11 @@ export const TABLES: readonly Table[] = [
   {
     name: "payments",
     rows: (l) => asRows(l.receipts),
-    key: (r) => String(r["id"]),
+    // By the day and the kind of payment, not the id: a receipt is numbered as it posts, so a payment one history
+    // never sends (a draft taken twice leaves the next one nothing to pay) would renumber every receipt after it.
+    key: (r) => `${String(r["on"])}:${String(r["mode"])}`,
     date: (r) => r["on"] as PlainDate,
+    ignore: ["id"],
   },
   {
     name: "fees",
@@ -838,8 +1287,15 @@ export const TABLES: readonly Table[] = [
   {
     name: "disbursements",
     rows: (l) => asRows(l.disbursements),
-    key: (r) => String(r["id"]),
+    // Not by the id, which is numbered as the row is written: a refund one history makes and the other does not
+    // (an analysis that found a surplus in one and a shortage in the other) would renumber every row after it. A bill
+    // is its line's next, which a bill paid late or at the wrong amount still is, and is named by the day it was
+    // paid in the clean history, its due date; any other row is named by its kind and its day.
+    key: (r) =>
+      r["kind"] === "bill" ? String(r["line"]) : `${String(r["kind"])}@${String(r["on"])}`,
+    rowName: (r, key) => (r["kind"] === "bill" ? `${String(r["line"])}@${String(r["on"])}` : key),
     date: (r) => r["on"] as PlainDate,
+    ignore: ["id"],
   },
   {
     name: "escrow_analyses",
@@ -942,7 +1398,7 @@ export function symptomLabels(
     loan: clean.loan_id,
     defect_id: def.id,
     ...x,
-    expected_handling: def.symptomHandling(x.file_or_table, x.field),
+    expected_handling: def.symptomHandling(x.file_or_table, x.field, x.row),
     root_cause: false,
   }));
 }
@@ -961,6 +1417,7 @@ export function differences(clean: LoanLife, twin: LoanLife): Difference[] {
     for (const k of keys) {
       const ra = A.get(k);
       const rb = B.get(k);
+      const row = t.rowName ? t.rowName((ra ?? rb)!, k) : k;
       const label = (
         field: string,
         tv: string | null,
@@ -969,7 +1426,7 @@ export function differences(clean: LoanLife, twin: LoanLife): Difference[] {
       ): Difference => ({
         file_or_table: t.name,
         field,
-        row: k,
+        row,
         on,
         true_value: tv,
         planted_value: pv,
@@ -979,6 +1436,7 @@ export function differences(clean: LoanLife, twin: LoanLife): Difference[] {
         continue;
       }
       for (const f of new Set([...Object.keys(ra), ...Object.keys(rb)])) {
+        if (t.ignore?.includes(f)) continue;
         const va = s(ra[f]);
         const vb = s(rb[f]);
         if (va !== vb) out.push(label(FIELD_NAMES[t.name]?.[f] ?? f, va, vb, t.date(rb)));

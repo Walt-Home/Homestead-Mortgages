@@ -102,8 +102,9 @@ exactly, and planted warnings must be found while extra ones are allowed
 (`AS/src/domain/boarding/demo-batch.test.ts:80-86`). Where a ported engine
 exists, the engine grades the money.
 
-**What is planted so far.** All ten of the first ten below, in `DEFECTS`
-(`ENV/life/defects.ts`), the registry each later wave extends. Each is
+**What is planted so far.** Eleven of the 47, in `DEFECTS`
+(`ENV/life/defects.ts`), the registry each later wave extends, and two
+vendor errors that are not among them. All ten of the first ten below are
 planted in the generator's twin and in the twin's transfer package
 (`ENV/life/transfer-package.ts`), and labeled: the planted value is the root,
 and every difference it makes, in the history, on the month-end tape and in
@@ -142,6 +143,28 @@ takes the first receipt. That is the defect's harm this page's "What should
 catch it" leaves out: an unpaid row is not counted as a receipt but as an
 installment. The boarding-triage environment grades a reviewer on all ten,
 each root apart from its symptoms (docs/environments.md).
+
+Three more, and D-25 again in its other form, are errors made in the
+ten-year history after boarding, on an event the clean history had, so each
+twin is the clean history until the error (docs/environments.md, "The life
+generator"):
+
+- D-28 as a system error: a borrower's payment drafted twice, the second
+  posted by the waterfall;
+- D-25 as a system error: a payment keyed to a loan number a keystroke away
+  and posted to that loan, labeled on both. The registry holds it as
+  `D-25/wrong-loan`, apart from the prior servicer's split above, and its
+  labels name D-25. The catalog's reversal weeks later is not modeled,
+  because cashiering has no engine for it;
+- V-01, a vendor's: a tax bill the tax service reported at ten times the
+  county's, paid from escrow, the excess returned later;
+- V-02, a vendor's: the first hazard renewal after a transfer billed to the
+  prior servicer, and paid late when it is sent on.
+
+Staff errors that need the contacts layer, such as a promise not tracked or
+a complaint not logged, are not planted yet. The tape-intake environment
+grades a reviewer on V-01, V-02 and D-25's wrong loan, the three that show
+on a partner's monthly tape (docs/environments.md, "tape-intake").
 
 **Source keys**
 

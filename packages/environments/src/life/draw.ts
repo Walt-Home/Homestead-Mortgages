@@ -156,6 +156,12 @@ export interface LoanPins {
   /** Pin both habit multipliers at 1, or at the values given. */
   readonly lateness?: number;
   readonly fragility?: number;
+  /**
+   * The servicer's loan number, in place of the one drawn (which is still
+   * drawn, so nothing after it moves). A scenario pins one to put two loans a
+   * keystroke apart, where a mistyped payment lands (D-25).
+   */
+  readonly servicer_loan_number?: string;
 }
 
 /* ── small draws ─────────────────────────────────────────────────────────── */
@@ -521,7 +527,7 @@ export function drawLoan(
   return {
     loan_id: id,
     index: i,
-    servicer_loan_number: servicerNo,
+    servicer_loan_number: pins.servicer_loan_number ?? servicerNo,
     prior_servicer_loan_number: priorNo,
     fnma_loan_number: fnma,
     min,

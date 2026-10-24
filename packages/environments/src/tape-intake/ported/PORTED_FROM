@@ -1,0 +1,33 @@
+The partner-book reader's m3-v1 profile and its parsers, ported for the
+tape-intake environment's date tool and the desk's reading of a delivery.
+
+Source       packages/partner-book/src/m3-v1.ts, and excelSerialToIsoDate from
+             packages/partner-book/src/vendored/xlsx.ts (vendored from the
+             servicing app's repository; packages/partner-book/src/vendored/VENDORED_FROM)
+Ported       2026-10-23
+
+m3-v1.ts here is that file byte for byte except one import: the profile takes
+excelSerialToIsoDate from the vendored workbook reader, which imports
+node:zlib, and an environment runs in the browser playground, whose bundle
+stops on any node: module but three. So the import names ./xlsx-serial.js,
+which holds the reader's "Excel serial dates" section (MS_PER_DAY and the
+function) copied character for character under a comment that says so. The
+kernel imports are the same in both packages. Nothing else may be edited:
+src/__tests__/tape-intake.test.ts compares m3-v1.ts with its source but for
+that import, and the section with the vendored file's, and fails on any
+difference. Lint and Prettier skip this directory for the reason they skip
+the vendored trees.
+
+What each is for. `parseDateIso` is the parse_date tool: what the reader
+reads a date cell as, on a given day. `profileHeadersPresent` and
+`mapTapeRow` are the desk's reading of a delivery (desk.ts): the required
+headers it refuses a file for, and each row's exceptions, as parseBook in
+packages/partner-book/src/book.ts gathers them. A test reads every task's
+delivery with readBook itself and holds the desk's reading to it.
+
+Not ported: book.ts (its node:crypto hash and @hm/shared/portfolio's schema,
+which imports node:crypto too) and tabular.ts. The delivery is CSV the life
+generator wrote, which the tape-intake tools split themselves.
+
+To take a change from the reader, copy m3-v1.ts again and rewrite the same
+import.

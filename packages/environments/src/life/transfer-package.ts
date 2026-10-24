@@ -856,7 +856,7 @@ export function writeTransferPackage(
   // The clean twins' package, which every label is read against.
   const cleanWritten = writeFiles(
     loans.map((l, k) => {
-      const early = planted[k]!.defects.filter((id) => defectById(id).history);
+      const early = planted[k]!.defects.filter((id) => defectById(id).priorHistory);
       if (early.length && !l.clean)
         throw new RangeError(
           `${early.join(", ")} on ${l.life.loan_id} changes the prior servicer's books: the package needs the clean twin's history to label it`,
@@ -891,7 +891,7 @@ export function writeTransferPackage(
         planted_value: c.planted,
         expected_handling: root
           ? def.handling
-          : `A symptom of ${def.id}: ${def.symptomHandling(c.file, c.field)}`,
+          : `A symptom of ${def.id}: ${def.symptomHandling(c.file, c.field, c.row)}`,
         root_cause: root,
         produces: def.produces,
         handling: p.handling,

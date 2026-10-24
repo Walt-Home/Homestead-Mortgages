@@ -26,6 +26,7 @@ import {
   CAP_COLUMN,
   CORRESPONDENCE_FILE,
   DEFECTS,
+  defectKey,
   LAYOUT_FILES,
   PACKAGE_FILES,
   TAPE_HEADER,
@@ -192,7 +193,7 @@ describe("the transfer package", () => {
 });
 
 describe("the defect registry", () => {
-  it("holds the first ten, each with its place in a package and what the gate does with it", () => {
+  it("holds the first ten, each with its place in a package and what the gate does with it, and the history errors", () => {
     expect(Object.keys(DEFECTS)).toEqual([
       "D-42",
       "D-35",
@@ -204,17 +205,27 @@ describe("the defect registry", () => {
       "D-24",
       "D-25",
       "D-15",
+      "V-01",
+      "V-02",
+      "D-28",
+      "D-25/wrong-loan",
     ]);
-    for (const d of Object.values(DEFECTS)) {
+    // Each is held under its own key, its id or its form: D-25's two forms carry one id.
+    for (const [k, d] of Object.entries(DEFECTS)) expect(defectKey(d)).toBe(k);
+    expect(DEFECTS["D-25/wrong-loan"]!.id).toBe("D-25");
+    // The ten that enter at boarding or before it sit in the package; the history errors are made after it, and sit
+    // in none.
+    const boarded = Object.values(DEFECTS).filter((d) => d.history === null);
+    for (const d of Object.values(DEFECTS))
+      expect(d.history === null, defectKey(d)).toBe(d.package !== null);
+    for (const d of boarded) {
       expect(d.package?.file).toBe(
         d.id === "D-24" || d.id === "D-25" ? "payment_history.csv" : "boarding_tape.final.csv",
       );
       expect(d.package?.gate).toMatch(/^Nothing\./);
       expect(d.package?.cell === null).toBe(d.id === "D-24" || d.id === "D-25");
     }
-    expect(
-      Object.values(DEFECTS).map((d) => [d.id, d.package!.handling, d.requires_transfer]),
-    ).toEqual([
+    expect(boarded.map((d) => [d.id, d.package!.handling, d.requires_transfer])).toEqual([
       ["D-42", "correct", true],
       ["D-35", "correct", true],
       ["D-03", "query", false],
@@ -226,6 +237,9 @@ describe("the defect registry", () => {
       ["D-25", "query", true],
       ["D-15", "correct", true],
     ]);
+    expect(() => writeTransferPackage([{ life: book.clean.loans[0]!, defects: ["V-01"] }])).toThrow(
+      /V-01 has no place in a transfer package/,
+    );
     expect(DEFECTS["D-42"]!.produces).toBe("D-31");
     expect(DEFECTS["D-42"]!.requires_transfer).toBe(true);
     expect(() =>

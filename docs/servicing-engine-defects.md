@@ -3199,11 +3199,15 @@ index date 2026-09-17).
   - `items` from the loan's escrow lines and bills through `projectLines`
     (domain/escrow/analysis.ts:168);
   - `projected_actual_cents` as R6 states it;
-  - `old_payment_cents` as the escrow payment billed on the effective date,
-    `escrowPortionOn(facts.terms, effective_on)`. That is
-    `loan_terms.escrow_payment_cents`, or 3.6's running spread
-    (domain/operations-runtime/installments.ts:57-61;
-    domain/escrow/ops-3-6.ts:113-117);
+  - `old_payment_cents` as the escrow payment on the loan's terms for the
+    first installment due after the run date,
+    `escrowPortionOn(facts.terms, <that due date>)`. That is
+    `loan_terms.escrow_payment_cents`, or 3.6's running spread at its level
+    amount (domain/operations-runtime/installments.ts:57-61;
+    domain/escrow/ops-3-6.ts:113-117). Not on `effective_on`: by the new
+    payment's effective date last year's spread has usually stepped down,
+    which is the reading escrow-review 1.0.0 had wrong (docs/decisions.md,
+    "Life 1.2.0");
   - the computation year from the escrow account, and the days delinquent
     from the loan's counters.
 

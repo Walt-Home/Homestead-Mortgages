@@ -284,6 +284,10 @@ export interface ProfilePins {
    * sent, whatever the rate: an inbound call that reaches an agent, the borrower on the line.
    */
   readonly escrow_call?: boolean;
+  /** How the borrower talks on the phone, in place of the drawn manner (the draw is still made). */
+  readonly style?: ContactProfile["style"];
+  /** A multiple of the chance a handled call carries a complaint: a borrower with a grievance. */
+  readonly complaint_multiplier?: number;
 }
 
 /** The cadence's state over one delinquency, kept so a reader can hold the attempts to it. */
@@ -312,6 +316,11 @@ export interface LoanContacts {
   readonly promises: readonly PromiseRecord[];
   readonly bankruptcy: BankruptcyCase | null;
   readonly cadence: readonly CadenceEpisode[];
+  /**
+   * Promises a call made that nobody recorded (S-01, staff.ts): the borrower said them and the agent noted them, and
+   * no promise record was written. Present only on a twin that carries the error; the call's words come from here.
+   */
+  readonly unrecorded_promises?: readonly PromiseRecord[];
 }
 
 /* ── transcripts ─────────────────────────────────────────────────────────── */

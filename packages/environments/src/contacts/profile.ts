@@ -118,7 +118,7 @@ export function drawProfile(r: Rng, life: LoanLife, pins: ProfilePins = {}): Con
           ? { name: spouseName, authorized: spouseAuthorized }
           : null,
     ssn_last4: d.parties.map((_, i) => ssn[i]!),
-    style,
+    style: pins.style ?? style,
     debt_collector: atTransfer !== undefined && atTransfer.days_delinquent >= 30,
   };
 }

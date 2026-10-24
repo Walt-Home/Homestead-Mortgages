@@ -348,9 +348,15 @@ export function notesFor(
     if (c.mode === "call" && kind && kind !== "voicemail" && c.human_agent) {
       const plan = planCall(life, full, c, centerKey);
       const r = rngFor(`${lk}/${c.id}`);
+      // A complaint the agent did not log (S-02's twin) is not in the agent's note either: the note is written as
+      // C-04's is, from the call's turns with the complaint left out of what the agent writes down.
+      const noted: CallPlan =
+        c.complaint_voiced && !c.complaint_logged
+          ? { ...plan, needs: { ...plan.needs, complaint: false } }
+          : plan;
       let text = inHand(
         r,
-        fillFigures(writer.callNote(plan, writer.callTurns(plan)), plan, c.human_agent),
+        fillFigures(writer.callNote(noted, writer.callTurns(plan)), noted, c.human_agent),
         c.human_agent,
       );
       let copied: string | null = null;

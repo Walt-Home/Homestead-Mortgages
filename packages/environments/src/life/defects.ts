@@ -38,8 +38,9 @@
  * and the engines' from there. Its root cause is the record the error wrote
  * (the vendor's bill, the carrier's mortgagee clause, the second draft, the
  * payment on the wrong loan), and D-25's reaches two loans, each with a root.
- * Staff errors that need the contacts layer (a promise not tracked, a
- * complaint not logged) are not here.
+ * Staff errors, which need the contacts layer (S-01, a promise not tracked,
+ * and S-02, a complaint not logged), are planted the same way by the contact
+ * center (`plantStaffErrors`, contacts/staff.ts), not here.
  *
  * The catalog gives D-25 two forms, a split that puts a payment's principal
  * into escrow and a receipt posted to the wrong loan, and the registry plants

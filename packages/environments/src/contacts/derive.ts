@@ -927,17 +927,20 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     if (promise) promiseWindows.push({ from: promise.made_on, to: promise.pay_by });
     if (unrecorded)
       unrecordedWindows.push({ from: unrecorded.made_on, minute, to: unrecorded.pay_by });
+    // A complaint nobody logged is escalated by nobody (S-02's twin): the call is dispositioned as it would have been
+    // without the complaint, by the same draw, but that a transfer, which would change its words, is a referral. The
+    // issue stays open, so the follow-ups below are drawn for it as for an escalated call.
     const resolution: Resolution = !live
       ? "unresolved"
       : promise
         ? "promise_recorded"
-        : complaint
+        : complaint && !unlogged
           ? "escalated"
           : unrecorded
             ? // The call is dispositioned as one that records nothing, which leaves its words as they were.
               "information_provided"
             : reason === "hardship" || reason === "disaster_assistance"
-              ? uRes < 0.5
+              ? uRes < 0.5 && !unlogged
                 ? "transferred"
                 : "referred_lossmit"
               : reason === "late_fee"
@@ -1217,8 +1220,13 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
   for (const x of [...drafts]) {
     if (x.direction !== "inbound" || x.mode !== "call" || x.outcome !== "conversation" || !x.reason)
       continue;
+    // A complaint voiced and not logged on a call that took no promise (S-02's twin; never on a clean history) leaves
+    // its issue open as the escalation it would have been.
     if (
-      !["pending_documents", "unresolved", "escalated", "callback_scheduled"].includes(x.resolution)
+      !["pending_documents", "unresolved", "escalated", "callback_scheduled"].includes(
+        x.resolution,
+      ) &&
+      !(x.complaint_voiced && !x.complaint_logged && x.promise === null)
     )
       continue;
     const r = rngFor(`${lk}/fu/${x.on}/${x.seq}`);

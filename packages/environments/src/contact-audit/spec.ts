@@ -278,7 +278,8 @@ function complaintHistory(o: {
   const call = inboundCall(20, "2027-03-24", "11:30", {
     reason: "late_fee",
     issue,
-    resolution: "escalated",
+    // A complaint nobody logged is escalated by nobody: the call is dispositioned as an ordinary one.
+    resolution: o.logged ? "escalated" : "information_provided",
     complaint_logged: o.logged,
   });
   const later = o.again
@@ -286,7 +287,7 @@ function complaintHistory(o: {
         inboundCall(21, o.again, "09:40", {
           reason: "late_fee",
           issue: o.elsewhere ? "late_fee:2027-04" : issue,
-          resolution: "escalated",
+          resolution: o.elsewhere ? "escalated" : "information_provided",
           complaint_logged: o.elsewhere ?? false,
         }),
       ]

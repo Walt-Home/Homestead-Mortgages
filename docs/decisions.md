@@ -8760,7 +8760,7 @@ dialer not ceased for the promise, a kept promise never marked, a broken one
 never followed up, no case, no acknowledgment and no written answer for the
 complaint, and the borrower calling about it again.
 
-**Three things the first build got wrong.**
+**Four things the first build got wrong.**
 
 - The contact center keeps a call from taking a promise when one is pending
   within three weeks, and it decides that in the order calls are drawn, not
@@ -8775,6 +8775,17 @@ complaint, and the borrower calling about it again.
   once the first was unrecorded, so it was no longer escalated, and the
   follow-up S-02 was asked for was never made. S-02 is not made there, and
   the planter says why.
+- An unlogged complaint's call kept the disposition a logged one gets,
+  "escalated", and so did the call raising it again. "Escalated and not
+  logged" was a tenth of a call in a clean window and one or two in every
+  window with S-02, so a reviewer who read no transcript found the root by
+  its row: reporting it passed 78 of the 200 held-out windows, 32 of the 50
+  with S-02 alone. Nobody escalates what nobody logged: the call is
+  dispositioned as its reason would have it without the complaint, by the
+  same draw, and its issue is left open as an escalation's is, so the
+  follow-ups drawn for it do not move. The same policy now passes 48, below
+  submitting nothing, and the held-out pin moved with it, before any model
+  ran.
 
 **The complaint log is a view, so no clean center moved.** Spec 4.5 puts
 complaints in a case-management system beside the contact log, acknowledged
@@ -8799,14 +8810,15 @@ complaint phrases on any line, whoever the recognizer labeled.
 
 **The suite, and what it measures.** Four plans in turn (clean, S-01, S-02,
 both), 50 of each in the held-out suite (seed 1, 200 windows), pinned at
-`4b8245f7…`. A draw is kept only when the reference finds exactly the
+`710237c2…`. A draw is kept only when the reference finds exactly the
 labels; 103 of 200 held-out windows are first draws, the redraws mostly
 books with no promise and complaint within 120 days of each other, and 8
 where the recognizer hid a complaint. The floors: nothing passes the 50
 clean windows (0.438); every promise as a root, 46 (0.560); every complaint
-as a root, 51 (0.553); both, 55. The reference passes the held-out suite,
-300 training tasks and ten hand-built histories in three turns and at most
-seven tool calls. No model has run on it.
+as a root, 51 (0.553); both, 55; an S-02 root wherever a call was escalated
+and not logged, reading no transcript, 48 (0.436). The reference passes the
+held-out suite, 300 training tasks and ten hand-built histories in three
+turns and at most seven tool calls. No model has run on it.
 
 **Not in 1.0.0:** other staff errors; interpreted calls; a complaint by
 letter or e-mail; a promise or complaint the recognizer hid, which only the

@@ -219,7 +219,18 @@ describe("staff errors in the contact center", () => {
         w.complaint_voiced,
         w.complaint_logged,
       ]).toEqual([true, true, true, false]);
-      expect({ ...w, complaint_logged: true, related: c.related }).toEqual(c);
+      // Nobody logged it, so nobody escalated it: the call is dispositioned as its reason is (a late fee may be
+      // escalated anyway), never as a transfer, which would change its words.
+      expect(c.resolution === "escalated" || c.resolution === "promise_recorded").toBe(true);
+      if (c.resolution === "escalated")
+        expect(w.resolution !== "escalated" || w.reason === "late_fee").toBe(true);
+      expect(w.resolution).not.toBe("transferred");
+      expect({
+        ...w,
+        complaint_logged: true,
+        resolution: c.resolution,
+        related: c.related,
+      }).toEqual(c);
       // The call is C-04's: its acknowledgment, its note, its CMPL line, exactly as plantContactDefects leaves them.
       const c04 = plantContactDefects(center, book, [{ id: "C-04", contacts: [rootId] }]);
       expect(toJsonLine(transcriptOf(res.defective, book, rootId))).toBe(
@@ -246,6 +257,7 @@ describe("staff errors in the contact center", () => {
         false,
         null,
       ]);
+      expect(again.resolution !== "escalated" || again.reason === "late_fee").toBe(true);
       const lag = (Date.parse(again.on) - Date.parse(c.on)) / 86_400_000;
       expect(lag).toBeGreaterThanOrEqual(RAISED_AGAIN_AFTER[0]);
       expect(lag).toBeLessThanOrEqual(RAISED_AGAIN_AFTER[1] + 1);
@@ -583,6 +595,18 @@ describe("contact-audit", () => {
       passed: 55,
       mean: 0.665,
     });
+    // Reading no transcript: an S-02 root wherever a call was escalated and not logged, the first on its issue. An
+    // unlogged complaint is escalated by nobody, so this is no better than submitting nothing.
+    const byDisposition = (t: ContactAuditTask): AuditFinding[] => {
+      const issues = new Set<string>();
+      return t.contacts.flatMap((c) => {
+        if (c.resolution !== "escalated" || c.complaint_logged || !c.agent || issues.has(c.issue))
+          return [];
+        issues.add(c.issue);
+        return [{ error: "S-02", kind: "root", contact: c.id, promise: null }];
+      });
+    };
+    expect(floor(byDisposition)).toEqual({ passed: 48, mean: 0.436 });
   }, 120_000);
 
   it("can be audited from the rulebook and the tools: the reference passes the held-out suite and a training suite", async () => {
@@ -628,11 +652,19 @@ describe("contact-audit", () => {
             : f.kind === "broken_not_followed_up",
         ),
       ).toBe(true);
-    // Every window holds promises and complaints that were handled right, beside any that were not.
-    for (const t of heldTasks()) {
-      expect(t.promises.length + (t.plan.plan.includes("S-01") ? 1 : 0)).toBeGreaterThan(0);
-      expect(t.complaints.length + (t.plan.plan.includes("S-02") ? 1 : 0)).toBeGreaterThan(0);
-    }
+    // A clean window holds both anchors, a promise recorded and a complaint logged. Beside an error's root, the logs
+    // hold another of its kind in most windows, not all: the floors are what that leaves.
+    expect(ofPlan("clean").every((t) => t.promises.length > 0 && t.complaints.length > 0)).toBe(
+      true,
+    );
+    const holding = (plan: string, log: "promises" | "complaints") =>
+      ofPlan(plan).filter((t) => t[log].length > 0).length;
+    expect([
+      holding("S-01", "promises"),
+      holding("S-01+S-02", "promises"),
+      holding("S-02", "complaints"),
+      holding("S-01+S-02", "complaints"),
+    ]).toEqual([32, 46, 10, 16]);
   }, 600_000);
 
   it("keeps a draw only when it is fair to grade", () => {
@@ -705,7 +737,7 @@ describe("contact-audit", () => {
     // A change here moves every score: bump CONTACT_AUDIT_ENVIRONMENT_VERSION, then the pin. The suite is drawn
     // from the life generator and the contact center: a change to either moves it too.
     expect(sha256(heldTasks().map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"4b8245f7c86ea03e6ccbe77313d6ae883d63a2e765f65407294590ff9d712c3b"`,
+      `"710237c246faf76565cebac525cb43cfe33be0083892271ceba0fc8dff2ef272"`,
     );
   }, 120_000);
 

@@ -4197,15 +4197,20 @@ rules from there:
 - **S-02, a complaint not logged.** C-04's error at the call (the row's
   flag, the agent's acknowledgment, the note, the CMPL line), and
   everything after it: the complaint system opens no case (below), so
-  nothing acknowledges it and nobody answers it in writing. Nothing having
-  come of it, the borrower calls about it again 16 to 35 days later
+  nothing acknowledges it and nobody answers it in writing. Nobody
+  escalates it either: the call is dispositioned as its reason would have
+  it without the complaint, by the same draw (a late fee may be escalated
+  anyway; a transfer, which would change the call's words, is a
+  referral), and its issue is left open as an escalation's is, so the
+  follow-ups the clean history draws for it are drawn the same. Nothing
+  having come of it, the borrower calls about it again 16 to 35 days later
   (`RAISED_AGAIN_AFTER`, a design choice: past the 15 days a response
   takes), on the same issue, a call that voices the complaint and is not
-  logged either.
+  logged or escalated either.
 
 The complaint system is the servicing app's spec 4.5, "Complaint handling /
 UDAAP", whose blueprint names a complaint log in a case-management system
-(`AS/spec/sections/04-customer-service-borrower-communications/4-5-complaint-handling-udaap.md`).
+(`apps/servicing/spec/sections/04-customer-service-borrower-communications/4-5-complaint-handling-udaap.md`).
 `complaintLog(loan, key)` (`complaints.ts`) reads it off the contact log:
 every complaint an agent logged on a call opens a case, received on the
 call's day (an oral complaint is a complaint, 4.5 "Inputs and triggers"),
@@ -4519,8 +4524,9 @@ the complaint. Four plans in turn make nothing (the control), S-01 on the
 promise, S-02 on the complaint, or both, so the held-out suite (seed 1, 200
 windows, pinned by hash) holds 50 of each. It has 100 roots of each error,
 195 dialer attempts inside a promise's window, 50 promises kept and 50
-broken, and 100 calls raising a complaint again. A window averages 115 days (39 to 202), 18.7 contacts, 9.2 recorded
-calls, 2.2 calls with a promise and 1.8 with a complaint.
+broken, and 100 calls raising a complaint again. A window averages 116
+days, both ends counted (40 to 203), 18.7 contacts, 9.2 recorded calls, 2.2
+calls with a promise and 1.8 with a complaint.
 
 **A draw is kept only when it is fair to grade, and this is a filter.** The
 reference, reading the window as rendered, must find exactly the labels'
@@ -4543,7 +4549,15 @@ promises or fewer. Reporting every call that voices a complaint as an S-02
 root passes 51 (0.553): every S-02 window, none holding more than two other
 complaints, and a clean one whose logged complaint the recognizer hid. Both
 together pass 55. Each floor passes little beyond the windows of the one
-error it reports, a quarter of the suite.
+error it reports, a quarter of the suite, and within that quarter most of
+it, because two extra findings are allowed and the logs hold few others: a
+clean window holds both anchors, a promise recorded and a complaint logged,
+but beside an S-01 root the promise log holds another promise in 32 of the
+50 S-01 windows (46 of the 50 with both errors), and beside an S-02 root the
+complaint log holds another complaint in 10 of 50 (16 of 50). A policy that
+reads no transcript and reports an S-02 root wherever a call was escalated
+and not logged passes 48 (0.436), below submitting nothing: an unlogged
+complaint is escalated by nobody.
 
 **The proof of fairness.** The reference passes the held-out suite, 300
 training tasks (seed 11) and ten hand-built histories in at most three

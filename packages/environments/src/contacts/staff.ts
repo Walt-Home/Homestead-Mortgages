@@ -14,9 +14,12 @@
  *         promise is never marked kept; a broken one is never followed up;
  *   S-02  a complaint not logged: a complaint voiced on a call is not logged
  *         (C-04's error at the call: the row's flag, the agent's
- *         acknowledgment, the note), so the complaint system opens no case
- *         (complaints.ts), nothing acknowledges it and nobody answers it in
- *         writing; nothing having come of it, the borrower calls about it
+ *         acknowledgment, the note), and nobody escalates it: the call is
+ *         dispositioned as its reason would have it without the complaint (a
+ *         transfer, which would change its words, as a referral), its issue
+ *         left open as an escalation's is. So the complaint system opens no
+ *         case (complaints.ts), nothing acknowledges it and nobody answers it
+ *         in writing; nothing having come of it, the borrower calls about it
  *         again 16 to 35 days later, and that call is not logged either.
  *
  * The twin is derived again with the error made (`StaffOverride`,

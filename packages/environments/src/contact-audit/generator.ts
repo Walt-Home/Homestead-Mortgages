@@ -19,8 +19,10 @@
  *   - S-02: the complaint not logged;
  *   - both, on the two calls.
  *
- * Every window holds other promises and complaints, recorded and logged, so a
- * reviewer cannot report every promise or every complaint and pass.
+ * Most windows hold other promises and complaints too, recorded and logged,
+ * but not all, and two extra findings are allowed: reporting every promise or
+ * every complaint passes most windows of that one error, and
+ * docs/environments.md gives the floors and how many windows hold another.
  *
  * A draw is kept only when it is fair to grade: the reference, the rulebook as
  * code reading the window through the tools, finds exactly the labels' roots

@@ -2611,33 +2611,45 @@ analysis (`LifeMoment`):
   premium otherwise, mortgage insurance on its contract;
 - the balance on the run date, and the escrow shares and bills still to post
   before the year;
-- the delinquency, and the escrow payment billed today, which the new one
-  replaces: the escrow share of the first installment due after the run
-  date, with any shortage or credit from last year's analysis still in it.
+- the delinquency, and the escrow payment on the loan's terms today, which
+  the new one replaces: the one the terms carry for the first installment
+  due after the run date, with any shortage or credit spread from last
+  year's analysis still in it at its level amount.
 
 Beside them is the account's history: the two analyses before this one, the
 disbursements of the last 24 months, and the last twelve month-ends. The
 model finds the shortage or surplus, the new payment, its effective date
 and the months a shortage is spread over, and says whether the flag stands.
 
-The payment billed today is what the servicing app compares the new payment
-with: `loan_terms.escrow_payment_cents` carries the running spread, and the
-step-down after it is held apart
-(`apps/servicing/src/domain/escrow/ops-3-6.ts:105-117`; spec 3.6, worked
-example (a)), as Reg X's annual statement sets the new payment beside the
-current one (12 CFR 1024.17(i)(1)). 1.0.0 handed the old schedule's payment
-from the new one's effective date, after last year's spread had run out; on
-its 200 held-out tasks the billed payment differs on 154, and 15 graded
-answers change, 4 of them whether the flag stands (measured from the
-generator under life 1.1.0). 1.1.0 is drawn on life 1.2.0, and
-`escrow-review/1.0.0` is retired in `HELDOUT_SUITES`.
+The payment on the terms is what the servicing app compares the new
+payment with. `loan_terms.escrow_payment_cents` carries the running spread
+at its level amount through the spread's last month, and the step-down after
+it is held apart (`apps/servicing/src/domain/escrow/ops-3-6.ts:105-117`);
+the app's installments read it so (`escrowPortionOn`,
+`apps/servicing/src/domain/operations-runtime/installments.ts:57-61`). Reg
+X's annual statement sets the new payment beside the current one (12 CFR
+1024.17(i)(1)). A spread's final installment carries the spread's rounding,
+which the plan holds apart (`final_installment_cents`; spec 3.6, worked
+example (b): "payment $243.05, final $243.09"), so it is not the payment on
+the terms. On 70 of the held-out suite's 200 analyses the next installment
+is a final one whose rounding is not zero: it bills 1 to 6 cents more or
+less than the task's payment, and read instead it would change no graded
+answer.
+
+1.0.0 handed the old schedule's payment from the new one's effective date,
+after last year's spread had run out. On its 200 held-out tasks the payment
+on the terms differs on 154, and 15 graded answers change, 4 of them whether
+the flag stands (measured from the generator under life 1.1.0; the billed
+payment differs on the same tasks and changes the same answers). 1.1.0 is
+drawn on life 1.2.0, and `escrow-review/1.0.0` is retired in
+`HELDOUT_SUITES`.
 
 **The rules.** escrow-analysis's rulebook from its conventions through Step
 9, word for word (a test holds it), under a reviewer's opening. Step 10 is
 the app's triggers: a payment change over 25 % or over $150 against the
-payment billed today, a refund over $2,500, and a bill's variance against
-last year over 20 %. Step 11 is the flag, which stands when anything was
-flagged.
+payment on the terms today, a refund over $2,500, and a bill's variance
+against last year over 20 %. Step 11 is the flag, which stands when
+anything was flagged.
 
 **The grade.** Thirteen fields, a pass being every one right:
 
@@ -3179,7 +3191,8 @@ the borrower sends the prior servicer (`misdirected_payments`) is decided the
 day the prior servicer has it, reaches us 5 to 10 days later, and is
 credited as of that day. The 60-day transfer shield is read as the spec
 reads it (§2.7 rule 3(i) and its example L; 12 CFR 1024.33(c)(1)): in the 60
-days from the transfer, a payment the prior servicer received by the end of
+days beginning on the transfer date (through the transfer date plus 59, as
+example L counts them), a payment the prior servicer received by the end of
 grace is not late, so when what it received pays the installment in full, a
 `transfer_window_60` overlay naming that installment alone is written on
 the day it had the payment, and the late-charge run charges nothing whether
@@ -3296,9 +3309,10 @@ with the cash state it is posted against and the rate each installment is
 charged at (a payoff is quoted, not posted, and is not shown), and every
 annual analysis with the lines as the analyst has them, the CPI, the balance
 on the run date, what is still to post before the year and the payment it
-replaces: the escrow share billed on the first installment due after the
-run date, last year's shortage or credit still in it (since life 1.2.0; the
-old schedule's after the spread ran out before it). Each analysis row
+replaces: the escrow payment on the loan's terms for the first installment
+due after the run date, last year's shortage or credit spread still in it at
+its level amount, not the final installment's rounding (since life 1.2.0;
+the old schedule's after the spread ran out before it). Each analysis row
 carries its projection's bills and targets too. Each moment is a copy, and
 observing changes no draw. An environment
 built on the generator reads its task off one of these, so the task is the
@@ -3639,9 +3653,12 @@ in three lanes:
   on 5 April 2028 and the flagged analysis of 29 December 2029. Each is read
   off the history with its environment's task builder (`catchupTaskAt`,
   `reviewTaskAt`), and the build stops unless the environment's own filters
-  would pose it. Each shows the task abridged, the reference policy's
-  answer through the environment's tools, and every graded field. The twin
-  poses no analysis, because it boarded non-escrowed.
+  would pose it. The analysis's build stops too unless its payment today is
+  the one on the loan's terms for the next installment, worked out from the
+  history's analyses apart from the moment. Each shows the task abridged,
+  the reference policy's answer through the environment's tools, and every
+  graded field. The twin poses no analysis, because it boarded
+  non-escrowed.
 
 Below the lanes is what missing the defects costs on the twin:
 
@@ -3894,7 +3911,8 @@ call and note defects for a call-QA environment to grade.
   bankruptcy, cadence and notes.
 - `transcriptOf(center, book, id)` writes one call's transcript when asked.
   A 300-loan decade holds about 2,650 handled calls and 1.6 million words
-  (life 1.2.0, on the defaults), so transcripts are not written in advance.
+  (life 1.2.0 and contacts 1.1.0, on the defaults), so transcripts are not
+  written in advance.
 - `plantContactDefects(center, book, requests)` makes the defective twin and
   its labels.
 
@@ -3902,6 +3920,14 @@ Every draw comes from a stream keyed by the book's seed, the loan and the
 month, delinquency, event or call, and none reads another loan. So a center
 is a function of its book's seed, byte for byte, and a loan's contacts are
 the same in a book of 30 as in a book of 300.
+
+Every stream hangs off the contact center's version too
+(`CONTACTS_VERSION`, `contacts/<version>/<book seed>`), so any change to
+what it draws or writes draws every center again. It is 1.1.0, since life
+1.2.0: a petition the scenario dates is the center's case, a complaint is
+said with no filler inside it, the recognizer never loses the word that
+makes a number a rate, and the transfer shield ends on the transfer date
+plus 59 (below, "The record on the day").
 
 **The rows** are shaped like the servicing app's `contacts` table
 (`apps/servicing/db/migrations/0005_servicing_requests.sql:201`, with
@@ -4014,14 +4040,14 @@ no file the reader's typed defaults stand (1.5 a loan-year, 7 minutes), and
 the contact center says in its warnings that they are the reader's
 defaults. The object shapes are still read, for a calibration that hands
 them over, and a test holds both. On the 300-loan seed-7 book, drawn on the
-defaults under life 1.2.0:
+defaults under life 1.2.0, with contacts 1.1.0:
 
 |                                                        | Defaults               | The file, as the reader reads it |
 | ------------------------------------------------------ | ---------------------- | -------------------------------- |
-| Inquiries a loan-year, against the status mix's target | 1.34 against 1.35      | 1.77 against 1.79                |
-| Current; 30, 60 and 90+ days                           | 1.26; 4.5, 6.7, 7.4    | 1.68; 5.8, 8.1, 10.5             |
-| Mean handle time                                       | 6.87 against 7 minutes | 9.00 against 9.23                |
-| Words in a transcript, on average                      | 388                    | 508                              |
+| Inquiries a loan-year, against the status mix's target | 1.33 against 1.35      | 1.78 against 1.79                |
+| Current; 30, 60 and 90+ days                           | 1.26; 4.7, 5.5, 7.2    | 1.68; 6.5, 7.9, 10.3             |
+| Mean handle time                                       | 6.96 against 7 minutes | 9.11 against 9.23                |
+| Words in a transcript, on average                      | 390                    | 514                              |
 
 **The life generator's own contacts.** The life generator draws a few inbound
 contacts a year: a reason and a duration, flat across the year. The contact
@@ -4044,6 +4070,15 @@ bankruptcy notice, an authorization on file). The figures:
 - the latest late charge, and the 1098;
 - MI, a transfer, a payoff, the last Metro 2 month;
 - the servicer's own constants.
+
+A transfer carries the last day of its shield. §1024.33(c)(1) protects a
+payment the prior servicer receives on time "during the 60-day period
+beginning on the effective date of transfer", and the spec's example L
+counts the transfer date as the first of the 60 (effective 2026-09-01,
+window through 2026-10-30), as the life generator does. So `shield_until`
+is the transfer date plus 59, and an agent asked about the transfer says
+the 60 days start on the transfer date and run through that day. Under
+contacts 1.0.0 the record put it a day later.
 
 The facts come first and the text second: `checkTranscript` reads every
 number back out of a transcript (money, dates in English and Spanish, rates,
@@ -4097,7 +4132,7 @@ the user, an area code and the text.
   agent's own rate.
 - **A collector often copies the last note on a delinquency forward**
   (`copied_from`), so its figures are of the day it was first written.
-- **The median agent note is 228 characters**, and a longer call leaves a
+- **The median agent note is 236 characters**, and a longer call leaves a
   longer note.
 
 **The seam for model-written text.** `ContactTextWriter` (`writer.ts`) is the
@@ -4133,8 +4168,8 @@ field, the row, the day, the true and planted values, the expected handling,
 root cause or symptom), plus the turn. A defect changes one turn and its
 interpreter relay. Every other turn is the clean call's, word for word,
 because each turn's noise has a stream of its own. At the default rate, 2%
-of the contacts each defect fits, the 300-loan book carries about 160
-defects in all on life 1.2.0.
+of the contacts each defect fits, the 300-loan book carries 153 defects in
+all on life 1.2.0 and contacts 1.1.0.
 
 **Not covered yet:**
 
@@ -4278,8 +4313,8 @@ through the contact center. Two plants bring findings beyond their own. A
 demand in a bankruptcy case (C-02) takes the disclaimer's turn, so the
 disclaimer is missing too. A dial into a bankruptcy (Q-07) ignored the case
 on the call as well: it carries the mini-Miranda, not the disclaimer, and
-often asks for a payment. On the held-out suite 63 calls are clean, 110
-fail items and 37 fail outright; every item turns up seven times or more.
+often asks for a payment. On the held-out suite 63 calls are clean, 109
+fail items and 38 fail outright; every item turns up seven times or more.
 
 **A draw is kept only when it is fair to grade, and this is a filter.**
 ei-clocks' guard rejects nothing it draws; this one does. A draw is kept
@@ -4287,13 +4322,13 @@ when the call without its plant draws no finding and its note matches, the
 planted call draws the plant's finding on the planted line and nothing the
 plant does not name, and the rubric finds exactly the same on the
 recognizer's text and labels as on what was said, by whom. Of the first
-draws of 1,500 training tasks (seed 3), 453 found no call that fits their
-edge and drew again; of the other 1,047, 91 were turned away because the
+draws of 1,500 training tasks (seed 3), 500 found no call that fits their
+edge and drew again. Of the other 1,000, 91 were turned away because the
 recognizer's noise moved a finding (a misheard amount reads as a wrong
-one), and none because a wrong amount's digits were already in the record
-(under life 1.1.0, one was). The contact center's clean calls draw no
-finding of their own, its dialer's times and counts included. The kept
-draws average 1.7 attempts, at most 7 on the held-out suite.
+one), one because a wrong amount's digits were already in the record, and
+one because a note's planted figure was. The contact center's clean calls
+draw no finding of their own, its dialer's times and counts included. The
+kept draws average 1.8 attempts, at most 14 on the held-out suite.
 
 **What v1 leaves out, and why.**
 
@@ -4338,9 +4373,9 @@ and C-08 except where the record holds the planted figure.
 The scores to read a model against, on the held-out suite: an answer that
 says nothing scores 0.493 and passes 7 (clean calls with no note and no
 option named); one that calls every call clean but gets the note and the
-options right scores 0.765 and passes the 63 clean calls; one that names
-every finding but no line scores 0.914. A test holds the pins. Every figure
-in this section is the suite drawn on life 1.2.0.
+options right scores 0.763 and passes the 63 clean calls; one that names
+every finding but no line scores 0.913. A test holds the pins. Every figure
+in this section is the suite drawn on life 1.2.0 and contacts 1.1.0.
 
 Generating the held-out suite takes about six seconds.
 

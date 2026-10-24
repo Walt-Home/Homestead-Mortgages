@@ -8540,27 +8540,34 @@ plant on.
 
 **Decided 24 October 2026.** `LIFE_VERSION` is 1.2.0. Five things the life
 generator did wrong or did not carry are fixed, and one module that reads
-it reads more. Every stream hangs off the version, so every book moves, and
-so does every suite drawn from it. docs/environments.md, "The life
-generator", "escrow-review" and "The contact center", says what each now
-does; the entries above give 1.1.0's figures and are left as they were
-measured.
+it, the contact center, reads more and is `CONTACTS_VERSION` 1.1.0. Every
+stream hangs off the versions, so every book and every center moves, and so
+does every suite drawn from them. docs/environments.md, "The life
+generator", "escrow-review", "The contact center" and "call-qa", says what
+each now does; the entries above give life 1.1.0's figures and are left as
+they were measured.
 
 **What changed.**
 
-- **An analysis's old payment is the one billed when it runs.** The
-  generator handed each analysis, and escrow-review its
+- **An analysis's old payment is the one on the loan's terms when it
+  runs.** The generator handed each analysis, and escrow-review its
   `current_escrow_payment_cents`, the old schedule's payment from the new
   schedule's effective date, after last year's spread had run out ("An
   analysis's 'old payment' is the old schedule's", above). It now hands the
-  escrow share of the first installment due after the run date, the running
-  shortage or credit in it: what the servicing app compares the new payment
-  with (`loan_terms.escrow_payment_cents`,
-  `apps/servicing/src/domain/escrow/ops-3-6.ts:105-117`; spec 3.6, worked
-  example (a)), and what Reg X's annual statement sets the new payment
-  beside (12 CFR 1024.17(i)(1)). On the final month of a spread that
-  installment carries the final installment's rounding, a few cents off
-  `loan_terms`. The history's own triggers read it too.
+  escrow payment the loan's terms carry for the first installment due after
+  the run date, the running shortage or credit spread in it at its level
+  amount. That is what the servicing app compares the new payment with:
+  `loan_terms.escrow_payment_cents` is the base plus every active plan's
+  level installment through the plan's last month, and the step-down after
+  it is held apart (`apps/servicing/src/domain/escrow/ops-3-6.ts:105-117`),
+  which the app's installments read through `escrowPortionOn`
+  (`apps/servicing/src/domain/operations-runtime/installments.ts:57-61`).
+  It is what Reg X's annual statement sets the new payment beside, too (12
+  CFR 1024.17(i)(1)). In the history, as in spec 3.6's worked example (b)
+  ("payment $243.05, final $243.09"), a spread's final installment is
+  billed the spread's rounding, the plan's `final_installment_cents`, which
+  `loan_terms` never carries; so the generator keeps the terms by due date
+  beside the bills and reads them. The history's own triggers read it too.
 - **A MIN carries its check digit.** `draw.ts` wrote "1000001" and eleven
   random digits, so 188 of the cross-check's 216 MINs failed Mod-10. The
   eighteenth digit is now computed by the port of the boarding gate's own
@@ -8614,17 +8621,43 @@ measured.
   hardship calls in the stay. Where a boarding dropped the case (D-37's twin),
   the servicer stops knowing of it at the transfer, as the history's
   month-ends do. A loan with no scenario case draws its own as before.
+- **The contact center is 1.1.0.** `CONTACTS_VERSION` says to bump it on any
+  change to what the contact center draws or writes, and the case above,
+  the shield line, the complaint and the recognizer's rate word (below)
+  changed both. Every stream hangs
+  off it (`contacts/<version>/<book seed>`), so the bump draws every center
+  again, and call-qa with it. Its record dated the shield's end as the
+  transfer date plus 60, a day past the window: 12 CFR 1024.33(c)(1)
+  protects a payment "during the 60-day period beginning on the effective
+  date of transfer", and §2.7's example L counts the transfer date as the
+  first (effective 2026-09-01, window through 2026-10-30), as the generator
+  does (`TRANSFER_WINDOW_DAYS`). `shield_until` is now the transfer date
+  plus 59, and the agent says the 60 days start on the transfer date and
+  run through that day, in English and through the interpreter, where "60
+  days after the transfer" could be read to end a day later.
 
 **escrow-review is 1.1.0.** Its task now states, and its grader grades
-against, the payment billed today, so its stated rule changed: Step 10
-names it (the escrow share of the first installment due after `as_of`, paid
-or not, which on a delinquent loan is not the oldest unpaid one), and
-`escrow-review/1.0.0` is retired in `HELDOUT_SUITES`. Measured
-from the generator, never from a run's transcripts, on 1.0.0's 200 held-out
-tasks under life 1.1.0: the billed payment differs from the task's on 154,
-and 15 graded answers change, 4 of them whether the flag stands, the
-figures the baseline entry above gave. DeepSeek's 188 of 200 stands as what
-1.0.0 measured; the baseline is to be rerun on 1.1.0.
+against, the payment on the loan's terms today, so its stated rule changed:
+Step 10 names it (the one the terms carry for the first installment due
+after `as_of`, paid or not, which on a delinquent loan is not the oldest
+unpaid one, with last year's spread at its level amount and never the few
+cents a final installment rounds by), and `escrow-review/1.0.0` is retired
+in `HELDOUT_SUITES`. Measured from the generator, never from a run's
+transcripts, on 1.0.0's 200 held-out tasks under life 1.1.0: the payment on
+the terms differs from the task's on 154, and 15 graded answers change, 4 of
+them whether the flag stands, the figures the baseline entry above gave for
+the billed payment, which differs on the same tasks and changes the same
+answers. DeepSeek's 188 of 200 stands as what 1.0.0 measured; the baseline
+is to be rerun on 1.1.0.
+
+The branch's first build handed the billed payment, the escrow share of
+that installment as billed, and pinned 1.1.0 at `b0040840…`. On 70 of the
+200 held-out analyses the installment is a spread's final one with a
+rounding, and the billed payment was 1 to 6 cents off the terms. With the
+terms read instead, no graded answer and no flag changes, every figure
+below holds, and the suite is the same 200 analyses: with each payment set
+back to its installment's bill it hashes to `b0040840…` again. No model ran
+on that pin, so 1.1.0 is re-pinned in place.
 
 **The pins.** A suite whose stated rule did not change keeps its version
 and is re-pinned, as life 1.1.0's were; each fingerprint names the life
@@ -8633,18 +8666,23 @@ model had run on them, and one of these now has a score: DeepSeek's 198 of
 200 on catchup-posting 1.0.0 (above) was measured on the life 1.1.0 suite,
 `3ff8eccf…`, and its records' fingerprint names life 1.1.0. It stands as
 what that suite measured, and the baseline is to be rerun on `9291c1f2…`.
-No model has run on boarding-triage 1.1.0, tape-intake or call-qa.
+No model has run on boarding-triage 1.1.0, tape-intake or call-qa. call-qa
+moved twice on this branch: with the life books at `ff88e536…`, and with
+contacts 1.1.0 at `d675547e…`; no model ran on the first.
 
 | Suite           | Version       | Held-out pin              | Reference, held-out | Spec cases |
 | --------------- | ------------- | ------------------------- | ------------------- | ---------- |
 | catchup-posting | 1.0.0         | `3ff8eccf…` → `9291c1f2…` | 200 of 200          | 5 of 5     |
-| escrow-review   | 1.0.0 → 1.1.0 | `6a05284f…` → `b0040840…` | 200 of 200          | 4 of 4     |
+| escrow-review   | 1.0.0 → 1.1.0 | `6a05284f…` → `1df4df93…` | 200 of 200          | 4 of 4     |
 | boarding-triage | 1.1.0         | `a2fc1478…` → `eb9db31d…` | 200 of 200          | 4 of 4     |
 | tape-intake     | 1.0.0         | `09804de6…` → `04fc3434…` | 200 of 200          | 13 of 13   |
-| call-qa         | 1.0.0         | `697ad78d…` → `ff88e536…` | 210 of 210          | 17 of 17   |
+| call-qa         | 1.0.0         | `697ad78d…` → `d675547e…` | 210 of 210          | 17 of 17   |
 
 Every other environment's held-out pin passes as it was: nothing else
-draws from the life generator. What each suite holds now:
+draws from the life generator or the contact center. The payment on the
+terms and contacts 1.1.0 moved escrow-review and call-qa alone; the other
+three hold the pins they took with the life books. What each suite holds
+now:
 
 - **catchup-posting:** 125 first draws (117); the same 116 above the cap and
   84 within; 58 refunds due, a median near $240; up to 19 charges and seven
@@ -8661,16 +8699,28 @@ draws from the life generator. What each suite holds now:
   and the same findings by defect but T-03's 40 (37); of 1,000 training
   first draws, 943 reached the check and the reference missed three (one),
   each a history error the rule's line does not reach.
-- **call-qa:** 63 clean, 110 failing items and 37 failing outright (111 and
-  36); an empty answer scores 0.493 (0.499).
+- **call-qa:** 63 clean, 109 failing items and 38 failing outright (111 and
+  36); an empty answer scores 0.493 (0.499), calling every call clean 0.763
+  (0.765), every finding on no line 0.913 (0.915); of 1,500 training first
+  draws 500 fit no call (475), and of the other 1,000, 91 were turned away
+  for the recognizer's noise (92), one for a wrong amount whose digits the
+  record holds (one) and one for a note's planted figure the record holds
+  (none); the kept draws average 1.8 attempts, at most 14 (1.9 and 12).
 
 **What the new books found.** Re-pinning met six tests that had held one
-book's figure, and one defect:
+book's figure, and two defects:
 
 - a contact-center caller could say a filler inside a complaint ("I want I
   mean, this escalated"), which none of the rubric's complaint phrases
   reads, so a C-04 planted on that call could not be found. A complaint turn
   now takes no filler, as personal data already did;
+- the recognizer could drop the word that makes a number a rate. Contacts
+  1.1.0's seed-7 book has an agent's "it ends automatically at 78 percent"
+  heard as "at 78", a count no record holds, which the transcript check
+  read as a figure nobody computed. "Percent" and "ciento" beside a number
+  are now written as said, as a date's month is, and a test holds that a
+  rate stays a rate through 8,000 recognitions. No call-qa held-out task
+  had reached it;
 - the D-25 test held a misapplied split to its clean twin's payment-history
   amounts. An analysis the prior servicer ran after the misapplication read
   the escrow it inflated and reset the payment, so the test now holds the

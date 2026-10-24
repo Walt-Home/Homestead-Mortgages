@@ -360,7 +360,7 @@ describe("escrow-review", () => {
   it("still draws the held-out suite every reported score was measured on", () => {
     // A change here moves every score: bump REVIEW_ENVIRONMENT_VERSION, then the pin.
     expect(sha256(heldoutSuite().map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"b00408409c1f2abcf3e2c82bce19587878d8e990af5eb31c19d13a50e8ea5baf"`,
+      `"1df4df93b172d5b4828cd9b81fbc3173f3a282a06bc320b9a2162bb861430420"`,
     );
   }, 300_000);
 

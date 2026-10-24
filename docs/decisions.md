@@ -8736,3 +8736,162 @@ book's figure, and two defects:
 has not been rerun. Its two generator bugs and the generator's half of
 cashiering-11 are fixed here, and the harness's notes say so; its MIN repair
 and its cashiering-11 class find nothing on the books it draws.
+
+## The escrow call reads the annual statement
+
+**Decided 24 October 2026.** A borrower who calls about the escrow analysis
+is answered from the analysis and the annual statement mailed with it. This
+is phase 3's year-4 call. `CONTACTS_VERSION` is 1.2.0, call-qa 1.0.0 is
+re-pinned in place, and the demo page shows the loan's calls (page 1.1.0).
+docs/environments.md, "The annual statement's explanation", "The contact
+center", "call-qa" and "The demo page", says what each now does.
+
+**What the agent says.** The figures come from the analysis and the
+statement:
+
+- the escrow payment on the loan's terms today beside the new one, as
+  escrow-review 1.1.0 reads it (the row's `old_payment`);
+- the shortage, deficiency or surplus and how it is spread, refunded or
+  credited. The port's `decide` and `newPayment` decide it again from the
+  row (`analysisDecision`), and it throws if they disagree with the row.
+  The words are the servicing app's `decisionText` and `planText`, which
+  are not ported;
+- item (viii), one turn a line, in the statement engine's three templates
+  with the month read aloud ("01/2030" as "January 2030").
+
+Every one of those figures is in the record on the call's day.
+
+**Which year the statement explains.** `escrowYears` reads the year as it
+turned out, and a statement cannot. The analysis runs 45 to 75 days before
+the year it sets, so the year it closes is not over when the statement goes
+out, and the hazard renewal often falls in the gap. Read whole, the year
+would put figures in the agent's mouth that no record held on the call's
+day. It would also carry the refund the analysis itself orders, which is
+item (vi), not (viii). The servicing app's statement assembly marks the
+months after the approval as assumed (`assembleAnnualStatement`, its
+escrow `ops.ts`). So `statementYearOf` reads the history through the run
+date and, after it, what the analysis counted on for its projected actual:
+each installment's escrow share still due before the year, at its due date,
+and each bill still to pay.
+
+A test holds this on every analysis of three kinds of book: a 300-loan
+decade, loans transferred in with V-01, V-02 and D-28 made on them (clean
+and twin), and the demo's four.
+
+- The year ends at the analysis's projected actual.
+- Through the run date its postings and month-ends are `escrowYears`' own.
+- After it, only the assumed postings, inside the year.
+
+One case needs a rule of its own. A loan paid off after the run date has
+no installment row for the month the analysis counted on, and 25 of seed
+1's 5,741 analyses are such. Such an analysis has no statement year, rather
+than one guessed at.
+
+**When there is no statement.** A borrower more than 30 days behind at the
+analysis gets none (§1024.17(i)(2), the ported `exemption`), and the
+analysis's system note now says so, or that the shortage notice went out.
+The first analysis has none here, because the projection its year was held
+to was made at closing and the history keeps no row for it. A year that
+runs across two servicers' books has none either. Each such call, and a
+call about the payment change, is answered from the analysis alone, as
+before. In seed 1's thousand loans, 4,906 of 5,741 analyses have a
+statement year: 745 are first analyses, 65 exempt and 25 end early.
+
+**escrow-4 is said plainly.** An account overdrawn during the year has a
+negative low, which the engine prints as $-105.-50. `statementReading`
+hands the engine the same low twice for such a year, which prints the bill
+lines whole and no low line, and says in `refused` why. The agent then says
+the account was overdrawn, so the statement does not compare the low
+balance with the projected one. 27 of the 4,906 years are such. The demo's
+is one: the January 2030 renewal of $4,031.43 takes the account to
+−$969.42 at January's end.
+
+**No new defect.** A wrong figure in the explanation is a wrong amount
+(C-05) in the call and a contradiction (C-08) in its note. On a call that
+reads the statement, C-05 now plants in the first statement line and C-08
+in a statement figure in the note. The record view call-qa hands the
+reviewer carries the analysis's plan and the statement lines, so the
+rubric's provenance check, the servicing app's own, holds the agent to
+them. On every call explaining a statement in call-qa's 120-loan rubric
+book, pinned, both are found, 215 of 215 each. A new item, such as a bill
+named for a change it did not make, would need a rule that reads words,
+and nothing planted needs one.
+
+**call-qa holds 1.0.0, re-pinned.** Its rubric and rulebook are unchanged:
+the rulebook's pin holds, and the record's new fields are read by its
+existing words ("every value in the record"). No model has run on it. So,
+as with life 1.2.0's pins, the suite is re-pinned in place, and its
+fingerprint names contacts 1.2.0. Three edges take escrow calls on an arm
+of their own: the clean inbound call (one arm in three), C-05 and C-08
+(every other draw). Eight held-out tasks are escrow calls. One reader the
+rubric shares with the contact center changed. `check.ts` read "January
+2030" as the 20th and a 30, and now reads a day as one or two digits only.
+No text said a month and its year before, so no finding on any earlier call
+moves.
+
+| Suite   | Version | Held-out pin              | Reference, held-out | Spec cases | Training (seed 11) |
+| ------- | ------- | ------------------------- | ------------------- | ---------- | ------------------ |
+| call-qa | 1.0.0   | `d675547e…` → `0c6f1827…` | 210 of 210          | 17 of 17   | 300 of 300         |
+
+Every other environment's pin passes as it was, because no other suite
+draws from the contact center. The reference still takes two turns and at
+most 12 tool calls. What the suite holds now, with contacts 1.1.0's figure
+in brackets:
+
+- 63 clean, 111 failing items (109) and 36 failing outright (38);
+- every item seven times or more;
+- an empty answer scores 0.509 (0.493), calling every call clean 0.763
+  (0.763), and every finding on no line 0.915 (0.913);
+- of 1,500 training first draws, 461 fit no call (500). Of the other 1,039,
+  113 were turned away for the recognizer's noise (91), one for a wrong
+  amount the record holds (one) and none for a note's figure (one). An
+  escrow call says a dozen figures or more, so noise moves more of them;
+- the kept draws average 1.8 attempts, at most 9 (14).
+
+**The contact center moved with its version.** Every stream hangs off it.
+On the 300-loan seed-7 book on the defaults:
+
+- inquiries a loan-year read 1.38 against 1.35 (1.33);
+- the delinquent statuses, a few hundred loan-months each, read 3.9, 8.1
+  and 7.1 (4.7, 5.5 and 7.2);
+- the mean handle time is 6.82 minutes against 7 (6.96);
+- the median agent note is 246 characters (236);
+- 148 defects at the default rate (153).
+
+**Two defects found on the way, fixed where they were.** An interpreted
+call's note read the interpreter's relay of the question as a second
+question, and asked about "undefined": 142 of the seed-7 book's 3,282 agent
+notes did under contacts 1.1.0. The rubric reads a note's numbers and
+status words, not its words otherwise, so no test saw it, and call-qa draws
+no interpreted call. A test now holds every note clear of it. The date
+reader above is the other.
+
+**The demo page.** It shows the year-3 promise call and the year-4 escrow
+call for the history chosen. Each call shows its row, the record it read,
+the lines that say a figure, the whole transcript, the agent's note and the
+system's notes. The escrow call shows each statement line beside the
+transcript time that read it. The demo borrower drew Spanish, so both
+calls run through an interpreter. Unpinned, the contact center draws the
+year-4 call as a question about the payment change, so the page pins
+`escrow_call`, as the scenario scripts the promise, and says so.
+
+The page data refuses to build when a figure it shows disagrees with the
+history:
+
+- the promise and the receipt that kept it;
+- a number said or written that the record does not hold;
+- statement lines that are not the engine's over `statementYearOf`;
+- a payment today that is not the one escrow-review poses.
+
+`check-page.mjs` now renders the calls for both histories and holds the
+rendered text to each note and statement line. The first build of the
+section drew an empty statement table, which the old check passed.
+
+**Not yet.**
+
+- A call about the payment change after an analysis is still answered from
+  the analysis with its tax and premium totals of the last two years.
+- The first analysis's statement. It needs the projection made at closing,
+  which the life generator does not keep.
+- The baselines: no model has run on call-qa, and the escrow call is
+  graded only through it.

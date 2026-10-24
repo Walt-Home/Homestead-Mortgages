@@ -269,7 +269,7 @@ ones these lines explain.
   and the repayment plan, are `decisionText` and `planText` in the servicing
   app's escrow `ops.ts`. That file is not ported, because it carries the
   stateful operations layer around them. Their figures are the analysis's
-  own.
+  own, which `analysisDecision` (below) decides again for a reader.
 - **Thousands separators.** The engine prints $1710.50 where the statement's
   other items print $1,710.50.
 
@@ -293,6 +293,51 @@ engine's three templates, and the years overdrawn somewhere in them are the
 ones `statementScopeIssues` names. In that decade every year it explains has
 at least one line, because the account's low is never exactly the
 projected cushion.
+
+**The year a statement explains.** `escrowYears` is the year as it turned
+out. The statement mailed with an analysis cannot be: the analysis runs 45
+to 75 days before the year it sets, so the year it closes is not over. The
+servicing app's statement assembly marks the months after the approval as
+assumed (`assembleAnnualStatement`: `assumed: late ? false : r.month >
+f.approved_on`). `statementYearOf(loan, analysis)` reads that year as the
+statement has it:
+
+- the analysis before it, whose projection the year is held to;
+- the ledger through the run date, as `escrowYears` reads it;
+- after the run date, what the analysis itself counted on for its
+  projected actual: the escrow share of each installment still due before
+  the year, at its due date, and each bill still to pay, at its amount.
+
+The year ends at the analysis's projected actual balance, and a test holds
+that on every analysis of a 300-loan decade, a book of loans transferred in
+with vendor and system errors (and its twins), and the demo loan's four.
+Through the run date its postings and month-ends are `escrowYears`' own.
+What the statement says is known the day it goes out, so a call after it
+reads the same lines whatever the history did next. A refund the analysis
+itself orders is item (vi), not (viii), and is not in them.
+
+An analysis has no statement year when:
+
+- its year's payment was set by no analysis the history holds: the first
+  one, whose year's payment was set at closing;
+- the borrower was more than 30 days behind at it, so no statement goes
+  out (§1024.17(i)(2), the ported `exemption`; the shortage notice still
+  does);
+- the year runs across two servicers' books;
+- the history ends before an installment the analysis counted on (a payoff
+  after the run date).
+
+In seed 1's thousand loans (life 1.2.0, the typed defaults), 4,906 of 5,741
+analyses have one: 745 are first analyses, 65 exempt and 25 end early. 27
+of the 4,906 are overdrawn. `statementReading` reads item (viii) for one,
+every figure parsed back out of the engine's own lines. An overdrawn year
+keeps its bill lines, which the engine prints whole when it is handed the
+same low twice, and loses the low line, with `refused` saying why.
+`analysisDecision(row)` decides the analysis again through the escrow
+port's `decide` and `newPayment`, for items (vi) and (vii): the shortage's
+and deficiency's level installments and months, a refund's date, a
+credit's monthly amount. It throws if the port disagrees with the row; a
+test holds it to every row.
 
 ## regz-price-tests
 
@@ -3586,8 +3631,10 @@ none of the first's.
 **Not covered yet:**
 
 - the other 36 defects of the catalog;
-- staff errors that need the contacts layer: a promise not tracked, a
-  complaint not logged;
+- staff errors that need the contacts layer. The contact center plants
+  those on calls and notes (C-01 to C-08, below): a complaint not logged is
+  C-04, a wrong figure in a call explaining the annual statement C-05. A
+  promise not tracked is planted nowhere yet;
 - foreclosure, forbearance, trial plans and modification, whose tape fields
   are present and always empty; a bankruptcy's plan, trustee, discharge and
   dismissal; loss mitigation beyond a repayment plan; the end of a
@@ -3630,7 +3677,7 @@ has not been rerun on it.
 
 `npm run env:demo -w @hm/environments` writes `playground/dist/demo.html`,
 the first demo as one self-contained page titled "Synthetic Loan
-Histories", its data inlined (about 500 KB). `scripts/build-demo.mjs`
+Histories", its data inlined (about 585 KB). `scripts/build-demo.mjs`
 bundles `src/demo/page-data.ts` from the workspace's sources, runs it, and
 fills `playground/demo/template.html`. No figure on it is typed by hand, and
 the same code writes the same bytes.
@@ -3660,7 +3707,43 @@ in three lanes:
   graded field. The twin poses no analysis, because it boarded
   non-escrowed.
 
-Below the lanes is what missing the defects costs on the twin:
+Below the lanes are two of the loan's calls, as the contact center writes
+them for the history chosen (page 1.1.0). The center draws the demo loan as
+it draws any loan, with one pin, `escrow_call`; unpinned, the year-4 call is
+drawn as a question about the payment change. The borrower drew Spanish, so
+both calls run through an interpreter. Each call shows its row, what the
+record held that day, the lines that say a figure (with the interpreter's
+relay of each), the whole transcript on demand, the agent's note and the
+system's notes around it.
+
+- **Year 3, the promise.** On day 22 of the missed March the borrower calls,
+  is told the $2,997.99 past due with the $50.00 charge in it, and promises
+  $5,945.98 by 5 April, the receipt that keeps it. Before it are the text
+  reminder and the dialer's voicemail. On the twin, the promise is
+  $4,664.65, the charge $113.77 and no escrow.
+- **Year 4, the escrow call.** On 4 February 2030 the borrower asks about
+  the flagged analysis. The agent quotes the escrow payment on the loan's
+  terms today, $662.42, and the new $1,130.68, then the deficiency of
+  $441.98 and the shortage of $2,517.25 with their installments. Then the
+  agent reads the statement's three lines: both county taxes and the
+  January renewal, which falls after the run date. The year was overdrawn in
+  January, so there is no low line, and the agent says so. Each statement
+  line is shown beside the transcript time that read it. The twin ran no
+  analysis, and the page says why no call came.
+
+The page data refuses to build when a figure it shows disagrees with the
+history:
+
+- a promise that is not the receipt that kept it;
+- a number said or written that the record does not hold that day;
+- statement lines that are not the engine's over `statementYearOf`;
+- a payment today that is not the one escrow-review poses;
+- a plan's figures that are not `analysisDecision`'s.
+
+`check-page.mjs` renders the calls for both histories and holds the
+rendered text to each note and statement line.
+
+Below the calls is what missing the defects costs on the twin:
 
 - the late charge above the note's cap and its refund, $63.77, from
   `lateChargeAmount`;
@@ -3699,8 +3782,8 @@ environments do, so the page shows the tasks they pose. `demo-page.test.ts`
 runs the build. It checks that the script parses and renders every view
 against a stub DOM (`playground/demo/check-page.mjs`, which the build runs
 too), and holds the page's data equal to `demoPageData`. It then works
-every graded field and every cost again from the environments and the
-ports.
+every graded field, every cost and both calls again from the environments,
+the ports and the contact center.
 
 ## Calibration
 
@@ -3910,8 +3993,8 @@ call and note defects for a call-QA environment to grade.
 - `contactCenter(book)` derives every loan's contact rows, promises,
   bankruptcy, cadence and notes.
 - `transcriptOf(center, book, id)` writes one call's transcript when asked.
-  A 300-loan decade holds about 2,650 handled calls and 1.6 million words
-  (life 1.2.0 and contacts 1.1.0, on the defaults), so transcripts are not
+  A 300-loan decade holds about 2,700 handled calls and 1.65 million words
+  (life 1.2.0 and contacts 1.2.0, on the defaults), so transcripts are not
   written in advance.
 - `plantContactDefects(center, book, requests)` makes the defective twin and
   its labels.
@@ -3923,11 +4006,22 @@ the same in a book of 30 as in a book of 300.
 
 Every stream hangs off the contact center's version too
 (`CONTACTS_VERSION`, `contacts/<version>/<book seed>`), so any change to
-what it draws or writes draws every center again. It is 1.1.0, since life
-1.2.0: a petition the scenario dates is the center's case, a complaint is
-said with no filler inside it, the recognizer never loses the word that
-makes a number a rate, and the transfer shield ends on the transfer date
-plus 59 (below, "The record on the day").
+what it draws or writes draws every center again. It is 1.2.0:
+
+- the record holds the annual statement mailed with an analysis and the
+  analysis's plan, and a call about the escrow analysis is answered from
+  them (below, "The escrow call");
+- C-05 and C-08 plant their wrong figure in that explanation;
+- no statement goes to a borrower more than 30 days behind at the
+  analysis;
+- a pin draws the borrower's call about each one;
+- an interpreted call's note no longer reads the interpreter's relay of the
+  question as a second one.
+
+1.1.0, since life 1.2.0, made a petition the scenario dates the center's
+case, said a complaint with no filler inside it, kept the word that makes a
+number a rate, and ended the transfer shield on the transfer date plus 59
+(below, "The record on the day").
 
 **The rows** are shaped like the servicing app's `contacts` table
 (`apps/servicing/db/migrations/0005_servicing_requests.sql:201`, with
@@ -3977,6 +4071,11 @@ rows.
 - **Promises.** The scenario's promise calls, read through the history's
   behavior rows. A promise drawn on a call is kept when a receipt in the
   next three weeks keeps it; otherwise some are made and broken.
+- **The pinned escrow call.** With `escrow_call` pinned
+  (`ProfilePins`, beside `bankruptcy`), the borrower calls 4 to 40 days
+  after each analysis an annual statement explains, on a stream of its own,
+  and the call reaches an agent. The demo page and call-qa's escrow arms pin
+  it.
 
 **What it draws.** Every figure below is a design choice, named in
 `derive.ts` and `profile.ts`.
@@ -4040,14 +4139,18 @@ no file the reader's typed defaults stand (1.5 a loan-year, 7 minutes), and
 the contact center says in its warnings that they are the reader's
 defaults. The object shapes are still read, for a calibration that hands
 them over, and a test holds both. On the 300-loan seed-7 book, drawn on the
-defaults under life 1.2.0, with contacts 1.1.0:
+defaults under life 1.2.0, with contacts 1.2.0:
 
 |                                                        | Defaults               | The file, as the reader reads it |
 | ------------------------------------------------------ | ---------------------- | -------------------------------- |
-| Inquiries a loan-year, against the status mix's target | 1.33 against 1.35      | 1.78 against 1.79                |
-| Current; 30, 60 and 90+ days                           | 1.26; 4.7, 5.5, 7.2    | 1.68; 6.5, 7.9, 10.3             |
-| Mean handle time                                       | 6.96 against 7 minutes | 9.11 against 9.23                |
-| Words in a transcript, on average                      | 390                    | 514                              |
+| Inquiries a loan-year, against the status mix's target | 1.38 against 1.35      | 1.82 against 1.79                |
+| Current; 30, 60 and 90+ days                           | 1.31; 3.9, 8.1, 7.1    | 1.73; 5.0, 10.9, 9.3             |
+| Mean handle time                                       | 6.82 against 7 minutes | 8.91 against 9.23                |
+| Words in a transcript, on average                      | 391                    | 514                              |
+
+Contacts 1.2.0 draws every center again, so the delinquent statuses, a few
+hundred loan-months each, moved: under 1.1.0 they read 4.7, 5.5 and 7.2 on
+the defaults.
 
 **The life generator's own contacts.** The life generator draws a few inbound
 contacts a year: a reason and a duration, flat across the year. The contact
@@ -4065,7 +4168,10 @@ bankruptcy notice, an authorization on file). The figures:
 - what is past due, with the late charges outstanding;
 - the last receipt;
 - the escrow balance on the last statement;
-- the latest analysis and ARM change;
+- the latest analysis, with its plan (`analysisDecision`), and the annual
+  statement mailed with it (`statementYearOf`, read by `statementReading`
+  under the labels the statement prints, `STATEMENT_LABELS`);
+- the latest ARM change;
 - the last tax and premium paid;
 - the latest late charge, and the 1098;
 - MI, a transfer, a payoff, the last Metro 2 month;
@@ -4085,7 +4191,50 @@ number back out of a transcript (money, dates in English and Spanish, rates,
 the telephone number, the menu's keys, counts) and finds it in
 `factNumbers`. A number the recognizer misheard is logged on its turn, and
 a planted wrong amount is labeled. Every figure is written in digits, as a
-recognizer writes them.
+recognizer writes them. A month said with its year ("January 2030") reads
+as the year alone, which the record holds for each statement line; until
+contacts 1.2.0 the date reader took it for the 20th and a 30.
+
+**The escrow call.** A call whose reason is the escrow analysis, when the
+record holds the annual statement mailed with it, is answered from the
+analysis and the statement:
+
+- which analysis it is, and when it went out with the statement;
+- the escrow payment on the loan's terms today beside the new one, from the
+  effective date. That is escrow-review 1.1.0's payment today, the analysis
+  row's `old_payment`. Then the total payment from then;
+- the decision and how it is handled, in the words of the servicing app's
+  `decisionText` and `planText`: a shortage (and a deficiency) and its
+  level installments over 12 months from the effective date, a surplus
+  refunded by its date (and that it went out, once it has), or credited at
+  so much a month;
+- the statement's item (viii), one agent turn a line, in the engine's
+  three templates with the month read aloud: "the {line} paid in {month
+  year} was {amount} versus {amount} projected", "a {line} bill of {amount}
+  paid in {month year}, which wasn't projected", "the low balance was
+  {amount} versus {amount} projected". The demo's first reads "the county
+  tax paid in May 2029 was $2,278.09 versus $1,687.49 projected", where the
+  engine wrote "county tax paid 05/2029 was $2278.09 vs $1687.49
+  projected". The agent adds that the projected low is the cushion when
+  re-projecting the projection's own bills says it is. A line whose month
+  runs past the run date is followed by a sentence saying it is what the
+  analysis expected to pay;
+- for a year the engine cannot print the low of (escrow-4, an account
+  overdrawn during the year), the bill lines without the low line, and the
+  agent says plainly that the account was overdrawn, so the statement does
+  not compare the low balance with the projected one;
+- the shortage question and the cushion, as before.
+
+The interpreter relays each line with the same figures and month ("en mayo
+de 2029"), each line's slots read under their own names. A test holds the
+agent's figures to the engine's on every such call of the seed-7 book with
+the call pinned: 1,853 calls and 5,724 lines, 1,536 of them after the run
+date, 10 overdrawn years and 118 calls through an interpreter. Drawn, the
+book holds 314 conversations about the escrow analysis, 257 of them with a
+statement. A call about an analysis no statement explains (the first one, a
+borrower behind at it, a year on two servicers' books), and a call about
+the payment change, are answered from the analysis alone, with its tax and
+premium totals of the last two years, as before.
 
 **Transcripts.** A call's plan comes first: the record on the day, the
 shape from the row, the agent's manner, further questions, side topics and
@@ -4132,8 +4281,21 @@ the user, an area code and the text.
   agent's own rate.
 - **A collector often copies the last note on a delinquency forward**
   (`copied_from`), so its figures are of the day it was first written.
-- **The median agent note is 236 characters**, and a longer call leaves a
+- **The escrow call's note is the escrow desk's (ESC)** and records what
+  was explained: the escrow payment from and to, the decision and its
+  spread or refund, each statement line's figures ("CNTY TAX 2,278.09 VS
+  1,687.49 PROJ"), and the low line, or that the account was overdrawn and
+  the statement has none.
+- **The median agent note is 246 characters**, and a longer call leaves a
   longer note.
+- **An analysis's system note says what was mailed.** A borrower more than
+  30 days behind at the analysis gets no annual statement (§1024.17(i)(2),
+  the ported `exemption`), so its note says the statement was not mailed,
+  or that the shortage notice was.
+
+Until contacts 1.2.0 an interpreted call's note read the interpreter's
+relay of the question as a second question, and asked about "undefined":
+142 of the seed-7 book's 3,282 agent notes did.
 
 **The seam for model-written text.** `ContactTextWriter` (`writer.ts`) is the
 seam. It has two calls: `callTurns(plan)` and `callNote(plan, turns)`.
@@ -4152,24 +4314,30 @@ whoever wrote the words.
 **Defects.** Eight call and note defects, numbered apart from
 docs/synthetic-data-defects.md's data defects:
 
-| Id   | Defect                                            | Planted in                                                        |
-| ---- | ------------------------------------------------- | ----------------------------------------------------------------- |
-| C-01 | Account details disclosed to someone not verified | The refusal turn of an unverified call or a wrong number          |
-| C-02 | Collection language during a bankruptcy stay      | The disclaimer turn, replaced by a demand                         |
-| C-03 | "This won't hurt your credit"                     | The answer to the credit question                                 |
-| C-04 | A complaint voiced and not logged                 | The row's flag, the acknowledgment turn, the log entry (symptoms) |
-| C-05 | A wrong amount quoted                             | The first statement turn quoting a record amount                  |
-| C-06 | The mini-Miranda missing on a call that needed it | The disclosure turn, removed                                      |
-| C-07 | The recording notice missing on an outbound call  | The disclosure turn, removed                                      |
-| C-08 | A note that contradicts the record                | A figure in the agent's note, or a status the record lacks        |
+| Id   | Defect                                            | Planted in                                                                                         |
+| ---- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| C-01 | Account details disclosed to someone not verified | The refusal turn of an unverified call or a wrong number                                           |
+| C-02 | Collection language during a bankruptcy stay      | The disclaimer turn, replaced by a demand                                                          |
+| C-03 | "This won't hurt your credit"                     | The answer to the credit question                                                                  |
+| C-04 | A complaint voiced and not logged                 | The row's flag, the acknowledgment turn, the log entry (symptoms)                                  |
+| C-05 | A wrong amount quoted                             | The first quote of a record amount; on an escrow call, the first statement line                    |
+| C-06 | The mini-Miranda missing on a call that needed it | The disclosure turn, removed                                                                       |
+| C-07 | The recording notice missing on an outbound call  | The disclosure turn, removed                                                                       |
+| C-08 | A note that contradicts the record                | A figure in the agent's note (on an escrow call, a statement line's), or a status the record lacks |
 
 Each label is the life generator's (the loan, the defect, the table and
 field, the row, the day, the true and planted values, the expected handling,
 root cause or symptom), plus the turn. A defect changes one turn and its
 interpreter relay. Every other turn is the clean call's, word for word,
 because each turn's noise has a stream of its own. At the default rate, 2%
-of the contacts each defect fits, the 300-loan book carries 153 defects in
-all on life 1.2.0 and contacts 1.1.0.
+of the contacts each defect fits, the 300-loan book carries 148 defects in
+all on life 1.2.0 and contacts 1.2.0.
+
+A wrong figure in the annual statement's explanation is C-05 in the call
+and C-08 in its note, and no new defect is needed: the rubric's provenance
+check holds the agent's figures to the record, which carries the statement
+lines. On every call explaining a statement in call-qa's 120-loan rubric
+book, pinned, both are planted and both found, 215 of 215 each.
 
 **Not covered yet:**
 
@@ -4181,6 +4349,10 @@ all on life 1.2.0 and contacts 1.1.0.
   `11-1-live-contact.md:54`). call-qa (below) writes the AI voice's
   introduction into a call itself;
 - the text of e-mails and letters, and phone-menu transcripts;
+- the annual statement for a first analysis, whose year's payment was set
+  at closing by a projection the history does not keep; a call about it,
+  and a call about the payment change, are answered from the analysis
+  alone;
 - a discharge or dismissal of the scenario's case, which the life generator
   does not model; and a drawn case the history's payments know about.
 
@@ -4212,7 +4384,14 @@ have been dialed, never whether it was live contact.
   logged a complaint, and the loan's debt-collector and active-duty flags;
 - the transcript, line by line: the time, the stereo recording's channel
   (Agent, Customer, IVR) and the recognizer's text, noise and all;
-- the loan's record at the end of the call's day, in dollars;
+- the loan's record at the end of the call's day, in dollars. Since
+  contacts 1.2.0 it carries the latest analysis's plan (the shortage's and
+  deficiency's installments and months, a refund's date, a credit's monthly
+  amount) and the annual statement mailed with it, when one was: the year
+  it explains, the run date it was read through, and each item (viii) line
+  with its month, its figures and the engine's sentence. So on a call
+  explaining the statement the provenance and wrong-amount checks hold the
+  agent to the statement's own figures;
 - for an outbound call, the facts the dialer held when it dialed, named as
   the servicing app's `preDialChecks` names them;
 - the agent's note, when the call left one.
@@ -4292,14 +4471,18 @@ ignores, and the browser playground passes the task it has drawn.
 **The tasks** cycle by index through thirty edges, seven each in the
 210-task held-out suite:
 
-- eight clean calls: an inbound conversation; an outbound collection call;
+- eight clean calls: an inbound conversation (one arm in three a
+  borrower's call about the escrow analysis, answered from the statement);
+  an outbound collection call;
   a caller nobody verified (a spouse not on the note, an answering third
   party or wrong number, a refusal); a voicemail; the AI voice (to a
   consenting mobile, or a landline under its cap); an active-duty
   servicemember told of the protections; a call during a bankruptcy case;
   and a debt collector's call;
 - the contact center's eight defects, C-01 to C-08, planted by
-  `plantContactDefects`;
+  `plantContactDefects`. C-05 and C-08 take every other draw on a call
+  explaining the statement, with the wrong figure in a statement line or in
+  the note's record of one;
 - fourteen of ours, Q-01 to Q-14: the AI voice that does not disclose;
   consent; the fourth landline call; the time zone, early and late; the
   call count, a debt collector's and the policy's; a cease, oral and
@@ -4309,12 +4492,16 @@ ignores, and the browser playground passes the task it has drawn.
 
 Each draw is a fresh book of one loan (four for a complaint, a call few
 loans make) from the task's own key, behind the way its edge needs, run
-through the contact center. Two plants bring findings beyond their own. A
-demand in a bankruptcy case (C-02) takes the disclaimer's turn, so the
-disclaimer is missing too. A dial into a bankruptcy (Q-07) ignored the case
-on the call as well: it carries the mini-Miranda, not the disclaimer, and
-often asks for a payment. On the held-out suite 63 calls are clean, 109
-fail items and 38 fail outright; every item turns up seven times or more.
+through the contact center. An escrow arm's loan is escrowed, with no
+missed payment scripted, and pins the borrower's call about each analysis
+(`escrow_call`); its 30 months hold one analysis with a statement, the
+second. Two plants bring findings beyond their own. A demand in a
+bankruptcy case (C-02) takes the disclaimer's turn, so the disclaimer is
+missing too. A dial into a bankruptcy (Q-07) ignored the case on the call as
+well: it carries the mini-Miranda, not the disclaimer, and often asks for a
+payment. On the held-out suite 63 calls are clean, 111 fail items and 36
+fail outright; every item turns up seven times or more. Eight of the 210 are
+escrow calls: two clean, three with C-05 and three with C-08.
 
 **A draw is kept only when it is fair to grade, and this is a filter.**
 ei-clocks' guard rejects nothing it draws; this one does. A draw is kept
@@ -4322,13 +4509,14 @@ when the call without its plant draws no finding and its note matches, the
 planted call draws the plant's finding on the planted line and nothing the
 plant does not name, and the rubric finds exactly the same on the
 recognizer's text and labels as on what was said, by whom. Of the first
-draws of 1,500 training tasks (seed 3), 500 found no call that fits their
-edge and drew again. Of the other 1,000, 91 were turned away because the
+draws of 1,500 training tasks (seed 3), 461 found no call that fits their
+edge and drew again. Of the other 1,039, 113 were turned away because the
 recognizer's noise moved a finding (a misheard amount reads as a wrong
-one), one because a wrong amount's digits were already in the record, and
-one because a note's planted figure was. The contact center's clean calls
-draw no finding of their own, its dialer's times and counts included. The
-kept draws average 1.8 attempts, at most 14 on the held-out suite.
+one), and one because a wrong amount's digits were already in the record.
+An escrow call says a dozen figures or more, so the recognizer moves more
+of them. The contact center's clean calls draw no finding of their own, its
+dialer's times and counts included. The kept draws average 1.8 attempts, at
+most 9 on the held-out suite.
 
 **What v1 leaves out, and why.**
 
@@ -4368,16 +4556,20 @@ takes two turns: every search, clock reading and other day's record in one,
 then the submission; at most 12 tool calls. On the contact center's own
 calls, as said, over a 120-loan book, the rubric finds nothing; on its
 planted defects it finds C-01 to C-04, C-06 and C-07 every time, and C-05
-and C-08 except where the record holds the planted figure.
+and C-08 except where the record holds the planted figure. With every
+borrower on that book calling about each statement, C-05 and C-08 planted
+in the explanation are found on all 215 calls.
 
 The scores to read a model against, on the held-out suite: an answer that
-says nothing scores 0.493 and passes 7 (clean calls with no note and no
+says nothing scores 0.509 and passes 7 (clean calls with no note and no
 option named); one that calls every call clean but gets the note and the
 options right scores 0.763 and passes the 63 clean calls; one that names
-every finding but no line scores 0.913. A test holds the pins. Every figure
-in this section is the suite drawn on life 1.2.0 and contacts 1.1.0.
+every finding but no line scores 0.915. A test holds the pins. Every figure
+in this section is the suite drawn on life 1.2.0 and contacts 1.2.0, pinned
+at `0c6f1827…`; the rubric and the rulebook are 1.0.0's, so the version
+holds (docs/decisions.md, "The escrow call reads the annual statement").
 
-Generating the held-out suite takes about six seconds.
+Generating the held-out suite takes about nine seconds on a loaded machine.
 
 ## The Supermortgage Gym
 

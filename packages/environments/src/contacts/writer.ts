@@ -264,8 +264,9 @@ class Script {
   caller(templates: readonly string[], tag = "talk", pii: readonly string[] = []) {
     const lead = this.r.chance(0.35) ? this.r.pick(LEAD_CALLER[this.p.style]) : "";
     let text = joinLead(lead, say(this.r, templates, this.s));
-    // Personal data is said plainly: a filler inside a date of birth would split it.
-    if (this.p.style !== "brief" && pii.length === 0 && this.r.chance(0.2))
+    // Personal data is said plainly: a filler inside a date of birth would split it. So is a complaint, whose words
+    // the call rubric reads (COMPLAINT_PHRASES): "I want I mean, this escalated" says none of them.
+    if (this.p.style !== "brief" && pii.length === 0 && this.r.chance(0.2) && tag !== "complaint")
       text = disfluent(this.r, text);
     this.push("CALLER", text, tag, pii);
   }

@@ -3679,7 +3679,7 @@ has not been rerun on it.
 
 `npm run env:demo -w @hm/environments` writes `playground/dist/demo.html`,
 the first demo as one self-contained page titled "Synthetic Loan
-Histories", its data inlined (about 585 KB). `scripts/build-demo.mjs`
+Histories", its data inlined (about 587 KB). `scripts/build-demo.mjs`
 bundles `src/demo/page-data.ts` from the workspace's sources, runs it, and
 fills `playground/demo/template.html`. No figure on it is typed by hand, and
 the same code writes the same bytes.

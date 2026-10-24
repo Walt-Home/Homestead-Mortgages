@@ -78,6 +78,7 @@ import {
   projectLines,
   settlementDepositCeiling,
   type EscrowLineInput,
+  type Projection,
 } from "../escrow/ported/analysis.js";
 import {
   boardingMonthReporter,
@@ -249,6 +250,11 @@ export interface AnalysisRow {
   readonly as_of: PlainDate;
   readonly year_start: PlainDate;
   readonly sent_on: PlainDate;
+  /**
+   * `project()`'s bills for the computation year and its twelve month-end targets: the projection the annual
+   * statement's item (viii) holds the year's history to (escrow/statement.ts, `statementExplanation`).
+   */
+  readonly projection: Pick<Projection, "items" | "targets">;
   readonly balance: Cents;
   readonly projected_actual: Cents;
   readonly annual: Cents;
@@ -1847,6 +1853,7 @@ export function simulateLoan(
       as_of: asOf,
       year_start: ys,
       sent_on: sent,
+      projection: { items: projection.items, targets: projection.targets },
       balance: escrowBal,
       projected_actual: pa,
       annual: projection.annual_cents,

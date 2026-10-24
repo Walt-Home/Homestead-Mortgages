@@ -23,6 +23,7 @@ import {
 } from "../escrow/index.js";
 import { project, type ProjectedItem } from "../escrow/ported/analysis.js";
 import { lowPointExplanation } from "../escrow/ported/statement.js";
+import { defaultCalibration, escrowYears, generate } from "../life/index.js";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const imports = (text: string) => text.split("\n").filter((l) => l.startsWith("import "));
@@ -352,5 +353,45 @@ describe("the annual escrow statement's explanation", () => {
       "low balance $0.-50 vs $260.00 projected",
     ]);
     expect(statementScopeIssues(statementHistory(PRIOR, WORKED))).toEqual([]);
+  });
+  it("explains every whole computation year of a generated book, the overdrawn ones filtered", () => {
+    // A 300-loan decade on the typed defaults. Each analysis row carries its projection's bills and targets, so a
+    // year's history is held to the projection that set its payment, as the statement holds it.
+    const book = generate(1, { loans: 300 }, { calibration: defaultCalibration() }).clean;
+    const TEMPLATES = [
+      /^a [a-z_ ]+ bill of \$\d+\.\d{2} was paid \d{2}\/\d{4} \(not projected\)$/,
+      /^[a-z_ ]+ paid \d{2}\/\d{4} was \$\d+\.\d{2} vs \$\d+\.\d{2} projected$/,
+      /^low balance \$\d+\.\d{2} vs \$\d+\.\d{2} projected$/,
+    ];
+    const seen = { years: 0, overdrawn: 0, quiet: 0, moved: 0, unprojected: 0, low: 0 };
+    for (const loan of book.loans)
+      for (const y of escrowYears(loan)) {
+        seen.years++;
+        const h = statementHistory(y.analysis, y.ledger);
+        // The ledger is the history's: every month-end balance is the generator's own.
+        expect(h.months.map((m) => m.balance_cents)).toEqual(y.month_end_balances);
+        expect(y.analysis.projection.targets.length).toBe(12);
+        if (statementScopeIssues(h).length > 0) {
+          seen.overdrawn++;
+          expect(h.actual_low_cents < 0n).toBe(true);
+          expect(() => statementExplanation(y.analysis, y.ledger)).toThrow(/^escrow-4: /);
+          continue;
+        }
+        const lines = statementExplanation(y.analysis, y.ledger);
+        for (const l of lines)
+          expect(
+            TEMPLATES.some((t) => t.test(l)),
+            l,
+          ).toBe(true);
+        if (lines.length === 0) seen.quiet++;
+        if (lines.some((l) => TEMPLATES[1]!.test(l))) seen.moved++;
+        if (lines.some((l) => TEMPLATES[0]!.test(l))) seen.unprojected++;
+        if (lines.some((l) => TEMPLATES[2]!.test(l))) seen.low++;
+      }
+    expect(seen.years).toBeGreaterThan(1_000);
+    // Every kind of line turns up.
+    for (const k of ["moved", "unprojected", "low"] as const) expect(seen[k], k).toBeGreaterThan(0);
+    expect(seen.overdrawn).toBeGreaterThan(0);
+    expect(seen.overdrawn).toBeLessThan(seen.years / 20);
   });
 });

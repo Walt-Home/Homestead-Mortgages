@@ -1302,6 +1302,9 @@ export const TABLES: readonly Table[] = [
     rows: (l) => asRows(l.analyses),
     key: (r) => String(r["year"]),
     date: (r) => r["as_of"] as PlainDate,
+    // A twin that projects other bills is labeled by the row's own figures (the annual total, the base payment, the
+    // target at the start), not again by the projection's bills and targets as one cell of JSON.
+    ignore: ["projection"],
   },
   {
     name: "arm_adjustments",

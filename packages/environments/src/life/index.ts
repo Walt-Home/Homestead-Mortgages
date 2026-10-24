@@ -31,4 +31,5 @@ export * from "./tape.js";
 export * from "./tape-defects.js";
 export * from "./check.js";
 export * from "./transfer-package.js";
+export * from "./escrow-year.js";
 export * from "./demo.js";

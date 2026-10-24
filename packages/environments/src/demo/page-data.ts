@@ -1,16 +1,19 @@
 /**
  * The first demo's page, as data: the demo loan's ten years in its clean
  * history and its defective twin, the m3-v1 tape a partner sees each month,
- * the three moments a model is asked to act, what the defects cost on the
- * twin, and a book of 1,000 loans held to the calibration's acceptance tests.
+ * the three moments a model is asked to act, two of the loan's calls as the
+ * contact center writes them, what the defects cost on the twin, and a book
+ * of 1,000 loans held to the calibration's acceptance tests.
  *
  * Nothing here is computed for the page alone. The histories are the life
  * generator's (`generate`, over the ported engines), drawn exactly as
  * `demoLoan()` draws them; the tape is `writeTape`'s; each moment is posed by
  * its environment's own task builder, answered by its reference policy
  * through its own tools (`solveNow`), and graded by its own grader; the cost
- * of a missed late-fee cap is cashiering's `lateChargeAmount`; the book is
- * the generator's, read by `calibrationCheck` and `bookPanel`.
+ * of a missed late-fee cap is cashiering's `lateChargeAmount`; the calls are
+ * `contactCenter`'s, and the escrow call's statement lines the statement
+ * engine's (`statementReading` over `statementYearOf`); the book is the
+ * generator's, read by `calibrationCheck` and `bookPanel`.
  *
  * The demo loan is drawn from the calibration's typed defaults
  * (`defaultCalibration`), as the three environments draw their tasks, so the

@@ -168,7 +168,8 @@ export interface RecordFacts {
    * The annual escrow statement mailed with that analysis, when one was (`statementYearOf`): its item (viii), each
    * bill that came in other than last year's projection and the low balance against the projected low, as the
    * servicing app's engine writes them (`statementReading`). Null with no analysis, or when no statement explains a
-   * year (the first analysis, a borrower more than 30 days behind at it, a year on two servicers' books).
+   * year (the first analysis, a borrower more than 30 days behind at it, a year on two servicers' books), or when
+   * another servicer mailed it (a transferee's record does not hold the prior servicer's).
    */
   readonly statement: {
     /** The computation year it explains, first and last day. */

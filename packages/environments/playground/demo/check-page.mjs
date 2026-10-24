@@ -2,7 +2,8 @@
  * Checks on a built demo page, without a browser: its data parses, its script
  * parses, and its rendering runs to the end against a minimal DOM for every
  * view the page offers (each history, each year, each month, the monthly
- * premium shown and hidden), with every button it draws pressed once.
+ * premium shown and hidden), with every button it draws pressed once, and
+ * each history's calls show the notes and statement lines their data holds.
  *
  * The DOM is the least the page uses: createElement, createTextNode,
  * getElementById, append, replaceChildren, setAttribute, addEventListener

@@ -97,7 +97,8 @@ export function contactCenter(book: LifeBook, opts: ContactCenterOptions = {}): 
   };
 }
 
-const loanIdOf = (contactId: string) => contactId.replace(/-K\d+$/, "");
+/** The loan a contact id names: `<loan>-K0042`, or a row a staff error's twin added, `<loan>-K0042-S01-1`. */
+const loanIdOf = (contactId: string) => contactId.replace(/-K\d+(-S\d\d(-\d+)?)?$/, "");
 
 function locate(
   center: ContactCenter,

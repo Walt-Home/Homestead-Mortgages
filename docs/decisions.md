@@ -8750,7 +8750,9 @@ center", "call-qa" and "The demo page", says what each now does.
 statement:
 
 - the escrow payment on the loan's terms today beside the new one, as
-  escrow-review 1.1.0 reads it (the row's `old_payment`);
+  escrow-review 1.1.0 reads it (the row's `old_payment`), and on a call on
+  or after the effective date the change in the past tense, since by then
+  the new payment is the one on the terms;
 - the shortage, deficiency or surplus and how it is spread, refunded or
   credited. The port's `decide` and `newPayment` decide it again from the
   row (`analysisDecision`), and it throws if they disagree with the row.
@@ -8832,7 +8834,7 @@ moves.
 
 | Suite   | Version | Held-out pin              | Reference, held-out | Spec cases | Training (seed 11) |
 | ------- | ------- | ------------------------- | ------------------- | ---------- | ------------------ |
-| call-qa | 1.0.0   | `d675547e…` → `0c6f1827…` | 210 of 210          | 17 of 17   | 300 of 300         |
+| call-qa | 1.0.0   | `d675547e…` → `4e175948…` | 210 of 210          | 17 of 17   | 300 of 300         |
 
 Every other environment's pin passes as it was, because no other suite
 draws from the contact center. The reference still takes two turns and at

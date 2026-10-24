@@ -4205,7 +4205,9 @@ analysis and the statement:
 - which analysis it is, and when it went out with the statement;
 - the escrow payment on the loan's terms today beside the new one, from the
   effective date. That is escrow-review 1.1.0's payment today, the analysis
-  row's `old_payment`. Then the total payment from then;
+  row's `old_payment`. Then the total payment from then. A call on or after
+  the effective date, when the new payment is the one on the terms, says
+  the change in the past tense;
 - the decision and how it is handled, in the words of the servicing app's
   `decisionText` and `planText`: a shortage (and a deficiency) and its
   level installments over 12 months from the effective date, a surplus
@@ -4220,8 +4222,9 @@ analysis and the statement:
   engine wrote "county tax paid 05/2029 was $2278.09 vs $1687.49
   projected". The agent adds that the projected low is the cushion when
   re-projecting the projection's own bills says it is. A line whose month
-  runs past the run date is followed by a sentence saying it is what the
-  analysis expected to pay;
+  runs past the run date is followed by a sentence saying the statement
+  shows what the analysis expected, worded to hold whether the call comes
+  before the bill or after it;
 - for a year the engine cannot print the low of (escrow-4, an account
   overdrawn during the year), the bill lines without the low line, and the
   agent says plainly that the account was overdrawn, so the statement does
@@ -4571,7 +4574,7 @@ option named); one that calls every call clean but gets the note and the
 options right scores 0.763 and passes the 63 clean calls; one that names
 every finding but no line scores 0.915. A test holds the pins. Every figure
 in this section is the suite drawn on life 1.2.0 and contacts 1.2.0, pinned
-at `0c6f1827…`; the rubric and the rulebook are 1.0.0's, so the version
+at `4e175948…`; the rubric and the rulebook are 1.0.0's, so the version
 holds (docs/decisions.md, "The escrow call reads the annual statement").
 
 Generating the held-out suite takes about nine seconds on a loaded machine.

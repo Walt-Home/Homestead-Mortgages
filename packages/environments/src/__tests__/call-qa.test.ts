@@ -904,7 +904,7 @@ describe("call-qa", () => {
     // A change here moves every score: bump CALL_QA_ENVIRONMENT_VERSION, then the pin. The suite
     // is drawn from the life generator and the contact center: a change to either moves it too.
     expect(sha256(heldTasks().map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"0c6f18277ad434aeb36530654305a332ee4162d86daa9822933bbf2143ac0316"`,
+      `"4e175948f5ca6a9a5f09b416ba2317b3fe175b398136923cc220d00c4146cbf3"`,
     );
   }, 60_000);
 

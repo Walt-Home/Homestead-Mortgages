@@ -142,10 +142,10 @@ const AGENT_ES: Record<string, string> = {
   "quote:no_payment": "Dice que no ve ningún pago registrado después del {last_on_es}.",
   // The annual statement's call (writer.ts, `statementCall`).
   "quote:analysis_compare":
-    "Dice que la parte del depósito de su pago es ahora {old_escrow}, y que a partir del pago del {effective_es} será {new_escrow}.",
+    "Dice que el análisis cambia la parte del depósito de su pago de {old_escrow} a {new_escrow}, a partir del pago del {effective_es}.",
   "quote:analysis_first":
-    "Dice que el primer mes, por el crédito, la parte del depósito es {first_escrow}.",
-  "quote:analysis_total": "Dice que su pago total será {new_total}.",
+    "Dice que en el primer mes, por el crédito, la parte del depósito es de {first_escrow}.",
+  "quote:analysis_total": "Dice que con el cambio su pago total es de {new_total}.",
   "quote:shortage_plan":
     "Dice que el análisis encontró un faltante de {shortage}, que se reparte en {plan_months} meses: {shortage_installment} al mes a partir del pago del {effective_es}.",
   "quote:deficiency_plan":
@@ -165,7 +165,7 @@ const AGENT_ES: Record<string, string> = {
   "quote:stmt_unprojected":
     "Dice que se pagó una factura {label_del} de {actual} en {month_es}, que no estaba proyectada.",
   stmt_anticipated:
-    "Dice que esa factura vence después del análisis, así que es el monto que esperan pagar.",
+    "Dice que esa factura cae después de la fecha del análisis, así que el estado de cuenta muestra el monto que el análisis esperaba.",
   "quote:stmt_low":
     "Dice que el saldo más bajo fue {low_actual} frente a {low_projected} proyectados.",
   stmt_overdrawn:

@@ -1008,23 +1008,35 @@ function statementCall(x: Script) {
     ],
     "quote:analysis_sent",
   );
+  // The payment on the loan's terms is the old one until the effective date's payment, and the new one from it: a call
+  // on or after that day says the change in the past tense, never that the old payment is today's.
+  const changed = f.on >= a.effective;
   x.agent(
-    [
-      "[Right now|Today] the escrow part of your payment is {old_escrow}. [Starting with the {effective} payment it will be|From the {effective} payment on, it's] {new_escrow}.",
-      "The analysis [sets|changes] your escrow payment from {old_escrow} to {new_escrow}, starting with the {effective} payment.",
-    ],
+    changed
+      ? [
+          "[Before the change|Until the {effective} payment] the escrow part of your payment was {old_escrow}. [Starting with the {effective} payment it became|From the {effective} payment on, it's been] {new_escrow}.",
+          "The analysis [set|changed] your escrow payment from {old_escrow} to {new_escrow}, starting with the {effective} payment.",
+        ]
+      : [
+          "[Right now|Today] the escrow part of your payment is {old_escrow}. [Starting with the {effective} payment it will be|From the {effective} payment on, it's] {new_escrow}.",
+          "The analysis [sets|changes] your escrow payment from {old_escrow} to {new_escrow}, starting with the {effective} payment.",
+        ],
     "quote:analysis_compare",
   );
   if (a.first_month_escrow !== a.new_escrow)
     x.agent(
       [
-        "[That first month it's|The first payment at the new amount carries] {first_escrow}[ of escrow|], because of the credit.",
+        changed
+          ? "[That first month it was|The first payment at the new amount carried] {first_escrow}[ of escrow|], because of the credit."
+          : "[That first month it's|The first payment at the new amount carries] {first_escrow}[ of escrow|], because of the credit.",
       ],
       "quote:analysis_first",
     );
   x.agent(
     [
-      "[So your total payment|With principal and interest, your payment] [will be|comes to] {new_total}[ that month|].",
+      changed
+        ? "[So your total payment|With principal and interest, your payment] [was|came to] {new_total}[ that month|]."
+        : "[So your total payment|With principal and interest, your payment] [will be|comes to] {new_total}[ that month|].",
     ],
     "quote:analysis_total",
   );
@@ -1097,10 +1109,11 @@ function statementCall(x: Script) {
         ].map(sub),
         `quote:stmt_unprojected:${i + 1}`,
       );
+    // Whether the call is before the bill or after it, the statement shows what the analysis counted on.
     if (l.anticipated)
       x.agent(
         [
-          "[That one comes due after the analysis ran, so it's the amount we expect to pay.|That bill comes after the analysis date, so the statement shows what we have scheduled.]",
+          "[That one falls after the analysis date, so the statement shows the amount the analysis expected.|That bill is dated after the analysis ran, so the statement shows what the analysis counted on.]",
         ],
         "stmt_anticipated",
       );

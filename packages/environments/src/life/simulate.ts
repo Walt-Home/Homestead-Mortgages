@@ -156,6 +156,11 @@ const CURTAILMENT_MAX_SHARE = 10n;
 export const BEHIND_CONTACT_MULTIPLIER = 3;
 /** A payment the prior servicer forwards reaches us 5 to 10 days after it reached them. */
 const FORWARD_LAG_DAYS: readonly [number, number] = [5, 10];
+/**
+ * §1024.33(c)(1): the 60-day period beginning on the transfer's effective date, its first day the transfer date
+ * (spec §2.7 example L: effective 2026-09-01, window through 2026-10-30).
+ */
+const TRANSFER_WINDOW_DAYS = 60;
 /** The escrow balance is refunded this many business days after a payoff (the quote says within 20). */
 const PAYOFF_REFUND_BUSINESS_DAYS = 10;
 
@@ -179,7 +184,9 @@ export type ReceiptMode =
   /** A history error's: the same draft taken twice (D-28). */
   | "duplicate"
   /** A history error's: another borrower's payment, keyed to this loan (D-25). */
-  | "misposted";
+  | "misposted"
+  /** An event's, never a row's: a payment the prior servicer forwards, posted under the mode the borrower sent it as. */
+  | "forwarded";
 
 export interface ReceiptRow {
   readonly id: string;
@@ -759,6 +766,10 @@ interface Ev {
   readonly mode?: ReceiptMode;
   readonly credited?: PlainDate;
   readonly channel?: ReceiptRow["channel"];
+  /** A payment the borrower sent the prior servicer: the day it is forwarded to us. */
+  readonly arrives?: PlainDate;
+  /** A forwarded payment on the day it reaches us: what the borrower sent, decided the day the prior servicer had it. */
+  readonly sent?: { readonly mode: ReceiptMode; readonly curtail: Cents };
   readonly draws?: PaymentDraw;
   readonly year?: number;
   readonly scriptedMiss?: boolean;
@@ -1200,7 +1211,9 @@ export function simulateLoan(
     on = rollForward(on, servicerCalendar);
     const credited = on;
     let channel: ReceiptRow["channel"] = "borrower";
-    // A payment sent to the prior servicer after the transfer reaches us late and is credited as of the day they had it.
+    let arrives: PlainDate | null = null;
+    // A payment sent to the prior servicer after the transfer: the borrower decides what to send the day the prior
+    // servicer has it, and it reaches us 5 to 10 days later, credited as of the day they had it (`forwardLater`).
     if (
       transferInOn &&
       on >= transferInOn &&
@@ -1209,7 +1222,7 @@ export function simulateLoan(
     ) {
       forwarded++;
       channel = "transferor_forward";
-      on = rollForward(addDays(on, md.forwardLag), servicerCalendar);
+      arrives = rollForward(addDays(on, md.forwardLag), servicerCalendar);
     }
     push({
       on,
@@ -1220,6 +1233,7 @@ export function simulateLoan(
       channel,
       draws: md,
       scriptedMiss: script.missed.has(due),
+      ...(arrives ? { arrives } : {}),
     });
   };
 
@@ -1406,10 +1420,61 @@ export function simulateLoan(
       post(on, credited, amount, "duplicate", channel, 0n, `${id}-DUP`);
   };
 
+  /**
+   * A payment the prior servicer received after the transfer, forwarded: posted the day it reaches us, credited as of
+   * the day they had it. The 60-day transfer shield is read as the spec reads it (§2.7 rule 3(i) and example L; 12 CFR
+   * 1024.33(c)(1)): in the 60 days from the transfer, a payment the prior servicer received by the end of grace is not
+   * late for any purpose. The prior servicer reports it the day it has it (spec §2.7's
+   * `misdirected_payments.protected`, which the run reads), so when what it received pays the installment in full,
+   * a `transfer_window_60` overlay naming that installment alone is written that day, and the late-charge run before
+   * the money reaches us charges nothing. The engine's `transfer_shield_until`, which spares every installment due in
+   * the window paid or not (cashiering-11, latecharges.ts:83), is never set: a missed installment in the window is
+   * charged, and so is one paid after grace, a short payment, or one paid to either servicer late.
+   */
+  const forwardLater = (
+    e: Ev,
+    credited: PlainDate,
+    amount: Cents,
+    mode: ReceiptMode,
+    curtail: Cents,
+  ) => {
+    const target = e.due!;
+    let owed = -state.suspense_unapplied_cents;
+    for (const i of open()) if (i.due_date <= target) owed += pOf(i);
+    if (
+      transferInOn !== null &&
+      credited <= addDays(transferInOn, TRANSFER_WINDOW_DAYS - 1) &&
+      credited <= graceEndFor(state, target) &&
+      owed > 0n &&
+      amount - curtail >= owed
+    )
+      state.overlays = [
+        ...(state.overlays ?? []),
+        { kind: "transfer_window_60", from: target, to: target, installment_due_date: target },
+      ];
+    push({
+      on: e.arrives!,
+      kind: "receipt",
+      due: target,
+      mode: "forwarded",
+      amount,
+      credited,
+      channel: e.channel!,
+      sent: { mode, curtail },
+    });
+  };
+
   const onReceipt = (e: Ev) => {
     const target = e.due!;
     const channel = e.channel ?? "borrower";
     const credited = e.credited ?? e.on;
+    if (e.mode === "forwarded")
+      return post(e.on, credited, e.amount!, e.sent!.mode, channel, e.sent!.curtail);
+    // What the borrower sends: posted now, or, sent to the prior servicer, when it is forwarded to us.
+    const send = (amount: Cents, mode: ReceiptMode, curtail: Cents = 0n): void =>
+      e.arrives
+        ? forwardLater(e, credited, amount, mode, curtail)
+        : post(e.on, credited, amount, mode, channel, curtail);
     if (e.mode === "misposted") {
       post(e.on, credited, e.amount!, "misposted", channel, 0n, e.rowId);
       for (const x of receipts.find((r) => r.id === e.rowId)?.installments ?? [])
@@ -1420,6 +1485,13 @@ export function simulateLoan(
       return post(e.on, credited, e.amount!, "partial_rest", channel, 0n);
     if (e.scriptedMiss) return void note(e.on, "missed", target);
     if (promiseCovers(e.on)) return void note(e.on, "deferred_to_promise", target);
+    // A plan payment's bookkeeping reads the posting, so one sent to the prior servicer is decided when it reaches us.
+    if (e.arrives && activePlan()) {
+      const { arrives, seq: _seq, ...rest } = e;
+      void _seq;
+      push({ ...rest, on: arrives });
+      return;
+    }
     const md = e.draws!;
     const o = open();
     const oldest = o[0];
@@ -1439,7 +1511,7 @@ export function simulateLoan(
           ? plan.arrears - plan.share * BigInt(plan.months - 1)
           : plan.share;
       const regular = targetInst && !plan.in_arrears.has(target) ? pOf(targetInst) : 0n;
-      post(e.on, credited, regular + extra, "plan", channel, 0n);
+      send(regular + extra, "plan");
       if (plan.paid === plan.months) {
         plan.done = true;
         const caughtUp = !state.installments.some((i) => i.status === "due" && i.due_date <= e.on);
@@ -1459,10 +1531,10 @@ export function simulateLoan(
     if (behind) {
       if (!rnd.delinquency || md.uCure < pCure) {
         const owed = cureAmount(target > e.on ? target : e.on);
-        return post(e.on, credited, owed > 0n ? owed : pOf(oldest!), "cure", channel, 0n);
+        return send(owed > 0n ? owed : pOf(oldest!), "cure");
       }
       if (md.uRoll < clamp01(pRoll2 * disaster)) return void note(e.on, "missed", target);
-      return post(e.on, credited, pOf(oldest!), "oldest", channel, 0n);
+      return send(pOf(oldest!), "oldest");
     }
     if (rnd.delinquency && md.uMiss < clamp01(pRoll * disaster, 0.9))
       return void note(e.on, "missed", target);
@@ -1479,7 +1551,7 @@ export function simulateLoan(
     if (stale) {
       staleArmed.shift();
       note(e.on, "stale_bill_pay", target);
-      return post(e.on, credited, lastRegular!, "stale_bill_pay", channel, 0n);
+      return send(lastRegular!, "stale_bill_pay");
     }
     lastRegular = statement;
     if (rnd.payments && md.uPartial < R.payment.partial_share) {
@@ -1492,16 +1564,16 @@ export function simulateLoan(
         amount: short,
         channel,
       });
-      return post(e.on, credited, statement - short, "partial", channel, 0n);
+      return send(statement - short, "partial");
     }
     if (rnd.payments && state.escrowed && md.uFifty < FIFTY_SHORT_SHARE)
-      return post(e.on, credited, statement - md.fiftyShort, "short_50", channel, 0n);
+      return send(statement - md.fiftyShort, "short_50");
     if (rnd.payments && md.uCurtail < R.payment.curtailment_share) {
       const cap = state.upb_cents / CURTAILMENT_MAX_SHARE;
       const c = md.curtail < cap ? md.curtail : cap;
-      if (c > 0n) return post(e.on, credited, statement + c, "curtail", channel, c);
+      if (c > 0n) return send(statement + c, "curtail", c);
     }
-    return post(e.on, credited, statement, "regular", channel, 0n);
+    return send(statement, "regular");
   };
 
   const onPromiseMade = (e: Ev) => {
@@ -2044,8 +2116,8 @@ export function simulateLoan(
         if (i.status === "due" && i.due_date >= e.on)
           (i as { escrow_cents: Cents }).escrow_cents = 0n;
     }
-    // §1024.33(c)(1): sixty days in which a payment sent to the prior servicer is not late.
-    state.transfer_shield_until = addDays(e.on, 60);
+    // §1024.33(c)(1) protects only a payment the prior servicer received on time (`forwardLater`); the engine's blanket
+    // `transfer_shield_until` is left unset (cashiering-11).
     if (graceBefore !== boardedTerms.late_charge_grace_days)
       for (const [due, run] of runEvents)
         if (run.on > e.on && !run.canceled) {

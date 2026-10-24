@@ -30,7 +30,7 @@ export const SERVICER = {
   phone: "1-800-555-0187",
   hours_open: 8,
   hours_close: 9,
-  /** §1024.33(c)(1): a payment sent to the prior servicer is not late for 60 days after a transfer. */
+  /** §1024.33(c)(1): for 60 days after a transfer, a payment the prior servicer receives on time is not late. */
   transfer_shield_days: 60,
   /** Regulation Z §1026.36(c)(3): a payoff statement within 7 business days. */
   payoff_statement_business_days: 7,

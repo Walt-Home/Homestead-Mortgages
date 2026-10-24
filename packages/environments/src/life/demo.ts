@@ -30,10 +30,14 @@
  *   - year 10: the mortgage insurance ends on its own schedule on 1 March
  *     2035, at the 78 % date, and the loan is paid off in September.
  *
- * The 60-day transfer shield is why the transfer is in December: the
- * cashiering engine shields every installment due within 60 days of the
- * transfer date (`assessLateCharge`, latecharges.ts:83), so a transfer on 1
- * January 2028 would have left March's charge unassessed.
+ * The transfer is in December because of the 60-day transfer shield as the
+ * generator first used it: the cashiering engine's `transfer_shield_until`
+ * spares every installment due within 60 days of the transfer date, paid or
+ * not (cashiering-11, latecharges.ts:83), so a transfer on 1 January 2028
+ * would have left March's charge unassessed. Since life 1.2.0 the generator
+ * shields only a payment the prior servicer received on time, as the spec
+ * reads §1024.33(c)(1), and a missed March would be charged after a January
+ * transfer too; the date stays where the demo's figures were set.
  *
  * `demoLoan()` runs the clean history and three twins (D-42 alone, D-03
  * alone, and both, the demo's defective loan) and writes each one's transfer

@@ -9,10 +9,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { addMonths, daysBetween, type PlainDate } from "@hm/kernel/calendar";
+import { addDays, addMonths, daysBetween, type PlainDate } from "@hm/kernel/calendar";
 import { monthlyInterest, ratePercent } from "@hm/kernel/money";
 import { isValidMin } from "../boarding/ported/min.js";
-import { lateChargeAmount } from "../payments/ported/latecharges.js";
+import { graceEnd, lateChargeAmount } from "../payments/ported/latecharges.js";
 import type { LoanCashState } from "../payments/ported/types.js";
 import { toJsonLine } from "../record.js";
 import { rngFor } from "../rng.js";
@@ -425,7 +425,9 @@ describe("life generator", () => {
     ).clean;
     const [a, b] = [res.loans[0]!, res.loans[1]!];
 
-    // The transfer: everything before it is the prior servicer's, marked so; the shield keeps the first payment from being late.
+    // The transfer: everything before it is the prior servicer's, marked so. The installment due on the transfer date
+    // was missed, inside the 60-day window, and is charged: §1024.33(c)(1) protects only a payment the prior servicer
+    // received on time, and the borrower sent nobody anything for it.
     const t = a.transfer_in_on!;
     expect(t).toBe(addMonths(a.draw.first_due, 18));
     for (const r of [
@@ -436,8 +438,8 @@ describe("life generator", () => {
       expect(r.servicer).toBe(r.on < t ? "prior" : "us");
     expect(a.months.filter((m) => m.servicer === "prior").length).toBe(18);
     expect(a.months.filter((m) => m.metro2.furnished_by === "prior").length).toBe(18);
-    const shielded = a.late_charge_runs.find((r) => r.due === t)!;
-    expect(shielded.reason).toContain("transfer_window_60");
+    const missed = a.late_charge_runs.find((r) => r.due === t)!;
+    expect(missed.outcome).toBe("assessed");
     expect(
       a.receipts.some((r) => r.channel === "transferor_forward" && r.credited_as_of < r.on),
     ).toBe(true);
@@ -481,6 +483,56 @@ describe("life generator", () => {
     expect(b.months.at(-1)!.metro2.record!["special_comment"]).toBe("AS");
     expect(b.disbursements.at(-1)!.kind).toBe("payoff_refund");
     expect(b.disbursements.at(-1)!.balance_after).toBe(0n);
+  });
+
+  it("shields only a payment the prior servicer received on time in the 60 days after a transfer", () => {
+    // Forty loans transferred in on one date, the borrower sending the next two payments to the prior servicer.
+    const n = 40;
+    const t = addMonths("2026-03-01" as PlainDate, 18);
+    const res = generate(
+      "life-test/shield",
+      {
+        loans: n,
+        start: "2026-03-01",
+        cohort_months: 1,
+        random: { payoff: false },
+        events: Array.from({ length: n }, (_, i) => ({
+          kind: "transfer_in" as const,
+          loan: i,
+          month: 18,
+          misdirected_payments: 2,
+        })),
+      },
+      { calibration: cal },
+    ).clean;
+    const windowEnd = addDays(t, 59);
+    let shieldedBeforeArrival = 0;
+    let chargedInWindow = 0;
+    const bad: string[] = [];
+    for (const l of res.loans) {
+      expect(l.transfer_in_on).toBe(t);
+      // The installments a forwarded payment received on time paid in full: protected, whenever the money reached us.
+      const protectedDues = new Map<PlainDate, PlainDate>();
+      for (const r of l.receipts)
+        if (r.channel === "transferor_forward" && r.credited_as_of <= windowEnd)
+          for (const x of r.installments)
+            if (r.credited_as_of <= graceEnd(x.due, 15)) protectedDues.set(x.due, r.on);
+      for (const run of l.late_charge_runs) {
+        if (run.servicer !== "us") continue;
+        const arrived = protectedDues.get(run.due);
+        const shield = run.reason?.includes("transfer_window_60") ?? false;
+        if (arrived !== undefined) {
+          if (run.outcome !== "not_assessed") bad.push(`${l.loan_id} ${run.due}: ${run.outcome}`);
+          if (arrived > run.on && !shield) bad.push(`${l.loan_id} ${run.due}: ${run.reason}`);
+          if (arrived > run.on) shieldedBeforeArrival++;
+        } else if (shield) bad.push(`${l.loan_id} ${run.due}: shielded, nothing received on time`);
+        if (run.due >= t && run.due <= windowEnd && run.outcome === "assessed") chargedInWindow++;
+      }
+    }
+    expect(bad).toEqual([]);
+    // Some forwarded payments reach us after the run, and are shielded; some installments in the window are charged.
+    expect(shieldedBeforeArrival).toBeGreaterThan(0);
+    expect(chargedInWindow).toBeGreaterThan(0);
   });
 
   it("plants D-03, and its twin differs from the clean history only downstream of it", () => {

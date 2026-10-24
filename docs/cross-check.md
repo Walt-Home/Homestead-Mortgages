@@ -16,7 +16,9 @@ Run on 23 October 2026, against life 1.0.0 and the servicing app at the commit
 Life 1.1.0, the calibration reader merged the same day, draws every book
 differently, so the same seeds now draw other books; the two-hour batch has not
 been rerun on it, and `report` and `loan` refuse a run drawn under another life
-version than the generator's.
+version than the generator's. Life 1.2.0 (24 October) fixes both generator
+bugs below and stops walking into the engine half of cashiering-11; the batch
+has not been rerun on it either.
 
 ## At a glance
 
@@ -35,8 +37,9 @@ version than the generator's.
   3,594 to three that are not, and 1,587 to the harness. Two more logged
   defects, boarding-4 and boarding-2, were worked around before the first
   unit ran. One logged defect is on both sides: on a transfer the generator
-  uses the engine's own transfer shield, which cashiering-11 says spares too
-  much, while the runtime never sets it at all.
+  used the engine's own transfer shield, which cashiering-11 says spares too
+  much, while the runtime never sets it at all. Since life 1.2.0 the
+  generator shields only a payment the prior servicer received on time.
 - **Three defects in the servicing app's runtime that are not logged, all in
   credit reporting.** Its monthly Metro 2 builder never carries the prior
   month, so the payment history profile never fills, and the date of first
@@ -46,11 +49,11 @@ version than the generator's.
   servicer never reaches it, so a first month with no receipt of the
   servicing app's own reports no date of last payment.
 - **Two generator bugs, neither in a figure an environment grades.** The MIN's
-  check digit is drawn at random, so 188 of 216 generated MINs fail Mod-10;
+  check digit was drawn at random, so 188 of 216 generated MINs fail Mod-10;
   and 2,311 of 16,704 active month-ends (13.8 %) have no next due date,
   because the borrower paid the next installment early and the generator
   creates the one after it only the next month. The tape's half of the second
-  is fixed on main since this run (below).
+  was fixed in life 1.1.0, and life 1.2.0 fixes the rest of both (below).
 - **The path is a check, not a generator.** About 0.4 seconds per loan-day per
   process on a loaded machine, rising as the database's records grow: a
   thousand loan-decades would take two days. The generator writes them in
@@ -313,7 +316,7 @@ case, which became its own class.
   did.
 - **cashiering-11** has two halves, and the two sides here each take one.
   The engine shields every installment due inside the 60 days after a
-  transfer, paid or not (`latecharges.ts:83`), and the generator sets that
+  transfer, paid or not (`latecharges.ts:83`), and the generator set that
   shield on every transfer (`simulate.ts:1486` in life 1.0.0). The
   runtime's cash state never sets it, so the servicing app charges every
   installment in the window that is paid after grace. The spec shields only
@@ -321,7 +324,13 @@ case, which became its own class.
   borrower paid no one for January, so by the spec the servicing app's
   $219.56 is due and the generator's zero is the engine's error. Neither
   side is right on a forwarded payment the old servicer received on time,
-  which the generator draws only when a scenario asks for one.
+  which the generator draws only when a scenario asks for one. Since life
+  1.2.0 the generator takes the spec's side: it never sets the blanket
+  shield, and a payment the prior servicer received on time in the window
+  writes a `transfer_window_60` overlay naming that installment alone, the
+  defect's own smallest fix. So January's charge in the example is the
+  generator's too, and on a forwarded payment received on time it charges
+  nothing where the runtime still would.
 - **boarding-6**: 32 of the 82 transfers compared carried late charges. The
   cash state never sees them, so the servicing app never collects them, and
   the money the borrower sends for them goes to suspense or to the next
@@ -384,10 +393,10 @@ posts, but every transferred loan whose first month brings none meets it.
 ## Generator bugs
 
 Neither touches a figure an environment grades; both were worked around in
-the harness, and neither is fixed here. Both still stand in life 1.1.0, but
-for the tape row's half of the second (below). Paths are under
-`packages/environments/src/life/`, and the lines are life 1.0.0's, the
-version this run drew from.
+the harness. Both are fixed in life 1.2.0, the tape row's half of the second
+in 1.1.0 already, and the harness's repairs find nothing on a book it draws
+now. Paths are under `packages/environments/src/life/`, and the lines are
+life 1.0.0's, the version this run drew from.
 
 - **The MIN's check digit is random.** `draw.ts:361` writes `"1000001"` and
   eleven random digits, so the eighteenth digit is the Mod-10 check digit only
@@ -396,7 +405,9 @@ version this run drew from.
   `apps/servicing/src/domain/boarding/rules.ts:103`), and the harness repairs
   the digit before boarding. The generator's own Metro 2 validation checks
   only that a MIN is present, so its records carry a MIN no MERS lookup would
-  accept.
+  accept. Fixed in life 1.2.0: the eighteenth digit is computed by the port of
+  the gate's own `min.ts` (`mersMin`), and the month-end's validation holds
+  it to the digit too.
 - **A month-end paid ahead has no next due date.** The generator creates each
   installment one month ahead (`simulate.ts:1808`), and a month-end's next due
   date is the oldest open one (`simulate.ts:1697`, `:1776`). When the borrower
@@ -404,13 +415,17 @@ version this run drew from.
   and so the tape row (`projection.ts:249`), has no next due date: 2,311 of
   16,704 active month-ends. A tape row for an active loan always carries one.
   Main fixed the tape row the same day, in life 1.1.0 (e0aa1f4): the
-  projection takes the installment after the one interest is paid to. The
-  month-end's own `next_due` is still null there.
+  projection takes the installment after the one interest is paid to. Life
+  1.2.0 fixes the month-end's own `next_due` the same way, with its remaining
+  term counted from it, and the projection copies them.
 
-The generator also inherits the engine half of cashiering-11 (above): it
-shields every installment due in the 60 days after a transfer, paid or not.
-That is a logged engine defect, not a generator bug, but the generator walks
-into it on every transfer rather than steering around it.
+Until life 1.2.0 the generator also inherited the engine half of
+cashiering-11 (above): it shielded every installment due in the 60 days
+after a transfer, paid or not. That is a logged engine defect, not a
+generator bug, but the generator walked into it on every transfer. Since
+1.2.0 it steers around it, as the environments steer around the logged
+defects: the blanket shield is never set, and only a payment the prior
+servicer received on time is shielded.
 
 ## Harness errors
 
@@ -450,18 +465,19 @@ into it on every transfer rather than steering around it.
   to boarding-6, and the Metro 2 ones to metro2-1 and the three new defects.
   On cashiering-18, cashiering-19 and boarding-6 the generator does what the
   engine does when it is handed what the runtime drops: the plan's overlay,
-  the charge's collection, the tape's charges. On cashiering-11 it does what
-  the engine does, which is the
-  other half of the same defect: a transferred loan's first two months are
-  wrong on both sides, in opposite directions, until the generator shields
-  only payments the prior servicer received on time. The servicing app's
-  runtime cannot serve as a reference for late charges after one is paid, for
-  a transfer's first two months, for a plan, or for anything it reports to a
-  bureau.
-- **The generator's data has bugs where nothing grades it.** The MIN and the
+  the charge's collection, the tape's charges. On cashiering-11 it did what
+  the engine does, which is the other half of the same defect: a transferred
+  loan's first two months were wrong on both sides, in opposite directions.
+  Since life 1.2.0 the generator shields only payments the prior servicer
+  received on time, as the spec does, so the generator is right there and the
+  runtime still is not. The servicing app's runtime cannot serve as a
+  reference for late charges after one is paid, for a transfer's first two
+  months, for a plan, or for anything it reports to a bureau.
+- **The generator's data had bugs where nothing grades it.** The MIN and the
   next due date are fields a tape writer and a boarding environment will
-  read, and the check found both on its first run. The tape writer and the
-  transfer package should be checked the same way before they are trusted.
+  read, and the check found both on its first run; life 1.2.0 fixes both.
+  The tape writer and the transfer package should be checked the same way
+  before they are trusted.
 - **What this check does not cover.** ARMs (arm-15 makes the comparison
   meaningless), payoffs, transfers out, mortgage insurance, escrow
   disbursements and analyses, contacts and the early-intervention clocks; a

@@ -8535,3 +8535,147 @@ gate (`apps/servicing/scripts/board-life-package.mjs`).
 panel's note said D-42 alone enters through a transfer. Of the ten, nine
 do. The note now names every defect the book has no transferred loan to
 plant on.
+
+## Life 1.2.0
+
+**Decided 24 October 2026.** `LIFE_VERSION` is 1.2.0. Five things the life
+generator did wrong or did not carry are fixed, and one module that reads
+it reads more. Every stream hangs off the version, so every book moves, and
+so does every suite drawn from it. docs/environments.md, "The life
+generator", "escrow-review" and "The contact center", says what each now
+does; the entries above give 1.1.0's figures and are left as they were
+measured.
+
+**What changed.**
+
+- **An analysis's old payment is the one billed when it runs.** The
+  generator handed each analysis, and escrow-review its
+  `current_escrow_payment_cents`, the old schedule's payment from the new
+  schedule's effective date, after last year's spread had run out ("An
+  analysis's 'old payment' is the old schedule's", above). It now hands the
+  escrow share of the first installment due after the run date, the running
+  shortage or credit in it: what the servicing app compares the new payment
+  with (`loan_terms.escrow_payment_cents`,
+  `apps/servicing/src/domain/escrow/ops-3-6.ts:105-117`; spec 3.6, worked
+  example (a)), and what Reg X's annual statement sets the new payment
+  beside (12 CFR 1024.17(i)(1)). On the final month of a spread that
+  installment carries the final installment's rounding, a few cents off
+  `loan_terms`. The history's own triggers read it too.
+- **A MIN carries its check digit.** `draw.ts` wrote "1000001" and eleven
+  random digits, so 188 of the cross-check's 216 MINs failed Mod-10. The
+  eighteenth digit is now computed by the port of the boarding gate's own
+  `min.ts` (HF-008); the eleventh is still drawn, so no later draw moves,
+  and the MIN is exactly the one the transfer-package writer used to repair
+  it to, so the writer writes it as drawn. The month-end's Metro 2
+  validation holds the digit too (`MIN_CHECK_DIGIT`, ours: the engine's
+  stops at eighteen digits). No defect in the registry plants a MIN.
+- **A month-end paid ahead has a next due date.** The tape row took the
+  installment after the one interest is paid to in 1.1.0; the month-end now
+  does, and counts its remaining term from it. Its payment is still next
+  month's installment's, as the tape row's was, so no tape cell moved. What
+  moved is every reader of the month-end's own `next_due`: catchup-posting's
+  month-ends, the demo page's month list, and the cross-check harness's
+  fallback for a null one, which no longer fires. Metro 2 reads the original
+  term, and the contact center and the early-intervention clocks read the
+  installment ledger, so none of them moved.
+- **The 60-day transfer shield is the spec's.** The generator set the
+  ported engine's `transfer_shield_until` on every transfer, which spares
+  every installment due in the window, paid or not: the engine's half of
+  cashiering-11. It now never sets it. A payment the borrower sent the prior
+  servicer in the 60 days from the transfer (through day 59, as example L
+  reads the window) that pays its installment in full writes a
+  `transfer_window_60` overlay naming that installment alone, the day the
+  prior servicer had it, which is the defect's own smallest fix; the payment
+  reaches us 5 to 10 days later, credited as of that day. To know what the
+  prior servicer received, a forwarded payment is decided the day it is
+  sent, not the day it arrives (a plan payment, whose bookkeeping reads the
+  posting, still is decided on arrival). A missed installment in the window
+  is now charged, and so is one paid late or short. No rulebook stated the
+  blanket reading, catchup-posting's included, so no stated rule changed
+  with it. The contact center's agents now say the condition: a payment the
+  previous servicer gets by the end of grace is not late. The demo's
+  December transfer was chosen around the blanket shield; it stays.
+- **An analysis row carries its projection.** `AnalysisRow.projection` is
+  `project()`'s bills for the year and its twelve targets, which the annual
+  statement's explanation needs ("Not yet", in the entry on the statement's
+  explanation, above). `escrowYears(loan)` reads every computation year the
+  history holds whole into what `statementExplanation` takes, and a test runs
+  the engine over every such year of a 300-loan decade, the years overdrawn
+  in them filtered by `statementScopeIssues` (escrow-4). In seed 1's
+  thousand loans, 54 of the 4,930 such years are overdrawn. The twin
+  comparison leaves the projection to the row's own figures.
+- **The contact center reads the scenario's bankruptcy.** It drew its own
+  petition and ignored `LoanLife.bankruptcy`, the one a scenario dates and
+  D-37 plants on, so a book with one could get collection calls without the
+  disclaimer during the stay. It now takes that petition as its case (the
+  attorney's notice one to three days later, and no discharge, because the
+  history keeps the case open), and its handling applies: no collection call
+  from the petition, the disclaimer from the notice, no payment-arrangement or
+  hardship calls in the stay. Where a boarding dropped the case (D-37's twin),
+  the servicer stops knowing of it at the transfer, as the history's
+  month-ends do. A loan with no scenario case draws its own as before.
+
+**escrow-review is 1.1.0.** Its task now states, and its grader grades
+against, the payment billed today, so its stated rule changed: Step 10
+names it, and `escrow-review/1.0.0` is retired in `HELDOUT_SUITES`. Measured
+from the generator, never from a run's transcripts, on 1.0.0's 200 held-out
+tasks under life 1.1.0: the billed payment differs from the task's on 154,
+and 15 graded answers change, 4 of them whether the flag stands, the
+figures the baseline entry above gave. DeepSeek's 188 of 200 stands as what
+1.0.0 measured; the baseline is to be rerun on 1.1.0.
+
+**The pins.** A suite whose stated rule did not change keeps its version
+and is re-pinned, as life 1.1.0's were; each fingerprint names the life
+version it is drawn under.
+
+| Suite           | Version       | Held-out pin              | Reference, held-out | Spec cases |
+| --------------- | ------------- | ------------------------- | ------------------- | ---------- |
+| catchup-posting | 1.0.0         | `3ff8eccf…` → `9291c1f2…` | 200 of 200          | 5 of 5     |
+| escrow-review   | 1.0.0 → 1.1.0 | `6a05284f…` → `b0040840…` | 200 of 200          | 4 of 4     |
+| boarding-triage | 1.1.0         | `a2fc1478…` → `eb9db31d…` | 200 of 200          | 4 of 4     |
+| tape-intake     | 1.0.0         | `09804de6…` → `04fc3434…` | 200 of 200          | 13 of 13   |
+| call-qa         | 1.0.0         | `697ad78d…` → `ff88e536…` | 210 of 210          | 17 of 17   |
+
+Every other environment's held-out pin passes as it was: nothing else
+draws from the life generator. What each suite holds now:
+
+- **catchup-posting:** 125 first draws (117); the same 116 above the cap and
+  84 within; 58 refunds due, a median near $240; up to 19 charges and seven
+  installments; an answer trusting the system's charges still passes the 84
+  within the note and none above (0.65 there).
+- **escrow-review:** 160 first draws (158); the same 101 held and 99 not;
+  a payment change over $150 on 94 (81), over 25 % on 68, a refund over
+  $2,500 on 28 (30), a bill over 20 % on 16 (20). With no bill comparison an
+  answer passes 184; saying every flag stands passes 101.
+- **boarding-triage:** 148 first draws (149); 346 symptom labels (284); the
+  floors are 20, 70 and 80 as they were; of 1,000 training first draws, 745
+  reached the fairness check (734) and the reference missed none.
+- **tape-intake:** 186 first draws (185); the same 82, 80 and 38 verdicts
+  and the same findings by defect but T-03's 40 (37); of 1,000 training
+  first draws, 943 reached the check and the reference missed three (one),
+  each a history error the rule's line does not reach.
+- **call-qa:** 63 clean, 110 failing items and 37 failing outright (111 and
+  36); an empty answer scores 0.493 (0.499).
+
+**What the new books found.** Re-pinning met six tests that had held one
+book's figure, and one defect:
+
+- a contact-center caller could say a filler inside a complaint ("I want I
+  mean, this escalated"), which none of the rubric's complaint phrases
+  reads, so a C-04 planted on that call could not be found. A complaint turn
+  now takes no filler, as personal data already did;
+- the D-25 test held a misapplied split to its clean twin's payment-history
+  amounts. An analysis the prior servicer ran after the misapplication read
+  the escrow it inflated and reset the payment, so the test now holds the
+  dates, which are what boarding's oldest-first application reads;
+- D-24's twin may collect a charge boarding carried on another day than the
+  clean history does, a symptom dated by the charge's row before the root;
+- the rest were counts of one book (escrow-review's bills over 20 %, the
+  boarding suite's clean loans by kind, the demo's year-4 T&I, a rare
+  already-paid receipt, C-04 planted at 3 % on a book with few complaints),
+  each moved to what the new book holds.
+
+**The cross-check.** docs/cross-check.md's batch drew from life 1.0.0 and
+has not been rerun. Its two generator bugs and the generator's half of
+cashiering-11 are fixed here, and the harness's notes say so; its MIN repair
+and its cashiering-11 class find nothing on the books it draws.

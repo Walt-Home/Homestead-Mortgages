@@ -1524,7 +1524,11 @@ index date 2026-09-17).
   `section2.test.ts:279` and 2.7-T4, which assert the current reading.
 - **Kept out by.** payments-posting. `paymentsInScope` keeps a shielded
   installment only when the forwarded receipt then satisfies it, as in example
-  L.
+  L. The life generator (since life 1.2.0) never sets `transfer_shield_until`:
+  a payment the prior servicer received on time in the window writes a
+  `transfer_window_60` overlay naming its installment, the fix above, so every
+  suite drawn from it charges a missed installment in the window and spares a
+  forwarded on-time one.
 
 ### cashiering-12. A forbearance plan payment is held as a partial, with the hold notice 🟡
 
@@ -3606,7 +3610,9 @@ index date 2026-09-17).
   under a dollar, $0.-50 for −$0.50. An account overdrawn during the year has
   a negative low: in a thousand-loan book from the life generator (1.0.0,
   seed 1), 75 of the 6,016 computation years it holds whole (each analysis's
-  twelve month-ends from its year start) ended a month below zero. Fix:
+  twelve month-ends from its year start) ended a month below zero; under life
+  1.2.0, 54 of the 4,930 years `escrowYears` reads whole (no transfer or
+  payoff inside them) do. Fix:
   format the absolute value and put the sign in front, as `fmtMoney` does
   (ops.ts:106). Kept out: `statementExplanation` refuses such a year, and
   `statementScopeIssues` names it

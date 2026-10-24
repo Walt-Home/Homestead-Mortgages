@@ -358,12 +358,14 @@ continuity. Later processes catch some of them, and each item says which.
    pre-origination row, or a receipt posted to the wrong loan, changes the
    oldest-first result. A receipt split wrong, its principal posted to
    escrow, does not: the history carries a date and an amount, so the loan
-   boards exactly as far behind as its clean twin, and only its balance is
-   wrong (`AS/scripts/board-life-package.mjs`). D-24 is deterministic to
-   grade. A gate rule (W-014) sees it only when a planted row breaks the
-   history's continuity, and then for the wrong reason. The vendored sample
-   already carries it, unlabeled, on 16 loans. D-25 goes in the ten-year
-   history, where the payments environment's allocation engine grades it.
+   boards exactly as far behind as its clean twin, and what is wrong is its
+   balance, and the escrow payment any later analysis set from the escrow the
+   principal inflated (`AS/scripts/board-life-package.mjs`). D-24 is
+   deterministic to grade. A gate rule (W-014) sees it only when a planted row
+   breaks the history's continuity, and then for the wrong reason. The
+   vendored sample already carries it, unlabeled, on 16 loans. D-25 goes in
+   the ten-year history, where the payments environment's allocation engine
+   grades it.
 10. **D-15, wrong flood data.** The CFPB alleges that Ocwen's own review found
     inconsistent or incomplete flood determination data loaded for its loans
     (OCW ¶138†) and inaccurate flood-zone data on more than 3,000 loans (OCW

@@ -261,8 +261,10 @@ ones these lines explain.
   and −$0.50 as $0.-50 (escrow-4 in `docs/servicing-engine-defects.md`). An
   account overdrawn during the year has a negative low, so
   `statementScopeIssues` names it and `statementExplanation` refuses it. In a
-  thousand-loan book from the life generator (1.0.0, seed 1), 75 of the
-  6,016 computation years it holds whole had one.
+  thousand-loan book from the life generator (1.2.0, seed 1, the typed
+  defaults), 54 of the 4,930 computation years `escrowYears` reads whole had
+  one (under 1.0.0, counting every analysis's twelve month-ends, 75 of
+  6,016).
 - **The shortage sentence.** Items (vi) and (vii), the surplus or shortage
   and the repayment plan, are `decisionText` and `planText` in the servicing
   app's escrow `ops.ts`. That file is not ported, because it carries the
@@ -271,8 +273,26 @@ ones these lines explain.
 - **Thousands separators.** The engine prints $1710.50 where the statement's
   other items print $1,710.50.
 
-The life generator's analysis rows do not yet record the projection's items
-and targets, which the wrapper needs.
+**A generated year.** Since life 1.2.0 each analysis row carries its
+projection's bills and twelve targets (`AnalysisRow.projection`), so a
+generated year can be explained. `escrowYears(loan)` (`src/life/escrow-year.ts`)
+reads every computation year the history holds whole on one servicer's
+books (every month-end in it and the one before it, no transfer or payoff
+inside it, the account open throughout) into the wrapper's two inputs:
+
+- the analysis that set the year's payment, with its projection;
+- the year's ledger: the month-end balance before it, the escrow share of
+  every receipt posted in the year and any money a payee returned as
+  deposits, and every bill by its line as disbursements, with a surplus
+  refund to the borrower as a line of its own, `refund`, which the engine
+  prints as a bill nobody projected.
+
+A test runs the engine over every such year of a 300-loan decade: each
+year's month-end balances are the history's, every line is one of the
+engine's three templates, and the years overdrawn somewhere in them are the
+ones `statementScopeIssues` names. In that decade every year it explains has
+at least one line, because the account's low is never exactly the
+projected cushion.
 
 ## regz-price-tests
 
@@ -2513,16 +2533,21 @@ verdict the runner tallies and two for the commonest, so every verdict is
   and paying only the oldest installment (on a note with no cap three times
   in ten).
 
-A draw that does not land on its arm is drawn again under the next key: 117
+A draw that does not land on its arm is drawn again under the next key: 125
 of the held-out suite's 200 are first draws. The suite holds:
 
 - 116 tasks above the cap, 58 of them current after posting and 58 still
   behind, and 84 within the note;
-- 58 tasks with a refund due (a median near $190), 58 that send something
-  to suspense, and 34 that prepay an installment;
-- 85 loans boarded by transfer, and 41 notes with no cap;
-- up to 17 charges on a loan (5.0 on average), and catch-ups of up to six
-  installments, from May 2027 to August 2036.
+- 58 tasks with a refund due (a median near $240), 58 that send something
+  to suspense, and 33 that prepay an installment;
+- 79 loans boarded by transfer, and 39 notes with no cap;
+- up to 19 charges on a loan (5.0 on average), and catch-ups of up to seven
+  installments, from March 2027 to August 2035.
+
+Every figure here is the suite drawn on life 1.2.0, whose histories charge
+an installment in the 60 days after a transfer as the spec does: only a
+payment the prior servicer received on time is spared (below, "The life
+generator").
 
 **Out of scope.** The receipts stay on the pay-in-full route, where every
 installment the money reaches is paid whole. They stay off the
@@ -2558,8 +2583,8 @@ example K:
 - September's installment alone, which leaves the loan behind.
 
 It agrees with the engine on every in-scope candidate among 600 first draws
-nothing filtered. Its longest held-out task is 39 tool calls in 24 turns,
-and its longest training task 50 in 30. Two tests
+nothing filtered. Its longest held-out task is 44 tool calls in 27 turns,
+and its longest training task 39 in 24. Two tests
 hold the moments to their histories:
 
 - each clean moment posts to the cent as the history posted it;
@@ -2570,7 +2595,7 @@ and none above it, with a mean score of 0.65 on those.
 
 ## escrow-review
 
-escrow-review 1.0.0 is the first demo's other graded moment. It is an annual
+escrow-review 1.1.0 is the first demo's other graded moment. It is an annual
 escrow analysis that the servicing app holds for anomaly review before
 approval, drawn from a decade the life generator runs. A hold follows a
 large change in the payment or in a bill (spec §3.2 R10, `anomalies`,
@@ -2586,18 +2611,33 @@ analysis (`LifeMoment`):
   premium otherwise, mortgage insurance on its contract;
 - the balance on the run date, and the escrow shares and bills still to post
   before the year;
-- the delinquency, and the payment the new one replaces.
+- the delinquency, and the escrow payment billed today, which the new one
+  replaces: the escrow share of the first installment due after the run
+  date, with any shortage or credit from last year's analysis still in it.
 
 Beside them is the account's history: the two analyses before this one, the
 disbursements of the last 24 months, and the last twelve month-ends. The
 model finds the shortage or surplus, the new payment, its effective date
 and the months a shortage is spread over, and says whether the flag stands.
 
+The payment billed today is what the servicing app compares the new payment
+with: `loan_terms.escrow_payment_cents` carries the running spread, and the
+step-down after it is held apart
+(`apps/servicing/src/domain/escrow/ops-3-6.ts:105-117`; spec 3.6, worked
+example (a)), as Reg X's annual statement sets the new payment beside the
+current one (12 CFR 1024.17(i)(1)). 1.0.0 handed the old schedule's payment
+from the new one's effective date, after last year's spread had run out; on
+its 200 held-out tasks the billed payment differs on 154, and 15 graded
+answers change, 4 of them whether the flag stands (measured from the
+generator under life 1.1.0). 1.1.0 is drawn on life 1.2.0, and
+`escrow-review/1.0.0` is retired in `HELDOUT_SUITES`.
+
 **The rules.** escrow-analysis's rulebook from its conventions through Step
 9, word for word (a test holds it), under a reviewer's opening. Step 10 is
-the app's triggers: a payment change over 25 % or over $150, a refund over
-$2,500, and a bill's variance against last year over 20 %. Step 11 is the
-flag, which stands when anything was flagged.
+the app's triggers: a payment change over 25 % or over $150 against the
+payment billed today, a refund over $2,500, and a bill's variance against
+last year over 20 %. Step 11 is the flag, which stands when anything was
+flagged.
 
 **The grade.** Thirteen fields, a pass being every one right:
 
@@ -2634,13 +2674,13 @@ runner tallies is 16 % of a suite or more.
 After an event the generator tries the first three analyses whose coming
 year ends after the first bill the event changed. The first can see a
 renewal's increase among the coming year's bills; the next two see it in
-last year's. A draw that lands on no analysis of its arm is drawn again: 158
+last year's. A draw that lands on no analysis of its arm is drawn again: 160
 of the held-out suite's 200 are first draws. The suite holds:
 
 - 101 analyses held, 68 with a shortage and 33 with a refund;
 - 99 not held: 33 shortages, 33 refunds and 33 credits;
-- triggers: a payment change over $150 on 81, over 25 % on 68, a refund over
-  $2,500 on 30, and a bill over 20 % on 20.
+- triggers: a payment change over $150 on 94, over 25 % on 68, a refund over
+  $2,500 on 28, and a bill over 20 % on 16.
 
 Every shortage is spread over 12 months. The life generator runs no workout,
 so neither the 60 months of one nor a borrower's election appears, and
@@ -2666,18 +2706,19 @@ its three variants, with today's payment at the $130.00 the ledger deposits:
 - the refund's $138.33 and the credit's $136.11 are not.
 
 It agrees with the engine on every candidate among 600 first draws nothing
-filtered. Its longest held-out task is 71 tool calls in 32 turns, and its
-longest training task 73 in 30. An answer with the analysis right and no
-bill comparison passes 180 of the held-out suite's 200, and one that says
+filtered. Its longest held-out task is 71 tool calls in 31 turns, and its
+longest training task 73 in 33. An answer with the analysis right and no
+bill comparison passes 184 of the held-out suite's 200, and one that says
 every flag stands passes 101.
 
 **Both environments draw from the calibration's typed defaults**
 (`defaultCalibration`), as the life generator's tests do. So a change to
 `calibration.json` does not move a pinned suite, and the browser, which
 reads no file, draws the task the command line does. A change to how the
-generator draws does move them, as life 1.1.0 did (docs/decisions.md, "Life
-1.1.0 moved the three suites drawn from it"). The held-out suites are seed
-1, 200 tasks each, pinned by hash.
+generator draws does move them, as life 1.1.0 and 1.2.0 did
+(docs/decisions.md, "Life 1.1.0 moved the three suites drawn from it" and
+"Life 1.2.0"). The held-out suites are seed 1, 200 tasks each, pinned by
+hash.
 
 ## boarding-triage
 
@@ -2792,7 +2833,7 @@ held-out suite:
 
 So each defect is planted on at least 20 of the 200 held-out packages, the
 floor a test holds: D-03 and D-42 on 40, D-35 and D-24 on 30, the other six
-on 20. That is 260 roots and 284 symptom labels. A defect's loan is drawn
+on 20. That is 260 roots and 346 symptom labels. A defect's loan is drawn
 with what it needs:
 
 - a capped note, an ARM, an escrow account or a flood line, pinned;
@@ -2806,28 +2847,29 @@ with what it needs:
 The clean loans are drawn to look like the defects. Of the held-out suite's
 130 clean loans:
 
-- 33 carry a cap their tape carries too;
-- 31 have no escrow, and 22 are ARMs;
-- 13 are servicemembers, 9 are in bankruptcy and 9 are paying a plan, each
+- 52 carry a cap their tape carries too;
+- 30 have no escrow, and 15 are ARMs;
+- 5 are servicemembers, 9 are in bankruptcy and 10 are paying a plan, each
   flagged with its details;
-- 49 carry mortgage insurance, and 13 are in zone AE.
+- 41 carry mortgage insurance, and 19 are in zone AE.
 
 Each history runs a year past the transfer, and the package reads what came
 before it. Behavior is drawn from the calibration's typed defaults, so a new
 calibration file does not move the suite. A package is kept only when two
 things hold. The gate's 35 rules, ported and run on the package as the
 decoder reads it, pass on every loan. And the reference finds exactly the
-planted roots. Otherwise it is redrawn. On the held-out suite 51 of 200 first
-draws were redrawn:
+planted roots. Otherwise it is redrawn. On the held-out suite 52 of 200 first
+draws were redrawn (life 1.2.0):
 
-- 21 for a payoff before the transfer;
-- 15 at the gate: 11 for a hazard renewal within 30 days of the transfer
-  (W-005), 4 for that and an analysis more than a year old (W-009);
-- 15 for a defect the draw cannot carry. Five had no plan in force at the
-  transfer (D-35), and four drew a cap the P&I never reaches (D-03). Six had
-  paid off before the transfer, which the defect's own check meets before
-  the payoff check does: three of D-12's (before the call to duty, too), two
-  of D-24's and one of D-25's.
+- 22 for a payoff before the transfer;
+- 12 at the gate: 10 for a hazard renewal within 30 days of the transfer
+  (W-005), 2 for that and an analysis more than a year old (W-009);
+- 18 for a defect the draw cannot carry. Four drew a note D-03 cannot be
+  planted on (a cap the P&I never reaches) and two a note D-24 cannot (a
+  closing on the first of its month). Twelve had a history without what the
+  defect needs, which the defect's own check meets before the payoff check
+  does: seven of D-12's, two of D-18's, and one each of D-24's, D-25's and
+  D-35's (no plan in force at the transfer).
 
 **The floors.** Submitting nothing passes 20 of the 200 held-out packages,
 the ones with nothing planted, with a mean score of 0.27. Correcting every
@@ -2839,7 +2881,7 @@ passes 70. Every check the tape and the short files settle alone (checks 1,
 200 packages, pinned by hash), 300 training tasks, four spec cases (the demo
 loan clean, with D-42, with D-03, and with both) and a package of each
 defect alone. It takes three turns and at most 18 tool calls. Of the first
-draws of 1,000 training tasks (train seed 11), 734 reached the fairness
+draws of 1,000 training tasks (train seed 11), 745 reached the fairness
 check, and the reference missed nothing on any of them.
 
 **What the servicing app does with them.**
@@ -2989,28 +3031,31 @@ from the payer's. A third of each book's loans reach the partner by transfer.
 The held-out suite (seed 1, 200 tasks, pinned by hash) holds:
 
 - 82 deliveries to load, 80 to load after correction and 38 to hold;
-- 25 clean, and findings of every defect: T-01 38, T-02 38, T-03 37 (a ZIP
-  and a pay string on most), T-04 25 (9 two-digit years, 7 serials, 9 day
+- 25 clean, and findings of every defect: T-01 38, T-02 38, T-03 40 (a ZIP
+  and a pay string on most), T-04 25 (7 two-digit years, 12 serials, 6 day
   first, over all six date columns), T-05 25, V-01 12, V-02 24 and D-25 48
   (24 payments, two loans each);
-- deliveries of 5 to 14 loans, 8.7 on average, from June 2027 to March 2032.
+- deliveries of 5 to 14 loans, 8.9 on average, from October 2027 to March 2032.
 
-185 of the 200 are first draws. 15 were redrawn: 10 books had no first
-renewal after a transfer in range for V-02, and 5 had a tape with fewer than
-five loans.
+186 of the 200 are first draws (life 1.2.0). 14 were redrawn: 11 books had
+no first renewal after a transfer in range for V-02, and 3 had a tape with
+fewer than five loans.
 
 **The floors.** Submitting load with nothing found passes 25 of the 200
 held-out deliveries, the clean ones. Finding only what the desk's reading
-shows passes 38. Every stream defect found, with no record read, passes 140;
+shows (a required header it refused on, a column it raised an exception on)
+passes 39. Every stream defect found, with no record read, passes 140;
 every finding with the verdict always load passes 82.
 
 **The proof of fairness.** The reference passes the held-out suite, 300
 training tasks and 13 spec cases, one per defect in a named form, in at most
 5 turns and 30 tool calls. A delivery is kept only when
 it finds exactly the labels, nothing extra, and the verdict. Of the first
-draws of 1,000 training tasks (train seed 11), 918 reached that check, and
-the reference missed one: a V-02 loan that paid two installments in the
-month at escrow payments an analysis had set apart.
+draws of 1,000 training tasks (train seed 11), 943 reached that check, and
+the reference missed three. One is a V-02 loan that paid two installments
+in the month, as under life 1.1.0. Two are V-01 bills whose tenfold amount,
+less the month's deposits, took the account down by less than twelve months
+of T&I, the line the rule draws.
 
 **What the first draws taught the generator.** A D-25 payment that came
 before the receiving borrower's own once left that borrower paying nothing,
@@ -3122,21 +3167,35 @@ date what happens to the borrower:
 - **A bankruptcy petition** (`bankruptcy`, Chapter 13 unless named). Every
   charge on an installment due from it accrues suspended (2.7 rule 3(iv)),
   and the servicer does not call the borrower (12 CFR 1024.39(c)(1)). The
-  month-end and the tape report the case. The plan's payments, the trustee
-  and a discharge are not modeled.
+  month-end and the tape report the case, and since life 1.2.0 the contact
+  center takes it as its own (below, "The contact center"). The plan's
+  payments, the trustee and a discharge are not modeled.
 
 A pin may also give a loan a flood line (`flood`). On a transfer in, the
 prior servicer's months are generated in full and marked `prior`, and the
 prior servicer's books at the close of the day before are kept
-(`at_transfer`), with the repayment plan in force then, if any. Forwarded
-payments are credited as of the day the prior servicer had them, and the
-60-day shield applies. With `outreach` on (it is off by default), the
-servicer calls a delinquent borrower as the servicing app's D2-2-02 plan
-does: on day 17, then 7 days after each attempt moved to a business day,
-ceased by a promise to pay within 30 days and closed by the cure
-(`early-intervention/plan.ts`). None of these moves a book drawn without
-them, so `LIFE_VERSION` stays 1.1.0 and the suites drawn from it do not
-move.
+(`at_transfer`), with the repayment plan in force then, if any. A payment
+the borrower sends the prior servicer (`misdirected_payments`) is decided the
+day the prior servicer has it, reaches us 5 to 10 days later, and is
+credited as of that day. The 60-day transfer shield is read as the spec
+reads it (§2.7 rule 3(i) and its example L; 12 CFR 1024.33(c)(1)): in the 60
+days from the transfer, a payment the prior servicer received by the end of
+grace is not late, so when what it received pays the installment in full, a
+`transfer_window_60` overlay naming that installment alone is written on
+the day it had the payment, and the late-charge run charges nothing whether
+the money has reached us or not. The engine's `transfer_shield_until`,
+which spares every installment due in the window paid or not
+(cashiering-11), is never set: a missed installment in the window is
+charged, and so is one paid late or short, to either servicer. Until life
+1.2.0 the generator set it on every transfer.
+
+With `outreach` on (it is off by default), the servicer calls a delinquent
+borrower as the servicing app's D2-2-02 plan does: on day 17, then 7 days
+after each attempt moved to a business day, ceased by a promise to pay
+within 30 days and closed by the cure (`early-intervention/plan.ts`). None
+of these moves a book drawn without them. `LIFE_VERSION` is 1.2.0
+(docs/decisions.md, "Life 1.2.0"), and every suite drawn from it is pinned
+at that version.
 
 **Twins.** With `defects`, each planted loan runs again from the same draws
 with the defect planted. Every draw comes from a stream keyed by the loan and
@@ -3237,7 +3296,11 @@ with the cash state it is posted against and the rate each installment is
 charged at (a payoff is quoted, not posted, and is not shown), and every
 annual analysis with the lines as the analyst has them, the CPI, the balance
 on the run date, what is still to post before the year and the payment it
-replaces. Each is a copy, and observing changes no draw. An environment
+replaces: the escrow share billed on the first installment due after the
+run date, last year's shortage or credit still in it (since life 1.2.0; the
+old schedule's after the spread ran out before it). Each analysis row
+carries its projection's bills and targets too. Each moment is a copy, and
+observing changes no draw. An environment
 built on the generator reads its task off one of these, so the task is the
 engine's own input at that moment and the history before it is the loan's.
 catchup-posting and escrow-review are the first two.
@@ -3310,9 +3373,12 @@ both, and their four packages.
 
 Two places it departs from the plan, each the engines' doing:
 
-- The transfer is in December, not January. The cashiering engine shields
-  every installment due within 60 days of a transfer (cashiering-11), which
-  would have spared March's charge.
+- The transfer is in December, not January. It was set there when the
+  generator used the cashiering engine's blanket shield, which spares every
+  installment due within 60 days of a transfer (cashiering-11) and would
+  have spared March's charge. Since life 1.2.0 the shield spares only a
+  payment the prior servicer received on time, so a January transfer would
+  charge a missed March too; the date stays where the demo was set.
 - Year 4's short payment draws no late charge. Cashiering counts suspense
   toward the P&I basis (decision 2.7-Q1, latecharges.ts:58-66), and the old
   amount covers the P&I. The calls come all the same.
@@ -3325,13 +3391,16 @@ foreclosure and bankruptcy fields. The tape writer lays them out. The month
 a loan pays off or transfers out is measured on the day it closed, so an
 installment still in grace at a payoff never ages to 30 days.
 
-A loan still being paid always has a next due date on the projection. The
-ledger runs one installment ahead of the month, so a borrower who paid next
-month's installment early has none open at the month-end, and the
-month-end's `next_due` is null. The projection takes the installment after
-the one interest is paid to, as `next_due` is on every other month-end, and
-counts the remaining term from it. The round trip below has 2,832 such
-rows out of 13,478.
+A loan still being paid always has a next due date. The ledger runs one
+installment ahead of the month, so a borrower who paid next month's
+installment early has none open at the month-end. Since life 1.2.0 the
+month-end's own `next_due` is then the installment after the one interest is
+paid to, as it is on every other month-end, and its remaining term counts
+from it; the projection copies both. (Under 1.1.0 the month-end's was null
+there, and the projection filled it, which is the fix the tape row took
+first.) The payment the month-end reads is still next month's installment's,
+the one just paid, so no tape cell moved. The round trip below has 2,916
+such rows out of 15,385.
 
 **The tape writer.** `writeTape(book, month)` (`src/life/tape.ts`) writes a
 month's tape in the m3-v1 layout that `@hm/partner-book` reads:
@@ -3371,8 +3440,8 @@ A column the projection has nothing for is left empty: FICO, a BPO, the
 property's rooms, the investor's economics. The writer invents nothing.
 
 **The round trip.** `tape.test.ts` writes a 200-loan book over ten years,
-with transfers out on: 131 tapes and 13,478 rows. It reads each tape back
-through `readBook`.
+with transfers out on: 131 tapes and 15,385 rows (life 1.2.0). It reads each
+tape back through `readBook`.
 
 - The reader raises no exception.
 - Every fact it keeps equals the projection's, and so does every field of
@@ -3392,7 +3461,7 @@ zero days, and a bucket is delinquent by its days. The projection's status
 follows the Regulation X count instead. At the end of a month shorter than
 31 days, a loan one payment behind is under 30 days by that count and 30 by
 the MBA's. So the contract says delinquent where the projection says current
-on 94 of the 13,478 rows.
+on 104 of the 15,385 rows.
 
 **Tape-stream defects** are what a delivery does to right values. The 47 in
 docs/synthetic-data-defects.md are wrong values in a servicer's records;
@@ -3455,7 +3524,7 @@ number and loses its leading zeros. On the m3 tape that hits two columns:
 - a ZIP code that starts with 0. Massachusetts and New Jersey are the
   generator's states with one;
 - every pay string whose oldest month was current, so "000000000000"
-  arrives as "0". That is 11,081 of the 13,478 rows.
+  arrives as "0". That is 12,916 of the 15,385 rows.
 
 The reader takes both as written. The record's postal code, the ZIP fact
 and the pay-string fact change, and nothing else does. The review reads
@@ -3536,7 +3605,12 @@ loan-years. Away from logged defects the two agree on every receipt's split,
 installment, late charge and month-end balance; it also lists two generator
 bugs and three unlogged credit-reporting defects. Its figures are life
 1.0.0's, and the harness (`apps/servicing/scripts/cross-check-life.mts`)
-refuses to read back a run drawn under another life version.
+refuses to read back a run drawn under another life version. Life 1.2.0
+fixes both generator bugs (a drawn MIN carries its Mod-10 check digit,
+computed by the port of the boarding gate's own `min.ts`, and a month-end
+paid ahead has a next due date) and steers around the engine half of
+cashiering-11, which the generator walked into on every transfer; the batch
+has not been rerun on it.
 
 ### The demo page
 
@@ -3562,7 +3636,7 @@ in three lanes:
   February 2030 with no reason given.
 - **Moments a model is asked to act.** Boarding triage on 16 December 2027
   (boarding-triage's own spec cases on the demo's packages), the catch-up
-  on 5 April 2028 and the flagged analysis of 15 January 2030. Each is read
+  on 5 April 2028 and the flagged analysis of 29 December 2029. Each is read
   off the history with its environment's task builder (`catchupTaskAt`,
   `reviewTaskAt`), and the build stops unless the environment's own filters
   would pose it. Each shows the task abridged, the reference policy's
@@ -3573,7 +3647,7 @@ Below the lanes is what missing the defects costs on the twin:
 
 - the late charge above the note's cap and its refund, $63.77, from
   `lateChargeAmount`;
-- the bills its escrow never paid, $64,355.26 of them county tax.
+- the bills its escrow never paid, $35,904.96 of them county tax.
 
 No engine prices a tax penalty, so the page says so rather than inventing
 one.
@@ -3586,17 +3660,22 @@ not a verdict. Each also shows the target's provenance and whether the book
 meets the test's sample floor. Every target and tolerance is read from the
 two files, the ones the acceptance file states only in words too (0.01 on
 the delinquency total, 0.08 on the cure, 25 % on each contact status), and
-words the panel cannot read stop the build. On 23 October 11 were within,
-6 outside and 3 not a verdict. The six outside:
+words the panel cannot read stop the build. On 24 October, under life
+1.2.0, 10 were within, 7 outside and 3 not a verdict. The seven outside:
 
 - returned payments, which are not generated;
 - missed months, a check that reads low;
 - the all-loans delinquency stock, whose target includes FHA and VA;
+- the quarterly roll from current, 1.16 % against 0.86 % (±30 %), which a
+  quarter-end reads above the monthly chain (below, "Calibration"); the
+  cure is within;
 - contacts by delinquency status, a design-choice split that the
   borrower's own calls do not reach;
-- loan-to-value, drawn at origination against a mark-to-market target;
-- the ARM share, 5.5 % against 4.3 %, on a fifth of the test's sample
-  floor.
+- the note rates, whose 4 to 5 % bin reads 18.9 % against 16.5 % (±2
+  points), on a fifth of the test's sample floor;
+- loan-to-value, drawn at origination against a mark-to-market target.
+
+The ARM share, outside under 1.1.0 at 5.5 %, is 4.3 % against 4.3 %.
 
 The demo loan draws from the calibration's typed defaults, as the three
 environments do, so the page shows the tasks they pose. `demo-page.test.ts`
@@ -3764,12 +3843,12 @@ open bins are a point wide, and their mean, 4.39 %, is the stated 4.4 % to
 its rounding.
 
 **What a book shows.** Four years of 1,500 loans drawn from the file, against
-it: 49.7 % of installments within grace (50.8 %), late charges on 4.0 % (4.2 %),
-a borrower's monthly roll 0.38 % (0.357 %) and cure 16.0 % (16.3 %), 0.96 %
-short receipts (1 %), 31.3 % of on-time payers early (31.1 %), 2.09 contacts
-a loan-year (2.0). Every arrival bin lands within the acceptance test's 0.02
-of the file's: 26.2 % of installments on days 2 to 5 (27 %), 12.0 % on days
-6 to 10 (12 %), 11.3 % on days 11 to 16 (11.8 %). A book from the defaults
+it (life 1.2.0): 50.1 % of installments within grace (50.8 %), late charges on
+3.8 % (4.2 %), a borrower's monthly roll 0.37 % (0.357 %) and cure 16.4 %
+(16.3 %), 0.94 % short receipts (1 %), 30.6 % of on-time payers early
+(31.1 %), 2.06 contacts a loan-year (2.0). Every arrival bin lands within the
+acceptance test's 0.02 of the file's: 26.7 % of installments on days 2 to 5
+(27 %), 11.7 % on days 6 to 10 (12 %), 11.7 % on days 11 to 16 (11.8 %). A book from the defaults
 differs in each the file moves, and a test holds both. The arrival shares,
 within grace and around the due day, are read on due dates that are a
 business day following one: around a weekend, a payment drawn for the day
@@ -3786,8 +3865,9 @@ for it.
   low.
 - **A quarter-end finds more loans behind than the chain.** The rest of a
   partial payment can come after the month ends, and a disaster month makes a
-  miss likelier. So the quarterly roll reads about a fifth over the file's
-  0.864 %, inside the acceptance test's 30 %.
+  miss likelier. So the quarterly roll reads over the file's 0.864 %: 1.01 %
+  on the four years of 1,500 loans above, inside the acceptance test's 30 %,
+  and 1.16 % on the demo page's decade of 1,000, outside it.
 - **The reason mix is of complaints.** Every inbound contact draws its reason
   from it, so disputes (loss mitigation 23 %, foreclosure 7 %) are as common
   among a current borrower's calls as among complaints. The file's own note
@@ -3813,8 +3893,8 @@ call and note defects for a call-QA environment to grade.
 - `contactCenter(book)` derives every loan's contact rows, promises,
   bankruptcy, cadence and notes.
 - `transcriptOf(center, book, id)` writes one call's transcript when asked.
-  A 300-loan decade holds about 2,600 handled calls and 1.6 million words
-  (life 1.1.0, on the defaults), so transcripts are not written in advance.
+  A 300-loan decade holds about 2,650 handled calls and 1.6 million words
+  (life 1.2.0, on the defaults), so transcripts are not written in advance.
 - `plantContactDefects(center, book, requests)` makes the defective twin and
   its labels.
 
@@ -3895,14 +3975,21 @@ rows.
   arrives first), the borrower's bankruptcy attorney, and a caller who fails
   verification. A Spanish-speaking borrower (4%, or 40% with a Spanish
   surname) talks through an interpreter.
-- **A bankruptcy.** The life generator draws none (a scenario may script
-  one, which the contact center does not read yet), so the contact center
+- **A bankruptcy.** A petition the scenario dates (`LoanLife.bankruptcy`,
+  which D-37 plants on) is the contact center's case: its filing date and
+  chapter, the attorney's notice one to three days later, and no discharge,
+  because the history keeps the case open to its end. On a loan whose
+  history dates none, the life generator draws none, so the contact center
   draws one on 2% of delinquencies that reach day 30, 70% of them under
-  Chapter 13. From the petition no collection call is made until a Chapter
-  13 discharge, and every call after the attorney's notice carries the
-  informational-only disclaimer. From the notice's day the ordinary calls
-  draw no payment arrangement or hardship, and no agent asks when the
-  borrower will pay. The history's payments do not know about the case.
+  Chapter 13. Either way, from the petition no collection call is made until
+  a Chapter 13 discharge, and every call after the attorney's notice carries
+  the informational-only disclaimer. From the notice's day the ordinary
+  calls draw no payment arrangement or hardship, and no agent asks when the
+  borrower will pay. Where a boarding left the scenario's case off (D-37's
+  twin), the servicer knows nothing of it from the transfer
+  (`BankruptcyCase.known_until`) and calls as if none were open, as the
+  history's month-ends report none. The history's payments know of a
+  scenario's case (its charges accrue suspended) and not of a drawn one.
 - **Handle time.** A lognormal around the calibration's mean, by reason (a
   hardship runs longest, a statement copy shortest), longer through an
   interpreter, with a 90-second floor.
@@ -3927,14 +4014,14 @@ no file the reader's typed defaults stand (1.5 a loan-year, 7 minutes), and
 the contact center says in its warnings that they are the reader's
 defaults. The object shapes are still read, for a calibration that hands
 them over, and a test holds both. On the 300-loan seed-7 book, drawn on the
-defaults under life 1.1.0:
+defaults under life 1.2.0:
 
 |                                                        | Defaults               | The file, as the reader reads it |
 | ------------------------------------------------------ | ---------------------- | -------------------------------- |
-| Inquiries a loan-year, against the status mix's target | 1.32 against 1.35      | 1.76 against 1.79                |
-| Current; 30, 60 and 90+ days                           | 1.25; 4.1, 6.3, 8.7    | 1.67; 5.7, 8.7, 10.8             |
-| Mean handle time                                       | 6.74 against 7 minutes | 8.90 against 9.23                |
-| Words in a transcript, on average                      | 377                    | 499                              |
+| Inquiries a loan-year, against the status mix's target | 1.34 against 1.35      | 1.77 against 1.79                |
+| Current; 30, 60 and 90+ days                           | 1.26; 4.5, 6.7, 7.4    | 1.68; 5.8, 8.1, 10.5             |
+| Mean handle time                                       | 6.87 against 7 minutes | 9.00 against 9.23                |
+| Words in a transcript, on average                      | 388                    | 508                              |
 
 **The life generator's own contacts.** The life generator draws a few inbound
 contacts a year: a reason and a duration, flat across the year. The contact
@@ -4047,7 +4134,7 @@ root cause or symptom), plus the turn. A defect changes one turn and its
 interpreter relay. Every other turn is the clean call's, word for word,
 because each turn's noise has a stream of its own. At the default rate, 2%
 of the contacts each defect fits, the 300-loan book carries about 160
-defects in all on life 1.1.0.
+defects in all on life 1.2.0.
 
 **Not covered yet:**
 
@@ -4059,7 +4146,8 @@ defects in all on life 1.1.0.
   `11-1-live-contact.md:54`). call-qa (below) writes the AI voice's
   introduction into a call itself;
 - the text of e-mails and letters, and phone-menu transcripts;
-- a bankruptcy the history's payments know about.
+- a discharge or dismissal of the scenario's case, which the life generator
+  does not model; and a drawn case the history's payments know about.
 
 The 300-loan book's center takes about three seconds, and a thousand
 transcripts about a second.
@@ -4190,8 +4278,8 @@ through the contact center. Two plants bring findings beyond their own. A
 demand in a bankruptcy case (C-02) takes the disclaimer's turn, so the
 disclaimer is missing too. A dial into a bankruptcy (Q-07) ignored the case
 on the call as well: it carries the mini-Miranda, not the disclaimer, and
-often asks for a payment. On the held-out suite 63 calls are clean, 111
-fail items and 36 fail outright; every item turns up seven times or more.
+often asks for a payment. On the held-out suite 63 calls are clean, 110
+fail items and 37 fail outright; every item turns up seven times or more.
 
 **A draw is kept only when it is fair to grade, and this is a filter.**
 ei-clocks' guard rejects nothing it draws; this one does. A draw is kept
@@ -4199,13 +4287,13 @@ when the call without its plant draws no finding and its note matches, the
 planted call draws the plant's finding on the planted line and nothing the
 plant does not name, and the rubric finds exactly the same on the
 recognizer's text and labels as on what was said, by whom. Of the first
-draws of 1,500 training tasks (seed 3), 475 found no call that fits their
-edge and drew again; of the other 1,025, 92 were turned away because the
+draws of 1,500 training tasks (seed 3), 453 found no call that fits their
+edge and drew again; of the other 1,047, 91 were turned away because the
 recognizer's noise moved a finding (a misheard amount reads as a wrong
-one) and 1 because a wrong amount's digits were already in the record. The
-contact center's clean calls draw no finding of their own, its dialer's
-times and counts included. The kept draws average 1.9 attempts, at most 12
-on the held-out suite.
+one), and none because a wrong amount's digits were already in the record
+(under life 1.1.0, one was). The contact center's clean calls draw no
+finding of their own, its dialer's times and counts included. The kept
+draws average 1.7 attempts, at most 7 on the held-out suite.
 
 **What v1 leaves out, and why.**
 
@@ -4242,17 +4330,17 @@ eighth counted call, T7's dial into a Chapter 13 case, rule 13's $4,165.00
 and a balance worked out instead, design item 1, Q3, the threat and
 negotiation guardrails, T23, and the edge cases' cease and counsel. It
 takes two turns: every search, clock reading and other day's record in one,
-then the submission; at most 13 tool calls. On the contact center's own
+then the submission; at most 12 tool calls. On the contact center's own
 calls, as said, over a 120-loan book, the rubric finds nothing; on its
 planted defects it finds C-01 to C-04, C-06 and C-07 every time, and C-05
 and C-08 except where the record holds the planted figure.
 
 The scores to read a model against, on the held-out suite: an answer that
-says nothing scores 0.499 and passes 7 (clean calls with no note and no
+says nothing scores 0.493 and passes 7 (clean calls with no note and no
 option named); one that calls every call clean but gets the note and the
 options right scores 0.765 and passes the 63 clean calls; one that names
-every finding but no line scores 0.915. A test holds the pins. Every figure
-in this section is the suite drawn on life 1.1.0.
+every finding but no line scores 0.914. A test holds the pins. Every figure
+in this section is the suite drawn on life 1.2.0.
 
 Generating the held-out suite takes about six seconds.
 

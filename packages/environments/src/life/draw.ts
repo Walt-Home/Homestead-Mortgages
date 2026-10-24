@@ -148,12 +148,20 @@ export interface LoanPins {
   readonly late_charge_cap_cents?: Cents | number | null;
   /** Borrower-paid MI on a loan above 80 % loan-to-value (true), or none (false); drawn when unpinned. */
   readonly mi?: boolean;
+  /** A flood line in escrow (true: the property is in a special flood hazard area), or none (false); drawn when unpinned. */
+  readonly flood?: boolean;
   /** The property's state, one of the generator's sixteen; drawn when unpinned. */
   readonly state?: string;
   readonly persona?: Persona;
   /** Pin both habit multipliers at 1, or at the values given. */
   readonly lateness?: number;
   readonly fragility?: number;
+  /**
+   * The servicer's loan number, in place of the one drawn (which is still
+   * drawn, so nothing after it moves). A scenario pins one to put two loans a
+   * keystroke apart, where a mistyped payment lands (D-25).
+   */
+  readonly servicer_loan_number?: string;
 }
 
 /* ── small draws ─────────────────────────────────────────────────────────── */
@@ -462,7 +470,7 @@ export function drawLoan(
         Math.exp(0.3 * insNoise),
       growth: insGrowth,
     });
-    if (uFlood < FLOOD_SHARE)
+    if (pins.flood ?? uFlood < FLOOD_SHARE)
       line_specs.push({
         line_type: "flood",
         frequency: "annual",
@@ -519,7 +527,7 @@ export function drawLoan(
   return {
     loan_id: id,
     index: i,
-    servicer_loan_number: servicerNo,
+    servicer_loan_number: pins.servicer_loan_number ?? servicerNo,
     prior_servicer_loan_number: priorNo,
     fnma_loan_number: fnma,
     min,
@@ -557,6 +565,16 @@ export function drawLoan(
     arm,
     boarding_age_months: boardingAge,
   };
+}
+
+/**
+ * The FEMA flood zone the loan's life-of-loan determination gives. INVENTED: a drawn loan carries flood
+ * insurance in escrow exactly when its property is in a special flood hazard area, where the Flood Disaster
+ * Protection Act requires it (42 U.S.C. 4012a(b)), and AE stands for every such zone; every other property is
+ * in zone X. A loan with no escrow draws no flood line, so it is in zone X.
+ */
+export function floodZoneOf(d: Pick<LoanDraw, "line_specs">): "AE" | "X" {
+  return d.line_specs.some((l) => l.basis === "flood") ? "AE" : "X";
 }
 
 /** A multiplier on a line's bills from a dated scenario event (a reassessment, a premium increase). */

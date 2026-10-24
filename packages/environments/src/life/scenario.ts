@@ -78,6 +78,20 @@ export type ScenarioEvent = When &
         readonly loan: number;
         readonly by_refinance?: boolean;
       }
+    | {
+        /**
+         * The borrower is called to active duty on this date, for the rest of the history: the
+         * servicemember's protections (50 U.S.C. 3937) run from the first installment due after it.
+         */
+        readonly kind: "active_duty";
+        readonly loan: number;
+      }
+    | {
+        /** The borrower files a bankruptcy petition on this date (Chapter 13 unless named), open for the rest of the history. */
+        readonly kind: "bankruptcy";
+        readonly loan: number;
+        readonly chapter?: "7" | "13";
+      }
   );
 
 export interface RandomToggles {
@@ -220,6 +234,10 @@ export interface LoanScript {
   readonly insurance: readonly { readonly on: PlainDate; readonly pct: number }[];
   readonly bill_pay_stale: readonly PlainDate[];
   readonly payoff: { readonly on: PlainDate; readonly by_refinance: boolean } | null;
+  /** The day the borrower was called to active duty, or null. */
+  readonly active_duty: PlainDate | null;
+  /** The bankruptcy petition, or null. */
+  readonly bankruptcy: { readonly on: PlainDate; readonly chapter: "7" | "13" } | null;
 }
 
 export function scriptFor(
@@ -243,6 +261,8 @@ export function scriptFor(
   const tin = one("transfer_in");
   const tout = one("transfer_out");
   const pay = one("payoff");
+  const duty = one("active_duty");
+  const bk = one("bankruptcy");
   const missed = new Set<PlainDate>();
   for (const e of evs)
     if (e.kind === "missed_payment") {
@@ -310,6 +330,17 @@ export function scriptFor(
       ? {
           on: inWindow("payoff", resolveWhen(pay, dates.first_due), dates.first_due),
           by_refinance: pay.by_refinance ?? false,
+        }
+      : null,
+    // From the first payment: the call comes after the note, as the 6 % cap needs (an obligation incurred during
+    // service is not one it reaches; openScraCase, apps/servicing/src/domain/foreclosure/ops.ts:343).
+    active_duty: duty
+      ? inWindow("active_duty", resolveWhen(duty, dates.first_due), dates.first_due)
+      : null,
+    bankruptcy: bk
+      ? {
+          on: inWindow("bankruptcy", resolveWhen(bk, dates.first_due), dates.first_due),
+          chapter: bk.chapter ?? "13",
         }
       : null,
   };

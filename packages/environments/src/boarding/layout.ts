@@ -6,8 +6,9 @@
  * are the servicing app's own column dictionary (`FINAL_TAPE_COLUMNS`, in the
  * ported codec), and the enumerations its MISMO text names are read from it;
  * a test holds the Y/N columns to the ones the codec's encoder writes as Y or
- * N. The detail files' notes are LAYOUT.md's, and the correspondence file and
- * the cap column are the writer's own (`life/transfer-package.ts`).
+ * N. The detail files' notes are LAYOUT.md's, and the correspondence file,
+ * the tape's four columns after the layout's own and the payment history's
+ * split are the writer's own (`life/transfer-package.ts`).
  */
 
 import { FINAL_TAPE_COLUMNS } from "./ported/tape-codec.js";
@@ -16,6 +17,9 @@ import {
   CORRESPONDENCE_FILE,
   CORRESPONDENCE_HEADER,
   CORRESPONDENCE_KINDS,
+  FLOOD_COLUMN,
+  MI_DATE_COLUMN,
+  MI_VALUE_COLUMN,
   PACKAGE_FILES,
   TAPE_HEADER,
   type PackageFile,
@@ -109,6 +113,37 @@ const TAPE_FORMATS: Readonly<Record<string, Format>> = {
   late_charges_due: "money",
   last_principal_applied: "money",
   [CAP_COLUMN]: "money",
+  [MI_VALUE_COLUMN]: "money",
+  [MI_DATE_COLUMN]: "date",
+  [FLOOD_COLUMN]: "code",
+};
+
+/** FEMA's flood zones (44 CFR 64.3): A and V zones are special flood hazard areas; B, C, X and D are not. */
+export const FLOOD_ZONES: readonly string[] = [
+  "A",
+  "AE",
+  "AH",
+  "AO",
+  "AR",
+  "A99",
+  "V",
+  "VE",
+  "B",
+  "C",
+  "X",
+  "D",
+];
+
+/** The notes of the tape's columns after the layout's own, which this package's writer adds. */
+const EXTENSION_NOTES: Readonly<Record<string, string>> = {
+  [CAP_COLUMN]:
+    "The note's dollar cap on a late charge (MISMO LATE_CHARGE_RULE/LateChargeMaximumAmount): blank when the note has none. A column of this package's writer after the layout's own; the layout has no place for it, and the servicing app's decoder does not read it.",
+  [MI_VALUE_COLUMN]:
+    "The mortgage insurance's original value (12 U.S.C. 4901(12)), from which its termination dates are computed: blank when no MI is in force. A column of this package's writer after the layout's own; the servicing app's decoder does not read it.",
+  [MI_DATE_COLUMN]:
+    "The date the mortgage insurance terminates automatically: the first due date on which the initial amortization schedule reaches 78 % of the original value (12 U.S.C. 4902(b)); blank when no MI is in force. A column of this package's writer after the layout's own; the servicing app's decoder does not read it.",
+  [FLOOD_COLUMN]:
+    "The FEMA flood zone of the property, from the life-of-loan flood determination (MISMO FLOOD_DETERMINATION/FloodZoneIdentifier). A zone that begins with A or V is a special flood hazard area. A column of this package's writer after the layout's own; the servicing app's decoder does not read it.",
 };
 
 /** The codes a MISMO path names in parentheses, as the dictionary writes them: "(A/A, S/A, S/S)". */
@@ -124,17 +159,21 @@ const tape: ColumnSpec[] = TAPE_HEADER.map((column) => {
   const format: Format = YES_NO_COLUMNS.includes(column)
     ? "yes_no"
     : (TAPE_FORMATS[column] ?? "text");
-  const codes = format === "yes_no" ? ["Y", "N"] : format === "code" ? codesIn(dict!.mismo) : null;
+  const codes =
+    format === "yes_no"
+      ? ["Y", "N"]
+      : column === FLOOD_COLUMN
+        ? [...FLOOD_ZONES]
+        : format === "code"
+          ? codesIn(dict!.mismo)
+          : null;
   if (format === "code" && !codes) throw new Error(`${column}: the dictionary names no codes`);
   return {
     file: "boarding_tape.final.csv",
     column,
     format,
     codes,
-    note:
-      column === CAP_COLUMN
-        ? "The note's dollar cap on a late charge (MISMO LATE_CHARGE_RULE/LateChargeMaximumAmount): blank when the note has none. A column of this package's writer after the layout's own; the layout has no place for it, and the servicing app's decoder does not read it."
-        : `${FORMATS[format]}.`,
+    note: EXTENSION_NOTES[column] ?? `${FORMATS[format]}.`,
     ...(dict ? { mismo: dict.mismo, read_by: dict.rules } : {}),
   };
 });
@@ -166,6 +205,19 @@ export const COLUMNS: readonly ColumnSpec[] = [
       "The day the installment was paid in full; blank = unpaid as of the close of business before the transfer date.",
     ],
     ["received_amount", "money", null, "What paid it; blank = unpaid."],
+    [
+      "principal",
+      "money",
+      null,
+      "How the prior servicer applied the payment that paid the row: to principal. With interest and escrow it is the payment; blank = unpaid. A column of this package's writer after the layout's own, as the prior servicer's transaction history gives it; the servicing app's decoder does not read it.",
+    ],
+    ["interest", "money", null, "The payment's interest; blank = unpaid."],
+    [
+      "escrow",
+      "money",
+      null,
+      "The payment's escrow; blank = unpaid. Less than the escrow the installment billed when the $50 rule applied a short payment (F-1-09).",
+    ],
   ]),
   ...detail("escrow_history.csv", [
     LOAN,
@@ -271,10 +323,15 @@ export const COLUMNS: readonly ColumnSpec[] = [
                       c,
                       "code",
                       CORRESPONDENCE_KINDS,
-                      "What the row is. A periodic_statement is the monthly statement (12 CFR 1026.41(d)): the installment it bills, its P&I and escrow, the late fee the prior servicer's system will charge, and the last day before that fee is imposed.",
+                      "What the row is. A periodic_statement is the monthly statement (12 CFR 1026.41(d)): the installment it bills, its P&I and escrow, the late fee the prior servicer's system will charge, and the last day before that fee is imposed. The documents of record: mi_disclosure, the lender's mortgage-insurance disclosure at consummation (12 U.S.C. 4903(a)(1)), whose due_date is the automatic-termination date and amount the original value; flood_determination, the life-of-loan flood determination, whose detail is the FEMA zone; repayment_plan, a plan the prior servicer agreed, whose amount is the arrears it spreads; bankruptcy_notice, the court's notice of a petition; scra_notice, the prior servicer's notice of a servicemember's rate cap, whose due_date is the first capped installment and pi the capped P&I.",
                     ]
                   : c === "due_date"
-                    ? [c, "date", null, "The installment a statement or notice is about."]
+                    ? [
+                        c,
+                        "date",
+                        null,
+                        "The installment a statement or notice is about; on an mi_disclosure, the automatic-termination date.",
+                      ]
                     : c === "late_fee_after"
                       ? [
                           c,

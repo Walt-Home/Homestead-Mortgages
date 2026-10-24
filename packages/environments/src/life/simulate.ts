@@ -24,7 +24,11 @@
  *     month-ends);
  *   - the index feed, the boarding of a transferred loan, and the payoff
  *     (`allocate` never caps the last installment at the balance, and no
- *     engine closes a loan).
+ *     engine closes a loan);
+ *   - a servicemember's 6 % cap and a bankruptcy the scenario dates, and
+ *     what the servicer knows of them and of a repayment plan: a boarding
+ *     that leaves one off (a defect's twin) stops honoring it from the
+ *     transfer, through the cashiering engine's own overlays.
  *
  * Within a day the late-charge run comes before the day's receipts (the
  * servicing app's 00:30 convention, ops-2-7.ts:110, as payments/grader.ts
@@ -108,7 +112,9 @@ import type {
 } from "../payments/ported/types.js";
 import { quote } from "../payoff/ported/quote.js";
 import {
+  applyFifo,
   fnmaDelinquencyStatus,
+  isUnpaidAsOf,
   regxDaysDelinquent,
   type AppliedInstallment,
   type FnmaDelinquencyStatus,
@@ -128,7 +134,7 @@ import {
 import { rngFor, type Rng } from "../rng.js";
 import { EARLY_DAYS, PARTIAL_LAG_DAYS, behaviorBase, borrowerRates } from "./behavior.js";
 import type { Rates } from "./calibration.js";
-import type { EscrowLine, LoanDraw } from "./draw.js";
+import { floodZoneOf, type ArmTerms, type EscrowLine, type LoanDraw } from "./draw.js";
 import { marketRateOn, normal, printsAround, type MarketMonth } from "./feeds.js";
 import type { LoanScript, RandomToggles } from "./scenario.js";
 
@@ -168,7 +174,11 @@ export type ReceiptMode =
   | "short_50"
   | "curtail"
   | "stale_bill_pay"
-  | "payoff";
+  | "payoff"
+  /** A history error's: the same draft taken twice (D-28). */
+  | "duplicate"
+  /** A history error's: another borrower's payment, keyed to this loan (D-25). */
+  | "misposted";
 
 export interface ReceiptRow {
   readonly id: string;
@@ -176,7 +186,7 @@ export interface ReceiptRow {
   readonly credited_as_of: PlainDate;
   readonly amount: Cents;
   readonly mode: ReceiptMode;
-  readonly channel: "borrower" | "transferor_forward";
+  readonly channel: "borrower" | "transferor_forward" | "misposted";
   readonly servicer: Servicer;
   readonly outcome: AllocationOutcome | "payoff";
   readonly installments: readonly {
@@ -219,7 +229,8 @@ export interface DisbursementRow {
   readonly id: string;
   readonly on: PlainDate;
   readonly line: string;
-  readonly kind: "bill" | "refund" | "payoff_refund";
+  /** `returned`: money a payee sent back into the account, written as a negative amount (a history error's, V-01). */
+  readonly kind: "bill" | "refund" | "payoff_refund" | "returned";
   readonly amount: Cents;
   readonly balance_after: Cents;
   readonly servicer: Servicer;
@@ -344,9 +355,12 @@ export interface MonthEnd {
   readonly amount_past_due: Cents;
   readonly status: "current" | "delinquent" | "paid_off" | "transferred";
   readonly mi_active: boolean;
+  /** A repayment plan in force, as the servicer whose books the loan is on knows it. */
   readonly plan_active: boolean;
   readonly remaining_term_months: number;
   readonly metro2: Metro2Month;
+  /** A bankruptcy case open, as the servicer whose books the loan is on knows it; absent when none. */
+  readonly bankruptcy?: { readonly chapter: "7" | "13"; readonly filed_on: PlainDate };
 }
 
 export interface PayoffRow {
@@ -363,13 +377,48 @@ export interface PayoffRow {
   readonly servicer: Servicer;
 }
 
-/** The terms boarding writes onto the loan (`loan_terms`), which cashiering and escrow read. */
+/**
+ * What boarding writes onto the loan, which every engine after it reads: the terms (`loan_terms`), the
+ * mortgage-insurance schedule and the flood determination, and whether it carries what the prior servicer
+ * had in force. The clean history boards the note and the loan as they are; a defect boards one value wrong.
+ */
 export interface BoardedTerms {
   readonly late_charge_pct: string;
   readonly late_charge_grace_days: number;
   readonly late_charge_cap_cents: Cents | null;
   /** `loan_terms.escrowed`: false on an escrowed loan stops the escrow account at boarding (D-31). */
   readonly escrowed: boolean;
+  /** The ARM terms (`loan_terms.arm_*`), which every rate change after boarding reads (D-01); null on a fixed rate. */
+  readonly arm: ArmTerms | null;
+  /** The automatic-termination date (`mi_schedules`, the 78 % date of 12 U.S.C. 4902(b)) the MI sweep reads (D-18). */
+  readonly mi_termination_date: PlainDate | null;
+  /** The FEMA flood zone (`flood_determinations.zone`; D-15). */
+  readonly flood_zone: string;
+  /** Whether boarding carries the repayment plan the prior servicer had in force (`lm_in_process`; D-35 boards it off). */
+  readonly lossmit_carried: boolean;
+  /** Whether boarding carries the borrower's open bankruptcy (`bk_active`; D-37 boards it off). */
+  readonly bankruptcy_carried: boolean;
+  /** Whether boarding carries the servicemember's protection (`scra_active`; D-12 boards it off). */
+  readonly scra_carried: boolean;
+  /** A payment-history row the package carries for an installment the loan never had, which boarding's oldest-first application reads (D-24). */
+  readonly phantom_installment: PlainDate | null;
+}
+
+/** A change a defect makes to the prior servicer's own history, before any boarding (D-25). */
+export interface HistoryPlant {
+  /** The installment whose receipt the prior servicer posts with its principal to escrow. */
+  readonly misapplied: PlainDate;
+}
+
+/** A repayment plan in force at the transfer, as the prior servicer's books carry it. */
+export interface TransferPlan {
+  readonly started_on: PlainDate;
+  readonly months: number;
+  /** Plan payments made so far. */
+  readonly paid: number;
+  /** What was owed when it began, and each payment's share of it. */
+  readonly arrears: Cents;
+  readonly share: Cents;
 }
 
 /** The loan as it stood at the close of business before the transfer date: what the prior servicer hands over. */
@@ -390,6 +439,8 @@ export interface TransferSnapshot {
   readonly mi_active: boolean;
   /** The installment ledger as it stood: every installment added so far, each with the day it was paid in full. */
   readonly installments: readonly InstallmentRow[];
+  /** The repayment plan in force at the close of business, absent when none. */
+  readonly plan?: TransferPlan;
 }
 
 export interface LoanLife {
@@ -416,6 +467,19 @@ export interface LoanLife {
   readonly payoff: PayoffRow | null;
   readonly transfer_out_on: PlainDate | null;
   readonly invariants: { readonly ok: boolean; readonly notes: readonly string[] };
+  /**
+   * The servicemember's protection, absent when the borrower is never called to active duty: the day of the
+   * call, the first installment it reaches, and the P&I at the 6 % cap (null when the note's rate is not above it).
+   */
+  readonly scra?: {
+    readonly called_on: PlainDate;
+    readonly first_due: PlainDate;
+    readonly capped_pi: Cents | null;
+  };
+  /** The bankruptcy petition, absent when none. */
+  readonly bankruptcy?: { readonly chapter: "7" | "13"; readonly filed_on: PlainDate };
+  /** A change a defect made to the prior servicer's own history (D-25's twin), absent on every other history. */
+  readonly history_plant?: HistoryPlant;
 }
 
 export interface SimContext {
@@ -473,11 +537,52 @@ export type LifeMoment =
       readonly old_payment: Cents;
     };
 
+/**
+ * An error made in the history after boarding, by a vendor or a system the
+ * servicer depends on (defects.ts, the history errors). Each changes one
+ * event before the engines are handed it; everything after is the engines'.
+ * A row an error adds is named off the row it comes from, and a row it
+ * removes keeps its id spent, so every other row of the twin keeps the id it
+ * has in the clean history and the two compare row by row.
+ */
+export type HistoryError =
+  /** A bill paid from escrow at the amount a vendor reported, not the bill's; the payee returns the excess on `returned_on`. */
+  | {
+      readonly kind: "bill_amount";
+      readonly line: EscrowLine["line_type"];
+      readonly due: PlainDate;
+      readonly paid: Cents;
+      readonly returned_on: PlainDate | null;
+    }
+  /** A bill that went to someone else and reached the servicer late: paid on `paid_on`, not on its due date. */
+  | {
+      readonly kind: "bill_late";
+      readonly line: EscrowLine["line_type"];
+      readonly due: PlainDate;
+      readonly paid_on: PlainDate;
+    }
+  /** The receipt `receipt` drafted twice: posted again the same day, as `${receipt}-DUP`. */
+  | { readonly kind: "receipt_twice"; readonly receipt: string }
+  /** The receipt `receipt` keyed to another loan, `to`: never posted here. */
+  | { readonly kind: "receipt_elsewhere"; readonly receipt: string; readonly to: string }
+  /** Another loan's receipt keyed to this one: posted here as `id`. */
+  | {
+      readonly kind: "receipt_from";
+      readonly id: string;
+      readonly on: PlainDate;
+      readonly amount: Cents;
+      readonly from: string;
+    };
+
 export interface SimOverrides {
   /** What boarding writes, given the note's terms. The clean history boards the note as it is. */
   readonly boarded?: (note: BoardedTerms) => BoardedTerms;
+  /** A change to the prior servicer's own history (D-25). */
+  readonly history?: HistoryPlant;
   /** Shown each receipt before the waterfall posts it (a payoff is quoted, not posted), and each analysis before it is decided. */
   readonly observe?: (moment: LifeMoment) => void;
+  /** Errors made in the history. The clean history has none. */
+  readonly errors?: readonly HistoryError[];
 }
 
 /* ── the draws ───────────────────────────────────────────────────────────── */
@@ -610,6 +715,8 @@ export function withinGraceDay(
 
 type EvKind =
   | "board"
+  | "scra"
+  | "bankruptcy"
   | "plan"
   | "promise_made"
   | "pmi"
@@ -623,6 +730,8 @@ type EvKind =
   | "arm";
 const PRIORITY: Record<EvKind, number> = {
   board: 0,
+  scra: 1,
+  bankruptcy: 1,
   plan: 1,
   promise_made: 1,
   pmi: 2,
@@ -643,6 +752,9 @@ interface Ev {
   readonly amount?: Cents;
   readonly line?: string;
   readonly refund?: boolean;
+  /** A history error's: the id its row keeps (a bill paid late, an excess returned, a receipt keyed here from another loan). */
+  readonly rowId?: string;
+  readonly returned?: boolean;
   readonly mode?: ReceiptMode;
   readonly credited?: PlainDate;
   readonly channel?: ReceiptRow["channel"];
@@ -798,9 +910,18 @@ export function simulateLoan(
     late_charge_grace_days: d.late_charge.grace_days,
     late_charge_cap_cents: d.late_charge.cap_cents,
     escrowed: d.escrowed,
+    arm: d.arm,
+    mi_termination_date: miTerminationDate(d),
+    flood_zone: floodZoneOf(d),
+    lossmit_carried: true,
+    bankruptcy_carried: true,
+    scra_carried: true,
+    phantom_installment: null,
   };
   const boardedTerms = ov.boarded ? ov.boarded(noteTerms) : noteTerms;
   const boardedOn = transferInOn ?? d.note_date;
+  // Boarded at origination, only the late-charge terms reach a twin: every other defect enters through a transfer
+  // package (`DefectDefinition.requires_transfer`), and the boarding below reads what it boarded.
   const initialTerms = transferInOn ? noteTerms : boardedTerms;
 
   // INVENTED: the P&I and note rate by due date; the cashiering state carries one rate and each installment one P&I.
@@ -813,6 +934,14 @@ export function simulateLoan(
     return t;
   };
   const rateOf = (due: PlainDate) => termsFor(due).rate;
+  /** New terms from `from` on: every later entry gives way, and every open installment due from then takes the P&I. */
+  const termsFrom = (from: PlainDate, pi: Cents, rate: string) => {
+    for (let k = piSched.length - 1; k > 0; k--) if (piSched[k]!.from >= from) piSched.splice(k, 1);
+    piSched.push({ from, pi, rate });
+    for (const i of state.installments)
+      if (i.status === "due" && i.due_date >= from)
+        (i as { pi_cents: Cents }).pi_cents = termsFor(i.due_date).pi;
+  };
 
   // INVENTED: the escrow payment by due date (each analysis writes the next 24), and the balance between analyses.
   const escrowSched = new Map<PlainDate, Cents>();
@@ -957,6 +1086,14 @@ export function simulateLoan(
       push({ on: addDays(indexDate(c, d.arm.lookback_days), 7), kind: "arm", due: c });
   if (miTrigger && miTrigger <= windowEnd) push({ on: miTrigger, kind: "pmi", due: miTrigger });
   if (transferInOn) push({ on: transferInOn, kind: "board" });
+  if (script.active_duty) {
+    if (d.arm)
+      throw new RangeError(
+        `active_duty on loan ${d.index}: the 6 % cap on an ARM is not modeled; a servicemember's loan is a fixed rate here`,
+      );
+    push({ on: script.active_duty, kind: "scra" });
+  }
+  if (script.bankruptcy) push({ on: script.bankruptcy.on, kind: "bankruptcy" });
   script.plans.forEach((p, i) => push({ on: p.on, kind: "plan", plan: i }));
   script.promises.forEach((p, i) => {
     push({ on: p.made_on, kind: "promise_made", promise: i });
@@ -965,6 +1102,22 @@ export function simulateLoan(
   if (script.payoff)
     push({ on: script.payoff.on, kind: "payoff", byRefi: script.payoff.by_refinance });
   if (script.transfer_out) push({ on: script.transfer_out, kind: "transfer_out" });
+  // A history error's: another loan's receipt keyed to this one, posted on the day it came in.
+  const errors = ov.errors ?? [];
+  /** The installments another loan's payment, posted here, paid (D-25). */
+  const paidByAnother = new Set<PlainDate>();
+  for (const x of errors)
+    if (x.kind === "receipt_from" && x.on <= windowEnd)
+      push({
+        on: x.on,
+        kind: "receipt",
+        due: x.on,
+        mode: "misposted",
+        amount: x.amount,
+        credited: x.on,
+        channel: "misposted",
+        rowId: x.id,
+      });
 
   /* ── the behavior layer ────────────────────────────────────────────────── */
 
@@ -990,9 +1143,30 @@ export function simulateLoan(
     readonly share: Cents;
     paid: number;
     done: boolean;
+    /** The last day the servicer knows of the plan: null while every servicer does; the day before a boarding that drops it (D-35). */
+    known_until: PlainDate | null;
   }
   const plans: Plan[] = [];
   const activePlan = (): Plan | undefined => plans.find((p) => !p.done);
+  /** The plan the servicer whose books the loan is on knows is in force on `on`. */
+  const knownPlan = (on: PlainDate): Plan | undefined => {
+    const p = activePlan();
+    return p && (p.known_until === null || on <= p.known_until) ? p : undefined;
+  };
+  // The servicemember's protection and the bankruptcy, as they happen and as the servicer knows them.
+  let scraCall: { called_on: PlainDate; first_due: PlainDate; capped_pi: Cents | null } | null =
+    null;
+  let bkKnownUntil: PlainDate | null = null;
+  const bkKnown = (on: PlainDate): boolean =>
+    script.bankruptcy !== null &&
+    script.bankruptcy.on <= on &&
+    (bkKnownUntil === null || on <= bkKnownUntil);
+  /** End an overlay in force the day before `on`: the servicer stops honoring what it no longer knows of. */
+  const endOverlay = (kind: string, on: PlainDate) => {
+    state.overlays = (state.overlays ?? []).map((x) =>
+      x.kind === kind && !x.to ? { ...x, to: addDays(on, -1) } : x,
+    );
+  };
   const promiseCovers = (on: PlainDate) =>
     script.promises.some((p) => p.made_on <= on && on < p.pay_on);
   const open = () => state.installments.filter((i) => i.status === "due").sort(byDue);
@@ -1105,11 +1279,15 @@ export function simulateLoan(
     mode: ReceiptMode,
     channel: ReceiptRow["channel"],
     curtail: Cents,
-  ) => {
+    fixedId?: string,
+  ): void => {
+    // A history error's row is named off another's (HistoryError), and spends no id of the loan's own.
+    const id = fixedId ?? `${d.loan_id}-R${++receiptSeq}`;
+    // A receipt keyed to another loan never reaches this one; its id stays spent.
+    if (errors.some((x) => x.kind === "receipt_elsewhere" && x.receipt === id)) return;
     const cutoff = addDays(on, -365);
     while (fiftyDates.length && fiftyDates[0]! < cutoff) fiftyDates.shift();
     state.partial_count_12m = fiftyDates.length;
-    const id = `${d.loan_id}-R${++receiptSeq}`;
     if (ov.observe)
       ov.observe({
         kind: "receipt",
@@ -1167,6 +1345,19 @@ export function simulateLoan(
           fifty_rule_shortfall: x.fifty_rule_shortfall_cents ?? 0n,
         });
     }
+    // D-25's twin: the prior servicer posts this receipt's principal to escrow. The installment is paid and interest
+    // paid to its due date as cashiering decided; the balance keeps the principal, and the escrow account holds it.
+    const mis = ov.history?.misapplied;
+    if (mis !== undefined && who(on) === "prior") {
+      const k = insts.findIndex((x) => x.due === mis);
+      if (k >= 0) {
+        const x = insts[k]!;
+        insts[k] = { ...x, principal: 0n, escrow: x.escrow + x.principal };
+        state = { ...state, upb_cents: state.upb_cents + x.principal };
+        escrowIn += x.principal;
+        principalApplied -= x.principal;
+      }
+    }
     const outcome: AllocationOutcome = outcomes.includes("applied_with_50_rule")
       ? "applied_with_50_rule"
       : outcomes.includes("applied")
@@ -1209,12 +1400,21 @@ export function simulateLoan(
       ended = { kind: "paid_in_full", on, by_refinance: false };
       note(on, "payoff");
     }
+    // A draft taken twice: the same amount, the same day, posted again by the waterfall.
+    if (!ended && errors.some((x) => x.kind === "receipt_twice" && x.receipt === id))
+      post(on, credited, amount, "duplicate", channel, 0n, `${id}-DUP`);
   };
 
   const onReceipt = (e: Ev) => {
     const target = e.due!;
     const channel = e.channel ?? "borrower";
     const credited = e.credited ?? e.on;
+    if (e.mode === "misposted") {
+      post(e.on, credited, e.amount!, "misposted", channel, 0n, e.rowId);
+      for (const x of receipts.find((r) => r.id === e.rowId)?.installments ?? [])
+        paidByAnother.add(x.due);
+      return;
+    }
     if (e.mode === "partial_rest")
       return post(e.on, credited, e.amount!, "partial_rest", channel, 0n);
     if (e.scriptedMiss) return void note(e.on, "missed", target);
@@ -1226,8 +1426,9 @@ export function simulateLoan(
     const behind = oldest !== undefined && oldest.due_date < target;
     const plan = activePlan();
     // An installment a cure or a promise already paid (a late receipt arriving after the next one's cure) is not paid
-    // twice: the borrower sends nothing for it.
-    if (!plan && targetInst && targetInst.status !== "due")
+    // twice: the borrower sends nothing for it. One another borrower's payment paid (D-25) the borrower knows nothing
+    // of, and pays as billed.
+    if (!plan && targetInst && targetInst.status !== "due" && !paidByAnother.has(target))
       return void note(e.on, "already_paid", target);
     if (plan) {
       // Each plan payment is the month's own installment (none when it is one of the arrears) and a share of the arrears.
@@ -1241,11 +1442,14 @@ export function simulateLoan(
       if (plan.paid === plan.months) {
         plan.done = true;
         const caughtUp = !state.installments.some((i) => i.status === "due" && i.due_date <= e.on);
-        if (caughtUp) waiveAll(state, "workout_completion", ACTOR);
-        else releaseSuspended(state, "repayment_plan_pending_waiver");
-        state.overlays = (state.overlays ?? []).map((x) =>
-          x.kind === "repayment_plan_pending_waiver" && !x.to ? { ...x, to: e.on } : x,
-        );
+        // A servicer that boarded the loan without the plan (D-35) neither waives nor releases what it never knew of.
+        if (plan.known_until === null) {
+          if (caughtUp) waiveAll(state, "workout_completion", ACTOR);
+          else releaseSuspended(state, "repayment_plan_pending_waiver");
+          state.overlays = (state.overlays ?? []).map((x) =>
+            x.kind === "repayment_plan_pending_waiver" && !x.to ? { ...x, to: e.on } : x,
+          );
+        }
         note(e.on, caughtUp ? "plan_completed" : "plan_failed");
       }
       return;
@@ -1261,7 +1465,11 @@ export function simulateLoan(
     }
     if (rnd.delinquency && md.uMiss < clamp01(pRoll * disaster, 0.9))
       return void note(e.on, "missed", target);
-    const statement = pOf(oldest ?? targetInst!);
+    // What the borrower was billed: the oldest installment open, or, for one another borrower's payment paid without
+    // their knowing (D-25), that installment itself.
+    const statement = pOf(
+      targetInst && paidByAnother.has(target) ? targetInst : (oldest ?? targetInst!),
+    );
     const stale =
       staleArmed.length > 0 &&
       staleArmed[0]! <= e.on &&
@@ -1331,6 +1539,7 @@ export function simulateLoan(
       share: arrears / BigInt(p.months),
       paid: 0,
       done: false,
+      known_until: null,
     });
     // Charges on the installments the plan covers, and on those due while it runs, accrue suspended until it ends
     // (the overlay `assessLateCharge` reads, apps/servicing/src/domain/cashiering/latecharges.ts:88).
@@ -1366,11 +1575,18 @@ export function simulateLoan(
     });
   };
 
-  const disburse = (on: PlainDate, line: string, kind: DisbursementRow["kind"], amount: Cents) => {
+  const disburse = (
+    on: PlainDate,
+    line: string,
+    kind: DisbursementRow["kind"],
+    amount: Cents,
+    fixedId?: string,
+  ): string => {
+    const id = fixedId ?? `${d.loan_id}-D${++disbSeq}`;
     escrowBal -= amount;
     escrowDisbursed += amount;
     disbursements.push({
-      id: `${d.loan_id}-D${++disbSeq}`,
+      id,
       on,
       line,
       kind,
@@ -1378,10 +1594,43 @@ export function simulateLoan(
       balance_after: escrowBal,
       servicer: who(on),
     });
+    return id;
   };
   const onDisburse = (e: Ev) => {
     if (!escrowOn(e.on)) return;
     if (e.line === "mi_borrower_paid" && miTerminatedOn && e.on >= miTerminatedOn) return;
+    if (e.returned) return void disburse(e.on, e.line!, "returned", e.amount!, e.rowId);
+    if (e.rowId) return void disburse(e.on, e.line!, "bill", e.amount!, e.rowId);
+    const err = e.refund
+      ? undefined
+      : errors.find(
+          (x) =>
+            (x.kind === "bill_amount" || x.kind === "bill_late") &&
+            x.line === e.line &&
+            x.due === e.on,
+        );
+    if (err?.kind === "bill_late") {
+      // The bill went to someone else; it is paid when it reaches the servicer, under the id it would have had.
+      const id = `${d.loan_id}-D${++disbSeq}`;
+      if (err.paid_on <= windowEnd)
+        push({ on: err.paid_on, kind: "disburse", amount: e.amount!, line: e.line!, rowId: id });
+      return;
+    }
+    if (err?.kind === "bill_amount") {
+      // Paid as the vendor reported it; the payee returns what it was paid over the bill.
+      const id = disburse(e.on, e.line!, "bill", err.paid);
+      const excess = err.paid - e.amount!;
+      if (err.returned_on !== null && err.returned_on <= windowEnd && excess !== 0n)
+        push({
+          on: err.returned_on,
+          kind: "disburse",
+          amount: -excess,
+          line: e.line!,
+          returned: true,
+          rowId: `${id}-RET`,
+        });
+      return;
+    }
     disburse(e.on, e.line!, e.refund ? "refund" : "bill", e.amount!);
   };
 
@@ -1549,7 +1798,8 @@ export function simulateLoan(
   };
 
   const onArm = (e: Ev) => {
-    const a = d.arm!;
+    // The dates are the note's; the caps and margin are what the servicer's system holds, boarded wrong in D-01's twin.
+    const a = e.on >= boardedOn ? (boardedTerms.arm ?? d.arm!) : d.arm!;
     const change = e.due!;
     const fnpd = addMonths(change, 1);
     const idxDate = indexDate(change, a.lookback_days);
@@ -1643,6 +1893,38 @@ export function simulateLoan(
     });
   };
 
+  /**
+   * The call to active duty (50 U.S.C. 3937; Fannie Mae D2-3.4-01): from the first installment due after it, no
+   * interest above 6 % and no late charge (the `scra_reduced_rate` overlay, 2.7 rule 3(iii),
+   * apps/servicing/src/domain/cashiering/ops-2-7.ts:16-19). INVENTED: the capped payment is the balance re-amortized
+   * at 6 % over the remaining term, as an ARM change re-amortizes; the servicing app states no formula for it.
+   */
+  const onScra = (e: Ev) => {
+    let first = addMonths(d.first_due, monthsBetween(d.first_due, e.on));
+    if (first <= e.on) first = addMonths(first, 1);
+    let capped: Cents | null = null;
+    if (Number(d.note_rate_pct) > 6 && first <= d.maturity) {
+      capped = levelPayment(
+        state.upb_cents,
+        ratePercent("6.000"),
+        monthsBetween(first, d.maturity) + 1,
+      );
+      termsFrom(first, capped, "6.000");
+    }
+    state.overlays = [
+      ...(state.overlays ?? []),
+      { kind: "scra_reduced_rate", from: first, to: null },
+    ];
+    scraCall = { called_on: e.on, first_due: first, capped_pi: capped };
+  };
+  /** The petition: every charge on an installment due from it accrues suspended (2.7 rule 3(iv), ops-2-7.ts:24-26). */
+  const onBankruptcy = (e: Ev) => {
+    state.overlays = [
+      ...(state.overlays ?? []),
+      { kind: "bankruptcy_active", from: e.on, to: null },
+    ];
+  };
+
   const onBoard = (e: Ev) => {
     // The prior servicer's books at the close of the day before: boarding is the first event of its day.
     const o = open();
@@ -1652,6 +1934,7 @@ export function simulateLoan(
     );
     const nextDue = o[0]?.due_date ?? addMonths(lastDue, 1);
     const t = termsFor(nextDue);
+    const inForce = activePlan();
     atTransfer = {
       on: e.on,
       upb: state.upb_cents,
@@ -1666,7 +1949,89 @@ export function simulateLoan(
       last_payment_on: lastPaymentOn,
       mi_active: d.mi !== null && !(miTerminatedOn !== null && miTerminatedOn <= e.on),
       installments: [...archived, ...state.installments].sort(byDue).map(ledgerRow),
+      ...(inForce
+        ? {
+            plan: {
+              started_on: inForce.on,
+              months: inForce.months,
+              paid: inForce.paid,
+              arrears: inForce.arrears,
+              share: inForce.share,
+            },
+          }
+        : {}),
     };
+    // What boarding leaves out, the servicer does not honor from the transfer date (each a defect's twin).
+    const dayBefore = addDays(e.on, -1);
+    // D-35: the plan's charges are assessed rather than suspended, and nothing is waived at its end.
+    if (inForce && !boardedTerms.lossmit_carried) {
+      inForce.known_until = dayBefore;
+      endOverlay("repayment_plan_pending_waiver", e.on);
+    }
+    // D-37: the stay's suspension ends; the borrower in bankruptcy is billed and called as any other.
+    if (script.bankruptcy && script.bankruptcy.on < e.on && !boardedTerms.bankruptcy_carried) {
+      bkKnownUntil = dayBefore;
+      endOverlay("bankruptcy_active", e.on);
+    }
+    // D-12: the servicer bills the tape's terms, the note's rate and P&I, on every installment due from the transfer
+    // date (as D-42's twin drops the escrow), and charges late fees again. An installment already past due keeps what
+    // the prior servicer billed, the capped payment, which is what the package's history boards it at.
+    if (scraCall && !boardedTerms.scra_carried) {
+      if (scraCall.capped_pi !== null)
+        termsFrom(
+          e.on > scraCall.first_due ? e.on : scraCall.first_due,
+          d.initial_pi_cents,
+          d.note_rate_pct,
+        );
+      endOverlay("scra_reduced_rate", e.on);
+    }
+    // D-18: the MI sweep reads the termination date boarding wrote. A date still to come replaces the sweep; one
+    // already past leaves it as it stands, so a sweep deferred while the borrower was behind keeps looking each month,
+    // as it would on the right date.
+    if (
+      d.mi &&
+      !miTerminatedOn &&
+      boardedTerms.mi_termination_date !== noteTerms.mi_termination_date
+    ) {
+      const nt = pendingTriggerDate(boardedTerms.mi_termination_date, mid, rule78);
+      if (nt > e.on && nt !== miTrigger) {
+        miTrigger = nt;
+        if (nt <= windowEnd) push({ on: nt, kind: "pmi", due: nt });
+      }
+    }
+    // D-24: boarding derives the ledger from the package's payment history, oldest first (service.ts:272, :345-347),
+    // and the history carries a row for an installment the loan never had. Every installment that application leaves
+    // unpaid as of the day before is open again; the balance and the interest paid-to date are the tape's.
+    if (boardedTerms.phantom_installment) {
+      const h = historyRows(atTransfer);
+      const applied = applyFifo(
+        [
+          {
+            due_date: boardedTerms.phantom_installment,
+            amount_cents: h.installments[0]!.amount_cents,
+          },
+          ...h.installments,
+        ],
+        h.payments,
+      ).installments;
+      for (const a of applied) {
+        if (a.due_date === boardedTerms.phantom_installment || !isUnpaidAsOf(a, dayBefore))
+          continue;
+        let inst = state.installments.find((i) => i.due_date === a.due_date);
+        if (!inst) {
+          const k = archived.findIndex((i) => i.due_date === a.due_date);
+          if (k < 0) continue;
+          inst = archived.splice(k, 1)[0]!;
+          state.installments.push(inst);
+          state.installments.sort(byDue);
+        }
+        if (inst.status !== "satisfied" && inst.status !== "prepaid") continue;
+        inst.status = "due";
+        delete (inst as { satisfied_on?: PlainDate }).satisfied_on;
+        delete (inst as { credited_as_of?: PlainDate }).credited_as_of;
+        delete (inst as { satisfied_by_payment_id?: string }).satisfied_by_payment_id;
+      }
+    }
     const graceBefore = state.late_charge_grace_days;
     state.late_charge_pct = boardedTerms.late_charge_pct;
     state.late_charge_grace_days = boardedTerms.late_charge_grace_days;
@@ -1798,6 +2163,12 @@ export function simulateLoan(
         case "board":
           onBoard(e);
           break;
+        case "scra":
+          onScra(e);
+          break;
+        case "bankruptcy":
+          onBankruptcy(e);
+          break;
         case "plan":
           onPlan(e);
           break;
@@ -1894,7 +2265,8 @@ export function simulateLoan(
     const ref = nextDue ?? addMonths(monthStart, 1);
     const t = termsFor(ref);
     const dq = deriveDelinquency(ap, asOf);
-    const plan = activePlan();
+    // What the servicer furnishes and reports is the plan it knows of (a boarding that dropped it knows none).
+    const plan = knownPlan(asOf);
     const condition: LoanCondition = ended
       ? ended.kind === "paid_in_full"
         ? { kind: "paid_in_full", closed_on: ended.on, by_refinance: ended.by_refinance }
@@ -1992,6 +2364,9 @@ export function simulateLoan(
         errors: errs,
         account_status: snap.account_status,
       },
+      ...(!ended && bkKnown(asOf)
+        ? { bankruptcy: { chapter: script.bankruptcy!.chapter, filed_on: script.bankruptcy!.on } }
+        : {}),
     });
   };
 
@@ -2020,6 +2395,8 @@ export function simulateLoan(
     }
   }
   const endOn = (ended as { on: PlainDate } | null)?.on ?? null;
+  const scraAt = scraCall as LoanLife["scra"] | null;
+  const boardedAt = atTransfer as TransferSnapshot | null;
   const tail = endOn ? (x: { on: PlainDate }) => x.on <= endOfMonth(endOn) : () => true;
 
   // The invariants the prototype checked, and the ones this module adds.
@@ -2050,7 +2427,20 @@ export function simulateLoan(
   const ledger = [...archived, ...state.installments].sort(byDue).map(ledgerRow);
   if (ctx.outreach)
     contacts.push(
-      ...outreachCalls(loanKey, ledger, script.promises, d.first_due, endOn ?? windowEnd, who),
+      ...outreachCalls(
+        loanKey,
+        ledger,
+        script.promises,
+        d.first_due,
+        endOn ?? windowEnd,
+        who,
+        bkKnown,
+        // A boarding that reopened installments the prior servicer had paid (D-24) changes the ledger only from the
+        // transfer: before it the prior servicer's own ledger says who was behind.
+        boardedTerms.phantom_installment && boardedAt
+          ? { until: boardedAt.on, ledger: boardedAt.installments }
+          : null,
+      ),
     );
   const invariantNotes = notes.filter((n) => !n.startsWith("paid to zero"));
   return {
@@ -2074,7 +2464,57 @@ export function simulateLoan(
     payoff,
     transfer_out_on: transferOutOn,
     invariants: { ok: invariantNotes.length === 0, notes },
+    ...(scraAt ? { scra: scraAt } : {}),
+    ...(script.bankruptcy
+      ? { bankruptcy: { chapter: script.bankruptcy.chapter, filed_on: script.bankruptcy.on } }
+      : {}),
+    ...(ov.history ? { history_plant: ov.history } : {}),
   };
+}
+
+/**
+ * The payment history a transfer package carries: every installment due by the transfer date, or by the oldest
+ * unpaid when the borrower is ahead, oldest first, each with the day it was paid in full by the close of business
+ * the day before (null when it was not) and what paid it, read off the cashiering ledger at the transfer.
+ */
+export function historyRows(t: TransferSnapshot): {
+  readonly rows: readonly (InstallmentRow & { readonly paid_on: PlainDate | null })[];
+  readonly installments: readonly { readonly due_date: PlainDate; readonly amount_cents: Cents }[];
+  readonly payments: readonly { readonly received_on: PlainDate; readonly amount_cents: Cents }[];
+} {
+  const asOf = addDays(t.on, -1);
+  const through = t.next_due > t.on ? t.next_due : t.on;
+  const rows = t.installments
+    .filter((i) => i.due <= through)
+    .map((i) => {
+      const on = i.credited_as_of ?? i.satisfied_on;
+      const paid =
+        (i.status === "satisfied" || i.status === "prepaid") && on !== null && on <= asOf;
+      return { ...i, paid_on: paid ? on : null };
+    });
+  return {
+    rows,
+    installments: rows.map((i) => ({ due_date: i.due, amount_cents: i.pi + i.escrow })),
+    payments: rows.flatMap((i) =>
+      i.paid_on ? [{ received_on: i.paid_on, amount_cents: i.pi + i.escrow }] : [],
+    ),
+  };
+}
+
+/**
+ * The note's automatic-termination date for its mortgage insurance: the first due date on which the initial
+ * amortization schedule reaches 78 % of the original value (12 U.S.C. 4902(b); `scheduledDateForPct`), or null on a
+ * loan with none. `value` is the original value, the draw's unless another is named (D-18 computes from a wrong one).
+ */
+export function miTerminationDate(d: LoanDraw, value: Cents = d.value_cents): PlainDate | null {
+  if (!d.mi) return null;
+  const s = buildSchedule({
+    upb_cents: d.orig_upb_cents,
+    annual_rate: ratePercent(d.note_rate_pct),
+    term_months: d.term_months,
+    first_due: d.first_due,
+  });
+  return scheduledDateForPct(s, value, 78)?.due_date ?? null;
 }
 
 /** The ledger as the outreach reads it: each installment and the day it was paid in full. */
@@ -2101,6 +2541,11 @@ const OUTREACH_PROMISE_MAX_DAYS = 30;
  * and FNMA_D2202_PTP_MAX_30 in spec/registry/timers.json), a broken one resumes
  * it on the day it was due (`promise_broken`), and the cure closes it.
  *
+ * A borrower the servicer knows to be in bankruptcy is exempt and is not
+ * called (12 CFR 1024.39(c)(1); the bankruptcy exemption of
+ * early-intervention/windows.ts:16), as a promise ceases the plan; a servicer
+ * that boarded the loan without the case (D-37) calls again.
+ *
  * INVENTED: each attempt's outcome, drawn from a stream of its own day (no
  * attempt reaches the borrower; a conversation would be a contact with a
  * reason, which the borrower's own calls carry), and its minutes.
@@ -2112,16 +2557,23 @@ function outreachCalls(
   firstDue: PlainDate,
   end: PlainDate,
   who: (on: PlainDate) => Servicer,
+  exempt: (on: PlainDate) => boolean = () => false,
+  before: { readonly until: PlainDate; readonly ledger: readonly LedgerRow[] } | null = null,
 ): ContactRow[] {
-  const ap: AppliedInstallment[] = ledger.map((i) => {
-    const paid = i.status === "satisfied" || i.status === "prepaid";
-    return {
-      due_date: i.due,
-      amount_cents: i.pi + i.escrow,
-      satisfied_on: paid ? (i.credited_as_of ?? i.satisfied_on ?? null) : null,
-      paid_cents: paid ? i.pi + i.escrow : 0n,
-    };
-  });
+  const appliedOf = (rows: readonly LedgerRow[]): AppliedInstallment[] =>
+    rows.map((i) => {
+      const paid = i.status === "satisfied" || i.status === "prepaid";
+      return {
+        due_date: i.due,
+        amount_cents: i.pi + i.escrow,
+        satisfied_on: paid ? (i.credited_as_of ?? i.satisfied_on ?? null) : null,
+        paid_cents: paid ? i.pi + i.escrow : 0n,
+      };
+    });
+  const ap = appliedOf(ledger);
+  const prior = before ? appliedOf(before.ledger) : null;
+  const daysOn = (on: PlainDate) =>
+    regxDaysDelinquent(prior && before && on < before.until ? prior : ap, on);
   const held = (on: PlainDate) =>
     promises.some(
       (p) =>
@@ -2133,7 +2585,7 @@ function outreachCalls(
   let status: "closed" | "active" | "ceased" = "closed";
   let nextDue: PlainDate = firstDue;
   for (let on = addDays(firstDue, OUTREACH_FIRST_DAY); on <= end;) {
-    const days = regxDaysDelinquent(ap, on);
+    const days = daysOn(on);
     if (days === 0) {
       // Cured, or never late: the next plan can open no sooner than an installment due later reaches day 17.
       status = "closed";
@@ -2147,7 +2599,7 @@ function outreachCalls(
       on = addDays(next.due_date, OUTREACH_FIRST_DAY);
       continue;
     }
-    if (held(on)) {
+    if (held(on) || exempt(on)) {
       if (status === "active") status = "ceased";
       on = addDays(on, 1);
       continue;

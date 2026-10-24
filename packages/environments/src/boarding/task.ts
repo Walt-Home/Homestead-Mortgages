@@ -28,7 +28,7 @@ import { PAYLOAD_START, type Split } from "../refi/task.js";
 
 export const BOARDING_ENVIRONMENT_NAME = "boarding-triage";
 /** Bump on any change to the rulebook, the tools, the rendering or the generator. */
-export const BOARDING_ENVIRONMENT_VERSION = "1.0.0";
+export const BOARDING_ENVIRONMENT_VERSION = "1.1.0";
 
 export interface BoardingTask {
   readonly id: string;

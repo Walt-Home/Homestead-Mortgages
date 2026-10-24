@@ -48,6 +48,7 @@ import { CATCHUP_HELDOUT_SUITE, catchupTaskId } from "./catchup/index.js";
 import { REVIEW_HELDOUT_SUITE, reviewTaskId } from "./escrow-review/index.js";
 import { BOARDING_HELDOUT_SUITE, boardingTaskId } from "./boarding/index.js";
 import { CALL_QA_HELDOUT_SUITE, callQaTaskId } from "./call-qa/index.js";
+import { INTAKE_HELDOUT_SUITE, intakeTaskId } from "./tape-intake/index.js";
 
 /** A held-out suite: the `name/version` its ids are drawn under, and its seed and size. */
 export interface HeldoutSuite {
@@ -98,6 +99,7 @@ export const HELDOUT_SUITES: readonly HeldoutSuite[] = Object.freeze([
   today(reviewTaskId, REVIEW_HELDOUT_SUITE),
   today(boardingTaskId, BOARDING_HELDOUT_SUITE),
   today(callQaTaskId, CALL_QA_HELDOUT_SUITE),
+  today(intakeTaskId, INTAKE_HELDOUT_SUITE),
   { namespace: "refi-tape/1.0.0", ...TAPE_HELDOUT_SUITE },
   { namespace: "refi-hard/1.0.0", ...HARD_HELDOUT_SUITE },
   { namespace: "regz-price-tests/1.0.0", ...REGZ_HELDOUT_SUITE },
@@ -108,6 +110,7 @@ export const HELDOUT_SUITES: readonly HeldoutSuite[] = Object.freeze([
   { namespace: "flexmod-terms/1.1.0", ...FLEX_HELDOUT_SUITE },
   { namespace: "payments-posting/1.0.0", ...PAYMENTS_HELDOUT_SUITE },
   { namespace: "pmi-termination/1.0.0", ...PMI_HELDOUT_SUITE },
+  { namespace: "boarding-triage/1.0.0", ...BOARDING_HELDOUT_SUITE },
 ]);
 
 /** Redraw keys after the first, `${id}#1` to `${id}#60`: past every generator's attempts. */

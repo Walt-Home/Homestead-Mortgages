@@ -232,6 +232,16 @@ import {
   expectedCallQa,
   generateCallQaTask,
 } from "../src/call-qa/index.js";
+import {
+  INTAKE_SPEC_CASES,
+  IntakeReferencePolicy,
+  generateIntakeTask,
+  intakePayload,
+  intakeSpecTasks,
+  intakeTaskId,
+  intakeVerdict,
+  tapeIntake,
+} from "../src/tape-intake/index.js";
 
 /* ── what crosses to the page ───────────────────────────────────────────── */
 
@@ -914,7 +924,7 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     title: "Boarding triage",
     side: "servicing",
     summary:
-      "One servicing-transfer package before it boards, in the servicing app's own layout: one to four loans with their prior servicer's tape, payment history, escrow files and correspondence, some carrying a defect the boarding gate cannot see (an escrow flag written Yes, which boards the loan non-escrowed; a late-fee cap left off the tape) and some clean. The model names each defect, what the cell says and should say, and whether to correct it or query the prior servicer, and passes the clean loans. Graded against the package's label manifest.",
+      "One servicing-transfer package before it boards, in the servicing app's own layout: one to four loans with their prior servicer's tape, payment history, escrow files and correspondence, some carrying one of ten defects the boarding gate cannot see (an escrow flag written Yes; a late-fee cap left off the tape; a repayment plan, a bankruptcy or a servicemember's rate cap with its flag off; an ARM's first-change cap; a mortgage-insurance termination date; a flood zone; a payment-history row from before the loan was made; a payment posted with its principal to escrow) and some clean. The model names each defect at its root, what the cell says and should say, and whether to correct it, hold the loan or query the prior servicer, and passes the clean loans. Graded against the package's label manifest, which tells a root from its symptoms.",
     id: boardingTaskId,
     one: generateBoardingTask,
     spec: boardingSpecTasks,
@@ -938,6 +948,21 @@ export const ENVIRONMENTS: readonly PlaygroundEnvironment[] = Object.freeze([
     expected: expectedCallQa,
     verdictOf: callQaVerdict,
     reference: () => new CallQaReferencePolicy(),
+  }),
+  playground({
+    env: tapeIntake,
+    title: "Tape intake",
+    side: "servicing",
+    summary:
+      "One partner's monthly loan tape as the tape desk receives it, beside the last one loaded: a month missing or sent again, a renamed column, codes without their leading zeros, a date column a spreadsheet mangled, an as-of that drifted, or the partner's own records wrong (a tax bill paid ten times over, a renewal billed to the prior servicer, a payment posted to the loan a keystroke away), or nothing at all. The model names each defect, what the tape says and what is true, whether the month can be loaded, and what to ask the partner. Graded against the delivery's labels.",
+    id: intakeTaskId,
+    one: generateIntakeTask,
+    spec: intakeSpecTasks,
+    specNames: INTAKE_SPEC_CASES.map((c) => c.name),
+    payload: intakePayload,
+    expected: (task) => task.expected,
+    verdictOf: intakeVerdict,
+    reference: () => new IntakeReferencePolicy(),
   }),
 ]);
 

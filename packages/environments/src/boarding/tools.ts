@@ -68,6 +68,11 @@ export const BOARDING_TOOLS: readonly ToolSpec[] = [
             type: "string",
             description: "The column of the cell that is wrong or missing.",
           },
+          row: orNull({
+            type: "string",
+            description:
+              'In a file with several rows per loan, the row: payment_history.csv its due_date, escrow_history.csv its line_type, images_manifest.csv its document_type, correspondence_file.csv its sent_on and kind ("2027-03-18 periodic_statement"); null for a file of one row per loan.',
+          }),
           says: orNull({
             type: "string",
             description: 'The cell exactly as the file has it; "" for a blank.',

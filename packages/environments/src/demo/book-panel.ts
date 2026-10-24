@@ -617,6 +617,8 @@ export function bookPanel(o: BookPanelOptions): PageBook {
         );
         const allLabeled = res.planted.every((p) => rooted.has(`${p.loan}|${p.defect_id}`));
         let notYet = 0;
+        /** The defects that enter only through a transfer and found no loan transferred to plant on. */
+        const untransferred: string[] = [];
         for (const [id, r] of Object.entries(rates)) {
           const def = DEFECTS[id];
           if (!def) {
@@ -628,6 +630,8 @@ export function bookPanel(o: BookPanelOptions): PageBook {
               def.eligible(l.draw) && (!def.requires_transfer || l.transfer_in_on !== null),
           ).length;
           const k = planted.get(id) ?? 0;
+          if (eligible === 0 && def.requires_transfer && loans.every((l) => !l.transfer_in_on))
+            untransferred.push(id);
           if (eligible === 0) {
             parts.push({
               label: `${id}, ${r.field}`,
@@ -654,8 +658,14 @@ export function bookPanel(o: BookPanelOptions): PageBook {
           tolerance: "99% binomial interval",
           pass: null,
         });
+        const named =
+          untransferred.length > 1
+            ? `${untransferred.slice(0, -1).join(", ")} and ${untransferred.at(-1)!} enter`
+            : `${untransferred[0] ?? ""} enters`;
         note =
-          "Planted at the file's rates. D-42 enters only through a transfer package, and this book's loans are ours from their first payment, so none is eligible. Every rate is a design choice until a validation sample.";
+          untransferred.length > 0
+            ? `Planted at the file's rates. ${named} only through a transfer, and this book's loans are ours from their first payment, so none is eligible. Every rate is a design choice until a validation sample.`
+            : "Planted at the file's rates. Every rate is a design choice until a validation sample.";
         break;
       }
       case "note-rate-distribution": {

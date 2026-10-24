@@ -464,7 +464,13 @@ describe("life generator", () => {
         .map((f) => f.due)
         .sort()[0]!;
       expect(reached > p.on).toBe(true);
-      expect(labels.filter((x) => x.on < reached)).toEqual([]);
+      // But the tape's cap: a partner's tape shows the terms the servicer's system holds from the boarding on.
+      const held = (x: (typeof labels)[number]) =>
+        x.file_or_table === "tape" && x.field === "terms.late_charge_max_cents";
+      expect(labels.filter((x) => x.on < reached && !held(x))).toEqual([]);
+      expect(
+        labels.filter(held).every((x) => x.true_value === "1500" && x.planted_value === null),
+      ).toBe(true);
       for (const x of labels) expect(x.defect_id).toBe("D-03");
       // Each charge differs exactly as the cap says: capped in the clean history, the full percent in the twin.
       const fees = labels.filter((x) => x.file_or_table === "fees" && x.field === "amount_cents");

@@ -7,10 +7,20 @@
  * the cell holds, what it should hold, and what to do about it; and a clean
  * loan must be passed, which is to say neither held nor changed.
  *
+ * The manifest labels each defect's root, the cell planted, and its symptoms,
+ * the cells the root reached or a reviewer's checks flag because of it. A
+ * root is graded; a symptom is credit for having seen the defect at all.
+ *
  * The fields:
- *   - for each planted cell, four: found (a finding names its loan, file and
- *     column), says (the cell as the file has it), truth (what the rest of
- *     the package says it should hold) and handling (one the label accepts);
+ *   - for each root, four: found (a finding names its loan, file, column and,
+ *     in a file of several rows per loan, its row), says (the cell as the file
+ *     has it), truth (what the rest of the package says it should hold) and
+ *     handling (one the label accepts);
+ *   - for each root with symptoms, a fifth, traced: a finding names the root,
+ *     or failing that one of its symptoms. A finding that names a symptom but
+ *     not the root earns that field alone, so partial credit at most; one that
+ *     names the root covers its symptoms, and a symptom found beside it is
+ *     neither required nor extra;
  *   - for each clean loan, passed: no finding on it holds it or corrects it;
  *   - the extra findings, all together: a finding on a cell no label names,
  *     or a second finding on a cell, counted, at most `EXTRA_FINDINGS_CAP`.
@@ -23,7 +33,12 @@
 import { cents } from "@hm/kernel/money";
 import type { FieldGrade, Grade, Parsed } from "../episode.js";
 import { HANDLINGS, type Handling } from "../life/defects.js";
-import { PACKAGE_FILES, type PackageLabel } from "../life/transfer-package.js";
+import {
+  PACKAGE_FILES,
+  ROW_KEY,
+  type PackageFile,
+  type PackageLabel,
+} from "../life/transfer-package.js";
 import type { BoardingTask } from "./task.js";
 
 /** Findings beyond the labels a submission may make and still pass. */
@@ -35,6 +50,8 @@ export interface TriageFinding {
   readonly file: string;
   /** The column. */
   readonly field: string;
+  /** The row, in a file of several rows per loan (a payment history row's due date); null otherwise. */
+  readonly row?: string | null;
   /** The cell as the file has it; "" or null for a blank. */
   readonly says: string | null;
   /** What the rest of the package says the cell should hold, or null when it cannot say. */
@@ -45,6 +62,9 @@ export interface TriageFinding {
 export interface TriageAnswer {
   readonly findings: readonly TriageFinding[];
 }
+
+/** The files with several rows per loan, whose findings name a row. */
+export const MULTI_ROW_FILES: readonly PackageFile[] = Object.keys(ROW_KEY) as PackageFile[];
 
 const BLANKS = new Set(["", "blank", "(blank)", "empty", "(empty)"]);
 const MONEY = /^-?\$?\d{1,3}(,?\d{3})*(\.\d{1,2})?$|^-?\$?\d+(\.\d{1,2})?$/;
@@ -59,8 +79,11 @@ function cell(v: string | null): string {
 }
 export const sameCell = (a: string | null, b: string | null): boolean => cell(a) === cell(b);
 
-const key = (loan: string, file: string, field: string) =>
-  `${loan.trim()}|${file.trim()}|${field.trim().toLowerCase()}`;
+const multi = (file: string) => (MULTI_ROW_FILES as readonly string[]).includes(file.trim());
+/** Where a finding or a label points: the loan, file, column and, in a file of several rows per loan, the row. */
+const key = (loan: string, file: string, field: string, row: string | null | undefined) =>
+  `${loan.trim()}|${file.trim()}|${field.trim().toLowerCase()}${multi(file) ? `|${(row ?? "").trim()}` : ""}`;
+const labelKey = (l: PackageLabel) => key(l.loan, l.file_or_table, l.field, l.row);
 
 export function parseTriageSubmission(raw: unknown): Parsed<TriageAnswer> {
   const bad = (error: string): Parsed<TriageAnswer> => ({ ok: false, error });
@@ -79,6 +102,12 @@ export function parseTriageSubmission(raw: unknown): Parsed<TriageAnswer> {
     if (!str("file") || !(PACKAGE_FILES as readonly string[]).includes(o["file"] as string))
       return bad(`finding ${k}: file must be one of ${PACKAGE_FILES.join(", ")}`);
     if (!str("field")) return bad(`finding ${k}: field must name the column`);
+    if (o["row"] !== undefined && !strOrNull("row"))
+      return bad(`finding ${k}: row must be the row's key, or null for a file of one row per loan`);
+    if (multi(o["file"] as string) && !str("row"))
+      return bad(
+        `finding ${k}: ${o["file"] as string} has several rows per loan, so row must name one (in payment_history.csv, its due_date)`,
+      );
     if (!strOrNull("says"))
       return bad(`finding ${k}: says must be the cell's text, or null for a blank`);
     if (!strOrNull("truth"))
@@ -89,6 +118,7 @@ export function parseTriageSubmission(raw: unknown): Parsed<TriageAnswer> {
       loan: (o["loan"] as string).trim(),
       file: o["file"] as string,
       field: (o["field"] as string).trim(),
+      row: multi(o["file"] as string) ? (o["row"] as string).trim() : null,
       says: o["says"] as string | null,
       truth: o["truth"] as string | null,
       handling: o["handling"] as Handling,
@@ -97,41 +127,45 @@ export function parseTriageSubmission(raw: unknown): Parsed<TriageAnswer> {
   return { ok: true, answer: { findings: out } };
 }
 
-/** The answer the labels give: one finding per planted cell. */
+/** The answer the labels give: one finding per root. */
 export function expectedTriage(task: BoardingTask): TriageAnswer {
-  return { findings: task.labels.map(findingOf) };
+  return { findings: task.labels.filter((l) => l.root_cause).map(findingOf) };
 }
 
-const findingOf = (l: PackageLabel): TriageFinding => ({
+export const findingOf = (l: PackageLabel): TriageFinding => ({
   loan: l.loan,
   file: l.file_or_table,
   field: l.field,
+  row: multi(l.file_or_table) ? l.row : null,
   says: l.planted_value,
   truth: l.true_value,
   handling: l.handling,
 });
 
-/** What happened to each loan, and which findings were extra. */
+/** What each finding matched: a root, a symptom, or nothing (an extra). */
 export function readFindings(task: BoardingTask, answer: TriageAnswer) {
-  const labels = new Map(task.labels.map((l) => [key(l.loan, l.file_or_table, l.field), l]));
+  const roots = new Map(task.labels.filter((l) => l.root_cause).map((l) => [labelKey(l), l]));
+  const symptoms = new Map(task.labels.filter((l) => !l.root_cause).map((l) => [labelKey(l), l]));
   const matched = new Map<string, TriageFinding>();
+  const named = new Set<string>();
   const extra: TriageFinding[] = [];
   for (const f of answer.findings) {
-    const k = key(f.loan, f.file, f.field);
-    if (labels.has(k) && !matched.has(k)) matched.set(k, f);
+    const k = key(f.loan, f.file, f.field, f.row);
+    if (roots.has(k) && !matched.has(k)) matched.set(k, f);
+    else if (symptoms.has(k) && !named.has(k)) named.add(k);
     else extra.push(f);
   }
-  return { labels, matched, extra };
+  return { roots, symptoms, matched, named, extra };
 }
 
 export function gradeTriage(task: BoardingTask, answer: TriageAnswer | null): Grade {
-  const { labels, matched, extra } = readFindings(task, answer ?? { findings: [] });
+  const { roots, symptoms, matched, named, extra } = readFindings(task, answer ?? { findings: [] });
   const fields: FieldGrade[] = [];
   const add = (field: string, expected: string, got: string | null, ok: boolean) =>
     fields.push({ field, expected, got, ok });
-  for (const [k, l] of [...labels].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+  for (const [k, l] of [...roots].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
     const f = matched.get(k);
-    const at = `${l.loan} ${l.field}`;
+    const at = `${l.loan} ${l.field}${multi(l.file_or_table) ? ` ${l.row}` : ""}`;
     const accepted = [l.handling, ...l.also_accepted];
     add(`${at}: found`, `${l.file_or_table} ${l.field}`, f ? `${f.file} ${f.field}` : null, !!f);
     add(
@@ -152,6 +186,17 @@ export function gradeTriage(task: BoardingTask, answer: TriageAnswer | null): Gr
       f ? f.handling : null,
       !!f && accepted.includes(f.handling),
     );
+    // A root whose symptoms a reviewer may see first: credit for tracing the defect at all.
+    const own = [...symptoms].filter(([, s]) => s.loan === l.loan && s.defect_id === l.defect_id);
+    if (own.length) {
+      const seen = own.filter(([sk]) => named.has(sk)).map(([, s]) => s.field);
+      add(
+        `${at}: traced`,
+        `${l.field}, or one of ${own.map(([, s]) => s.field).join(", ")}`,
+        f ? f.field : seen.length ? `${seen.join(", ")} (a symptom)` : null,
+        !!f || seen.length > 0,
+      );
+    }
   }
   const defective = new Set(task.labels.map((l) => l.loan));
   for (const loan of task.loans.filter((n) => !defective.has(n))) {
@@ -180,6 +225,6 @@ export function gradeTriage(task: BoardingTask, answer: TriageAnswer | null): Gr
 
 /** The task's verdict, for a run's tally: what the package holds. */
 export function boardingVerdict(task: BoardingTask): string {
-  const ids = [...new Set(task.labels.map((l) => l.defect_id))].sort();
+  const ids = [...new Set(task.labels.filter((l) => l.root_cause).map((l) => l.defect_id))].sort();
   return ids.length === 0 ? "clean" : ids.join("+");
 }

@@ -15,11 +15,15 @@ Two findings stand out.
 
 - **The rules of the servicing app's boarding gate catch none of the ten
   defects ranked first below, except D-24 by accident when a planted row
-  breaks the history's continuity; later processes catch some.** About a third
-  of the rules check that a field is present, and about another third trust a
-  flag the transferor sets. The public record (CFPB supervisory findings,
-  consent orders and complaints) is mostly about values that are present and
-  wrong. Some of the ten are caught later, or would be:
+  breaks the history's continuity; later processes catch some.** The gate's
+  own output confirms it: `AS/scripts/board-life-package.mjs` boards a
+  package of each, planted as below, through the servicing app's decoder and
+  boarding service, and every loan boards with no hard failure and no
+  warning. About a third of the rules check that a field is present, and
+  about another third trust a flag the transferor sets. The public record
+  (CFPB supervisory findings, consent orders and complaints) is mostly about
+  values that are present and wrong. Some of the ten are caught later, or
+  would be:
   - an unflagged servicemember, by the military-status (DMDC) check that
     `loan.boarded` arms for every borrower, due within five servicer business
     days (SM_DMDC_VERIFY_BOARDING_0), once an agent runs it; an SCRA case then
@@ -98,24 +102,69 @@ exactly, and planted warnings must be found while extra ones are allowed
 (`AS/src/domain/boarding/demo-batch.test.ts:80-86`). Where a ported engine
 exists, the engine grades the money.
 
-**What is planted so far.** Two of the ten below, in `DEFECTS`
-(`ENV/life/defects.ts`), the registry each later wave extends:
+**What is planted so far.** Eleven of the 47, in `DEFECTS`
+(`ENV/life/defects.ts`), the registry each later wave extends, and two
+vendor errors that are not among them. All ten of the first ten below are
+planted in the generator's twin and in the twin's transfer package
+(`ENV/life/transfer-package.ts`), and labeled: the planted value is the root,
+and every difference it makes, in the history, on the month-end tape and in
+the package, is a symptom. Clean twins go beside them as negatives.
 
-- D-03, a blank cap cell in the package;
-- D-42 on the escrow column, which boards the loan as D-31.
+| ID   | Planted in the package                                                                           | What gives it away                                                                      | Handling | What boards                                             |
+| ---- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------- |
+| D-42 | `escrowed` = Yes                                                                                 | not a code; the escrow files                                                            | correct  | `escrowed=false` (D-31)                                 |
+| D-35 | `lm_in_process` = N, the plan's row kept in `lossmit_file.csv`                                   | the row, and the plan in the correspondence                                             | correct  | `lossmit_in_process=false`, the details staged, no case |
+| D-03 | a blank `late_charge_max`, a column the writer adds                                              | the statements' capped fee                                                              | query    | no cap; the decoder reads none                          |
+| D-01 | `arm_initial_cap_bps` holds the periodic cap                                                     | the plan's caps, read off the first change date                                         | query    | the wrong cap, staged                                   |
+| D-12 | `scra_active` = N, the cap's reason kept, on a fixed rate above 6 %                              | the reason, the prior servicer's notice of the cap and the capped payments              | correct  | `scra_active=false`                                     |
+| D-37 | `bk_active` = N, the case kept in `fc_bk_file.csv`                                               | the case, and the court's notice                                                        | correct  | `bk_active=false`, the case dropped                     |
+| D-18 | `mi_termination_date`, a column the writer adds, computed from 95 % of the original value        | the lender's disclosure in the correspondence                                           | query    | no MI date or value; the decoder reads neither          |
+| D-24 | an unpaid history row due on the first of the closing month, two months before the first payment | a row before `first_payment_date` and `origination_date`                                | hold     | the loan an installment behind                          |
+| D-25 | a payment's principal split to escrow, three to twelve months before the transfer                | the row's escrow above its statement's; the balance, trial balance and position keep it | query    | the balance with the misapplied principal               |
+| D-15 | `flood_zone` = X, a column the writer adds, where the determination says AE                      | the life-of-loan determination in the correspondence, and the flood line                | correct  | no zone; the decoder reads none                         |
 
-Each is planted in the generator's twin and in the twin's transfer package
-(`ENV/life/transfer-package.ts`), where the package and its clean twin's
-differ only in that cell. Clean twins go beside them as negatives. A cap
-needs a column the layout lacks, so the writer adds `late_charge_max` after
-the layout's own columns. The prior servicer's periodic statements, in the
-correspondence file the writer adds, quote the capped fee. Together these
-let a reviewer see D-03, though the gate cannot.
-`apps/servicing/scripts/board-life-package.mjs` boards written packages
-through the servicing app's own decoder and boarding service, in process. It
-reproduces what this page says: neither defect is caught. D-42's loan boards
-with `escrowed=false`, and no package, clean or not, boards a cap. The
-boarding-triage environment grades a reviewer on both (docs/environments.md).
+Where the plant differs from the catalog's "How to inject it": D-01 writes
+one cell rather than swapping two; D-12 keeps the cap's reason on the tape,
+so the package shows the servicemember without the military-status lookup;
+D-15 keeps the flood line and adds the determination, so the package
+contradicts itself; D-24's row is unpaid, so the history's receipts pay the
+row before their own. The layout has no column for the cap, the MI's value
+and dates or the zone, so the writer adds them after its own, and a
+correspondence file holding the prior servicer's statements and documents of
+record.
+
+`AS/scripts/board-life-package.mjs` boards written packages through the
+servicing app's own decoder and boarding service, in process, and reports
+every label. It reproduces what this page says: the gate catches none of the
+ten. It also shows what the gate's silence costs at boarding. One D-24
+package boards its loan 15 days delinquent, though its tape says the borrower
+is paid ahead: boarding applies the history oldest first, and the extra row
+takes the first receipt. That is the defect's harm this page's "What should
+catch it" leaves out: an unpaid row is not counted as a receipt but as an
+installment. The boarding-triage environment grades a reviewer on all ten,
+each root apart from its symptoms (docs/environments.md).
+
+Three more, and D-25 again in its other form, are errors made in the
+ten-year history after boarding, on an event the clean history had, so each
+twin is the clean history until the error (docs/environments.md, "The life
+generator"):
+
+- D-28 as a system error: a borrower's payment drafted twice, the second
+  posted by the waterfall;
+- D-25 as a system error: a payment keyed to a loan number a keystroke away
+  and posted to that loan, labeled on both. The registry holds it as
+  `D-25/wrong-loan`, apart from the prior servicer's split above, and its
+  labels name D-25. The catalog's reversal weeks later is not modeled,
+  because cashiering has no engine for it;
+- V-01, a vendor's: a tax bill the tax service reported at ten times the
+  county's, paid from escrow, the excess returned later;
+- V-02, a vendor's: the first hazard renewal after a transfer billed to the
+  prior servicer, and paid late when it is sent on.
+
+Staff errors that need the contacts layer, such as a promise not tracked or
+a complaint not logged, are not planted yet. The tape-intake environment
+grades a reviewer on V-01, V-02 and D-25's wrong loan, the three that show
+on a partner's monthly tape (docs/environments.md, "tape-intake").
 
 **Source keys**
 
@@ -198,7 +247,7 @@ boarding-triage environment grades a reviewer on both (docs/environments.md).
 | D-22 | Custody gap: a missing allonge or note, or certification still pending                                          | IAR PDF p.7 ("limited exceptions"). SH11 PDF p.18                                                                                                                                                                                                                                                                                                        | Drop an `allonge` row from `images_manifest.csv`; set `custody_certification_status`=pending                                                                                                                                                                                                      | HF-018 checks only that a custody record exists and ignores its status (`rules.ts:155-156`). Custody exceptions in spec 1.4 (:59, :73 ‡)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Partly. The manifest can be graded; image content cannot, because no image files exist (docs/subservicer-data.md, Where each domain stands, documents)                                                                                                                                          |
 | D-23 | Fees and advances without support, or the investor's fees billed to the borrower                                | OCW ¶¶42–43. SH13S PDF p.13–14. NMS PDF p.3 (a 10.90% error rate against a 5% threshold)                                                                                                                                                                                                                                                                 | `fees_advances` above zero with `fees_itemized` blank                                                                                                                                                                                                                                             | Nothing. A blank reads as itemized (`tape-codec.ts:260`), so W-015 passes (`rules.ts:189`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Yes, by label and by checking that the items sum to the total                                                                                                                                                                                                                                   |
 |      | **E. Payment history and ledger**                                                                               |                                                                                                                                                                                                                                                                                                                                                          |                                                                                                                                                                                                                                                                                                   |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |                                                                                                                                                                                                                                                                                                 |
-| D-24 | History rows dated before the loan was made                                                                     | OCW ¶41†                                                                                                                                                                                                                                                                                                                                                 | A `payment_history.csv` row whose due or received date is before `origination_date`. The vendored sample already has 96 such rows on 16 loans, unlabeled, because every history starts 23 months before the transfer (`demo-batch.ts:149`)                                                        | Nothing, when the row is contiguous with the history: W-014 checks only for gaps (`rules.ts:179-182`), and the oldest-first application counts the receipt (`AS/src/domain/boarding/delinquency.ts:33-40`). An isolated row well before the rest trips W-014's gap test, for the wrong reason                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Yes, deterministic. Label the sample's 16 existing loans too, or a detection grader that treats an unlabeled hard finding as wrong will mark a correct one as a mistake (extra warnings cost nothing under the pattern above)                                                                   |
+| D-24 | History rows dated before the loan was made                                                                     | OCW ¶41†                                                                                                                                                                                                                                                                                                                                                 | A `payment_history.csv` row whose due or received date is before `origination_date`. The vendored sample already has 96 such rows on 16 loans, unlabeled, because every history starts 23 months before the transfer (`demo-batch.ts:149`)                                                        | Nothing, when the row is contiguous with the history: W-014 checks only for gaps (`rules.ts:179-182`), and the oldest-first application counts the receipt (`AS/src/domain/boarding/delinquency.ts:33-40`). An unpaid row two months before the first payment passes too, and the application pays it first, so the loan boards an installment behind (`AS/src/domain/boarding/service.ts:272`, `:345-347`; reproduced by `AS/scripts/board-life-package.mjs`). An isolated row well before the rest trips W-014's gap test, for the wrong reason                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Yes, deterministic. Label the sample's 16 existing loans too, or a detection grader that treats an unlabeled hard finding as wrong will mark a correct one as a mistake (extra warnings cost nothing under the pattern above)                                                                   |
 | D-25 | Misapplied payments                                                                                             | OCW ¶41†, ¶¶94–97                                                                                                                                                                                                                                                                                                                                        | History: a `payment_allocations` split that puts principal into escrow, or a receipt posted to the wrong loan and reversed weeks later                                                                                                                                                            | Nothing at boarding, because the history carries only a date and an amount (docs/subservicer-data.md, What moves with a transfer)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Yes. The payments environment's allocation engine grades it                                                                                                                                                                                                                                     |
 | D-26 | History shorter than the life of the loan                                                                       | B14 PDF p.7. F111                                                                                                                                                                                                                                                                                                                                        | Cut the history to N months; the sample already has 24                                                                                                                                                                                                                                            | Nothing. W-014 ignores the length. The metro2 environment already draws this (`ENV/metro2/generator.ts:861-867`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Yes. The right act is a request to the transferor                                                                                                                                                                                                                                               |
 | D-27 | A gap in the history                                                                                            | Already planted (`demo-batch.ts:152`)                                                                                                                                                                                                                                                                                                                    | As planted                                                                                                                                                                                                                                                                                        | W-014                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Yes                                                                                                                                                                                                                                                                                             |
@@ -306,12 +355,15 @@ continuity. Later processes catch some of them, and each item says which.
 9. **D-24 and D-25, history dated before the loan was made, and misapplied
    payments.** OCW ¶41† alleges both. They can corrupt every delinquency
    figure computed from the history (`delinquency.ts:11-12`): an unpaid
-   pre-origination row, or a misapplied receipt, changes the oldest-first
-   result. D-24 is deterministic to grade. A gate rule (W-014) sees it only
-   when a planted row breaks the history's continuity, and then for the wrong
-   reason. The vendored sample already carries it, unlabeled, on 16 loans.
-   D-25 goes in the ten-year history, where the payments environment's
-   allocation engine grades it.
+   pre-origination row, or a receipt posted to the wrong loan, changes the
+   oldest-first result. A receipt split wrong, its principal posted to
+   escrow, does not: the history carries a date and an amount, so the loan
+   boards exactly as far behind as its clean twin, and only its balance is
+   wrong (`AS/scripts/board-life-package.mjs`). D-24 is deterministic to
+   grade. A gate rule (W-014) sees it only when a planted row breaks the
+   history's continuity, and then for the wrong reason. The vendored sample
+   already carries it, unlabeled, on 16 loans. D-25 goes in the ten-year
+   history, where the payments environment's allocation engine grades it.
 10. **D-15, wrong flood data.** The CFPB alleges that Ocwen's own review found
     inconsistent or incomplete flood determination data loaded for its loans
     (OCW ¶138†) and inaccurate flood-zone data on more than 3,000 loans (OCW

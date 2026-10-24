@@ -3919,7 +3919,7 @@ and a mix's `shares` or `counts`.
 
 Since life 1.1.0 the calibration reader reads the file's objects itself and
 hands over the shapes the life generator's `monthHazards` draws from
-(`simulate.ts:1828-1846`): a number of inquiries a loan-year (2.0, the
+(`simulate.ts:2199-2217`): a number of inquiries a loan-year (2.0, the
 file's `inquiries_per_loan_year`), a number of minutes (9.23, the geometric
 mean of its range) and the complaint mix as a list of pairs, from its
 counts. The contact center takes those as the file's, with no warning. With
@@ -4163,8 +4163,8 @@ the rulebook reads them), `record_on` (the record on any day up to the
 call's, rebuilt from the book's seed), `local_time` and `minutes_between`.
 No tool returns a finding. The first two read the task's own material: the
 episode loop hands a tool the task, a third argument boarding-triage's file
-reader reads too and every other environment ignores, and the browser
-playground passes the task it has drawn.
+reader and tape-intake's tape readers read too and every other environment
+ignores, and the browser playground passes the task it has drawn.
 
 **The tasks** cycle by index through thirty edges, seven each in the
 210-task held-out suite:

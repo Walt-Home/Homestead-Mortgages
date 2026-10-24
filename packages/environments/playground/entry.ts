@@ -297,7 +297,8 @@ export interface PlaygroundEnvironment {
   payload(task: TaskRef): Record<string, Json>;
   /**
    * Runs a tool other than the submit tool; throws on bad input, as the episode loop's tools do. A tool that
-   * reads the task (boarding-triage's file reader, call-qa's transcript search) reads the one passed.
+   * reads the task (boarding-triage's file reader, tape-intake's tape readers, call-qa's transcript search)
+   * reads the one passed.
    */
   execute(name: string, input: unknown, task?: TaskRef): string;
   /** Reads a submission strictly, as the episode loop does. */

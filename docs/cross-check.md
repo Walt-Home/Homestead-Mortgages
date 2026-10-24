@@ -21,8 +21,8 @@ version than the generator's.
 ## At a glance
 
 - **178 loans, 3,503 loan-months, 3,240 receipts, 111,334 loan-days** (about
-  305 loan-years, drawn under life 1.0.0) stepped through the servicing app's own cycles, in eight
-  processes over two hours.
+  305 loan-years, drawn under life 1.0.0) stepped through the servicing app's
+  own cycles, in eight processes over two hours.
 - **Wherever no defect stood between them, the two agree on every figure of
   money, to the cent.** On the fields no defect had reached by their date,
   every receipt's split (2,431 of 2,431), every installment (2,619 of 2,619),
@@ -314,14 +314,14 @@ case, which became its own class.
 - **cashiering-11** has two halves, and the two sides here each take one.
   The engine shields every installment due inside the 60 days after a
   transfer, paid or not (`latecharges.ts:83`), and the generator sets that
-  shield on every transfer (`simulate.ts:1486`). The runtime's cash
-  state never sets it, so the servicing app charges every installment in the
-  window that is paid after grace. The spec shields only a payment the prior
-  servicer received on time. In the example the borrower paid no one for
-  January, so by the spec the servicing app's $219.56 is due and the
-  generator's zero is the engine's error. Neither side is right on a
-  forwarded payment the old servicer received on time, which the generator
-  draws only when a scenario asks for one.
+  shield on every transfer (`simulate.ts:1486` in life 1.0.0). The
+  runtime's cash state never sets it, so the servicing app charges every
+  installment in the window that is paid after grace. The spec shields only
+  a payment the prior servicer received on time. In the example the
+  borrower paid no one for January, so by the spec the servicing app's
+  $219.56 is due and the generator's zero is the engine's error. Neither
+  side is right on a forwarded payment the old servicer received on time,
+  which the generator draws only when a scenario asks for one.
 - **boarding-6**: 32 of the 82 transfers compared carried late charges. The
   cash state never sees them, so the servicing app never collects them, and
   the money the borrower sends for them goes to suspense or to the next
@@ -384,9 +384,10 @@ posts, but every transferred loan whose first month brings none meets it.
 ## Generator bugs
 
 Neither touches a figure an environment grades; both were worked around in
-the harness, and neither is fixed here, because the generator is being
-changed on other branches. Paths are under `packages/environments/src/life/`,
-and the lines are life 1.0.0's, the version this run drew from.
+the harness, and neither is fixed here. Both still stand in life 1.1.0, but
+for the tape row's half of the second (below). Paths are under
+`packages/environments/src/life/`, and the lines are life 1.0.0's, the
+version this run drew from.
 
 - **The MIN's check digit is random.** `draw.ts:361` writes `"1000001"` and
   eleven random digits, so the eighteenth digit is the Mod-10 check digit only

@@ -93,8 +93,8 @@ export interface Environment<T, A> {
   /**
    * Runs a non-submit tool. Throwing is an error observation, never a crash.
    * The task is passed for a tool that reads it (boarding-triage's file
-   * reader, call-qa's search of the transcript); every other environment's
-   * tools are functions of their input.
+   * reader, tape-intake's tape readers, call-qa's search of the transcript);
+   * every other environment's tools are functions of their input.
    */
   execute(name: string, input: unknown, task: T): string;
   parseAnswer(input: unknown): Parsed<A>;

@@ -7977,18 +7977,22 @@ promise pauses the cadence until its date, as D2-2-02's promise-to-pay
 cessation does.
 
 **The bankruptcy lives in the contact center for now.** The life generator
-has no bankruptcy, and the stay defect needs one. So the contact center
-draws a petition on 2% of delinquencies that reach day 30. From the petition
-no collection call goes out, the attorney's call brings the notice, and
-every later call carries the informational-only disclaimer. The history's
-payments do not know about the case; when the generator models one, the
-contact center reads it instead.
+had no bankruptcy when this was built, and the stay defect needs one. So the
+contact center draws a petition on 2% of delinquencies that reach day 30.
+From the petition no collection call goes out until a Chapter 13 discharge,
+the attorney's call brings the notice, and every later call carries the
+informational-only disclaimer. The history's payments do not know about
+the case; when the generator models one, the contact center reads it
+instead. Life 1.1.0 lets a scenario date a petition (`LoanLife.bankruptcy`,
+which boarding-triage's D-37 plants on), and the contact center does not
+read it yet: it still draws its own.
 
 **Transcripts are written on demand, notes from the turns.** A 300-loan
-decade's calls run to about two million words, so the center holds the rows
-and the notes, and `transcriptOf` writes a call when asked. The agent's
-note is written from the call's turns, so it mentions what was said and
-nothing else. A longer call leaves a longer note.
+decade's calls ran to about two million words under life 1.0.0 (1.6 million
+under 1.1.0), so the center holds the rows and the notes, and
+`transcriptOf` writes a call when asked. The agent's note is written from
+the call's turns, so it mentions what was said and nothing else. A longer
+call leaves a longer note.
 
 **The seam for model-written text is the writer.** `ContactTextWriter` takes
 the call's plan (the record and the shape) and returns tagged turns and a
@@ -8073,15 +8077,16 @@ against the day it was first written.
 **The tools read the task, so the episode loop hands them it.** A search of
 the transcript and the record on another day are task material. Every tool
 so far was a pure function of its input, and `Environment.execute` took
-none. It now takes the task as a third argument, which the loop passes and
-every other environment but boarding-triage, whose file reader made the same
-change on main, ignores; the playground passes the task it has drawn. The record on another day is rebuilt from the task's book
-seed, its scenario and the contact center's pins, at the typed default
-calibration, so the task never moves when the calibration file or its
-reader does.
+none. It now takes the task as a third argument, which the loop passes.
+boarding-triage's file reader made the same change independently, and
+tape-intake's tape readers read the task too; every other environment
+ignores it, and the playground passes the task it has drawn. The record on
+another day is rebuilt from the task's book seed, its scenario and the
+contact center's pins, at the typed default calibration, so the task never
+moves when the calibration file or its reader does.
 
 **The generator filters, and says why.** ei-clocks' guard rejects nothing
-it draws. call-qa's turns away about one built draw in thirteen: where the
+it draws. call-qa's turns away about one built draw in eleven: where the
 recognizer misheard a figure or a word a rule reads (the reviewer could
 not tell the slip from the agent's), and where a wrong amount's digits are
 already the record's. Each is a filter on the suite's distribution, named

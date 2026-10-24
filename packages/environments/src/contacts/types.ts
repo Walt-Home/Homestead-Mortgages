@@ -220,7 +220,10 @@ export interface PromiseRecord {
   readonly scripted: boolean;
 }
 
-/** A bankruptcy the contact center learned of. The life generator has none yet; see docs/environments.md. */
+/**
+ * A bankruptcy the contact center learned of. The life generator draws none, and the petition a scenario may script
+ * (`LoanLife.bankruptcy`) is not read here yet; see docs/environments.md.
+ */
 export interface BankruptcyCase {
   readonly chapter: 7 | 13;
   readonly petition_on: PlainDate;

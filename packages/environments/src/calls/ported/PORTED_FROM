@@ -1,0 +1,35 @@
+The two checks of the servicing app's conversation harness that carry over
+to a telephone call, ported for the call rubric (src/calls) and the call-qa
+environment's grader.
+
+Source       apps/servicing/src/domain/borrower/eval/{checks,types}.ts
+Vendored at  293261b371fe97d2b6b39e1f29ca60dd808ac8fb (apps/servicing/VENDORED_FROM)
+Ported       2026-10-23
+
+The harness grades the app's chat agent with five checks (checks.ts:1-25).
+Two read nothing but words and a record, and so read a call transcript as
+well as a chat thread:
+
+  provenance   every digit-run an agent says is in the borrower's own words
+               or the record (checks.ts, section (1));
+  verbatim     no agent message is a copy-library template pasted whole
+               (checks.ts, section (2)).
+
+The other three read the chat product's own tables (the turn log, the
+cards, the events) and have no counterpart on a call.
+
+types.ts here is its source byte for byte; it imports nothing. checks.ts
+here is its source's first 122 lines byte for byte (the header, the
+helpers, and sections (1) and (2), up to the line before section (3)'s
+rule), except its import lines, and the rewrite is two rules and no more:
+  - the import of ../../application/ops-21-1.ts is dropped: only section
+    (3) reads it, and section (3) is not here;
+  - ./types.ts becomes ./types.js.
+Nothing else may be edited: src/__tests__/call-qa.test.ts compares types.ts
+with its source, compares checks.ts with the same lines of its source with
+their import lines removed, holds the import lines to that rewrite, and
+fails on any difference. Lint and Prettier skip this directory for the
+reason they skip the vendored trees.
+
+To take a change from the servicing app, copy types.ts again, copy
+checks.ts's lines up to section (3)'s rule, and rewrite the same imports.

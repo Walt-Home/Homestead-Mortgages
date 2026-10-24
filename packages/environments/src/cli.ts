@@ -28,6 +28,7 @@
  *   npm run env:refi -w @hm/environments -- --env catchup-posting --policy reference
  *   npm run env:refi -w @hm/environments -- --env escrow-review --policy reference
  *   npm run env:refi -w @hm/environments -- --env boarding-triage --policy reference
+ *   npm run env:refi -w @hm/environments -- --env call-qa --policy reference
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -297,6 +298,19 @@ import {
   type BoardingTask,
   type TriageAnswer,
 } from "./boarding/index.js";
+import {
+  CALL_QA_FINGERPRINT,
+  CALL_QA_HELDOUT_SUITE,
+  CallQaReferencePolicy,
+  callQa,
+  callQaSpecTasks,
+  callQaTaskId,
+  callQaVerdict,
+  generateCallQaSuite,
+  generateCallQaTask,
+  type CallQaAnswer,
+  type CallQaTask,
+} from "./call-qa/index.js";
 
 interface TaskCoordinates {
   readonly id: string;
@@ -332,7 +346,8 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof EI_FINGERPRINT
     | typeof CATCHUP_FINGERPRINT
     | typeof REVIEW_FINGERPRINT
-    | typeof BOARDING_FINGERPRINT;
+    | typeof BOARDING_FINGERPRINT
+    | typeof CALL_QA_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
   readonly taskId: (split: Exclude<Split, "spec">, seed: number, index: number) => string;
@@ -644,6 +659,18 @@ const BENCHES = {
     verdictOf: boardingVerdict,
     reference: () => new BoardingReferencePolicy(),
   } satisfies Bench<BoardingTask, TriageAnswer>,
+  // One recorded call reviewed against the call rubric, graded by the rubric's own functions.
+  "call-qa": {
+    env: callQa,
+    fingerprint: CALL_QA_FINGERPRINT,
+    heldout: CALL_QA_HELDOUT_SUITE,
+    suite: generateCallQaSuite,
+    one: generateCallQaTask,
+    taskId: callQaTaskId,
+    spec: callQaSpecTasks,
+    verdictOf: callQaVerdict,
+    reference: () => new CallQaReferencePolicy(),
+  } satisfies Bench<CallQaTask, CallQaAnswer>,
 };
 
 const { values } = parseArgs({
@@ -838,6 +865,7 @@ async function main(): Promise<void> {
   if (values.env === "catchup-posting") return run(BENCHES["catchup-posting"]);
   if (values.env === "escrow-review") return run(BENCHES["escrow-review"]);
   if (values.env === "boarding-triage") return run(BENCHES["boarding-triage"]);
+  if (values.env === "call-qa") return run(BENCHES["call-qa"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }
 

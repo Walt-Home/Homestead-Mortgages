@@ -7882,3 +7882,259 @@ drawn under life 1.0.0, took two hours in eight processes.
 accounts (boarding-4), a borrower party (boarding-2), the note's late-charge
 cap (no tape column, D-03), and each escrow analysis's new payment on the
 schedule rows (no runner). Each run names them in its output.
+
+## The contact center draws its own calls, and every figure in its text is the record's
+
+**Built 23 October 2026,** as `packages/environments/src/contacts`, a
+module beside the life generator and, like it, not an environment. From a
+book the life generator wrote, it derives what a subservicer's contact
+center would hold:
+
+- contact rows shaped like the servicing app's `contacts` table;
+- promises, a bankruptcy, and each delinquency's outbound cadence;
+- the comment log;
+- call transcripts, written on demand;
+- eight planted, labeled call and note defects for a call-QA environment.
+
+docs/environments.md, "The contact center", says what each holds.
+
+**The contact center draws the inbound volume itself.** The life generator
+draws a few contacts a year of its own: a reason and a duration, flat across
+the year, at the calibration's rate. Two choices were open:
+
+- build on those rows, and add the spikes the plan asks for (after an
+  analysis, a transfer and a disaster, and the 1098 in January);
+- or draw the whole volume here.
+
+Building on them would have met the calibration twice: the generator's rows
+already make the full rate, and every spike lands on top. So the contact
+center draws by status and month, and its events' calls come out of each
+status's share rather than on top of it. It reads only the scenario's
+promise calls from the history, through its behavior rows. The tape's last
+contact date still reads the generator's rows; `lastContactOn` is the
+contact center's, for a tape writer that wants it.
+
+**The split by status is the acceptance file's.** The CFPB gives one figure,
+about 2.0 inquiries a loan-year, and no split. calibration-acceptance.json
+already set one as a design choice (1.7, 6, 9 and 10 for current, 30, 60
+and 90+ days, averaging 2.0 over the all-loans delinquency mix). The
+contact center uses it as multiples of whatever the calibration says, so
+the two cannot drift apart. What each status's events bring was measured on
+300-loan books and taken off its ordinary calls: about 0.6 a loan-year on a
+current loan, and 1.6 to 2.4 on a delinquent one, mostly the call after each
+month's late charge.
+
+**Either shape of the calibration.** The calibration file states the three
+`contacts.*` keys as objects (the CFPB's figures and their derivation). When
+this was built the reader could not read them, handed over its defaults and
+warned, so the contact center reads a scalar or the object from whatever
+`Rates` holds. On the 300-loan seed-7 book under life 1.0.0 it met either:
+
+|                                       | Defaults          | The file's figures |
+| ------------------------------------- | ----------------- | ------------------ |
+| Inquiries a loan-year, against target | 1.33 against 1.34 | 1.77 against 1.79  |
+| Mean handle time                      | 6.99 against 7    | 9.09 against 9.23  |
+
+The life generator does not tolerate the objects: `simulate.ts` reads
+`contacts.per_loan_year` as a number and the reason mix as pairs in
+`monthHazards`. Life 1.1.0's reader, merged before this, reads the objects
+and hands over exactly those shapes, so the generator draws from the file
+and the contact center reads the same values as the file's, with no
+warning; docs/environments.md has 1.1.0's figures.
+
+**The complaint mix weights complaints and nothing else.** The calibration's
+reason mix is the CFPB's complaint database, a skewed proxy for why people
+call (plan section 4). So the reasons for calling are design-choice tables
+by status and month, and the complaint mix decides only which calls carry a
+voiced complaint.
+
+**Facts first.** Every figure an agent says or writes is one the record held
+that day (`recordOn`): the history as dated on or before the day, plus the
+contact center's own records. The text is written after, from slots that
+throw when the record lacks a figure, in digits as a recognizer writes
+them. `checkTranscript` reads every number back out.
+
+- A number the recognizer misheard is logged as noise on its turn.
+- A planted wrong amount is labeled.
+- So a QA reader can tell the two apart only by the label, as a QA reviewer
+  can only by the audio.
+
+Four places where the first draft broke the rule, each now held by a test:
+
+- a filler word inserted inside a spoken date of birth split it, and the
+  redaction left the year behind;
+- the recognizer dropped "press" from the phone menu, leaving a bare key;
+- a negative escrow balance was said with a sign the reader did not read
+  (an amount is now said by its size, "overdrawn by");
+- a date lost its month to a dropped word. Words next to a figure are no
+  longer dropped.
+
+**One number a borrower brings: the promise.** A promise is the one figure a
+call adds to the record. It is drawn from what the borrower then did: a
+receipt in the next three weeks keeps it, at that receipt's amount and
+date. Otherwise some borrowers promise the amount past due and break it. A
+promise pauses the cadence until its date, as D2-2-02's promise-to-pay
+cessation does.
+
+**The bankruptcy lives in the contact center for now.** The life generator
+has no bankruptcy, and the stay defect needs one. So the contact center
+draws a petition on 2% of delinquencies that reach day 30. From the petition
+no collection call goes out, the attorney's call brings the notice, and
+every later call carries the informational-only disclaimer. The history's
+payments do not know about the case; when the generator models one, the
+contact center reads it instead.
+
+**Transcripts are written on demand, notes from the turns.** A 300-loan
+decade's calls run to about two million words, so the center holds the rows
+and the notes, and `transcriptOf` writes a call when asked. The agent's
+note is written from the call's turns, so it mentions what was said and
+nothing else. A longer call leaves a longer note.
+
+**The seam for model-written text is the writer.** `ContactTextWriter` takes
+the call's plan (the record and the shape) and returns tagged turns and a
+note. The template writer is the one there is, and no model is called. A
+model writer is held to the provenance check, writes the tags defects
+need, and is written once, offline, by contact id, so the book stays a
+function of its seed. The timing, noise and defects come after the writer.
+
+**Call defects are numbered apart.** docs/synthetic-data-defects.md catalogs
+data defects. These are conduct, the items a QA team fails a call for
+automatically (plan section 4): C-01 to C-08. Each changes one turn, its
+interpreter relay, one row or one note. Every other turn stays word for word,
+because each turn's noise draws from a stream keyed by its place in the
+clean call. Each label is the life generator's, with the turn added.
+
+## A call is reviewed against the collections spec, by the servicing app's own checks where they carry over
+
+**Built 23 October 2026,** as the call rubric (`src/calls`) and `call-qa`
+1.0.0 in `packages/environments`. A task is one recorded call from the
+contact center: its row, its transcript as the recorder wrote it, the
+loan's record on the day, the dialer's facts and the agent's note. The
+model reviews it as a QA desk does: every rubric item the call fails, with
+its line; whether it fails outright; whether the note matches the record;
+and the options the agent named. docs/environments.md, "call-qa", has the
+rubric and the suite.
+
+**Why this one.**
+
+- QA is where a servicer finds out what its agents, and soon its AI voice,
+  actually said. The servicing app's collections spec asks for exactly this
+  before the AI voice goes live: evaluation suites for disclosure
+  compliance, prohibited-statement detection and the quiet-hour and
+  frequency guards (11.1, line 56), over a decision record that names every
+  pre-dial check (line 158).
+- The contact center already plants and labels the defects a QA team fails
+  a call for. What it lacked was the grader.
+- The work is reading, against rules, in a long noisy text: who was
+  verified before what was said, which disclosure was due, whether the dial
+  should have happened at all, and whether each figure has a source.
+
+**Two of the harness's five checks carry over, ported.** The servicing
+app's conversation harness grades its chat agent with provenance, verbatim,
+SAFE and inquiries, evidence and completion (`checks.ts:1-25`). Provenance
+and verbatim read only words and a record, so they read a call as well as a
+thread. The other three read the chat product's own tables (the turn log,
+the cards, the events). The port is the harness's `types.ts` byte for byte
+and its `checks.ts` through the second check, byte for byte but for the
+imports: the import of `ops-21-1.ts` is dropped because only the third check
+reads it. A port of a file's first part is new here; a test cuts the source
+at the third check's rule and compares, so a change above the cut fails it
+and a change below does not.
+
+**The rest of the rubric restates the servicing app where it can, and says
+so where it cannot.**
+
+- The pre-dial checks are `preDialChecks` (`section11.ts:84-105`) through
+  its evaluators, held line by line, less the post-conversation cooling-off,
+  the pre-sale stop and the workplace rule, which nothing here draws.
+- The threat words are `THREAT_WORDS`, the options the servicing app's own
+  names, the voicemail and counsel rules its guardrails at lines 336-337.
+- The recording notice, the AI disclosure, the servicemember script,
+  collection language, the credit misstatement, a complaint and terms
+  offered are phrase lists of ours. The servicing app reads these from its
+  own decision record (`statements_made`, `terms_quoted`), which a
+  recorded call does not carry.
+- The military flag stops no dial. 11.1's decision record lists it among
+  the pre-dial checks, and its guardrail sentence names it, but
+  `PreDialChecks` has no key for it, and the spec's edge case says the
+  cadence continues and the script adds the military path. The rubric reads
+  it as the script.
+
+**A rule reads words, and says which.** A reviewer of free text and a
+grader agree only when the grader's rule is one the reviewer can apply, so
+each text rule lists the phrases it reads, the rulebook writes the same
+constants in, and a line that means the same in other words is not a
+finding. That makes the environment's text rules narrow. What it keeps
+hard: deciding which disclosure was due, reading the dial's time in every
+zone and its counts in a trailing window, the servicing app's
+digit-run provenance over a whole record, and a note copied forward read
+against the day it was first written.
+
+**The tools read the task, so the episode loop hands them it.** A search of
+the transcript and the record on another day are task material. Every tool
+so far was a pure function of its input, and `Environment.execute` took
+none. It now takes the task as a third argument, which the loop passes and
+every other environment but boarding-triage, whose file reader made the same
+change on main, ignores; the playground passes the task it has drawn. The record on another day is rebuilt from the task's book
+seed, its scenario and the contact center's pins, at the typed default
+calibration, so the task never moves when the calibration file or its
+reader does.
+
+**The generator filters, and says why.** ei-clocks' guard rejects nothing
+it draws. call-qa's turns away about one built draw in thirteen: where the
+recognizer misheard a figure or a word a rule reads (the reviewer could
+not tell the slip from the agent's), and where a wrong amount's digits are
+already the record's. Each is a filter on the suite's distribution, named
+in docs/environments.md under "What v1 leaves out".
+
+**Four defects in the contact center, fixed where they were.** Building
+the suite found two calls the contact center could not write:
+
+- a C-02 plant on a call whose record had neither an amount past due nor a
+  next installment threw on the missing slot. It now has no turn to go in,
+  as the other plants do when theirs is missing;
+- a payment that went to no installment (held in suspense, or all
+  principal) left the last-payment statement with no template, and a book
+  with one such call threw while writing its notes. The clause naming the
+  installment is now left out instead.
+
+Neither changes a call the contact center could write before. The review
+of the branch found two more, which do:
+
+- the dialer called from 08:00 to 21:00 and kept no state cap, so 118 of
+  the 4,303 calls it dialed on the 300-loan book broke the voice window the
+  rubric reads (after 08:00 and through 20:30, 11.1 rule 8), and a
+  Massachusetts loan could take a third call in seven days (940 CMR 7.04).
+  A clean book carried breaches nobody had labeled, and call-qa had to draw
+  around them. The dialer now calls inside the window, waits four days
+  between attempts on a Massachusetts loan with a third at least eight days
+  after the first of the two before it, and keeps a welcome call there a
+  week away from the collection calls;
+- a call answered by someone nobody verified was marked as carrying the
+  mini-Miranda (and, in a case, the bankruptcy disclaimer) on a past-due
+  loan, though nothing about the debt is said to such a person
+  (§1006.6(d)(1)) and the writer never said it; and an outbound call a
+  third party answered was marked as carrying the recording notice it did
+  not carry. Such a call now marks no debt disclosure, and the agent gives
+  the third party the recording notice, so every row marks what its call
+  says.
+
+A test holds each, and the rubric finds nothing on the clean book's calls.
+The held-out suite was pinned again at 1.0.0, which nothing had yet been
+measured on. When it merged onto life 1.1.0 it was re-pinned in place at
+`697ad78d…`, its version unchanged, because no model has run on it; the
+reference still passes the held-out suite, its training suites and its
+spec cases, and every verdict still turns up above 15 %.
+
+The new books found a fifth defect in the contact center. The month the
+bankruptcy notice arrived drew its inbound reasons as if no case were open,
+so a call after the notice could be one to arrange a payment, on which the
+agent asked when the borrower could pay: collection language in the case,
+on a call the generator then turned away. The ordinary calls now draw the
+case's reasons from the notice's day, and no agent asks that question in a
+case.
+
+**Not in 1.0.0:** calls through an interpreter, mono recordings, welcome
+calls, the three gates above, 11.1-T23's fifteen-second rule, and whether
+an option told was appropriate (comment 39(a)-4). docs/environments.md has
+why for each.

@@ -56,9 +56,11 @@ qualifying-income, lossmit-retention, metro2-furnishing and ei-clocks grade
 with ports of its escrow, Flex Modification, cashiering, ARM, payoff,
 mortgage-insurance, origination income, loss-mitigation retention, Metro 2
 furnishing and early-intervention windows engines that tests hold byte-equal
-to it, and boarding-triage writes and gates its transfer packages with ports
+to it; boarding-triage writes and gates its transfer packages with ports
 of its transfer-batch codec and data-quality gate, held byte-equal the same
-way.
+way; and call-qa grades with its conversation harness's provenance and
+verbatim checks, ported the same way, and holds its pre-dial gates, guardrail
+words and copy library to their lines.
 
 ## The shape
 
@@ -74,7 +76,7 @@ packages/shared            domain types; LoanFile is the object everything reads
 packages/kernel            Doug's kernel, vendored: money, calendar, ledger, fsm, timers, events
 packages/partner-book      the tape reader: a servicer's book onto the partner-feed contract
 packages/refi-review       the daily refinance review: Doug's §33.2 over his §20.1, pure, over the kernel
-packages/environments      RL environments: refi review, escrow analysis, payment posting, Flex Mod, loss-mit retention, ARM adjustment, payoff statements, MI termination, Metro 2 furnishing, early-intervention clocks, catch-up posting, escrow review, boarding triage, Reg Z price tests, qualifying income, the AUS decision; the engine as grader
+packages/environments      RL environments: refi review, escrow analysis, payment posting, Flex Mod, loss-mit retention, ARM adjustment, payoff statements, MI termination, Metro 2 furnishing, early-intervention clocks, catch-up posting, escrow review, boarding triage, call QA, Reg Z price tests, qualifying income, the AUS decision; the engine as grader
 packages/brand             design tokens, Tailwind preset, .super-* components
 packages/db                Prisma
 apps/api                   Express 5

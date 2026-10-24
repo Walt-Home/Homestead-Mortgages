@@ -4266,7 +4266,7 @@ the recognizer adds noise:
 - speakers swapped on a mono recording, crosstalk;
 - two engine styles, one cased and one lower case.
 
-On the defaults, the speech runs at about 98 words a minute across a call,
+On the defaults, the speech runs at about 99 words a minute across a call,
 dead air included.
 
 **Notes.** The comment log is one line a note: the loan, the day and time,

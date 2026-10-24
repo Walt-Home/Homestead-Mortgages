@@ -19,6 +19,7 @@
 
 import { addDays, addMonths, daysInMonth, parts, ymd, type PlainDate } from "@hm/kernel/calendar";
 import { levelPayment, ratePercent, type Cents } from "@hm/kernel/money";
+import { makeMin } from "../boarding/ported/min.js";
 import type { Rng } from "../rng.js";
 import type { Bin, Rates } from "./calibration.js";
 import { INDEX_NAME, normal } from "./feeds.js";
@@ -182,6 +183,18 @@ const digits = (r: Rng, n: number): string => {
   for (let i = 1; i < n; i++) s += String(r.int(0, 9));
   return s;
 };
+
+/** The MERS organization every drawn MIN is registered under (the transfer package's investor org id). */
+export const MIN_ORG_ID = "1000001";
+
+/**
+ * A MERS Mortgage Identification Number: the org id, a ten-digit sequence and
+ * the Mod-10 check digit, computed as the servicing app's boarding gate checks
+ * it (HF-008, apps/servicing/src/domain/boarding/rules.ts:103, through
+ * `isValidMin` in its min.ts, ported byte for byte in boarding/ported/min.ts).
+ * Until life 1.2.0 the eighteenth digit was drawn, and passed only by chance.
+ */
+export const mersMin = (sequence: string): string => makeMin(MIN_ORG_ID, sequence);
 const eighth = (pct: number): string => (Math.round(pct * 8) / 8).toFixed(3);
 const lognormalMeanOne = (r: Rng, sigma: number): number =>
   Math.exp(sigma * normal(r) - (sigma * sigma) / 2);
@@ -379,7 +392,8 @@ export function drawLoan(
   const street = `${streetNo} ${r.pick(STREETS)} ${r.pick(SUFFIXES)}`;
   const zip = state[3] + digits(r, 2).padStart(2, "0");
   const fnma = digits(r, 10);
-  const min = "1000001" + digits(r, 11);
+  // The eleventh digit is still drawn, so nothing after it moves; the check digit takes its place.
+  const min = mersMin(digits(r, 11).slice(0, 10));
   const servicerNo = "70" + digits(r, 8);
   const priorNo = "P" + digits(r, 9);
   const boardingAge = Math.max(0, Math.round(pickBin(r, R.book.loan_age_months)));

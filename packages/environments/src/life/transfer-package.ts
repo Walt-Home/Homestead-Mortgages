@@ -64,7 +64,6 @@
 import { createHash } from "node:crypto";
 import { addDays, addMonths, daysBetween, parts, type PlainDate } from "@hm/kernel/calendar";
 import { cents, formatCents, ratePercent, type Cents } from "@hm/kernel/money";
-import { makeMin } from "../boarding/ported/min.js";
 import {
   encodeTransferBatch,
   parseCsv,
@@ -281,7 +280,8 @@ function stagedLoan(life: LoanLife, batch: TransferBatch): StagedLoan {
   return {
     transferor_loan_number: d.prior_servicer_loan_number,
     fnma_loan_number: d.fnma_loan_number,
-    min: makeMin(d.min.slice(0, 7), d.min.slice(7, 17)),
+    // The drawn MIN carries its Mod-10 check digit (draw.ts, `mersMin`), so HF-008 reads it as drawn.
+    min: d.min,
     mers_eligible: true,
     remittance_type: "A/A",
     upb_cents: t.upb,

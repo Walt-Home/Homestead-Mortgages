@@ -68,6 +68,7 @@ import {
   type IndexObs,
 } from "../arm/ported/arm.js";
 import { verifyArmAdjustment } from "../arm/ported/arm-verify.js";
+import { isValidMin } from "../boarding/ported/min.js";
 import {
   anomalies as escrowAnomalies,
   decide,
@@ -2306,7 +2307,14 @@ export function simulateLoan(
       prior,
     };
     const snap = buildSnapshot(cs);
-    const errs = validateSnapshot(snap);
+    // The engine's validation holds the MIN to eighteen digits; the generator also holds it to its Mod-10 check digit,
+    // which the servicing app checks at boarding (HF-008) and its Metro 2 unit does not. A drawn MIN always passes.
+    const errs = [
+      ...validateSnapshot(snap),
+      ...(snap.k3.min !== null && /^\d{18}$/.test(snap.k3.min) && !isValidMin(snap.k3.min)
+        ? ["MIN_CHECK_DIGIT"]
+        : []),
+    ];
     let record: Record<string, string> | null = null;
     if (errs.length) prior = { php: snap.php, status: null, dofd: snap.dofd, omitted: true };
     else {

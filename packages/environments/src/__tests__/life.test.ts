@@ -11,9 +11,11 @@
 import { describe, expect, it } from "vitest";
 import { addMonths, daysBetween, type PlainDate } from "@hm/kernel/calendar";
 import { monthlyInterest, ratePercent } from "@hm/kernel/money";
+import { isValidMin } from "../boarding/ported/min.js";
 import { lateChargeAmount } from "../payments/ported/latecharges.js";
 import type { LoanCashState } from "../payments/ported/types.js";
 import { toJsonLine } from "../record.js";
+import { rngFor } from "../rng.js";
 import {
   CALIBRATION_KEYS,
   DEFAULT_CALIBRATION,
@@ -23,6 +25,7 @@ import {
   defaultCalibration,
   generate,
   loadCalibration,
+  mersMin,
   monthEndRow,
   type LifeMoment,
   type LoanLife,
@@ -207,6 +210,36 @@ describe("life generator", () => {
     }
     expect(missing).toEqual([]);
     expect(book.loans.some((l) => l.payoff)).toBe(true);
+  });
+
+  it("draws every MIN with the check digit the boarding gate holds it to", () => {
+    // HF-008 refuses a MIN that fails isValidMin (apps/servicing/src/domain/boarding/rules.ts:103); the port in
+    // boarding/ported/min.ts is that file byte for byte (boarding.test.ts). The gate's Luhn, restated here apart
+    // from both: double every second digit from the right of the seventeen, and the check digit tops the sum to ten.
+    const luhn = (payload: string) => {
+      let sum = 0;
+      for (let k = 0; k < payload.length; k++) {
+        let x = Number(payload[payload.length - 1 - k]);
+        if (k % 2 === 0) x = x * 2 > 9 ? x * 2 - 9 : x * 2;
+        sum += x;
+      }
+      return (10 - (sum % 10)) % 10;
+    };
+    const r = rngFor("life-test/min");
+    for (let k = 0; k < 20_000; k++) {
+      const seq = [0, 1].map(() => String(r.int(0, 99_999)).padStart(5, "0")).join("");
+      const min = mersMin(seq);
+      expect(min).toMatch(/^1000001\d{11}$/);
+      expect(Number(min[17])).toBe(luhn(min.slice(0, 17)));
+      expect(isValidMin(min)).toBe(true);
+      // Every other last digit fails the gate.
+      const wrong = min.slice(0, 17) + String((Number(min[17]) + 1 + (k % 9)) % 10);
+      expect(isValidMin(wrong)).toBe(false);
+    }
+    const bad = book.loans.filter((l) => !isValidMin(l.draw.min)).map((l) => l.draw.min);
+    expect(bad).toEqual([]);
+    for (const l of book.loans)
+      for (const m of l.months) expect(m.metro2.errors).not.toContain("MIN_CHECK_DIGIT");
   });
 
   it("schedules every year's escrow analysis, the tenth included", () => {

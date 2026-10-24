@@ -509,10 +509,32 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
   const full = (p: { given_name: string; surname: string }) => `${p.given_name} ${p.surname}`;
   const agentFor = (r: Rng, on: PlainDate) => r.pick(AGENTS[servicerOn(life, on)]);
 
-  /* bankruptcy: drawn on a delinquency that reaches day 30 */
+  /* bankruptcy: the petition the history dates, or one drawn on a delinquency that reaches day 30 */
   const episodes = delinquencies(life, endOn);
   let bankruptcy: BankruptcyCase | null = null;
-  {
+  if (life.bankruptcy) {
+    // The scenario's petition, which the history obeys: late charges accrue suspended from it, the servicer's own
+    // outreach stops, and the month-end and the tape report the case. The attorney's notice follows in one to three
+    // days. The history keeps the case open to its end, with no discharge, so collection never resumes on it. A
+    // boarding that left the case off (D-37) leaves the servicer not knowing of it from the transfer.
+    const r = rngFor(`${lk}/bk/petition`);
+    const noticeLag = r.int(1, 3);
+    const who = r.pick(ATTORNEYS);
+    const last4 = String(r.int(1000, 9999));
+    const petition = life.bankruptcy.filed_on;
+    const tin = life.transfer_in_on;
+    const dropped = tin !== null && petition < tin && !life.boarded.terms.bankruptcy_carried;
+    bankruptcy = {
+      chapter: life.bankruptcy.chapter === "7" ? 7 : 13,
+      petition_on: petition,
+      noticed_on: addDays(petition, noticeLag),
+      discharged_on: null,
+      attorney: who[0],
+      firm: who[1],
+      case_last4: last4,
+      ...(dropped ? { known_until: addDays(tin, -1) } : {}),
+    };
+  } else {
     const r = rngFor(`${lk}/bk`);
     for (const ep of episodes) {
       if (!ep.day30) continue;
@@ -541,13 +563,18 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     }
   }
   const bk = bankruptcy;
+  /** Whether the servicer whose books the loan is on knows of the case on `on` (a boarding may have dropped it). */
+  const known = (on: PlainDate) =>
+    bk !== null && (bk.known_until === undefined || on <= bk.known_until);
   /** Collection is barred from the petition, until a Chapter 13 discharge; after a Chapter 7 discharge it never resumes. */
   const barred = (on: PlainDate) =>
     bk !== null &&
+    known(on) &&
     on >= bk.petition_on &&
     !(bk.chapter === 13 && bk.discharged_on !== null && on >= bk.discharged_on);
   const disclaimer = (on: PlainDate) =>
     bk !== null &&
+    known(on) &&
     on >= bk.noticed_on &&
     !(bk.chapter === 13 && bk.discharged_on !== null && on >= bk.discharged_on);
 
@@ -960,7 +987,7 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       const day = r.int(1, dim);
       let on = ymd(y, mo, day);
       if (dayOfWeek(on) === 0) on = addDays(on, 1);
-      const reason = weightedOf(r, bk && on >= bk.noticed_on ? stayed : mix);
+      const reason = weightedOf(r, bk && on >= bk.noticed_on && known(on) ? stayed : mix);
       const rr = rngFor(`${lk}/in/${m.month}/${c}`);
       if (on > endOfMonth(monthStart)) continue;
       push(inbound(rr, on, reason));

@@ -221,8 +221,8 @@ export interface PromiseRecord {
 }
 
 /**
- * A bankruptcy the contact center learned of. The life generator draws none, and the petition a scenario may script
- * (`LoanLife.bankruptcy`) is not read here yet; see docs/environments.md.
+ * A bankruptcy the contact center learned of: the petition a scenario dates (`LoanLife.bankruptcy`), which the history
+ * keeps open to its end, or, on a loan whose history has none, one the contact center draws (derive.ts).
  */
 export interface BankruptcyCase {
   readonly chapter: 7 | 13;
@@ -234,6 +234,12 @@ export interface BankruptcyCase {
   readonly firm: string;
   /** The case number's last four digits. */
   readonly case_last4: string;
+  /**
+   * The last day the servicer whose books the loan is on knows of the case: absent while every servicer does, and the
+   * day before the transfer on a boarding that left it off (D-37's twin), from which the servicer calls as if none
+   * were open.
+   */
+  readonly known_until?: PlainDate;
 }
 
 export interface PhoneOnFile {

@@ -405,7 +405,13 @@ export function recordOn(life: LoanLife, on: PlainDate, ctx: RecordContext): Rec
     ? { month: cm.month, status: cm.metro2.account_status, days: cm.days_delinquent }
     : null;
 
-  const bk = ctx.bankruptcy && ctx.bankruptcy.noticed_on <= on ? ctx.bankruptcy : null;
+  // The case as the servicer holds it: from the attorney's notice, while the servicer whose books the loan is on knows
+  // of it (a boarding that dropped it, D-37, knows of none from the transfer).
+  const held = ctx.bankruptcy;
+  const bk =
+    held && held.noticed_on <= on && (held.known_until === undefined || on <= held.known_until)
+      ? held
+      : null;
   const firstNumber = /^\d+/.exec(d.property.street)?.[0] ?? "";
 
   return {

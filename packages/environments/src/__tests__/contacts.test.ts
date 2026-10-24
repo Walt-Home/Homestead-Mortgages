@@ -400,6 +400,93 @@ describe("contact center", () => {
     );
   });
 
+  it("reads the petition a scenario dates, and stops knowing of it where a boarding dropped it", () => {
+    // Loan 0 falls behind and files in its 21st month; loan 1 filed in its 14th month, reaches us in its 18th, and
+    // misses twice after. Every loan is pinned with nothing random but the payments' timing.
+    const res = generate(
+      "contacts-test/bankruptcy",
+      {
+        loans: 2,
+        cohort_months: 1,
+        random: { payoff: false, delinquency: false },
+        events: [
+          { kind: "missed_payment", loan: 0, month: 20 },
+          { kind: "missed_payment", loan: 0, month: 21 },
+          { kind: "missed_payment", loan: 0, month: 22 },
+          { kind: "bankruptcy", loan: 0, month: 21, day: 10 },
+          { kind: "bankruptcy", loan: 1, month: 14, day: 5, chapter: "7" },
+          { kind: "transfer_in", loan: 1, month: 18 },
+          { kind: "missed_payment", loan: 1, month: 20 },
+          { kind: "missed_payment", loan: 1, month: 21 },
+        ],
+      },
+      { calibration: cal, defects: [{ id: "D-37", loans: [1] }] },
+    );
+    const stays = (life: LoanLife, l: LoanContacts, known: (on: PlainDate) => boolean) => {
+      const bk = l.bankruptcy!;
+      expect(bk.petition_on).toBe(life.bankruptcy!.filed_on);
+      expect(bk.chapter).toBe(Number(life.bankruptcy!.chapter));
+      expect(daysBetween(bk.petition_on, bk.noticed_on)).toBeGreaterThanOrEqual(1);
+      expect(daysBetween(bk.petition_on, bk.noticed_on)).toBeLessThanOrEqual(3);
+      // The history keeps the case open to its end, so collection never resumes.
+      expect(bk.discharged_on).toBeNull();
+      const problems: string[] = [];
+      for (const c of l.contacts) {
+        if (c.on < bk.petition_on || !known(c.on)) continue;
+        if (c.purpose === "collection" && c.mode === "call")
+          problems.push(`${c.id}: a collection call in the stay`);
+        if (c.on < bk.noticed_on) continue;
+        if (
+          c.direction === "inbound" &&
+          (c.reason === "payment_arrangement" || c.reason === "hardship")
+        )
+          problems.push(`${c.id}: ${c.reason} in the stay`);
+        if (c.mode === "call" && c.outcome === "conversation" && c.party !== "attorney")
+          if (!c.disclosures_marked.bankruptcy) problems.push(`${c.id}: no disclaimer`);
+      }
+      expect(problems).toEqual([]);
+      expect(
+        l.contacts.some((c) => c.party === "attorney" && c.purpose === "bankruptcy_notice"),
+      ).toBe(true);
+      return bk;
+    };
+
+    // The clean history: both cases are known for the whole history, and the record holds them from the notice.
+    const clean = contactCenter(res.clean, { calibration: cal });
+    for (const i of [0, 1]) {
+      const life = res.clean.loans[i]!;
+      const bk = stays(life, clean.loans[i]!, () => true);
+      expect(bk.known_until).toBeUndefined();
+      const ctx = { profile: clean.loans[i]!.profile, bankruptcy: bk };
+      expect(recordOn(life, addDays(bk.noticed_on, -1), ctx).bankruptcy).toBeNull();
+      expect(recordOn(life, addDays(bk.noticed_on, 1), ctx).bankruptcy?.petition_on).toBe(
+        bk.petition_on,
+      );
+    }
+    // Loan 0 is behind through the petition: the cadence the delinquency opened pauses for the case and never resumes.
+    const behind = clean.loans[0]!;
+    expect(
+      behind.contacts.some(
+        (c) => c.purpose === "collection" && c.on < behind.bankruptcy!.petition_on,
+      ) || behind.cadence.some((e) => e.paused.some((p) => p.reason === "bankruptcy")),
+    ).toBe(true);
+
+    // D-37's twin boarded loan 1 without the case: until the transfer the prior servicer knew of it, and from the
+    // transfer our servicer calls a borrower in bankruptcy, without the disclaimer, as if none were open.
+    const twin = contactCenter(res.defective!, { calibration: cal });
+    const life = res.defective!.loans[1]!;
+    const t = life.transfer_in_on!;
+    const l = twin.loans[1]!;
+    const bk = stays(life, l, (on) => on < t);
+    expect(bk.known_until).toBe(addDays(t, -1));
+    const after = l.contacts.filter((c) => c.on >= t);
+    expect(after.some((c) => c.purpose === "collection" && c.mode === "call")).toBe(true);
+    for (const c of after) expect(c.disclosures_marked.bankruptcy, c.id).toBe(false);
+    expect(
+      recordOn(life, addDays(t, 5), { profile: l.profile, bankruptcy: bk }).bankruptcy,
+    ).toBeNull();
+  });
+
   it("asks why by status and month: the 1098 in January, and spikes after an analysis", () => {
     const all = center.loans.flatMap((l) =>
       l.contacts.filter((c) => c.counts_as_inquiry && c.reason).map((c) => ({ c, l })),

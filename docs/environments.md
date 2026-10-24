@@ -4414,15 +4414,19 @@ the complaint log, the transcripts, the dialer's pauses); and the named ones
 are `dialed_in_window`, `kept_not_marked`, `broken_not_followed_up`,
 `no_acknowledgment`, `no_response` and `raised_again`. A loan takes one of
 each. Where S-01's twin does not make the call S-02 was asked for (a
-hardship call a day after the promise call takes a promise of its own, so
+hardship call days after the promise call takes a promise of its own, so
 it is no longer escalated, and its follow-up is never made), S-02 is not
 made, and the planter says so.
 
 A clean center is byte for byte what it was. The override and
 `unrecorded_promises` are absent from every clean history, and
-`complaintLog` stores nothing, so neither `CONTACTS_VERSION` nor
-`LIFE_VERSION` moved, and call-qa's held-out pin (`d675547e…`) passes as it
-was. contact-audit's books set two new profile pins, `style` and
+`complaintLog` stores nothing, so the staff errors moved no version of their
+own: they arrived beside contacts 1.2.0's escrow call, and a center with
+them is the center without them, held side by side (rows, notes, every
+transcript and C-01 to C-08 planted at 5 %, on 120 loans over 48 months and
+60 over 120, and 80 loans over 72 months with the escrow call pinned).
+call-qa's held-out pin (`4e175948…`) passes as contacts 1.2.0 left it.
+contact-audit's books set two new profile pins, `style` and
 `complaint_multiplier`, which change no draw on a center that does not set
 them.
 
@@ -4724,47 +4728,53 @@ and a complaint call, within 120 days of each other; the window runs from 10
 to 45 days before the first to past the promise's date and five weeks past
 the complaint. Four plans in turn make nothing (the control), S-01 on the
 promise, S-02 on the complaint, or both, so the held-out suite (seed 1, 200
-windows, pinned by hash) holds 50 of each. It has 100 roots of each error,
-195 dialer attempts inside a promise's window, 50 promises kept and 50
-broken, and 100 calls raising a complaint again. A window averages 116
-days, both ends counted (40 to 203), 18.7 contacts, 9.2 recorded calls, 2.2
-calls with a promise and 1.8 with a complaint.
+windows, drawn on life 1.2.0 and contacts 1.2.0, pinned by hash) holds 50 of
+each. It has 100 roots of each error, 203 dialer attempts inside a
+promise's window, 50 promises kept and 50 broken, and 100 calls raising a
+complaint again. A window averages 113
+days, both ends counted (42 to 200), 18.3 contacts, 8.8 recorded calls, 2.2
+calls with a promise and 1.8 with a complaint. 53 of the windows' calls are
+about an escrow analysis, 11 of them an S-02 root.
 
 **A draw is kept only when it is fair to grade, and this is a filter.** The
 reference, reading the window as rendered, must find exactly the labels'
 roots and the symptoms a rule names, and nothing more (nothing at all in a
-clean window). On the held-out suite 103 of 200 windows are first draws;
-the redraws are 195 books with no pair of anchors, 6 where the recognizer
-hid the complaint raised again (a misheard or dropped word in the phrase)
-and 2 where it hid the root's own. Of the first draws of 1,000 training
-tasks (train seed 11), 512 had a pair of anchors and reached the check, and
-20 were turned away: 10 because the recognizer hid the complaint, 9 the
-complaint raised again, and one because the payments read otherwise than
-the promise log: a scripted promise the scenario breaks, which the
-borrower's own payment met on its date, is marked broken. The same filters
-are v1's limits.
+clean window). On the held-out suite 97 of 200 windows are first draws,
+and the longest took 11; the redraws are 215 books with no pair of anchors,
+6 where the recognizer hid the complaint raised again (a misheard or
+dropped word in the phrase) and 5 where it hid the root's own. Of the first
+draws of 1,000 training tasks (train seed 11), 530 had a pair of anchors
+and reached the check, and 25 were turned away: 14 because the recognizer
+hid the complaint, 10 the complaint raised again, and one because the
+payments read otherwise than the promise log: a scripted promise the
+scenario breaks, which the borrower's own payment met on its date, is
+marked broken. The same filters are v1's limits.
 
 **The floors.** Submitting nothing passes the 50 clean windows, with a mean
 score of 0.438. Reporting every call whose note states a promise as an S-01
-root, with its promise, passes 46 (0.560): the S-01 windows with two other
+root, with its promise, passes 46 (0.545): the S-01 windows with two other
 promises or fewer. Reporting every call that voices a complaint as an S-02
-root passes 51 (0.553): every S-02 window, none holding more than two other
-complaints, and a clean one whose logged complaint the recognizer hid. Both
-together pass 55. Each floor passes little beyond the windows of the one
-error it reports, a quarter of the suite, and within that quarter most of
-it, because two extra findings are allowed and the logs hold few others: a
-clean window holds both anchors, a promise recorded and a complaint logged,
-but beside an S-01 root the promise log holds another promise in 32 of the
-50 S-01 windows (46 of the 50 with both errors), and beside an S-02 root the
-complaint log holds another complaint in 10 of 50 (16 of 50). A policy that
-reads no transcript and reports an S-02 root wherever a call was escalated
-and not logged passes 48 (0.436), below submitting nothing: an unlogged
-complaint is escalated by nobody.
+root passes 51 (0.555): the 49 S-02 windows with two other complaint calls
+or fewer, the call raising it again among them, and two clean ones whose
+logged complaint the recognizer hid. Both together pass 63 (0.663): 35 with
+both errors, 25 with S-01 alone and 3 with S-02 alone. Each floor passes
+little beyond the windows of the one error it reports, a quarter of the
+suite, and within that quarter most of it, because two extra findings are
+allowed and the logs hold few others: a clean window holds both anchors, a
+promise recorded and a complaint logged, but beside an S-01 root the
+promise log holds another promise in 36 of the 50 S-01 windows (40 of the 50
+with both errors), and beside an S-02 root the complaint log holds another
+complaint in 15 of 50 (7 of 50). A policy that reads no transcript and
+reports an S-02 root wherever a call was escalated and not logged passes 49
+(0.441), fewer than submitting nothing: an unlogged complaint is escalated
+by nobody, and the one root it finds is a late-fee call, escalated as a late
+fee may be with no complaint, as a call in two clean windows is.
 
 **The proof of fairness.** The reference passes the held-out suite, 300
 training tasks (seed 11) and ten hand-built histories in at most three
-turns and seven tool calls: one turn reads the logs and searches the
-transcripts, one adds up a window's payments, one submits. The histories
+turns and seven tool calls (two and six on the generated windows): one turn
+reads the logs and searches the transcripts, one adds up a window's
+payments, one submits. The histories
 hold each rule on its edge: a promise recorded and kept; one not recorded
 with two attempts in its window; the window's pay-by date in and the day
 after out, and a payment a cent short; an attempt earlier on the promise
@@ -4786,7 +4796,7 @@ Not in 1.0.0:
 - a promise or a complaint the recognizer hid from the reviewer, which only
   the label could tell, and a scripted broken promise its payments met.
 
-Generating the held-out suite takes about eleven seconds on an idle machine.
+Generating the held-out suite takes about twelve seconds.
 
 ## The Supermortgage Gym
 

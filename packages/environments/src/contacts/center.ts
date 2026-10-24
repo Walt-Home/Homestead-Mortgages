@@ -43,6 +43,11 @@ import { templateWriter, type ContactTextWriter } from "./writer.js";
  * its note records what was explained; C-05 and C-08 plant a wrong figure in that explanation; no statement is
  * mailed to a borrower more than 30 days behind at the analysis; a pin draws the borrower's call about each one;
  * and an interpreted call's note no longer reads the interpreter's relay of the question as a second question.
+ * Beside them, and drawing nothing new on a clean center (held byte for byte against the center without them): two
+ * staff errors a twin can make on a call the clean history has (staff.ts), S-01, a promise said and noted and never
+ * recorded, and S-02, a complaint voiced and never logged and raised again; the complaint log, read off the logged
+ * complaints as a view (complaints.ts); and two pins, the borrower's manner and a multiple of the chance of a
+ * complaint.
  */
 export const CONTACTS_VERSION = "1.2.0";
 

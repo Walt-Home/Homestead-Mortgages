@@ -294,11 +294,11 @@ describe("staff errors in the contact center", () => {
       );
       expect(res.skipped).toEqual([]);
     }
-    // contact-audit/1.0.0/train/3/11#1: a hardship call the day after the promise call takes a promise of its own
-    // once nobody recorded the first, so it is no longer escalated, and the follow-up S-02 was asked for is never
-    // made. S-01 is made alone, and the planter says why.
-    const key = "contact-audit/1.0.0/train/3/11#1";
-    const got = drawContactAuditCandidate(key, "train", 3, 11)!;
+    // contact-audit/1.0.0/train/3/1779#2 (contacts 1.2.0): a hardship call two days after the promise call takes a
+    // promise of its own once nobody recorded the first, so it is no longer escalated, and the follow-up S-02 was
+    // asked for is never made. S-01 is made alone, and the planter says why.
+    const key = "contact-audit/1.0.0/train/3/1779#2";
+    const got = drawContactAuditCandidate(key, "train", 3, 1779)!;
     expect(got.issues.join(" ")).toMatch(/does not make this call/);
     expect(got.task.labels.filter((l) => l.root_cause).map((l) => l.defect_id)).toEqual(["S-01"]);
   }, 120_000);
@@ -589,14 +589,15 @@ describe("contact-audit", () => {
       };
     };
     expect(floor(() => [])).toEqual({ passed: 50, mean: 0.438 });
-    expect(floor(everyPromise)).toEqual({ passed: 46, mean: 0.56 });
-    expect(floor(everyComplaint)).toEqual({ passed: 51, mean: 0.553 });
+    expect(floor(everyPromise)).toEqual({ passed: 46, mean: 0.545 });
+    expect(floor(everyComplaint)).toEqual({ passed: 51, mean: 0.555 });
     expect(floor((t) => [...everyPromise(t), ...everyComplaint(t)])).toEqual({
-      passed: 55,
-      mean: 0.665,
+      passed: 63,
+      mean: 0.663,
     });
     // Reading no transcript: an S-02 root wherever a call was escalated and not logged, the first on its issue. An
-    // unlogged complaint is escalated by nobody, so this is no better than submitting nothing.
+    // unlogged complaint is escalated by nobody, so this passes fewer windows than submitting nothing: the one root it
+    // finds is a late-fee call, escalated as a late fee may be with no complaint, as two clean windows' are.
     const byDisposition = (t: ContactAuditTask): AuditFinding[] => {
       const issues = new Set<string>();
       return t.contacts.flatMap((c) => {
@@ -606,7 +607,7 @@ describe("contact-audit", () => {
         return [{ error: "S-02", kind: "root", contact: c.id, promise: null }];
       });
     };
-    expect(floor(byDisposition)).toEqual({ passed: 48, mean: 0.436 });
+    expect(floor(byDisposition)).toEqual({ passed: 49, mean: 0.441 });
   }, 120_000);
 
   it("can be audited from the rulebook and the tools: the reference passes the held-out suite and a training suite", async () => {
@@ -635,7 +636,7 @@ describe("contact-audit", () => {
         kinds.set(`${f.error} ${f.kind}`, (kinds.get(`${f.error} ${f.kind}`) ?? 0) + 1);
     expect(Object.fromEntries([...kinds].sort())).toEqual({
       "S-01 broken_not_followed_up": 50,
-      "S-01 dialed_in_window": 195,
+      "S-01 dialed_in_window": 203,
       "S-01 kept_not_marked": 50,
       "S-01 root": 100,
       "S-02 no_acknowledgment": 100,
@@ -664,7 +665,7 @@ describe("contact-audit", () => {
       holding("S-01+S-02", "promises"),
       holding("S-02", "complaints"),
       holding("S-01+S-02", "complaints"),
-    ]).toEqual([32, 46, 10, 16]);
+    ]).toEqual([36, 40, 15, 7]);
   }, 600_000);
 
   it("keeps a draw only when it is fair to grade", () => {
@@ -737,7 +738,7 @@ describe("contact-audit", () => {
     // A change here moves every score: bump CONTACT_AUDIT_ENVIRONMENT_VERSION, then the pin. The suite is drawn
     // from the life generator and the contact center: a change to either moves it too.
     expect(sha256(heldTasks().map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"710237c246faf76565cebac525cb43cfe33be0083892271ceba0fc8dff2ef272"`,
+      `"9722ef265dd70e65975c9d4443b9c253675498e89fa300c448591789e57de9f6"`,
     );
   }, 120_000);
 

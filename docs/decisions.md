@@ -8989,3 +8989,75 @@ letter or e-mail; a promise or complaint the recognizer hid, which only the
 label could tell; and a scripted broken promise the borrower's own payment
 met on its date, which the contact center marks broken (one in 512 training
 first draws).
+
+## The escrow call and the staff errors carry one contacts version, and contact-audit is re-pinned
+
+**Decided 24 October 2026,** when the two entries above were integrated.
+Each was built on contacts 1.1.0 and neither saw the other.
+
+**One version, 1.2.0.** The escrow call changed what the contact center
+draws and writes, so it took 1.2.0. The staff errors change nothing a clean
+center draws, and that was checked again on the integrated tree, side by
+side against the escrow call's own: the rows, the notes, every transcript
+and C-01 to C-08 planted at 5 %, on 120 loans over 48 months (seed 11), 60
+over 120 (seed 7), and 80 over 72 with the escrow call pinned on every loan
+and a third of them Spanish-speaking. Each hashed the same. So the center
+stays at 1.2.0, and the version's comment in `contacts/center.ts` lists the
+staff errors beside the escrow call. The one conflict in the code was the
+inbound call's options, the escrow call's `answered` beside the twin's
+`again`, and the profile pins, `escrow_call` beside `style` and
+`complaint_multiplier`; both sides are kept.
+
+**call-qa holds.** Its held-out pin, `4e175948…`, passes as the escrow call
+left it, so none of its figures moves.
+
+**contact-audit 1.0.0 is re-pinned in place.** Its suite is drawn through
+the contact center, whose every stream hangs off its version, so every
+window is drawn again. Its rulebook and tools are unchanged (the test that
+pins what a model is told passes) and no model has run on it, so, under the
+precedent in "Life 1.2.0", it keeps its version, `contact-audit/1.0.0`
+stays in `HELDOUT_SUITES` with nothing retired, and its fingerprint names
+contacts 1.2.0 over life 1.2.0.
+
+| Suite         | Version | Held-out pin              | Reference, held-out | Spec cases | Training (seed 11) |
+| ------------- | ------- | ------------------------- | ------------------- | ---------- | ------------------ |
+| contact-audit | 1.0.0   | `710237c2…` → `9722ef26…` | 200 of 200          | 10 of 10   | 300 of 300         |
+| call-qa       | 1.0.0   | `4e175948…`, unchanged    | 210 of 210          | 17 of 17   | 300 of 300         |
+
+The reference takes at most two turns and six tool calls on the generated
+windows, and three and seven on the spec cases. What the suite holds now,
+with the figure the staff errors were measured at in brackets:
+
+- 97 first draws (103), the longest draw 11 attempts (10); the redraws are
+  215 books with no pair of anchors (195), 6 where the recognizer hid the
+  complaint raised again (6) and 5 where it hid the root's own (2);
+- 203 dialer attempts inside a promise's window (195); the roots, the kept
+  and broken promises and the calls raising a complaint again are 100, 50,
+  50 and 100, as the plans make them;
+- a window of 113 days, both ends counted, 42 to 200 (116, 40 to 203); 18.3
+  contacts (18.7), 8.8 recorded calls (9.2), 2.2 calls with a promise and
+  1.8 with a complaint (the same). 53 of the windows' calls are about an
+  escrow analysis, 11 of them an S-02 root;
+- the floors: nothing passes 50 (0.438, the same); every promise as a root
+  46 (0.545; 0.560); every complaint 51 (0.555; 0.553), now 49 S-02 windows
+  and two clean ones whose logged complaint the recognizer hid (50 and
+  one); both 63 (0.663; 55 and 0.665); an S-02 root wherever a call was
+  escalated and not logged 49 (0.441; 48 and 0.436), one fewer than
+  nothing, its one root a late-fee call escalated as a late fee may be;
+- another promise beside an S-01 root in 36 of 50 windows and 40 of 50 with
+  both errors (32 and 46), another complaint beside an S-02 root in 15 and
+  7 (10 and 16);
+- of 1,000 training first draws, 530 reached the fairness check (512) and
+  25 were turned away (20): 14 for a complaint the recognizer hid (10), 10
+  for the complaint raised again (9), one for a promise's payments (one).
+
+The planter's named example of S-02 not made, because S-01's twin does not
+make its call, moved with the streams, from `train/3/11#1` to
+`train/3/1779#2`: the same mechanism, a hardship call two days after the
+promise call taking a promise of its own.
+
+**Not yet.** No model has run on contact-audit, call-qa or the escrow call,
+so all three baselines are pending. contact-audit's floors still pass most
+of their own error's quarter of the suite, because two extra findings are
+allowed and the logs hold few others; tightening that is a rule or
+generator change, best made while no model has run on 1.0.0.

@@ -73,8 +73,8 @@ export const auditArmOf = (index: number): number => Math.floor(index / AUDIT_PL
 export const AUDIT_HISTORY_MONTHS = 30;
 /**
  * The contact center's pins on every task's loan: an English-speaking borrower (v1 reads no interpreted
- * call), irritated, with a grievance that makes a complaint about four times as likely on a call an agent
- * handles (about three in ten such calls).
+ * call), irritated, with a grievance that makes a complaint about four times as likely on an inbound call an
+ * agent handles (about three in ten such calls; an outbound call carries none).
  */
 export const AUDIT_PINS: ProfilePins = {
   language: "en",

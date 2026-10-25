@@ -4722,7 +4722,8 @@ reads its manifest:
 delinquencies, each with the scenario's promise (kept or broken) beside the
 ones the contact center draws from the receipts, and a borrower the contact
 center's pins make irritated and four times as likely to complain (about
-three in ten calls an agent handles). The task takes two anchors from the
+three in ten of the inbound calls an agent handles; an outbound call carries
+none). The task takes two anchors from the
 clean center, in turn by index a promise the borrower kept and one broken,
 and a complaint call, within 120 days of each other; the window runs from 10
 to 45 days before the first to past the promise's date and five weeks past

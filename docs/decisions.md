@@ -9003,10 +9003,10 @@ and C-01 to C-08 planted at 5 %, on 120 loans over 48 months (seed 11), 60
 over 120 (seed 7), and 80 over 72 with the escrow call pinned on every loan
 and a third of them Spanish-speaking. Each hashed the same. So the center
 stays at 1.2.0, and the version's comment in `contacts/center.ts` lists the
-staff errors beside the escrow call. The one conflict in the code was the
+staff errors beside the escrow call. The two conflicts in the code were the
 inbound call's options, the escrow call's `answered` beside the twin's
 `again`, and the profile pins, `escrow_call` beside `style` and
-`complaint_multiplier`; both sides are kept.
+`complaint_multiplier`; both sides of each are kept.
 
 **call-qa holds.** Its held-out pin, `4e175948…`, passes as the escrow call
 left it, so none of its figures moves.
@@ -9055,6 +9055,13 @@ The planter's named example of S-02 not made, because S-01's twin does not
 make its call, moved with the streams, from `train/3/11#1` to
 `train/3/1779#2`: the same mechanism, a hardship call two days after the
 promise call taking a promise of its own.
+
+The "about three in ten" the docs give for a complaint on the audit's
+loans is of the inbound calls an agent handles, the only calls that carry
+one: 0.316 of them on the books of 400 training keys (seed 11), kept or
+turned away, and 0.195 of every handled call. On the held-out suite's books
+the share reads higher, 0.364, because a window is kept only where a
+complaint call fits.
 
 **Not yet.** No model has run on contact-audit, call-qa or the escrow call,
 so all three baselines are pending. contact-audit's floors still pass most

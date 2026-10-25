@@ -18,6 +18,7 @@
 
 import { addDays, parts, type PlainDate } from "@hm/kernel/calendar";
 import type { Cents } from "@hm/kernel/money";
+import { exemption } from "../escrow/ported/statement.js";
 import type { LoanLife } from "../life/simulate.js";
 import { hash32, rngFor, type Rng } from "../rng.js";
 import { noteDate, noteMoney } from "./format.js";
@@ -108,6 +109,13 @@ const SPELL_OUT: Readonly<Record<string, string>> = {
   INTERP: "interpreter",
   SPANISH: "Spanish",
   W: "with",
+  PROJ: "projected",
+  CNTY: "county",
+  SCHL: "school",
+  BAL: "balance",
+  YR: "year",
+  MO: "month",
+  VS: "vs",
 };
 const MISSPELL: Readonly<Record<string, string>> = {
   received: "recieved",
@@ -183,6 +191,21 @@ export function fillFigures(coded: string, p: CallPlan, agentId: string): string
     ["last_amount", f.last_payment?.amount],
     ["new_total", f.analysis?.new_total],
     ["shortage", f.analysis?.shortage],
+    ["old_escrow", f.analysis?.old_escrow],
+    ["new_escrow", f.analysis?.new_escrow],
+    ["surplus", f.analysis?.surplus],
+    ["deficiency", f.analysis?.plan.deficiency],
+    ["shortage_installment", f.analysis?.plan.shortage_installment],
+    ["credit_monthly", f.analysis?.plan.credit_monthly],
+    ["low_actual", f.statement?.low?.actual],
+    ["low_projected", f.statement?.low?.projected],
+    ...(f.statement?.lines ?? []).flatMap(
+      (l, i) =>
+        [
+          [`st${i + 1}_actual`, l.actual],
+          [`st${i + 1}_projected`, l.projected],
+        ] as const,
+    ),
     ["new_pi", f.arm?.new_pi],
     ["late_amount", f.late_charge?.amount],
     ["interest_1098", f.form_1098?.interest],
@@ -201,10 +224,12 @@ export function fillFigures(coded: string, p: CallPlan, agentId: string): string
     ["mi_terminated_on", f.mi.terminated_on],
     ["petition_on", f.bankruptcy?.petition_on],
     ["promise_date", f.promise?.pay_by],
+    ["refund_by", f.analysis?.plan.refund_by],
   ]);
   const ints = new Map<string, number | undefined>([
     ["days", f.past_due?.days],
     ["chapter", f.bankruptcy?.chapter],
+    ["plan_months", f.analysis?.plan.months ?? undefined],
   ]);
   return coded.replace(/⟨(money|date|int):([a-z_0-9]+)⟩/gi, (_all, kind: string, key: string) => {
     const k = key.toLowerCase();
@@ -512,12 +537,23 @@ export function notesFor(
       "ESC",
       `ESCROW ANALYSIS COMPLETED. ${head}. NEW ESC PMT ${m$(a.new_payment)} EFF ${d$(a.effective)}${a.anomalies.length ? " - FLAGGED FOR REVIEW" : ""}`,
     );
+    // §1024.17(i)(2), the servicing app's `exemption`: no annual statement to a borrower more than 30 days behind at
+    // the analysis; a shortage still gets its notice (3.3-T3).
+    const exempt = exemption({
+      regx_days_delinquent: a.regx_days_delinquent,
+      foreclosure_first_legal_filed: false,
+      bankruptcy_open: false,
+    });
     sys(
       a.sent_on,
       6 * 60 + 15,
       "SYSTEM",
       "LTR",
-      "LTR MAILED: ANNUAL ESCROW ACCOUNT DISCLOSURE STMT",
+      !exempt
+        ? "LTR MAILED: ANNUAL ESCROW ACCOUNT DISCLOSURE STMT"
+        : a.shortage !== null
+          ? "LTR MAILED: ESCROW SHORTAGE NOTICE - ANNUAL STMT EXEMPT, DELINQUENT AT ANALYSIS"
+          : "ANNUAL ESCROW STMT NOT MAILED - EXEMPT, DELINQUENT AT ANALYSIS",
     );
   }
   for (const x of life.disbursements) {

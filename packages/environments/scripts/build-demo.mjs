@@ -12,7 +12,8 @@
  * `playground/demo/template.html`. The data is the demo loan's two histories
  * (src/life/demo.ts), the m3-v1 tape rows the tape writer writes for it, the
  * three moments as boarding-triage, catchup-posting and escrow-review pose
- * them, what the defects cost on the defective twin, and a book of 1,000
+ * them, two of its calls as the contact center writes them, what the defects
+ * cost on the defective twin, and a book of 1,000
  * loans drawn from calibration.json and read against
  * calibration-acceptance.json. The same code gives the same page, byte for
  * byte: nothing reads a clock.

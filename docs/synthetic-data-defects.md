@@ -161,8 +161,11 @@ generator"):
 - V-02, a vendor's: the first hazard renewal after a transfer billed to the
   prior servicer, and paid late when it is sent on.
 
-Staff errors that need the contacts layer, such as a promise not tracked or
-a complaint not logged, are not planted yet. The tape-intake environment
+Staff errors that need the contacts layer are the contact center's, planted
+on its calls and notes and numbered apart (C-01 to C-08, docs/environments.md,
+"The contact center"): a complaint not logged is C-04, and a wrong figure in
+a call explaining the annual escrow statement, or in its note, is C-05 or
+C-08. A promise not tracked is not planted yet. The tape-intake environment
 grades a reviewer on V-01, V-02 and D-25's wrong loan, the three that show
 on a partner's monthly tape (docs/environments.md, "tape-intake").
 

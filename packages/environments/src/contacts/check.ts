@@ -10,7 +10,8 @@
  * telephone number, the phone menu's keys, and bare counts. Markup in square
  * brackets and placeholders in angle quotes are not speech and are skipped.
  * A date said without its year matches a record date on the same month and
- * day.
+ * day. A month said with its year ("January 2030", "enero de 2030") is no
+ * date: its year reads as a count.
  */
 
 import { parts, type PlainDate } from "@hm/kernel/calendar";
@@ -42,7 +43,11 @@ const PATTERNS: readonly (readonly [
   ["phone", /\b1-\d{3}-\d{3}-\d{4}\b/g],
   ["money", /\$\s?\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\$\s?\d+(?:\.\d{2})?/g],
   ["pct", /\b\d+(?:\.\d+)?\s?(?:%|percent|por ciento)/gi],
-  ["date", new RegExp(`\\b(${MONTH_RE})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,\\s*(\\d{4}))?`, "gi")],
+  // A day is one or two digits and no more: "January 2030" is a month and its year, not the 20th and a 30.
+  [
+    "date",
+    new RegExp(`\\b(${MONTH_RE})\\s+(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?(?:,\\s*(\\d{4}))?`, "gi"),
+  ],
   ["date_es", new RegExp(`\\b(\\d{1,2}) de (${MES_RE})(?: de (\\d{4}))?`, "gi")],
   ["date_num", /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{4}|\d{2}))?\b/g],
   ["key", /\b(?:press|oprima)\s+\d\b/gi],

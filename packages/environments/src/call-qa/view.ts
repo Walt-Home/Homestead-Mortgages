@@ -128,6 +128,35 @@ export function recordView(
           taxes_prior_12_months: $(f.analysis.tax_prior_12m),
           hazard_last_12_months: $(f.analysis.hazard_12m),
           hazard_prior_12_months: $(f.analysis.hazard_prior_12m),
+          shortage_installment: $n(f.analysis.plan.shortage_installment),
+          spread_months: f.analysis.plan.months,
+          deficiency: $n(f.analysis.plan.deficiency),
+          deficiency_installment: $n(f.analysis.plan.deficiency_installment),
+          refund_by: f.analysis.plan.refund_by,
+          credit_monthly: $n(f.analysis.plan.credit_monthly),
+        }
+      : null,
+    annual_statement: f.statement
+      ? {
+          year_start: f.statement.year_start,
+          year_end: f.statement.year_end,
+          through: f.statement.through,
+          lines: f.statement.lines.map((l) => ({
+            month: l.month,
+            line: l.label,
+            paid: $(l.actual),
+            projected: $n(l.projected),
+            anticipated: l.anticipated,
+            text: l.text,
+          })),
+          low_balance: f.statement.low
+            ? {
+                actual: $(f.statement.low.actual),
+                projected: $(f.statement.low.projected),
+                text: f.statement.low.text,
+              }
+            : null,
+          overdrawn: f.statement.overdrawn,
         }
       : null,
     arm_change: f.arm

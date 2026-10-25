@@ -279,6 +279,11 @@ export interface ProfilePins {
   readonly portal_user?: boolean;
   /** Draw a bankruptcy on the first delinquency that reaches day 30, whatever the rate. */
   readonly bankruptcy?: boolean;
+  /**
+   * Draw the borrower's call about every analysis an annual statement explains a year for, 4 to 40 days after it is
+   * sent, whatever the rate: an inbound call that reaches an agent, the borrower on the line.
+   */
+  readonly escrow_call?: boolean;
 }
 
 /** The cadence's state over one delinquency, kept so a reader can hold the attempts to it. */

@@ -21,7 +21,10 @@ with the vendored engine and upheld the same way. Six more in the runtime,
 escrow-5, ei-9, perf-1, metro2-2, metro2-3 and metro2-4, were found on 23
 October 2026, the three Metro 2 ones by the cross-check of the life generator
 against the servicing app (docs/cross-check.md); each was reproduced in
-isolation the same day and upheld by an independent check.
+isolation the same day and upheld by an independent check. One more,
+escrow-6, was found on 24 October 2026 while building the escrow call,
+reproduced with the servicing app's own code and upheld by two independent
+checks.
 The environments keep all but one out of grading. pmi-9 is graded, because
 the spec states the engine's reading as its own rule. Four more
 (cashiering-4, cashiering-9, flexmod-1, flexmod-2) were graded at the
@@ -141,8 +144,9 @@ decided", says why each went the way it did.
 | ei-8          | ei         | A delinquency cured on its start deadline with no attempt is reported as a missed start              | §11.1 timer table; D2-2-02             | 🟢     | `domain/early-intervention/plan.ts:192-193`                                                     |
 | ei-9          | ei         | A case's bk notice is refused a second time only at 11.2's render, so four paths send a second one   | §11.2 guardrails, gate row; 11.2-T6    | 🟢     | `app/tools/section11.ts:131-132`, `:163`, `:167-168`; `app/tools/section14-1.ts:43`, `:361`     |
 | metro2-4      | metro2     | A transferred loan's date of last payment is zero-filled until the servicing app posts a receipt     | §8.1 rule 3; Reg V 1022.41(a)          | 🟢     | `domain/operations-runtime/runners.ts:137-139`; `domain/boarding/service.ts:166`, `:367-371`    |
+| escrow-6      | escrow     | A spread bills its level installment in its last month too, so its final installment never is        | §3.6 rule 1, example (b); 3.2-T5       | 🟢     | `domain/escrow/ops-3-6.ts:106`, `:113-117`; `domain/operations-runtime/installments.ts:57-61`   |
 
-🔴 high (17) · 🟡 medium (54) · 🟢 low (37). ei is Reg X early intervention, and perf is performance.
+🔴 high (17) · 🟡 medium (54) · 🟢 low (38). ei is Reg X early intervention, and perf is performance.
 Section numbers are the servicing app's spec; paths are under
 `apps/servicing/src/`; amounts ending in c are cents. docs/decisions.md tells
 the longer story of most of these, in the entry for the environment that found
@@ -3840,8 +3844,66 @@ index date 2026-09-17).
   engine `last_payment_on` from the task's own receipts, which begin months
   before the window (packages/environments/src/metro2/grader.ts:165-166,
   :185), and does not run the runtime's builder.
+- **escrow-6.** A shortage or deficiency spread bills its level installment
+  in its last month too, so its final installment is never billed. A spread
+  that does not divide evenly therefore collects its total short or long by
+  the rounding. §3.6 rule 1 sets
+  `final_installment = total − installment × (months − 1)`, which "absorbs
+  residual cents" (3-6-shortage-repayment.md:75). Rule 5 counts "the final amount" collected
+  (:79), and worked example (b) bills "payment $243.05, final $243.09"
+  (:84). In §3.2's arithmetic the final installment absorbs the residual "so
+  Σ installments = amount exactly" (3-2-annual-escrow-analysis.md:110). R9
+  versions the payment into `loan_terms` for cashiering (:112), and 3.2-T5
+  states the final month (:158). Reg X 1024.17(f)(3) asks for "equal monthly
+  payments" and does not settle the cent; the spec does. The plan carries
+  `final_installment_cents` (domain/escrow/shortage.ts:24-25), and 3.2's
+  `newPayment` computes the final month (domain/escrow/analysis.ts:91); the
+  app's own 3.2-T5 test holds it at $243.09
+  (domain/escrow/3-2.spec.test.ts:47-50). The `loan_terms` version 3.6
+  writes has no field for it (domain/escrow/ops-3-6.ts:106). It holds the
+  base plus each active plan's level installment from the start date, and
+  one step-down (:113-117; app/tools/section3-6.ts:85-87). `escrowPortionOn`
+  returns that level figure for every due date before the step-down
+  (domain/operations-runtime/installments.ts:57-61). That is what the
+  cashiering cycle bills (domain/operations-runtime/cashiering-cycle.ts:101,
+  :130, :141) and what the reprojection writes into `loan_installments`
+  (installments.ts:352). No other path bills or credits the difference:
+  - The final amount's one reader, `recordInstallment` (shortage.ts:27), has
+    no runtime caller, so no posting moves a plan's `collected_cents` or
+    completes the plan.
+  - The step-down is a date and a figure from the month after the plan ends
+    (ops-3-6.ts:111, :117), with no residual in it.
 
-109 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
+  12.5's repayment schedule, by contrast, bills its final installment
+  (domain/lossmit/ops-12-5.ts:91). The residual is at most half a cent per
+  month of the spread: 6¢ on 12 months, 30¢ on a 60-month workout spread.
+  It stays in the escrow account. An analysis that reads the ledger balance
+  (§3.2 R6) would fold it into the next year's gap, which T9's supersession
+  nets. The running app's only annual analysis reads no balance (escrow-5),
+  so in the running app nothing trues it up.
+
+  Reproduced on 24 October 2026 on demo loan SM-TR-0000004, on a scratch
+  database with the 177 migrations and `seed-demo`. 3.1 `runEscrowAnalysis`
+  on §3.2's worked-example items, with a projected actual of −$150.00,
+  gives 3.2-T5: deficiency $150.00 as 12 × $12.50, shortage $1,106.68 as 11
+  × $92.22 + $92.26, payment $243.05 and final month $243.09. `approveAnalysis`
+  and 3.6 `createRepaymentPlan` then ran for each kind. Both the reprojected
+  `loan_installments` and the cashiering cycle's installments bill $243.05
+  on 2028-06-01, the plans' last month, so the spreads collect $1,256.64 of
+  $1,256.68. Both plans still read `active` with $0.00 collected. The app's
+  own `buildPlan`, `planRecord`, `loanTermsVersion` and `escrowPortionOn`
+  give two more cases. 3.6-T2's $100.00 shortage is billed $8.33 twelve
+  times, $99.96, and its final $8.37 is never billed. A $2,400.30 workout
+  shortage is billed $40.01 sixty times, 30¢ over, and its final $39.71 is
+  never billed. Fix: version each plan's final installment with the plan,
+  and have `escrowPortionOn` bill it on that plan's `end_due_date`. Kept
+  out: the life generator bills the spec's final month and keeps the app's
+  level terms apart for escrow-review's old payment
+  (packages/environments/src/life/simulate.ts:1837, :1856-1866). docs/decisions.md,
+  "Life 1.2.0", records that `loan_terms` never carries the final
+  installment. No environment grades a plan's billing.
+
+110 defects were recorded and one was dropped: arm-9 (Fannie Mae's notice in
 place of a suppressed Reg Z notice is never marked late) did not reproduce,
 because the template holds every such notice inside 25 days of the change
 date, so none is sent late; what it leaves is an adjustment that never takes

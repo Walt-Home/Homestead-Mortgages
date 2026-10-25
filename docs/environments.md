@@ -4783,7 +4783,7 @@ error, 197 dialer attempts inside a promise's window, 50 promises kept and
 50 broken, and 100 calls raising a complaint again, 3 to 61 days after it
 (24 within 15 days; 18 under the root's own issue, 82 under issues of their
 own). S-01's roots are 77 dialer conversations and 23 inbound calls about a
-payment arrangement; S-02's are on 15 reasons, a hardship (41) and a payment
+payment arrangement; S-02's are on 14 reasons, a hardship (41) and a payment
 arrangement (28) the most. A window averages 252 days, both ends counted (87
 to 378), 48.8 contacts (14 to 112), 25.4 recorded calls, 4.7 calls whose
 note states a promise and 6.2 that voice a complaint. 90 of the windows'
